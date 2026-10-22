@@ -11,6 +11,7 @@ from ...sdk.tooling import ProviderToolGrant
 from .mysql_binlog_archives import BinlogArchiveError, connection_options, rows, program_identity
 from . import mysql_topology_quiescence as quiescence
 from . import mysql_topology_accounts as accounts
+from . import mysql_topology_fanout as fanout
 
 CREDENTIAL_FILE = 'CDEADMIN_MYSQL_TOPOLOGY_CREDENTIAL_FILE'
 
@@ -79,6 +80,7 @@ CALLS = {
 
 # These are native methods on each topology, not generic SQL approximations.
 for _context in ('cluster', 'replica_set', 'cluster_set'):
+    CALLS[_context + '.execute'] = {**call(_context, 'execute', ['sql', 'instances', 'options?']), 'fanout': True}
     for _method in ('setup_admin_account', 'setup_router_account'):
         CALLS[_context + '.' + _method] = {**call(_context, _method, ['account', 'options?']), 'account': True}
     for _name, _arguments, _read in (
@@ -111,6 +113,9 @@ for _context in ('cluster', 'replica_set', 'cluster_set'):
 RECOVERY_CALLS = frozenset({'instance.reboot_cluster', 'cluster.add_instance',
     'cluster.add_replica_instance', 'cluster.rejoin_instance',
     'replica_set.add_instance', 'replica_set.rejoin_instance', 'cluster_set.create_replica_cluster'})
+FANOUT_CALLS = frozenset(context + '.execute' for context in ('cluster', 'replica_set', 'cluster_set'))
+SERVER_WORK_CALLS = RECOVERY_CALLS | FANOUT_CALLS
+CALLS['cluster_set.set_option']['option_names'] = ['replicationAllowedHost']
 
 
 def parse(value):
@@ -160,6 +165,9 @@ def options(value):
         if argument is None and definition.endswith('?'): continue
         if kind in {'name', 'option', 'router', 'match'} and not isinstance(argument, str):
             raise BinlogArchiveError('Native names and option names require strings')
+        if kind == 'sql' and not isinstance(argument, str):
+            raise BinlogArchiveError('Supply the native SQL statement as text')
+        if kind == 'instances': fanout.selector(argument)
         if kind == 'account' and (not isinstance(argument, dict) or set(argument) != {'user', 'host'} or
                 any(not isinstance(argument[key], str) for key in ('user', 'host'))):
             raise BinlogArchiveError('Select exact native account user and host strings; supply passwords separately at dispatch')
@@ -169,6 +177,7 @@ def options(value):
             raise BinlogArchiveError('Supply the ordered native destination expressions as a JSON string array')
         if kind == 'options':
             if not isinstance(argument, dict): raise BinlogArchiveError('Native options require a JSON object')
+            if specification.get('fanout') and 'exclude' in argument: fanout.selector(argument['exclude'])
             # Account creation and host-file deployment keep separate authority;
             # their credentials/paths must never enter a retained argument JSON.
             if {key.casefold() for key in argument} & {'password', 'password1', 'password2', 'password3', 'clusteradminpassword', 'mycnfpath', 'outputmycnfpath'}:
@@ -177,6 +186,8 @@ def options(value):
             if (not isinstance(argument, dict) or set(argument) != {'server_id'} or
                     type(argument['server_id']) is not int or argument['server_id'] <= 0):
                 raise BinlogArchiveError('Select an owned registered instance for each native instance argument')
+    if specification.get('option_names') and arguments[0] not in specification['option_names']:
+        raise BinlogArchiveError('Native ClusterSet set_option supports replicationAllowedHost; manage Router tags through native routing options')
     context_name = value.get('context_name', '')
     context_options = parse(value.get('context_options_json', '{}'))
     if not isinstance(context_name, str) or not isinstance(context_options, dict):
@@ -206,9 +217,11 @@ def options(value):
 
 
 def member_ids(selected):
+    specification = CALLS[selected['operation']]
+    arguments = parse(selected['arguments_json'])
     return sorted(set(selected.get('witness_server_ids', [])) | {argument['server_id'] for definition, argument in zip(
-        CALLS[selected['operation']]['arguments'], parse(selected['arguments_json']))
-        if definition.rstrip('?') == 'instance' and argument is not None})
+        specification['arguments'], arguments) if definition.rstrip('?') == 'instance' and argument is not None} |
+        (fanout.member_ids(arguments) if specification.get('fanout') else set()))
 
 
 def metadata(connection):
@@ -290,7 +303,7 @@ def script(selected, seed, members, marker, owner):
     # JavaScript Number range throughout review, execution and result display.
     return '''import json,os
 settings=json.loads(''' + repr(canonical(settings)) + ''')
-''' + quiescence.profile_source() + '''
+''' + quiescence.profile_source() + fanout.native_source() + '''
 with open(os.environ[''' + repr(CREDENTIAL_FILE) + '''],encoding="utf8") as stream: authentication=json.load(stream)
 def authenticated(key,definition):
     return dict(definition,**authentication[key])
@@ -390,6 +403,7 @@ try:
         # The URI is constructed only in private native memory, never argv or a
         # retained review/script. The native formatter preserves its encoding.
         arguments[index]=shell.unparse_uri(definition) if specification["instance_format"]=="uri" else definition
+    if specification.get("fanout"):arguments=native_fanout(arguments,prepared)
     if specification["seed_argument"]:arguments.insert(0,authenticated("seed",settings["seed"]["connection"]))
     if specification.get("account"):
         account_options=dict(arguments[1]) if len(arguments)>1 else {}

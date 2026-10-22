@@ -23,7 +23,7 @@ class TopologyJobs(InstanceRestoreJobs):
         result['reviewed_seed'] = record['source_state']['seed']
         result['remote_database_mutation'] = not native.CALLS[record['options']['operation']]['read_only']
         result['workload_readiness_verified'] = False
-        result['server_recovery_clearance_required'] = (record['options']['operation'] in native.RECOVERY_CALLS and
+        result['server_recovery_clearance_required'] = (record['options']['operation'] in native.SERVER_WORK_CALLS and
             result['native_operation_outcome'] == 'unknown' and not record.get('target_state_acknowledged_at'))
         result['affected_native_instances'] = self.fence_identities(record)
         result['state'] = {'native_load_returned': 'operation_returned',
@@ -59,6 +59,11 @@ class TopologyJobs(InstanceRestoreJobs):
         if native.CALLS[record['options']['operation']]['read_only']:
             self.update(record, remote_database_mutation=False, warnings=[
                 'Native inspection uses private utility connections. It does not execute the selected topology changes or verify workload readiness.'])
+        elif native.CALLS[record['options']['operation']].get('fanout'):
+            self.update(record, warnings=[
+                'Native SQL executes independently on the selected topology members. A returned method can contain instance-specific SQL errors, warnings or unreachable members. Review every instance result.',
+                'Native execution can commit separately on different members. Dry-run validates target selection without executing the statement. Native timeout options do not impose a deadline on every kind of SQL statement.',
+                'Cancellation and utility exit do not roll back completed SQL. An uncertain result is never repeated automatically; every known member needs independent native session observations before target acknowledgement.'])
         elif native.CALLS[record['options']['operation']].get('account'):
             self.update(record, warnings=[
                 'Native account setup creates or updates the selected account on the current primary and adds its required native grants. Existing extra grants remain.',
@@ -74,10 +79,10 @@ class TopologyJobs(InstanceRestoreJobs):
 
     def acknowledge(self, record, observation, request):
         clearance = observation.get('server_recovery_quiescence') or {}
-        if record['options']['operation'] in native.RECOVERY_CALLS and not (
+        if record['options']['operation'] in native.SERVER_WORK_CALLS and not (
                 clearance.get('qualified') is True and clearance.get('idle') is True):
             raise native.BinlogArchiveError(
-                'Native clone recovery can continue on the server after utility exit. '
+                'Native SQL or clone recovery can continue on the server after utility exit. '
                 'Independent server-side completion evidence is required before clearing this target; '
                 'the uncertain recovery remains protected.')
         return super().acknowledge(record, observation, request)

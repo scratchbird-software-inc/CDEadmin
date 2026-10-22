@@ -9,6 +9,12 @@ function example(operation,member) {
     if(kind==='options')return {};
     if(kind==='document')return {};
     if(kind==='account')return {user:'account_name',host:'%'};
+    if(kind==='sql')return 'SELECT @@server_uuid AS server_uuid';
+    if(kind==='instances')return 'all';
+    if(operation.context==='cluster_set' && operation.method==='set_option') {
+      if(kind==='option')return 'replicationAllowedHost';
+      if(kind==='value')return '%';
+    }
     if(kind==='destinations')return ['round-robin(Primary)'];
     if(kind==='match')return operation.method==='add_route' ? '$.session.targetPort = $.router.port.ro' : '$.server.memberRole = SECONDARY';
     if(kind==='instance')return member ? {server_id:member.server_id} : null;
@@ -30,10 +36,14 @@ export default function MySQLTopologies({post}) {
   const [busy,setBusy]=useState(false),[error,setError]=useState('');const generation=useRef(0),inputVersion=useRef(0);
   const operation=catalog?.operations.find(value=>value.id===operationId);
   const recovery=receipt?.reconciliation?.server_recovery_quiescence;
-  let exported,exportRedacted;
+  let exported,exportRedacted,fanoutSummary;
   try {
     const result=JSON.parse(receipt?.result?.control?.result_json || 'null');
     exported=result?.guideline_export_json;exportRedacted=result?.guideline_export_redacted;
+    if(receipt?.options?.operation?.endsWith('.execute') && Array.isArray(result))fanoutSummary={
+      instances:result.length,errors:result.filter(value=>value?.error).length,
+      dryRuns:result.filter(value=>value?.warnings?.includes('dry run execution')).length,
+    };
   } catch { /* Keep the original native result visible. */ }
   useEffect(()=> {
     generation.current++;setCatalog(null);setSeed(null);setMembers(null);setMember(null);setReview(null);setReceipt(null);setJobs(null);setObservation(null);setBusy(false);setError('');
@@ -81,6 +91,7 @@ export default function MySQLTopologies({post}) {
       setAccountPasswordEnabled(false);setAccountPassword('');setAccountSecretReady(false);
     }}>{catalog.operations.map(value=><MenuItem key={value.id} value={value.id}>{value.id}</MenuItem>)}</TextField>}
     {operation && <Alert severity="info">Native arguments: {operation.arguments.join(', ') || 'none'}. Instance arguments use registered references such as {'{"server_id":4}'}. Optional arguments have a ? suffix.</Alert>}
+    {operation?.option_names && <Alert severity="info">Native option names: {operation.option_names.join(', ')}. Router tags are managed through native routing options.</Alert>}
     <Button disabled={busy} onClick={()=>loadMembers(0)}>Load registered topology instances</Button>
     {members && <>
       <Table size="small" aria-label="Registered topology instances"><TableHead><TableRow><TableCell>ID</TableCell><TableCell>Instance</TableCell><TableCell>Use</TableCell><TableCell>Recovery observation</TableCell></TableRow></TableHead><TableBody>
@@ -88,7 +99,7 @@ export default function MySQLTopologies({post}) {
       </TableBody></Table><TablePagination component="div" count={members.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={members.offset/25} onPageChange={(_event,next)=>loadMembers(next*25)} />
     </>}
     {member && <Button disabled={busy || !operation} onClick={()=>{setArgumentsText(example(operation,member));setReview(null);}}>Reset arguments for {member.name}</Button>}
-    <Alert severity="info">For interrupted clone recovery, select every known member for recovery observations before review. Missing native ownership or unavailable observations keep uncertain targets protected.</Alert>
+    <Alert severity="info">For native SQL fanout or clone recovery, select every known member for recovery observations before review. Missing native ownership or unavailable observations keep uncertain targets protected.</Alert>
     <TextField fullWidth multiline minRows={5} label="Native topology arguments (JSON array)" value={argumentsText} disabled={busy}
       helperText={'Native arguments: '+(operation?.arguments.join(', ') || 'none')+'. Optional arguments end in ?. Edit names for the selected native objects; integer digits are preserved.'}
       onChange={event=>{setArgumentsText(event.target.value);invalidate();if(operation?.account){setAccountPassword('');setAccountSecretReady(false);}}} />
@@ -101,6 +112,7 @@ export default function MySQLTopologies({post}) {
         helperText="An empty value sets an empty native password. The password is cleared after dispatch and is excluded from saved reviews."
         onChange={event=>{setAccountPassword(event.target.value);setAccountSecretReady(true);}} />}
     </>}
+    {operation?.fanout && <Alert severity="info">Native SQL fanout uses independent member sessions. Select a native keyword (all, primary, secondaries, read-replicas) or an array of registered instance references. Native context rules determine supported keywords. Options retain native exclude, dryRun and timeout behavior. Inspect every member result for SQL errors or unreachable instances.</Alert>}
     <TextField fullWidth label="Native cluster context name (optional)" value={contextName} disabled={busy} onChange={event=>{setContextName(event.target.value);invalidate();}} />
     <TextField fullWidth label="Native Cluster context options (JSON object)" value={contextOptions} disabled={busy || operation?.context!=='cluster'} onChange={event=>{setContextOptions(event.target.value);invalidate();}} />
     {operation?.guideline && <TextField fullWidth label="Native routing guideline name (empty selects active guideline)" value={guidelineName} disabled={busy} onChange={event=>{setGuidelineName(event.target.value);invalidate();}} />}
@@ -141,6 +153,7 @@ export default function MySQLTopologies({post}) {
       <Alert severity={receipt.native_operation_outcome==='unknown' ? 'warning' : 'info'}>Native topology job {receipt.job_id}: {receipt.state}. Original operation outcome: {receipt.native_operation_outcome}. Workload readiness is unverified.</Alert>
       {receipt.target_state_acknowledged_at && <Alert severity="info">Observed target state acknowledged. The original operation outcome remains {receipt.native_operation_outcome}.</Alert>}
       {receipt.native_error && <Alert severity="error">Native topology error {receipt.native_error.code ?? ''}: {receipt.native_error.message}</Alert>}
+      {fanoutSummary && <Alert severity={fanoutSummary.errors ? 'warning' : 'info'}>Native fanout returned {fanoutSummary.instances} instance results: {fanoutSummary.errors} instance errors; {fanoutSummary.dryRuns} dry runs. Inspect the native results for warnings and SQL output.</Alert>}
       {receipt.result?.control?.result_json && <Box component="pre" aria-label="Native topology result JSON" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{receipt.result.control.result_json}</Box>}
       {exportRedacted && <Alert severity="warning">Sensitive string values were removed from this guideline export. The downloaded JSON is a redacted copy.</Alert>}
       {typeof exported==='string' && <Button onClick={()=> {
@@ -156,7 +169,7 @@ export default function MySQLTopologies({post}) {
       <Button disabled={busy || !ACTIVE.has(receipt.state) && receipt.state!=='reviewed' && !(receipt.state==='unknown' && receipt.durable_tool && receipt.native_process_termination_confirmed!==true)} onClick={()=>run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel native topology operation</Button>
       <Button disabled={busy || ACTIVE.has(receipt.state)} onClick={()=>run('reconcile',{job_id:receipt.job_id},value=>{setReceipt(value);setObservation(value.observation_digest);})}>Observe current topology target</Button>
       {recovery && <>
-        <Alert severity={recovery.qualified && recovery.idle ? 'info' : 'warning'}>{recovery.qualified && recovery.idle ? 'Native utility sessions have ended and observed clone work is idle. The original operation outcome is unchanged.' : 'Server-side recovery clearance is unconfirmed. The native target remains protected.'}</Alert>
+        <Alert severity={recovery.qualified && recovery.idle ? 'info' : 'warning'}>{recovery.qualified && recovery.idle ? 'Original native utility sessions have ended and observed clone activity is idle. The original operation outcome is unchanged.' : 'Server-side recovery clearance is unconfirmed. The native target remains protected.'}</Alert>
         <Table size="small" aria-label="Native recovery member observations"><TableHead><TableRow><TableCell>Member</TableCell><TableCell>Visibility</TableCell><TableCell>Idle</TableCell></TableRow></TableHead><TableBody>
           {Object.entries(recovery.targets || {}).map(([key,value])=><TableRow key={key}><TableCell>{key}</TableCell><TableCell>{value.qualified ? 'Observed' : 'Unconfirmed'}</TableCell><TableCell>{value.idle===true ? 'Yes' : value.idle===false ? 'No' : 'Unconfirmed'}</TableCell></TableRow>)}
         </TableBody></Table>

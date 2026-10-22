@@ -130,7 +130,7 @@ def action(service, server, operation, request):
             observation = {**observed, 'native_lock_free': rows(connection, 'SELECT IS_FREE_LOCK(%s) AS free',
                 ('cdeadmin:binlog-load:' + record['source']['server_uuid'],))[0]['free'] == 1,
                 'scope': 'Current seed and visible native metadata identities; no workload readiness or attribution of concurrent topology changes'}
-            if record['options']['operation'] in native.RECOVERY_CALLS:
+            if record['options']['operation'] in native.SERVER_WORK_CALLS:
                 observation['server_recovery_quiescence'] = recovery_quiescence(service, jobs, record, connection)
             if operation == 'acknowledge': return jobs.acknowledge(record, observation, request)
             result = jobs.reconcile(record, observation); result['observation_digest'] = digest(observation); return result
@@ -169,7 +169,9 @@ def action(service, server, operation, request):
         configuration = digest({'registrations': configurations, 'root': str(jobs.root),
             'adapter_sha256': hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest(),
             **({'account_adapter_sha256': hashlib.sha256(Path(native.accounts.__file__).read_bytes()).hexdigest()}
-               if native.CALLS[selected['operation']].get('account') else {})})
+               if native.CALLS[selected['operation']].get('account') else {}),
+            **({'fanout_adapter_sha256': hashlib.sha256(Path(native.fanout.__file__).read_bytes()).hexdigest()}
+               if native.CALLS[selected['operation']].get('fanout') else {})})
         if operation == 'review':
             return jobs.review(owner, endpoint.id, selected, {'identity': observed['identity'],
                 'state': {'seed': seed, 'members': members}}, configuration, program)

@@ -151,3 +151,30 @@ it('keeps account passwords out of reviews and supplies them once at explicit di
     account_secret:{password:'private-native-雪'}}}));
   await waitFor(()=>expect(screen.getByLabelText('Native account password').value).toBe(''));
 });
+it('shows native member errors separately from a returned fanout method and preserves native result text',async()=> {
+  const text='[{"instance":{"address":"one:3306"},"output":[{"columnNames":["wide"],"rows":[["9223372036854775808"]]}]},{"instance":{"address":"two:3306"},"error":{"type":"mysql","code":1146,"message":"Missing table"}}]';
+  const receipt={job_id:'fanout',state:'operation_returned',native_operation_outcome:'returned',options:{operation:'cluster.execute'},
+    result:{control:{result_json:text}}};
+  const post=jest.fn(({action})=>Promise.resolve(action==='mysql_topology_list' ? {jobs:[receipt],offset:0,limit:25,total:1} : receipt));
+  render(<Component post={post} />);fireEvent.click(screen.getByRole('button',{name:'Load native topology jobs'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Inspect topology job fanout'}));
+  expect((await screen.findByText(/Native fanout returned 2 instance results: 1 instance errors; 0 dry runs/)).closest('[role="alert"]')).toHaveClass('MuiAlert-colorWarning');
+  expect(screen.getByLabelText('Native topology result JSON').textContent).toBe(text);
+  expect(screen.getByText(/Original operation outcome: returned/)).toBeInTheDocument();
+});
+it('offers native fanout SQL and keyword arguments without fabricating registered instance identities',async()=> {
+  const methods={operations:[...catalog.operations,{id:'cluster.execute',context:'cluster',method:'execute',
+    arguments:['sql','instances','options?'],fanout:true,read_only:false}]};
+  const post=jest.fn(()=>Promise.resolve(methods));
+  render(<Component post={post} />);fireEvent.click(screen.getByRole('button',{name:'Load native topology methods'}));await screen.findByLabelText('Native topology method');
+  fireEvent.mouseDown(screen.getByLabelText('Native topology method'));fireEvent.click(await screen.findByRole('option',{name:'cluster.execute'}));
+  expect(screen.getByLabelText('Native topology arguments (JSON array)').value).toBe(JSON.stringify(['SELECT @@server_uuid AS server_uuid','all'],null,2));
+});
+it('uses the supported ClusterSet option instead of offering a Cluster tag',async()=> {
+  const methods={operations:[...catalog.operations,{id:'cluster_set.set_option',context:'cluster_set',method:'set_option',
+    arguments:['option','value'],option_names:['replicationAllowedHost'],read_only:false}]};
+  const post=jest.fn(()=>Promise.resolve(methods));
+  render(<Component post={post} />);fireEvent.click(screen.getByRole('button',{name:'Load native topology methods'}));await screen.findByLabelText('Native topology method');
+  fireEvent.mouseDown(screen.getByLabelText('Native topology method'));fireEvent.click(await screen.findByRole('option',{name:'cluster_set.set_option'}));
+  expect(screen.getByLabelText('Native topology arguments (JSON array)').value).toBe(JSON.stringify(['replicationAllowedHost','%'],null,2));
+});

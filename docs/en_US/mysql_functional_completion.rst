@@ -113,6 +113,21 @@ separate. Native setup grants its required privileges and does not remove
 unrelated existing privileges. These workflows do not freeze external account
 administrators or attest client login, replication catch-up or workload readiness.
 
+Native ``execute`` methods retain Cluster, ReplicaSet and ClusterSet SQL fanout.
+Select native contextual keywords or ordered registered-instance references and
+native exclusion, dry-run and timeout options. MySQL Shell resolves the native
+target set and executes independently on its member sessions. The original
+method return and instance-specific SQL errors, warnings and results remain
+separate; Shell formats result cells as text. Unknown replies require admitted
+member ownership and independent native session observations before explicit
+target acknowledgement. Original unknown outcomes remain unknown. Session and
+clone observations do not verify application data or asynchronous effects of
+arbitrary SQL, stored programs or scheduled events.
+ClusterSet ``set_option`` retains its native ``replicationAllowedHost`` option;
+Cluster tag options are unavailable in that context. Router tags use native
+routing options. Argument templates and admission follow those distinct native
+interfaces, including versions that silently accept an ineffective tag request.
+
 The same workspace also exposes native Router metadata inspection, global and
 selected-Router option changes, and routing guideline creation, selection,
 inspection, editing, copying, renaming, removal and JSON import/export for

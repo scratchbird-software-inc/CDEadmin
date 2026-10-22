@@ -180,7 +180,7 @@ MySQL
   ReplicaSet and ClusterSet. Native document and Router configuration changes
   invalidate stale reviews. Live selected-Router mutation/removal acceptance,
   Router deployment/bootstrap and actual traffic/failure tests remain open,
-  alongside fanout SQL execution and host sandbox lifecycle integration.
+  alongside host sandbox lifecycle integration.
   Native administrator and Router account setup now has dedicated Cluster,
   ReplicaSet and ClusterSet methods. These require the current writable primary
   registration and bind native primary roles, account state and visible grants
@@ -188,6 +188,13 @@ MySQL
   dry-run, certificate and expiration options retain their native meaning.
   Existing extra grants remain. Automatic secondary-seed routing, certificate
   login acceptance and replication catch-up are separate qualification work.
+  Native SQL fanout now exposes each topology's ``execute`` method with native
+  contextual selectors, registered member arrays, exclusions, dry runs and
+  timeouts. Receipts and the desktop retain per-instance SQL errors separately
+  from the method return. Unknown SQL replies retain target protection until
+  independent original-session observations and explicit acknowledgement.
+  These observations do not attest arbitrary asynchronous SQL effects or full
+  application and HA readiness.
   New topology jobs also retain admitted native utility/member ownership
   evidence before dispatch. Uncertain clone recovery requires independent
   original-client absence and idle server clone observations before explicit

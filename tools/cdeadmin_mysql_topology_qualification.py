@@ -22,7 +22,7 @@ UI_ACCOUNT_USER = 'sr_gui_雪'
 UI_ACCOUNT_PASSWORD = 'Native-UI-private:\'\\雪'
 
 
-def qualify(output, routes, password, *, use_c=False, browser_exchange=False, routing_only=False, desktop_only=False, accounts_only=False, account_contexts=None):
+def qualify(output, routes, password, *, use_c=False, browser_exchange=False, routing_only=False, desktop_only=False, accounts_only=False, account_contexts=None, fanout_only=False):
     from flask import url_for
     from pgadmin.model import db, User, ServerGroup, Server
     from pgadmin.cdeadmin.endpoints.profiles import registration_profile
@@ -39,8 +39,10 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
         'tools/mysql_topology_lingering_qualification.py',
         'tools/mysql_routing_qualification.py',
         'tools/mysql_accounts_qualification.py',
+        'tools/mysql_fanout_qualification.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology_accounts.py',
+        'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology_fanout.py',
         'web/pgadmin/cdeadmin/workspace/mysql_topology_jobs.py',
         'web/pgadmin/cdeadmin/workspace/mysql_topology_service.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology_quiescence.py',
@@ -114,6 +116,11 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
                     if arguments[0].get('server_id') == item['server_id'])
                 witnesses = [item['server_id'] for index,item in enumerate(registrations)
                     if seeds[index]['identity']['server_uuid'] in allowed]
+            elif operation.endswith('.execute'):
+                current=http('inspect',peer=peer)
+                allowed={current['identity']['server_uuid'],*current['metadata']['instance_uuids']}
+                witnesses=[item['server_id'] for index,item in enumerate(registrations)
+                    if seeds[index]['identity']['server_uuid'] in allowed]
             return {'operation': operation, 'arguments_json': json.dumps(arguments),
                 **({'guideline_name': guideline} if '.guideline.' in operation else {}),
                 **({'account_password_mode':'set' if setting_password else 'preserve'} if '.setup_' in operation else {}),
@@ -178,6 +185,10 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
             request={'server_id':registrations[0]['server_id'],'target_uuid':seeds[0]['identity']['server_uuid'],
                 'recovery_member_indexes':[0] if desktop_only or accounts_only else [0,1,2]}
             if accounts_only:request['account_setup']=True
+            if fanout_only:
+                request['fanout_setup']=True
+                request['recovery_member_indexes']=[0,1]
+                request['fanout_member_uuids']=[seeds[index]['identity']['server_uuid'] for index in (0,1)]
             if uncertain_job_id:request['uncertain_job_id']=uncertain_job_id
             (output/'browser-request.json').write_text(json.dumps(request)+'\n')
             deadline=time.monotonic()+300
@@ -233,6 +244,39 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
                 assert proof['account_desktop_login']['identity']==UI_ACCOUNT_USER+'@%'
                 assert sql(0,'SELECT password_lifetime AS days FROM mysql.user WHERE User=%s AND Host=%s',
                     (UI_ACCOUNT_USER,'%'))==[{'days':14}]
+            proof['complete']=True
+            return proof
+        if fanout_only:
+            from mysql_fanout_qualification import qualify as qualify_fanout
+            for peer in (0,1):execute('instance.configure_cluster',[{'restart':True}],peer)
+            execute('instance.create_cluster',['sr_fanout_cluster',{'gtidSetIsComplete':True}])
+            execute('cluster.add_instance',[{'server_id':registrations[1]['server_id']},
+                {'recoveryMethod':'clone','recoveryProgress':0}])
+            if desktop_only:
+                if not browser_exchange:raise ValueError('Fanout desktop qualification requires a browser exchange')
+                execute('cluster.create_cluster_set',['sr_fanout_desktop_domain'])
+                before=[sql(peer,'SELECT @@global.max_connections AS n') for peer in (0,1)]
+                desktop()
+                assert before==[sql(peer,'SELECT @@global.max_connections AS n') for peer in (0,1)]
+                proof['complete']=True
+                return proof
+            def fanout_context(name):
+                return qualify_fanout(name,0,[0,1],execute,http,options,sql,registrations,seeds)
+            proof['fanout']={'cluster':fanout_context('cluster')}
+            if browser_exchange:
+                before=[sql(peer,'SELECT @@global.max_connections AS n') for peer in (0,1)]
+                desktop()
+                assert before==[sql(peer,'SELECT @@global.max_connections AS n') for peer in (0,1)]
+            execute('cluster.create_cluster_set',['sr_fanout_domain'])
+            proof['fanout']['cluster_set']=fanout_context('cluster_set')
+            execute('cluster_set.dissolve',[{'force':True}])
+            for peer in (0,1):
+                sql(peer,'SET GLOBAL super_read_only=OFF')
+                execute('instance.configure_replica_set',[{'restart':True}],peer)
+            execute('instance.create_replica_set',['sr_fanout_replicas',{'gtidSetIsComplete':True}])
+            execute('replica_set.add_instance',[{'server_id':registrations[1]['server_id']},
+                {'recoveryMethod':'clone','recoveryProgress':0}])
+            proof['fanout']['replica_set']=fanout_context('replica_set')
             proof['complete']=True
             return proof
         if desktop_only:
@@ -497,6 +541,35 @@ XMLHttpRequest.prototype.send=function(body){
             wait.until(lambda b:b.find_elements(By.CSS_SELECTOR,'[aria-label="Native topology review"]'))
             click('Confirm and start native topology change')
             wait.until(lambda b: any('outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
+        if request.get('fanout_setup'):
+            select_method('cluster.execute')
+            assert json.loads(control('Native topology arguments',True).get_attribute('value'))==[
+                'SELECT @@server_uuid AS server_uuid','all']
+            click('Review native topology change');wait.until(reviewed)
+            click('Confirm and start native topology change')
+            wait.until(lambda b:any('Native fanout returned 2 instance results: 0 instance errors' in node.get_attribute('textContent')
+                for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            result=json.loads(driver.find_element(By.CSS_SELECTOR,'[aria-label="Native topology result JSON"]').get_attribute('textContent'))
+            assert {item['output'][0]['rows'][0][0] for item in result}==set(request['fanout_member_uuids'])
+            change('cluster.execute',['SELECT * FROM mysql.sr_fanout_missing_table','all'])
+            wait.until(lambda b:any('Native fanout returned 2 instance results: 2 instance errors' in node.get_attribute('textContent')
+                for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            change('cluster.execute',['SET GLOBAL max_connections=777','all',{'dryRun':True}])
+            wait.until(lambda b:any('2 dry runs' in node.get_attribute('textContent')
+                for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            select_method('cluster_set.set_option')
+            assert json.loads(control('Native topology arguments',True).get_attribute('value'))==['replicationAllowedHost','%']
+            click('Review native topology change');wait.until(reviewed)
+            click('Confirm and start native topology change')
+            wait.until(lambda b:any('outcome: returned.' in node.get_attribute('textContent')
+                for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            severe=[entry for entry in driver.get_log('browser') if entry['level']=='SEVERE']
+            (output/'browser-console.json').write_text(json.dumps(severe,indent=2)+'\n')
+            driver.save_screenshot(str(output/'native-fanout.png'));assert not severe,severe
+            return {'complete':True,'checks':['native-context-menu','native-read-only-inspection','exact-uint64-review',
+                'unchanged-native-fanout-template-two-member-results','per-instance-SQL-errors-separate-from-returned-method',
+                'native-dry-run-results','registered-member-observations','native-output-retains-string-rows',
+                'unchanged-native-clusterset-supported-option-template'],'severe_errors':0}
         if request.get('account_setup'):
             select_method('cluster.setup_admin_account')
             field('Native topology arguments',json.dumps([{'user':UI_ACCOUNT_USER,'host':'%'},{'passwordExpiration':30}]),True)
@@ -580,6 +653,7 @@ if __name__ == '__main__':
     parser.add_argument('--desktop-only', action='store_true')
     parser.add_argument('--accounts-only', action='store_true')
     parser.add_argument('--account-contexts', nargs='+', choices=['cluster','cluster_set','replica_set'])
+    parser.add_argument('--fanout-only', action='store_true')
     args = parser.parse_args()
     output = Path(args.output).resolve()
     if output == ROOT or ROOT in output.parents: raise ValueError('Keep native evidence outside source')
@@ -589,4 +663,4 @@ if __name__ == '__main__':
     if not isinstance(selected, list) or len(selected) != 3: raise ValueError('Select three disposable native peers')
     qualify(output, selected, os.environ[args.password_env], use_c=args.use_c,
         browser_exchange=args.browser_exchange, routing_only=args.routing_only, desktop_only=args.desktop_only, accounts_only=args.accounts_only,
-        account_contexts=args.account_contexts)
+        account_contexts=args.account_contexts,fanout_only=args.fanout_only)
