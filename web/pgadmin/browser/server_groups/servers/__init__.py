@@ -3173,6 +3173,10 @@ class ServerNode(PGChildNodeView):
                                 'mysql_instance_restore_backups','mysql_instance_restore_inspect','mysql_instance_restore_reconcile','mysql_instance_restore_acknowledge'}:
                     try: payload = service.mysql_instance_restore(server, action.removeprefix('mysql_instance_restore_'), data.get('request'))
                     except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
+                elif action in {'mysql_instance_acceptance_review','mysql_instance_acceptance_start','mysql_instance_acceptance_status',
+                                'mysql_instance_acceptance_list','mysql_instance_acceptance_cancel','mysql_instance_acceptance_reconcile','mysql_instance_acceptance_acknowledge'}:
+                    try: payload = service.mysql_instance_acceptance(server, action.removeprefix('mysql_instance_acceptance_'), data.get('request'))
+                    except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
                 elif action in {'mysql_clone_review','mysql_clone_start','mysql_clone_status','mysql_clone_list','mysql_clone_cancel','mysql_clone_reconcile','mysql_clone_donors'}:
                     try:
                         payload=service.mysql_clone(server,action.removeprefix('mysql_clone_'),data.get('request'))

@@ -330,9 +330,47 @@ procedures, accounts/roles, wide integers/Unicode/BLOBs, native GTID base
 installation followed by application log replay, explicit cancellation,
 privilege refusal and injected reply/bookkeeping failures. ``--use-c`` selects
 the C connector; optional browser/driver paths exercise the built restore UI.
-These receipts prove their selected restore and continuation cases. Whole-dump
-data/definition equivalence, physical recovery, external dependencies and
-production cutover retain their own acceptance.
+These receipts prove their selected restore and continuation cases. Physical
+recovery, external dependencies and production cutover retain their own
+acceptance. The separate dump acceptance workflow below checks the exported
+base snapshot; it does not accept data after later log replay.
+
+Independent instance-dump acceptance
+====================================
+
+The full-instance restore view includes ``Independent dump acceptance``. It
+uses an explicitly selected retained instance backup and separately confirmed
+native target. Review requires consent to the server-wide write pause. Start
+acquires an instance backup lock and global read lock, observes full table
+inventories and exact row counts, runs native Shell checksum verification with
+all data/DDL/index/account loading disabled, and re-exports native definitions.
+No GTID update or restore is issued. Source bytes, native identity, GTID state,
+utility identity and exported coverage are checked independently of the earlier
+restore receipt.
+
+Data, selected-schema definitions and exported account/role/grant definitions
+have separate results. An unexported surface stays unchecked. Full row counts
+detect rows outside native checksum chunk boundaries. Definition comparison
+preserves native SQL bodies exactly, omitting only the five validated native
+tool/host/version header lines. Native routine bodies, comments, names, user
+properties and grant statements are preserved. Source SQL filename coverage is
+required. Reports expose file names and body hashes, without SQL text or
+authentication definitions. Account comparison covers the exported identities;
+additional target accounts outside that selection are not accepted by it.
+
+The pinned native checksum mismatch code ``53031`` is an observed mismatch;
+privilege, launch, cancellation and incomplete checks remain unconfirmed.
+Comparison facts, utility completion and server-lock cleanup are recorded
+separately. Unconfirmed private server-lock cleanup retains target protection.
+New target observations do not rerun checks or rewrite an earlier result.
+
+Add ``--acceptance`` to the instance restore qualification command to exercise
+actual same-count value changes, extra rows, routine definition changes and role
+grant changes, followed by new independent acceptance after reverting the owned
+fixture. Both connector implementations and the optional built browser workflow
+retain their own receipts. These results cover the exported logical base
+snapshot; physical recovery, changed post-replay data, production cutover and
+unobserved process/lock cleanup after interruption remain separate work.
 
 InnoDB page tracking
 ====================

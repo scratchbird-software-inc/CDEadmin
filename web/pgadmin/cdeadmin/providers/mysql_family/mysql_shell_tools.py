@@ -10,6 +10,16 @@ from .mysql_binlog_archives import connection_options
 
 CREDENTIAL_FILE = 'CDEADMIN_MYSQL_SHELL_CREDENTIAL_FILE'
 
+# The pinned polyglot JavaScript bridge wraps native exception metadata in
+# Error.cause. Keep the reported code/state; message masking happens while the
+# credential lease is still available, before the public text is truncated.
+NATIVE_ERROR_FUNCTION = (
+    'function nativeError(error){const detail=error && error.cause && typeof error.cause==="object"?error.cause:error;'
+    'return {code:Number.isInteger(error.code)?error.code:Number.isInteger(detail.code)?detail.code:null,'
+    'sqlstate:typeof error.sqlState==="string"?error.sqlState:typeof detail.sqlState==="string"?detail.sqlState:typeof detail.state==="string"?detail.state:null,'
+    'message:String(error.message || error)};}\n'
+)
+
 
 def run(client, route, source, passwords):
     references = dict(route.get('credential_references') or {})

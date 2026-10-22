@@ -94,9 +94,14 @@ MySQL
   native instance loading now supports a confirmed recovery target, selected
   native account/schema/data/GTID options, shared restore/replay fencing and
   explicit uncertain-target observation/acknowledgement. Native qualification
-  includes GTID base installation followed by application log replay. Whole-dump
-  data/definition equivalence, physical recovery and cutover remain open, along
-  with unknown process-termination reconciliation after application interruption.
+  includes GTID base installation followed by application log replay. Separate
+  instance-dump acceptance now checks complete exported table inventories and
+  row counts, native checksums, exact native schema SQL and exported account/
+  role/grant SQL under an explicitly confirmed server-wide read pause. It
+  preserves original restore outcomes and records unexported or unconfirmed
+  checks separately. Physical recovery, independent acceptance after later log
+  replay and cutover remain open, along with unobserved process/server-lock
+  cleanup after application interruption.
 * MY-ARCHIVES: Complete backup/log-dependency-aware archive protection and
   retention. Separate native source-log administration now exposes reviewed TO
   and BEFORE purges, independent observations, durable acknowledgement and

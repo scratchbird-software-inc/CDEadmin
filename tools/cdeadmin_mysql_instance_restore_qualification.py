@@ -11,7 +11,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output,shell,use_c=False,binary=None,driver_binary=None):
+def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=False):
     output=Path(output).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Keep native evidence outside source')
     output.mkdir(mode=0o700,parents=True,exist_ok=False)
@@ -29,7 +29,12 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None):
     paths+=['web/pgadmin/cdeadmin/workspace/'+name for name in ('mysql_instance_restore_jobs.py','mysql_instance_restore_service.py','mysql_binlog_replay_jobs.py','service.py')]
     paths+=['web/pgadmin/browser/server_groups/servers/__init__.py','web/pgadmin/cdeadmin/context_menu.py',
         'web/pgadmin/static/js/Dialogs/MySQLInstanceRestores.jsx','tools/cdeadmin_mysql_instance_restore_qualification.py']
+    if acceptance:
+        paths+=['web/pgadmin/cdeadmin/providers/mysql_family/mysql_instance_acceptance.py',
+            'web/pgadmin/cdeadmin/workspace/mysql_instance_acceptance_jobs.py','web/pgadmin/cdeadmin/workspace/mysql_instance_acceptance_service.py',
+            'web/pgadmin/static/js/Dialogs/MySQLInstanceAcceptance.jsx']
     proof={'complete':False,'full_mysql_product_complete':False,'history_testing':'not run','use_c':use_c,'checks':[],
+        'independent_acceptance':acceptance,
         'source_sha256':{path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest() for path in paths}}
     password='true'
     try:
@@ -84,7 +89,7 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None):
                         if time.monotonic()>deadline:raise TimeoutError('Owned native instance recovery deadline')
                         time.sleep(.05);value=http('status',{'job_id':value['job_id']},**kwargs)
                     return value
-                backup=wait(start(http('review',{'options':{'users':True,'checksum':True,'threads':1}},url=surl,prefix='mysql_instance_backup_'),url=surl,prefix='mysql_instance_backup_'),url=surl,prefix='mysql_instance_backup_')
+                backup=wait(start(http('review',{'options':{'users':True,'checksum':True,'threads':1,**({'exclude_users':['root']} if acceptance else {})}},url=surl,prefix='mysql_instance_backup_'),url=surl,prefix='mysql_instance_backup_'),url=surl,prefix='mysql_instance_backup_')
                 assert backup['state']=='completed',backup
                 target_uuid=http('inspect',{})['identity']['server_uuid']
                 selected={'target_confirmation':target_uuid,'load_users':True,'exclude_users':['root'],
@@ -100,11 +105,55 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None):
                 qt.execute("SELECT User FROM mysql.user WHERE User IN ('sr_restored_user','sr_restored_role') ORDER BY User");assert qt.fetchall()==[('sr_restored_role',),('sr_restored_user',)]
                 qt.execute("SHOW GRANTS FOR 'sr_restored_user'@'%'");assert any('sr_restored_role' in row[0] for row in qt.fetchall())
                 for q in (qs,qt):q.execute('SHOW CREATE PROCEDURE sr_restored_a.p')
-                assert qs.fetchone()[2]==qt.fetchone()[2]
+                source_procedure=qs.fetchone()[2]
+                assert source_procedure==qt.fetchone()[2]
                 boundary=backup['result']['artifact']['native_boundary']
                 qt.execute('SELECT GTID_SUBSET(%s,@@GLOBAL.gtid_executed)',(boundary['gtidExecuted'],));assert qt.fetchone()==(1,)
                 assert start({'job_id':restored['job_id'],'review_digest':restored['review_digest']})['native_load_outcome']=='returned'
                 proof['checks'].append('native-instance-load-restores-two-schemas-wide-unicode-blob-cross-schema-view-procedure-accounts-and-roles-with-reviewed-native-GTID-base-installation')
+                if acceptance:
+                    def accept():
+                        planned=http('review',{'source_server_id':sid,'backup_job_id':backup['job_id'],
+                            'options':{'target_confirmation':target_uuid,'server_wide_write_pause_confirmed':True,'threads':1,'timeout_seconds':120}},prefix='mysql_instance_acceptance_')
+                        value=wait(start(planned,prefix='mysql_instance_acceptance_'),prefix='mysql_instance_acceptance_')
+                        if value['state']!='verification_observed':
+                            (output/'acceptance-failure.json').write_text(json.dumps(value,indent=2)+'\n')
+                            raise AssertionError('Native independent acceptance did not finish its observations')
+                        assert value['result']['server_locks_released'] and not value['restore_issued']
+                        return value
+                    http('review',{'source_server_id':sid,'backup_job_id':backup['job_id'],
+                        'options':{'target_confirmation':target_uuid,'server_wide_write_pause_confirmed':False}},prefix='mysql_instance_acceptance_',refused=True)
+                    accepted=accept()
+                    assert accepted['acceptance_outcome']=='matched',accepted
+                    assert all(accepted['result'][key]['matched'] is True for key in ('data','definitions','accounts'))
+                    proof['checks'].append('independent-native-full-dump-count-checksum-schema-and-exported-account-definition-acceptance-under-explicit-server-read-and-instance-backup-locks')
+                    qt.execute('UPDATE sr_restored_a.t SET body="same count changed value"')
+                    changed=accept();assert changed['acceptance_outcome']=='not_matched' and changed['result']['data']['matched'] is False
+                    assert changed['result']['row_counts']['matched'] and changed['result']['definitions']['matched'] and changed['result']['accounts']['matched']
+                    assert any(error['code']==53031 for error in changed['result']['control']['errors'])
+                    qt.execute('UPDATE sr_restored_a.t SET body=%s',('native 雪',))
+                    proof['checks'].append('actual-native-checksum-mismatch-53031-is-separate-from-row-count-and-definition-acceptance-without-restore-replay')
+                    qt.execute('INSERT INTO sr_restored_a.t VALUES(9007199254740994,"outside original chunk boundary",NULL)')
+                    changed=accept();assert changed['acceptance_outcome']=='not_matched' and not changed['result']['row_counts']['matched']
+                    assert changed['result']['control']['checksum_returned'] and changed['result']['data']['matched'] is False
+                    qt.execute('DELETE FROM sr_restored_a.t WHERE id=9007199254740994')
+                    proof['checks'].append('full-instance-counts-detect-extra-rows-beyond-native-checksum-chunk-boundaries')
+                    qt.execute("ALTER PROCEDURE sr_restored_a.p COMMENT 'changed native definition'")
+                    changed=accept();assert changed['acceptance_outcome']=='not_matched' and changed['result']['definitions']['matched'] is False
+                    assert changed['result']['data']['matched'] and changed['result']['accounts']['matched']
+                    qt.execute('DROP PROCEDURE sr_restored_a.p')
+                    qt.execute('USE sr_restored_a')
+                    qt.execute(source_procedure)
+                    qt.execute('SHOW CREATE PROCEDURE sr_restored_a.p');assert qt.fetchone()[2]==source_procedure
+                    proof['checks'].append('native-routine-definition-change-fails-exact-definition-acceptance-despite-matching-row-data')
+                    qt.execute("GRANT UPDATE ON sr_restored_b.* TO 'sr_restored_role'@'%'")
+                    changed=accept();assert changed['acceptance_outcome']=='not_matched' and changed['result']['accounts']['matched'] is False
+                    assert changed['result']['data']['matched'] and changed['result']['definitions']['matched']
+                    qt.execute("REVOKE UPDATE ON sr_restored_b.* FROM 'sr_restored_role'@'%'")
+                    proof['checks'].append('native-role-grant-change-fails-exported-account-acceptance-without-disclosing-native-sql-or-authentication-material')
+                    assert accept()['acceptance_outcome']=='matched'
+                    original=http('status',{'job_id':restored['job_id']});assert original['native_load_outcome']=='returned' and not original['data_recovery_verified']
+                    proof['checks'].append('new-acceptance-after-fixture-reversion-is-separate-from-the-original-restore-acknowledgement-and-prior-failed-observations')
                 qs.execute('INSERT INTO sr_restored_b.t VALUES(2,"after backup",NULL)');qs.execute('FLUSH BINARY LOGS')
                 archived=wait(start(http('review',{'options':{'start_file':boundary['file'],'start_position':boundary['position'],'threads':1,'timeout_seconds':120}},url=surl,prefix='mysql_binlog_'),url=surl,prefix='mysql_binlog_'),url=surl,prefix='mysql_binlog_')
                 assert archived['state']=='completed'
@@ -161,7 +210,7 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None):
                 accepted=http('acknowledge',{'job_id':cancelled['job_id'],'target_confirmation':target_uuid,'observation_digest':observed['observation_digest']})
                 assert accepted['native_load_outcome']=='unknown'
                 proof['checks'].append('active-native-load-cancellation-confirms-local-process-cleanup-and-requires-released-native-lock-and-explicit-target-acknowledgement-without-inferred-rollback')
-                if binary:proof['browser']=browser(app,output,tid,backup['job_id'],target_uuid,binary,driver_binary)
+                if binary:proof['browser']=browser(app,output,tid,backup['job_id'],target_uuid,binary,driver_binary,acceptance)
                 proof['native_connection_classes']=sorted(set(classes));assert proof['native_connection_classes']==[('CharsetCMySQLConnection' if use_c else 'CharsetMySQLConnection')]
                 proof['complete']=True
             finally:
@@ -173,7 +222,7 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None):
     return proof
 
 
-def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary):
+def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary,acceptance=False):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -195,9 +244,9 @@ def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary):
         ActionChains(driver).context_click(wait.until(target)).perform()
         wait.until(lambda b:next((node for node in b.find_elements(By.CSS_SELECTOR,'[role="menuitem"]') if node.is_displayed() and node.text.strip()=='Restore'),None)).click()
         wait.until(lambda b:next((node for node in b.find_elements(By.CSS_SELECTOR,'[role="menuitem"]') if node.is_displayed() and 'MySQL full-instance restores' in node.text),None)).click()
-        def click(label):
+        def click(label,tag='button'):
             def attempt(browser):
-                for node in browser.find_elements(By.TAG_NAME,'button'):
+                for node in browser.find_elements(By.TAG_NAME,tag):
                     if node.is_enabled() and node.get_attribute('textContent').strip()==label:
                         browser.execute_script('arguments[0].scrollIntoView({block:"center"});',node)
                         if node.is_displayed():node.click();return True
@@ -216,10 +265,21 @@ def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary):
         wait.until(lambda b:any(': native_load_returned.' in node.get_attribute('textContent') and 'outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
         click('Observe instance restore target')
         wait.until(lambda b:any('native_lock_free' in node.get_attribute('textContent') for node in b.find_elements(By.TAG_NAME,'pre')))
+        checks=['native-target-context-action','owned-source-and-backup-selection-with-exact-target-confirmation','review-and-explicit-native-instance-load','separate-target-observation-preserves-original-native-outcome']
+        if acceptance:
+            click('Independent dump acceptance','summary')
+            consent=driver.find_element(By.XPATH,'//label[contains(.,"Confirm server-wide write pause for independent acceptance")]')
+            driver.execute_script('arguments[0].scrollIntoView({block:"center"});',consent);consent.click()
+            click('Review independent dump acceptance');wait.until(lambda b:b.find_elements(By.CSS_SELECTOR,'[aria-label="Independent dump acceptance review"]'))
+            click('Confirm and start independent acceptance')
+            wait.until(lambda b:any('Recorded outcome: matched.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            table=driver.find_element(By.CSS_SELECTOR,'[aria-label="Recorded dump acceptance surfaces"]')
+            assert table.get_attribute('textContent').count('Matched')==3
+            checks+=['independent-read-lock-confirmation-and-reviewed-acceptance','separate-exported-data-definition-account-results']
         driver.save_screenshot(str(output/'native-instance-restore.png'))
         errors=[entry for entry in driver.get_log('browser') if entry['level']=='SEVERE'];assert not errors,errors
         return {'complete':True,'version':driver.capabilities['browserVersion'],'console_errors':errors,
-            'checks':['native-target-context-action','owned-source-and-backup-selection-with-exact-target-confirmation','review-and-explicit-native-instance-load','separate-target-observation-preserves-original-native-outcome']}
+            'checks':checks}
     except Exception:
         if driver:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)
@@ -231,5 +291,5 @@ def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',required=True);parser.add_argument('--mysql-shell',required=True);parser.add_argument('--use-c',action='store_true')
-    parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
-    args=parser.parse_args();proof=qualify(args.output,args.mysql_shell,args.use_c,args.browser_binary,args.driver_binary);print(json.dumps({'complete':proof['complete'],'checks':len(proof['checks'])}))
+    parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--acceptance',action='store_true')
+    args=parser.parse_args();proof=qualify(args.output,args.mysql_shell,args.use_c,args.browser_binary,args.driver_binary,args.acceptance);print(json.dumps({'complete':proof['complete'],'checks':len(proof['checks'])}))

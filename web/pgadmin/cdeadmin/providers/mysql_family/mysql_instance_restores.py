@@ -9,6 +9,7 @@ from ...operations.fileio import private_file
 from ...sdk.tooling import ProviderToolGrant
 from .mysql_binlog_archives import BinlogArchiveError, connection_options, rows, program_identity
 from .mysql_binlog_replay import capture_target
+from .mysql_shell_tools import NATIVE_ERROR_FUNCTION
 
 CREDENTIAL_FILE = 'CDEADMIN_MYSQL_INSTANCE_RESTORE_CREDENTIAL_FILE'
 
@@ -67,7 +68,8 @@ def script(client, route, directory, target, before, selected, workspace, marker
     return ('const authentication=JSON.parse(os.loadTextFile(os.getenv(' + json.dumps(CREDENTIAL_FILE) + ')));\n'
         'const target=' + json.dumps(connection_options(client, route), ensure_ascii=True) + ';\n'
         'for(const key of Object.keys(authentication))target[key]=authentication[key];\n'
-        'let invoked=false,returned=false,locked=false,stage="connecting",nativeError=null;\n'
+        + NATIVE_ERROR_FUNCTION +
+        'let invoked=false,returned=false,locked=false,stage="connecting",nativeErrorDetail=null;\n'
         'try {shell.connect(target);stage="identity";const session=shell.getSession();\n'
         'const observed=session.runSql("SELECT @@server_uuid,VERSION(),CURRENT_USER(),CURRENT_ROLE()").fetchOne();\n'
         'if(!' + json.dumps(expected) + '.every((value,index)=>value===observed[index]))throw new Error("Native restore target identity changed");\n'
@@ -76,8 +78,8 @@ def script(client, route, directory, target, before, selected, workspace, marker
         json.dumps([before['gtid_executed'], before['gtid_executed']]) + ').fetchOne();\n'
         'if(lineage[0]!==1 || lineage[1]!==1)throw new Error("Native recovery target GTIDs changed after review");\n'
         'stage="loading";invoked=true;util.loadDump(' + json.dumps(str(directory)) + ',' + json.dumps(native) + ');returned=true;stage="returned";\n'
-        '} catch(error) {nativeError={code:Number.isInteger(error.code)?error.code:null,sqlstate:typeof error.sqlState==="string"?error.sqlState:null,message:String(error.message || error).slice(0,2048)};throw error;}'
-        ' finally {print(' + json.dumps(marker) + '+JSON.stringify({native_load_invoked:invoked,native_load_returned:returned,stage:stage,native_error:nativeError})+"\\n");'
+        '} catch(error) {nativeErrorDetail=nativeError(error);throw error;}'
+        ' finally {print(' + json.dumps(marker) + '+JSON.stringify({native_load_invoked:invoked,native_load_returned:returned,stage:stage,native_error:nativeErrorDetail})+"\\n");'
         'if(locked)shell.getSession().runSql("SELECT RELEASE_LOCK(?)",' + json.dumps([lock]) + ');}\n')
 
 

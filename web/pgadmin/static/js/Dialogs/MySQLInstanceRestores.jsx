@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import MySQLInstanceAcceptance from './MySQLInstanceAcceptance';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 const DEFAULT_OPTIONS=JSON.stringify({load_users:false,checksum:true,threads:4,update_gtid_set:'off',timeout_seconds:3600},null,2);
@@ -72,7 +73,7 @@ export default function MySQLInstanceRestores({post}) {
       </TableBody></Table><TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={jobs.offset/25} onPageChange={(_event,next)=>loadJobs(next*25)} />
     </>}
     {receipt && <Box>
-      <Alert severity={receipt.state==='native_load_returned' ? 'info' : receipt.state==='unknown' ? 'warning' : 'info'}>Instance restore {receipt.job_id}: {receipt.state}. Original native load outcome: {receipt.native_load_outcome}. Recovery data/definitions and production cutover remain unverified.</Alert>
+      <Alert severity={receipt.state==='native_load_returned' ? 'info' : receipt.state==='unknown' ? 'warning' : 'info'}>Instance restore {receipt.job_id}: {receipt.state}. Original native load outcome: {receipt.native_load_outcome}. Review independent acceptance receipts for data and definitions. Production cutover remains unverified.</Alert>
       {receipt.native_error && <Alert severity="error">Native restore error {receipt.native_error.code ?? ''}: {receipt.native_error.message}</Alert>}
       <Button disabled={busy} onClick={()=>run('status',{job_id:receipt.job_id},setReceipt)}>Refresh instance restore receipt</Button>
       <Button disabled={busy || !ACTIVE.has(receipt.state) && receipt.state!=='reviewed'} onClick={()=>run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel instance restore</Button>
@@ -80,6 +81,7 @@ export default function MySQLInstanceRestores({post}) {
       {receipt.state==='unknown' && observation && <Button disabled={busy || confirmation!==receipt.target.server_uuid} onClick={()=>run('acknowledge',{job_id:receipt.job_id,target_confirmation:confirmation,observation_digest:observation},setReceipt)}>Acknowledge observed target for another recovery</Button>}
       <Box component="details"><summary>Native instance restore observations</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{JSON.stringify(receipt,null,2)}</Box></Box>
     </Box>}
+    <MySQLInstanceAcceptance post={post} sourceServerId={source?.server_id} backupJobId={backup?.job_id} targetUuid={target?.identity?.server_uuid} targetConfirmation={confirmation} />
   </Box>;
 }
 MySQLInstanceRestores.propTypes={post:PropTypes.func.isRequired};

@@ -43,6 +43,7 @@ def input_reference(service, owner, request):
     reference = {'server_id': source.id, 'endpoint_id': endpoint.id, 'job_id': record['job_id'],
         'artifact_digest': digest(artifact), 'summary': {key: deepcopy(artifact[key]) for key in
             ('format', 'source_uuid', 'schemas', 'users', 'native_boundary', 'native_consistent', 'native_checksums_included')}}
+    reference['summary']['native_backup_options'] = deepcopy(record['options']['native_options'])
     return reference, jobs.directory(record) / 'archive', record['source']
 
 

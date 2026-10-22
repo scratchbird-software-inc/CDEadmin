@@ -11,6 +11,7 @@ from ...operations.fileio import private_file
 from ...sdk.tooling import ProviderToolGrant
 from .mysql_binlog_archives import BinlogArchiveError, connection_options, manifest
 from .mysql_dump_verification import document
+from .mysql_shell_tools import NATIVE_ERROR_FUNCTION
 
 CREDENTIAL_FILE = 'CDEADMIN_MYSQL_INSTANCE_DUMP_CREDENTIAL_FILE'
 INSTANCE_FIELDS = {'users': 'users', 'include_schemas': 'includeSchemas', 'exclude_schemas': 'excludeSchemas',
@@ -108,13 +109,14 @@ def script(client, route, directory, expected, selected, marker):
     return ('const authentication=JSON.parse(os.loadTextFile(os.getenv(' + json.dumps(CREDENTIAL_FILE) + ')));\n'
         'const target=' + json.dumps(connection_options(client, route), ensure_ascii=True) + ';\n'
         'for(const key of Object.keys(authentication))target[key]=authentication[key];\n'
-        'let invoked=false,returned=false,stage="connecting",nativeError=null;\ntry {shell.connect(target);stage="identity";\n'
+        + NATIVE_ERROR_FUNCTION +
+        'let invoked=false,returned=false,stage="connecting",nativeErrorDetail=null;\ntry {shell.connect(target);stage="identity";\n'
         'const observed=shell.getSession().runSql("SELECT @@server_uuid,VERSION(),CURRENT_USER(),CURRENT_ROLE()").fetchOne();\n'
         'if(!' + json.dumps([expected[key] for key in fields]) + '.every((value,index)=>value===observed[index]))'
         'throw new Error("Native instance backup identity changed");\n'
         'stage="dumping";invoked=true;util.dumpInstance(' + json.dumps(str(directory)) + ',' + json.dumps(selected['native_options']) + ');returned=true;stage="returned";\n'
-        '} catch(error) {nativeError={code:Number.isInteger(error.code)?error.code:null,sqlstate:typeof error.sqlState==="string"?error.sqlState:null,message:String(error.message || error).slice(0,2048)};throw error;}'
-        ' finally {print(' + json.dumps(marker) + '+JSON.stringify({native_dump_invoked:invoked,native_dump_returned:returned,stage:stage,native_error:nativeError})+"\\n");}\n')
+        '} catch(error) {nativeErrorDetail=nativeError(error);throw error;}'
+        ' finally {print(' + json.dumps(marker) + '+JSON.stringify({native_dump_invoked:invoked,native_dump_returned:returned,stage:stage,native_error:nativeErrorDetail})+"\\n");}\n')
 
 
 def acknowledged(control):

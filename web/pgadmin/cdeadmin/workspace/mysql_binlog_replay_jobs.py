@@ -53,7 +53,9 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
                     # A crash between saving a terminal receipt and releasing
                     # the fence can be reconciled from that durable fact.
                     previous=self.load(current['job_id'],current['owner'],current['endpoint_id'])
-                    if previous.get('native_load_outcome') not in {'returned','not_dispatched'} or previous.get('native_process_termination_confirmed') is not True:
+                    if (previous.get('native_load_outcome') not in {'returned','not_dispatched'} or
+                            previous.get('native_process_termination_confirmed') is not True or
+                            previous.get('recovery_fence_release_confirmed', True) is not True):
                         raise BinlogArchiveError('This native target has an active or unresolved replay; reconcile its receipt before another dispatch')
                 state['replay_fence']={key:record[key] for key in ('job_id','owner','endpoint_id','operation')}
             store.change(claim)
