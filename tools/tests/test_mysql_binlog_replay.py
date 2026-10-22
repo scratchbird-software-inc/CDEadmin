@@ -139,6 +139,45 @@ def test_dead_worker_keeps_target_fenced_without_automatic_process_finality(mana
     with pytest.raises(BinlogArchiveError):jobs.claim_fence(jobs.load(next_item['job_id'],1,endpoint))
 
 
+def test_cancelled_unadmitted_review_releases_its_stale_target_claim_after_restart(manager):
+    jobs,endpoint,_target,review,current=manager;item,request=review()
+    jobs.claim_fence(jobs.load(item['job_id'],1,endpoint))
+    restarted=type(jobs)(jobs.path,jobs.root)
+    assert restarted.cancel(item['job_id'],1,endpoint)['state']=='cancelled'
+    other,_other_request=review();other_record=jobs.load(other['job_id'],1,endpoint)
+    jobs.claim_fence(other_record)
+    transport=Transport('returned')
+    assert jobs.start(request,1,endpoint,current,transport)['state']=='cancelled'
+    assert transport.calls==0 and transport.closed
+    with jobs.fence_store(jobs.target_identity(other_record)) as store:
+        assert store.read()['replay_fence']['job_id']==other['job_id']
+
+
+def test_cancellation_between_target_claim_and_atomic_admission_never_dispatches(manager,monkeypatch):
+    jobs,endpoint,_target,review,current=manager;_item,request=review()
+    claim=jobs.claim_fence
+    def cancel_after_claim(record):
+        claim(record)
+        jobs.cancel(record['job_id'],1,endpoint)
+    monkeypatch.setattr(jobs,'claim_fence',cancel_after_claim)
+    transport=Transport('returned')
+    assert jobs.start(request,1,endpoint,current,transport)['state']=='cancelled'
+    assert transport.calls==0 and transport.closed
+    other,_other_request=review();claim(jobs.load(other['job_id'],1,endpoint))
+
+
+@pytest.mark.parametrize('marker',['worker_identity','started_at','native_load_may_have_dispatched','native_checks_may_have_started','durable_tool','server_lock_owner'])
+def test_cancel_never_retires_a_claim_with_admission_or_native_ownership_evidence(manager,marker):
+    jobs,endpoint,_target,review,_current=manager;item,_request=review();record=jobs.load(item['job_id'],1,endpoint)
+    jobs.claim_fence(record)
+    # Even false/empty marker values cannot turn a post-admission receipt into
+    # a never-admitted review. Native cleanup still needs its original path.
+    jobs.update(record,state='cancelled',**{marker:False})
+    jobs.cancel(item['job_id'],1,endpoint)
+    other,_other_request=review()
+    with pytest.raises(BinlogArchiveError):jobs.claim_fence(jobs.load(other['job_id'],1,endpoint))
+
+
 @pytest.mark.parametrize('extra',[{'stop_mode':'before','stop_gtid':'arbitrary'}, {'stop_mode':'all','stop_gtid':'unexpected'},
     {'stop_mode':'after','stop_gtid':'00000000-0000-0000-0000-000000000001:9223372036854775808'},
     {'stop_mode':'before','stop_gtid':'00000000-0000-0000-0000-000000000001:9tag:1'}, {'timeout_seconds':True}, {'path':'/unregistered'}])

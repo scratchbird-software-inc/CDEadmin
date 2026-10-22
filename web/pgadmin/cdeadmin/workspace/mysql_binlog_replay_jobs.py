@@ -66,6 +66,18 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
                 if state.get('replay_fence',{}).get('job_id')==record['job_id']:state.pop('replay_fence',None)
             store.change(release)
 
+    def cancel(self,job_id,owner,endpoint):
+        super().cancel(job_id,owner,endpoint)
+        record=self.load(job_id,owner,endpoint)
+        # Atomic worker admission changes the reviewed state and records both
+        # worker_identity and started_at. Cancelling the review first prevents
+        # that admission, including a caller paused after claiming its fence.
+        admitted=('worker_identity','started_at','native_load_may_have_dispatched',
+                  'native_checks_may_have_started','durable_tool','server_lock_owner')
+        if record['state']=='cancelled' and not any(key in record for key in admitted):
+            self.release_fence(record)
+        return self.get(job_id,owner,endpoint)
+
     def start(self,request,owner,endpoint,current,transport):
         record=self.load(request.get('job_id') if isinstance(request,dict) else None,owner,endpoint)
         if record['state']!='reviewed':return super().start(request,owner,endpoint,current,transport)

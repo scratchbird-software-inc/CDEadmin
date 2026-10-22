@@ -390,6 +390,13 @@ Backup file reconciliation separately verifies complete native files; it does
 not invent a missing original dump reply. Interrupted utilities can be cancelled
 from their retained job views. There is no automatic native retry.
 
+If an interrupted start claimed target protection before atomic worker
+admission, explicitly cancelling its still-unstarted review releases that
+claim. A paused start then observes the cancellation and cannot dispatch.
+Admission, utility or private SQL-session ownership evidence prevents this
+review-only cleanup; uncertain native work keeps its original reconciliation
+requirements.
+
 A missing, changed or incomplete supervisor receipt remains unconfirmed. A
 dead application PID or free native SQL lock alone is insufficient. Older jobs
 without an invocation reference and failure of the supervisor itself retain
