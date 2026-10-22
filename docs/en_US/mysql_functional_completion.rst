@@ -178,6 +178,37 @@ The source-only refresh tool is
 <native-9.7-source>``. It retains existing runtime facts and qualified task
 receipts, records source hashes and avoids relabelling the original artifact.
 
+Installed native Rewriter rules now have dedicated server maintenance actions
+for inspection, insertion, editing, deletion and explicit reload. The adapter
+uses the native ``query_rewrite.rewrite_rules`` InnoDB table and installed
+``query_rewrite.flush_rewrite_rules`` procedure. Pattern/replacement text is
+bound as data; signed native rule IDs, native YES/NO and distinct NULL/empty
+pattern databases are preserved. Inspection includes stored patterns, native
+messages/digests/normalized patterns and the four native Rewriter status values.
+The plugin does not enumerate its in-memory rule definitions; the table and
+status observations do not assert which rule handled a client query.
+
+Each action owns its connection. Review binds the server UUID/principal/roles,
+plugin, reload-procedure definition hash and affected stored rules. Edits lock
+and recheck the selected row, then commit only their owned transaction. Saving
+does not invoke a reload; another administrator or native startup loading can
+activate stored rules. Reload is a separately confirmed server-wide action.
+The native procedure commits its own connection and may load valid rules even
+when it reports rejected rules. Native error 1644/45000 and per-rule messages
+remain visible through a later inspection. Missing replies are never replayed;
+a committed edit remains acknowledged if its later observation fails.
+
+``tools/cdeadmin_mysql_rewriter_qualification.py --output <outside-repo>``
+uses the official installer shipped with the pinned MySQL image, checks both
+native connector implementations and observes actual rewriting through a
+separate unprivileged client. ``--application`` adds authenticated reviewed API
+checks; ``--browser-binary`` and ``--driver-binary`` add built desktop checks.
+These fixtures install the native plugin for qualification. Deployment of the
+native installer onto an arbitrary database host remains under host lifecycle
+work; these rule actions require an already installed native plugin/schema.
+Native permission checks remain authoritative, and bounded review refuses
+partial inventories above 1000 stored rules or 4 MiB.
+
 Prepared XA inspection and explicit commit/rollback recovery workflows are
 available under the native server Maintenance menu. They use separate owned
 connections, ``XA RECOVER CONVERT XID`` and binary hexadecimal literals for both

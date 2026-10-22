@@ -779,6 +779,14 @@ def endpoint_context_actions(
                     'open_workspace',icon='action.settings',group='maintenance',mutation='destructive',confirmation=True,macro=False,
                     arguments={'tab':'administration','resource_kind':'server','operation_id':operation,'database_target_id':None},
                     enabled=ready and can_manage,disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can control the native server.'))
+            from .providers.mysql_family.mysql_rewriter import OPERATIONS as rewrite_operations
+            for operation, title in rewrite_operations.items():
+                actions.append(_action('endpoint.mysql.' + operation, title + '...',
+                    'open_workspace', icon='action.settings', group='maintenance',
+                    mutation='read' if operation == 'inspect_rewrite_rules' else 'destructive' if operation == 'drop_rewrite_rule' else 'admin',
+                    confirmation=operation != 'inspect_rewrite_rules', macro=False,
+                    arguments={'tab': 'administration', 'resource_kind': 'server', 'operation_id': operation, 'database_target_id': None},
+                    enabled=ready and can_manage, disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can manage native query rewrite rules.'))
             from .providers.mysql_family.mysql_xa import OPERATIONS as xa_operations
             for operation,title in xa_operations.items():
                 actions.append(_action('endpoint.mysql.'+operation,title+'...',

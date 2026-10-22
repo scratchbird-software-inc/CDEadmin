@@ -156,6 +156,16 @@ MySQL
   statement's expected mode and stops on drift. Runtime-dependent future context
   remains unconfirmed without executing submitted SQL. Remaining installed
   capability reconciliation and catalog/privilege semantics require their work.
+  Installed native Rewriter rules now have dedicated inspect/create/edit/delete
+  and explicit reload actions, with native messages/digests/status, selected-row
+  locking, own-connection commits, changed-state refusal and separate partial
+  reload outcomes. The native installer is used by qualification; arbitrary-host
+  installer deployment remains under lifecycle work. This closes the installed
+  rule-management adapter gap, not INV-MYSQL. Source inspection also confirms
+  the Community ``components/mysqlbackup`` page-tracking UDF implementation and
+  its InnoDB handlers; those interfaces remain beta implementation work. Their
+  presence does not establish source availability of a complete Enterprise
+  Backup utility or its physical recovery orchestration.
   Native MyISAM index-cache assignment and preloading now have typed reviewed
   workflows, exact source/table/index rechecks and explicit native result-row
   outcomes. These additions do not close the wider installed feature inventory.
