@@ -373,6 +373,12 @@ CDEADMIN_POSTGRESQL_WAL_ARCHIVE_ROOT = env('CDEADMIN_POSTGRESQL_WAL_ARCHIVE_ROOT
 # Native MySQL9.7 Shell archives on the application host. The operator chooses
 # storage and any mandatory deadline; browser requests cannot supply paths.
 CDEADMIN_MYSQL_BINLOG_ROOT = env('CDEADMIN_MYSQL_BINLOG_ROOT') or ''
+# Native testing sandboxes run under the application's OS account. Server-mode
+# deployment requires this explicit opt-in AND an Administrator application role.
+CDEADMIN_MYSQL_SANDBOX_ENABLED = False
+CDEADMIN_MYSQL_SANDBOX_ROOT = ''
+CDEADMIN_MYSQL_SANDBOX_JOB_ROOT = ''
+CDEADMIN_MYSQL_SANDBOX_DIRECTORIES = []
 CDEADMIN_MYSQL_BINLOG_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_MYSQL_BINLOG_MAX_RUNTIME_SECONDS') or 0) or None
 CDEADMIN_MYSQL_BINLOG_REPLAY_ROOT = env('CDEADMIN_MYSQL_BINLOG_REPLAY_ROOT') or ''
 CDEADMIN_MYSQL_BINLOG_REPLAY_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_MYSQL_BINLOG_REPLAY_MAX_RUNTIME_SECONDS') or 0) or None

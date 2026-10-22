@@ -510,6 +510,12 @@ define('pgadmin.node.server', [
           showProviderWorkspace(gettext('MySQL full-instance restores'),this,data,item,'mysql-instance-restores');
           return false;
         },
+        open_mysql_sandboxes: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL local sandboxes'),this,data,item,'mysql-sandboxes');
+          return false;
+        },
         open_mysql_topologies: function(args) {
           const item=args?.item || pgBrowser.tree.selected();
           const data=pgBrowser.tree.itemData(item);

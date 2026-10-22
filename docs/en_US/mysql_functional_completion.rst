@@ -201,10 +201,63 @@ not a substituted production tool runner. Both connector implementations and
 the built desktop require their own receipts.
 
 These adapters and scoped receipts do not complete the independently enumerated
-AdminAPI surface. Remaining account/router/routing-guideline interfaces,
-unreachable-member recovery, complete ClusterSet/failover/repair qualification,
-host deployment and broader lifecycle acceptance remain under
+AdminAPI surface. Unreachable-member recovery, complete ClusterSet/failover/
+repair qualification, Router deployment/bootstrap/traffic, host installation,
+upgrades and broader lifecycle acceptance remain under
 ``MY-HA-LIFECYCLE`` and ``INV-MYSQL``.
+
+Local testing sandboxes
+~~~~~~~~~~~~~~~~~~~~~~
+
+The dedicated **MySQL local testing sandboxes** workspace exposes native Shell
+9.7 ``deploy_sandbox_instance``, ``start_sandbox_instance``,
+``stop_sandbox_instance``, ``kill_sandbox_instance`` and
+``delete_sandbox_instance``. It works through an owned MySQL registration without
+opening that registration's SQL connection. These sandboxes run under the
+ScratchRobin execution host's operating-system account. They are native local
+testing instances, separate from remote service installation or production
+deployment. Native platform qualification remains with the platform teams.
+
+Configure ``CDEADMIN_MYSQLSH_BINARY`` and ``CDEADMIN_MYSQL_SERVER_BINARY`` on that
+host. Deployment checks the installed native Shell/server version and executable
+hashes. ``CDEADMIN_MYSQL_SANDBOX_ROOT`` chooses the managed base directory;
+``CDEADMIN_MYSQL_SANDBOX_DIRECTORIES`` can explicitly admit existing additional
+base directories. Native ``sandboxDir`` and ``mysqldPath`` are bound to these
+operator-selected paths. Deployment retains native ``portx``, ``allowRootFrom``,
+``ignoreSslError`` and ordered ``mysqldOptions``. Root passwords enter separately
+at dispatch, including an explicitly selected empty password. Saved reviews
+contain no password. Server mode additionally requires an Administrator role
+and ``CDEADMIN_MYSQL_SANDBOX_ENABLED = True``; SQL endpoint ownership alone does
+not grant local host control.
+
+Reviews bind actual control files, the native SDK's interpreted configuration,
+the native option-file graph, persisted configuration, data-directory and
+``auto.cnf`` identities, and observed PID/executable/listening-port ownership.
+No database UUID is invented before deployment. Stale controls and unconfirmed
+or foreign processes/ports refuse dispatch. Delete requires a stopped instance.
+Native kill uses its documented fixed PID-file location; a different configured
+PID file is refused for that method. These observations are bounded reads,
+not an atomic filesystem snapshot or protection against an independently
+privileged concurrent operating-system administrator.
+
+Before stop, a private native client authenticates the supplied root password
+and checks the actual server UUID. TLS is preferred; the native RSA password
+exchange is enabled when TLS is unavailable. The subsequent shutdown uses the
+public native sandbox method. This admission also handles the pinned gadgets
+helper's default ``ssl=False`` with a cold ``caching_sha2_password`` account.
+Native errors and partially completed operations remain visible; for example,
+native deployment with ``allowRootFrom: localhost`` can create the instance and
+then fail because that root account already exists.
+
+Jobs preserve native replies separately from subsequent process/filesystem
+observations and SQL workload readiness. Durable execution-host port fences
+span registration aliases and base directories. Lost replies retain their
+original unknown outcome, require utility termination and an independent
+qualified observation before explicit acknowledgement, and are never replayed
+automatically. ``tools/cdeadmin_mysql_sandbox_qualification.py`` exercises actual
+application requests, native methods, independent connector/data checks and the
+built desktop. Its receipts qualify that recorded scope, not full host lifecycle
+or full MySQL product completion.
 
 MyISAM table maintenance includes reviewed native ``CACHE INDEX`` and
 ``LOAD INDEX INTO CACHE`` operations, with all or selected exact index names,

@@ -3177,6 +3177,10 @@ class ServerNode(PGChildNodeView):
                                 'mysql_instance_acceptance_list','mysql_instance_acceptance_cancel','mysql_instance_acceptance_reconcile','mysql_instance_acceptance_acknowledge'}:
                     try: payload = service.mysql_instance_acceptance(server, action.removeprefix('mysql_instance_acceptance_'), data.get('request'))
                     except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
+                elif action in {'mysql_sandbox_catalog','mysql_sandbox_inspect','mysql_sandbox_review','mysql_sandbox_start',
+                                'mysql_sandbox_status','mysql_sandbox_list','mysql_sandbox_cancel','mysql_sandbox_reconcile','mysql_sandbox_acknowledge'}:
+                    try: payload = service.mysql_sandbox(server, action.removeprefix('mysql_sandbox_'), data.get('request'))
+                    except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
                 elif action in {'mysql_topology_catalog','mysql_topology_inspect','mysql_topology_inspect_native','mysql_topology_members',
                                 'mysql_topology_review','mysql_topology_start','mysql_topology_status','mysql_topology_list',
                                 'mysql_topology_cancel','mysql_topology_reconcile','mysql_topology_acknowledge'}:

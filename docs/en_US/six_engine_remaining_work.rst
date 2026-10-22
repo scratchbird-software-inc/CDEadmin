@@ -180,7 +180,14 @@ MySQL
   ReplicaSet and ClusterSet. Native document and Router configuration changes
   invalidate stale reviews. Live selected-Router mutation/removal acceptance,
   Router deployment/bootstrap and actual traffic/failure tests remain open,
-  alongside host sandbox lifecycle integration.
+  alongside host service installation/upgrades and broader lifecycle acceptance.
+  Native local sandbox deploy/start/stop/kill/delete now have a separate
+  offline-capable execution-host workspace with explicit OS authority,
+  private dispatch passwords, native configuration/process identity checks,
+  stale-review refusal and durable cross-registration port fences. Native
+  method replies, uncertain-outcome acknowledgement and independent SQL/data
+  observations retain separate meanings. This does not close production host
+  installation/upgrades or broader topology/Router failure/repair acceptance.
   Native administrator and Router account setup now has dedicated Cluster,
   ReplicaSet and ClusterSet methods. These require the current writable primary
   registration and bind native primary roles, account state and visible grants

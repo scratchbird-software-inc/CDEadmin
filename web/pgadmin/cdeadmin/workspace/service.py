@@ -1666,6 +1666,14 @@ class ProviderWorkspaceService:
         except (BinlogArchiveError, CloneError, ProviderToolError, RelationalClientError) as error: raise ProviderWorkspaceError(str(error)) from None
         except OSError: raise ProviderWorkspaceError('Native instance acceptance storage is unavailable') from None
 
+    def mysql_sandbox(self, server, operation, request):
+        from .mysql_sandbox_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        try: return action(self, server, operation, request)
+        except (BinlogArchiveError, ProviderToolError) as error: raise ProviderWorkspaceError(str(error)) from None
+        except (OSError, ValueError): raise ProviderWorkspaceError('Native sandbox host state or storage is unavailable') from None
+
     def mysql_topology(self, server, operation, request):
         from .mysql_topology_service import action
         from ..sdk.tooling import ProviderToolError
