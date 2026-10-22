@@ -9,6 +9,7 @@ from . import column_masking
 from . import mysql_key_cache
 from . import mysql_instance
 from . import mysql_xa
+from . import mysql_page_tracking
 from . import mysql_rewriter
 from . import mysql_server_control
 from . import mysql_key_cache_lifecycle as cache_lifecycle
@@ -19,6 +20,11 @@ class MySQLAdministration(RelationalAdministration):
         value = deepcopy(catalog)
         for resource in value['objects']:
             if resource['resource_kind']=='server':
+                resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in mysql_page_tracking.OPERATIONS] + [{
+                    'operation_id': operation, 'title': title,
+                    'mutation_class': 'read' if operation in mysql_page_tracking.READS else 'destructive' if operation in {'set_page_tracking_backup_id', 'purge_page_tracking'} else 'admin',
+                    'target_required': True, 'confirmation_required': operation not in mysql_page_tracking.READS,
+                } for operation, title in mysql_page_tracking.OPERATIONS.items()]
                 resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in mysql_rewriter.OPERATIONS] + [{
                     'operation_id': operation, 'title': title,
                     'mutation_class': 'read' if operation == 'inspect_rewrite_rules' else 'destructive' if operation == 'drop_rewrite_rule' else 'admin',
@@ -72,6 +78,8 @@ class MySQLAdministration(RelationalAdministration):
         return super().catalog(value)
 
     def _form(self, kind, operation):
+        if kind == 'server' and operation in mysql_page_tracking.OPERATIONS:
+            return mysql_page_tracking.form(operation, self._field)
         if kind == 'server' and operation in mysql_rewriter.OPERATIONS:
             return mysql_rewriter.form(operation, self._field)
         if kind=='server' and operation in mysql_server_control.OPERATIONS:return mysql_server_control.form(operation,self._field)
@@ -94,6 +102,8 @@ class MySQLAdministration(RelationalAdministration):
         return super()._form(kind, operation)
 
     def _normalize_draft(self, kind, operation, draft):
+        if kind == 'server' and operation in mysql_page_tracking.OPERATIONS:
+            return deepcopy(draft)
         if kind == 'server' and operation in mysql_rewriter.OPERATIONS:
             return deepcopy(draft)
         if kind=='server' and operation in mysql_server_control.OPERATIONS:return deepcopy(draft)
@@ -109,6 +119,12 @@ class MySQLAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def validate(self, request):
+        if request.get('resource_kind') == 'server' and request.get('operation_id') in mysql_page_tracking.OPERATIONS:
+            try:
+                mysql_page_tracking.compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
+                return {'errors': []}
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_page_tracking', 'message': str(error)}]}
         if request.get('resource_kind') == 'server' and request.get('operation_id') in mysql_rewriter.OPERATIONS:
             try:
                 mysql_rewriter.compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
@@ -166,6 +182,8 @@ class MySQLAdministration(RelationalAdministration):
         return super().validate(request)
 
     def _compile(self, request):
+        if request.get('resource_kind') == 'server' and request.get('operation_id') in mysql_page_tracking.OPERATIONS:
+            return mysql_page_tracking.compile_operation(request['operation_id'], request['draft'], request.get('target_resource'))
         if request.get('resource_kind') == 'server' and request.get('operation_id') in mysql_rewriter.OPERATIONS:
             return mysql_rewriter.compile_operation(request['operation_id'], request['draft'], request.get('target_resource'))
         if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_server_control.OPERATIONS:
@@ -187,6 +205,8 @@ class MySQLAdministration(RelationalAdministration):
         return super()._compile(request)
 
     def apply(self, client, request, connection=None):
+        if 'mysql_page_tracking' in (request.get('provider_payload') or {}).get('compiled', {}):
+            return mysql_page_tracking.apply(client, request, connection)
         if 'mysql_rewriter' in (request.get('provider_payload') or {}).get('compiled', {}):
             return mysql_rewriter.apply(client, request, connection)
         if 'mysql_server_control' in (request.get('provider_payload') or {}).get('compiled',{}):

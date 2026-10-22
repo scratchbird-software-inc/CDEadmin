@@ -178,6 +178,47 @@ The source-only refresh tool is
 <native-9.7-source>``. It retains existing runtime facts and qualified task
 receipts, records source hashes and avoids relabelling the original artifact.
 
+Community InnoDB page tracking now has seven dedicated server maintenance
+actions: inspect the active window, start/reset, stop, count page IDs, set the
+native backup ID, export a native index and purge tracking archives. These call
+the five implemented ``component_mysqlbackup`` UDFs and the native runtime-only
+``mysqlbackup.backupid`` variable. Native component installation/uninstallation
+uses the existing component administration. The interfaces do not require a
+closed-source Backup utility; physical data copying and incremental recovery
+orchestration remain separate work.
+
+Review binds the native component, UUID/principal/roles, current first active
+LSN, backup ID and database-host directory. Each action owns its connection and
+rechecks the review inputs. Read-only inspections/counts report fresh facts.
+Start resets an already active tracking window, and the native stop UDF first
+starts/resets tracking before stopping it. Destructive changes require an
+explicit coordinated backup window. Setting the native backup ID can interrupt
+a transfer and delete the component's previous exported index, even if the ID
+is unchanged. This is a separately confirmed action; export never changes that
+ID. NULL and native DEFAULT remain distinct inputs from literal text.
+
+An SQL reply is separate from a UDF result. The adapter retains exact signed
+native results as decimal text, including negative count errors, positive
+export error statuses and duplicate-file -1. The native purge LSN_MAX sentinel
+does not establish a purged boundary. Zero range inputs use native current
+window/checkpoint semantics. Native functions may expand a range without
+returning adjusted endpoints, so the adapter does not assert an exact exported
+range. The index is created under ``datadir/#meb`` on the database host; an SQL
+reply does not attest file existence, a copied data file, a recovery chain or
+recoverability. Returned native results survive a later observation failure;
+missing replies are never automatically replayed.
+
+``tools/cdeadmin_mysql_page_tracking_qualification.py --output <outside-repo>``
+checks both native drivers against an owned Community server. Its independent
+fixture verifies the exported file size/hash against the native page count,
+duplicate refusal, positive/negative native failure statuses, backup-ID file
+deletion, NULL/DEFAULT, changed-input refusal, post-acknowledgement observation
+loss, stop/purge and preservation of an unrelated transaction/savepoint.
+``--application`` adds authenticated reviewed API calls; optional
+``--browser-binary`` and ``--driver-binary`` qualify built desktop controls.
+This is native page-tracking qualification, not physical backup/recovery or
+cross-platform release acceptance.
+
 Installed native Rewriter rules now have dedicated server maintenance actions
 for inspection, insertion, editing, deletion and explicit reload. The adapter
 uses the native ``query_rewrite.rewrite_rules`` InnoDB table and installed

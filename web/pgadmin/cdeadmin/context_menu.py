@@ -779,6 +779,14 @@ def endpoint_context_actions(
                     'open_workspace',icon='action.settings',group='maintenance',mutation='destructive',confirmation=True,macro=False,
                     arguments={'tab':'administration','resource_kind':'server','operation_id':operation,'database_target_id':None},
                     enabled=ready and can_manage,disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can control the native server.'))
+            from .providers.mysql_family.mysql_page_tracking import OPERATIONS as page_operations, READS as page_reads
+            for operation, title in page_operations.items():
+                actions.append(_action('endpoint.mysql.' + operation, title + '...',
+                    'open_workspace', icon='action.settings', group='maintenance',
+                    mutation='read' if operation in page_reads else 'destructive' if operation in {'set_page_tracking_backup_id', 'purge_page_tracking'} else 'admin',
+                    confirmation=operation not in page_reads, macro=False,
+                    arguments={'tab': 'administration', 'resource_kind': 'server', 'operation_id': operation, 'database_target_id': None},
+                    enabled=ready and can_manage, disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can manage native page tracking.'))
             from .providers.mysql_family.mysql_rewriter import OPERATIONS as rewrite_operations
             for operation, title in rewrite_operations.items():
                 actions.append(_action('endpoint.mysql.' + operation, title + '...',

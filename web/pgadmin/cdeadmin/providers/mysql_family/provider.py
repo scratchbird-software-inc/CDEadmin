@@ -197,6 +197,8 @@ def _administration(profile):
         common['prepared-transaction'] = frozenset({'inspect'})
         from .mysql_instance import OPERATIONS as instance_operations
         common['server'] = common['server'] | frozenset(instance_operations)
+        from .mysql_page_tracking import OPERATIONS as page_tracking_operations
+        common['server'] = common['server'] | frozenset(page_tracking_operations)
         from .mysql_rewriter import OPERATIONS as rewriter_operations
         common['server'] = common['server'] | frozenset(rewriter_operations)
         from .mysql_key_cache_lifecycle import OPERATIONS as cache_lifecycle_operations
@@ -982,6 +984,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         if 'mysql_xa' in compiled:
             from .mysql_xa import bind_review
             return bind_review(self,planned)
+        if 'mysql_page_tracking' in compiled:
+            from .mysql_page_tracking import bind_review
+            return bind_review(self, planned)
         if 'mysql_rewriter' in compiled:
             from .mysql_rewriter import bind_review
             return bind_review(self, planned)

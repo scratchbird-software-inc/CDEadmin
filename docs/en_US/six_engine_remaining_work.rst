@@ -163,9 +163,12 @@ MySQL
   installer deployment remains under lifecycle work. This closes the installed
   rule-management adapter gap, not INV-MYSQL. Source inspection also confirms
   the Community ``components/mysqlbackup`` page-tracking UDF implementation and
-  its InnoDB handlers; those interfaces remain beta implementation work. Their
-  presence does not establish source availability of a complete Enterprise
-  Backup utility or its physical recovery orchestration.
+  its InnoDB handlers. Dedicated inspect/start/reset/stop/count, backup-ID,
+  export and purge actions now expose those native interfaces, including
+  native scalar failures, prior-index deletion on backup-ID assignment and
+  native host-file scope. They do not implement physical file copying,
+  incremental recovery or recovery-chain acceptance. Their presence does not
+  establish source availability of a complete Enterprise Backup utility.
   Native MyISAM index-cache assignment and preloading now have typed reviewed
   workflows, exact source/table/index rechecks and explicit native result-row
   outcomes. These additions do not close the wider installed feature inventory.
