@@ -1,0 +1,89 @@
+"""Native process supervision survives an abruptly lost application owner."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+import pytest
+
+from pgadmin.cdeadmin.sdk import durable_tool
+from pgadmin.cdeadmin.sdk.tooling import ProviderToolGrant, ProviderToolRunner
+
+
+def wait_until(callback, seconds=15):
+    deadline=time.monotonic()+seconds
+    while time.monotonic()<deadline:
+        value=callback()
+        if value:return value
+        time.sleep(.05)
+    raise TimeoutError('Owned durable utility fixture deadline')
+
+
+def test_durable_receipt_keeps_private_output_separate_and_scrubs_credentials(tmp_path):
+    events=[]
+    result=ProviderToolRunner({'python':sys.executable}).run(
+        ProviderToolGrant('python',str(tmp_path),'127.0.0.1',3306,durable_name='owned-native',
+            secret_environment_names=('OWNED_CREDENTIAL_FILE',)),
+        ['-c','import os,pathlib;print(pathlib.Path(os.environ["OWNED_CREDENTIAL_FILE"]).read_text())'],
+        secret_config=b'private-owned-canary',secret_argument=None,secret_environment_name='OWNED_CREDENTIAL_FILE',
+        redact_values=('private-owned-canary',),progress=events.append)
+    assert result['return_code']==0 and result['stdout']=='[redacted]\n'
+    reference=next(event['durable_tool'] for event in events if 'durable_tool' in event)
+    observed=durable_tool.observe(tmp_path,reference,result['executable_sha256'])
+    assert observed['complete'] and observed['cleanup_confirmed'] and observed['credential_file_cleanup_confirmed']
+    assert 'private-owned-canary' not in json.dumps(observed)
+    assert not list(tmp_path.glob('.cdeadmin-tool-*.json'))
+    with pytest.raises(FileExistsError):
+        ProviderToolRunner({'python':sys.executable}).run(
+            ProviderToolGrant('python',str(tmp_path),'127.0.0.1',3306,durable_name='owned-native'),['-c','raise RuntimeError("must never replay")'])
+
+
+@pytest.mark.parametrize('cancel',[False,True])
+def test_lost_application_process_never_loses_guardian_outcome_or_replays(tmp_path,cancel):
+    web=Path(__file__).resolve().parents[2]/'web'
+    fixture=tmp_path/'native_fixture.py'
+    fixture.write_text('''import os,time
+from pathlib import Path
+root=Path.cwd()
+with (root/'started').open('a') as stream:stream.write('one\\n')
+assert Path(os.environ['OWNED_CREDENTIAL_FILE']).read_text()=='owned-private'
+while not (root/'release').exists():time.sleep(.05)
+print('native completed')
+''')
+    owner_code='''import json,sys,types
+from pathlib import Path
+package=types.ModuleType('pgadmin');package.__path__=[sys.argv[2]+'/pgadmin'];sys.modules['pgadmin']=package
+sys.path.insert(0,sys.argv[2])
+from pgadmin.cdeadmin.sdk.tooling import ProviderToolGrant,ProviderToolRunner
+root=Path(sys.argv[1])
+def progress(event):
+ if 'durable_tool' in event:(root/'reference.json').write_text(json.dumps(event['durable_tool']))
+ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str(root),'127.0.0.1',3306,timeout_seconds=12,durable_name='owned-native',secret_environment_names=('OWNED_CREDENTIAL_FILE',)),
+ [sys.argv[3]],
+ secret_config=b'owned-private',secret_argument=None,secret_environment_name='OWNED_CREDENTIAL_FILE',progress=progress)
+'''
+    owner=subprocess.Popen([sys.executable,'-c',owner_code,str(tmp_path),str(web),str(fixture)],
+        stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    reference=None
+    try:
+        wait_until(lambda:(tmp_path/'started').exists())
+        reference=json.loads((tmp_path/'reference.json').read_text())
+        owner.kill();owner.wait(timeout=5)
+        expected=durable_tool.sha(sys.executable)
+        assert not durable_tool.observe(tmp_path,reference,expected)['complete']
+        if cancel:
+            assert durable_tool.cancel(tmp_path,reference,expected)['cancellation_requested']
+        else:(tmp_path/'release').write_text('release the owned native fixture')
+        observed=wait_until(lambda:(value if (value:=durable_tool.observe(tmp_path,reference,expected))['complete'] else None))
+        assert observed['cleanup_confirmed'] and observed['credential_file_cleanup_confirmed']
+        assert (observed['return_code']==0) is (not cancel)
+        assert (tmp_path/'started').read_text()=='one\n'
+        assert not list(tmp_path.glob('.cdeadmin-tool-*.json'))
+    finally:
+        if owner.poll() is None:owner.kill();owner.wait(timeout=5)
+        if reference:
+            expected=durable_tool.sha(sys.executable)
+            durable_tool.cancel(tmp_path,reference,expected)
+            wait_until(lambda:durable_tool.observe(tmp_path,reference,expected)['complete'])

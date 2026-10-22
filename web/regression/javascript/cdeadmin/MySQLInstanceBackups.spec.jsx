@@ -36,3 +36,13 @@ it('preserves a missing native reply after explicit file reconciliation and retr
   expect(screen.getByText(/Native dump reply acknowledged: no/)).toBeInTheDocument();
   expect(post.mock.calls.every(([request])=>!request.action.includes('restore') && request.action!=='mysql_instance_backup_start')).toBe(true);
 });
+it('can cancel an interrupted durable backup without treating cancellation as completion',async()=> {
+  const receipt={job_id:'interrupted',source:{server_uuid:'source'},state:'unknown',native_dump_acknowledged:false,durable_tool:{name:'native'},native_process_termination_confirmed:false};
+  const post=jest.fn(({action})=>Promise.resolve(action==='mysql_instance_backup_list' ? {jobs:[receipt],total:1,offset:0} : receipt));
+  render(<Component post={post} endpointUrl="/workspace/owned" />);fireEvent.click(screen.getByRole('button',{name:'Load instance backup jobs'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Inspect instance backup interrupted'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Cancel instance backup'}));
+  await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'mysql_instance_backup_cancel',request:{job_id:'interrupted'}}));
+  expect(screen.getByText(/Native dump reply acknowledged: no/)).toBeInTheDocument();
+  expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_backup_start')).toBe(false);
+});

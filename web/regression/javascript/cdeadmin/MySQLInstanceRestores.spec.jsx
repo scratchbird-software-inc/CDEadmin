@@ -36,3 +36,15 @@ it('observes an uncertain target separately and preserves its original outcome',
   expect(screen.getByText(/Original native load outcome: unknown/)).toBeInTheDocument();
   expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_restore_start')).toBe(false);
 });
+it('can cancel an interrupted durable utility and observes cleanup separately from the original outcome',async()=> {
+  const receipt={job_id:'interrupted',state:'unknown',native_load_outcome:'unknown',target:{server_uuid:'target'},durable_tool:{name:'native'},native_process_termination_confirmed:false};
+  const post=jest.fn(({action})=>Promise.resolve(action==='mysql_instance_restore_list' ? {jobs:[receipt],total:1,offset:0} : action==='mysql_instance_restore_reconcile' ? {...receipt,native_process_termination_confirmed:true,interrupted_utility_observation:{complete:true},observation_digest:'observed'} : receipt));
+  render(<Component post={post} />);fireEvent.click(screen.getByRole('button',{name:'Load instance restore jobs'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Inspect instance restore interrupted'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Cancel instance restore'}));
+  await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'mysql_instance_restore_cancel',request:{job_id:'interrupted'}}));
+  fireEvent.click(screen.getByRole('button',{name:'Observe instance restore target'}));
+  await screen.findByText(/Interrupted utility cleanup: confirmed/);
+  expect(screen.getByText(/Original native load outcome: unknown/)).toBeInTheDocument();
+  expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_restore_start')).toBe(false);
+});

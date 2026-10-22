@@ -105,6 +105,12 @@ MySQL
   their private SQL-lock teardown through admitted native thread/handshake and
   unique ownership-marker evidence. Original unlock replies stay unchanged;
   denied/disabled observations and unknown utility termination retain protection.
+  New managed instance backup/restore/acceptance utilities retain independently
+  supervised private completion receipts across application-worker loss, with
+  cancellation and explicit cleanup observation. Original native outcomes,
+  private SQL-lock cleanup, backup file adoption and uncertain-target
+  acknowledgement stay separate. Missing supervisor receipts, supervisor
+  failure and older untracked invocations remain unconfirmed.
 * MY-ARCHIVES: Complete backup/log-dependency-aware archive protection and
   retention. Separate native source-log administration now exposes reviewed TO
   and BEFORE purges, independent observations, durable acknowledgement and

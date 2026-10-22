@@ -40,7 +40,7 @@ class InstanceRestoreJobs(MySQLBinlogReplayJobs):
                 self.update(record, phase='native_dispatch', native_load_outcome='unknown', native_load_may_have_dispatched=True)
                 dispatched = True
             result = transport.execute(record, self.directory(record), cancel,
-                lambda value: self.update(record, progress=value), boundary)
+                lambda value: self.progress(record, value), boundary)
             control = result.get('control') or {}; tool = result['tool']
             stopped = tool['process_observation'].get('cleanup_confirmed') is True
             returned = (control.get('native_load_invoked') is True and control.get('native_load_returned') is True and

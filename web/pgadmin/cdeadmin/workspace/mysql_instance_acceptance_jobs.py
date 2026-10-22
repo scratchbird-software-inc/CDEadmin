@@ -56,7 +56,9 @@ class InstanceAcceptanceJobs(MySQLBinlogReplayJobs):
                 dispatched = True
             def progress(value):
                 owner = value.get('server_lock_owner')
-                self.update(record, progress=value, **({'server_lock_owner': owner} if owner is not None else {}))
+                fields = {'server_lock_owner': owner} if owner is not None else {}
+                if value.get('durable_tool'): fields['durable_tool'] = value['durable_tool']
+                self.update(record, progress=value, **fields)
             result = transport.execute(record, self.directory(record), cancel, progress, boundary)
             stopped = result['tool']['process_observation'].get('cleanup_confirmed') is True
             accepted = result['selected_dump_surfaces_verified']

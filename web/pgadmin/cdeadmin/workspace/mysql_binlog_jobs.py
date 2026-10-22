@@ -131,6 +131,23 @@ class MySQLBinlogJobs:
                 current.update(deepcopy(values),updated_at=time.time())
             store.change(change)
 
+    def progress(self,record,value):
+        self.update(record,progress=value,**({'durable_tool':value['durable_tool']} if
+            isinstance(value,dict) and 'durable_tool' in value else {}))
+
+    def observe_utility(self,record,*,cancel=False):
+        from ..sdk import durable_tool
+        reference=record.get('durable_tool')
+        if reference is None:return None
+        observe=durable_tool.cancel if cancel else durable_tool.observe
+        result=observe(self.directory(record),reference,record['program']['executable_sha256'])
+        values={'interrupted_utility_observation':result}
+        if result.get('complete') is True and result.get('cleanup_confirmed') is True:
+            values['native_process_termination_confirmed']=True
+            if record['state'] in ACTIVE and self.public(record)['state']=='unknown':values['state']='unknown'
+        self.update(record,**values)
+        return result
+
     def list(self,owner,endpoint,offset=0,limit=25):
         scope=self.scope(owner,endpoint)
         if type(offset) is not int or offset<0 or type(limit) is not int or not 1<=limit<=100:
@@ -222,11 +239,15 @@ class MySQLBinlogJobs:
 
     def cancel(self,job_id,owner,endpoint):
         self.scope(owner,endpoint)
+        current=self.load(job_id,owner,endpoint)
+        if current.get('durable_tool') and current.get('native_process_termination_confirmed') is not True:
+            self.observe_utility(current,cancel=True)
         with self.store(job_id) as store:
             def change(state):
                 record=self.record(state,job_id,owner,endpoint)
                 if record['state'] in ACTIVE:record.update(state='cancel_requested',cancel_requested=True)
                 elif record['state']=='reviewed':record.update(state='cancelled',cancel_requested=True)
+                elif record['state']=='unknown' and record.get('durable_tool'):record['cancel_requested']=True
             store.change(change)
         with self._maps_lock:
             known=self.workers.get(job_id)

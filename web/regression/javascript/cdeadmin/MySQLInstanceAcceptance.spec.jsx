@@ -39,3 +39,13 @@ it('shows later native session cleanup without rewriting the original check rece
   expect(screen.getByText(/Recorded outcome: matched/)).toBeInTheDocument();
   expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_acceptance_start')).toBe(false);
 });
+it('can cancel an interrupted durable acceptance without reporting a match',async()=> {
+  const receipt={job_id:'interrupted',state:'unknown',acceptance_outcome:'unconfirmed',target:{server_uuid:'target'},durable_tool:{name:'native'},native_process_termination_confirmed:false};
+  const post=jest.fn(({action})=>Promise.resolve(action==='mysql_instance_acceptance_list' ? {jobs:[receipt],total:1,offset:0} : receipt));
+  render(<Component post={post} />);fireEvent.click(screen.getByText('Independent dump acceptance'));
+  fireEvent.click(screen.getByRole('button',{name:'Load independent acceptance jobs'}));fireEvent.click(await screen.findByRole('button',{name:'Inspect acceptance interrupted'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Cancel independent acceptance'}));
+  await screen.findByText(/Recorded outcome: unconfirmed/);
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_instance_acceptance_cancel',request:{job_id:'interrupted'}});
+  expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_acceptance_start')).toBe(false);
+});

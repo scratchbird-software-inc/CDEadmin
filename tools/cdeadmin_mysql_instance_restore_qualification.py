@@ -29,6 +29,8 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
     paths+=['web/pgadmin/cdeadmin/workspace/'+name for name in ('mysql_instance_restore_jobs.py','mysql_instance_restore_service.py','mysql_binlog_replay_jobs.py','service.py')]
     paths+=['web/pgadmin/browser/server_groups/servers/__init__.py','web/pgadmin/cdeadmin/context_menu.py',
         'web/pgadmin/static/js/Dialogs/MySQLInstanceRestores.jsx','tools/cdeadmin_mysql_instance_restore_qualification.py']
+    paths+=['web/pgadmin/cdeadmin/sdk/'+name for name in ('tooling.py','durable_tool.py','tool_guardian.py','tool_process.py')]
+    paths+=['web/pgadmin/cdeadmin/workspace/mysql_binlog_jobs.py','tools/mysql_interruption_qualification.py']
     if acceptance:
         paths+=['web/pgadmin/cdeadmin/providers/mysql_family/mysql_instance_acceptance.py',
             'web/pgadmin/cdeadmin/providers/mysql_family/mysql_acceptance_lock_owner.py',
@@ -37,7 +39,7 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
     proof={'complete':False,'full_mysql_product_complete':False,'history_testing':'not run','use_c':use_c,'checks':[],
         'independent_acceptance':acceptance,
         'source_sha256':{path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest() for path in paths}}
-    password='true';recovered_acceptance_id=None
+    password='true';recovered_acceptance_id=None;interrupted_restore_id=None
     try:
         with server(output/'source-fixture') as (source,_source_name,sfixture),server(output/'target-fixture',server_id=102) as (target,_target_name,tfixture):
             fixtures.extend([sfixture,tfixture]);handles=[];cursors=[]
@@ -271,7 +273,16 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
                 accepted=http('acknowledge',{'job_id':cancelled['job_id'],'target_confirmation':target_uuid,'observation_digest':observed['observation_digest']})
                 assert accepted['native_load_outcome']=='unknown'
                 proof['checks'].append('active-native-load-cancellation-confirms-local-process-cleanup-and-requires-released-native-lock-and-explicit-target-acknowledgement-without-inferred-rollback')
-                if binary:proof['browser']=browser(app,output,tid,backup['job_id'],target_uuid,binary,driver_binary,acceptance,recovered_acceptance_id)
+                if acceptance:
+                    from mysql_interruption_qualification import qualify as qualify_interruption
+                    # Cancellation can leave dropped objects. Re-establish the
+                    # owned fixture through a new reviewed native load.
+                    reset=wait(start(review(plain)))
+                    assert reset['state']=='native_load_returned' and reset['native_load_outcome']=='returned'
+                    interruption_checks,interrupted_restore_id=qualify_interruption(service,db_client,backup,uid,
+                        target,target_uuid,review,http,qt,shell,output,password)
+                    proof['checks'].extend(interruption_checks)
+                if binary:proof['browser']=browser(app,output,tid,backup['job_id'],target_uuid,binary,driver_binary,acceptance,recovered_acceptance_id,interrupted_restore_id)
                 proof['native_connection_classes']=sorted(set(classes));assert proof['native_connection_classes']==[('CharsetCMySQLConnection' if use_c else 'CharsetMySQLConnection')]
                 proof['complete']=True
             finally:
@@ -283,7 +294,7 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
     return proof
 
 
-def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary,acceptance=False,recovered_acceptance_id=None):
+def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary,acceptance=False,recovered_acceptance_id=None,interrupted_restore_id=None):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -342,6 +353,12 @@ def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary,acceptance
                 wait.until(lambda b:any('A later native observation confirmed' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
                 assert any('Recorded outcome: matched.' in node.get_attribute('textContent') for node in driver.find_elements(By.CSS_SELECTOR,'[role="alert"]'))
                 checks+=['retained-unlock-reply-loss-receipt-reachable-after-later-native-session-cleanup','native-session-cleanup-keeps-original-comparison-outcome-visible']
+        if interrupted_restore_id:
+            click('Load instance restore jobs');click('Inspect instance restore '+interrupted_restore_id)
+            click('Observe instance restore target')
+            wait.until(lambda b:any('Interrupted utility cleanup: confirmed.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            assert any('Original native load outcome: unknown' in node.get_attribute('textContent') for node in driver.find_elements(By.CSS_SELECTOR,'[role="alert"]'))
+            checks+=['interrupted-native-utility-receipt-reachable-in-built-desktop','independent-cleanup-observation-keeps-original-load-outcome-unknown']
         driver.save_screenshot(str(output/'native-instance-restore.png'))
         errors=[entry for entry in driver.get_log('browser') if entry['level']=='SEVERE'];assert not errors,errors
         return {'complete':True,'version':driver.capabilities['browserVersion'],'console_errors':errors,

@@ -63,6 +63,9 @@ def action(service, server, operation, request):
         target = target_native.capture(connection)
         if operation in {'reconcile', 'acknowledge'}:
             if target['identity'] != record['source']: raise native.BinlogArchiveError('Acceptance reconciliation reached another target or principal')
+            if operation == 'reconcile':
+                jobs.observe_utility(record)
+                record = jobs.load(record['job_id'], owner, endpoint.id)
             observation = {**target, 'native_lock_free': rows(connection, 'SELECT IS_FREE_LOCK(%s) AS free',
                 ('cdeadmin:binlog-load:' + target['identity']['server_uuid'],))[0]['free'] == 1,
                 'private_server_lock_cleanup': lock_owner.observe(connection, record),

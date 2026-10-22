@@ -378,6 +378,24 @@ An unknown job still requires separately confirmed utility termination, a free
 native utility lock and explicit target acknowledgement. This observation does
 not terminate an orphan utility or reissue any check, restore or SQL lock.
 
+New managed instance backup, restore and acceptance utilities have an independent
+application-host supervisor. Its private invocation reference is durably saved
+before dispatch; it owns native output, cancellation, the bounded runtime and
+credential-file cleanup even if the original application worker exits. A later
+target observation can read the bound utility completion receipt and confirm
+process cleanup. It leaves the original load/check outcome unchanged. An
+uncertain restore still needs the explicit target acknowledgement, and an
+acceptance job still needs its separate private SQL-session cleanup evidence.
+Backup file reconciliation separately verifies complete native files; it does
+not invent a missing original dump reply. Interrupted utilities can be cancelled
+from their retained job views. There is no automatic native retry.
+
+A missing, changed or incomplete supervisor receipt remains unconfirmed. A
+dead application PID or free native SQL lock alone is insufficient. Older jobs
+without an invocation reference and failure of the supervisor itself retain
+their separate unresolved cleanup state. Windows/macOS native acceptance stays
+with the platform teams.
+
 Add ``--acceptance`` to the instance restore qualification command to exercise
 actual same-count value changes, extra rows, routine definition changes and role
 grant changes, followed by new independent acceptance after reverting the owned

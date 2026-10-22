@@ -88,6 +88,9 @@ def action(service, server, operation, request):
         if operation == 'inspect': return {**target, 'native_mutation_dispatched': False}
         if operation in {'reconcile', 'acknowledge'}:
             if target['identity'] != record['source']: raise native.BinlogArchiveError('Instance reconciliation reached another target or principal')
+            if operation == 'reconcile':
+                jobs.observe_utility(record)
+                record = jobs.load(record['job_id'], owner, endpoint.id)
             observed = {**target, 'native_lock_free': rows(connection, 'SELECT IS_FREE_LOCK(%s) AS free',
                 ('cdeadmin:binlog-load:' + target['identity']['server_uuid'],))[0]['free'] == 1,
                 'scope': 'Current native identity, schema names and GTIDs; not restored-data/definition equality or attribution of concurrent changes'}

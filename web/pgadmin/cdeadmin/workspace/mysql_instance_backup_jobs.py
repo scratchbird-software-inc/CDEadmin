@@ -37,6 +37,8 @@ class InstanceBackupJobs(MySQLBinlogJobs):
                 fields = {'progress': value}
                 if isinstance(value, dict) and value.get('backup_id'):
                     fields['backup_protection_id'] = value['backup_id']
+                if isinstance(value, dict) and value.get('durable_tool'):
+                    fields['durable_tool'] = value['durable_tool']
                 self.update(record, **fields)
             result = transport.execute(record, self.directory(record), cancel, progress)
             self.update(record, state='completed', result=result,
@@ -71,6 +73,8 @@ class InstanceBackupJobs(MySQLBinlogJobs):
             known = self.workers.get(job_id)
             if known and known[0].is_alive():
                 raise native.BinlogArchiveError('The native instance backup worker is still active')
+        self.observe_utility(record)
+        record = self.load(job_id, owner, endpoint)
         if record.get('native_process_termination_confirmed') is not True:
             raise native.BinlogArchiveError('Confirm native utility termination before accepting backup files')
         directory = self.directory(record)

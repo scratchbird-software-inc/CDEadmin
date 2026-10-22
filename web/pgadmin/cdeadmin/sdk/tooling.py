@@ -80,6 +80,7 @@ class ProviderToolGrant:
     max_output_bytes: int = MAX_TOOL_OUTPUT
     secret_environment_names: tuple[str, ...] = ()
     allow_unbounded_runtime: bool = False
+    durable_name: str | None = None
 
     def __post_init__(self):
         if not isinstance(self.executable_id, str) or not self.executable_id:
@@ -93,6 +94,9 @@ class ProviderToolGrant:
             raise ProviderToolError('tool endpoint port is invalid')
         if type(self.allow_unbounded_runtime) is not bool:
             raise ProviderToolError('tool runtime authority is invalid')
+        if self.durable_name is not None and (not isinstance(self.durable_name, str) or
+                re.fullmatch(r'[a-z][a-z0-9-]{0,63}', self.durable_name) is None):
+            raise ProviderToolError('durable tool identity is invalid')
         if (self.timeout_seconds is None and not self.allow_unbounded_runtime or
                 self.timeout_seconds is not None and (type(self.timeout_seconds) is not int or
                 not 1 <= self.timeout_seconds <= 2147483647)):
@@ -214,6 +218,7 @@ class ProviderToolRunner:
                 raise ProviderToolError('provider tool input path is invalid')
             input_stream = candidate.open('rb')
         config_path = None
+        guardian_owns_config = False
         command = [str(executable), *arguments]
         try:
             if secret_config is not None:
@@ -276,10 +281,21 @@ class ProviderToolRunner:
             from .tool_process import observe_process, ToolProcessFailure
             secret_bytes = sorted({value.encode('utf8') for value in redactions}, key=len, reverse=True)
             try:
-                observed = observe_process(command, workspace=workspace, environment=environment,
-                    input_bytes=bytes(input_bytes), input_stream=input_stream, timeout=grant.timeout_seconds,
-                    capture_limit=grant.max_output_bytes + max(map(len,secret_bytes),default=0),
-                    cancel_signal=cancel_signal, progress=progress)
+                capture_limit = grant.max_output_bytes + max(map(len,secret_bytes),default=0)
+                if grant.durable_name is not None and not (cancel_signal is not None and cancel_signal.is_set()):
+                    if input_bytes or input_stream is not None or secret_environment:
+                        raise ProviderToolError('Durable native invocation requires file-based credentials and no input stream')
+                    from .durable_tool import run as durable_run
+                    def handoff():
+                        nonlocal guardian_owns_config
+                        guardian_owns_config = True
+                    observed = durable_run(command, workspace=workspace, environment=environment,
+                        timeout=grant.timeout_seconds, capture_limit=capture_limit, name=grant.durable_name,
+                        credential_file=config_path, cancel_signal=cancel_signal, progress=progress, handoff=handoff)
+                else:
+                    observed = observe_process(command, workspace=workspace, environment=environment,
+                        input_bytes=bytes(input_bytes), input_stream=input_stream, timeout=grant.timeout_seconds,
+                        capture_limit=capture_limit, cancel_signal=cancel_signal, progress=progress)
             except ToolProcessFailure as failure:
                 observed = failure.observation
             def output_text(raw):
@@ -327,7 +343,7 @@ class ProviderToolRunner:
         finally:
             if input_stream is not None:
                 input_stream.close()
-            if config_path is not None and config_path.exists():
+            if not guardian_owns_config and config_path is not None and config_path.exists():
                 try:
                     size = config_path.stat().st_size
                     with config_path.open('r+b') as stream:
