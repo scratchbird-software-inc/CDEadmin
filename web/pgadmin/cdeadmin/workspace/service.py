@@ -1616,6 +1616,21 @@ class ProviderWorkspaceService:
         except OSError:
             raise ProviderWorkspaceError('The owned replication resource store is unavailable') from None
 
+    def mysql_workload(self, server, operation, request):
+        from .mysql_workload_service import action
+        from ..providers.mysql_family.mysql_workload import WorkloadError
+        from ..sdk.relational import RelationalClientError
+        from mysql.connector import Error as NativeError
+        try:
+            return action(self, server, operation, request)
+        except WorkloadError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:
+            raise ProviderWorkspaceError('Native MySQL workload inspection failed (' +
+                str(error.errno) + ', ' + str(error.sqlstate) + ')') from None
+        except (RelationalClientError, UnicodeError, ValueError, KeyError, TypeError):
+            raise ProviderWorkspaceError('Native workload input, encoding or observer admission is unavailable') from None
+
     def mysql_host(self, server, operation, request):
         from .mysql_host_service import action
         from ..providers.mysql_family.mysql_host_transport import HostError

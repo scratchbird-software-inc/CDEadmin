@@ -36,6 +36,30 @@ export function mysqlDashboardFiles(snapshot, scope, engine='mysql') {
       ['Native observation time', group?.observed_at], ['Native observation age', group?.observation_age_seconds, 'seconds'], ...rows,
     ]});
   }
+  if(engine === 'mysql') {
+    const digests = sample?.groups?.workload_digests;
+    panels.push({id: 'workload', title: 'MySQL workload / instrumentation coverage', rows: [
+      ...[
+        ['Source', digests?.status || 'Unavailable'], ['Native timer unit', 'picoseconds'],
+        ['Ranking', 'Top total latency; cumulative native counters'], ['Truncated', digests?.truncated],
+        ['Observed at', digests?.observed_at], ['Observation age', digests?.observation_age_seconds, 'seconds'],
+        ['Reset observation', sample?.workload_reset?.state], ['Reset coverage', 'Undetected native resets remain possible; no inferred rates'],
+      ].map((row, index) => binding(`mysql_workload_summary_${index}`, row)),
+      ...['workload_settings', 'workload_consumers', 'workload_instruments', 'workload_epoch'].flatMap((name, index) => {
+        const group = sample?.groups?.[name];
+        const kind = name.slice('workload_'.length);
+        return [binding(`mysql_workload_summary_${8+index}`, [name, group?.status || 'Unavailable']),
+          ...(group?.status === 'available' ? group.rows : []).flatMap(row => {
+            const identity = kind === 'settings' ? 'settings' : row.name ?? row.family ?? row.variable_name;
+            return Object.entries(row).map(([key, value]) => binding(`mysql_workload_${kind}_${hex(identity)}_${hex(key)}`,
+              [`${name} ${identity}: ${key}`, typeof value === 'object' && value !== null ? JSON.stringify(value) : value]));
+          })];
+      }),
+      ...(digests?.rows || []).slice(0, 10).flatMap(row => ['sum_timer_wait', 'count_star', 'sum_rows_examined'].map(key =>
+        binding(`mysql_workload_digests_${hex(`${row.schema_name ?? ''}\u0000${row.digest ?? ''}`)}_${hex(key)}`,
+          [`${row.schema_name ?? 'NULL'} / ${row.digest ?? 'overflow'}: ${key}`, row[key], key === 'sum_timer_wait' ? 'picoseconds' : 'count']))),
+    ]});
+  }
   return dashboardPanelFiles(panels, `${label} ${scope} dashboard`, `scratchrobin.${engine}.monitoring`);
 }
 export function mysqlFleetPublication(snapshot, limit=128, engine='mysql') {

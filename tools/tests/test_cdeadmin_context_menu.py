@@ -220,6 +220,16 @@ class ContextMenuTests(unittest.TestCase):
             for item in actions
         ))
 
+    def test_mysql_workload_is_an_authorized_native_diagnostic_workspace(self):
+        actions = endpoint_context_actions(profile('mysql', multiple=True), 'verified')
+        action = next(row for row in actions if row['command_id'] == 'endpoint.mysql.workload')
+        self.assertEqual(action['handler'], 'open_workspace')
+        self.assertEqual(action['arguments'], {'tab': 'mysql-workload', 'database_target_id': None})
+        self.assertEqual(action['menu_group'], 'diagnostics')
+        self.assertTrue(action['enabled'])
+        self.assertFalse(any(row['command_id'] == 'endpoint.mysql.workload'
+            for row in endpoint_context_actions(profile('mariadb'), 'verified')))
+
     def test_unverified_endpoint_keeps_verification_available(self):
         actions = endpoint_context_actions(
             profile('mysql', multiple=True), 'unverified'

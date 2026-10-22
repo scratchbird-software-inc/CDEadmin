@@ -254,6 +254,11 @@ define('pgadmin.node.server', [
           label: gettext('MySQL database-host administration...'), priority: 9,
           enable: node => node.cde_profile_id === 'mysql-native',
         }, {
+          name: 'mysql_workload', node: 'server', module: this,
+          applies: ['object', 'context'], callback: 'open_mysql_workload',
+          label: gettext('MySQL workload analysis...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mysql-native',
+        }, {
           name: 'mysql_local_clone', node: 'server', module: this,
           applies: ['object','context'], callback: 'open_mysql_local_clone',
           label: gettext('MySQL physical clone...'), priority: 9,
@@ -478,6 +483,12 @@ define('pgadmin.node.server', [
           const item = args?.item || pgBrowser.tree.selected();
           const data = pgBrowser.tree.itemData(item);
           showProviderWorkspace(gettext('PostgreSQL physical backup and verification'), this, data, item, 'postgresql-continuity');
+          return false;
+        },
+        open_mysql_workload: function(args) {
+          const item = args?.item || pgBrowser.tree.selected();
+          const data = pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL workload analysis'), this, data, item, 'mysql-workload');
           return false;
         },
         open_mysql_host: function(args) {

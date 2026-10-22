@@ -135,6 +135,66 @@ the repository, for example::
 These receipts close ``CMP-MY-04`` in its accepted implementation scope. They
 do not close the broader editor/capability inventory or the MySQL product matrix.
 
+Native workload performance analysis
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The server's **Diagnostics and verification** menu opens **MySQL workload
+analysis**. Its observations own separate,
+autocommit connections and do not consume an interactive pool lease or change
+the user's transaction, savepoints or SQL diagnostics. Statement digests can be
+ranked by total/mean latency, executions, examined rows, temporary tables and
+disk temporary tables. Native integer counters and picosecond timers remain
+exact strings. The top-100 limit, permission failures, native NULL overflow
+bucket, first/last-seen times and native quantiles remain explicit.
+
+Instrumentation coverage includes native consumers, enabled/timed instrument
+counts, digest capacity/length, lost digests, uptime and slow-log settings.
+Empty rows do not establish an idle server or complete instrumentation. Native
+summaries are cumulative. Collectors report observed first-seen changes and
+counter decreases across matching digests. MySQL provides no authoritative
+timestamp for every summary reset, so undetected resets remain possible; rates
+and uninterrupted measurement windows are not inferred. Workload collection
+uses the existing metadata cadence and continues under the separate policy
+without an open viewer. MariaDB retains its own collector behavior.
+
+The DDN display shows server waits and scoped native index activity. These
+aggregates are not attributed to a selected digest. Digest drilldown separately
+joins directly nested waits still present in both native long history rings;
+disabled, denied, evicted and stage-nested events remain coverage gaps. Existing
+dashboard publications use stable, admitted native workload bindings and strip
+observed values when definitions are saved. Viewers remain display-only.
+
+Private SQL samples require endpoint administration authority and explicit
+inspection consent. They are absent from routine collector samples and SQL
+history. Plan capture rechecks the displayed sample fingerprint, admits one
+native EXPLAIN statement and reuses the native graphical-plan presentation.
+It uses the observer's current settings, not the original execution session's
+settings. It requests optimizer estimates; native optimizer expression effects
+remain possible and explicit execution analysis stays in the SQL editor.
+Private responses are not cached or persisted; clearing them removes the sample
+and plan. Native server logging remains controlled by MySQL.
+
+Slow-log analysis selects one schema and an explicit UTC window of at most
+24 hours. TABLE input admits the latest 100 matching native log entries with a
+native execution-time bound. File input admits at most 1 MiB / 500 complete UTF-8
+long-format entries, requires native schema context and refuses ambiguous or
+partial framing. Native ``STATEMENT_DIGEST`` and ``STATEMENT_DIGEST_TEXT``
+normalize bound SQL data without executing it. Non-SQL administrator commands
+and syntax rejected by the native digest parser are counted separately with
+source-free native error codes. Raw SQL is not retained. Results disclose their
+input window, bounds and normalization gaps; they do not claim complete server
+workload coverage or inspect arbitrary server-host paths.
+
+``tools/cdeadmin_mysql_workload_qualification.py`` exercises the real MySQL
+9.7.0 pure and C connectors through authenticated workspace requests, native
+slow-log sources, an independent transaction/diagnostic oracle and the built
+desktop. Output belongs outside the repository. ScratchBird persistent-history
+qualification remains owner-deferred; Windows/macOS acceptance remains with
+the platform teams.
+
+Linux pure/C native and built-desktop receipts close ``CMP-MY-03`` in its
+accepted implementation scope. The broader MySQL product matrix remains open.
+
 Native topology administration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

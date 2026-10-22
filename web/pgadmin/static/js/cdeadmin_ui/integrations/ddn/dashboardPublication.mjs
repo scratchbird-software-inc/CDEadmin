@@ -41,6 +41,15 @@ function mysqlDynamic(id, scope, engine='mysql') {
     const match = /^mysql_fleet_[1-9][0-9]*_[a-f0-9]{2,1024}_([a-f0-9]{2,128})$/.exec(id);
     return Boolean(match && ['name', 'collector', 'freshness', 'heartbeat', maria ? 'server_uid' : 'server_uuid', 'observed_at'].some(field => hex(field) === match[1]));
   }
+  if(!maria && /^mysql_workload_summary_(?:[0-9]|1[01])$/.test(id)) return true;
+  const workload = !maria && /^mysql_workload_(settings|consumers|instruments|epoch|digests)_([a-f0-9]{2,1024})_([a-f0-9]{2,128})$/.exec(id);
+  if(workload) {
+    const fields = {settings: ['performance_schema', 'digests_size', 'max_digest_length', 'stored_digest_length', 'slow_query_log', 'log_output', 'long_query_time'],
+      consumers: ['name', 'enabled'], instruments: ['family', 'instrument_count', 'enabled_count', 'timed_count'],
+      epoch: ['variable_name', 'variable_value'], digests: ['sum_timer_wait', 'count_star', 'sum_rows_examined']};
+    return fields[workload[1]].some(field => hex(field) === workload[3]) &&
+      (workload[1] !== 'settings' || workload[2] === hex('settings'));
+  }
   const match = /^mysql_(status|settings|storage|activity|replication)_([a-f0-9]{2,1024})_([a-f0-9]{2,128})$/.exec(id);
   if(!match) return false;
   const fields = {status: ['variable_name', 'variable_value', ...(maria ? ['native_variable_name'] : [])],

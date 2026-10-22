@@ -150,7 +150,11 @@ Comparison evidence: `Current Workbench generation and shipped features <https:/
 CMP-MY-03: Workload performance analysis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Status: **open**. Priority: **P1**.
+Status: **implemented and Linux-qualified**. Priority: **P1**.
+
+Native pure/C workspace and built desktop acceptance is recorded under
+``Native workload performance analysis`` in :doc:`mysql_functional_completion`.
+Windows/macOS acceptance remains with platform teams.
 
 Provide statement-digest ranking by total/mean latency, execution count,
 examined rows and temporary work; drill into waits, indexes and native plan

@@ -3160,6 +3160,12 @@ class ServerNode(PGChildNodeView):
                         payload = service.postgresql_continuity(server, action.removeprefix('postgresql_continuity_'), data.get('request'))
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
+                elif action in {'mysql_workload_snapshot', 'mysql_workload_waits', 'mysql_workload_sample',
+                                'mysql_workload_plan', 'mysql_workload_slow_table', 'mysql_workload_slow_file'}:
+                    try:
+                        payload = service.mysql_workload(server, action.removeprefix('mysql_workload_'), data.get('request'))
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
                 elif action in {'mysql_host_peer','mysql_host_catalog','mysql_host_review','mysql_host_start','mysql_host_status','mysql_host_list','mysql_host_cancel','mysql_host_reconcile'}:
                     try:payload=service.mysql_host(server,action.removeprefix('mysql_host_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
@@ -3421,7 +3427,9 @@ class ServerNode(PGChildNodeView):
                     'The endpoint provider did not complete the request.'
                 ),
             )
-        return make_json_response(data=payload)
+        response = make_json_response(data=payload)
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
     def connect_status(self, gid, sid):
         """Check and return the connection status."""
