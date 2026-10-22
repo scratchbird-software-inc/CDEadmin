@@ -33,9 +33,11 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
              'execution_host': 'native application host on isolated fixture network',
              'checks': [], 'connector_classes': [], 'operations': []}
     paths = ['tools/cdeadmin_mysql_topology_qualification.py',
+        'tools/mysql_topology_lingering_qualification.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology.py',
         'web/pgadmin/cdeadmin/workspace/mysql_topology_jobs.py',
         'web/pgadmin/cdeadmin/workspace/mysql_topology_service.py',
+        'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology_quiescence.py',
         'web/pgadmin/cdeadmin/sdk/durable_tool.py',
         'web/pgadmin/cdeadmin/sdk/tool_guardian.py',
         'web/pgadmin/cdeadmin/sdk/tool_process.py',
@@ -98,8 +100,17 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
         proof['checks'].append('authenticated-native-9.7-seed-catalog-and-owned-paged-member-inspection-with-actual-selected-driver')
 
         def options(operation, arguments, peer=0):
+            witnesses = []
+            if operation in {'cluster.add_instance','replica_set.add_instance'}:
+                current = http('inspect', peer=peer)
+                allowed = {current['identity']['server_uuid'], *current['metadata']['instance_uuids']}
+                allowed.update(seeds[index]['identity']['server_uuid'] for index,item in enumerate(registrations)
+                    if arguments[0].get('server_id') == item['server_id'])
+                witnesses = [item['server_id'] for index,item in enumerate(registrations)
+                    if seeds[index]['identity']['server_uuid'] in allowed]
             return {'operation': operation, 'arguments_json': json.dumps(arguments),
                 'context_name': '', 'context_options_json': '{}', 'use_advertised_endpoint': True,
+                'witness_server_ids': witnesses,
                 'target_confirmation': seeds[peer]['identity']['server_uuid'], 'timeout_seconds': 240}
 
         def wait(value, peer=0):
@@ -151,8 +162,33 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
         execute('instance.check_configuration', [{}], inspection=True)
         for peer in range(3): execute('instance.configure_cluster', [{'restart': True}], peer)
         execute('instance.create_cluster', ['sr_application_cluster', {'gtidSetIsComplete': True}])
-        for peer in (1, 2): execute('cluster.add_instance', [
-            {'server_id': registrations[peer]['server_id']}, {'recoveryMethod': 'clone', 'recoveryProgress': 0}])
+        first = execute('cluster.add_instance', [
+            {'server_id': registrations[1]['server_id']}, {'recoveryMethod': 'clone', 'recoveryProgress': 0}])
+        first_observed = http('reconcile', {'job_id': first['job_id']})
+        assert first_observed['reconciliation']['server_recovery_quiescence']['idle'] is True, first_observed
+        from pgadmin.cdeadmin.workspace.mysql_topology_jobs import TopologyTransport
+        original_execute = TopologyTransport.execute
+        def missing_reply(self, *args, **kwargs):
+            result = original_execute(self, *args, **kwargs)
+            result['control'] = None
+            return result
+        TopologyTransport.execute = missing_reply
+        try:
+            uncertain = execute('cluster.add_instance', [
+                {'server_id': registrations[2]['server_id']}, {'recoveryMethod': 'clone', 'recoveryProgress': 0}], expect_returned=False)
+        finally: TopologyTransport.execute = original_execute
+        assert uncertain['state'] == 'unknown' and uncertain['server_recovery_clearance_required'] is True
+        blocked = http('review', {'options': options('cluster.set_option', ['tag:afterRecovery', True], 2)}, peer=2)
+        blocked_request = {key: blocked[key] for key in ('job_id','review_digest')} | {'confirmed': True}
+        http('start', blocked_request, peer=2, refused=True)
+        reconciled = http('reconcile', {'job_id': uncertain['job_id']})
+        assert reconciled['reconciliation']['server_recovery_quiescence']['idle'] is True, reconciled
+        acknowledged = http('acknowledge', {'job_id': uncertain['job_id'],
+            'target_confirmation': seeds[0]['identity']['server_uuid'], 'observation_digest': reconciled['observation_digest']})
+        assert acknowledged['native_operation_outcome'] == 'unknown' and acknowledged['target_state_acknowledged_at']
+        assert not acknowledged['server_recovery_clearance_required']
+        assert wait(http('start', blocked_request, peer=2), 2)['native_operation_outcome'] == 'returned'
+        proof['checks'].append('actual-native-clone-with-injected-reply-loss-keeps-all-known-targets-fenced-until-original-process-and-server-quiescence-observation-and-explicit-acknowledgement')
         sql(0, 'CREATE DATABASE sr_topology CHARACTER SET utf8mb4')
         sql(0, 'CREATE TABLE sr_topology.t(id BIGINT PRIMARY KEY,body TEXT,payload LONGBLOB)')
         sql(0, 'INSERT INTO sr_topology.t VALUES(%s,%s,%s)', (9007199254740993, 'native topology 雪', b'\x00\xff'))
@@ -187,16 +223,26 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
 
         if browser_exchange:
             from werkzeug.serving import make_server
+            execute('cluster.remove_instance', [{'server_id': registrations[2]['server_id']}], peer=1)
+            TopologyTransport.execute = missing_reply
+            try:
+                browser_unknown = execute('cluster.add_instance', [{'server_id': registrations[2]['server_id']},
+                    {'recoveryMethod':'clone','recoveryProgress':0}], expect_returned=False)
+            finally: TopologyTransport.execute = original_execute
+            assert browser_unknown['native_operation_outcome']=='unknown'
+            wait_data((0,1,2))
             http_server = make_server('0.0.0.0', 5000, app, threaded=True)
             threading.Thread(target=http_server.serve_forever, daemon=True).start()
-            (output/'browser-request.json').write_text(json.dumps({'server_id': registrations[1]['server_id'],
-                'target_uuid': seeds[1]['identity']['server_uuid']})+'\n')
+            (output/'browser-request.json').write_text(json.dumps({'server_id': registrations[0]['server_id'],
+                'target_uuid': seeds[0]['identity']['server_uuid'],'uncertain_job_id':browser_unknown['job_id']})+'\n')
             deadline = time.monotonic()+300
             while not (output/'browser-response.json').exists():
                 if time.monotonic() > deadline: raise TimeoutError('External native desktop qualification deadline')
                 time.sleep(.25)
             proof['browser'] = json.loads((output/'browser-response.json').read_text())
             assert proof['browser']['complete'], proof['browser']
+            browser_acknowledged=http('status',{'job_id':browser_unknown['job_id']})
+            assert browser_acknowledged['native_operation_outcome']=='unknown' and browser_acknowledged['target_state_acknowledged_at']
         execute('cluster.dissolve', [{'force': True}], peer=1)
         # Dissolution leaves the data in place and stops native replication.
         for peer in range(3):
@@ -211,6 +257,15 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
         execute('replica_set.status', [{'extended': 1}], peer=2, inspection=True)
         execute('replica_set.dissolve', [{'force': True}], peer=2)
         proof['checks'].append('native-replicaset-create-uri-typed-clone-join-primary-switch-data-observation-and-dissolution')
+        from mysql_topology_lingering_qualification import qualify as lingering, qualify_privileges
+        with app.test_request_context('/'):
+            native_client, route = context(service, db.session.get(Server, registrations[0]['server_id']))
+            oracle = native_client._connector(host=routes[0]['host'],port=routes[0]['port'],
+                user='root',password=password,use_pure=not use_c,autocommit=True)
+            try:
+                proof['privilege_profiles']=qualify_privileges(native_client,oracle,routes[0],password,use_c=use_c)
+                proof['lingering_server_worker']=lingering(native_client,oracle,routes[0],password,output/'native-lingering-worker')
+            finally:native_client._discard_failed_session(oracle)
         proof['complete'] = True
     finally:
         if http_server: http_server.shutdown(); http_server.server_close()
@@ -228,6 +283,7 @@ def browser(base_url, output, request, binary, driver_binary):
     from selenium.webdriver.common.by import By
     from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.common.exceptions import StaleElementReferenceException
     from cdeadmin_ui_evidence import ensure_data_explorer, expand
     driver = None
     try:
@@ -237,7 +293,8 @@ def browser(base_url, output, request, binary, driver_binary):
         options.add_argument('--user-data-dir='+str(output/'browser-profile'))
         options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
         driver = webdriver.Chrome(options=options, service=Service(driver_binary))
-        driver.get(base_url+'/browser/'); wait = WebDriverWait(driver, 120)
+        driver.get(base_url+'/browser/'); wait = WebDriverWait(driver, 120,
+            ignored_exceptions=(StaleElementReferenceException,))
         ensure_data_explorer(wait); expand(wait, 'Connectors'); expand(wait, 'MySQL')
         def target(browser):
             return next((node for node in browser.find_elements(By.CSS_SELECTOR, '.file-name') if node.is_displayed() and
@@ -260,10 +317,23 @@ def browser(base_url, output, request, binary, driver_binary):
             driver.execute_script('arguments[0].scrollIntoView({block:"center"});', node)
             node.send_keys(Keys.CONTROL, 'a'); node.send_keys(Keys.BACKSPACE); node.send_keys(value)
             wait.until(lambda _browser: node.get_attribute('value') == value)
-        click('Load native topology methods'); click('Inspect topology seed')
+        click('Load native topology methods')
+        if request.get('uncertain_job_id'):
+            click('Load native topology jobs');click('Inspect topology job '+request['uncertain_job_id'])
+            click('Observe current topology target')
+            wait.until(lambda b:b.find_elements(By.CSS_SELECTOR,'[aria-label="Native recovery member observations"]'))
+            field('Confirm uncertain topology target UUID',request['target_uuid'])
+            click('Acknowledge observed topology target')
+            wait.until(lambda b:any('Observed target state acknowledged.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        click('Inspect topology seed')
         wait.until(lambda b: b.find_elements(By.CSS_SELECTOR, '[aria-label="Native topology seed"]'))
         click('Run native topology inspection')
         wait.until(lambda b: any('outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
+        click('Load registered topology instances')
+        for index in range(3):
+            checkbox = wait.until(lambda b: b.find_element(By.CSS_SELECTOR, '[aria-label="Observe recovery member Owned MySQL topology '+str(index)+'"]'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"center"});', checkbox)
+            checkbox.click()
         # The native selector is a MUI listbox; choose its actual operation label.
         selector = driver.find_element(By.XPATH, '//label[contains(text(),"Native topology method")]/following::*[@role="combobox"][1]')
         selector.click()
@@ -285,7 +355,8 @@ def browser(base_url, output, request, binary, driver_binary):
         driver.save_screenshot(str(output/'native-topology.png'))
         assert not severe, severe
         return {'complete': True, 'checks': ['native-context-menu', 'read-only-native-inspection',
-            'exact-uint64-argument-review', 'explicit-native-mutation', 'separate-target-observation'], 'severe_errors': 0}
+            'exact-uint64-argument-review', 'explicit-native-mutation', 'separate-target-observation',
+            'native-uncertain-clone-recovery-observation-and-explicit-target-acknowledgement'], 'severe_errors': 0}
     except Exception:
         if driver: driver.save_screenshot(str(output/'native-topology-failure.png'))
         raise

@@ -68,6 +68,8 @@ def observe(workspace, reference, expected_executable_sha256):
             'return_code': native.get('return_code') if isinstance(native, dict) else None,
             'native_outcome_inferred': False, 'receipt_sha256': sha(path),
             'credential_file_cleanup_confirmed': result.get('credential_file_cleanup_confirmed') is True,
+            'native_process_identity': {'pid': native.get('pid'), 'process_create_time': native.get('process_create_time')}
+                if isinstance(native, dict) else None,
             'supervision_error_type': result.get('error_type')}
 
 

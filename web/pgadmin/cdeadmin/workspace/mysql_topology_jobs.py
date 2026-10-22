@@ -24,7 +24,7 @@ class TopologyJobs(InstanceRestoreJobs):
         result['remote_database_mutation'] = not native.CALLS[record['options']['operation']]['read_only']
         result['workload_readiness_verified'] = False
         result['server_recovery_clearance_required'] = (record['options']['operation'] in native.RECOVERY_CALLS and
-            result['native_operation_outcome'] == 'unknown')
+            result['native_operation_outcome'] == 'unknown' and not record.get('target_state_acknowledged_at'))
         result['affected_native_instances'] = self.fence_identities(record)
         result['state'] = {'native_load_returned': 'operation_returned',
             'native_returned_unverified': 'operation_returned_observation_unconfirmed'}.get(result['state'], result['state'])
@@ -68,7 +68,9 @@ class TopologyJobs(InstanceRestoreJobs):
         return super().start(request, owner, endpoint, current, transport)
 
     def acknowledge(self, record, observation, request):
-        if record['options']['operation'] in native.RECOVERY_CALLS:
+        clearance = observation.get('server_recovery_quiescence') or {}
+        if record['options']['operation'] in native.RECOVERY_CALLS and not (
+                clearance.get('qualified') is True and clearance.get('idle') is True):
             raise native.BinlogArchiveError(
                 'Native clone recovery can continue on the server after utility exit. '
                 'Independent server-side completion evidence is required before clearing this target; '
@@ -99,9 +101,13 @@ class TopologyTransport:
                 self.jobs.update(record, archive_backup_protections=[
                     {'endpoint_id': ticket.sink.endpoint, 'backup_id': ticket.backup_id} for ticket in tickets])
             boundary()
+        def progress_observation(value):
+            if isinstance(value, dict) and 'native_topology_owner' in value:
+                self.jobs.update(record, native_topology_owner=value['native_topology_owner'])
+            else: progress(value)
         result = native.run(self.client, self.route, self.credentials, record['options'],
             record['source_state']['seed'], record['source_state']['members'], directory, record['program'],
-            cancel=cancel, progress=progress, boundary=protected_boundary)
+            cancel=cancel, progress=progress_observation, boundary=protected_boundary)
         result['archive_backup_protections'] = []
         for ticket in tickets:
             try:

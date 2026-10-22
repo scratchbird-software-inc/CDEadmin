@@ -123,8 +123,18 @@ loss. Current seed/metadata observations and an explicit uncertain-target
 acknowledgement do not establish workload readiness or physical recovery.
 Uncertain methods that can perform clone recovery cannot clear their target
 fences using utility termination alone: copying can continue on the server.
-Independent server-side completion reconciliation remains required for those
-interrupted recovery methods. Their protected unknown receipts remain visible.
+Select every known registered member for recovery observations before review.
+New jobs retain positively observed native handshake/thread identities and
+instrumentation coverage before AdminAPI dispatch. Later reconciliation binds
+the original utility PID to its independently supervised completion receipt,
+checks current effective PROCESS visibility, unchanged instrumentation loss
+counters, absence of its SQL sessions and idle native clone status on every
+reviewed target. Explicit target acknowledgement can then release the job's
+claims while its original unknown operation outcome remains unchanged.
+Missing witnesses, unavailable members, changed identities, denied visibility,
+instrumentation loss and active server work retain protection. Older jobs and
+unobserved scopes still require their own recovery work; they are not inferred
+from a free lock or client exit.
 
 Operations that can select native clone recovery acquire conservative archive
 holds for registered and visible native sources before dispatch, including

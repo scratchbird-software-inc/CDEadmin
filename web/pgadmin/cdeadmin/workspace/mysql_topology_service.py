@@ -8,6 +8,8 @@ from ..core import EndpointContext
 from ..operations.store import JsonOperationStore
 from ..security import SecretLease
 from ..providers.mysql_family import mysql_topology as native
+from ..providers.mysql_family import mysql_topology_quiescence as quiescence
+from ..providers.mysql_family.mysql_log_purge import private_connection
 from ..providers.mysql_family.mysql_binlog_archives import delegate_credentials, program_identity, rows
 from ..providers.mysql_family.mysql_connections import POOL_ARGUMENTS
 from ..providers.mysql_family.provider import MySQLPilotProvider
@@ -104,7 +106,7 @@ def action(service, server, operation, request):
     client, route = context(service, server)
     connection = None; leases = []; transport = None
     try:
-        connection = client._connect({'route': {**route, 'database': None, 'autocommit': True, 'read_timeout': 15}})
+        connection = private_connection(client, {**route, 'database': None, 'autocommit': True, 'read_timeout': 15})
         observed = native.capture(connection)
         if operation == 'inspect': return {**observed, 'native_mutation_dispatched': False}
         if operation in {'reconcile', 'acknowledge'}:
@@ -115,6 +117,8 @@ def action(service, server, operation, request):
             observation = {**observed, 'native_lock_free': rows(connection, 'SELECT IS_FREE_LOCK(%s) AS free',
                 ('cdeadmin:binlog-load:' + record['source']['server_uuid'],))[0]['free'] == 1,
                 'scope': 'Current seed and visible native metadata identities; no workload readiness or attribution of concurrent topology changes'}
+            if record['options']['operation'] in native.RECOVERY_CALLS:
+                observation['server_recovery_quiescence'] = recovery_quiescence(service, jobs, record, connection)
             if operation == 'acknowledge': return jobs.acknowledge(record, observation, request)
             result = jobs.reconcile(record, observation); result['observation_digest'] = digest(observation); return result
         if selected['target_confirmation'] != observed['identity']['server_uuid']:
@@ -130,7 +134,7 @@ def action(service, server, operation, request):
         for server_id in native.member_ids(selected):
             member_server = source_server(owner, server_id)
             member_client, member_route = context(service, member_server)
-            member_connection = member_client._connect({'route': {**member_route, 'database': None, 'autocommit': True, 'read_timeout': 15}})
+            member_connection = private_connection(member_client, {**member_route, 'database': None, 'autocommit': True, 'read_timeout': 15})
             try: member = native.capture(member_connection)
             finally: member_client._discard_failed_session(member_connection)
             members[str(server_id)] = {'server_id': server_id, 'endpoint_id': member_server.endpoint_profile.id,
@@ -138,6 +142,11 @@ def action(service, server, operation, request):
                 'connection': native.connection(member_client, member_route, member, selected)}
             configurations[str(server_id)] = MySQLMonitoringHost._configuration(member_server)
             if operation == 'start': acquire(str(server_id), member_client, member_route)
+        argument_ids = native.member_ids({**selected, 'witness_server_ids': []})
+        allowed_witnesses = {observed['identity']['server_uuid'], *observed['metadata']['instance_uuids'],
+            *(members[str(server_id)]['identity']['server_uuid'] for server_id in argument_ids)}
+        if any(members[str(server_id)]['identity']['server_uuid'] not in allowed_witnesses for server_id in selected.get('witness_server_ids', [])):
+            raise native.BinlogArchiveError('Recovery observations must select native topology members or the selected operation instances')
         workspace = jobs.prepare_scope(owner, endpoint.id)
         program = program_identity(client, route, workspace)
         configuration = digest({'registrations': configurations, 'root': str(jobs.root),
@@ -157,3 +166,41 @@ def action(service, server, operation, request):
         for lease in leases: lease.close()
         if connection is not None: client._discard_failed_session(connection)
         if transport is not None: transport.close()
+
+
+def recovery_quiescence(service, jobs, record, seed_connection):
+    try:
+        witness = quiescence.load(jobs.directory(record), record)
+        expected = {'seed': record['source'], **{key: member['identity'] for key, member in record['source_state']['members'].items()}}
+        if set(witness['targets']) != set(expected): raise native.BinlogArchiveError('Native recovery observation scope changed')
+        admitted = {value['profile']['identity']['server_uuid'] for value in witness['targets'].values() if value.get('admitted') is True}
+        missing = sorted(set(jobs.fence_identities(record))-admitted)
+        if missing:
+            return {'qualified': False, 'idle': None, 'reason': 'Native member ownership was not admitted before dispatch',
+                'unqualified_native_instances': missing}
+        targets = {}
+        for key, identity in expected.items():
+            original = witness['targets'][key]
+            if original.get('profile', {}).get('identity') != identity:
+                raise native.BinlogArchiveError('Native recovery owner identity changed')
+            if key == 'seed':
+                targets[key] = quiescence.observe(seed_connection, original, witness['pid'])
+                continue
+            member = record['source_state']['members'][key]
+            owned = None
+            try:
+                registered = source_server(record['owner'], member['server_id'])
+                if registered.endpoint_profile.id != member['endpoint_id']:
+                    raise native.BinlogArchiveError('Native recovery member registration changed')
+                member_client, route = context(service, registered)
+                owned = private_connection(member_client, {**route, 'database': None, 'autocommit': True, 'read_timeout': 15})
+                targets[key] = quiescence.observe(owned, original, witness['pid'])
+            except Exception as error:
+                targets[key] = {'qualified': False, 'idle': None, 'error_type': type(error).__name__}
+            finally:
+                if owned is not None: member_client._discard_failed_session(owned)
+        qualified = all(value.get('qualified') is True for value in targets.values())
+        return {'qualified': qualified, 'idle': all(value.get('idle') is True for value in targets.values()) if qualified else None,
+            'targets': targets, 'scope': 'Reviewed native members, original utility sessions and current clone activity; original outcome remains unchanged'}
+    except Exception as error:
+        return {'qualified': False, 'idle': None, 'error_type': type(error).__name__}

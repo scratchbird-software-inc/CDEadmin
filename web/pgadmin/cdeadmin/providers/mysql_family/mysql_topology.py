@@ -1,5 +1,6 @@
 """Native MySQL Shell AdminAPI calls; instance and topology interfaces differ."""
 import json
+import hashlib
 import math
 from pathlib import Path
 import uuid
@@ -8,6 +9,7 @@ from urllib.parse import quote as url_quote, quote_plus
 from ...operations.fileio import private_file
 from ...sdk.tooling import ProviderToolGrant
 from .mysql_binlog_archives import BinlogArchiveError, connection_options, rows, program_identity
+from . import mysql_topology_quiescence as quiescence
 
 CREDENTIAL_FILE = 'CDEADMIN_MYSQL_TOPOLOGY_CREDENTIAL_FILE'
 
@@ -107,7 +109,7 @@ def canonical(value):
 
 def options(value):
     allowed = {'operation', 'arguments_json', 'context_name', 'context_options_json',
-               'target_confirmation', 'use_advertised_endpoint', 'timeout_seconds'}
+               'target_confirmation', 'use_advertised_endpoint', 'timeout_seconds', 'witness_server_ids'}
     if (not isinstance(value, dict) or set(value) - allowed or
             not isinstance(value.get('operation'), str) or value['operation'] not in CALLS):
         raise BinlogArchiveError('Select a native topology operation')
@@ -147,13 +149,16 @@ def options(value):
     advertised, timeout = value.get('use_advertised_endpoint', False), value.get('timeout_seconds', 3600)
     if type(advertised) is not bool or timeout is not None and (type(timeout) is not int or not 1 <= timeout <= 2147483647):
         raise BinlogArchiveError('Select the native execution address and positive client runtime or null')
+    witnesses = value.get('witness_server_ids', [])
+    if not isinstance(witnesses, list) or len(witnesses) > 128 or any(type(item) is not int or item <= 0 for item in witnesses):
+        raise BinlogArchiveError('Select bounded owned registrations for server-side recovery observations')
     return {'operation': value['operation'], 'arguments_json': canonical(arguments), 'context_name': context_name,
             'context_options_json': canonical(context_options), 'target_confirmation': target,
-            'use_advertised_endpoint': advertised, 'timeout_seconds': timeout}
+            'use_advertised_endpoint': advertised, 'timeout_seconds': timeout, 'witness_server_ids': sorted(set(witnesses))}
 
 
 def member_ids(selected):
-    return sorted({argument['server_id'] for definition, argument in zip(
+    return sorted(set(selected.get('witness_server_ids', [])) | {argument['server_id'] for definition, argument in zip(
         CALLS[selected['operation']]['arguments'], parse(selected['arguments_json']))
         if definition.rstrip('?') == 'instance' and argument is not None})
 
@@ -228,16 +233,41 @@ def connection(client, route, observed, selected):
     return value
 
 
-def script(selected, seed, members, marker):
+def script(selected, seed, members, marker, owner):
     specification = CALLS[selected['operation']]
-    settings = {'call': specification, 'selected': selected, 'seed': seed, 'members': members, 'marker': marker}
+    settings = {'call': specification, 'selected': selected, 'seed': seed, 'members': members, 'marker': marker, 'owner': owner}
     # JSON travels as text, preserving native integer arguments outside the
     # JavaScript Number range throughout review, execution and result display.
     return '''import json,os
 settings=json.loads(''' + repr(canonical(settings)) + ''')
+''' + quiescence.profile_source() + '''
 with open(os.environ[''' + repr(CREDENTIAL_FILE) + '''],encoding="utf8") as stream: authentication=json.load(stream)
 def authenticated(key,definition):
     return dict(definition,**authentication[key])
+def owned(definition):
+    result=dict(definition)
+    result["connection-attributes"]={''' + repr(quiescence.ATTRIBUTE) + ''':settings["owner"]["nonce"]}
+    return result
+def owner_profile(session):
+    def query(source,parameters=()):
+        return [list(row) for row in (session.run_sql(source,list(parameters)) if parameters else session.run_sql(source)).fetch_all()]
+    try:
+        profile=native_profile(query,{"name":''' + repr(quiescence.ATTRIBUTE) + ''',"value":settings["owner"]["nonce"]},os.getpid())
+        return {"admitted":True,"profile":profile}
+    except Exception as error:return {"admitted":False,"error_type":type(error).__name__}
+def save_owner(targets):
+    path=settings["owner"]["path"]
+    if os.path.lexists(path):raise RuntimeError("Native topology owner witness already exists")
+    temporary=path+"."+settings["owner"]["nonce"]
+    descriptor=os.open(temporary,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+    with os.fdopen(descriptor,"w",encoding="utf8") as stream:
+        json.dump({"policy":settings["owner"]["policy"],"nonce":settings["owner"]["nonce"],"pid":os.getpid(),"targets":targets},stream,ensure_ascii=True,allow_nan=False)
+        stream.flush();os.fsync(stream.fileno())
+    os.replace(temporary,path)
+    if os.name!="nt":
+        descriptor=os.open(os.path.dirname(path),os.O_RDONLY)
+        try:os.fsync(descriptor)
+        finally:os.close(descriptor)
 def identity(session,expected):
     observed=list(session.run_sql("SELECT @@server_uuid,VERSION(),CURRENT_USER(),CURRENT_ROLE()").fetch_one())
     if observed!=[expected[name] for name in ("server_uuid","version","authenticated_principal","active_role")]:
@@ -251,18 +281,21 @@ def native_error(error):
 shell.options["useWizards"]=False
 invoked=False;returned=False;stage="connecting";failure=None;result_json=None;observation_error=None
 try:
-    shell.connect(authenticated("seed",settings["seed"]["connection"]))
+    shell.connect(owned(authenticated("seed",settings["seed"]["connection"])))
     identity(shell.get_session(),settings["seed"]["identity"])
     metadata=settings["seed"]["metadata"]
     observed_metadata=[[list(row) for row in shell.get_session().run_sql(query).fetch_all()] for query in metadata["queries"]]
     if observed_metadata!=metadata["results"]:raise RuntimeError("Native topology metadata identities changed after review")
-    prepared={}
+    prepared={};owners={"seed":owner_profile(shell.get_session())}
     for key,member in settings["members"].items():
         definition=authenticated(key,member["connection"])
-        peer=mysql.get_classic_session(definition)
-        try:identity(peer,member["identity"])
+        peer=mysql.get_classic_session(owned(definition))
+        try:
+            identity(peer,member["identity"])
+            owners[key]=owner_profile(peer)
         finally:peer.close()
         prepared[int(key)]=definition
+    save_owner(owners)
     selected=settings["selected"];specification=settings["call"];context=specification["context"]
     stage="context"
     if context=="instance":target=dba
@@ -300,9 +333,13 @@ def run(client, route, credentials, selected, seed, members, workspace, program,
     if program_identity(client, route, workspace, cancel=cancel, progress=progress) != program:
         raise BinlogArchiveError('Native topology utility or execution host changed')
     marker = 'CDEADMIN_MYSQL_TOPOLOGY_' + uuid.uuid4().hex + ':'
+    owner = {'policy': quiescence.POLICY, 'nonce': str(uuid.uuid4()), 'path': str(workspace/quiescence.OWNER_FILE)}
     path = workspace / 'native-topology.py'
     with path.open('x', encoding='utf8') as stream:
-        private_file(path); stream.write(script(selected, seed, members, marker))
+        private_file(path); stream.write(script(selected, seed, members, marker, owner))
+    if progress is not None:
+        progress({'native_topology_owner': {key: owner[key] for key in ('policy', 'nonce')} |
+            {'script_sha256': hashlib.sha256(path.read_bytes()).hexdigest()}})
     grant = ProviderToolGrant('mysql-shell', str(workspace), seed['connection'].get('host') or 'localhost',
         int(seed['connection'].get('port', 3306)), timeout_seconds=selected['timeout_seconds'],
         allow_unbounded_runtime=selected['timeout_seconds'] is None, secret_environment_names=(CREDENTIAL_FILE,),

@@ -18,13 +18,16 @@ export default function MySQLTopologies({post}) {
   const [catalog,setCatalog]=useState(null),[operationId,setOperationId]=useState('instance.check_configuration');
   const [argumentsText,setArgumentsText]=useState('[{}]'),[contextName,setContextName]=useState(''),[contextOptions,setContextOptions]=useState('{}');
   const [advertised,setAdvertised]=useState(false),[timeout,setTimeout]=useState('3600');
+  const [witnessIds,setWitnessIds]=useState([]);
   const [seed,setSeed]=useState(null),[confirmation,setConfirmation]=useState(''),[members,setMembers]=useState(null),[member,setMember]=useState(null);
   const [review,setReview]=useState(null),[receipt,setReceipt]=useState(null),[jobs,setJobs]=useState(null),[observation,setObservation]=useState(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState('');const generation=useRef(0);
   const operation=catalog?.operations.find(value=>value.id===operationId);
+  const recovery=receipt?.reconciliation?.server_recovery_quiescence;
   useEffect(()=> {
     generation.current++;setCatalog(null);setSeed(null);setMembers(null);setMember(null);setReview(null);setReceipt(null);setJobs(null);setObservation(null);setBusy(false);setError('');
     setOperationId('instance.check_configuration');setArgumentsText('[{}]');setContextName('');setContextOptions('{}');setAdvertised(false);setTimeout('3600');setConfirmation('');
+    setWitnessIds([]);
     return ()=>{generation.current++;};
   },[post]);
   const run=async(action,request,accept)=> {
@@ -46,6 +49,7 @@ export default function MySQLTopologies({post}) {
   },[receipt?.job_id,receipt?.state,post]);
   const selected=()=>({operation:operationId,arguments_json:argumentsText,context_name:contextName,
     context_options_json:contextOptions,use_advertised_endpoint:advertised,
+    witness_server_ids:witnessIds,
     timeout_seconds:timeout.trim()==='null' ? null : Number(timeout),
     target_confirmation:operation?.read_only ? seed?.identity.server_uuid : confirmation});
   const loadJobs=offset=>run('list',{offset,limit:25},setJobs);
@@ -63,11 +67,12 @@ export default function MySQLTopologies({post}) {
     {operation && <Alert severity="info">Native arguments: {operation.arguments.join(', ') || 'none'}. Instance arguments use registered references such as {'{"server_id":4}'}. Optional arguments have a ? suffix.</Alert>}
     <Button disabled={busy} onClick={()=>loadMembers(0)}>Load registered topology instances</Button>
     {members && <>
-      <Table size="small" aria-label="Registered topology instances"><TableHead><TableRow><TableCell>ID</TableCell><TableCell>Instance</TableCell><TableCell>Use</TableCell></TableRow></TableHead><TableBody>
-        {members.instances.map(row=><TableRow key={row.server_id}><TableCell>{row.server_id}</TableCell><TableCell>{row.name}</TableCell><TableCell><Button disabled={busy} onClick={()=>{setMember(row);setReview(null);}}>Select topology instance {row.name}</Button></TableCell></TableRow>)}
+      <Table size="small" aria-label="Registered topology instances"><TableHead><TableRow><TableCell>ID</TableCell><TableCell>Instance</TableCell><TableCell>Use</TableCell><TableCell>Recovery observation</TableCell></TableRow></TableHead><TableBody>
+        {members.instances.map(row=><TableRow key={row.server_id}><TableCell>{row.server_id}</TableCell><TableCell>{row.name}</TableCell><TableCell><Button disabled={busy} onClick={()=>{setMember(row);setReview(null);}}>Select topology instance {row.name}</Button></TableCell><TableCell><Checkbox disabled={busy} inputProps={{'aria-label':'Observe recovery member '+row.name}} checked={witnessIds.includes(row.server_id)} onChange={event=>{setWitnessIds(current=>event.target.checked ? [...current,row.server_id] : current.filter(value=>value!==row.server_id));setReview(null);}} /></TableCell></TableRow>)}
       </TableBody></Table><TablePagination component="div" count={members.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={members.offset/25} onPageChange={(_event,next)=>loadMembers(next*25)} />
     </>}
     {member && <Button disabled={busy || !operation} onClick={()=>{setArgumentsText(example(operation,member));setReview(null);}}>Reset arguments for {member.name}</Button>}
+    <Alert severity="info">For interrupted clone recovery, select every known member for recovery observations before review. Missing native ownership or unavailable observations keep uncertain targets protected.</Alert>
     <TextField fullWidth multiline minRows={5} label="Native topology arguments (JSON array)" value={argumentsText} disabled={busy}
       helperText="Argument text is sent intact; integer digits are preserved. Configure account credentials and host option files through their dedicated workflows."
       onChange={event=>{setArgumentsText(event.target.value);invalidate();}} />
@@ -92,6 +97,7 @@ export default function MySQLTopologies({post}) {
     </>}
     {receipt && <Box>
       <Alert severity={receipt.native_operation_outcome==='unknown' ? 'warning' : 'info'}>Native topology job {receipt.job_id}: {receipt.state}. Original operation outcome: {receipt.native_operation_outcome}. Workload readiness is unverified.</Alert>
+      {receipt.target_state_acknowledged_at && <Alert severity="info">Observed target state acknowledged. The original operation outcome remains {receipt.native_operation_outcome}.</Alert>}
       {receipt.native_error && <Alert severity="error">Native topology error {receipt.native_error.code ?? ''}: {receipt.native_error.message}</Alert>}
       {receipt.result?.control?.result_json && <Box component="pre" aria-label="Native topology result JSON" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{receipt.result.control.result_json}</Box>}
       {receipt.result?.native_json_observation?.native_shell_json_signed_limit && <Alert severity="warning">Stored tags contain unsigned64 integers. MySQL Shell 9.7 options decoding can clamp these to its signed integer limit. The separate SQL tag observation preserves the stored values; the original Shell reply above is unchanged.</Alert>}
@@ -101,9 +107,15 @@ export default function MySQLTopologies({post}) {
       <Button disabled={busy} onClick={()=>run('status',{job_id:receipt.job_id},setReceipt)}>Refresh topology receipt</Button>
       <Button disabled={busy || !ACTIVE.has(receipt.state) && receipt.state!=='reviewed' && !(receipt.state==='unknown' && receipt.durable_tool && receipt.native_process_termination_confirmed!==true)} onClick={()=>run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel native topology operation</Button>
       <Button disabled={busy || ACTIVE.has(receipt.state)} onClick={()=>run('reconcile',{job_id:receipt.job_id},value=>{setReceipt(value);setObservation(value.observation_digest);})}>Observe current topology target</Button>
+      {recovery && <>
+        <Alert severity={recovery.qualified && recovery.idle ? 'info' : 'warning'}>{recovery.qualified && recovery.idle ? 'Native utility sessions have ended and observed clone work is idle. The original operation outcome is unchanged.' : 'Server-side recovery clearance is unconfirmed. The native target remains protected.'}</Alert>
+        <Table size="small" aria-label="Native recovery member observations"><TableHead><TableRow><TableCell>Member</TableCell><TableCell>Visibility</TableCell><TableCell>Idle</TableCell></TableRow></TableHead><TableBody>
+          {Object.entries(recovery.targets || {}).map(([key,value])=><TableRow key={key}><TableCell>{key}</TableCell><TableCell>{value.qualified ? 'Observed' : 'Unconfirmed'}</TableCell><TableCell>{value.idle===true ? 'Yes' : value.idle===false ? 'No' : 'Unconfirmed'}</TableCell></TableRow>)}
+        </TableBody></Table>
+      </>}
       {receipt.state==='unknown' && receipt.remote_database_mutation && observation && <>
         <TextField fullWidth label="Confirm uncertain topology target UUID" value={confirmation} onChange={event=>setConfirmation(event.target.value)} />
-        <Button disabled={busy || confirmation!==receipt.target.server_uuid} onClick={()=>run('acknowledge',{job_id:receipt.job_id,target_confirmation:confirmation,observation_digest:observation},setReceipt)}>Acknowledge observed topology target</Button>
+        <Button disabled={busy || confirmation!==receipt.target.server_uuid || receipt.server_recovery_clearance_required && !(recovery?.qualified && recovery?.idle)} onClick={()=>run('acknowledge',{job_id:receipt.job_id,target_confirmation:confirmation,observation_digest:observation},setReceipt)}>Acknowledge observed topology target</Button>
       </>}
       <Box component="details"><summary>Native topology observations</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{JSON.stringify(receipt,null,2)}</Box></Box>
     </Box>}
