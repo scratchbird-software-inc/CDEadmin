@@ -6,8 +6,8 @@ Comparison baseline: source ``0c14f90a21c80c32074c574e7914e56dc487661d``;
 MySQL 9.7.0 and Connector/Python 26.7.0.
 
 This is the accepted implementation queue arising from the MySQL management-tool
-comparison. ``CMP-MY-03``, ``CMP-MY-04``, ``CMP-MY-05`` and ``CMP-MY-07`` are implemented
-and Linux-qualified; the other seven comparison items remain open. They supplement
+comparison. ``CMP-MY-03``, ``CMP-MY-04``, ``CMP-MY-05``, ``CMP-MY-06`` and ``CMP-MY-07``
+are implemented and Linux-qualified; the other six comparison items remain open. They supplement
 :doc:`mysql_functional_completion` and :doc:`six_engine_remaining_work`; their
 acceptance must follow :doc:`six_engine_completion`.
 
@@ -214,7 +214,16 @@ Comparison evidence: `Percona online schema change <https://docs.percona.com/per
 CMP-MY-06: Replica and full-table data drift verification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Status: **open**. Priority: **P1**.
+Status: **implemented and Linux-qualified**. Priority: **P1**.
+
+Native full-table comparison now admits independent endpoint/table pairs with
+recorded read-only snapshot or server-lock boundaries. Duplicate-aware SHA256
+row multisets preserve full row counts and binary-protocol floating-point values.
+Registered GTID replica alignment, explicit incomplete coverage, cancellation,
+private spill-file cleanup, mismatch reporting/download and existing separately
+reviewed data-editor repair paths are implemented. Linux pure/C and built desktop
+receipts qualify the recorded scopes; see :doc:`mysql_functional_completion`.
+Broader native inventory, recovery/lifecycle and platform acceptance stay open.
 
 Compare independently admitted complete table scopes using native-consistent
 chunking/keys and explicit transaction or replication positions. Present

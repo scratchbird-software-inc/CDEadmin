@@ -3162,6 +3162,10 @@ class ServerNode(PGChildNodeView):
                         payload = service.postgresql_continuity(server, action.removeprefix('postgresql_continuity_'), data.get('request'))
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
+                elif action in {'mysql_drift_peers','mysql_drift_databases','mysql_drift_tables','mysql_drift_describe',
+                                'mysql_drift_start','mysql_drift_status','mysql_drift_cancel','mysql_drift_forget'}:
+                    try:payload=service.mysql_drift(server,action.removeprefix('mysql_drift_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mysql_content_search_databases', 'mysql_content_search_tables', 'mysql_content_search_columns',
                                 'mysql_content_search_start', 'mysql_content_search_status', 'mysql_content_search_cancel',
                                 'mysql_content_search_forget', 'mysql_content_search_row'}:

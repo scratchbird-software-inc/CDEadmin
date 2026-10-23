@@ -335,6 +335,88 @@ outcome alongside observed process completion, credential cleanup and remaining
 table/trigger artifacts. Broader MySQL inventory, recovery and lifecycle gates
 remain open; the next comparison workflow is ``CMP-MY-06`` data drift verification.
 
+Native full-table and replica data drift
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The endpoint **Diagnostics and verification → MySQL full-table data comparison**
+workspace independently admits both registered endpoints, databases and complete
+base-table pairs. Observe each native table, add its exact identity and confirm
+the read-lock/scan scope. Owner, registrations, native identities and complete
+logical-column metadata are checked at execution. Catalog visibility is
+permission filtered; unselected or invisible tables remain unknown.
+
+**InnoDB native snapshots** acquires server-wide native read locks on both
+endpoints, records GTID/binary-log positions, establishes read-only repeatable-read
+consistent snapshots and pins every selected table with metadata locks. It
+releases the global locks before scanning. Concurrent DML can continue; retained
+snapshots can retain undo versions. **Hold server read locks through scans**
+retains those locks for admitted local engines: InnoDB, MyISAM, MEMORY, CSV,
+ARCHIVE, MRG_MYISAM and BLACKHOLE. External/distributed writers have no admitted
+consistency profile. Native privileges, lock waits and unsupported profiles are
+reported without fallback. The native account needs complete table reads,
+server read-lock privileges and position inspection privileges.
+
+Optional replica alignment binds the explicit registered target/channel to the
+native source UUID, requires GTID mode ON and a running channel, waits for the
+recorded source set while source writes are blocked, and rechecks the applied
+set after acquiring the target lock. The target snapshot retains its recorded
+local/other-channel transactions. Source GTID coverage does not prove those
+transactions or replication filters are absent. The workflow compares the
+admitted endpoint directly without credential delegation or discovery of other
+members. Independent snapshots do not assert replication alignment.
+
+All logical columns, including invisible/generated columns, and all rows are
+scanned. Native SHA256 projections preserve binary text, exact decimal/temporal,
+JSON, geometry and vector representations. ENUM/SET use native numeric indices;
+binary prepared results preserve FLOAT/DOUBLE IEEE values. Logical column names,
+order, types, generation and collations must match. Physical storage bytes,
+index/constraint parity and CHAR storage padding are separate checks. Native
+warnings prevent a completed table result.
+
+Native unique keys order keyed scans and identify bounded private mismatch
+examples. Keyless tables use complete duplicate-aware row multisets. Fixed-size
+fetch batches, bounded external sorting and SHA256 row digests retain duplicate
+multiplicity. Matching counts or sampled rows do not establish a match. Results
+are cryptographic checksum comparisons, not collision-free mathematical proofs
+of physical byte equality. Reports retain full scanned-row and source-only/
+target-only row-version counts, key coverage, native positions and release
+observations. Schema differences, changed identities, denied reads, cancellation,
+deadlines and exhausted sort space remain incomplete or uncomparable.
+
+Limits are 1–64 table pairs, 16384 total observed columns, 1–86400 execution
+seconds, 1–4096 MiB private sort space and 0–200 mismatch examples across the job.
+Four active comparisons and 32 retained reports are admitted per process.
+Temporary runs are private and removed at completion; abandoned runs are removed
+after process-identity validation at startup. Private reports/key examples expire
+five minutes after completion, with explicit clearing and deliberate JSON
+download. Native server logging remains native. No SQL/history persistence or
+repair is dispatched. Repairs use the existing native table data editor with a
+separate review against its exact current target.
+
+Cancellation verifies owned native worker identities before KILL QUERY. Cleanup
+retains unlock/rollback replies and session-disposal observations. Closing the
+workspace requests cancellation; native runtime limits continue if delivery
+fails. Qualification entry points are
+``tools/cdeadmin_mysql_drift_qualification.py`` and
+``tools/cdeadmin_mysql_drift_desktop_qualification.py``. Preserve evidence outside
+the repository. Windows/macOS acceptance remains with the platform teams;
+ScratchBird history qualification remains owner-deferred.
+
+Linux pure/C native/API receipts qualify InnoDB snapshots and MyISAM locked
+scans, all admitted native type projections, equal-count duplicate drift,
+adjacent IEEE values, GTID alignment and stopped-channel refusal, changed
+structures, concurrent committed DML, sort limits and native cancellation.
+Independent user transactions, savepoints and warning areas remain intact.
+Built-desktop receipts qualify matched/different reports, deliberate report
+download, clearing and an independent native oracle confirming no repair writes.
+These scopes close ``CMP-MY-06``. Broader native inventory, recovery/lifecycle and
+platform acceptance remain open; ``CMP-MY-08`` MySQL alert lifecycle is next.
+
+The pinned Percona Toolkit 3.7.2 checksum source requires statement-based logging
+and has replication-format/topology restrictions. It is not selected as this
+workflow's backend. See `Percona checksum limitations
+<https://docs.percona.com/percona-toolkit/pt-table-checksum.html#limitations>`_.
+
 Native topology administration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -816,6 +816,10 @@ def endpoint_context_actions(
                     confirmation=True,macro=False,arguments={'tab':'administration','resource_kind':'server',
                         'operation_id':operation,'database_target_id':None},enabled=ready and can_manage,
                     disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can maintain this native instance.'))
+        actions.append(_action('endpoint.mysql.data_drift', 'MySQL full-table data comparison...', 'open_workspace',
+            icon='command.default', group='diagnostics', enabled=ready and can_manage,
+            arguments={'tab':'mysql-data-drift','database_target_id':None},
+            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can compare native table scopes.'))
         actions.append(_action('endpoint.mysql.content_search', 'MySQL database content search...', 'open_workspace',
             icon='command.default', group='diagnostics', enabled=ready and can_manage,
             arguments={'tab': 'mysql-content-search', 'database_target_id': None},
