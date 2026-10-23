@@ -172,7 +172,7 @@ def floors(records,planned):
     return [{'job_id':job,'input_digest':records[job]['review_digest']} for job in planned['retained_full_backup_ids']]
 
 
-def action(service,server,jobs,owner,endpoint,operation,request):
+def action(service,server,jobs,owner,endpoint,operation,request,*,scheduled_policy_id=None,on_review=None):
     from .mysql_host_service import credentials
     batches=manager(service,jobs);items=individual.manager(service,jobs)
     if operation=='retention_batch_list' and not set(request)-{'offset','limit'}:return batches.list(owner,endpoint.id,**request)
@@ -190,6 +190,11 @@ def action(service,server,jobs,owner,endpoint,operation,request):
         if operation not in {'retention_batch_advance','retention_batch_resume','retention_batch_reconcile','retention_batch_cancel'} or set(request)!=fields:
             raise native.HostError('Select an exact reviewed physical retention batch')
         ticket=batches.load(request['job_id'],owner,endpoint.id)
+        owning=ticket['options'].get('scheduled_policy_id')
+        if owning and owning!=scheduled_policy_id:
+            scheduler=getattr(service,'mysql_physical_scheduler',None)
+            if scheduler is None or scheduler.jobs.load(owning,owner,endpoint.id)['state']=='enabled':
+                raise native.HostError('Disable the owning physical schedule before manually changing its occurrence')
         if confirmed and (request['confirmed'] is not True or request['review_digest']!=ticket['review_digest'] or review_digest(ticket)!=ticket['review_digest'] or request['batch_confirmation']!=ticket['job_id']):
             raise native.HostError('Confirm this exact batch review and type its batch UUID')
         if ticket['state'] in {'completed','cancelled'}:return batches.get(ticket['job_id'],owner,endpoint.id)
@@ -210,8 +215,10 @@ def action(service,server,jobs,owner,endpoint,operation,request):
                 child=items.review(owner,endpoint.id,{'source_job_id':job_id,'retention_id':retention_id,'batch_reservation_id':reservation},
                     {'identity':record['source'],'state':{'remote_review':remote,'source_review_digest':record['review_digest']}},configuration,child_program)
                 reviewed.append({'physical_job_id':job_id,'retention_job_id':child['job_id'],'retention_digest':child['review_digest'],'artifact':remote['artifact']})
-            result=batches.review(owner,endpoint.id,{'scope_job_id':anchor['job_id'],'policy':selected,'reservation_id':reservation},
+            result=batches.review(owner,endpoint.id,{'scope_job_id':anchor['job_id'],'policy':selected,'reservation_id':reservation,
+                **({'scheduled_policy_id':scheduled_policy_id} if scheduled_policy_id else {})},
                 {'identity':anchor['source'],'state':{'plan':planned,'items':reviewed}},configuration,current)
+            if on_review is not None:on_review(result)
             for item in reviewed:
                 jobs.update(records[item['physical_job_id']],retention_batch_id=reservation,retention_batch_job_id=result['job_id'],retention_review_job_id=item['retention_job_id'])
             batches.update(batches.load(result['job_id'],owner,endpoint.id),next_index=0,removed_job_ids=[])

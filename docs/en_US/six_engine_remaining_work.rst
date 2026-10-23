@@ -715,7 +715,12 @@ chains and execute a fixed set in dependency order. Native retained-file
 revalidation, current graph/reservation checks, pause, restart inspection,
 interrupted-item resume and unused-review invalidation are implemented.
 
-Scheduled physical retention, recurring backup/drill policy, independent
+Scheduled physical retention uses explicitly confirmed, encrypted and expiring
+SSH delegation. Independent workers admit one fixed occurrence at a time and
+recheck current authority before each step. Revocation, expiry and interruption
+stop future admissions; original occurrences require independent handling.
+
+Recurring backup/drill policy, independent
 post-replay acceptance, remaining backend admission and cutover stay open under
 ``CMP-MY-01``. ``CMP-MY-02`` and remaining ``INV-MYSQL`` reconciliation still
 precede the MariaDB handoff. Linux evidence does not close platform-team gates;

@@ -121,7 +121,7 @@ class ScheduleHost:
             if not self.enabled.exists():
                 return
             self.stop.clear()
-            self.thread = threading.Thread(target=self.loop, daemon=True, name='mysql-archive-retention-scheduler')
+            self.thread = threading.Thread(target=self.loop, daemon=True, name=self.jobs.operation+'-scheduler')
             self.thread.start()
 
     def close(self):
@@ -154,9 +154,9 @@ class ScheduleHost:
                             raise BinlogArchiveError('The archive schedule index changed')
                         self.tick(entry.name)
                     except Exception as error:
-                        self.app.logger.error('Archive retention schedule requires attention: %s (%s)', entry.name, type(error).__name__)
+                        self.app.logger.error('%s requires attention: %s (%s)', self.jobs.operation, entry.name, type(error).__name__)
             except Exception:
-                self.app.logger.error('Archive retention schedule index is unavailable')
+                self.app.logger.error('%s schedule index is unavailable', self.jobs.operation)
 
     def read(self, job_id):
         with self.jobs.store(job_id) as store:

@@ -302,8 +302,8 @@ late dispatch before releasing an unclaimed local intent. An unknown outcome or
 missing intent alone never authorizes a fresh removal. Completed manifests are
 compacted; private file inventories do not accumulate as retention history.
 
-This workflow removes reviewed individual artifacts. Scheduled physical
-retention, recurring backup/drill policy, independent full post-replay acceptance
+This workflow removes reviewed individual artifacts. Recurring backup/drill
+policy, independent full post-replay acceptance
 and production cutover remain under ``CMP-MY-01``. Binary-log archive protection
 has its own reviewed retirement workflow and is not silently retired here.
 Native qualification covers both Connector/Python interfaces, real pinned-host
@@ -361,5 +361,60 @@ the remaining reviews again. Cancellation never starts the next item.
 Unused previews expire after ten minutes. Invalidate an expired batch and review
 a fresh fixed set; there is no silent extension or added deletion intent.
 Original physical results, unknown database outcomes, native output and archive
-protection remain separate. Scheduled retention, recurring backup/drill policy,
+protection remain separate. Recurring backup/drill policy,
 full independent post-replay acceptance and production cutover remain open.
+
+Scheduled physical retention
+-----------------------------
+
+Use **Review physical retention schedule** to review future age/count scans for
+the selected original physical scope. Choose a scan interval from 60 seconds to
+one year and a lifetime from 1 to 365 days. The preview does not reserve files or
+store SSH credentials. Type the exact schedule UUID, confirm the policy and
+explicitly select encrypted SSH delegation before **Enable reviewed physical
+retention schedule**. Supply fresh SSH authentication for that enable request.
+
+The application worker scans independently of the viewer. Each due occurrence
+creates one fixed batch of at most 100 eligible jobs, including later jobs in
+the same owner, endpoint, original source/principal/role, pinned SSH account and
+workspace. Existing graph, registration, pin, process and native retained-file
+checks still apply before each deletion. No source SQL password is delegated;
+SQL login is unnecessary for retention. Backup/drill execution, data recovery
+acceptance, binary-log protection retirement and cutover remain separate.
+
+Application administrators configure ``CDEADMIN_MYSQL_PHYSICAL_WORKER_KEYS`` as
+a mapping of key IDs to base64-encoded 32-byte keys, and select
+``CDEADMIN_MYSQL_PHYSICAL_WORKER_ACTIVE_KEY_ID`` in private application
+configuration. Use the same key authority across participating workers. Without
+it, scheduled SSH delegation is unavailable; manual retention remains available.
+Authenticated encryption binds the credential to this exact policy, owner,
+endpoint, review and registration. Only ciphertext is persisted after explicit
+enablement. Public receipts and exports omit the credential envelope. Workers
+decrypt only while processing the admitted occurrence and do not delegate the
+source SQL password.
+
+For key rotation, first make the old and new keys available to all workers,
+then select the new active key and use **Rotate physical retention SSH envelope**
+on each enabled policy. Remove old keys only after their retained delegations
+have been rotated. Losing a required key suspends the policy; review a new
+policy with fresh SSH authentication. Changes to the registration, permissions,
+original scope, adapter, application host or pinned execution host also suspend
+future work. Expiry, disable and suspension clear the stored SSH delegation.
+
+**Load physical retention schedules** and **Refresh physical retention schedule**
+observe durable state without starting work. **Request due physical retention
+scan** requests one due scan of an enabled policy; it cannot resume a suspended
+one. **Disable physical retention schedule** stops future admissions, including
+remaining steps of an active occurrence. A host request already admitted may
+continue. Disable the owning policy before manually inspecting, resuming or
+invalidating its batch intent. Its recorded occurrence remains accessible through
+**Inspect scheduled physical occurrence**, with fresh SSH authentication for
+host inspection. Original native and unknown database outcomes stay unchanged.
+
+Idle application restart preserves enabled policies. An interrupted scan or
+occurrence is never automatically retried: independent observation and explicit
+handling of the original batch precede a new policy review. Disabling or
+reconciling that batch never re-enables the old policy. While the application is
+off, scans stop; restart evaluates a future due occurrence without backfilling
+missed intervals. Native qualification is available through
+``tools/cdeadmin_mysql_physical_replay_qualification.py --schedule-only``.

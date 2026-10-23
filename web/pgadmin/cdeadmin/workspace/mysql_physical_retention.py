@@ -81,7 +81,7 @@ def action(service,server,jobs,owner,endpoint,operation,request,*,batch_reservat
                 review_digest(ticket)!=ticket['review_digest'] or request['job_confirmation']!=record['job_id']):
             raise native.HostError('Confirm the exact physical retention review and type its original physical job UUID')
         if ticket['state'] in {'removed','not_dispatched'}:return tickets.get(ticket['job_id'],owner,endpoint.id)
-        if operation=='retention_abandon' and not prior and record.get('retention_review_job_id')!=ticket['job_id']:
+        if operation=='retention_abandon' and not prior and record.get('retention_review_job_id')!=ticket['job_id'] and not selected.get('batch_reservation_id'):
             raise native.HostError('Select the current physical retention review')
     else:raise native.HostError('Select an explicit physical retention action')
     configuration=digest(MySQLMonitoringHost._configuration(server))
@@ -123,7 +123,8 @@ def action(service,server,jobs,owner,endpoint,operation,request,*,batch_reservat
                 artifact_retention=observed)
         elif observed.get('late_dispatch_refused') is True:
             tickets.update(ticket,state='not_dispatched',remote_observation=observed,removal_confirmed=False)
-            jobs.update(record,artifact_removal=None,retention_review_job_id=None)
+            if record.get('retention_review_job_id')==ticket['job_id']:
+                jobs.update(record,artifact_removal=None,retention_review_job_id=None)
         else:
             tickets.update(ticket,state='unknown' if ticket['state']!='reviewed' else 'reviewed',remote_observation=observed)
         return tickets.get(ticket['job_id'],owner,endpoint.id)

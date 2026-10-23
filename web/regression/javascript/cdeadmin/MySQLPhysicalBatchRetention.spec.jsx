@@ -65,3 +65,43 @@ it('loads persisted batches without dispatch and invalidates unused reviews expl
   await waitFor(() => expect(screen.getByLabelText('Physical retention batch receipt')).toHaveTextContent('cancelled'));
   expect(post).toHaveBeenLastCalledWith(expect.objectContaining({action: 'mysql_physical_retention_batch_cancel'}));
 });
+
+const reviewedSchedule = {job_id: 'exact-schedule', review_digest: 'schedule-digest', state: 'reviewed', ssh_delegation_present: false};
+const confirmSchedule = () => {
+  fireEvent.change(screen.getByLabelText('Exact physical retention schedule UUID'), {target: {value: 'exact-schedule'}});
+  fireEvent.click(screen.getByLabelText('I confirm this exact physical retention schedule.'));
+};
+it('delegates scheduled SSH access only after exact policy confirmation and a separate delegation choice', async () => {
+  const post = jest.fn().mockResolvedValueOnce(reviewedSchedule).mockResolvedValueOnce({...reviewedSchedule, state: 'enabled', ssh_delegation_present: true});
+  renderBatch(post); fireEvent.click(screen.getByRole('button', {name: 'Review physical retention schedule'}));
+  await screen.findByLabelText('Physical retention schedule receipt');
+  expect(post).toHaveBeenCalledTimes(1);
+  expect(post).toHaveBeenLastCalledWith({action: 'mysql_physical_retention_schedule_review', request: {scope_job_id: 'source-job', options: {policy: {retention_days: 30, keep_latest: 2}, interval_seconds: 3600, expires_after_days: 30}, credentials: {private_key: 'ephemeral-key'}}});
+  confirmSchedule(); expect(screen.getByRole('button', {name: 'Enable reviewed physical retention schedule'})).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('Delegate SSH authentication encrypted for this expiring physical policy.'));
+  fireEvent.click(screen.getByRole('button', {name: 'Enable reviewed physical retention schedule'}));
+  await waitFor(() => expect(screen.getByLabelText('Physical retention schedule receipt')).toHaveTextContent('enabled'));
+  expect(post).toHaveBeenLastCalledWith({action: 'mysql_physical_retention_schedule_enable', request: {job_id: 'exact-schedule', review_digest: 'schedule-digest', confirmed: true, schedule_confirmation: 'exact-schedule', delegate_ssh_credentials: true, credentials: {private_key: 'ephemeral-key'}}});
+  expect(screen.getByLabelText('Physical retention schedule receipt')).not.toHaveTextContent('ephemeral-key');
+  expect(screen.getByRole('button', {name: 'Disable physical retention schedule'})).toBeDisabled();
+});
+
+it('loads a persisted policy without scanning and requires fresh confirmation before disabling it', async () => {
+  const enabled = {...reviewedSchedule, state: 'enabled', ssh_delegation_present: true};
+  const post = jest.fn().mockResolvedValueOnce({jobs: [enabled]}).mockResolvedValueOnce(enabled).mockResolvedValueOnce({...enabled, state: 'disabled', ssh_delegation_present: false});
+  renderBatch(post); fireEvent.click(screen.getByRole('button', {name: 'Load physical retention schedules'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Inspect physical retention schedule exact-schedule'}));
+  await screen.findByLabelText('Physical retention schedule receipt'); expect(post).toHaveBeenCalledTimes(2);
+  confirmSchedule(); fireEvent.click(screen.getByRole('button', {name: 'Disable physical retention schedule'}));
+  await waitFor(() => expect(screen.getByLabelText('Physical retention schedule receipt')).toHaveTextContent('disabled'));
+  expect(post).toHaveBeenLastCalledWith({action: 'mysql_physical_retention_schedule_disable', request: {job_id: 'exact-schedule', confirmed: true, schedule_confirmation: 'exact-schedule'}});
+});
+
+it('invalidates a schedule review when its age/count policy changes', async () => {
+  const post = jest.fn().mockResolvedValue(reviewedSchedule); renderBatch(post);
+  fireEvent.click(screen.getByRole('button', {name: 'Review physical retention schedule'}));
+  await screen.findByLabelText('Physical retention schedule receipt');
+  fireEvent.change(screen.getByLabelText('Minimum full-backup chains'), {target: {value: '3'}});
+  expect(screen.queryByLabelText('Physical retention schedule receipt')).not.toBeInTheDocument();
+  expect(post).toHaveBeenCalledTimes(1);
+});

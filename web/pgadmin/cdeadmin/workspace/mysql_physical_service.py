@@ -163,7 +163,12 @@ def claim(jobs, record, owner, endpoint, request):
 
 def action(service, server, operation, request):
     from .mysql_physical_retention import admission
-    jobs,_owner,_endpoint=manager(service,server)
+    jobs,owner,endpoint=manager(service,server)
+    if operation.startswith('retention_schedule_'):
+        if not isinstance(request,dict):raise native.HostError('Select a physical schedule request')
+        from ..report_scheduler.crypto import WorkerKeyError
+        try:return service.mysql_physical_scheduler.action(server,jobs,owner,endpoint,operation,request)
+        except WorkerKeyError:raise native.HostError('Physical SSH delegation is unavailable; configure worker keys and review a new policy') from None
     with admission(jobs):return _action(service,server,operation,request)
 
 

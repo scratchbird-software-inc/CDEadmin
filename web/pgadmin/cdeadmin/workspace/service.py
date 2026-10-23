@@ -3773,6 +3773,8 @@ def init_app(
     app.extensions[APP_EXTENSION_KEY] = service
     from .mysql_retention_schedule import init_app as init_mysql_retention_schedule
     init_mysql_retention_schedule(app, service)
+    from .mysql_physical_retention_schedule import init_app as init_mysql_physical_schedule
+    init_mysql_physical_schedule(app, service)
     return service
 
 

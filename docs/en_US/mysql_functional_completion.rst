@@ -2002,7 +2002,11 @@ descendants and all inputs of retained jobs. Each step checks current graph
 admission and the host rehashes retained full backups under its admission lock.
 The fixed deletion set supports pause, independent restart observation,
 explicit interrupted-item resume and unused-review invalidation. Scheduled
-physical retention and recurring backup/drill scheduling, full independent
+physical retention now adds explicitly delegated, encrypted and expiring SSH
+access, independently polled occurrences and revocation between steps. Changed
+authority or interrupted occurrences suspend future work without automatic
+retry. Public receipts omit encrypted credential material. Recurring
+backup/drill scheduling, full independent
 post-replay acceptance, remaining physical backend admission and production
 cutover remain open. ``CMP-MY-01``, ``CMP-MY-02`` and ``INV-MYSQL`` still precede
 the MariaDB implementation handoff; the comparison denominator remains nine

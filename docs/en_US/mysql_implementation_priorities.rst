@@ -139,14 +139,17 @@ reattachment. Unknown database outcomes/fences persist until fresh SQL facts and
 explicit acknowledgement. Legacy missing-binding receipts, missing/failed
 guardians and wider lifecycle reconciliation remain open, alongside
 post-replay acceptance, incremental/encrypted/external-table-space
-support, scheduled physical retention and production cutover remain open.
+support and production cutover remain open.
 Reviewed individual-artifact pin/removal, dependency admission and interrupted
 cleanup reconciliation/resume are implemented; see ``mysql_physical_backups.rst``. These bounded
 artifact receipts do not close ``CMP-MY-01``. Reviewed age/count batch retention
 now protects a minimum number of full-backup chains, rechecks native retained
 files and removes a fixed set in dependency order. Pausing, restart observation,
 explicit interrupted-item resume and unused-review invalidation are available;
-automatic retention and recurring backup/drill scheduling remain open.
+scheduled retention now uses expiring, encrypted SSH delegation and durable
+occurrences independent of a viewer. Revocation, expiry, changed authority and
+interruption suspend future admissions. Recurring backup/drill scheduling
+remains open.
 
 Comparison evidence: `XtraBackup MySQL 9.7 support and limitations <https://docs.percona.com/percona-xtrabackup/9.7/>`_;
 `XtraBackup 9.7.1-rc1 release status <https://docs.percona.com/percona-xtrabackup/9.7/release-notes/9.7.1-rc1.html>`_;
