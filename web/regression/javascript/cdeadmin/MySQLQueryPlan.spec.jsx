@@ -1,6 +1,6 @@
 import {fireEvent, render, screen, within} from '@testing-library/react';
 import MySQLQueryPlan from '../../../pgadmin/static/js/Dialogs/MySQLQueryPlan';
-import {mysqlPlanText, parseMySQLPlan, PLAN_LIMITS} from '../../../pgadmin/static/js/Dialogs/mysqlQueryPlan';
+import {mysqlPlanText, parseMySQLPlan, PLAN_LIMITS} from '../../../pgadmin/static/js/Dialogs/mysqlPlanPresentation';
 
 const rendered = text => ({view_model: {columns: [{name: 'EXPLAIN', native_name: 'EXPLAIN'}], rows: [{EXPLAIN: text}]}});
 const nativeJSON = '{"query_plan":{"operation":"Filter: café <img src=x>","estimated_rows":9007199254740993,"estimated_total_cost":0.1234567890123456789,"inputs":[{"operation":"Table scan on t","actual_rows":2,"actual_loops":0,"actual_first_row_ms":null}]},"json_schema_version":"2.0"}';

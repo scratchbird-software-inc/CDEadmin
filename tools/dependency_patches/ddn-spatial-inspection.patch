@@ -1,0 +1,74 @@
+--- a/notation/runtime/ddn-geo.js
++++ b/notation/runtime/ddn-geo.js
+@@ -27,0 +28 @@
++ cartesian:(x,y)=>[x,y],
+@@ -46 +47 @@
+-function ingest(input,ErrorClass=D.DDNError){
++function ingest(input,ErrorClass=D.DDNError,cartesian=false){
+@@ -53 +54,11 @@
+- const features=raw.map((ft,i)=>{
++ let pointCount=0;
++ const expanded=[];
++ const expand=(ft,depth=0)=>{
++  if(depth>32||expanded.length>=500)fail('DDN-PJ147','Geometry exceeds 32 collection levels or 500 features');
++  if(ft?.geometry?.type==='GeometryCollection'){
++   if(!Array.isArray(ft.geometry.geometries))fail('DDN-PJ144','GeometryCollection needs geometries');
++   ft.geometry.geometries.forEach((geometry,i)=>expand({...ft,id:String(ft.id??'collection')+'/'+i,geometry},depth+1));
++  }else expanded.push(ft);
++ };
++ raw.forEach(ft=>expand(ft));
++ const features=expanded.map((ft,i)=>{
+@@ -56,3 +67,3 @@
+-  if(!['Polygon','MultiPolygon','Point','MultiPoint'].includes(g.type))fail('DDN-PJ147','Unsupported GeoJSON geometry "'+g.type+'"; ddn-geo renders Polygon, MultiPolygon, Point and MultiPoint');
+-  const check=(pt)=>{if(!Array.isArray(pt)||pt.length<2||!Number.isFinite(pt[0])||!Number.isFinite(pt[1]))fail('DDN-PJ146','GeoJSON coordinates must be finite [lon, lat] pairs');if(Math.abs(pt[0])>360||Math.abs(pt[1])>90)fail('DDN-PJ146','GeoJSON coordinate outside longitude/latitude range: ['+pt[0]+', '+pt[1]+']');};
+-  const walk=c=>{if(typeof c[0]==='number'){check(c);return;}for(const x of c)walk(x);};
++  if(!['Polygon','MultiPolygon','Point','MultiPoint','LineString','MultiLineString'].includes(g.type))fail('DDN-PJ147','Unsupported GeoJSON geometry "'+g.type+'"; ddn-geo renders points, lines, polygons and collections');
++  const check=(pt)=>{if(!Array.isArray(pt)||pt.length<2||!Number.isFinite(pt[0])||!Number.isFinite(pt[1]))fail('DDN-PJ146','GeoJSON coordinates must be finite [lon, lat] pairs');if(!cartesian&&(Math.abs(pt[0])>360||Math.abs(pt[1])>90))fail('DDN-PJ146','GeoJSON coordinate outside longitude/latitude range: ['+pt[0]+', '+pt[1]+']');};
++  const walk=(c,depth=0)=>{if(!Array.isArray(c)||depth>32)fail('DDN-PJ144','Invalid or excessively nested coordinates');if(typeof c[0]==='number'){if(++pointCount>10000)fail('DDN-PJ147','Geography exceeds 10000 positions');check(c);return;}for(const x of c)walk(x,depth+1);};
+@@ -68,5 +79,7 @@
+-function geoPath(geometry,project){
+- const seg=(a,b)=>Math.abs(a[0]-b[0])>180;
+- const ring=pts=>{let d='';for(let i=0;i<pts.length;i++){const prev=i?pts[i-1]:null;d+=(i===0||seg(prev,pts[i])?'M':'L')+f(project(pts[i])[0])+' '+f(project(pts[i])[1]);}return d+'Z';};
+- if(geometry.type==='Polygon')return geometry.coordinates.map(ring).join('');
+- if(geometry.type==='MultiPolygon')return geometry.coordinates.map(poly=>poly.map(ring).join('')).join('');
++function geoPath(geometry,project,{cartesian=false}={}){
++ const seg=(a,b)=>!cartesian&&Math.abs(a[0]-b[0])>180;
++ const ring=(pts,closed=true)=>{let d='';for(let i=0;i<pts.length;i++){const prev=i?pts[i-1]:null;d+=(i===0||seg(prev,pts[i])?'M':'L')+f(project(pts[i])[0])+' '+f(project(pts[i])[1]);}return d+(closed?'Z':'');};
++ if(geometry.type==='LineString')return ring(geometry.coordinates,false);
++ if(geometry.type==='MultiLineString')return geometry.coordinates.map(pts=>ring(pts,false)).join('');
++ if(geometry.type==='Polygon')return geometry.coordinates.map(pts=>ring(pts)).join('');
++ if(geometry.type==='MultiPolygon')return geometry.coordinates.map(poly=>poly.map(pts=>ring(pts)).join('')).join('');
+@@ -98 +111 @@
+- return ingest(rec.properties.x_record??rec.properties.x_geojson);
++ return ingest(rec.properties.x_record??rec.properties.x_geojson,D.DDNError,p.method==='cartesian');
+@@ -145 +158 @@
+- const raw=(lon,lat)=>projections[method](rad(lon),rad(lat));
++ const raw=(lon,lat)=>method==='cartesian'?[lon,lat]:projections[method](rad(lon),rad(lat));
+@@ -147 +160 @@
+- const visit=pt=>{if(pt[1]<clamp[0]||pt[1]>clamp[1])return;const [x,y]=raw(pt[0],pt[1]);x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y);};
++ const visit=pt=>{if(method!=='cartesian'&&(pt[1]<clamp[0]||pt[1]>clamp[1]))return;const [x,y]=raw(pt[0],pt[1]);x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y);};
+@@ -151,0 +165,2 @@
++ const unit=method==='cartesian'?Math.max(Math.abs(x0),Math.abs(x1),Math.abs(y0),Math.abs(y1),1):1;
++ x0/=unit;x1/=unit;y0/=unit;y1/=unit;
+@@ -154 +169 @@
+- return pt=>{const [x,y]=raw(pt[0],pt[1]);return [ox+(x-x0)*scale,H-(oy+(y-y0)*scale)];};
++ return pt=>{const [x,y]=raw(pt[0],pt[1]);return [ox+(x/unit-x0)*scale,H-(oy+(y/unit-y0)*scale)];};
+@@ -190 +205 @@
+-  if(!['Polygon','MultiPolygon'].includes(ft.geometry.type))continue;
++  if(!['Polygon','MultiPolygon','LineString','MultiLineString'].includes(ft.geometry.type))continue;
+@@ -196,2 +211,3 @@
+-  const d=geoPath(ft.geometry,project);
+-  body+=group(rid,ids,`<path d="${d}" fill="${fill}" stroke="${rowsByKey?t.rule:t.muted}" stroke-width="${rowsByKey?.8:1}"><title>${esc(label)}</title></path>`,{},rowsByKey?'value':undefined);
++  const d=geoPath(ft.geometry,project,{cartesian:plan.method==='cartesian'});
++  if(['LineString','MultiLineString'].includes(ft.geometry.type))fill='none';
++  body+=group(rid,ids,`<path d="${d}" fill="${fill}" fill-rule="evenodd" stroke="${rowsByKey?t.rule:t.muted}" stroke-width="${rowsByKey?.8:1}"><title>${esc(label)}</title></path>`,{},rowsByKey?'value':undefined);
+--- a/tools/rollup.config.mjs
++++ b/tools/rollup.config.mjs
+@@ -112 +112 @@
+-    geo: `var h=typeof globalThis!=='undefined'?globalThis:this;if(!h.DDNLive)throw new Error('ddn-geo requires ddn-core.js to be loaded first');if(!h.DDNRender)throw new Error('ddn-geo requires ddn-graph.js to be loaded first');if(h.DDNLive.VERSION!==${V})throw new Error('A different DDNLive runtime is already loaded. Load exactly one version.');if(h.DDNGeo)return;`,
++    geo: `var h=typeof globalThis!=='undefined'?globalThis:this;if(!h.DDNLive)throw new Error('ddn-geo requires ddn-core.js to be loaded first');if(!h.DDNRender&&!h.__DDN_MODULE_REGISTRY__?.namespaces?.DDNRender)throw new Error('ddn-geo requires ddn-graph.js to be loaded first');if(h.DDNLive.VERSION!==${V})throw new Error('A different DDNLive runtime is already loaded. Load exactly one version.');if(h.DDNGeo)return;`,
+--- a/tools/rollup/entries/geo.js
++++ b/tools/rollup/entries/geo.js
+@@ -11 +11 @@
+-if (!host.DDNRender) throw new Error('ddn-geo requires ddn-graph.js to be loaded first');
++if (!host.DDNRender && !optionalNamespace('DDNRender')) throw new Error('ddn-geo requires ddn-graph.js to be loaded first');

@@ -173,31 +173,31 @@
       }
     },
     "geo": {
-      "bytes": 24711,
-      "sha256": "602f1f04a62f5958ed6cd58d9efb218818da50e6219e55cef5c63d348634c80e",
+      "bytes": 26274,
+      "sha256": "d21e9366e59e4b875472381487785d36ed889cafbe71ab2b4d031fbe425d84a9",
       "files": [
         "notation/runtime/ddn-geo.js"
       ],
       "formats": {
         "js": {
-          "bytes": 24711,
-          "sha256": "602f1f04a62f5958ed6cd58d9efb218818da50e6219e55cef5c63d348634c80e",
-          "gzipBytes": 9458
+          "bytes": 26274,
+          "sha256": "d21e9366e59e4b875472381487785d36ed889cafbe71ab2b4d031fbe425d84a9",
+          "gzipBytes": 9946
         },
         "mjs": {
-          "bytes": 24064,
-          "sha256": "61e46550eac5beaa4bd3bf23b012647ba2a7613006076d85936a8d8a0c87d102",
-          "gzipBytes": 9416
+          "bytes": 25544,
+          "sha256": "80558c51c67ca3618196e863e6d7967618ec99795b3e70c63b7e912f7266aa99",
+          "gzipBytes": 9886
         },
         "min.js": {
-          "bytes": 16538,
-          "sha256": "fab7fb15598660bf6a28e6fea80610343067d9d9d5c04137ddc2207c0bce85c7",
-          "gzipBytes": 6979
+          "bytes": 17752,
+          "sha256": "8c6d268bc78cd04c9e06864560c3a383223ace0d4b343c3d44f831a34d4e09ad",
+          "gzipBytes": 7398
         },
         "min.js.map": {
-          "bytes": 46355,
-          "sha256": "d368b542a60598b150afe0be672d430eb20cfe8b51efaa40cca9d9bca43c0f1f",
-          "gzipBytes": 17697
+          "bytes": 49155,
+          "sha256": "e1795351a9e3a65dd9297b4ef8751daa65750f81c28f9497c04794004f79ca95",
+          "gzipBytes": 18638
         }
       }
     },

@@ -1638,6 +1638,18 @@ class ProviderWorkspaceService:
         except OSError:
             raise ProviderWorkspaceError('The owned replication resource store is unavailable') from None
 
+    def mysql_spatial(self, server, operation, request):
+        from .mysql_spatial_service import action
+        from ..providers.mysql_family.mysql_spatial import Error
+        from mysql.connector import Error as NativeError
+        from ..sdk.relational import RelationalClientError
+        try:return action(self,server,operation,request)
+        except Error as error:raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:
+            raise ProviderWorkspaceError('Native MySQL spatial inspection failed ('+str(error.errno)+', '+str(error.sqlstate)+')') from None
+        except (RelationalClientError,ValueError,TypeError,KeyError):
+            raise ProviderWorkspaceError('Native spatial input or observer admission is unavailable') from None
+
     def mysql_drift(self, server, operation, request):
         from .mysql_drift_service import action
         from ..providers.mysql_family.mysql_drift import Error

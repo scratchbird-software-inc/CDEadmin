@@ -20,6 +20,7 @@ DEFAULT_WORK = Path(os.environ.get('SCRATCHROBIN_DDN_WORK',
                                   str(ROOT.parent / 'ChatGPT_Codex_1_Workarea/ddn-intake')))
 DEST = ROOT / 'web/pgadmin/static/vendor/ddn/current'
 WINDOWS_PATCH = ROOT / 'tools/dependency_patches/ddn-windows-paths.patch'
+SPATIAL_PATCH = ROOT / 'tools/dependency_patches/ddn-spatial-inspection.patch'
 
 
 def git(source, *args):
@@ -76,11 +77,11 @@ def refresh(source, work):
                            'only to inspect artifacts, not to validate a build.')
     work.mkdir(parents=True, exist_ok=True)
     before = inventory(source)
-    # Apply the portable path correction on every host. The captured source,
-    # declarations and generated bundle then have one provenance identity on
-    # Windows, macOS and Linux, rather than host-specific release candidates.
-    adjustments = [{'patch': WINDOWS_PATCH.relative_to(ROOT).as_posix(),
-                    'sha256': digest(WINDOWS_PATCH)}]
+    # Apply reviewed path and spatial-module corrections on every host. Keep
+    # the sister checkout untouched and record every adjusted source hash.
+    patches = [WINDOWS_PATCH, SPATIAL_PATCH]
+    adjustments = [{'patch': patch.relative_to(ROOT).as_posix(),
+                    'sha256': digest(patch)} for patch in patches]
     manifest_path = DEST / 'resource-manifest.json'
     if manifest_path.exists():
         previous = json.loads(manifest_path.read_text())
@@ -105,12 +106,13 @@ def refresh(source, work):
             raise RuntimeError('DDN changed during capture; retry intake')
         adjusted_files = {}
         if adjustments:
-            subprocess.run(['git', 'apply', '--check', '--ignore-space-change',
-                            str(WINDOWS_PATCH)], cwd=snapshot, check=True)
-            subprocess.run(['git', 'apply', '--ignore-space-change',
-                            str(WINDOWS_PATCH)], cwd=snapshot, check=True)
-            name = 'tools/rollup.config.mjs'
-            adjusted_files[name] = digest(snapshot / name)
+            for patch in patches:
+                subprocess.run(['git', 'apply', '--check', '--unidiff-zero', '--ignore-space-change',
+                                str(patch)], cwd=snapshot, check=True)
+                subprocess.run(['git', 'apply', '--unidiff-zero', '--ignore-space-change',
+                                str(patch)], cwd=snapshot, check=True)
+            for name in ('tools/rollup.config.mjs', 'tools/rollup/entries/geo.js', 'notation/runtime/ddn-geo.js'):
+                adjusted_files[name] = digest(snapshot / name)
         # Build tools consume pinned installed dependencies without modifying them.
         if os.name == 'nt':
             # Ordinary Windows developer accounts may not create symlinks.
@@ -138,7 +140,8 @@ def refresh(source, work):
         stage = Path(scratch) / 'vendor'
         stage.mkdir()
         for name in ('ddn.global.js', 'ddn.global.min.js', 'ddn.global.min.js.map',
-                     'ddn.mjs', 'ddn.d.ts', 'ddn.d.mts', 'ddn.css', 'README.md'):
+                     'ddn.mjs', 'ddn.d.ts', 'ddn.d.mts', 'ddn.css', 'README.md',
+                     'ddn-geo.js', 'ddn-geo.d.ts', 'ddn-geo.d.mts'):
             shutil.copy2(snapshot / 'notation/dist' / name, stage / name)
         shutil.copy2(snapshot / 'notation/tool/ddn-tool.html', stage)
         shutil.copy2(snapshot / 'release/validation/sdk-build.json',

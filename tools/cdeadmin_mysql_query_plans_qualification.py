@@ -22,7 +22,7 @@ def qualify(output, browser_binary=None, driver_binary=None):
         raise ValueError('Native evidence belongs outside application source')
     output.mkdir(parents=True, exist_ok=False, mode=0o700)
     paths = [str(Path(__file__).relative_to(ROOT)), 'tools/mysql_query_plan_probe.cjs',
-             'web/pgadmin/static/js/Dialogs/mysqlQueryPlan.js',
+             'web/pgadmin/static/js/Dialogs/mysqlPlanPresentation.js',
              'web/pgadmin/static/js/Dialogs/MySQLQueryPlan.jsx',
              'web/pgadmin/static/js/Dialogs/ProviderWorkspaceContent.jsx',
              'web/pgadmin/cdeadmin/providers/mysql_family/provider.py']

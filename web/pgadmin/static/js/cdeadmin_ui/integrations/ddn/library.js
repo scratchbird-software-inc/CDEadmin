@@ -84,6 +84,14 @@ export function loadDDNLibraries() {
   return librariesPromise;
 }
 
+export async function loadDDNGeoLibraries() {
+  const libraries = await loadDDNLibraries();
+  await loadScript('ddn-geo.js', () => Boolean(window.DDNGeo));
+  if(window.DDNGeo?.VERSION !== DDN_RUNTIME_VERSION) throw new Error('The paired DDN geographic module is required.');
+  for(const name of ['render', 'ingest', 'geoPath']) requireFunction(window.DDNGeo[name], `geo.${name}()`);
+  return {...libraries, geo: window.DDNGeo};
+}
+
 export function setDDNLibraryLoaderForTests(loader) {
   if(process.env.NODE_ENV !== 'test' || typeof loader !== 'function') {
     throw new Error('DDN library loader replacement is restricted to tests.');

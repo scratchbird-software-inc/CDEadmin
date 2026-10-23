@@ -6,8 +6,8 @@ Comparison baseline: source ``0c14f90a21c80c32074c574e7914e56dc487661d``;
 MySQL 9.7.0 and Connector/Python 26.7.0.
 
 This is the accepted implementation queue arising from the MySQL management-tool
-comparison. ``CMP-MY-03``, ``CMP-MY-04``, ``CMP-MY-05``, ``CMP-MY-06``, ``CMP-MY-07`` and ``CMP-MY-08``
-are implemented and Linux-qualified; the other five comparison items remain open. They supplement
+comparison. ``CMP-MY-03``, ``CMP-MY-04``, ``CMP-MY-05``, ``CMP-MY-06``, ``CMP-MY-07``, ``CMP-MY-08`` and ``CMP-MY-09``
+are implemented and Linux-qualified; the other four comparison items remain open. They supplement
 :doc:`mysql_functional_completion` and :doc:`six_engine_remaining_work`; their
 acceptance must follow :doc:`six_engine_completion`.
 
@@ -263,7 +263,17 @@ Comparison evidence: `PMM query analytics, monitoring and alerting <https://docs
 CMP-MY-09: Spatial data inspection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Status: **open**. Priority: **P2**.
+Status: **implemented and Linux-qualified**. Priority: **P2**.
+
+The native workspace now inspects exact geometry/WKB bytes, SRID definitions,
+WKT in SRS and X/Y order, and native GeoJSON. A bounded DDN map supports every
+native geometry family, lines, collections and polygon holes, with explicit
+native X/Y or native WGS84 transformation. Invalid, null, oversized and refused
+values retain distinct fallback states. Deliberate original-byte download and
+private-result clearing are included. No external tiles or network requests
+are enabled. See :doc:`mysql_spatial_inspection` for scope and limits. Linux
+pure/C native/API and built desktop evidence qualifies this workflow; platform
+acceptance and owner-deferred history remain separate.
 
 Add a bounded geometry map and WKT/GeoJSON inspection with correct SRID and
 axis-order handling, null/invalid/binary fallbacks and explicit external tile

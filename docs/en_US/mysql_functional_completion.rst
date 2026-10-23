@@ -410,7 +410,7 @@ Independent user transactions, savepoints and warning areas remain intact.
 Built-desktop receipts qualify matched/different reports, deliberate report
 download, clearing and an independent native oracle confirming no repair writes.
 These scopes close ``CMP-MY-06``. Broader native inventory, recovery/lifecycle and
-platform acceptance remain open; the accepted next comparison workflow is ``CMP-MY-09`` spatial inspection.
+platform acceptance remain open; the accepted next comparison workflow is ``CMP-MY-10`` deployment automation.
 
 The pinned Percona Toolkit 3.7.2 checksum source requires statement-based logging
 and has replication-format/topology restrictions. It is not selected as this
@@ -444,9 +444,34 @@ status-counter reset, stopped/failed replication, denied measurements and live
 registration revocation. Existing interactive transactions, savepoints and
 warning areas remain intact. Built-desktop acceptance qualifies rule setup,
 firing/delivery receipts, silence/unsilence, a read-only DDN findings display and
-collector stop/release. These receipts close ``CMP-MY-08`` on Linux. Five accepted
+collector stop/release. These receipts close ``CMP-MY-08`` on Linux. Four accepted
 comparison workflows and broader MySQL inventory/recovery/lifecycle gaps remain
 open; owner-deferred history and platform-team acceptance remain separate.
+
+Native spatial data inspection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The server or registered database **Diagnostics and verification → MySQL spatial
+data inspection** workspace now provides native geometry/WKB inspection and a
+bounded DDN map. Native ST_GeomFromWKB, ST_AsText, ST_AsGeoJSON, ST_IsValid and
+ST_Transform preserve SRID and axis-order semantics. Original source bytes stay
+available for deliberate binary download; native errors and null, empty,
+invalid, malformed and oversized values retain distinct coverage/fallback
+states. No source data is modified, persisted or sent to an external tile host.
+See :doc:`mysql_spatial_inspection` for selection, coordinate modes, snapshots,
+bounds and the recorded consumed-dependency adjustment.
+
+Linux MySQL 9.7.0 qualification with both corrected Connector/Python 26.7.0
+interfaces covers all native geometry types, lines/collections/polygon holes,
+asymmetric geographic axes, projected-to-WGS84 transformation, malformed and
+big-endian WKB, unknown SRIDs, native privilege refusals, source fingerprints,
+page/map bounds and independent transaction/savepoint/warning preservation.
+The built desktop renders the paired DDN map, distinguishes native SRS and X/Y
+text, downloads byte-identical internal geometry and clears private results.
+Network evidence confirms no external map/tile requests. This closes
+``CMP-MY-09`` on Linux; four accepted comparison workflows and broader native
+inventory/recovery/lifecycle gaps remain open. Windows/macOS acceptance remains
+with the platform teams, and ScratchBird history testing remains owner-deferred.
 
 Native topology administration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

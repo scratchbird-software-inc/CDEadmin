@@ -2,7 +2,7 @@ import {useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {Alert, Box, Button, Typography} from '@mui/material';
-import {mysqlPlanText, parseMySQLPlan} from './mysqlQueryPlan';
+import {mysqlPlanText, parseMySQLPlan} from './mysqlPlanPresentation';
 
 function PlanNode({id, graph, selected, onSelect}) {
   const node = graph.nodes[id];

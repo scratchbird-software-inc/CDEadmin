@@ -820,6 +820,10 @@ def endpoint_context_actions(
             icon='command.default', group='diagnostics', enabled=ready and can_manage,
             arguments={'tab':'mysql-data-drift','database_target_id':None},
             disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can compare native table scopes.'))
+        actions.append(_action('endpoint.mysql.spatial', 'MySQL spatial data inspection...', 'open_workspace',
+            icon='command.default', group='diagnostics', enabled=ready and can_manage,
+            arguments={'tab':'mysql-spatial','database_target_id':None},
+            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can inspect native spatial data.'))
         actions.append(_action('endpoint.mysql.content_search', 'MySQL database content search...', 'open_workspace',
             icon='command.default', group='diagnostics', enabled=ready and can_manage,
             arguments={'tab': 'mysql-content-search', 'database_target_id': None},
@@ -1431,6 +1435,8 @@ def database_target_context_actions(
                 mutation='admin' if tab == 'monitoring_policy' else 'read',
                 arguments={**base, 'tab': tab},
             ))
+        actions.append(_action('database.mysql.spatial', 'MySQL spatial data inspection...', 'open_workspace',
+            icon='command.default', group='diagnostics', arguments={**base,'tab':'mysql-spatial'}))
         actions.append(_action('database.mysql.dashboard_editor', 'Edit MySQL dashboard...', 'open_mysql_dashboard_editor',
             icon='action.edit', group='availability', mutation='write', arguments=base))
         actions.append(_action(
