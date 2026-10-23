@@ -6,8 +6,8 @@ Comparison baseline: source ``0c14f90a21c80c32074c574e7914e56dc487661d``;
 MySQL 9.7.0 and Connector/Python 26.7.0.
 
 This is the accepted implementation queue arising from the MySQL management-tool
-comparison. ``CMP-MY-03``, ``CMP-MY-04``, ``CMP-MY-05``, ``CMP-MY-06``, ``CMP-MY-07``, ``CMP-MY-08``, ``CMP-MY-09`` and ``CMP-MY-10``
-are implemented and Linux-qualified; the other three comparison items remain open. They supplement
+comparison. ``CMP-MY-03`` through ``CMP-MY-11`` are implemented and
+Linux-qualified; ``CMP-MY-01`` and ``CMP-MY-02`` remain open. They supplement
 :doc:`mysql_functional_completion` and :doc:`six_engine_remaining_work`; their
 acceptance must follow :doc:`six_engine_completion`.
 
@@ -321,14 +321,26 @@ Comparison evidence: `Skeema declarative schema management <https://github.com/s
 CMP-MY-11: SQL notebooks and shareable investigations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Status: **open**. Priority: **P3**.
+Status: **implemented and Linux-qualified**. Priority: **P3**.
 
-Combine notes, SQL and deliberately retained/redacted result snapshots with
-explicit connection scope and execution actions. Opening or sharing a notebook
-never executes SQL. Exclude secrets and integrate existing project assets. The
-owner accepted this application workflow for the current MySQL implementation
-scope; it must close before the MariaDB handoff. Its implementation does not
-authorize deferred ScratchBird history testing.
+Native MySQL SQL editors and Project Explorer now share versioned notebook
+assets containing notes, SQL cells and deliberately retained/redacted bounded
+result snapshots. Explicit binding selects an engine/endpoint/database target;
+only a deliberate cell run uses the existing native session, transactions,
+diagnostics and cancellation. Opening, importing, saving and sharing never
+execute stored SQL. Portable exports remove local connection bindings and
+exclude credentials, session handles, parameters and native result blobs.
+Import requires explicit rebinding before execution. Project permissions,
+optimistic revisions, historical drafts, exact SQL/result matching and sharing
+review are enforced. See :doc:`mysql_sql_notebooks` for privacy limits and use.
+
+Linux native pure/C/API qualification covers exact unsigned64/Unicode results,
+redaction, revision conflicts, inert stored mutations and independent pending
+transaction/savepoint preservation. The production desktop qualifies explicit
+execution, retention, revision save, portable download, inert import and
+rebinding. Windows/macOS acceptance remains with platform teams. ScratchBird
+history qualification is owner-deferred and was not run. Recovery/lifecycle
+priorities and the broader native product inventory remain open.
 
 Comparison evidence: `Current Workbench generation and shipped features <https://blogs.oracle.com/mysql/introducing-mysql-workbench-26>`_;
 `Workbench open source repository <https://github.com/mysql/mysql-shell-plugins/tree/7332e92a5fb3f1422c3b083f339cd03c8788e876>`_.

@@ -23,7 +23,7 @@ import {ProgressOverlay} from '../feedback/ProgressOverlay';
 
 function assetIcon(assetType) {
   if(assetType === 'ddn-workspace') return 'tool.erd';
-  if(assetType === 'query' || assetType === 'script') return 'tool.query';
+  if(assetType === 'query' || assetType === 'script' || assetType === 'cdeadmin.sql-notebook.v1') return 'tool.query';
   if(assetType === 'semantic-model') return 'object.semantic_model';
   if(assetType === 'cube') return 'object.cube';
   return 'object.unknown';

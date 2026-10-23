@@ -410,7 +410,7 @@ Independent user transactions, savepoints and warning areas remain intact.
 Built-desktop receipts qualify matched/different reports, deliberate report
 download, clearing and an independent native oracle confirming no repair writes.
 These scopes close ``CMP-MY-06``. Broader native inventory, recovery/lifecycle and
-platform acceptance remain open; the accepted next comparison workflow is ``CMP-MY-11`` SQL notebooks.
+platform acceptance remain open; notebook qualification is recorded below.
 
 The pinned Percona Toolkit 3.7.2 checksum source requires statement-based logging
 and has replication-format/topology restrictions. It is not selected as this
@@ -494,10 +494,32 @@ three-way drift, duplicate apply and original receipt retrieval are qualified.
 Abrupt CLI loss after the durable claim retains uncertainty across restart and
 never redispatches the original review. Controlled native INSTANT, an actual
 INPLACE refusal and pinned Percona Toolkit 3.7.2 copy with explicitly approved
-cutover also pass. These scopes close ``CMP-MY-10`` on Linux. Three accepted
+cutover also pass. These scopes close ``CMP-MY-10`` on Linux. Two accepted
 comparison workflows and broader native inventory/recovery/lifecycle gaps remain
 open. Platform-team qualification and owner-deferred ScratchBird history stay
 separate.
+
+SQL notebooks and investigations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Native MySQL SQL workspaces and Project Explorer share notes, SQL cells and
+explicitly retained result snapshots through existing versioned project assets.
+Connection binding and cell execution are deliberate actions; opening, saving,
+importing or sharing never executes SQL. Native editor completion, diagnostics,
+session transactions and cancellation remain available. Selected snapshot
+columns can be omitted, redacted or retained, with bounded rows and exact
+SQL/connection provenance. Portable exports strip local bindings and require
+review of saved content; imports are unbound and inert. Concurrent revisions,
+shared viewer permissions, dirty drafts and earlier-revision sharing are
+handled explicitly. See :doc:`mysql_sql_notebooks` for workflow and privacy
+limits, including retained older project revisions.
+
+Native MySQL 9.7.0 pure/C/API and built desktop receipts close ``CMP-MY-11`` on
+Linux. Nine of eleven accepted comparison workflows are now implemented and
+Linux-qualified. ``CMP-MY-01``, ``CMP-MY-02`` and the broader native
+inventory/recovery/lifecycle work remain open before the MariaDB handoff.
+Platform qualification, human form validation and owner-deferred ScratchBird
+history acceptance remain separately owned.
 
 Native topology administration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

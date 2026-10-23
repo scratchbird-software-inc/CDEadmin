@@ -1,6 +1,7 @@
 import {requestedAdministrationResource} from '../cdeadmin_ui/navigation/postgresqlAdministration';
 import PostgresqlTestData from './PostgresqlTestData';
 import MySQLQueryOptions from '../cdeadmin_ui/editors/MySQLQueryOptions';
+import SQLNotebook from '../cdeadmin_ui/projects/SQLNotebook';
 import {QueryToolFrame, QueryToolToolbar, QueryToolAction} from '../cdeadmin_ui/editors/QueryToolControls';
 import useNativeRowPages from '../cdeadmin_ui/data/useNativeRowPages';
 /////////////////////////////////////////////////////////////
@@ -7099,6 +7100,10 @@ export default function ProviderWorkspaceContent({
   const workspace = loadedWorkspace?.context === workspaceContext ?
     loadedWorkspace.value : null;
   const [source, setSource] = useState('');
+  const [notebookOpen, setNotebookOpen] = useState(false);
+  const [notebookMounted, setNotebookMounted] = useState(false);
+  const [notebookDirty, setNotebookDirty] = useState(false);
+  const [notebookExecutedSource, setNotebookExecutedSource] = useState(null);
   const [languageProfile, setLanguageProfile] = useState('');
   const [parameterSource, setParameterSource] = useState('{}');
   const [mysqlAttributeSource, setMySQLAttributeSource] = useState('{}');
@@ -7623,7 +7628,7 @@ export default function ProviderWorkspaceContent({
     return () => clearTimeout(timer);
   }, [languageProfile, occurrenceId, busy, queryPollingPaused, poll, workspace]);
 
-  const execute = async (executionSource=source, presentation='native', sessionCommand=false, scriptMode=false, planMode=false, profileMode=false, analyzeRequested=false) => {
+  const execute = async (executionSource=source, presentation='native', sessionCommand=false, scriptMode=false, planMode=false, profileMode=false, analyzeRequested=false, notebookRun=false) => {
     if (querySessionBlocked || scriptLocked || queryStreamActive) return;
     if (!Number.isInteger(bufferRows) || bufferRows < 1 || bufferRows > 500) {
       setError(gettext('Result buffer rows must be an integer from 1 to 500.')); return;
@@ -7632,6 +7637,7 @@ export default function ProviderWorkspaceContent({
     setBusy(true);
     setError(null);
     setRendered(null);
+    setNotebookExecutedSource(null);
     setFetchObservation(null);
     setScriptResult(null);
     setFirebirdPlan(null);
@@ -7650,7 +7656,7 @@ export default function ProviderWorkspaceContent({
         }
         rowPolicy = {max_rows: Number(maximumRows) || null};
       }
-      const parameters = sessionCommand || (planMode && languageProfile === 'firebird-sql') ? [] : JSON.parse(
+      const parameters = notebookRun ? [] : sessionCommand || (planMode && languageProfile === 'firebird-sql') ? [] : JSON.parse(
         parameterSource || defaultParameterSource(activeLanguage));
       const expectsArray = sessionCommand || activeLanguage?.parameter_shape === 'array';
       const permitsEither = !sessionCommand && activeLanguage?.parameter_shape === 'object-or-array';
@@ -7661,7 +7667,8 @@ export default function ProviderWorkspaceContent({
           gettext('This provider requires a JSON parameter object.'));
       }
       if (scriptMode && parameters.length) throw new Error(gettext('Scripts do not accept parameter bindings. Clear the parameter array first.'));
-      const attributes=languageProfile==='mysql-sql' && !sessionCommand ? mysqlQueryAttributes(mysqlAttributeSource) : {};
+      const attributes=languageProfile==='mysql-sql' && !sessionCommand && !notebookRun ? mysqlQueryAttributes(mysqlAttributeSource) : {};
+      if(languageProfile === 'mysql-sql' && !sessionCommand && !scriptMode && !planMode && !Object.keys(parameters).length && !Object.keys(attributes).length) setNotebookExecutedSource({source: executionSource, context: endpointUrl + ':' + queryDatabaseTargetId});
       const activeSession = sessionCommand ? sessionId : await ensureSession();
       // A previous observation is no longer current once execution begins.
       setTransaction(null);
@@ -8035,6 +8042,7 @@ export default function ProviderWorkspaceContent({
         sx={{p: 0, flex: 1, display: tab === 'studio' ? 'flex' : 'none', flexDirection: 'column',
           minHeight: 0, minWidth: 0, overflow: 'auto'}}>
         <QueryToolToolbar aria-label="SQL execution toolbar">
+          {languageProfile === 'mysql-sql' && queryDatabaseTargetId && <Button onClick={() => {setNotebookMounted(true); setNotebookOpen(!notebookOpen);}}>SQL notebook</Button>}
           <QueryToolAction action="execute" title={gettext('Run')} disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId || !source.trim()}
             onClick={() => execute()} />
           {languageProfile === 'firebird-sql' && <QueryToolAction action="explain" title={gettext('Explain / query plan')}
@@ -8062,7 +8070,7 @@ export default function ProviderWorkspaceContent({
             onClick={releaseQuerySession} />
           <TextField select size="small" sx={{width: 200, ml: 1}}
             label={gettext('Provider language')} value={languageProfile}
-            disabled={busy || queryStreamActive || !!occurrenceId || scriptLocked}
+            disabled={busy || queryStreamActive || !!occurrenceId || scriptLocked || notebookDirty}
             onChange={(event) => selectLanguage(event.target.value)}>
             {(workspace.languages || []).map((language) => <MenuItem
               key={language.language_profile} value={language.language_profile}>
@@ -8076,6 +8084,15 @@ export default function ProviderWorkspaceContent({
             title={gettext('Rows per browser buffer (1–500). Native fetch limits are separate. Close the query session to change this after a result.')} />
           {busy && <CircularProgress size={24} />}
         </QueryToolToolbar>
+        {notebookMounted && languageProfile === 'mysql-sql' && <Box sx={{display: notebookOpen ? 'block' : 'none', maxHeight: '55%', overflow: 'auto', flexShrink: 0}}>
+          <SQLNotebook key={endpointUrl + ':' + queryDatabaseTargetId}
+            scope={{engine: 'mysql', endpoint_id: String(workspace.endpoint.endpoint_id), database_target_id: queryDatabaseTargetId}}
+            editorSource={source} rendered={rendered} executedSource={notebookExecutedSource?.context === endpointUrl + ':' + queryDatabaseTargetId ? notebookExecutedSource.source : null}
+            onDirty={setNotebookDirty}
+            disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId}
+            onLoad={value => {setSource(value); setParameterSource('[]'); setMySQLAttributeSource('{}');}}
+            onRun={value => {setSource(value); setParameterSource('[]'); setMySQLAttributeSource('{}'); execute(value, 'native', false, false, false, false, false, true);}} />
+        </Box>}
         {sourcePresets(activeLanguage).length === 0 &&
           !defaultSource(activeLanguage).trim() && !source.trim() &&
           <Alert severity="info" sx={{mb: 1}}>
