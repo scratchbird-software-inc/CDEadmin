@@ -32,7 +32,7 @@ def prepare_fixture(output, image):
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -100,6 +100,14 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             config.CDEADMIN_MYSQL_PHYSICAL_WORKER_ACTIVE_KEY_ID='owned-fixture'
             config.CDEADMIN_MYSQL_RETENTION_POLL_SECONDS=.1
         app = setup_application(output)
+        if acceptance_only:
+            from cdeadmin_mysql_physical_acceptance_qualification import qualify_acceptance
+            selected={'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
+                'workspace':'/var/backups/scratchrobin/jobs','executable':'/usr/bin/xtrabackup','mysql':'/usr/bin/mysql',
+                'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
+            proof['physical_acceptance']=qualify_acceptance(app,output,root,port,password,selected,{'private_key':key.read_text()},browser_binary,driver_binary)
+            proof['complete']=True
+            return proof
         if retention_only or batch_only or schedule_only or backup_only:
             from cdeadmin_mysql_physical_retention_qualification import qualify_retention
             selected={'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},

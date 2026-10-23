@@ -3211,7 +3211,7 @@ class ServerNode(PGChildNodeView):
                     try: payload = service.mysql_instance_restore(server, action.removeprefix('mysql_instance_restore_'), data.get('request'))
                     except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
                 elif action in {'mysql_instance_acceptance_review','mysql_instance_acceptance_start','mysql_instance_acceptance_status',
-                                'mysql_instance_acceptance_list','mysql_instance_acceptance_cancel','mysql_instance_acceptance_reconcile','mysql_instance_acceptance_acknowledge'}:
+                                'mysql_instance_acceptance_list','mysql_instance_acceptance_observe_utilities','mysql_instance_acceptance_cancel','mysql_instance_acceptance_reconcile','mysql_instance_acceptance_acknowledge'}:
                     try: payload = service.mysql_instance_acceptance(server, action.removeprefix('mysql_instance_acceptance_'), data.get('request'))
                     except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
                 elif action in {'mysql_sandbox_catalog','mysql_sandbox_inspect','mysql_sandbox_review','mysql_sandbox_start',

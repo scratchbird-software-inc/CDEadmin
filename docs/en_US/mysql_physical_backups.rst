@@ -475,3 +475,50 @@ removal. Enabling policies and removing their registration share lifecycle
 admission across application workers. Native qualification is available through
 ``tools/cdeadmin_mysql_physical_replay_qualification.py --backup-only`` and covers
 both Connector/Python interfaces and the built desktop.
+
+Independent expected-snapshot acceptance
+----------------------------------------
+
+A managed recovery registration can use the original private Unix socket through
+pinned SSH, including when TCP is disabled. Each stream checks the original
+native process birth/executable and its kernel listener ownership before and
+after connection. The connected Unix peer must also report the original native
+PID/UID, so replacing an unlinked socket pathname cannot redirect the stream.
+TCP-enabled recoveries retain their original loopback checks.
+A changed or stopped listener refuses access without a network fallback.
+
+For data checksum checks, explicitly select **Enable trusted LOCAL INFILE for
+native checksum acceptance on this recovery copy** before reviewing startup.
+The option defaults off and the worker verifies the observed native setting.
+It does not change the source server or silently enable a global setting later.
+Only trusted managed dump inputs should be admitted to this recovery instance.
+
+From the recovery target's **MySQL full-instance restores** workspace, inspect
+the target, choose a retained expected full-instance backup from the original
+physical source, confirm the target UUID, and open **Independent dump
+acceptance**. Confirm the server-wide write pause, review the exact snapshot,
+and start acceptance. The checks use a separate native connection, full row
+counts, MySQL Shell checksums and exact exported native SQL bodies. No restore,
+repair or GTID update is issued. Data, schema definitions and exported accounts
+have separate matched/different/unconfirmed results. Unexported surfaces remain
+unchecked. A post-replay check requires an explicitly selected expected snapshot
+for that checkpoint; the current source is not implicitly treated as the
+expected state of an older backup.
+
+The receipt binds the original physical recovery, its immutable copy-back and
+review, the expected dump's native boundary and its sealed artifact. Acceptance
+utilities reserve their original process-bound route independently of SQL
+sessions, including read-only targets. They cannot authorize raw or Shell
+replay. A lost native reply leaves the original check unconfirmed and retains
+its reservation. **Observe original acceptance utility without SQL connection**
+and cancellation work without the relay. Confirming original utility termination
+can release only its own reservation; fresh SSH attachment and native SQL-session
+lock observations precede acknowledgement. Original comparison outcomes remain
+unchanged and interrupted checks are never repeated automatically.
+
+``tools/cdeadmin_mysql_physical_replay_qualification.py --acceptance-only``
+qualifies native pure/C physical-base and post-replay data/definition acceptance,
+actual differences, interrupted replies and the built desktop. This is separate
+from unattended startup-drill automation. Automatically selecting/capturing an
+expected snapshot for scheduled data checks, unexported/system-state coverage,
+wider physical backend admission and production cutover remain open.

@@ -1,4 +1,4 @@
-import {fireEvent,render,screen} from '@testing-library/react';
+import {fireEvent,render,screen,waitFor} from '@testing-library/react';
 import MySQLInstanceAcceptance from 'sources/Dialogs/MySQLInstanceAcceptance';
 import {withTheme} from '../fake_theme';
 
@@ -47,5 +47,17 @@ it('can cancel an interrupted durable acceptance without reporting a match',asyn
   fireEvent.click(await screen.findByRole('button',{name:'Cancel independent acceptance'}));
   await screen.findByText(/Recorded outcome: unconfirmed/);
   expect(post).toHaveBeenLastCalledWith({action:'mysql_instance_acceptance_cancel',request:{job_id:'interrupted'}});
+  expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_acceptance_start')).toBe(false);
+});
+it('observes the original physical acceptance utility independently of the SQL target',async()=> {
+  const receipt={job_id:'physical-check',state:'unknown',acceptance_outcome:'unconfirmed',target:{server_uuid:'target'},
+    physical_recovery:{job_id:'original-recovery'},durable_tool:{name:'native'},native_process_termination_confirmed:false};
+  const post=jest.fn(({action})=>Promise.resolve(action==='mysql_instance_acceptance_list' ? {jobs:[receipt],total:1,offset:0} : receipt));
+  render(<Component post={post} />);fireEvent.click(screen.getByText('Independent dump acceptance'));
+  fireEvent.click(screen.getByRole('button',{name:'Load independent acceptance jobs'}));fireEvent.click(await screen.findByRole('button',{name:'Inspect acceptance physical-check'}));
+  await screen.findByText(/Managed physical recovery original-recovery/);
+  fireEvent.click(screen.getByRole('button',{name:'Observe original acceptance utility without SQL connection'}));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Observe original acceptance utility without SQL connection'})).toBeEnabled());
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_instance_acceptance_observe_utilities',request:{job_id:'physical-check'}});
   expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_acceptance_start')).toBe(false);
 });

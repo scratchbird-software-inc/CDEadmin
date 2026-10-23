@@ -138,8 +138,14 @@ the exact recorded owner/endpoint/recovery reservation before reviewed
 reattachment. Unknown database outcomes/fences persist until fresh SQL facts and
 explicit acknowledgement. Legacy missing-binding receipts, missing/failed
 guardians and wider lifecycle reconciliation remain open, alongside
-post-replay acceptance, incremental/encrypted/external-table-space
-support and production cutover remain open.
+incremental/encrypted/external-table-space support and production cutover.
+Managed physical targets now support separately reviewed expected-dump acceptance
+through private-socket or TCP connections, with full counts, native checksums and
+exported-definition comparisons, including after native replay. Each receipt
+binds the original recovery and explicitly selected source checkpoint. Interrupted
+checks preserve unknown outcomes and original utility reservations; independent
+utility observation works without the SQL relay. Unexported/system-state
+coverage and automated expected-snapshot selection remain open.
 Reviewed individual-artifact pin/removal, dependency admission and interrupted
 cleanup reconciliation/resume are implemented; see ``mysql_physical_backups.rst``. These bounded
 artifact receipts do not close ``CMP-MY-01``. Reviewed age/count batch retention
@@ -151,8 +157,9 @@ occurrences independent of a viewer. Revocation, expiry, changed authority and
 interruption suspend future admissions. Recurring full backups and optional
 isolated native startup/stop drills now use separately scoped encrypted SSH/SQL
 delegation and durable occurrences. Interrupted native work retains workflow
-protection until independently resolved; full data/definition recovery-drill
-acceptance remains open alongside post-replay acceptance and cutover.
+protection until independently resolved. Scheduled expected-snapshot
+data/definition acceptance remains separate from the new manual acceptance
+workflow and stays open alongside wider backend admission and cutover.
 
 Comparison evidence: `XtraBackup MySQL 9.7 support and limitations <https://docs.percona.com/percona-xtrabackup/9.7/>`_;
 `XtraBackup 9.7.1-rc1 release status <https://docs.percona.com/percona-xtrabackup/9.7/release-notes/9.7.1-rc1.html>`_;

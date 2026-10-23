@@ -165,6 +165,10 @@ def run_checks(client, route, credentials, directory, destination, target, selec
         except ValueError: raise BinlogArchiveError('Native acceptance files escape their execution-host scope') from None
     if program_identity(client, route, workspace, cancel=cancel, progress=progress) != expected_program:
         raise BinlogArchiveError('Native acceptance utility or execution host changed')
+    reservation = None
+    if route.get('mysql_recovery_binding'):
+        from .mysql_recovery_bridge import require_replay_utility, UTILITY_KEY
+        require_replay_utility(route, family='acceptance'); reservation = route[UTILITY_KEY].bridge.listener
     marker = 'CDEADMIN_INSTANCE_ACCEPTANCE_' + uuid.uuid4().hex + ':'
     path = workspace / 'native-instance-acceptance.js'
     with path.open('x', encoding='utf8') as stream:
@@ -178,7 +182,7 @@ def run_checks(client, route, credentials, directory, destination, target, selec
         observed = client._tool_runner.run(grant,
             ['--no-defaults', '--js', '--log-level=none', '--quiet-start=2', '--file=' + str(path)],
             secret_config=bytes(view), secret_argument=None, secret_environment_name=CREDENTIAL_FILE, secret_suffix='.json',
-            cancel_signal=cancel, progress=progress)
+            cancel_signal=cancel, progress=progress, reservation_socket=reservation)
         try: controls = [json.loads(line[len(marker):]) for line in observed['stdout'].splitlines() if line.startswith(marker)]
         except (ValueError, UnicodeError): controls = []
         control = controls[0] if len(controls) == 1 and isinstance(controls[0], dict) else None

@@ -41,7 +41,7 @@ def options(value):
     fields = {'connection', 'workspace', 'executable', 'mysql', 'phase', 'sql_host', 'sql_port',
         'input_job_id', 'parallel', 'memory_bytes', 'timeout_seconds', 'accept_release_candidate'}
     extra = {'mysqld', 'recovery_gtid_mode'} if isinstance(value,dict) and value.get('phase') == 'recover' else set()
-    optional = {'recovery_port','recovery_mode','recovery_server_id'} if extra else set()
+    optional = {'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile'} if extra else set()
     if not isinstance(value, dict) or not fields | extra <= set(value) or set(value)-fields-extra-optional:
         raise native.HostError('Select the complete native physical host and operation options')
     selected = deepcopy(value); selected['connection'] = native.ssh.public_route(value['connection'])
@@ -64,6 +64,9 @@ def options(value):
         if type(port) is not int or port != 0 and not 1024 <= port <= 65535:
             raise native.HostError('Select no recovery TCP listener or a native loopback port from 1024 through 65535')
         selected['recovery_port'] = port
+        local = value.get('recovery_local_infile', False)
+        if type(local) is not bool: raise native.HostError('Explicitly select trusted recovery checksum input')
+        selected['recovery_local_infile'] = local
         mode=value.get('recovery_mode','read_only')
         if mode not in {'read_only','replay'}:raise native.HostError('Select read-only inspection or writable native replay startup')
         selected['recovery_mode']=mode
@@ -132,7 +135,7 @@ def remote_request(record, action):
         'binding': deepcopy(record['source_state']['host_binding']), 'source_identity': deepcopy(record['source']),
         'reviewed': deepcopy(record['source_state']['remote_review']),
         'job_id': record['job_id'], 'input_digest': record['review_digest'],
-        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id') if key in selected}}
+        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile') if key in selected}}
 
 
 def delegate(service, server):

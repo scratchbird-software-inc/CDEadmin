@@ -726,8 +726,11 @@ references. Unresolved work retains protection until explicit reconciliation;
 registration removal refuses enabled physical policies and protected jobs.
 Startup success does not establish full data/definition recovery acceptance.
 
-Full data/definition recovery-drill acceptance, independent
-post-replay acceptance, remaining backend admission and cutover stay open under
+Manual expected-dump data/definition acceptance on managed physical recovery
+targets, including after native replay, now has separate native checks and
+interrupted-utility handling. Private-socket registrations preserve isolation
+without requiring TCP. Scheduled expected-snapshot acceptance, unexported/system
+state, remaining backend admission and cutover stay open under
 ``CMP-MY-01``. ``CMP-MY-02`` and remaining ``INV-MYSQL`` reconciliation still
 precede the MariaDB handoff. Linux evidence does not close platform-team gates;
 ScratchBird history qualification remains owner-deferred.

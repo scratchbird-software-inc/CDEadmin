@@ -17,7 +17,7 @@ class InstanceAcceptanceJobs(MySQLBinlogReplayJobs):
     review_warnings = (
         'Independent acceptance acquires an instance backup lock and a server-wide read lock. Writes can pause for the entire row-count, checksum and definition observation.',
         'The native utility checks dumped data and re-exports definitions. It never loads DDL, data, indexes or accounts and never updates GTIDs.',
-        'Only exported dump surfaces are accepted. Source exclusions, physical recovery, subsequent log replay and production cutover retain separate scopes.',
+        'Only selected expected-dump surfaces are accepted. Recovery linkage identifies the managed physical target; source exclusions, unexported state and production cutover retain separate scopes.',
     )
 
     def public(self, record):
@@ -25,9 +25,18 @@ class InstanceAcceptanceJobs(MySQLBinlogReplayJobs):
         value['target'] = value.pop('source')
         value['source_backup'] = record['source_state']['input_reference']
         value['acceptance_outcome'] = record.get('acceptance_outcome', 'not_observed')
+        value['physical_recovery'] = record['source_state'].get('physical_recovery')
         value['restore_issued'] = False
         value['production_cutover_verified'] = False
         return value
+
+    def observe_utility(self, record, *, cancel=False):
+        result = super().observe_utility(record, cancel=cancel)
+        if result is not None:
+            result = {**result, 'native_process_termination_confirmed': result.get('complete') is True and result.get('cleanup_confirmed') is True,
+                'original_acceptance_outcome_unchanged': True, 'automatic_retry': False}
+            self.update(record, interrupted_utility_observation=result)
+        return result
 
     def fence_store(self, target_uuid):
         return self.replay_jobs.fence_store(target_uuid)
@@ -102,10 +111,19 @@ class InstanceAcceptanceTransport:
             if self.credentials is not None:
                 owned = self.credentials; self.credentials = None; owned.close()
         finally:
-            if self.connection is not None:
-                owned = self.connection; self.connection = None; self.client._discard_failed_session(owned)
+            try:
+                if self.connection is not None:
+                    owned = self.connection; self.connection = None; self.client._discard_failed_session(owned)
+            finally:
+                utility = getattr(self, 'recovery_utility', None)
+                if utility is not None: utility.close(); self.recovery_utility = None
 
     def execute(self, record, directory, cancel, progress, boundary):
+        utility = getattr(self, 'recovery_utility', None); dispatched = False
+        if utility is not None: utility.job_id = record['job_id']
+        def checking():
+            nonlocal dispatched
+            boundary(); dispatched = True
         artifact = dumps.verify(self.source_directory, self.source_identity, cancel=cancel)
         if digest(artifact) != record['source_state']['input_reference']['artifact_digest']:
             raise native.BinlogArchiveError('Native dump changed after acceptance review')
@@ -116,7 +134,7 @@ class InstanceAcceptanceTransport:
             raise native.BinlogArchiveError('Native dump acceptance coverage changed')
         result = {'selected_dump_surfaces_verified': False, 'restore_issued': False, 'production_cutover_verified': False,
             'server_read_lock_acquired': False, 'instance_backup_lock_acquired': False, 'server_locks_released': False,
-            'scope': 'Exported table data with full row counts, exact selected-schema object SQL and exported account/role/grant SQL; not physical recovery, later log replay or production cutover'}
+            'scope': 'Exported table data with full row counts, exact selected-schema object SQL and exported account/role/grant SQL; selected expected dump on this target; no unexported state or production cutover'}
         cursor = self.connection.cursor()
         try:
             # No acceptance lock is acquired until this identity is durable.
@@ -132,8 +150,9 @@ class InstanceAcceptanceTransport:
             if cancel.is_set(): raise InterruptedError('Acceptance cancelled before native checks')
             observed = native.run_checks(self.client, self.route, self.credentials, staged, directory / 'target-definitions',
                 record['source'], selected, before['state'], directory, record['program'], record['options'],
-                cancel=cancel, progress=progress, boundary=boundary)
+                cancel=cancel, progress=progress, boundary=checking)
             result.update(observed)
+            if utility is not None: utility.uncertain = observed['tool']['process_observation'].get('cleanup_confirmed') is not True
             control = result.get('control') or {}; tool = result['tool']
             qualified = (tool['return_code'] == 0 and tool.get('stdout_truncated') is False and
                 tool['process_observation'].get('cleanup_confirmed') is True and control.get('stage') == 'returned')
@@ -161,6 +180,9 @@ class InstanceAcceptanceTransport:
             prior = getattr(error, 'native_check_result', None)
             if prior: result.update(prior)
             error.native_check_result = result
+            observation = getattr(error, 'observation', None) or getattr(error, 'process_observation', None) or result.get('tool') or {}
+            if utility is not None and dispatched and observation.get('process_observation', {}).get('cleanup_confirmed') is not True:
+                utility.uncertain = not getattr(error, 'native_preparation_refused', False)
             raise
         finally:
             failures = []

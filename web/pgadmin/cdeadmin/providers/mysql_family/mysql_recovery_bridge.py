@@ -141,12 +141,12 @@ UTILITY_KEY='_mysql_recovery_raw_utility'
 class ReplayUtility:
     """An unpersisted reservation of one original process-bound route."""
     def __init__(self,route,*,family):
-        if family not in {'raw','shell'}:raise RelationalClientError('Select a native replay utility family')
-        if family=='shell' and os.name!='posix':
-            raise RelationalClientError('Managed recovery Shell replay currently requires a POSIX application execution host')
+        if family not in {'raw','shell','acceptance'}:raise RelationalClientError('Select a native replay utility family')
+        if family in {'shell','acceptance'} and os.name!='posix':
+            raise RelationalClientError('Managed recovery Shell utilities currently require a POSIX application execution host')
         self.family=family
         self.binding=copy.deepcopy(route[ROUTE_KEY]);self.released=False;self.uncertain=False
-        if self.binding.get('recovery_mode')!='replay':
+        if self.binding.get('recovery_mode') not in ({'read_only','replay'} if family=='acceptance' else {'replay'}):
             raise RelationalClientError('Start a separately reviewed writable recovery instance before native replay')
         with bridges.lock:
             self.bridge=bridges.get(self.binding);self.lease=self.bridge.acquire()

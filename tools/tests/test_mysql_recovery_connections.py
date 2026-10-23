@@ -193,3 +193,80 @@ def test_replay_startup_refuses_ambiguous_or_incomplete_native_configuration(mon
     assert physical.options(value)['recovery_mode']=='read_only'
     assert physical.options({**value,'recovery_mode':'replay','recovery_server_id':10001})['recovery_server_id']==10001
     with pytest.raises(physical.native.HostError):physical.options({**value,**extra})
+
+
+def test_private_socket_identity_uses_original_kernel_listener_and_refuses_symlinks():
+    import os,sys,tempfile
+    from pathlib import Path
+    if not sys.platform.startswith('linux'):pytest.skip('Native Linux socket ownership facts')
+    with tempfile.TemporaryDirectory(prefix='cde-socket-',dir='/tmp') as private:
+        path=Path(private)/'native.sock'
+        with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as listener:
+            listener.bind(str(path));listener.listen()
+            assert stream.unix_listener_owned(os.getpid(),path)
+            with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
+                client.connect(str(path));accepted,_ = listener.accept()
+                try:
+                    assert stream.unix_peer_owned(client,os.getpid())
+                    assert not stream.unix_peer_owned(client,os.getpid()+1)
+                finally:accepted.close()
+            alias=Path(private)/'alias.sock';alias.symlink_to(path)
+            assert not stream.unix_listener_owned(os.getpid(),alias)
+            assert not stream.unix_listener_owned(os.getpid(),Path(private)/'missing.sock')
+        assert not stream.unix_listener_owned(os.getpid(),path)
+
+
+def test_read_only_acceptance_lease_cannot_authorize_replay_and_retains_unknown_original(monkeypatch):
+    registry=bridge.Bridges();monkeypatch.setattr(bridge,'bridges',registry)
+    binding={'id':'read-only','recovery_mode':'read_only'}
+    original=registry.install(binding,SimpleNamespace(close=Mock()),{})
+    route={bridge.ROUTE_KEY:binding}
+    utility=bridge.admit_replay_utility(route,family='acceptance')
+    try:
+        bridge.require_replay_utility(utility.route,family='acceptance')
+        for family in ('raw','shell'):
+            with pytest.raises(RelationalClientError):bridge.admit_replay_utility(route,family=family)
+            with pytest.raises(RelationalClientError):bridge.require_replay_utility(utility.route,family=family)
+        utility.job_id='acceptance';utility.uncertain=True;utility.close()
+        assert original.users==1
+        with pytest.raises(RelationalClientError):registry.detach(binding)
+        assert bridge.confirm_raw_utility_termination(binding,'other')==0
+        assert bridge.confirm_raw_utility_termination(binding,'acceptance')==1
+        assert original.users==0
+    finally:utility.uncertain=False;utility.close();registry.close()
+
+
+@pytest.mark.parametrize('value',[None,0,1,'true',{}])
+def test_recovery_checksum_input_requires_a_boolean_startup_choice(monkeypatch,value):
+    from pgadmin.cdeadmin.workspace import mysql_physical_service as physical
+    monkeypatch.setattr(physical.native.ssh,'public_route',lambda value:value)
+    options={'connection':{'platform':'posix'},'workspace':'/private','executable':'/bin/xtrabackup','mysql':'/bin/mysql',
+        'phase':'recover','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':'6c304f92-1195-4d9c-9c5a-fb7974af691e',
+        'parallel':1,'memory_bytes':67108864,'timeout_seconds':120,'accept_release_candidate':True,
+        'mysqld':'/bin/mysqld','recovery_gtid_mode':'ON'}
+    assert physical.options(options)['recovery_local_infile'] is False
+    assert physical.options({**options,'recovery_local_infile':True})['recovery_local_infile'] is True
+    with pytest.raises(physical.native.HostError):physical.options({**options,'recovery_local_infile':value})
+
+
+def test_replaced_unix_path_cannot_redirect_the_original_process_bound_stream():
+    import os,subprocess,sys,tempfile
+    from pathlib import Path
+    if not sys.platform.startswith('linux'):pytest.skip('Native Linux Unix peer credentials')
+    with tempfile.TemporaryDirectory(prefix='cde-peer-',dir='/tmp') as private:
+        path=Path(private)/'native.sock'
+        with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as original:
+            original.bind(str(path));original.listen();path.unlink()
+            program='import socket,sys; s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); s.bind(sys.argv[1]); s.listen(); print("ready",flush=True); sys.stdin.buffer.read(1); s.close()'
+            child=subprocess.Popen([sys.executable,'-B','-c',program,str(path)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            try:
+                assert child.stdout.readline()==b'ready\n'
+                # /proc retains the original listener's now-unlinked pathname.
+                assert stream.unix_listener_owned(os.getpid(),path)
+                with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
+                    client.connect(str(path))
+                    assert not stream.unix_peer_owned(client,os.getpid())
+                    assert stream.unix_peer_owned(client,child.pid)
+                child.communicate(b'1',timeout=5);assert child.returncode==0
+            finally:
+                if child.poll() is None:child.terminate();child.communicate(timeout=5)

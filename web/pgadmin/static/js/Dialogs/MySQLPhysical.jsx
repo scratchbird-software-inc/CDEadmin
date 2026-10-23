@@ -10,9 +10,9 @@ const initial = {connection: {host: '', port: 22, username: '', host_key: '', au
   sql_host: '127.0.0.1', sql_port: 3306, input_job_id: null, parallel: 2, memory_bytes: 268435456,
   timeout_seconds: 3600, accept_release_candidate: false};
 const phaseOptions = (current, phase, input_job_id) => {
-  const {mysqld, recovery_gtid_mode, recovery_port, recovery_mode, recovery_server_id, ...base} = current;
+  const {mysqld, recovery_gtid_mode, recovery_port, recovery_mode, recovery_server_id, recovery_local_infile, ...base} = current;
   return {...base, phase, input_job_id, ...(phase === 'recover' ? {mysqld: mysqld || '/usr/sbin/mysqld', recovery_gtid_mode: recovery_gtid_mode || 'ON', recovery_port: recovery_port ?? 3307,
-    recovery_mode: recovery_mode || 'read_only', ...(recovery_mode === 'replay' ? {recovery_server_id: recovery_server_id || 10001} : {})} : {})};
+    recovery_mode: recovery_mode || 'read_only', recovery_local_infile: recovery_local_infile ?? false, ...(recovery_mode === 'replay' ? {recovery_server_id: recovery_server_id || 10001} : {})} : {})};
 };
 export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
   const [options, setOptions] = useState(initial), [credentials, setCredentials] = useState({});
@@ -115,6 +115,7 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
         </TextField>
         {options.recovery_mode === 'replay' && <TextField type="number" size="small" label="Recovery native server ID" value={options.recovery_server_id} disabled={busy} onChange={event => change('recovery_server_id', Number(event.target.value))} />}
         <TextField size="small" label="Recovery mysqld executable" value={options.mysqld} disabled={busy} onChange={event => change('mysqld', event.target.value)} />
+        <FormControlLabel control={<Checkbox checked={options.recovery_local_infile === true} disabled={busy} onChange={event => change('recovery_local_infile', event.target.checked)} />} label="Enable trusted LOCAL INFILE for native checksum acceptance on this recovery copy" />
         <TextField type="number" size="small" label="Recovery loopback TCP port (0 disables)" value={options.recovery_port || 0} disabled={busy} onChange={event => change('recovery_port', Number(event.target.value))} />
         <TextField select size="small" label="Recovery GTID mode" value={options.recovery_gtid_mode} disabled={busy} onChange={event => change('recovery_gtid_mode', event.target.value)}>
           {['OFF', 'OFF_PERMISSIVE', 'ON_PERMISSIVE', 'ON'].map(mode => <MenuItem key={mode} value={mode}>{mode}</MenuItem>)}
@@ -172,7 +173,7 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
     <MySQLPhysicalBackupSchedule post={post} physical={options} credentials={credentials} busy={busy} onBusy={setBusy} />
     {output && <Box component="pre" aria-label="Native physical output" sx={{whiteSpace: 'pre-wrap', maxHeight: 350, overflow: 'auto'}}>{JSON.stringify(output, null, 2)}</Box>}
     {receipt?.options.phase === 'recover' && <Box sx={{my: 1}}>
-      <Alert severity="info">Register this recovery instance as a separate MySQL target for the native editor and catalog. Use its reviewed loopback TCP port through pinned SSH. After application restart, reattach with fresh SSH authentication. Writable replay startups support native raw-log and POSIX Shell replay from the target’s recovery menu.</Alert>
+      <Alert severity="info">Register this recovery instance as a separate MySQL target for the native editor and catalog. Use its private Unix socket or reviewed loopback TCP port through pinned SSH. After application restart, reattach with fresh SSH authentication. Writable replay startups support native raw-log and POSIX Shell replay from the target’s recovery menu.</Alert>
       <TextField size="small" label="Recovery registration name" value={connectionName} disabled={busy} onChange={event => {setConnectionName(event.target.value); clearConnectionReview();}} />
       <Button disabled={busy} onClick={() => run('connection_review', {job_id: receipt.job_id, name: connectionName, credentials}, value => {setConnectionReview(value); setConnectionConfirmed(false); setConnectionDelegate(false);})}>Review recovery connection</Button>
       {connectionReview && <>

@@ -32,7 +32,7 @@ export default function MySQLInstanceAcceptance({post,sourceServerId,backupJobId
   return <Box component="details" sx={{my:2}}>
     <summary>Independent dump acceptance</summary>
     <Alert severity="warning">Full row counts, native checksums and native definition re-export run under a server-wide read lock and instance backup lock. Writes can pause for the entire check. Select the source backup and confirm the target UUID above. Closing this view does not cancel a job.</Alert>
-    <Alert severity="info">Each exported surface has a separate result. Acceptance reads the target and creates private verification files; it issues no data, DDL, account or GTID restore. Physical recovery, later log replay and production cutover retain separate acceptance.</Alert>
+    <Alert severity="info">Each exported surface has a separate result. Acceptance reads the target and creates private verification files; it issues no data, DDL, account or GTID restore. Managed physical targets retain their original recovery reference. Select the expected backup checkpoint explicitly; unexported state and production cutover remain separate.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <TextField fullWidth label="Independent dump acceptance options" value={options} disabled={busy} onChange={event=>{setOptions(event.target.value);setReview(null);}} />
     <FormControlLabel control={<Checkbox checked={pause} disabled={busy} onChange={event=>{setPause(event.target.checked);setReview(null);}} />} label="Confirm server-wide write pause for independent acceptance" />
@@ -54,6 +54,7 @@ export default function MySQLInstanceAcceptance({post,sourceServerId,backupJobId
     </>}
     {receipt && <Box>
       <Alert severity={receipt.acceptance_outcome==='matched' ? 'success' : ['not_matched','unconfirmed'].includes(receipt.acceptance_outcome) ? 'warning' : 'info'}>Independent acceptance {receipt.job_id}: {receipt.state}. Recorded outcome: {receipt.acceptance_outcome}. No restore was issued.</Alert>
+      {receipt.physical_recovery && <Alert severity="info">Managed physical recovery {receipt.physical_recovery.job_id}: comparison against the selected expected dump. This does not authorize production cutover.</Alert>}
       {receipt.native_error_code && <Alert severity="error">Native acceptance failure code: {receipt.native_error_code}</Alert>}
       {receipt.result && <>
         <Table size="small" aria-label="Recorded dump acceptance surfaces"><TableHead><TableRow><TableCell>Exported surface</TableCell><TableCell>Recorded result</TableCell></TableRow></TableHead><TableBody>
@@ -66,6 +67,7 @@ export default function MySQLInstanceAcceptance({post,sourceServerId,backupJobId
       <Button disabled={busy} onClick={()=>run('status',{job_id:receipt.job_id},setReceipt)}>Refresh acceptance receipt</Button>
       {receipt.interrupted_utility_observation && <Alert severity={receipt.native_process_termination_confirmed===true ? 'info' : 'warning'}>Interrupted utility cleanup: {receipt.native_process_termination_confirmed===true ? 'confirmed' : 'unconfirmed'}. Earlier checks are unchanged; private SQL-lock cleanup and target acknowledgement remain separate.</Alert>}
       <Button disabled={busy || !ACTIVE.has(receipt.state) && receipt.state!=='reviewed' && !(receipt.state==='unknown' && receipt.durable_tool && receipt.native_process_termination_confirmed!==true)} onClick={()=>run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel independent acceptance</Button>
+      <Button disabled={busy || ACTIVE.has(receipt.state)} onClick={()=>run('observe_utilities',{job_id:receipt.job_id},setReceipt)}>Observe original acceptance utility without SQL connection</Button>
       <Button disabled={busy || ACTIVE.has(receipt.state)} onClick={()=>run('reconcile',{job_id:receipt.job_id},value=>{setReceipt(value);setObservation(value.observation_digest);})}>Observe acceptance target</Button>
       {receipt.state==='unknown' && observation && <Button disabled={busy || targetConfirmation!==receipt.target.server_uuid} onClick={()=>run('acknowledge',{job_id:receipt.job_id,target_confirmation:targetConfirmation,observation_digest:observation},setReceipt)}>Acknowledge observed acceptance target</Button>}
       <Box component="details"><summary>Independent acceptance observations</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{JSON.stringify(receipt,null,2)}</Box></Box>

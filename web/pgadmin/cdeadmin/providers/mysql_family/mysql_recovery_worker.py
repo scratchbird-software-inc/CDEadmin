@@ -90,6 +90,7 @@ def inspection(request):
     port = request.get('recovery_port',0)
     if type(port) is not int or port != 0 and not 1024 <= port <= 65535 or port and port == request['sql_port']:
         raise Refused('Select a separate native recovery loopback TCP port or no TCP listener')
+    if type(request.get('recovery_local_infile',False)) is not bool:raise Refused('Select trusted recovery checksum input explicitly')
     if port:check_listener_port(port)
     mode=request.get('recovery_mode','read_only')
     if mode not in {'read_only','replay'}:raise Refused('Select a native recovery startup mode')
@@ -128,6 +129,7 @@ def inspection(request):
         'configuration': configuration(config), 'configuration_sha256': config_hash,
         'transport': 'loopback-tcp-and-private-unix-socket' if port else 'private-unix-socket-only', 'recovery_port':port, 'automatic_upgrade': False,
         'replication_autostart': False, 'group_replication_autostart': False, 'event_scheduler': 'DISABLED', 'super_read_only': not replay,
+        'recovery_local_infile':request.get('recovery_local_infile',False),
         'recovery_mode':mode,'binary_logging':replay,'recovery_server_id':server_id,
         'recovery_gtid_mode': request['recovery_gtid_mode'], 'maximum_lifetime_seconds': request['timeout_seconds']}
 
@@ -202,7 +204,7 @@ def observe(directory, value, action):
 def sql_ready(request, observed, directory, option_file, data):
     query = "SELECT JSON_OBJECT('version',VERSION(),'server_uuid',@@server_uuid,'datadir',@@datadir,'socket',@@socket," \
         "'skip_networking',@@skip_networking,'port',@@port,'bind_address',CAST(@@bind_address AS CHAR CHARACTER SET utf8mb4),'skip_replica_start',@@skip_replica_start,'super_read_only',@@super_read_only,'read_only',@@read_only,'event_scheduler',@@event_scheduler," \
-        "'gtid_mode',@@gtid_mode,'gtid_executed',@@gtid_executed,'gtid_purged',@@gtid_purged,'log_bin',@@log_bin,'server_id',@@server_id," \
+        "'local_infile',@@global.local_infile,'gtid_mode',@@gtid_mode,'gtid_executed',@@gtid_executed,'gtid_purged',@@gtid_purged,'log_bin',@@log_bin,'server_id',@@server_id," \
         "'log_bin_basename',CAST(@@log_bin_basename AS CHAR CHARACTER SET utf8mb4),'log_bin_index',CAST(@@log_bin_index AS CHAR CHARACTER SET utf8mb4),'log_replica_updates',@@log_replica_updates,'binlog_format',CAST(@@binlog_format AS CHAR CHARACTER SET utf8mb4)," \
         "'group_replication_autostart',CAST((SELECT VARIABLE_VALUE FROM performance_schema.global_variables WHERE VARIABLE_NAME='group_replication_start_on_boot') AS CHAR CHARACTER SET utf8mb4)," \
         "'authenticated_principal',CURRENT_USER()," \
@@ -225,6 +227,7 @@ def sql_ready(request, observed, directory, option_file, data):
             value.get('authenticated_principal') != expected['authenticated_principal'] or value.get('active_role') != expected['active_role'] or
             physical.absolute(value['datadir']) != data or physical.absolute(value['socket']) != directory/'runtime.sock' or
             value.get('skip_networking') != (0 if request.get('recovery_port') else 1) or value.get('skip_replica_start') != 1 or value.get('super_read_only') != (0 if replay else 1) or value.get('read_only') != (0 if replay else 1) or
+            value.get('local_infile') != int(request.get('recovery_local_infile',False)) or
             value.get('event_scheduler') != 'DISABLED' or value.get('log_bin') != (1 if replay else 0) or value.get('gtid_mode') != request['recovery_gtid_mode']):
         raise Refused('Native recovered SQL identity or isolation differs from the reviewed instance')
     if replay and (value.get('server_id')!=request['recovery_server_id'] or value.get('log_replica_updates')!=1 or value.get('binlog_format')!='ROW' or
@@ -263,6 +266,7 @@ def execute(directory):
             '--log-error='+str(directory/'native-error.log'),
             '--user='+observed['os_account']['name'], '--mysqlx=OFF', '--skip-replica-start',
             '--loose-group-replication-start-on-boot=OFF',
+            '--local-infile='+('ON' if request.get('recovery_local_infile',False) else 'OFF'),
             '--event-scheduler=DISABLED', '--gtid-mode='+request['recovery_gtid_mode'],
             '--enforce-gtid-consistency=ON', '--innodb-buffer-pool-size='+str(request['memory_bytes']),
             '--tmpdir='+str(directory), '--innodb-data-home-dir='+str(data), '--innodb-undo-directory='+str(data)]

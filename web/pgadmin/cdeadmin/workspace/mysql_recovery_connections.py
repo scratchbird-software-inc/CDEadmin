@@ -13,7 +13,7 @@ class Connections(MySQLBinlogJobs):
     operation='mysql_recovery_connection'
     review_warnings=(
         'Creates or reattaches a separate native MySQL registration. Source registrations and their SQL sessions are preserved.',
-        'Native MySQL protocol, authentication, TLS, data types and transactions pass through a process-bound SSH stream to the reviewed loopback listener. No database password is delegated to the relay.',
+        'Native MySQL protocol, authentication, TLS, data types and transactions pass through a process-bound SSH stream to the reviewed private socket or loopback listener. No database password is delegated to the relay.',
         'This transport belongs to the current application process. After application restart, reattach with fresh private SSH authentication. Missing or changed instances refuse connection; there is no network fallback.',
         'The registered recovery instance retains its reviewed read-only or writable replay startup policy and lifetime. Raw and POSIX Shell replay retain their original utility leases. Independent utility observations remain available when SQL transport is unavailable; full post-replay acceptance remains separate.',
     )
@@ -69,8 +69,9 @@ def observed(transport,job):
     value=transport.request(physical.remote_request(job,'status'))
     if value.get('input_digest')!=job['review_digest'] or not value.get('recovery_running_verified'):
         raise physical.native.HostError('Original recovery instance is not independently observed as running')
-    if not value.get('sql_identity',{}).get('port') or value['sql_identity'].get('skip_networking')!=0:
-        raise physical.native.HostError('Start a recovery instance with an explicitly reviewed loopback TCP port for editor access')
+    identity=value.get('sql_identity',{});port=job['options'].get('recovery_port',0)
+    if identity.get('skip_networking')!=(0 if port else 1) or port and identity.get('port')!=port:
+        raise physical.native.HostError('Recovery listener differs from its original reviewed startup')
     return {'server_uuid':value['sql_identity']['server_uuid'],'version':value['sql_identity']['version'],
         'recovery_mode':job['options'].get('recovery_mode','read_only'),
         'datadir':value['data_directory'],'runtime_process':deepcopy(value['runtime_process'])}

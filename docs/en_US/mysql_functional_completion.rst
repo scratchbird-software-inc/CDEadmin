@@ -2009,8 +2009,13 @@ retry. Public receipts omit encrypted credential material. Recurring full-backup
 policies now add encrypted SQL delegation through dedicated connection owners,
 optional native prepare/copy-back/read-only startup/stop pipelines, durable job
 binding before dispatch and retention protection for unresolved occurrences.
-SQL startup remains distinct from full data/definition recovery acceptance. Full independent
-post-replay acceptance, remaining physical backend admission and production
-cutover remain open. ``CMP-MY-01``, ``CMP-MY-02`` and ``INV-MYSQL`` still precede
+SQL startup remains distinct from independent data/definition acceptance.
+Managed recovery targets now support explicit expected-dump acceptance of full
+counts, native checksums and exported SQL definitions, including after native
+replay. Private-socket startup works without a TCP listener; trusted checksum
+input is an explicit reviewed startup choice. Original utility leases and
+independent termination observations preserve unknown checks after relay loss.
+Scheduled expected-snapshot checks, unexported/system-state coverage, remaining
+physical backend admission and production cutover remain open. ``CMP-MY-01``, ``CMP-MY-02`` and ``INV-MYSQL`` still precede
 the MariaDB implementation handoff; the comparison denominator remains nine
 implemented items out of eleven.
