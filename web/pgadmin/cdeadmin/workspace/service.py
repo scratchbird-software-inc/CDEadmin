@@ -934,7 +934,7 @@ class ProviderWorkspaceService:
         from .firebird_catalog_export import build_export
         from .firebird_catalog_import import read_catalog
         from .mysql_schema_plan import plan
-        if not isinstance(request, dict) or set(request) != {'database_target_id', 'baseline', 'source'}:
+        if not isinstance(request, dict) or set(request)-{'database_target_id', 'baseline', 'source','execution'} or not {'database_target_id','baseline','source'}<=set(request):
             raise ProviderWorkspaceError('Native MySQL preview requires baseline and desired DDN')
         target = request.get('database_target_id')
         context, endpoint, provider = self._mysql_catalog_context(server, target)
@@ -948,7 +948,17 @@ class ProviderWorkspaceService:
             captured = provider.capture_catalog(endpoint['route'])
             live = build_export(captured['resources'], endpoint_id=str(context.endpoint_id), target_id=target,
                 generation=captured['generation'], refreshed=True, engine='mysql', native_model=True)
-            result = plan(baseline, desired, live)
+            result = plan(baseline, desired, live,execution=request.get('execution'))
+            if result['ready_for_review'] and (request.get('execution') or {}).get('method')=='pt-online-schema-change':
+                from ..providers.mysql_online_copy import admission
+                connection=provider.client._connect({'route':{**endpoint['route'],'autocommit':True}})
+                try:
+                    from .mysql_online_replicas import admission as admit_replicas
+                    replicas=admit_replicas(self,self._principal_id(server),request['execution'].get('replicas',[]),result['server_uuid'])
+                    result['operations'][0]['copy_admission']=admission(connection,result,replicas=replicas)
+                finally:provider.client._discard_failed_session(connection)
+                from .firebird_schema_plan import digest
+                result['execution_sha256']=digest(result['operations'])
             if validate:
                 result.update(provider.validate_schema_plan(endpoint['route'], result))
             return result
@@ -991,7 +1001,7 @@ class ProviderWorkspaceService:
         binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
         try:
             if action == 'mysql_schema_review':
-                if set(request) != {'baseline', 'source', 'execution_sha256', 'database_target_id'}:
+                if set(request)-{'baseline', 'source', 'execution_sha256', 'database_target_id','execution'} or not {'baseline','source','execution_sha256','database_target_id'}<=set(request):
                     raise ValueError('Invalid MySQL schema review request')
                 preview = self.mysql_schema_plan(server, {key: value for key, value in request.items()
                     if key != 'execution_sha256'}, validate=True)
@@ -1005,6 +1015,9 @@ class ProviderWorkspaceService:
                 return applications.get(request['review_id'], owner, binding)
             if action != 'mysql_schema_apply':
                 raise ValueError('Unknown MySQL schema application action')
+            reviewed=applications.get(request.get('review_id'),owner,binding)
+            if any(op.get('execution') for op in reviewed['plan']['operations']):
+                raise ValueError('Dispatch controlled table ALTER through its asynchronous DDN job')
             def execute(record):
                 result = provider.apply_schema_review(endpoint['route'], record)
                 if result['state'] != 'not_dispatched':
@@ -1018,6 +1031,15 @@ class ProviderWorkspaceService:
                 if key != 'database_target_id'}, owner, binding, execute)
         except (ValueError, RecursionError) as error:
             raise ProviderWorkspaceError(str(error)) from None
+
+    def mysql_online_ddl(self, server, operation, request):
+        from .mysql_online_service import action
+        from ..sdk.relational import RelationalClientError
+        from mysql.connector import Error as NativeError
+        try:return action(self,server,operation,request)
+        except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
+        except (RelationalClientError,NativeError,KeyError,TypeError):
+            raise ProviderWorkspaceError('Controlled ALTER input or native connection admission is unavailable') from None
 
     def mariadb_schema_plan(self, server, request, *, validate=False):
         from .firebird_catalog_export import build_export

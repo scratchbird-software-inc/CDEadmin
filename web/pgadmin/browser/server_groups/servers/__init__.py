@@ -3053,6 +3053,8 @@ class ServerNode(PGChildNodeView):
                     payload = service.mysql_relational_review(server, data.get('request'))
                 elif action in {'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt'}:
                     payload = service.mysql_schema_application(server, action, data.get('request'))
+                elif action in {'mysql_online_ddl_start','mysql_online_ddl_status','mysql_online_ddl_cancel','mysql_online_ddl_observe','mysql_online_ddl_cutover','mysql_online_ddl_replicas'}:
+                    payload = service.mysql_online_ddl(server, action.removeprefix('mysql_online_ddl_'), data.get('request'))
                 elif action in {'mysql_schema_plan', 'mysql_schema_validate'}:
                     payload = service.mysql_schema_plan(server, data.get('request'), validate=action == 'mysql_schema_validate')
                 elif action == 'mysql_test_data':

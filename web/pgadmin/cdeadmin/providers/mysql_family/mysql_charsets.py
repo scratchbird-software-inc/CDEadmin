@@ -167,18 +167,38 @@ def install(native):
             if owner is None:raise RelationalClientError('MySQL result connection is unavailable')
             requested_raw=kwargs.get('raw',args[3] if len(args)>3 else None)
             effective_raw=bool(owner._raw or c_api.raw()) if requested_raw is None else requested_raw
+            from mysql.connector.constants import FieldFlag,FieldType
+            # The upstream C SET branch unconditionally splits a Unicode
+            # object, even with use_unicode=False. Request wire bytes for
+            # SET-bearing results and perform the driver's documented typed
+            # conversion after decoding text with each column's native charset.
+            set_result=not effective_raw and any(c[1]==FieldType.SET or c[7]&FieldFlag.SET for c in owner._columns)
+            if set_result:
+                args=list(args)
+                if len(args)>3:args[3]=True
+                else:kwargs['raw']=True
+            raw_state=c_api.raw()
             unicode=c_api.use_unicode();c_api.use_unicode(False)
             try:rows,eof=original_rows(owner,*args,**kwargs)
-            finally:c_api.use_unicode(unicode)
-            if unicode and not effective_raw:
+            finally:
+                c_api.use_unicode(unicode)
+                if set_result:c_api.raw(raw_state)
+            if (unicode or set_result) and not effective_raw:
                 from .mysql_values import decode_text
-                from mysql.connector.constants import FieldType
+                if set_result:
+                    from mysql.connector.conversion import MySQLConverter
+                    converter=MySQLConverter(charset='utf8mb4',use_unicode=unicode)
                 text_types={FieldType.STRING,FieldType.VAR_STRING,FieldType.VARCHAR,FieldType.ENUM,FieldType.SET,FieldType.TINY_BLOB,FieldType.MEDIUM_BLOB,FieldType.LONG_BLOB,FieldType.BLOB}
                 def converted(value,column):
+                    if set_result and isinstance(value,bytes) and (column[1]==FieldType.SET or column[7]&FieldFlag.SET):
+                        decoded=decode_text(value,column[8])
+                        return set(decoded.split(',')) if isinstance(decoded,str) and value else set() if not value else value
                     if isinstance(value,bytes) and column[8]!=63 and column[1] in text_types:
-                        return decode_text(value,column[8])
+                        return decode_text(value,column[8]) if unicode else value
                     if isinstance(value,set):return {decode_text(item,column[8]) if isinstance(item,bytes) else item for item in value}
                     if isinstance(value,bytes) and column[1]==FieldType.JSON:return value.decode('utf8')
+                    if set_result and column[1] in {FieldType.GEOMETRY,FieldType.VECTOR}:return value
+                    if set_result and value is not None:return converter.to_python(column,value)
                     return value
                 rows=[tuple(converted(value,column) for value,column in zip(row,owner._columns)) for row in rows]
             return rows,eof

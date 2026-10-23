@@ -6,8 +6,8 @@ Comparison baseline: source ``0c14f90a21c80c32074c574e7914e56dc487661d``;
 MySQL 9.7.0 and Connector/Python 26.7.0.
 
 This is the accepted implementation queue arising from the MySQL management-tool
-comparison. ``CMP-MY-03``, ``CMP-MY-04`` and ``CMP-MY-07`` are implemented and
-Linux-qualified; the other eight comparison items remain open. They supplement
+comparison. ``CMP-MY-03``, ``CMP-MY-04``, ``CMP-MY-05`` and ``CMP-MY-07`` are implemented
+and Linux-qualified; the other seven comparison items remain open. They supplement
 :doc:`mysql_functional_completion` and :doc:`six_engine_remaining_work`; their
 acceptance must follow :doc:`six_engine_completion`.
 
@@ -189,7 +189,17 @@ Comparison evidence: `DBeaver database content search <https://dbeaver.com/docs/
 CMP-MY-05: Controlled online schema change
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Status: **open**. Priority: **P1**.
+Status: **implemented and Linux-qualified**. Priority: **P1**.
+
+The native DDN workflow now binds exact ALGORITHM/LOCK, deadlines and native
+refusals, with independent execution, progress, cancellation and current-state
+observation. Pinned Percona Toolkit 3.7.2 provides the admitted InnoDB copy
+workflow, including registered asynchronous replica gates, source load limits,
+explicit cutover and separate cleanup observations. Pure/C native and built
+desktop evidence covers concurrent DML, foreign keys, existing triggers and
+interrupted outcomes. See :doc:`mysql_functional_completion` for admitted
+profiles, installation and qualification entry points. Wider topology, product
+inventory and platform acceptance remain separate.
 
 Expose native ALGORITHM/LOCK expectations and engine refusals first. For cases
 needing an admitted source-available utility, bind its exact version, execution

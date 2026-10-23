@@ -136,7 +136,9 @@ def creation(row,sql_mode,database):
     return 'CREATE TABLE '+identifier(database)+'.'+identifier(row['name'])+' ('+','.join(layout['clauses'])+')'+layout['suffix']
 
 
-def plan(baseline,desired,live):
+def plan(baseline,desired,live,execution=None):
+    from .mysql_online_policy import policy, statement
+    execution=policy(execution)
     database,identity=root(live)
     for document in (baseline,desired):
         other,observed=root(document)
@@ -156,7 +158,13 @@ def plan(baseline,desired,live):
                 if before['kind']!=after['kind'] or (current is not None and current['kind']!=after['kind']):
                     raise ValueError('Native object kind changed across the review')
             if after['kind'] not in {'table','view','library','event','procedure','function','trigger','database','materialized-view'}:raise ValueError('Native adapter for this object kind is not yet admitted')
-            if before is not None and (current is None or not _equal(schema(before),schema(current))):
+            same=current is not None and _equal(schema(before),schema(current)) if before else False
+            if execution and before and current and after['kind']=='table':
+                from .mysql_online_policy import structural_definition
+                same=(structural_definition(before['native']['definition'],identity['sql_mode'])==
+                    structural_definition(current['native']['definition'],identity['sql_mode']) and
+                    before['native'].get('definition_context')==current['native'].get('definition_context'))
+            if before is not None and not same:
                 conflicts.append({'resource_id':key,'reason':'Live native definition changed since baseline'});continue
             if before is None:
                 if current is not None:raise ValueError('New native target already exists')
@@ -167,6 +175,8 @@ def plan(baseline,desired,live):
                     raise ValueError('Removal requires exact native name confirmation')
                 operation='drop'
             else:operation='alter'
+            if execution and (after['kind']!='table' or operation!='alter'):
+                raise ValueError('Controlled execution requires one existing native table alteration')
             if after['kind']=='database':
                 from .mysql_database_plan import compile_database
                 source=compile_database(after,operation,database,before)
@@ -206,10 +216,14 @@ def plan(baseline,desired,live):
             operations.append({'resource_id':key,'kind':after['kind'],'name':after['name'],'database':database,'operation':operation,
                 'source':source,'context':context,
                 'baseline_schema_sha256':digest(schema(before)) if before else None,'desired_schema_sha256':digest(schema(after))})
+            if execution:
+                operations[-1].update(execution=deepcopy(execution),source=statement(source,execution))
         except (ValueError,KeyError,TypeError) as error:
             blockers.append({'resource_id':key,'name':after['name'],'reason':str(error)})
     for key,row in baseline['rows'].items():
         if key not in desired['rows']:ignored.append({'resource_id':key,'reason':'Missing desired selection is not removal intent'})
+    if execution and len(operations)!=1:
+        blockers.append({'reason':'Controlled ALTER requires exactly one native table per reviewed job'})
     return {'format':'scratchrobin.mysql.schema-plan@1','engine_id':'mysql','operations':operations,'blockers':blockers,
         'conflicts':conflicts,'ignored':ignored,'database':database,'server_uuid':identity['server_uuid'],
         'execution_sha256':digest(operations),'ready_for_review':not blockers and not conflicts and bool(operations),
@@ -217,5 +231,6 @@ def plan(baseline,desired,live):
         'warnings':['Native clause separation is not grammar validation. This preview grants no execution.',
             'MySQL DDL commits implicitly; rollback cannot provide multi-statement atomicity.',
             'Native baseline/absence revalidation, durable reviewed admission and rediscovery are required before application.'] +
+            (['Controlled ALTER uses a cooperating advisory lock and observational structural revalidation. Prevent external DDL during the operation; concurrent DML remains governed by native ALGORITHM/LOCK. Brief metadata locks still occur. Native PREPARE does not prove algorithm support or online feasibility. No automatic fallback or retry is permitted.'] if execution else []) +
             (['View/library/event/routine/trigger updates/removals recheck observed baselines with a cooperating advisory lock only. External DDL is not fenced; use an exclusive DDL maintenance window to prevent replacement races.']
              if any(op['kind'] in {'view','library','event','procedure','function','trigger','database','materialized-view'} and op['operation']!='create' for op in operations) else [])}

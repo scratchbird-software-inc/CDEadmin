@@ -248,6 +248,93 @@ the repository; Windows/macOS acceptance remains with the platform teams.
 Linux pure/C native and built-desktop receipts close ``CMP-MY-07`` in its
 accepted implementation scope. The broader MySQL product matrix remains open.
 
+Controlled DDN table changes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The database **MySQL metadata and DDN diagrams** workspace retains its existing
+baseline/desired/live comparison, native validation and durable review. Select
+**Controlled native ALTER** to bind an explicit INSTANT, INPLACE or COPY algorithm,
+LOCK expectation, metadata-lock wait and runtime budget to one existing table.
+INSTANT requires LOCK=DEFAULT. Other combinations remain subject to native
+refusal. PREPARE is grammar/semantic preparation, not proof that an algorithm can
+execute online. The application never retries with weaker ALGORITHM/LOCK values.
+
+Controlled jobs own independent worker/control connections and use a cooperating
+advisory lock in place of a duration-long table WRITE lock. Prevent other DDL
+throughout the operation; the advisory lock fences cooperating controlled jobs,
+not every administration path. Exact native server UUID, target names and
+structural baseline are rechecked. The volatile next AUTO_INCREMENT counter is
+excluded from structural comparison without removing text inside literals.
+Native ALGORITHM/LOCK governs concurrent DML; brief metadata locks still occur.
+MySQL owns implicit commits and native DDL atomicity. Cancellation confirms the
+owned server/thread identity before KILL QUERY and never implies rollback.
+
+Jobs retain native stages/work counters when instrumentation supplies them,
+explicit unavailable coverage, error codes/SQLSTATE, dispatch and acknowledgement
+facts. A lost worker or reply remains uncertain and is not automatically
+redispatched. Reading the receipt or observing the current native table does not
+rewrite the original outcome. Closing a workspace leaves an admitted job running;
+explicit cancellation and runtime limits remain separate actions.
+
+**Percona online copy** integrates the pinned source-available
+``pt-online-schema-change`` 3.7.2 script with the existing independent utility
+supervisor. The application host requires native Perl, DBI and DBD::mysql.
+Install the exact script and license with::
+
+   python tools/install_mysql_online_schema_tool.py \
+     --destination tools/reference_engine_demos/runtime/percona-toolkit
+
+The default runtime path is the installed ``bin/pt-online-schema-change``.
+``CDEADMIN_MYSQL_ONLINE_SCHEMA_TOOL``, ``CDEADMIN_MYSQL_ONLINE_PERL`` and optional
+``CDEADMIN_MYSQL_ONLINE_PERL_INCLUDE`` select an application-host installation.
+Review binds its exact script/hook hashes, source revision, Perl executable and
+module versions. A private copy is checked again before execution. Arbitrary
+scripts and flags are not accepted from the browser. Passwords use a private
+option file whose cleanup belongs to the independent supervisor; they do not
+enter command arguments, reviews or saved policy.
+
+The admitted copy profile covers InnoDB under UTF-8 DDN statement context on a
+standalone instance or an asynchronous source with explicitly registered replica
+channels. Native incoming/group replication and unadmitted reported replicas
+refuse this copy profile; native ALTER remains a separate workflow. Native
+privileges, unique-key requirements and unsupported alterations remain tool/server
+refusals. This is not blanket qualification of every upstream utility option or
+topology. Preserve the separate broader topology and capability inventories.
+
+Copy binds existing triggers and referencing foreign-key definitions, uses native
+trigger preservation and ``rebuild_constraints``, and reports that foreign-key
+names can change. It copies through native statements and synchronization
+triggers, then waits for a separate **Allow reviewed copy cutover** action.
+Native RENAME acknowledgement is retained even if later utility cleanup fails.
+Process exit alone is not database finality. Native process output and independent
+current table/trigger artifact observations remain available; no uncertain
+artifact is automatically removed.
+
+Registered replica observers use independent authenticated connections and
+credentials, never utility discovery/delegation to unknown hosts. Source UUID,
+replica UUID/account, channel and registration configuration are bound at review
+and rechecked at start. Stopped, denied, unknown or excessive native lag pauses
+between copy chunks. Cutover checks the channels again. The source's observed
+replica list must be admitted; hidden/unreported topology remains unknown. Native
+load policy pauses above 25 running threads and aborts above 50. Observer heartbeat
+loss aborts the copy hook; the independent supervisor retains process completion
+and credential cleanup evidence after application-worker loss.
+
+Current qualification entry points are
+``tools/cdeadmin_mysql_online_ddl_qualification.py --online-copy``, its
+``--desktop-only --browser-binary ... --driver-binary ...`` path, and
+``tools/cdeadmin_mysql_online_replica_qualification.py``. Record evidence outside
+the repository. Linux pure/C native, source-utility and desktop scopes remain
+separate from Windows/macOS platform-team acceptance and owner-deferred
+ScratchBird history qualification.
+
+Linux native pure/C, registered-replica and built-desktop receipts close
+``CMP-MY-05`` for these admitted profiles. The independent native oracle verifies
+post-cutover definitions/data. Interrupted copies retain their original unknown
+outcome alongside observed process completion, credential cleanup and remaining
+table/trigger artifacts. Broader MySQL inventory, recovery and lifecycle gates
+remain open; the next comparison workflow is ``CMP-MY-06`` data drift verification.
+
 Native topology administration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

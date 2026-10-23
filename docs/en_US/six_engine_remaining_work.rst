@@ -88,8 +88,8 @@ MySQL
 -----
 
 Of the accepted comparison priorities ``CMP-MY-01`` through ``CMP-MY-11``,
-``CMP-MY-03``, ``CMP-MY-04`` and ``CMP-MY-07`` are implemented and
-Linux-qualified; the other eight remain open.
+``CMP-MY-03``, ``CMP-MY-04``, ``CMP-MY-05`` and ``CMP-MY-07`` are implemented
+and Linux-qualified; the other seven remain open.
 :doc:`mysql_implementation_priorities` records their acceptance and maps
 them to the existing items below; overlapping recovery/lifecycle entries are
 one implementation scope and must not be counted as independent completion.
