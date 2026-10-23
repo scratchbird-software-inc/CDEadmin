@@ -6,8 +6,8 @@ Comparison baseline: source ``0c14f90a21c80c32074c574e7914e56dc487661d``;
 MySQL 9.7.0 and Connector/Python 26.7.0.
 
 This is the accepted implementation queue arising from the MySQL management-tool
-comparison. ``CMP-MY-03``, ``CMP-MY-04``, ``CMP-MY-05``, ``CMP-MY-06``, ``CMP-MY-07``, ``CMP-MY-08`` and ``CMP-MY-09``
-are implemented and Linux-qualified; the other four comparison items remain open. They supplement
+comparison. ``CMP-MY-03``, ``CMP-MY-04``, ``CMP-MY-05``, ``CMP-MY-06``, ``CMP-MY-07``, ``CMP-MY-08``, ``CMP-MY-09`` and ``CMP-MY-10``
+are implemented and Linux-qualified; the other three comparison items remain open. They supplement
 :doc:`mysql_functional_completion` and :doc:`six_engine_remaining_work`; their
 acceptance must follow :doc:`six_engine_completion`.
 
@@ -286,7 +286,24 @@ Comparison evidence: `DBeaver spatial data viewing <https://dbeaver.com/docs/dbe
 CMP-MY-10: Versioned schema deployment automation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Status: **open**. Priority: **P2**.
+Status: **implemented and Linux-qualified**. Priority: **P2**.
+
+The supported local operator/CI CLI now captures exact native environments,
+packages versioned DDN artifacts, plans and validates native changes, prepares
+durable review tickets, applies an explicitly approved ticket and retrieves its
+original receipt. Exact artifact/environment/native bindings prevent cross-target
+reuse and relabelled-review authority. JSON reports and documented exit codes
+retain drift, partial/unknown and committed-without-verification outcomes without
+automatic retry. Existing native controlled ALTER and pinned online-copy execution
+are reused; copy cutover requires explicit approval. See
+:doc:`mysql_schema_deployment` for setup, contracts and limitations.
+
+Linux qualification uses actual CLI subprocesses with independent MySQL 9.7.0
+instances and both corrected connector interfaces. It covers native data and
+transaction preservation, once-only receipts, process loss after the durable
+claim, native algorithm refusal and Percona Toolkit 3.7.2 copy/cutover. Platform
+acceptance remains with the Windows/macOS teams; history stays owner-deferred.
+
 
 Qualify a headless invocation and CI-friendly report/exit contract over
 existing DDN desired/live/baseline plans, explicit environment bindings and

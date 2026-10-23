@@ -410,7 +410,7 @@ Independent user transactions, savepoints and warning areas remain intact.
 Built-desktop receipts qualify matched/different reports, deliberate report
 download, clearing and an independent native oracle confirming no repair writes.
 These scopes close ``CMP-MY-06``. Broader native inventory, recovery/lifecycle and
-platform acceptance remain open; the accepted next comparison workflow is ``CMP-MY-10`` deployment automation.
+platform acceptance remain open; the accepted next comparison workflow is ``CMP-MY-11`` SQL notebooks.
 
 The pinned Percona Toolkit 3.7.2 checksum source requires statement-based logging
 and has replication-format/topology restrictions. It is not selected as this
@@ -444,7 +444,7 @@ status-counter reset, stopped/failed replication, denied measurements and live
 registration revocation. Existing interactive transactions, savepoints and
 warning areas remain intact. Built-desktop acceptance qualifies rule setup,
 firing/delivery receipts, silence/unsilence, a read-only DDN findings display and
-collector stop/release. These receipts close ``CMP-MY-08`` on Linux. Four accepted
+collector stop/release. These receipts close ``CMP-MY-08`` on Linux. Three accepted
 comparison workflows and broader MySQL inventory/recovery/lifecycle gaps remain
 open; owner-deferred history and platform-team acceptance remain separate.
 
@@ -469,9 +469,35 @@ page/map bounds and independent transaction/savepoint/warning preservation.
 The built desktop renders the paired DDN map, distinguishes native SRS and X/Y
 text, downloads byte-identical internal geometry and clears private results.
 Network evidence confirms no external map/tile requests. This closes
-``CMP-MY-09`` on Linux; four accepted comparison workflows and broader native
+``CMP-MY-09`` on Linux; three accepted comparison workflows and broader native
 inventory/recovery/lifecycle gaps remain open. Windows/macOS acceptance remains
 with the platform teams, and ScratchBird history testing remains owner-deferred.
+
+Versioned native schema deployment automation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``tools/cdeadmin_mysql_deploy.py`` now provides capture, versioned packaging,
+headless plan/validation, durable review, explicitly approved apply and original
+receipt lookup over the existing MySQL DDN services. Each environment retains
+its own exact native baseline/desired pair and owner/registration/target/server
+binding. Artifact and ticket hashes, native review matching and recompilation of
+the artifact's intended operations prevent relabelled or cross-environment
+review reuse. No schema/SQL/definer rewriting or deletion authority is inferred
+from deployment selection. See :doc:`mysql_schema_deployment` for the supported
+local operator boundary, private outputs, JSON/exit contracts and limits.
+
+Linux qualification covers actual subprocess deployment on independent native
+MySQL 9.7.0 environments using both corrected Connector/Python 26.7.0 interfaces.
+Native rediscovery, original data, independent pending transactions, savepoints
+and warning areas are checked. Wrong-environment tickets, altered fingerprints,
+three-way drift, duplicate apply and original receipt retrieval are qualified.
+Abrupt CLI loss after the durable claim retains uncertainty across restart and
+never redispatches the original review. Controlled native INSTANT, an actual
+INPLACE refusal and pinned Percona Toolkit 3.7.2 copy with explicitly approved
+cutover also pass. These scopes close ``CMP-MY-10`` on Linux. Three accepted
+comparison workflows and broader native inventory/recovery/lifecycle gaps remain
+open. Platform-team qualification and owner-deferred ScratchBird history stay
+separate.
 
 Native topology administration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
