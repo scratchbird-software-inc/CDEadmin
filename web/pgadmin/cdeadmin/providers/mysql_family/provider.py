@@ -1267,7 +1267,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         except (ProviderToolError, TypeError, ValueError) as exc:
             raise RelationalClientError(str(exc)) from None
 
-    def _tool_secrets(self, route, callback):
+    def _tool_secrets(self, route, callback, *, allow_recovery_credentials=False):
+        if route.get('mysql_recovery_binding') and not allow_recovery_credentials:
+            raise RelationalClientError('External native utilities need separately admitted recovery transport; this connection currently supports native driver/editor operations')
         references = dict(route.get('credential_references') or {})
         primary = route.get('credential_reference_id')
         if primary is not None:
@@ -1831,6 +1833,8 @@ def _route_arguments(route, profile):
             raise RelationalClientError(
                 'MySQL 9.7 does not support mysql_native_password')
         options = mysql_route(route)
+        if 'mysql_recovery_binding' in route:
+            options['mysql_recovery_binding'] = copy.deepcopy(route['mysql_recovery_binding'])
         if 'use_pure' in route:
             if type(route['use_pure']) is not bool:
                 raise RelationalClientError(

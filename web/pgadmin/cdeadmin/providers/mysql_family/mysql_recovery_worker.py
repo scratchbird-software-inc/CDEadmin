@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -65,6 +66,15 @@ def configuration(path):
     return {key: value for key,value in values.items() if key not in paths | metadata | {'server_id', 'innodb_log_block_size', 'innodb_undo_tablespaces', 'innodb_log_checksums'}}
 
 
+def check_listener_port(port):
+    with socket.socket() as listener:
+        # Match native MySQL's Linux listener admission after a completed
+        # connection leaves TIME_WAIT. A live listening socket still refuses.
+        listener.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+        try:listener.bind(('127.0.0.1',port))
+        except OSError:raise Refused('Selected recovery loopback TCP port is already occupied') from None
+
+
 def inspection(request):
     if not sys.platform.startswith('linux') or not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
         raise Refused('Managed recovery requires a native Linux host with process descriptor control')
@@ -77,6 +87,10 @@ def inspection(request):
         raise Refused('Select bounded native recovery buffer memory')
     if request.get('recovery_gtid_mode') not in {'OFF', 'OFF_PERMISSIVE', 'ON_PERMISSIVE', 'ON'}:
         raise Refused('Select the native recovery GTID mode explicitly')
+    port = request.get('recovery_port',0)
+    if type(port) is not int or port != 0 and not 1024 <= port <= 65535 or port and port == request['sql_port']:
+        raise Refused('Select a separate native recovery loopback TCP port or no TCP listener')
+    if port:check_listener_port(port)
     source = root / physical.job_id(request['input_job_id'])
     receipt = physical.read_json(source / 'result.json')
     if not successful(receipt) or not receipt.get('restored_files') or receipt.get('phase') != 'copy_back':
@@ -105,7 +119,7 @@ def inspection(request):
         'os_account': {'uid': os.geteuid(), 'gid': os.getegid(), 'name': account.pw_name},
         'input': {'job_id': request['input_job_id'], 'manifest_sha256': host.digest(files), 'file_count': len(files)},
         'configuration': configuration(config), 'configuration_sha256': config_hash,
-        'transport': 'private-unix-socket-only', 'automatic_upgrade': False,
+        'transport': 'loopback-tcp-and-private-unix-socket' if port else 'private-unix-socket-only', 'recovery_port':port, 'automatic_upgrade': False,
         'replication_autostart': False, 'group_replication_autostart': False, 'event_scheduler': 'DISABLED', 'super_read_only': True,
         'recovery_gtid_mode': request['recovery_gtid_mode'], 'maximum_lifetime_seconds': request['timeout_seconds']}
 
@@ -179,7 +193,7 @@ def observe(directory, value, action):
 
 def sql_ready(request, observed, directory, option_file, data):
     query = "SELECT JSON_OBJECT('version',VERSION(),'server_uuid',@@server_uuid,'datadir',@@datadir,'socket',@@socket," \
-        "'skip_networking',@@skip_networking,'skip_replica_start',@@skip_replica_start,'super_read_only',@@super_read_only,'read_only',@@read_only,'event_scheduler',@@event_scheduler," \
+        "'skip_networking',@@skip_networking,'port',@@port,'bind_address',CAST(@@bind_address AS CHAR CHARACTER SET utf8mb4),'skip_replica_start',@@skip_replica_start,'super_read_only',@@super_read_only,'read_only',@@read_only,'event_scheduler',@@event_scheduler," \
         "'gtid_mode',@@gtid_mode,'gtid_executed',@@gtid_executed,'log_bin',@@log_bin," \
         "'group_replication_autostart',CAST((SELECT VARIABLE_VALUE FROM performance_schema.global_variables WHERE VARIABLE_NAME='group_replication_start_on_boot') AS CHAR CHARACTER SET utf8mb4)," \
         "'authenticated_principal',CURRENT_USER()," \
@@ -200,9 +214,11 @@ def sql_ready(request, observed, directory, option_file, data):
             value.get('version') != expected['version'] or
             value.get('authenticated_principal') != expected['authenticated_principal'] or value.get('active_role') != expected['active_role'] or
             physical.absolute(value['datadir']) != data or physical.absolute(value['socket']) != directory/'runtime.sock' or
-            value.get('skip_networking') != 1 or value.get('skip_replica_start') != 1 or value.get('super_read_only') != 1 or value.get('read_only') != 1 or
+            value.get('skip_networking') != (0 if request.get('recovery_port') else 1) or value.get('skip_replica_start') != 1 or value.get('super_read_only') != 1 or value.get('read_only') != 1 or
             value.get('event_scheduler') != 'DISABLED' or value.get('log_bin') != 0 or value.get('gtid_mode') != request['recovery_gtid_mode']):
         raise Refused('Native recovered SQL identity or isolation differs from the reviewed instance')
+    if request.get('recovery_port') and (value.get('port') != request['recovery_port'] or value.get('bind_address') != '127.0.0.1'):
+        raise Refused('Native recovery TCP listener differs from its reviewed loopback address')
     if value.get('group_replication_autostart') not in {None,'OFF'}:
         raise Refused('Native recovered Group Replication autostart is not disabled')
     return value
@@ -232,12 +248,13 @@ def execute(directory):
         args = ['--no-defaults', '--persisted-globals-load=OFF', '--upgrade=NONE', '--datadir='+str(data),
             '--socket='+str(directory/'runtime.sock'), '--pid-file='+str(directory/'runtime.pid'),
             '--log-error='+str(directory/'native-error.log'),
-            '--user='+observed['os_account']['name'], '--skip-networking', '--mysqlx=OFF', '--skip-replica-start',
+            '--user='+observed['os_account']['name'], '--mysqlx=OFF', '--skip-replica-start',
             '--loose-group-replication-start-on-boot=OFF',
             '--event-scheduler=DISABLED', '--super-read-only=ON', '--skip-log-bin', '--gtid-mode='+request['recovery_gtid_mode'],
             '--enforce-gtid-consistency=ON', '--innodb-buffer-pool-size='+str(request['memory_bytes']),
             '--tmpdir='+str(directory), '--innodb-data-home-dir='+str(data), '--innodb-undo-directory='+str(data)]
         args += ['--'+key.replace('_','-')+'='+val for key,val in sorted(observed['configuration'].items())]
+        args += ['--bind-address=127.0.0.1','--port='+str(request['recovery_port'])] if request.get('recovery_port') else ['--skip-networking']
         if (directory/'cancel').exists(): raise InterruptedError('Recovery cancelled before native dispatch')
         option_file = physical.client_options(request,directory)
         value['native_may_have_dispatched'] = True; save()

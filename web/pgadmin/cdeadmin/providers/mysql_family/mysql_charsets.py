@@ -62,7 +62,8 @@ def install(native):
     if not type(native).__module__.startswith('mysql.connector.'):return
     reference=weakref.ref(native);factory=type(native).cursor
     creating_cursor=ContextVar('cdeadmin_mysql_creating_cursor',default=False)
-    c_api=getattr(native,'_cmysql',None)
+    is_c=getattr(native,'_cmysql',None) is not None
+    current={'handle':native._cmysql if is_c else native._protocol}
     initial=factory(native)
     try:
         initial.execute('SELECT @@SESSION.character_set_client,@@SESSION.character_set_connection,@@SESSION.character_set_results')
@@ -89,15 +90,32 @@ def install(native):
     def sync():
         owner=reference()
         if owner is None:raise RelationalClientError('MySQL character-set connection is unavailable')
+        handle=owner._cmysql if is_c else owner._protocol
+        if handle is not current['handle']:
+            # Native reconnect replaces the C API/protocol. Observe that new
+            # session and rebind its protocol hooks without retaining the old
+            # connection's charset state or creating another native wrapper.
+            current['handle']=handle
+            if not is_c:
+                handle.parse_ok=observed_ok;handle.parse_column=observed_column
+            construction=creating_cursor.set(True)
+            try:metadata=factory(owner,raw=True)
+            finally:creating_cursor.reset(construction)
+            try:
+                metadata.execute('SELECT @@SESSION.character_set_client,@@SESSION.character_set_connection,@@SESSION.character_set_results')
+                values=metadata.fetchone();metadata.fetchall()
+                owner._cdeadmin_charset_variables=dict(zip(('character_set_client','character_set_connection','character_set_results'),
+                    (None if value is None else value.decode('ascii') if isinstance(value,bytes) else value for value in values)))
+            finally:metadata.close()
         values=owner._cdeadmin_charset_variables
-        name=c_api.character_set_name() if c_api is not None else values['character_set_client']
+        name=owner._cmysql.character_set_name() if is_c else values['character_set_client']
         if isinstance(name,bytes):name=name.decode('ascii')
         owner._charset_id=owner._character_set.get_charset_info(name)[0]
         converter=getattr(owner,'converter',None)
         if converter is not None:converter.set_charset(name,character_set=owner._character_set)
         return name
 
-    if c_api is None:
+    if not is_c:
         from mysql.connector import utils
         from mysql.connector.constants import ServerFlag
         protocol=native._protocol;parse_ok=type(protocol).parse_ok;parse_column=type(protocol).parse_column
@@ -141,11 +159,12 @@ def install(native):
             _set_to_python=_string_to_python
         native.set_converter_class(NativeColumnConverter)
 
-    if c_api is not None:
+    if is_c:
         original_columns=type(native).fetch_eof_columns;original_rows=type(native).get_rows
         def raw_columns(prep_stmt=None):
             owner=reference()
             if owner is None:raise RelationalClientError('MySQL result metadata connection is unavailable')
+            c_api=owner._cmysql
             if prep_stmt is not None:return original_columns(owner,prep_stmt)
             unicode=c_api.use_unicode();c_api.use_unicode(False)
             try:result=original_columns(owner,prep_stmt)
@@ -165,6 +184,7 @@ def install(native):
         def observed_rows(*args,**kwargs):
             owner=reference()
             if owner is None:raise RelationalClientError('MySQL result connection is unavailable')
+            c_api=owner._cmysql
             requested_raw=kwargs.get('raw',args[3] if len(args)>3 else None)
             effective_raw=bool(owner._raw or c_api.raw()) if requested_raw is None else requested_raw
             from mysql.connector.constants import FieldFlag,FieldType
@@ -211,7 +231,7 @@ def install(native):
         construction=creating_cursor.set(True)
         try:cursor=factory(owner,*args,**kwargs)
         finally:creating_cursor.reset(construction)
-        if c_api is None:
+        if not is_c:
             from .mysql_warnings import install as install_warnings
             install_warnings(cursor)
         if any('Prepared' in cls.__name__ for cls in type(cursor).__mro__):return cursor
@@ -220,7 +240,7 @@ def install(native):
             def execute_text(operation,*arguments,**keywords):
                 cursor=cursor_reference()
                 if cursor is None:raise RelationalClientError('MySQL character-set cursor is unavailable')
-                if c_api is not None:refresh_c_variables()
+                if is_c:refresh_c_variables()
                 name=sync()
                 if isinstance(operation,str) and not many:operation=operation.encode(codec(name))
                 def row(value):return parameter_values(value,name)
@@ -245,7 +265,7 @@ def install(native):
                 # Constructing a cursor must preserve the user's ROW_COUNT and
                 # diagnostic area. Check local closure here; actual execution
                 # owns transport failure handling and never reconnects.
-                return bool(c_api.connected()) if c_api is not None else self._socket is not None
+                return bool(self._cmysql.connected()) if is_c else self._socket is not None
             return super().is_connected()
     CharsetConnection.__name__='Charset'+base.__name__
     native.__class__=CharsetConnection

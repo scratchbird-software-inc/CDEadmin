@@ -8,14 +8,16 @@ const initial = {connection: {host: '', port: 22, username: '', host_key: '', au
   sql_host: '127.0.0.1', sql_port: 3306, input_job_id: null, parallel: 2, memory_bytes: 268435456,
   timeout_seconds: 3600, accept_release_candidate: false};
 const phaseOptions = (current, phase, input_job_id) => {
-  const {mysqld, recovery_gtid_mode, ...base} = current;
-  return {...base, phase, input_job_id, ...(phase === 'recover' ? {mysqld: mysqld || '/usr/sbin/mysqld', recovery_gtid_mode: recovery_gtid_mode || 'ON'} : {})};
+  const {mysqld, recovery_gtid_mode, recovery_port, ...base} = current;
+  return {...base, phase, input_job_id, ...(phase === 'recover' ? {mysqld: mysqld || '/usr/sbin/mysqld', recovery_gtid_mode: recovery_gtid_mode || 'ON', recovery_port: recovery_port ?? 3307} : {})};
 };
-export default function MySQLPhysical({post}) {
+export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
   const [options, setOptions] = useState(initial), [credentials, setCredentials] = useState({});
   const [review, setReview] = useState(null), [receipt, setReceipt] = useState(null), [jobs, setJobs] = useState(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [peer, setPeer] = useState(null);
   const [confirmed, setConfirmed] = useState(false), [delegate, setDelegate] = useState(false), [output, setOutput] = useState(null);
+  const [connectionReview, setConnectionReview] = useState(null), [connectionReceipt, setConnectionReceipt] = useState(null);
+  const [connectionName, setConnectionName] = useState('Recovered MySQL'), [connectionConfirmed, setConnectionConfirmed] = useState(false), [connectionDelegate, setConnectionDelegate] = useState(false);
   const mounted = useRef(true), pending = useRef(false);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   useModalCloseGuard(() => !busy);
@@ -41,16 +43,18 @@ export default function MySQLPhysical({post}) {
     }, 1500);
     return () => {live = false; clearInterval(timer);};
   }, [post, receipt?.job_id, receipt?.state, credentials]);
-  const change = (key, value) => {setOptions(current => ({...current, [key]: value})); setReview(null); setConfirmed(false); setDelegate(false);};
+  const clearConnectionReview = () => {setConnectionReview(null); setConnectionConfirmed(false); setConnectionDelegate(false);};
+  const change = (key, value) => {setOptions(current => ({...current, [key]: value})); setReview(null); setConfirmed(false); setDelegate(false); clearConnectionReview();};
   const connection = (key, value) => change('connection', {...options.connection, [key]: value});
   const inspect = value => {
     setReceipt(value); setReview(value.state === 'reviewed' ? value : null); setOptions(value.options);
     setCredentials({}); setConfirmed(false); setDelegate(false); setOutput(null);
+    clearConnectionReview(); setConnectionReceipt(null);
   };
   const observe = operation => run(operation, {job_id: receipt.job_id, credentials}, operation === 'output' ? setOutput : setReceipt);
   const derived = phase => {
     setOptions(current => phaseOptions(current, phase, receipt.job_id));
-    setReview(null); setConfirmed(false); setDelegate(false);
+    setReview(null); setConfirmed(false); setDelegate(false); clearConnectionReview();
   };
   return <Box component="section" aria-label="Native MySQL physical backups" sx={{p: 1, overflow: 'auto', flex: 1}}>
     <Alert severity="info">XtraBackup 9.7.1-rc1 runs on the pinned Linux database SSH host. Backup, prepare and copy-back retain separate files. Managed recovery starts another data copy using native MySQL 9.7.0, a private Unix socket and read-only settings; it stops on request or its reviewed lifetime. Recovered-data acceptance, log replay and cutover have separate gates. Closing this viewer leaves admitted remote work running.</Alert>
@@ -82,12 +86,13 @@ export default function MySQLPhysical({post}) {
       <TextField select size="small" label="Physical operation" value={options.phase} disabled={busy} onChange={event => {
         const phase = event.target.value;
         setOptions(current => phaseOptions(current, phase, phase === 'backup' ? null : current.input_job_id));
-        setReview(null); setConfirmed(false); setDelegate(false);
+        setReview(null); setConfirmed(false); setDelegate(false); clearConnectionReview();
       }}>
         <MenuItem value="backup">Full backup</MenuItem><MenuItem value="prepare">Prepare immutable copy</MenuItem><MenuItem value="copy_back">Copy back to new isolated directory</MenuItem><MenuItem value="recover">Start managed recovery instance</MenuItem>
       </TextField>
       {options.phase === 'recover' && <>
         <TextField size="small" label="Recovery mysqld executable" value={options.mysqld} disabled={busy} onChange={event => change('mysqld', event.target.value)} />
+        <TextField type="number" size="small" label="Recovery loopback TCP port (0 disables)" value={options.recovery_port || 0} disabled={busy} onChange={event => change('recovery_port', Number(event.target.value))} />
         <TextField select size="small" label="Recovery GTID mode" value={options.recovery_gtid_mode} disabled={busy} onChange={event => change('recovery_gtid_mode', event.target.value)}>
           {['OFF', 'OFF_PERMISSIVE', 'ON_PERMISSIVE', 'ON'].map(mode => <MenuItem key={mode} value={mode}>{mode}</MenuItem>)}
         </TextField>
@@ -101,6 +106,7 @@ export default function MySQLPhysical({post}) {
     <Box sx={{display: 'flex', gap: 1, my: 1}}>
       <Button disabled={busy || !options.accept_release_candidate} onClick={() => run('review', {options, credentials}, value => {setReview(value); setReceipt(value); setConfirmed(false); setDelegate(false);})}>Review native physical job</Button>
       <Button disabled={busy} onClick={() => run('list', {offset: 0, limit: 25}, setJobs)}>Load physical jobs</Button>
+      <Button disabled={busy} onClick={() => run('connection_info', {}, inspect)}>Load this registration’s recovery instance</Button>
     </Box>
     {review && <Box>
       <Box component="pre" aria-label="Native physical review" sx={{whiteSpace: 'pre-wrap', maxHeight: 280, overflow: 'auto'}}>{JSON.stringify({job_id: review.job_id, source: review.source, remote_review: review.remote_review, warnings: review.warnings}, null, 2)}</Box>
@@ -124,6 +130,24 @@ export default function MySQLPhysical({post}) {
       <Box component="pre" aria-label="Native physical receipt" sx={{whiteSpace: 'pre-wrap', maxHeight: 400, overflow: 'auto'}}>{JSON.stringify(receipt, null, 2)}</Box>
     </Box>}
     {output && <Box component="pre" aria-label="Native physical output" sx={{whiteSpace: 'pre-wrap', maxHeight: 350, overflow: 'auto'}}>{JSON.stringify(output, null, 2)}</Box>}
+    {receipt?.options.phase === 'recover' && <Box sx={{my: 1}}>
+      <Alert severity="info">Register this recovery instance as a separate MySQL target for the native editor and catalog. Use its reviewed loopback TCP port through pinned SSH. After application restart, reattach with fresh SSH authentication. External utility/replay transport and writable recovery startup have separate gates.</Alert>
+      <TextField size="small" label="Recovery registration name" value={connectionName} disabled={busy} onChange={event => {setConnectionName(event.target.value); clearConnectionReview();}} />
+      <Button disabled={busy} onClick={() => run('connection_review', {job_id: receipt.job_id, name: connectionName, credentials}, value => {setConnectionReview(value); setConnectionConfirmed(false); setConnectionDelegate(false);})}>Review recovery connection</Button>
+      {connectionReview && <>
+        <Box component="pre" aria-label="Native recovery connection review" sx={{whiteSpace: 'pre-wrap', maxHeight: 250, overflow: 'auto'}}>{JSON.stringify(connectionReview, null, 2)}</Box>
+        <FormControlLabel label="I confirm this separate recovery connection registration." control={<Checkbox checked={connectionConfirmed} disabled={busy} onChange={event => setConnectionConfirmed(event.target.checked)} />} />
+        <FormControlLabel label="Use the registered database credential for this recovery registration." control={<Checkbox checked={connectionDelegate} disabled={busy} onChange={event => setConnectionDelegate(event.target.checked)} />} />
+        <Button disabled={busy || !connectionConfirmed || !connectionDelegate} onClick={() => run('connection_connect', {review_id: connectionReview.job_id, review_digest: connectionReview.review_digest,
+          confirmed: connectionConfirmed, delegate_database_credentials: connectionDelegate, credentials}, value => {setConnectionReceipt(value); setConnectionReview(null); if(value.result) onTargetRegistered(value.result);})}>Attach reviewed recovery connection</Button>
+      </>}
+      {connectionReceipt && <>
+        <Alert severity={connectionReceipt.result?.transport_attached ? 'success' : 'warning'}>{connectionReceipt.result ? `Recovery target: ${connectionReceipt.result.name}. Open its native query tool from Data Explorer.` : 'Original connection outcome is unknown. Observe the retained registration before another review.'}</Alert>
+        <Button disabled={busy} onClick={() => run('connection_status', {review_id: connectionReceipt.job_id}, setConnectionReceipt)}>Observe recovery registration</Button>
+        {connectionReceipt.result && <Button disabled={busy} onClick={() => run('connection_detach', {server_id: connectionReceipt.result.server_id}, value => setConnectionReceipt(current => ({...current, result: value})))}>Detach recovery transport</Button>}
+        <Box component="pre" aria-label="Native recovery connection receipt" sx={{whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto'}}>{JSON.stringify(connectionReceipt, null, 2)}</Box>
+      </>}
+    </Box>}
   </Box>;
 }
-MySQLPhysical.propTypes = {post: PropTypes.func.isRequired};
+MySQLPhysical.propTypes = {post: PropTypes.func.isRequired, onTargetRegistered: PropTypes.func};

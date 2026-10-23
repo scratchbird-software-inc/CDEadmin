@@ -208,7 +208,8 @@ class Connector:
             from mysql.connector.constants import ClientFlag
             flags=options.get('client_flags')
             options['client_flags']=[*flags,ClientFlag.SESSION_TRACK] if isinstance(flags,(tuple,list)) else (ClientFlag.get_default() if flags is None else flags)|ClientFlag.SESSION_TRACK
-        native=self.module.connect(*args,**options)
+        from .mysql_recovery_bridge import native_connection
+        native=native_connection(self.module.connect,args,options)
         try:
             if attribute is not None:
                 native._cdeadmin_observer_attribute = attribute

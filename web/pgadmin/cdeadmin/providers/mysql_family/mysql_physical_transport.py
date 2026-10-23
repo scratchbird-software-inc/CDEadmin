@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import secrets
 import shlex
+import struct
 import time
 
 from . import mysql_host_transport as ssh
@@ -16,7 +17,8 @@ def sources():
     host_source, file_source, service_source = ssh.sources()
     physical_source = Path(worker.__file__).read_text(encoding='utf8')
     return {'host': host_source, 'fileio': file_source, 'services': service_source, 'physical': physical_source,
-        'recovery': Path(worker.__file__).with_name('mysql_recovery_worker.py').read_text(encoding='utf8')}
+        'recovery': Path(worker.__file__).with_name('mysql_recovery_worker.py').read_text(encoding='utf8'),
+        'stream': Path(worker.__file__).with_name('mysql_recovery_stream.py').read_text(encoding='utf8')}
 
 
 BOOTSTRAP = '''import json,sys,types
@@ -28,6 +30,7 @@ def load(p):
  install('_cdeadmin_native_worker',p['host'])
  m=install('_cdeadmin_physical_worker',p['physical'])
  install('_cdeadmin_recovery_worker',p['recovery'])
+ install('_cdeadmin_recovery_stream',p['stream'])
  return m
 '''
 
@@ -37,6 +40,20 @@ m=load(p['sources'])
 try:r=m.dispatch(p['request'],p['supervisor'])
 except Exception as e:r={'state':'refused','error_type':type(e).__name__,'message':str(e) if isinstance(e,m.Refused) else 'Native physical host observation failed'}
 print(p['marker']+json.dumps(r,ensure_ascii=True,separators=(',',':')),flush=True)
+'''
+
+STREAM_LOADER = BOOTSTRAP + '''import struct
+def exact(n):
+ b=b''
+ while len(b)<n:
+  v=sys.stdin.buffer.read(n-len(b))
+  if not v:raise EOFError()
+  b+=v
+ return b
+n=struct.unpack('!I',exact(4))[0]
+if n>2097152:raise ValueError('Native stream request too large')
+p=json.loads(exact(n));load(p['sources'])
+sys.modules['_cdeadmin_recovery_stream'].serve(p['request'])
 '''
 
 
@@ -53,6 +70,33 @@ class Transport:
 
     def connect(self): return self.ssh.connect()
     def close(self): self.ssh.close()
+
+    def open_stream(self, request):
+        peer=self.ssh.transport
+        if peer is None or not peer.is_authenticated():raise HostError('Authenticate the pinned recovery SSH connection')
+        payload=json.dumps({'sources':sources(),'request':request},ensure_ascii=True).encode('ascii')
+        if len(payload)>2097152:raise HostError('Native recovery stream request exceeds its bound')
+        channel=peer.open_session(timeout=5)
+        try:
+            channel.settimeout(15)
+            channel.exec_command('exec '+shlex.quote(self.ssh.route['python'])+' -u -c '+shlex.quote(STREAM_LOADER))
+            channel.sendall(struct.pack('!I',len(payload))+payload)
+            def exact(count):
+                value=bytearray()
+                while len(value)<count:
+                    part=channel.recv(count-len(value))
+                    if not part:raise HostError('Native recovery stream admission reply is unavailable')
+                    value.extend(part)
+                return bytes(value)
+            size=struct.unpack('!I',exact(4))[0]
+            if size>65536:raise HostError('Native recovery stream acknowledgement exceeds its bound')
+            value=json.loads(exact(size))
+            if value.get('success') is not True:raise HostError(value.get('message') or 'Native recovery stream was refused')
+            observed=value['observed'];expected=request['expected']
+            if any(observed.get(key)!=expected[key] for key in ('server_uuid','datadir','runtime_process')):
+                raise HostError('Native recovery stream identity changed')
+            channel.settimeout(None);return channel
+        except BaseException:channel.close();raise
 
     def request(self, request, timeout=90):
         peer = self.ssh.transport

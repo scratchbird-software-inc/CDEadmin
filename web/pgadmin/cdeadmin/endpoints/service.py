@@ -1870,6 +1870,14 @@ class EndpointService:
                 'endpoint route or credential reference is unavailable'
             )
         route = json.loads(route_model.configuration)
+        extension = getattr(endpoint, 'extension_profile', None)
+        if extension is not None and extension.schema_reference == 'cdeadmin.mysql-recovery-registration.v1':
+            bound = json.loads(extension.profile_data)['binding']
+            if (endpoint.profile_id != 'mysql-native' or bound.get('owner') != server.user_id or
+                    bound.get('endpoint_id') != endpoint.id or route.get('mysql_recovery_binding') != bound or
+                    route.get('host') != 'managed-recovery.invalid' or route.get('port') != 3306 or
+                    route.get('unix_socket') or route.get('failover')):
+                raise EndpointRegistrationError('Managed recovery registration requires its reviewed private transport; network failover is unavailable')
         if credential_target is None and database_override is Ellipsis:
             credential_target = next((item for item in getattr(
                 endpoint, 'database_targets', ()) if item.active), None)

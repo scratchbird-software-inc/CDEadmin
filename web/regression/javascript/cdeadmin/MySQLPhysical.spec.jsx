@@ -68,7 +68,7 @@ it('derives recovery from verified copy-back and separately confirms native star
   fireEvent.click(screen.getByRole('button', {name: 'Inspect physical job physical-job'}));
   fireEvent.click(await screen.findByRole('button', {name: 'Use copy-back for managed recovery'}));
   expect(screen.getByLabelText('Recovery mysqld executable')).toHaveValue('/usr/sbin/mysqld');
-  const recoveryReview = {...review, options: {...review.options, phase: 'recover', input_job_id: 'physical-job', mysqld: '/usr/sbin/mysqld', recovery_gtid_mode: 'ON'}};
+  const recoveryReview = {...review, options: {...review.options, phase: 'recover', input_job_id: 'physical-job', mysqld: '/usr/sbin/mysqld', recovery_gtid_mode: 'ON', recovery_port: 3307}};
   post.mockResolvedValue(recoveryReview);
   fireEvent.click(screen.getByRole('button', {name: 'Review native physical job'}));
   await screen.findByLabelText('Native physical review');
@@ -81,4 +81,35 @@ it('derives recovery from verified copy-back and separately confirms native star
   fireEvent.click(screen.getByRole('button', {name: 'Start reviewed physical job'}));
   expect(await screen.findByRole('button', {name: 'Stop managed recovery instance'})).toBeEnabled();
   expect(screen.getByText(/SQL startup readiness: observed/)).toBeVisible();
+});
+
+it('reviews a separate recovery connection and requires both confirmations before registering it', async () => {
+  const recovered = {...review, state: 'unknown', options: {...review.options, phase: 'recover', recovery_port: 3307}};
+  const post = jest.fn().mockResolvedValue({jobs: [recovered], offset: 0, limit: 25, more: false});
+  const registered = jest.fn(); render(<Component post={post} onTargetRegistered={registered} />);
+  fireEvent.click(screen.getByRole('button', {name: 'Load physical jobs'}));
+  await screen.findByRole('table', {name: 'Native physical jobs'});
+  post.mockResolvedValue(recovered);
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect physical job physical-job'}));
+  await screen.findByLabelText('Native physical receipt');
+  fireEvent.change(screen.getByLabelText('Physical SSH private key'), {target: {value: 'private-recovery-key'}});
+  const ticket = {job_id: 'connection-review', review_digest: 'connection-exact', state: 'reviewed'};
+  post.mockResolvedValue(ticket);
+  fireEvent.click(screen.getByRole('button', {name: 'Review recovery connection'}));
+  await screen.findByLabelText('Native recovery connection review');
+  expect(screen.getByRole('button', {name: 'Attach reviewed recovery connection'})).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('I confirm this separate recovery connection registration.'));
+  expect(screen.getByRole('button', {name: 'Attach reviewed recovery connection'})).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('Use the registered database credential for this recovery registration.'));
+  const result = {server_id: 42, transport_attached: true}; post.mockResolvedValue({...ticket, result});
+  fireEvent.click(screen.getByRole('button', {name: 'Attach reviewed recovery connection'}));
+  await waitFor(() => expect(registered).toHaveBeenCalledWith(result));
+  expect(post).toHaveBeenLastCalledWith({action: 'mysql_physical_connection_connect', request: {
+    review_id: ticket.job_id, review_digest: ticket.review_digest, confirmed: true, delegate_database_credentials: true,
+    credentials: {private_key: 'private-recovery-key'},
+  }});
+  expect(screen.getByLabelText('Native recovery connection receipt')).not.toHaveTextContent('private-recovery-key');
+  post.mockResolvedValue({...result, transport_attached: false});
+  fireEvent.click(screen.getByRole('button', {name: 'Detach recovery transport'}));
+  await waitFor(() => expect(post).toHaveBeenLastCalledWith({action: 'mysql_physical_connection_detach', request: {server_id: 42}}));
 });

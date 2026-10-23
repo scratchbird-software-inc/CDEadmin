@@ -40,7 +40,8 @@ def options(value):
     fields = {'connection', 'workspace', 'executable', 'mysql', 'phase', 'sql_host', 'sql_port',
         'input_job_id', 'parallel', 'memory_bytes', 'timeout_seconds', 'accept_release_candidate'}
     extra = {'mysqld', 'recovery_gtid_mode'} if isinstance(value,dict) and value.get('phase') == 'recover' else set()
-    if not isinstance(value, dict) or set(value) != fields | extra:
+    optional = {'recovery_port'} if extra else set()
+    if not isinstance(value, dict) or not fields | extra <= set(value) or set(value)-fields-extra-optional:
         raise native.HostError('Select the complete native physical host and operation options')
     selected = deepcopy(value); selected['connection'] = native.ssh.public_route(value['connection'])
     if selected['connection']['platform'] != 'posix' or value['accept_release_candidate'] is not True:
@@ -57,6 +58,11 @@ def options(value):
         raise native.HostError('Select backup, prepare, isolated copy-back or managed recovery')
     if extra and value['recovery_gtid_mode'] not in {'OFF','OFF_PERMISSIVE','ON_PERMISSIVE','ON'}:
         raise native.HostError('Select the native recovery GTID mode explicitly')
+    if extra:
+        port = value.get('recovery_port',0)
+        if type(port) is not int or port != 0 and not 1024 <= port <= 65535:
+            raise native.HostError('Select no recovery TCP listener or a native loopback port from 1024 through 65535')
+        selected['recovery_port'] = port
     if value['phase'] == 'backup':
         if value['input_job_id'] is not None:
             raise native.HostError('A full physical backup has no prior input')
@@ -72,7 +78,7 @@ class PhysicalJobs(MySQLBinlogJobs):
         'Full backups take native backup/read locks and copy complete supported instance files. Prepare mutates a separate private copy. Copy-back creates only a new isolated job data directory; it never overwrites the live data directory or starts a database.',
         'Native processes run under an independent supervisor on the authenticated database SSH host. Closing the viewer or losing a reply does not cancel or roll back native work. An original unknown dispatch is never automatically repeated.',
         'This full-artifact workflow requires self-contained, uncompressed and unencrypted native backup files. External tablespaces, encryption key provisioning, incrementals, post-replay acceptance and production cutover retain separate implementation/acceptance gates.',
-        'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account, with a fresh native UUID, private Unix socket only, super_read_only, events/replication autostart disabled and no automatic upgrades. It ends on explicit stop or its reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
+        'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account, with a fresh native UUID, private Unix socket and an optional explicitly selected loopback TCP listener, super_read_only, events/replication autostart disabled and no automatic upgrades. It ends on explicit stop or its reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
         'Physical files and native output are private to the selected host OS account. Broad source archive protection is acquired before backup dispatch and is retired only by its separate reviewed protection workflow.',
     )
 
@@ -115,7 +121,7 @@ def remote_request(record, action):
         'binding': deepcopy(record['source_state']['host_binding']), 'source_identity': deepcopy(record['source']),
         'reviewed': deepcopy(record['source_state']['remote_review']),
         'job_id': record['job_id'], 'input_digest': record['review_digest'],
-        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode') if key in selected}}
+        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port') if key in selected}}
 
 
 def delegate(service, server):
@@ -130,7 +136,7 @@ def delegate(service, server):
         if len(values) > 1:
             raise native.HostError('This physical backend has not admitted native multiple-factor credential delegation')
         return {'user': route.get('user') or route.get('username'), 'password': values[0] if values else ''}
-    return provider.client._tool_secrets(route, sealed)
+    return provider.client._tool_secrets(route, sealed, allow_recovery_credentials=True)
 
 
 def claim(jobs, record, owner, endpoint, request):
@@ -148,6 +154,9 @@ def claim(jobs, record, owner, endpoint, request):
 
 def action(service, server, operation, request):
     if not isinstance(request, dict): raise native.HostError('Select a native physical request')
+    if operation.startswith('connection_'):
+        from .mysql_recovery_connections import action as connection_action
+        return connection_action(service, server, operation[11:], request)
     jobs, owner, endpoint = manager(service, server)
     if operation == 'peer' and set(request) == {'host', 'port'}:
         return native.ssh.probe(request['host'], request['port'])

@@ -32,7 +32,7 @@ def prepare_fixture(output, image):
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -49,6 +49,13 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
         'web/pgadmin/static/js/Dialogs/index.jsx','web/pgadmin/cdeadmin/context_menu.py','web/pgadmin/browser/server_groups/servers/__init__.py',
         'web/pgadmin/static/vendor/ddn/current/resource-manifest.json',str(Path(__file__).relative_to(ROOT))]
     proof['source_sha256'] = {p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in paths}
+    if connections:
+        extras=['web/pgadmin/cdeadmin/providers/mysql_family/mysql_recovery_bridge.py','web/pgadmin/cdeadmin/providers/mysql_family/mysql_recovery_stream.py',
+            'web/pgadmin/cdeadmin/providers/mysql_family/mysql_charsets.py',
+            'web/pgadmin/cdeadmin/providers/mysql_family/mysql_connections.py','web/pgadmin/cdeadmin/providers/mysql_family/provider.py',
+            'web/pgadmin/cdeadmin/endpoints/service.py','web/pgadmin/cdeadmin/workspace/mysql_recovery_connections.py','web/pgadmin/static/js/Dialogs/index.jsx',
+            'tools/cdeadmin_mysql_recovery_connection_qualification.py']
+        proof['source_sha256'].update({p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in extras})
     names = []; volume = 'sr-physical-'+secrets.token_hex(8); root = None
     data_volumes = []
     try:
@@ -101,6 +108,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
             def review(phase,input_job=None,gtid_mode='ON',lifetime=None):
                 extra={'mysqld':'/usr/sbin/mysqld','recovery_gtid_mode':gtid_mode} if phase=='recover' else {}
+                if connections and phase=='recover':extra['recovery_port']=33447
                 if lifetime is not None:extra['timeout_seconds']=lifetime
                 return post('review',{'options':{**selected,'phase':phase,'input_job_id':input_job,**extra},'credentials':credentials})
             def start(value):
@@ -180,6 +188,11 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             assert json.loads(recovered_sql("SELECT JSON_ARRAY((SELECT COUNT(*) FROM sr_osc.m),(SELECT COUNT(*) FROM sr_osc.c),(SELECT COUNT(*) FROM sr_osc.pending))").stdout)==[1,1,0]
             for what in ('VIEW sr_osc.v','PROCEDURE sr_osc.p'):assert recovered_sql('SHOW CREATE '+what).stdout
             assert recovered_sql('INSERT INTO sr_osc.pending VALUES(999)',False).returncode!=0
+            connection_proof=None
+            if connections:
+                from cdeadmin_mysql_recovery_connection_qualification import native_connection
+                connection_proof=native_connection(app,client,sid,target,runtime,post,credentials,output,use_c)
+                checks.extend(connection_proof['checks'])
             if use_c:
                 # Loss of the original supervisor must not require a third-party
                 # process tool or authorize a signal to a reused numeric PID.
@@ -196,6 +209,9 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             assert not stopped['recovery_running'] and stopped['state']=='unknown'
             if use_c:assert stopped['remote_observation']['supervisor_control_unavailable'] and stopped['remote_observation']['native_exit_reply_unknown']
             else:assert stopped['remote_observation']['return_code']==0
+            if connection_proof:
+                from cdeadmin_mysql_recovery_connection_qualification import stopped_connection
+                stopped_connection(app,client,connection_proof,post)
             checks.append('managed-native-recovery-new-UUID-private-socket-read-only-SQL-data-and-definitions-explicit-stop-with-unknown-original-reply')
             if use_c:checks.append('owned-process-descriptor-stop-after-original-supervisor-loss-without-invented-native-exit-reply')
             if not use_c:
@@ -254,9 +270,12 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
                 cursor.execute("CREATE USER 'sr_physical_ui'@'%' IDENTIFIED BY %s",(ui_password,))
                 cursor.execute("GRANT ALL PRIVILEGES ON *.* TO 'sr_physical_ui'@'%' WITH GRANT OPTION")
             sid,_target,_post=registration(app,{'host':'127.0.0.1','port':port},ui_password,True,username='sr_physical_ui')
-            proof['browser']=browser(app,output,sid,ui_password,selected,credentials,browser_binary,driver_binary)
+            proof['browser']=browser(app,output,sid,ui_password,selected,credentials,browser_binary,driver_binary,connections=connections)
         proof['complete']=True
     finally:
+        if connections:
+            from pgadmin.cdeadmin.providers.mysql_family.mysql_recovery_bridge import bridges
+            bridges.close()
         if root is not None:root.close()
         for name in reversed(names):_run(['docker','rm','-fv',name],check=False)
         remaining=_run(['docker','ps','-aq','--filter','name='+volume],check=False)
@@ -272,7 +291,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
     return proof
 
 
-def browser(app,output,sid,password,selected,credentials,binary,driver_binary):
+def browser(app,output,sid,password,selected,credentials,binary,driver_binary,connections=False):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -329,6 +348,9 @@ def browser(app,output,sid,password,selected,credentials,binary,driver_binary):
             elif index==2:click('Use copy-back for managed recovery');checks.append('built-isolated-copy-back-with-independent-file-verification-and-no-database-start')
             else:
                 assert final['recovery_sql_startup_observed'] and not final['database_recovery_verified']
+                if connections:
+                    from cdeadmin_mysql_recovery_connection_qualification import browser_connection
+                    checks.extend(browser_connection(driver,wait,click,fill,check,password,output))
                 click('Stop managed recovery instance')
                 wait.until(lambda b:(value if (value:=receipt(b)).get('remote_observation',{}).get('supervisor_finished') else None))
                 checks.append('built-explicit-native-recovery-start-SQL-readiness-owned-process-and-stop')

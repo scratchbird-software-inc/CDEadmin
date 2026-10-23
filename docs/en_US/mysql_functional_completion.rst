@@ -1904,7 +1904,14 @@ Explicit process-descriptor shutdown and lifetime expiry target the original
 native process birth. Shutdown after supervisor loss preserves unknown native
 exit replies and separately observed termination; original copy-back bytes stay
 intact. Pure/C/API and desktop native receipts qualify this bounded scope.
-Recovery editor/replay integration, incremental/encrypted/external-path admission, physical retention,
+The recovered native editor/catalog now has a separate owner-scoped registered
+connection over a pinned, process-bound SSH byte stream. A reviewed optional
+loopback TCP listener preserves native MySQL authentication/TLS and the full
+driver protocol. Native target UUID/version/data-path checks, independent
+registration observation after reply loss, explicit restart reattachment and
+a native connection lease guard protect detach/replacement lifecycle. Source
+sessions remain separate. External recovery utility/replay transport and
+writable startup, incremental/encrypted/external-path admission, physical retention,
 selected replay and independent post-replay acceptance, production cutover and
 the broader native inventory remain open. ``CMP-MY-01`` and ``CMP-MY-02`` stay
 open; nine of eleven comparison items are implemented and Linux-qualified.

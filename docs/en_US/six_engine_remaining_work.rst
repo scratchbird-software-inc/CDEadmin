@@ -107,7 +107,10 @@ one implementation scope and must not be counted as independent completion.
   disposable MySQL recovery. Managed private-socket native recovery startup and
   shutdown now have separate reviewed supervision, immutable base copies, fresh
   UUIDs, native SQL startup observations and process-descriptor control after
-  supervisor loss. Recovery editor/replay connection integration, native
+  supervisor loss. A separately reviewed SSH connection now registers the
+  recovered instance for the native editor/catalog, with process/listener/UUID
+  binding, native pure/C drivers and explicit reattachment after app restart.
+  Recovery replay utility transport and writable startup, native
   incremental/encrypted/external-path support, physical retention, selected
   replay, post-replay acceptance and cutover remain open; ``CMP-MY-01`` retains
   its open status and the comparison completion remains nine of eleven.

@@ -110,7 +110,8 @@ The supervisor copies and hashes the selected base into a new private runtime
 directory. It consumes admitted native geometry from the original prepared
 ``backup-my.cnf``, preserving its hash. External system-file mappings and
 unadmitted options refuse startup. Native MySQL assigns a fresh target UUID.
-The instance uses a private Unix socket, disabled TCP and X Protocol listeners,
+The instance uses a private Unix socket, an optional explicitly reviewed
+loopback TCP listener, disabled X Protocol listeners,
 ``super_read_only``, disabled events, asynchronous and Group Replication
 autostart, the selected GTID
 mode, disabled binary logging and ``upgrade=NONE``. Persisted global settings
@@ -121,7 +122,7 @@ data/socket paths and isolation settings. Credentials are removed after that
 startup observation while supervision continues. The display retains the SQL
 startup observation separately from fresh process presence. A live process
 observation does not assert current SQL/data correctness. Full recovered-data
-acceptance and editor/replay connection integration retain their own gates.
+acceptance and replay connection integration retain their own gates.
 
 Choose **Stop managed recovery instance** to request native shutdown. A native
 Linux process descriptor binds signal delivery to the original process birth,
@@ -136,8 +137,45 @@ Native server error output is available through the same bounded output viewer.
 
 Opening, observing or retrying an already claimed job never launches another
 server. A new review from the preserved immutable base creates a new instance.
-Production service installation, editor/replay integration, full data/definition
+Production service installation, replay integration, full data/definition
 and post-replay acceptance, physical retention and cutover remain open.
+
+Native editor connection
+------------------------
+
+For editor access, start a new recovery instance with a separate loopback TCP
+port. Port zero preserves Unix-socket-only startup. The host refuses an occupied
+port and binds the reviewed TCP listener to ``127.0.0.1``. In the recovery
+workspace, choose **Review recovery connection**, inspect the native instance
+and registration facts, and confirm both the separate registration and database
+credential use. **Attach reviewed recovery connection** creates a separate
+owner-scoped MySQL registration in Data Explorer. Its selected query database
+is copied from the current registration and verified on the recovered instance.
+The registration uses the native MySQL driver, TLS/authentication, catalog,
+predictive editor, native parameters and transaction/result protocols.
+
+The application forwards native bytes through the explicitly pinned SSH host.
+Each stream independently checks the original process birth/executable and its
+loopback listening socket. Native SQL also checks the target UUID, version and
+data path. The relay receives no database password outside the native protocol.
+Its raw packets, SQL and result bytes are never retained. Native read-only
+settings continue to enforce the instance's write policy.
+
+The persistent registration stores a recovery binding rather than a usable
+network destination. An absent transport, changed instance or ordinary network
+fallback refuses connection. After application restart, open the target's
+physical recovery workspace, choose **Load this registration’s recovery
+instance**, and review a fresh attachment with private SSH authentication.
+Lost original connection replies retain their unknown outcome; **Observe
+recovery registration** reports the independently retained registration.
+Source registrations and their pending sessions remain separate.
+
+**Detach recovery transport** requires this registration's native SQL
+connections to be explicitly closed before it releases this process's SSH
+forwarding. Replacing a transport has the same admission rule. The native recovery instance
+continues under its own supervisor/lifetime. External native utility/replay
+transport and a separately reviewed writable, binary-logging recovery startup
+remain beta implementation work.
 
 The job list and **Inspect native physical output** provide retained facts and
 bounded output from the pinned host. Native errors and interrupted observations
