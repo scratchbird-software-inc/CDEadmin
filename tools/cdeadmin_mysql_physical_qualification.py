@@ -59,6 +59,8 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
     if replay:
         for p in ('tools/cdeadmin_mysql_physical_replay_qualification.py','web/pgadmin/cdeadmin/workspace/mysql_binlog_replay_service.py',
             'web/pgadmin/cdeadmin/providers/mysql_family/mysql_raw_binlog_replay.py',
+            'web/pgadmin/cdeadmin/workspace/mysql_binlog_replay_jobs.py','web/pgadmin/static/js/Dialogs/MySQLBinlogReplay.jsx',
+            'web/pgadmin/cdeadmin/sdk/durable_tool.py','web/pgadmin/cdeadmin/sdk/tool_guardian.py','web/pgadmin/cdeadmin/sdk/tooling.py',
             'tools/cdeadmin_mysql_binlog_replay_workspace_qualification.py'):
             proof['source_sha256'][p]=hashlib.sha256((ROOT/p).read_bytes()).hexdigest()
     names = []; volume = 'sr-physical-'+secrets.token_hex(8); root = None
@@ -222,7 +224,8 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             if use_c:checks.append('owned-process-descriptor-stop-after-original-supervisor-loss-without-invented-native-exit-reply')
             if replay:
                 from cdeadmin_mysql_physical_replay_qualification import native_replay
-                checks.extend(native_replay(app,client,sid,root,post,credentials,review,start,copied,output,use_c))
+                checks.extend(native_replay(app,client,sid,root,post,credentials,review,start,copied,output,use_c,
+                    browser_binary=browser_binary if use_c else None,driver_binary=driver_binary if use_c else None))
             if not use_c:
                 for mode in ('OFF','OFF_PERMISSIVE','ON_PERMISSIVE'):
                     alternate=start(review('recover',copied['job_id'],mode))

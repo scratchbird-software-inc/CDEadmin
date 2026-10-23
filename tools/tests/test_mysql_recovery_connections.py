@@ -142,6 +142,22 @@ def test_unknown_native_utility_termination_retains_its_port_reservation(monkeyp
     finally:lease.uncertain=False;lease.close();registry.close()
 
 
+def test_independent_termination_releases_only_the_original_jobs_utility(monkeypatch):
+    registry=bridge.Bridges();monkeypatch.setattr(bridge,'bridges',registry)
+    binding={'id':'owned','recovery_mode':'replay'};original=registry.install(binding,SimpleNamespace(close=Mock()),{})
+    first=bridge.admit_raw_utility({bridge.ROUTE_KEY:binding});second=bridge.admit_raw_utility({bridge.ROUTE_KEY:binding})
+    try:
+        first.job_id='first';second.job_id='second'
+        for value in (first,second):value.uncertain=True;value.close()
+        bridge.confirm_raw_utility_termination(binding,'first')
+        assert first.released and not second.released and original.users==1
+        assert original.uncertain_utilities==[second]
+        with pytest.raises(RelationalClientError):registry.detach(binding)
+    finally:
+        for value in (first,second):value.uncertain=False;value.close()
+        registry.close()
+
+
 @pytest.mark.parametrize('extra',[
     {'recovery_mode':'unknown'}, {'recovery_mode':'replay'},
     {'recovery_mode':'replay','recovery_server_id':0},

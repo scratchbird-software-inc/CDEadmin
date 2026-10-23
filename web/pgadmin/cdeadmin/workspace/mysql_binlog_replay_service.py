@@ -61,6 +61,8 @@ class ReplayTransport:
 class RawReplayTransport(ReplayTransport):
     def execute(self,record,directory,cancel,progress,boundary):
         reference=record['source_state']['input_reference'];staged=directory/'input';cleanup_safe=True;load_dispatched=False
+        utility=getattr(self,'recovery_utility',None)
+        if utility is not None:utility.job_id=record['job_id']
         try:
             artifact=raw_archive.verify(self.source_directory,self.source_identity,cancel=cancel)
             if digest(artifact)!=reference['artifact_digest']:raise archive.BinlogArchiveError('Sealed native raw replay input changed')
@@ -85,7 +87,7 @@ class RawReplayTransport(ReplayTransport):
             return result
         except BaseException as error:
             observed_error=getattr(error,'observation',None) or getattr(error,'process_observation',{})
-            cleanup_safe=observed_error.get('process_observation',{}).get('cleanup_confirmed') is not False
+            cleanup_safe=observed_error.get('process_observation',{}).get('cleanup_confirmed') is True
             utility=getattr(self,'recovery_utility',None)
             if utility is not None and load_dispatched and observed_error.get('process_observation',{}).get('cleanup_confirmed') is not True and not getattr(error,'native_preparation_refused',False):
                 utility.uncertain=True
@@ -218,8 +220,12 @@ def action(service,server,operation,request):
             observation=(raw_native.coverage(connection,record['source'],record['source_state']['target']) if raw else
                 native.coverage(connection,reference['summary'],selected,record['source_state']['target']))
             observation['native_lock_free']=archive.rows(connection,'SELECT IS_FREE_LOCK(%s) AS free',('cdeadmin:binlog-load:'+target['identity']['server_uuid'],))[0]['free']==1
-            if operation=='acknowledge':return jobs.acknowledge(record,observation,request)
-            result=jobs.reconcile(record,observation);result['observation_digest']=digest(observation);return result
+            result=jobs.acknowledge(record,observation,request) if operation=='acknowledge' else jobs.reconcile(record,observation)
+            if result.get('interrupted_utility_observation',{}).get('native_process_termination_confirmed') is True:
+                from ..providers.mysql_family.mysql_recovery_bridge import confirm_raw_utility_termination
+                confirm_raw_utility_termination(route.get('mysql_recovery_binding'),record['job_id'])
+            if operation=='reconcile':result['observation_digest']=digest(observation)
+            return result
         previous=None
         if not raw:target=native.admission(connection,reference['summary'],selected)
         runtime_limit=current_app.config.get('CDEADMIN_MYSQL_BINLOG_REPLAY_MAX_RUNTIME_SECONDS')

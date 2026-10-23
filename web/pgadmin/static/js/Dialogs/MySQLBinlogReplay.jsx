@@ -103,10 +103,11 @@ export default function MySQLBinlogReplay({post,engine='mysql'}) {
     {receipt && <Box sx={{my:1}}>
       <Alert severity={receipt.state==='unknown' ? 'warning' : 'info'}>Replay {receipt.job_id}: {receipt.state}. Native load: {receipt.native_load_outcome}. {receipt.state==='unknown' && ('The outcome is uncertain. '+(receipt.target_state_acknowledged_at ? '' : 'This target is fenced. ')+'This operation will not replay automatically.')} Recovered data has not been independently verified.</Alert>
       <Button disabled={busy} onClick={() => inspect(receipt)}>Refresh replay receipt</Button>
-      <Button disabled={busy || !ACTIVE.has(receipt.state) && receipt.state!=='reviewed'} onClick={() => run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel replay</Button>
+      <Button disabled={busy || !ACTIVE.has(receipt.state) && receipt.state!=='reviewed' && !receipt.utility_cancellation_available} onClick={() => run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel replay</Button>
       <Button disabled={busy || ACTIVE.has(receipt.state)} onClick={() => run('reconcile',{job_id:receipt.job_id},value => {setReceipt(value);setFacts(value);setAck('');})}>Inspect current target facts</Button>
       <Button onClick={save}>Download replay receipt</Button>
-      {facts && <Box component="pre" aria-label="Native replay reconciliation" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify(facts.reconciliation,null,2)}</Box>}
+      {facts && <Box component="pre" aria-label="Native replay reconciliation" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify(facts.interrupted_utility_observation ?
+        {...facts.reconciliation,native_utilities:facts.interrupted_utility_observation} : facts.reconciliation,null,2)}</Box>}
       {receipt.state==='unknown' && !receipt.target_state_acknowledged_at && facts && <Box sx={{display:'flex',gap:1,my:1}}>
         <TextField disabled={busy} size="small" label={engine==='mariadb' ? 'Acknowledge uncertain target server UID' : 'Acknowledge uncertain target UUID'} value={ack} onChange={event => setAck(event.target.value)} />
         <Button disabled={busy || receipt.native_process_termination_confirmed!==true || facts.reconciliation?.native_lock_free!==true || ack!==receipt.target[identityKey]} onClick={() => run('acknowledge',{job_id:receipt.job_id,target_confirmation:ack,observation_digest:facts.observation_digest},value => {setReceipt(value);setFacts(null);setAck('');})}>Acknowledge facts and release target fence</Button>

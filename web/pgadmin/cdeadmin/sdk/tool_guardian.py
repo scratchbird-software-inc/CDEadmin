@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import stat
 from pathlib import Path
 import sys
 import threading
@@ -46,7 +47,9 @@ def main(root, expected):
             if (root / 'started.json').exists() or (root / 'result.json').exists():
                 raise ValueError('This native invocation already has a guardian')
             write(root / 'started.json', {'nonce': intent['nonce'], 'request_sha256': expected, 'guardian_pid': os.getpid()})
-            result = {'nonce': intent['nonce'], 'request_sha256': expected, 'credential_file_cleanup_confirmed': False}
+            result = {'nonce': intent['nonce'], 'request_sha256': expected, 'credential_file_cleanup_confirmed': False,
+                'input_file_cleanup_confirmed':intent.get('input_file') is None,'native_may_have_dispatched':False}
+            input_stream=None
             class Cancellation:
                 def is_set(self):
                     path = root / 'cancel.json'
@@ -57,8 +60,19 @@ def main(root, expected):
             try:
                 if sha(intent['command'][0]) != intent['executable_sha256']:
                     raise ValueError('Native executable changed before guardian dispatch')
+                selected=intent.get('input_file')
+                if selected is not None:
+                    path=Path(selected['path'])
+                    if path!=root/'stdin.bin' or path.is_symlink():raise ValueError('Native input handoff scope changed')
+                    input_descriptor=os.open(path,os.O_RDONLY|getattr(os,'O_BINARY',0)|getattr(os,'O_NOFOLLOW',0))
+                    input_stream=os.fdopen(input_descriptor,'rb');digest=hashlib.sha256();size=0
+                    if not stat.S_ISREG(os.fstat(input_stream.fileno()).st_mode):raise ValueError('Native input handoff is not regular')
+                    while data:=input_stream.read(1024*1024):digest.update(data);size+=len(data)
+                    if str(size)!=selected['bytes'] or digest.hexdigest()!=selected['sha256']:raise ValueError('Native input bytes changed after handoff')
+                    input_stream.seek(0)
+                result['native_may_have_dispatched']=True
                 observed = processes.observe_process(intent['command'], workspace=intent['workspace'],
-                    environment=intent['environment'], input_bytes=b'', input_stream=None,
+                    environment=intent['environment'], input_bytes=b'', input_stream=input_stream,
                     timeout=intent['timeout'], capture_limit=intent['capture_limit'], cancel_signal=Cancellation(),
                     progress=lambda event: write(root / 'progress.json', {'nonce': intent['nonce'], 'observation': event}))
                 observed['stdout'] = base64.b64encode(observed['stdout']).decode('ascii')
@@ -71,6 +85,13 @@ def main(root, expected):
                     for key in ('stdout', 'stderr'): observed[key] = base64.b64encode(observed[key]).decode('ascii')
                     result['observation'] = observed
             finally:
+                if input_stream is not None:input_stream.close()
+                try:
+                    if intent.get('input_file') and (result['native_may_have_dispatched'] is False or (result.get('observation') or {}).get('cleanup_confirmed') is True):
+                        path=root/'stdin.bin'
+                        if path.is_symlink():raise ValueError('Native input cleanup scope changed')
+                        path.unlink(missing_ok=True);result['input_file_cleanup_confirmed']=True
+                except Exception as error:result['input_cleanup_error_type']=type(error).__name__
                 try:
                     if intent['credential_file'] is not None:
                         path = Path(intent['credential_file'])

@@ -111,8 +111,12 @@ one implementation scope and must not be counted as independent completion.
   recovered instance for the native editor/catalog, with process/listener/UUID
   binding, native pure/C drivers and explicit reattachment after app restart.
   Separately reviewed writable startup and leased native raw-log replay now
-  cover selected native before/after/all boundaries. Shell reconnect transport,
-  broader independent process reconciliation, native
+  cover selected native before/after/all boundaries. Independent original
+  decoder/client guardians now retain hash-verified private stdin and support
+  cancellation/termination observation after observer loss, scoped cleanup and
+  release of the matching parked lease without changing unknown database
+  outcomes. Shell reconnect transport, missing/failed guardian and wider
+  lifecycle reconciliation, native
   incremental/encrypted/external-path support, physical retention, selected
   replay, post-replay acceptance and cutover remain open; ``CMP-MY-01`` retains
   its open status and the comparison completion remains nine of eleven.

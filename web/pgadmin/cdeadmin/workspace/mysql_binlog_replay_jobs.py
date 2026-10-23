@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from copy import deepcopy
 import os
+import shutil
 from pathlib import Path
 import threading
 import time
@@ -29,6 +30,40 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
             if isinstance(summary.get(name),dict) and 'position' in summary[name]:summary[name]['position']=str(summary[name]['position'])
         result['native_load_outcome']=record.get('native_load_outcome','not_dispatched' if record['state'] in {'reviewed','cancelled','not_dispatched'} and not record.get('native_load_may_have_dispatched') else 'unknown')
         result['data_recovery_verified']=False
+        result['utility_cancellation_available']=bool(record.get('durable_tools')) and result.get('native_process_termination_confirmed') is not True
+        return result
+
+    def progress(self,record,value):
+        if record['source_state']['input_reference'].get('family')!='raw':return super().progress(record,value)
+        if not isinstance(value,dict) or not value.get('durable_tool'):return super().progress(record,value)
+        reference=value['durable_tool'];name=reference.get('name')
+        if name not in {'raw-replay-decoder','raw-replay-client'}:raise BinlogArchiveError('Native replay utility reference is not admitted')
+        with self.store(record['job_id']) as store:
+            def change(state):
+                current=self.record(state,record['job_id'],record['owner'],record['endpoint_id'])
+                tools=current.setdefault('durable_tools',{})
+                if name in tools and tools[name]!=reference:raise BinlogArchiveError('An original replay utility cannot be replaced or repeated')
+                tools[name]=deepcopy(reference);current.update(progress=deepcopy(value),durable_tool=deepcopy(reference))
+            store.change(change)
+
+    def observe_utility(self,record,*,cancel=False):
+        from ..sdk import durable_tool
+        tools=record.get('durable_tools')
+        if not tools:return super().observe_utility(record,cancel=cancel)
+        expected={'raw-replay-decoder':record['program']['decoder']['executable_sha256'],
+            'raw-replay-client':record['program']['client']['executable_sha256']}
+        operation=durable_tool.cancel if cancel else durable_tool.observe
+        observed={}
+        for name,reference in tools.items():
+            if name not in expected or reference.get('name')!=name:raise BinlogArchiveError('Original native replay utility association changed')
+            observed[name]=operation(self.directory(record),reference,expected[name])
+        required={'raw-replay-decoder','raw-replay-client'} if record.get('native_load_may_have_dispatched') else {'raw-replay-decoder'}
+        stopped=required.issubset(observed) and all(observed[name].get('complete') is True and observed[name].get('cleanup_confirmed') is True for name in required)
+        result={'tools':observed,'native_process_termination_confirmed':stopped,'original_native_load_outcome_unchanged':True,
+            'automatic_retry':False,'observed_at':time.time()}
+        values={'interrupted_utility_observation':result,'native_process_termination_confirmed':stopped}
+        if self.public(record)['state']=='unknown':values['state']='unknown'
+        self.update(record,**values)
         return result
 
     @staticmethod
@@ -98,7 +133,7 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
         cancel=DurableCancellation(self,record,signal);dispatched=False
         try:
             self.update(record,state='active',phase='verifying_input',native_load_outcome='not_dispatched')
-            def progress(value):self.update(record,progress=value)
+            def progress(value):self.progress(record,value)
             def boundary():
                 nonlocal dispatched
                 if cancel.is_set():raise InterruptedError('Replay cancelled before native dispatch')
@@ -121,10 +156,19 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
             if stopped is None and getattr(error,'native_preparation_refused',False):stopped=True
             control=getattr(error,'control',None) or {}
             not_dispatched=not dispatched or control.get('native_load_invoked') is False
+            decoder_guardian=not dispatched and bool(self.load(record['job_id'],record['owner'],record['endpoint_id']).get('durable_tools'))
             self.update(record,state='cancelled' if not_dispatched and cancel.is_set() else 'not_dispatched' if not_dispatched else 'unknown',
                 native_load_outcome='not_dispatched' if not_dispatched else 'unknown',
-                native_process_termination_confirmed=True if not dispatched else stopped,
+                native_process_termination_confirmed=False if decoder_guardian else True if not dispatched else stopped,
                 tool_observation=observed,native_control=control or None,error_type=type(error).__name__,finished_at=time.time())
+            if decoder_guardian:
+                current=self.load(record['job_id'],record['owner'],record['endpoint_id'])
+                # No SQL client was dispatched, but its decoder may still
+                # be running under a guardian after this observer exits.
+                try:self.observe_utility(current)
+                except Exception as failure:
+                    self.update(record,native_process_termination_confirmed=False,
+                        utility_reconciliation_error_type=type(failure).__name__)
             if not_dispatched and (not dispatched or stopped is True):self.release_fence(record)
         finally:
             try:transport.close()
@@ -137,6 +181,15 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
         with self._maps_lock:
             known=self.workers.get(record['job_id'])
             if known and known[0].is_alive():raise BinlogArchiveError('The native replay worker is still active')
+        if self.public(record)['state'] in {'dispatching','active','cancel_requested'}:
+            raise BinlogArchiveError('The original native replay worker is still active')
+        self.observe_utility(record)
+        record=self.load(record['job_id'],record['owner'],record['endpoint_id'])
+        if record.get('durable_tools') and record.get('native_process_termination_confirmed') is True:
+            path=self.directory(record)/'input'
+            if path.is_symlink():raise BinlogArchiveError('Original replay input cleanup scope changed')
+            if path.exists():shutil.rmtree(path)
+            self.update(record,staged_input_cleanup={'complete':not path.exists(),'observed_at':time.time()})
         self.update(record,reconciliation={**observation,'observed_at':time.time()},
             native_load_outcome=record.get('native_load_outcome','unknown'))
         return self.get(record['job_id'],record['owner'],record['endpoint_id'])
@@ -145,6 +198,9 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
         with self._maps_lock:
             known=self.workers.get(record['job_id'])
             if known and known[0].is_alive():raise BinlogArchiveError('The native replay worker is still active')
+        if self.public(record)['state'] in {'dispatching','active','cancel_requested'}:
+            raise BinlogArchiveError('The original native replay worker is still active')
+        self.observe_utility(record)
         record=self.load(record['job_id'],record['owner'],record['endpoint_id'])
         if self.public(record)['state']!='unknown':raise BinlogArchiveError('Only an uncertain native replay needs target acknowledgement')
         if request.get('target_confirmation')!=self.target_identity(record) or request.get('observation_digest')!=digest(observation):

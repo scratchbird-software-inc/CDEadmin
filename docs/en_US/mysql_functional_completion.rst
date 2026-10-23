@@ -1913,7 +1913,12 @@ a native connection lease guard protect detach/replacement lifecycle. Source
 sessions remain separate. Separately reviewed writable startup now admits a
 native server ID/private ROW binary logs; leased native mysqlbinlog/mysql raw
 replay covers selected before/after/all boundaries and unknown native replies.
-Shell reconnect transport and broader independent process reconciliation,
+Original decoder/client guardians now retain separate immutable references,
+hash-verified private stdin and cancellation after observer loss. Reconciliation
+observes both utilities and cleanup before releasing the matching parked lease;
+the database outcome remains unknown and target acknowledgement still requires
+the exact UUID, current facts and a free native replay lock. Shell reconnect
+transport, missing/failed guardian reconciliation and wider lifecycle handling,
 incremental/encrypted/external-path admission, physical retention,
 selected replay and independent post-replay acceptance, production cutover and
 the broader native inventory remain open. ``CMP-MY-01`` and ``CMP-MY-02`` stay

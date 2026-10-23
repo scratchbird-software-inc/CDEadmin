@@ -159,6 +159,19 @@ def require_raw_utility(route):
     value.validate(route)
 
 
+def confirm_raw_utility_termination(binding,job_id):
+    """Release only the original job's reservation after durable observation."""
+    if not binding:return
+    with bridges.lock:
+        original=bridges.entries.get(binding.get('id'))
+        if original is None or original.binding!=binding:return
+        with original.lock:
+            pending=getattr(original,'uncertain_utilities',[])
+            for value in list(pending):
+                if getattr(value,'job_id',None)==job_id:
+                    value.uncertain=False;value.close();pending.remove(value)
+
+
 def native_connection(connect,args,options):
     binding=options.pop(ROUTE_KEY,None)
     if binding is None:return connect(*args,**options)

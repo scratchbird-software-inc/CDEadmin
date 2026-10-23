@@ -198,10 +198,20 @@ replay. A missing transport has no ordinary network fallback. MySQL owns log
 application, commits, GTIDs and errors; stopping a client does not prove rollback.
 
 Before/after/all transaction boundaries, original unknown replies and subsequent
-native target observation retain the existing replay/fence rules. Unknown
-utility termination retains its port reservation; broader independent process
-termination reconciliation remains open. Native Shell replay, which manages
+native target observation retain the existing replay/fence rules. The decoder
+and SQL client each have an independent guardian and immutable invocation
+reference. The client reads a private, hash-verified stdin snapshot. After the
+original observer exits, **Cancel replay** addresses those original utilities;
+**Inspect current target facts** separately observes their termination and
+input/credential cleanup. Only confirmed termination releases this job's parked
+transport lease. The original database outcome remains unknown; releasing its
+target fence still requires a free native replay lock and explicit confirmation
+of the exact target UUID and current facts. Missing or failed guardian receipts
+retain uncertainty and their reservation. Native Shell replay, which manages
 additional/reconnecting connections, requires separate transport admission.
+If observation is lost during decoding before SQL dispatch, the load remains
+not dispatched while the decoder's separate process state stays observable and
+cancellable; absence of SQL dispatch does not prove decoder termination.
 Whole-product post-replay data/definition acceptance, retention and production
 cutover also remain open; selected successful replay cases do not close them.
 

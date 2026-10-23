@@ -110,9 +110,9 @@ def program_identity(client,route,workspace,*,cancel=None,progress=None):
         'execution_host':{key:result['execution_host'][key] for key in ('kind','platform')}},'execution_host':decoder['execution_host']}
 
 
-def _grant(executable,route,workspace,timeout):
+def _grant(executable,route,workspace,timeout,*,durable_name=None):
     return ProviderToolGrant(executable,str(workspace),str(route.get('host') or 'localhost'),int(route.get('port',3306)),
-        timeout_seconds=timeout,allow_unbounded_runtime=timeout is None)
+        timeout_seconds=timeout,allow_unbounded_runtime=timeout is None,durable_name=durable_name)
 
 
 def previous_gtids(client,route,directory,observed,workspace,expected,*,cancel=None,progress=None):
@@ -222,7 +222,7 @@ def run_load(client,route,credentials,directory,target,state,selected,observed,w
         if start['position']!='4':args.append('--start-position='+start['position'])
         if state['gtid_executed']:args.append('--exclude-gtids='+state['gtid_executed'])
         if stop is not None:args.append('--stop-position='+stop['position'])
-        result=client._tool_runner.run(_grant('mysql-binlog',route,workspace,selected['timeout_seconds']),
+        result=client._tool_runner.run(_grant('mysql-binlog',route,workspace,selected['timeout_seconds'],durable_name='raw-replay-decoder'),
             [*args,'--',*[str(directory/name) for name in names]],cancel_signal=cancel,progress=progress)
         last={key:value for key,value in result.items() if key not in {'stdout','stderr'}};decoder=dict(last)
         if result['return_code']!=0 or result['executable_sha256']!=program['decoder']['executable_sha256']:raise BinlogArchiveError('The native decoder refused raw replay input')
@@ -233,8 +233,10 @@ def run_load(client,route,credentials,directory,target,state,selected,observed,w
             stream.write(('\nDELIMITER ;\nSELECT '+_literal(marker+'returned')+';\nSELECT RELEASE_LOCK('+_literal(lock_name(target))+');\n').encode('utf8'));stream.flush();os.fsync(stream.fileno())
         args=[*archive.connection_arguments(client,route),'--batch','--raw','--skip-column-names','--binary-mode','--skip-reconnect',
             '--local-infile=0','--load-data-local-dir='+str(loads)]
+        # Decoder termination cannot establish termination of the next client.
+        last=None
         boundary();dispatched=True
-        result=credentials.use(lambda view:client._tool_runner.run(_grant('mysql-client',route,workspace,selected['timeout_seconds']),args,
+        result=credentials.use(lambda view:client._tool_runner.run(_grant('mysql-client',route,workspace,selected['timeout_seconds'],durable_name='raw-replay-client'),args,
             input_path=sql,secret_config=bytes(view),secret_argument='--defaults-file={path}',secret_argument_position=0,
             cancel_signal=cancel,progress=progress))
         last={key:value for key,value in result.items() if key not in {'stdout','stderr'}}

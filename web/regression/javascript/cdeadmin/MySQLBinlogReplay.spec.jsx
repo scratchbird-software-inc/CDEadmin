@@ -53,6 +53,19 @@ it('keeps unknown outcomes explicit and binds acknowledgement to current reconci
   expect(post.mock.calls.every(([request]) => request.action!=='mysql_binlog_replay_start')).toBe(true);
 });
 
+it('allows cancelling an independently supervised utility after the application reply is lost',async () => {
+  const unknown={...item,state:'unknown',native_load_outcome:'unknown',native_process_termination_confirmed:false,utility_cancellation_available:true};
+  const post=jest.fn(async ({action}) => ({mysql_binlog_replay_list:{jobs:[unknown],offset:0,total:1},mysql_binlog_replay_status:unknown,
+    mysql_binlog_replay_cancel:{...unknown,cancel_requested:true}}[action]));
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load replay jobs'}));await screen.findByRole('table',{name:'Native MySQL replay jobs'});
+  fireEvent.click(screen.getByRole('button',{name:'Inspect replay '+item.job_id}));await screen.findByText(/Native load: unknown/);
+  expect(screen.getByRole('button',{name:'Cancel replay'})).toBeEnabled();
+  fireEvent.click(screen.getByRole('button',{name:'Cancel replay'}));
+  await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_replay_cancel',request:{job_id:item.job_id}}));
+  expect(screen.queryByRole('button',{name:'Acknowledge facts and release target fence'})).not.toBeInTheDocument();
+});
+
 it('discards an in-flight reply when the registered target changes',async () => {
   let resolve;const oldPost=jest.fn(() => new Promise(accept => {resolve=accept;}));const newPost=jest.fn();
   const view=render(<Component post={oldPost} />);fireEvent.click(screen.getByRole('button',{name:'Inspect replay target'}));

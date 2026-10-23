@@ -20,7 +20,7 @@ def wait_job(value,post,expected):
 def start_request(value):return {key:value[key] for key in ('job_id','review_digest')}|{'confirmed':True}
 
 
-def native_replay(app,client,sid,root,physical,credentials,review,start,copied,output,use_c):
+def native_replay(app,client,sid,root,physical,credentials,review,start,copied,output,use_c,*,browser_binary=None,driver_binary=None):
     from cdeadmin_mysql_recovery_connection_qualification import endpoint,query_post,execute
     from pgadmin.cdeadmin.providers.mysql_family import mysql_raw_binlog_replay as raw
     source_url=endpoint(app,sid)
@@ -65,16 +65,26 @@ def native_replay(app,client,sid,root,physical,credentials,review,start,copied,o
         def lost_reply(*args,**kwargs):
             reached.set();assert release.wait(30)
             result=original(*args,**kwargs);assert result['control']['native_load_returned']
-            error=ConnectionError('Owned reply loss after actual native raw replay');error.observation=result['tool'];raise error
+            raise ConnectionError('Owned loss of the original raw utility reply and termination observation')
         with patch.object(raw,'run_load',lost_reply):
             try:
                 value=replay('start',start_request(ticket));assert reached.wait(30)
                 physical('connection_detach',{'server_id':target['server_id']},refused=True)
             finally:release.set()
             unknown=wait_job(value,replay,'unknown')
-        assert unknown['native_process_termination_confirmed'] and unknown['native_load_outcome']=='unknown'
+        assert unknown.get('native_process_termination_confirmed') is not True and unknown['native_load_outcome']=='unknown'
+        assert set(unknown['durable_tools'])=={'raw-replay-decoder','raw-replay-client'}
+        deadline=time.monotonic()+30
+        while app.extensions['cdeadmin_provider_workspace'].mysql_binlog_replay_jobs.workers.get(ticket['job_id']):
+            if time.monotonic()>deadline:raise TimeoutError('Original native replay observer did not end')
+            time.sleep(.02)
+        physical('connection_detach',{'server_id':target['server_id']},refused=True)
         assert replay('start',start_request(ticket))['started_at']==unknown['started_at']
         facts=replay('reconcile',{'job_id':ticket['job_id']});assert facts['reconciliation']['native_lock_free']
+        assert facts['native_process_termination_confirmed'] and facts['native_load_outcome']=='unknown'
+        assert facts['staged_input_cleanup']['complete']
+        assert all(value['cleanup_confirmed'] and value['credential_file_cleanup_confirmed'] and value['input_file_cleanup_confirmed']
+            for value in facts['interrupted_utility_observation']['tools'].values())
         replay('acknowledge',{'job_id':ticket['job_id'],'target_confirmation':identity['server_uuid'],'observation_digest':facts['observation_digest']})
         post=lambda action,**body:query_post(client,url,target['database_target_id'],action,**body)
         session=post('open_session',language_profile='mysql-sql')['session_id']
@@ -92,6 +102,7 @@ def native_replay(app,client,sid,root,physical,credentials,review,start,copied,o
                 rows=execute(post,session,'SELECT CAST(id AS CHAR),note,HEX(b) FROM t WHERE id<10 ORDER BY id')['rows']
                 assert rows==[[str(i),'physical raw 雪 '+str(i),'00FF0'+str(i)] for i in range(1,count+1)]
             finally:post('close_session',session_id=session)
+        checks.extend(cancel_independent_raw(app,client,sid,root,archive,replay,physical,target,url,output,browser_binary,driver_binary))
         physical('connection_detach',{'server_id':target['server_id']})
         checks.extend(['physical-base-writable-startup-native-GTID-ROW-binlogs-and-separate-leased-raw-replay-registration',
             'native-mysqlbinlog-mysql-before-after-all-replay-exact-selected-Unicode-BLOB-data',
@@ -107,6 +118,149 @@ def native_replay(app,client,sid,root,physical,credentials,review,start,copied,o
                 time.sleep(.1)
             else:raise TimeoutError('Writable physical recovery did not stop')
         cursor.execute('DELETE FROM sr_osc.t WHERE id<10');cursor.close()
+
+
+def cancel_independent_raw(app,client,sid,root,archive,replay,physical,target,url,output,browser_binary=None,driver_binary=None):
+    """Lose only the original observer; the real native client stays blocked."""
+    from flask_login import login_user
+    from pgadmin.model import User,Server
+    from pgadmin.cdeadmin.sdk import durable_tool
+    native=connection=cursor=None
+    with app.test_request_context('/'):
+        registered=Server.query.get(target['server_id']);login_user(User.query.get(registered.user_id))
+        service=app.extensions['cdeadmin_provider_workspace'];context,payload,_=service.endpoint_service.workspace(registered,database_target_id=None)
+        provider=service.endpoint_service.provider_registry.resolve(context).instance
+        native=provider.client;connection=native._connect({'route':payload['route']});cursor=connection.cursor()
+        cursor.execute('LOCK TABLES sr_osc.t READ')
+    source=root.cursor();ticket=None
+    try:
+        source.execute('FLUSH BINARY LOGS');source.execute('SHOW BINARY LOG STATUS');filename=source.fetchone()[0];source.fetchall()
+        source.execute('INSERT INTO sr_osc.t VALUES(4,%s,%s)',('cancelled native outcome stays unknown',b'\x00\xff\x04'))
+        source.execute('FLUSH BINARY LOGS')
+        sealed=archive('review',{'options':{'log_names':[filename]}});sealed=wait_job(archive('start',start_request(sealed)),archive,'completed')
+        selected={'source_server_id':sid,'archive_job_id':sealed['job_id'],'options':{'target_confirmation':target['binding']['server_uuid']}}
+        ticket=replay('review',selected);original=durable_tool.run
+        def observer_lost(*args,**kwargs):
+            if kwargs.get('name')=='raw-replay-client':
+                callback=kwargs.get('progress')
+                def progress(event):
+                    if callback:callback(event)
+                    if event.get('pid'):raise SystemExit('Owned original native observer loss')
+                kwargs['progress']=progress
+            return original(*args,**kwargs)
+        with patch.object(durable_tool,'run',observer_lost):
+            unknown=wait_job(replay('start',start_request(ticket)),replay,'unknown')
+        deadline=time.monotonic()+30
+        while service.mysql_binlog_replay_jobs.workers.get(ticket['job_id']):
+            if time.monotonic()>deadline:raise TimeoutError('Original native observer remained active')
+            time.sleep(.02)
+        assert unknown['utility_cancellation_available'] and unknown.get('native_process_termination_confirmed') is not True
+        facts=replay('reconcile',{'job_id':ticket['job_id']})
+        assert facts['native_load_outcome']=='unknown' and facts['reconciliation']['native_lock_free'] is False
+        assert not facts['interrupted_utility_observation']['native_process_termination_confirmed']
+        replay('acknowledge',{'job_id':ticket['job_id'],'target_confirmation':target['binding']['server_uuid'],'observation_digest':facts['observation_digest']},refused=True)
+        if browser_binary:
+            def unlock():
+                nonlocal cursor,connection
+                cursor.execute('UNLOCK TABLES');cursor.close();cursor=None
+                native._discard_failed_session(connection);connection=None
+            browser_cancel(app,output,target,ticket['job_id'],browser_binary,driver_binary,unlock)
+            facts=replay('reconcile',{'job_id':ticket['job_id']})
+            assert facts['target_state_acknowledged_at'] and facts['native_load_outcome']=='unknown' and facts['native_process_termination_confirmed']
+            assert facts['staged_input_cleanup']['complete']
+            assert all(value.get('cleanup_confirmed') and value.get('credential_file_cleanup_confirmed') and value.get('input_file_cleanup_confirmed')
+                for value in facts['interrupted_utility_observation']['tools'].values())
+            return ['built-original-unknown-replay-native-cancellation-termination-facts-and-explicit-target-acknowledgement']
+        replay('cancel',{'job_id':ticket['job_id']})
+        deadline=time.monotonic()+30
+        while time.monotonic()<deadline:
+            facts=replay('reconcile',{'job_id':ticket['job_id']})
+            if facts['native_process_termination_confirmed']:break
+            time.sleep(.1)
+        else:raise TimeoutError('Independent native replay cancellation was not observed')
+        cursor.execute('UNLOCK TABLES');cursor.close();cursor=None
+        native._discard_failed_session(connection);connection=None
+        deadline=time.monotonic()+30
+        while time.monotonic()<deadline:
+            facts=replay('reconcile',{'job_id':ticket['job_id']})
+            if facts['reconciliation']['native_lock_free']:break
+            time.sleep(.1)
+        else:raise TimeoutError('Original native replay SQL lock remained active')
+        assert facts['native_load_outcome']=='unknown' and facts['staged_input_cleanup']['complete']
+        assert all(value.get('cleanup_confirmed') and value.get('credential_file_cleanup_confirmed') and value.get('input_file_cleanup_confirmed')
+            for value in facts['interrupted_utility_observation']['tools'].values())
+        replay('acknowledge',{'job_id':ticket['job_id'],'target_confirmation':target['binding']['server_uuid'],'observation_digest':facts['observation_digest']})
+        (output/('independent-native-replay-'+str(target['server_id'])+'.json')).write_text(json.dumps(facts,indent=2)+'\n')
+        return ['independent-native-client-cancel-after-observer-loss-preserves-unknown-data-outcome-and-proves-utility-input-credential-cleanup']
+    finally:
+        if ticket:replay('cancel',{'job_id':ticket['job_id']})
+        if cursor is not None:
+            try:cursor.execute('UNLOCK TABLES')
+            finally:cursor.close()
+        if connection is not None:native._discard_failed_session(connection)
+        source.close()
+
+
+def browser_cancel(app,output,target,job_id,binary,driver_binary,unlock):
+    from werkzeug.serving import make_server
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.support.ui import WebDriverWait
+    from cdeadmin_ui_evidence import ensure_data_explorer,expand,invoke_context_action
+    evidence=output/'independent-replay-desktop';evidence.mkdir(mode=0o700)
+    http=make_server('127.0.0.1',0,app,threaded=True);thread=threading.Thread(target=http.serve_forever,daemon=True);thread.start();driver=None
+    try:
+        options=webdriver.ChromeOptions();options.binary_location=binary
+        for flag in ('--headless=new','--no-sandbox','--disable-dev-shm-usage','--window-size=1900,1600'):options.add_argument(flag)
+        options.add_argument('--user-data-dir='+str(evidence/'browser-profile'));options.set_capability('goog:loggingPrefs',{'browser':'ALL'})
+        driver=webdriver.Chrome(options=options,service=Service(driver_binary));driver.get('http://127.0.0.1:'+str(http.server_port)+'/browser/')
+        wait=WebDriverWait(driver,90);ensure_data_explorer(wait);expand(wait,'Connectors');expand(wait,'MySQL')
+        def target_node(b):
+            return next((e for e in b.find_elements(By.CSS_SELECTOR,'.file-name') if e.is_displayed() and b.execute_script(
+                'const t=window.pgAdmin.Browser.tree;const d=t.itemData(t.itemFrom(arguments[0].closest(".file-entry")));return d?._type==="server" && String(d._id ?? d.id)===String(arguments[1]);',e,target['server_id'])),None)
+        invoke_context_action(wait,driver,wait.until(target_node),('Restore','MySQL binary-log replay...'),handle_endpoint_prompt=False)
+        def click(text):
+            node=wait.until(lambda b:next((e for e in b.find_elements(By.TAG_NAME,'button') if e.is_displayed() and e.is_enabled() and e.text==text),None))
+            driver.execute_script('arguments[0].scrollIntoView({block:"center"});',node);node.click()
+        click('Load replay jobs')
+        inspect=wait.until(lambda b:b.find_element(By.CSS_SELECTOR,'button[aria-label="Inspect replay '+job_id+'"]'));inspect.click()
+        click('Inspect current target facts')
+        def facts():
+            wait.until(lambda b:next((e for e in b.find_elements(By.TAG_NAME,'button') if e.is_displayed() and e.is_enabled() and e.text=='Inspect current target facts'),None))
+            return json.loads(wait.until(lambda b:b.find_element(By.CSS_SELECTOR,'[aria-label="Native replay reconciliation"]')).text)
+        assert wait.until(lambda b:facts().get('native_lock_free') is False)
+        assert not driver.find_element(By.XPATH,'//button[normalize-space()="Acknowledge facts and release target fence"]').is_enabled()
+        click('Cancel replay')
+        deadline=time.monotonic()+45
+        while time.monotonic()<deadline:
+            click('Inspect current target facts')
+            if facts().get('native_utilities',{}).get('native_process_termination_confirmed'):break
+            time.sleep(.1)
+        else:raise TimeoutError('Built native utility cancellation did not terminate its original process')
+        unlock()
+        deadline=time.monotonic()+30
+        while time.monotonic()<deadline:
+            click('Inspect current target facts')
+            if facts().get('native_lock_free'):break
+            time.sleep(.1)
+        else:raise TimeoutError('Built original native SQL lock did not end')
+        label=driver.find_element(By.XPATH,'//label[normalize-space()="Acknowledge uncertain target UUID"]')
+        value=wait.until(lambda b:(e if (e:=b.find_element(By.ID,label.get_attribute('for'))).is_enabled() else None))
+        driver.execute_script('arguments[0].scrollIntoView({block:"center"});',value)
+        value.send_keys(Keys.CONTROL,'a');value.send_keys(target['binding']['server_uuid'])
+        click('Acknowledge facts and release target fence')
+        wait.until(lambda b:'original native load outcome remains uncertain' in b.find_element(By.TAG_NAME,'body').text)
+        driver.save_screenshot(str(evidence/'native-independent-replay.png'))
+        errors=[v for v in driver.get_log('browser') if v['level']=='SEVERE'];assert not errors,errors
+        (evidence/'summary.json').write_text(json.dumps({'complete':True,'console_errors':errors,'original_native_outcome':'unknown','native_utility_termination_observed':True},indent=2)+'\n')
+    except BaseException:
+        if driver:driver.save_screenshot(str(evidence/'browser-failure.png'));(evidence/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)
+        raise
+    finally:
+        if driver:driver.quit()
+        http.shutdown();http.server_close();thread.join(timeout=5)
 
 
 def browser_replay(app,output,sid,password,target,root,binary,driver_binary):
@@ -148,7 +302,7 @@ def browser_replay(app,output,sid,password,target,root,binary,driver_binary):
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--output',required=True);parser.add_argument('--fixture-image',default='sr-mysql-physical:phase210')
+    parser=argparse.ArgumentParser();parser.add_argument('--output',required=True);parser.add_argument('--fixture-image',default='sr-mysql-physical:phase211')
     parser.add_argument('--private-key');parser.add_argument('--prepare-fixture',action='store_true');parser.add_argument('--decoder',required=True);parser.add_argument('--client',required=True)
     parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');args=parser.parse_args()
     os.environ['CDEADMIN_MYSQL_BINLOG_BINARY']=str(Path(args.decoder).resolve(strict=True));os.environ['CDEADMIN_MYSQL_CLIENT_BINARY']=str(Path(args.client).resolve(strict=True))

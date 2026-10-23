@@ -125,8 +125,12 @@ preserving native driver semantics and refusing network fallback after
 transport/instance loss. Separately reviewed writable startup now provides
 private native binary logging and server-ID admission. Native raw closed-log
 replay uses a leased process-bound SSH route, native before/after/all boundaries
-and retained lost-reply/fence handling. Shell reconnect transport, broader
-independent process reconciliation, post-replay acceptance, incremental/encrypted/external-table-space
+and retained lost-reply/fence handling. Independent original decoder/client
+guardians now support hash-verified file stdin, cancellation and termination
+observation after observer loss, scoped input/credential cleanup and release of
+only the matching parked lease. Original unknown database outcomes stay unknown.
+Shell reconnect transport, missing/failed guardian and wider lifecycle
+reconciliation, post-replay acceptance, incremental/encrypted/external-table-space
 support, physical retention and production cutover remain open. These bounded
 artifact receipts do not close ``CMP-MY-01``.
 

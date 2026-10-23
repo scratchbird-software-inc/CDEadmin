@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -40,6 +41,25 @@ def host():
     return {'hostname': socket.gethostname(), 'platform': sys.platform, 'boot_time': psutil.boot_time()}
 
 
+def stage_input(path,workspace,root):
+    """Own regular stdin bytes before handing their descriptor to a guardian."""
+    path=Path(path)
+    if not path.resolve(strict=True).is_relative_to(Path(workspace).resolve()):raise ValueError('Native input escapes its workspace')
+    descriptor=os.open(path,os.O_RDONLY|getattr(os,'O_BINARY',0)|getattr(os,'O_NOFOLLOW',0))
+    target=root/'stdin.bin';digest=hashlib.sha256();size=0
+    with os.fdopen(descriptor,'rb') as incoming:
+        before=os.fstat(incoming.fileno())
+        if not stat.S_ISREG(before.st_mode):raise ValueError('Native input is not a regular file')
+        with target.open('xb') as outgoing:
+            private_file(target)
+            while data:=incoming.read(1024*1024):outgoing.write(data);digest.update(data);size+=len(data)
+            outgoing.flush();os.fsync(outgoing.fileno())
+        after=os.fstat(incoming.fileno())
+        if (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns)!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns) or size!=before.st_size:
+            target.unlink();raise ValueError('Native input changed during handoff')
+    return {'path':str(target),'bytes':str(size),'sha256':digest.hexdigest()}
+
+
 def observe(workspace, reference, expected_executable_sha256):
     """Return sanitized facts; never dispatch, retry or infer database finality."""
     if not isinstance(reference, dict) or set(reference) != {'name', 'nonce', 'request_sha256', 'host'}:
@@ -64,10 +84,12 @@ def observe(workspace, reference, expected_executable_sha256):
     if result.get('nonce') != reference['nonce'] or result.get('request_sha256') != reference['request_sha256']:
         raise ValueError('The durable native utility receipt belongs to another invocation')
     native = result.get('observation')
-    return {'complete': True, 'cleanup_confirmed': native.get('cleanup_confirmed') is True if isinstance(native, dict) else None,
+    return {'complete': True, 'cleanup_confirmed': native.get('cleanup_confirmed') is True if isinstance(native, dict) else True if result.get('native_may_have_dispatched') is False else None,
             'return_code': native.get('return_code') if isinstance(native, dict) else None,
             'native_outcome_inferred': False, 'receipt_sha256': sha(path),
             'credential_file_cleanup_confirmed': result.get('credential_file_cleanup_confirmed') is True,
+            'input_file_cleanup_confirmed': result.get('input_file_cleanup_confirmed') is True if intent.get('input_file') else True,
+            'native_may_have_dispatched':result.get('native_may_have_dispatched'),
             'native_process_identity': {'pid': native.get('pid'), 'process_create_time': native.get('process_create_time')}
                 if isinstance(native, dict) else None,
             'supervision_error_type': result.get('error_type')}
@@ -81,14 +103,16 @@ def cancel(workspace, reference, expected_executable_sha256):
 
 
 def run(command, *, workspace, environment, timeout, capture_limit, name,
-        credential_file=None, cancel_signal=None, progress=None, handoff=None):
+        credential_file=None, input_path=None, cancel_signal=None, progress=None, handoff=None):
     """A detached guardian owns one invocation, its pipes and credential cleanup."""
     root = directory(workspace, name)
     root.mkdir(mode=0o700, exist_ok=False); private_directory(root)
     helper = Path(__file__).with_name('tool_guardian.py')
     process_helper = Path(__file__).with_name('tool_process.py')
     file_helper = Path(__file__).parent.parent / 'operations' / 'fileio.py'
+    input_file=stage_input(input_path,workspace,root) if input_path is not None else None
     intent = {'nonce': str(uuid.uuid4()), 'command': command, 'workspace': str(workspace),
+        'input_file':input_file,
         'environment': environment, 'timeout': timeout, 'capture_limit': capture_limit,
         'credential_file': str(credential_file) if credential_file is not None else None,
         'host': host(), 'executable_sha256': sha(command[0]),
@@ -122,6 +146,8 @@ def run(command, *, workspace, environment, timeout, capture_limit, name,
                 native['stdout'] = base64.b64decode(native['stdout'], validate=True)
                 native['stderr'] = base64.b64decode(native['stderr'], validate=True)
                 native['durable_tool'] = reference
+                native['credential_file_cleanup_confirmed']=observed['credential_file_cleanup_confirmed']
+                native['input_file_cleanup_confirmed']=observed['input_file_cleanup_confirmed']
                 try: process.wait(timeout=1)
                 except subprocess.TimeoutExpired: pass
                 return native

@@ -112,6 +112,65 @@ def test_unknown_reconciliation_never_relabels_return_or_replays_and_ack_is_exac
     next_item,_next_request=review();jobs.claim_fence(jobs.load(next_item['job_id'],1,endpoint))
 
 
+@pytest.mark.parametrize('client_complete',[False,True])
+def test_raw_reconciliation_requires_both_original_utilities_and_preserves_unknown(tmp_path,monkeypatch,client_complete):
+    jobs=MySQLBinlogReplayJobs(tmp_path/'jobs',tmp_path/'replays');endpoint=str(uuid.uuid4());target=str(uuid.uuid4())
+    value=jobs.review(1,endpoint,options({'target_confirmation':target}),{'identity':{'server_uuid':target},'state':{
+        'target':{},'input_reference':{'family':'raw','server_id':7,'endpoint_id':endpoint,'job_id':str(uuid.uuid4()),'artifact_digest':'bytes','summary':{'total_bytes':'1'}}}},
+        'configuration',{'execution_host':{'hostname':'owned-test'},'decoder':{'executable_sha256':'decoder'},'client':{'executable_sha256':'client'}})
+    record=jobs.load(value['job_id'],1,endpoint);jobs.claim_fence(record)
+    jobs.update(record,state='unknown',native_load_outcome='unknown',native_load_may_have_dispatched=True,native_process_termination_confirmed=False)
+    for name in ('raw-replay-decoder','raw-replay-client'):jobs.progress(record,{'durable_tool':{'name':name,'nonce':name}})
+    calls=[]
+    def observe(directory,reference,expected):
+        calls.append((reference['name'],expected));complete=client_complete or reference['name']=='raw-replay-decoder'
+        return {'complete':complete,'cleanup_confirmed':complete,'credential_file_cleanup_confirmed':complete,'input_file_cleanup_confirmed':complete}
+    monkeypatch.setattr('pgadmin.cdeadmin.sdk.durable_tool.observe',observe)
+    result=jobs.reconcile(jobs.load(value['job_id'],1,endpoint),{'native_lock_free':True})
+    assert result['native_load_outcome']=='unknown' and result['state']=='unknown'
+    assert result['native_process_termination_confirmed'] is client_complete
+    assert set(calls)=={('raw-replay-decoder','decoder'),('raw-replay-client','client')}
+    assert result['utility_cancellation_available'] is (not client_complete)
+    other=jobs.review(1,str(uuid.uuid4()),options({'target_confirmation':target}),{'identity':{'server_uuid':target},'state':{
+        'target':{},'input_reference':record['source_state']['input_reference']}},'configuration',record['program'])
+    with pytest.raises(BinlogArchiveError,match='unresolved'):jobs.claim_fence(jobs.load(other['job_id'],1,other['endpoint_id']))
+
+
+@pytest.mark.parametrize('manager',['mysql'],indirect=True)
+def test_raw_utility_reference_cannot_be_replaced_after_admission(manager):
+    jobs,endpoint,_target,review,_current=manager
+    item,_request=review();record=jobs.load(item['job_id'],1,endpoint)
+    record['source_state']['input_reference']['family']='raw';jobs.update(record,source_state=record['source_state'])
+    reference={'name':'raw-replay-client','nonce':'original'}
+    jobs.progress(record,{'durable_tool':reference})
+    with pytest.raises(BinlogArchiveError,match='replaced'):jobs.progress(record,{'durable_tool':{**reference,'nonce':'replacement'}})
+
+
+@pytest.mark.parametrize('manager',['mysql'],indirect=True)
+def test_lost_decoder_observer_before_sql_dispatch_does_not_infer_process_exit(manager,monkeypatch):
+    jobs,endpoint,_target,review,current=manager;item,request=review();record=jobs.load(item['job_id'],1,endpoint)
+    record['source_state']['input_reference']['family']='raw'
+    record['program'].update(decoder={'executable_sha256':'decoder'},client={'executable_sha256':'client'})
+    item=jobs.review(1,endpoint,record['options'],{'identity':record['source'],'state':record['source_state']},'configuration',record['program'])
+    request={'job_id':item['job_id'],'review_digest':item['review_digest'],'confirmed':True}
+    current={**current,'program':record['program']}
+    class DecoderObserver(Transport):
+        def execute(self,record,directory,cancel,progress,boundary):
+            progress({'durable_tool':{'name':'raw-replay-decoder','nonce':'original'}})
+            raise SystemExit('Original decoder observer exited before SQL dispatch')
+    calls=[]
+    def observe(directory,reference,expected):
+        calls.append((reference['name'],expected));return {'complete':False,'cleanup_confirmed':False}
+    monkeypatch.setattr('pgadmin.cdeadmin.sdk.durable_tool.observe',observe)
+    monkeypatch.setattr('pgadmin.cdeadmin.sdk.durable_tool.cancel',observe)
+    jobs.start(request,1,endpoint,current,DecoderObserver('returned'))
+    result=finished(jobs,item,endpoint)
+    assert result['native_load_outcome']=='not_dispatched' and result['state']=='not_dispatched'
+    assert result['native_process_termination_confirmed'] is False and result['utility_cancellation_available']
+    jobs.cancel(item['job_id'],1,endpoint)
+    assert len(calls)==2 and set(calls)=={('raw-replay-decoder','decoder')}
+
+
 def test_active_native_worker_cannot_be_acknowledged_or_superseded(manager):
     jobs,endpoint,target,review,current=manager;item,request=review();transport=Transport('cancel-after')
     jobs.start(request,1,endpoint,current,transport);assert transport.entered.wait(3)

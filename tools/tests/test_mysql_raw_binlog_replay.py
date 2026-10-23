@@ -70,3 +70,25 @@ def test_native_header_is_staged_inside_the_filesystem_grant(tmp_path):
     assert native.previous_gtids(type('Client',(),{'_tool_runner':Runner()})(),{'host':'localhost'},source,observed,work,
         {'decoder':{'executable_sha256':'decoder'}})=='native-gtid-set'
     assert (source/'native.1').read_bytes()==original
+
+
+def test_completed_decoder_does_not_prove_later_client_termination(tmp_path,monkeypatch):
+    source=tmp_path/'input';source.mkdir();(source/'native.1').write_bytes(b'owned native input')
+    program={'decoder':{'executable_sha256':'decoder'},'client':{'executable_sha256':'client'}}
+    monkeypatch.setattr(native,'program_identity',lambda *args,**kwargs:program)
+    monkeypatch.setattr(native,'guard',lambda *args:'DO 0;\n')
+    monkeypatch.setattr(native.archive,'connection_arguments',lambda *args:[])
+    class Runner:
+        def run(self,grant,args,**kwargs):
+            if grant.durable_name=='raw-replay-decoder':
+                Path(next(value.split('=',1)[1] for value in args if value.startswith('--result-file='))).write_text('DO 0;\n')
+                return {'return_code':0,'executable_sha256':'decoder','process_observation':{'cleanup_confirmed':True}}
+            assert grant.durable_name=='raw-replay-client' and '--skip-reconnect' in args
+            assert kwargs['input_path'].read_text().startswith('DO 0;')
+            raise ConnectionError('Lost original SQL client observer')
+    class Credentials:
+        def use(self,callback):return callback(b'[client]\n')
+    with pytest.raises(ConnectionError) as caught:
+        native.run_load(type('Client',(),{'_tool_runner':Runner()})(),{'host':'localhost'},Credentials(),source,{'server_uuid':str(uuid.uuid4())},
+            {'gtid_executed':''},options(),{'start_boundary':{'position':'4','file_index':0},'log_names':['native.1']},tmp_path,program)
+    assert getattr(caught.value,'observation',None) is None

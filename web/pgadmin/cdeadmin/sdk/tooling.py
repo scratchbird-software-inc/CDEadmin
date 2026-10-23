@@ -283,15 +283,16 @@ class ProviderToolRunner:
             try:
                 capture_limit = grant.max_output_bytes + max(map(len,secret_bytes),default=0)
                 if grant.durable_name is not None and not (cancel_signal is not None and cancel_signal.is_set()):
-                    if input_bytes or input_stream is not None or secret_environment:
-                        raise ProviderToolError('Durable native invocation requires file-based credentials and no input stream')
+                    if input_bytes or secret_environment:
+                        raise ProviderToolError('Durable native invocation requires file-based credentials and file-based stdin')
                     from .durable_tool import run as durable_run
                     def handoff():
                         nonlocal guardian_owns_config
                         guardian_owns_config = True
                     observed = durable_run(command, workspace=workspace, environment=environment,
                         timeout=grant.timeout_seconds, capture_limit=capture_limit, name=grant.durable_name,
-                        credential_file=config_path, cancel_signal=cancel_signal, progress=progress, handoff=handoff)
+                        credential_file=config_path, input_path=candidate if input_stream is not None else None,
+                        cancel_signal=cancel_signal, progress=progress, handoff=handoff)
                 else:
                     observed = observe_process(command, workspace=workspace, environment=environment,
                         input_bytes=bytes(input_bytes), input_stream=input_stream, timeout=grant.timeout_seconds,

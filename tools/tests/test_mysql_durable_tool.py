@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import hashlib
 
 import pytest
 
@@ -67,7 +68,8 @@ def test_durable_receipt_keeps_private_output_separate_and_scrubs_credentials(tm
 
 
 @pytest.mark.parametrize('cancel',[False,True])
-def test_lost_application_process_never_loses_guardian_outcome_or_replays(tmp_path,cancel):
+@pytest.mark.parametrize('with_input',[False,True])
+def test_lost_application_process_never_loses_guardian_outcome_or_replays(tmp_path,cancel,with_input):
     web=Path(__file__).resolve().parents[2]/'web'
     fixture=tmp_path/'native_fixture.py'
     fixture.write_text('''import os,time
@@ -76,8 +78,12 @@ root=Path.cwd()
 with (root/'started').open('a') as stream:stream.write('one\\n')
 assert Path(os.environ['OWNED_CREDENTIAL_FILE']).read_text()=='owned-private'
 while not (root/'release').exists():time.sleep(.05)
+if (root/'stdin.data').exists():
+ import sys
+ assert sys.stdin.buffer.read()==(root/'stdin.data').read_bytes()
 print('native completed')
 ''')
+    if with_input:(tmp_path/'stdin.data').write_bytes('native LF\nquote"slash\\雪'.encode()+b'\x00\xff')
     owner_code='''import json,sys,types
 from pathlib import Path
 package=types.ModuleType('pgadmin');package.__path__=[sys.argv[2]+'/pgadmin'];sys.modules['pgadmin']=package
@@ -87,10 +93,10 @@ root=Path(sys.argv[1])
 def progress(event):
  if 'durable_tool' in event:(root/'reference.json').write_text(json.dumps(event['durable_tool']))
 ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str(root),'127.0.0.1',3306,timeout_seconds=12,durable_name='owned-native',secret_environment_names=('OWNED_CREDENTIAL_FILE',)),
- [sys.argv[3]],
+ [sys.argv[3]],input_path=root/'stdin.data' if sys.argv[4]=='1' else None,
  secret_config=b'owned-private',secret_argument=None,secret_environment_name='OWNED_CREDENTIAL_FILE',progress=progress)
 '''
-    owner=subprocess.Popen([sys.executable,'-c',owner_code,str(tmp_path),str(web),str(fixture)],
+    owner=subprocess.Popen([sys.executable,'-c',owner_code,str(tmp_path),str(web),str(fixture),'1' if with_input else '0'],
         stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     reference=None
     try:
@@ -104,6 +110,7 @@ ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str
         else:(tmp_path/'release').write_text('release the owned native fixture')
         observed=wait_until(lambda:(value if (value:=durable_tool.observe(tmp_path,reference,expected))['complete'] else None))
         assert observed['cleanup_confirmed'] and observed['credential_file_cleanup_confirmed']
+        assert observed['input_file_cleanup_confirmed'] and not (durable_tool.directory(tmp_path,'owned-native')/'stdin.bin').exists()
         assert (observed['return_code']==0) is (not cancel)
         assert (tmp_path/'started').read_text()=='one\n'
         assert not list(tmp_path.glob('.cdeadmin-tool-*.json'))
@@ -113,3 +120,35 @@ ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str
             expected=durable_tool.sha(sys.executable)
             durable_tool.cancel(tmp_path,reference,expected)
             wait_until(lambda:durable_tool.observe(tmp_path,reference,expected)['complete'])
+
+
+def test_durable_stdin_owns_exact_bytes_after_the_original_path_changes(tmp_path):
+    source=tmp_path/'input.sql';data=('native LF\nquote"slash\\雪'.encode()+b'\x00\xff')*4096;source.write_bytes(data)
+    events=[]
+    def progress(value):
+        events.append(value)
+        if value.get('durable_tool'):source.write_bytes(b'changed after handoff')
+    result=ProviderToolRunner({'python':sys.executable}).run(
+        ProviderToolGrant('python',str(tmp_path),'127.0.0.1',3306,durable_name='owned-input'),
+        ['-c','import hashlib,sys;print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'],input_path=source,progress=progress)
+    assert result['stdout'].strip()==hashlib.sha256(data).hexdigest()
+    reference=next(value['durable_tool'] for value in events if value.get('durable_tool'))
+    observed=durable_tool.observe(tmp_path,reference,result['executable_sha256'])
+    assert observed['cleanup_confirmed'] and observed['input_file_cleanup_confirmed']
+    assert not (durable_tool.directory(tmp_path,'owned-input')/'stdin.bin').exists()
+
+
+def test_guardian_refuses_changed_stdin_before_native_dispatch(tmp_path):
+    source=tmp_path/'input.sql';source.write_bytes(b'owned input');references=[]
+    def progress(value):
+        if value.get('durable_tool'):
+            reference=value['durable_tool'];references.append(reference)
+            (durable_tool.directory(tmp_path,reference['name'])/'stdin.bin').write_bytes(b'tampered input')
+    with pytest.raises(RuntimeError,match='supervision failed'):
+        ProviderToolRunner({'python':sys.executable}).run(
+            ProviderToolGrant('python',str(tmp_path),'127.0.0.1',3306,durable_name='owned-input'),
+            ['-c','from pathlib import Path;Path("must-not-run").write_text("unsafe")'],input_path=source,progress=progress)
+    assert not (tmp_path/'must-not-run').exists()
+    observed=durable_tool.observe(tmp_path,references[0],durable_tool.sha(sys.executable))
+    assert observed['native_may_have_dispatched'] is False and observed['cleanup_confirmed']
+    assert observed['input_file_cleanup_confirmed'] and observed['credential_file_cleanup_confirmed']
