@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import socket
 import stat
 from pathlib import Path
 import sys
@@ -49,7 +50,7 @@ def main(root, expected):
             write(root / 'started.json', {'nonce': intent['nonce'], 'request_sha256': expected, 'guardian_pid': os.getpid()})
             result = {'nonce': intent['nonce'], 'request_sha256': expected, 'credential_file_cleanup_confirmed': False,
                 'input_file_cleanup_confirmed':intent.get('input_file') is None,'native_may_have_dispatched':False}
-            input_stream=None
+            input_stream=None;reservation=None
             class Cancellation:
                 def is_set(self):
                     path = root / 'cancel.json'
@@ -60,6 +61,14 @@ def main(root, expected):
             try:
                 if sha(intent['command'][0]) != intent['executable_sha256']:
                     raise ValueError('Native executable changed before guardian dispatch')
+                selected_reservation=intent.get('endpoint_reservation')
+                if selected_reservation is not None:
+                    fd=selected_reservation['fd'];facts=os.fstat(fd)
+                    if os.name!='posix' or (facts.st_dev,facts.st_ino)!=(selected_reservation['device'],selected_reservation['inode']):
+                        raise ValueError('Native endpoint reservation changed before dispatch')
+                    reservation=socket.socket(fileno=fd)
+                    if reservation.family!=socket.AF_INET or list(reservation.getsockname())!=selected_reservation['address'] or reservation.getsockname()[0]!='127.0.0.1' or not reservation.getsockopt(socket.SOL_SOCKET,socket.SO_ACCEPTCONN):
+                        raise ValueError('Native endpoint reservation is not the original listener')
                 selected=intent.get('input_file')
                 if selected is not None:
                     path=Path(selected['path'])
@@ -74,7 +83,9 @@ def main(root, expected):
                 observed = processes.observe_process(intent['command'], workspace=intent['workspace'],
                     environment=intent['environment'], input_bytes=b'', input_stream=input_stream,
                     timeout=intent['timeout'], capture_limit=intent['capture_limit'], cancel_signal=Cancellation(),
+                    inherited_fds=() if reservation is None else (reservation.fileno(),),
                     progress=lambda event: write(root / 'progress.json', {'nonce': intent['nonce'], 'observation': event}))
+                observed['endpoint_reservation_inherited']=reservation is not None and observed.get('started') is True
                 observed['stdout'] = base64.b64encode(observed['stdout']).decode('ascii')
                 observed['stderr'] = base64.b64encode(observed['stderr']).decode('ascii')
                 result['observation'] = observed
@@ -82,10 +93,12 @@ def main(root, expected):
                 result['error_type'] = type(error).__name__
                 observed = getattr(error, 'observation', None)
                 if observed is not None:
+                    observed['endpoint_reservation_inherited']=reservation is not None and observed.get('started') is True
                     for key in ('stdout', 'stderr'): observed[key] = base64.b64encode(observed[key]).decode('ascii')
                     result['observation'] = observed
             finally:
                 if input_stream is not None:input_stream.close()
+                if reservation is not None:reservation.close()
                 try:
                     if intent.get('input_file') and (result['native_may_have_dispatched'] is False or (result.get('observation') or {}).get('cleanup_confirmed') is True):
                         path=root/'stdin.bin'

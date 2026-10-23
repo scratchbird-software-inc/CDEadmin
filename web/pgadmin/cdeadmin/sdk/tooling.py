@@ -22,6 +22,7 @@ import ntpath
 import os
 import re
 import shutil
+import socket
 import tempfile
 import sys
 from dataclasses import dataclass
@@ -148,10 +149,15 @@ class ProviderToolRunner:
         secret_argument_position=None, redact_values=(),
         secret_environment=None,
         progress=None, cancel_signal=None,
-        secret_environment_name=None,
+        secret_environment_name=None, reservation_socket=None,
     ):
         if not isinstance(grant, ProviderToolGrant):
             raise ProviderToolError('provider tool grant is required')
+        if reservation_socket is not None and (os.name!='posix' or grant.durable_name is None or
+                not isinstance(reservation_socket,socket.socket) or reservation_socket.family!=socket.AF_INET or
+                reservation_socket.getsockname()!=(grant.endpoint_host,grant.endpoint_port) or
+                grant.endpoint_host!='127.0.0.1' or not reservation_socket.getsockopt(socket.SOL_SOCKET,socket.SO_ACCEPTCONN)):
+            raise ProviderToolError('Durable native endpoint reservation is invalid')
         declared = self._allowlist.get(grant.executable_id)
         executable = self._resolve(declared)
         if executable is None:
@@ -292,7 +298,7 @@ class ProviderToolRunner:
                     observed = durable_run(command, workspace=workspace, environment=environment,
                         timeout=grant.timeout_seconds, capture_limit=capture_limit, name=grant.durable_name,
                         credential_file=config_path, input_path=candidate if input_stream is not None else None,
-                        cancel_signal=cancel_signal, progress=progress, handoff=handoff)
+                        cancel_signal=cancel_signal, progress=progress, handoff=handoff,reservation_socket=reservation_socket)
                 else:
                     observed = observe_process(command, workspace=workspace, environment=environment,
                         input_bytes=bytes(input_bytes), input_stream=input_stream, timeout=grant.timeout_seconds,

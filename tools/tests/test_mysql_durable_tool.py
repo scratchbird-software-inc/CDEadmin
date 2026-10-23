@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 import hashlib
+import socket
 
 import pytest
 
@@ -69,12 +70,19 @@ def test_durable_receipt_keeps_private_output_separate_and_scrubs_credentials(tm
 
 @pytest.mark.parametrize('cancel',[False,True])
 @pytest.mark.parametrize('with_input',[False,True])
-def test_lost_application_process_never_loses_guardian_outcome_or_replays(tmp_path,cancel,with_input):
+@pytest.mark.parametrize('with_reservation',[False,True])
+def test_lost_application_process_never_loses_guardian_outcome_or_replays(tmp_path,cancel,with_input,with_reservation):
+    if with_reservation and os.name!='posix':pytest.skip('POSIX endpoint descriptor inheritance')
     web=Path(__file__).resolve().parents[2]/'web'
     fixture=tmp_path/'native_fixture.py'
     fixture.write_text('''import os,time
 from pathlib import Path
 root=Path.cwd()
+if (root/'listener.json').exists():
+ import json,socket
+ expected=tuple(json.loads((root/'listener.json').read_text()))
+ fd=json.loads((root/'.cdeadmin-tool-owned-native'/'request.json').read_text())['endpoint_reservation']['fd']
+ with socket.socket(fileno=os.dup(fd)) as reserved:assert reserved.getsockname()==expected
 with (root/'started').open('a') as stream:stream.write('one\\n')
 assert Path(os.environ['OWNED_CREDENTIAL_FILE']).read_text()=='owned-private'
 while not (root/'release').exists():time.sleep(.05)
@@ -90,19 +98,27 @@ package=types.ModuleType('pgadmin');package.__path__=[sys.argv[2]+'/pgadmin'];sy
 sys.path.insert(0,sys.argv[2])
 from pgadmin.cdeadmin.sdk.tooling import ProviderToolGrant,ProviderToolRunner
 root=Path(sys.argv[1])
+listener=None
+if sys.argv[5]=='1':
+ import socket
+ listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen()
+ (root/'listener.json').write_text(json.dumps(listener.getsockname()))
 def progress(event):
  if 'durable_tool' in event:(root/'reference.json').write_text(json.dumps(event['durable_tool']))
-ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str(root),'127.0.0.1',3306,timeout_seconds=12,durable_name='owned-native',secret_environment_names=('OWNED_CREDENTIAL_FILE',)),
+ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str(root),'127.0.0.1',listener.getsockname()[1] if listener else 3306,timeout_seconds=12,durable_name='owned-native',secret_environment_names=('OWNED_CREDENTIAL_FILE',)),
  [sys.argv[3]],input_path=root/'stdin.data' if sys.argv[4]=='1' else None,
- secret_config=b'owned-private',secret_argument=None,secret_environment_name='OWNED_CREDENTIAL_FILE',progress=progress)
+ secret_config=b'owned-private',secret_argument=None,secret_environment_name='OWNED_CREDENTIAL_FILE',progress=progress,reservation_socket=listener)
 '''
-    owner=subprocess.Popen([sys.executable,'-c',owner_code,str(tmp_path),str(web),str(fixture),'1' if with_input else '0'],
+    owner=subprocess.Popen([sys.executable,'-c',owner_code,str(tmp_path),str(web),str(fixture),'1' if with_input else '0','1' if with_reservation else '0'],
         stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     reference=None
     try:
         wait_until(lambda:(tmp_path/'started').exists())
         reference=json.loads((tmp_path/'reference.json').read_text())
         owner.kill();owner.wait(timeout=5)
+        if with_reservation:
+            with socket.socket() as other:
+                with pytest.raises(OSError):other.bind(tuple(json.loads((tmp_path/'listener.json').read_text())))
         expected=durable_tool.sha(sys.executable)
         assert not durable_tool.observe(tmp_path,reference,expected)['complete']
         if cancel:
@@ -114,6 +130,8 @@ ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str
         assert (observed['return_code']==0) is (not cancel)
         assert (tmp_path/'started').read_text()=='one\n'
         assert not list(tmp_path.glob('.cdeadmin-tool-*.json'))
+        if with_reservation:
+            with socket.socket() as other:other.bind(tuple(json.loads((tmp_path/'listener.json').read_text())))
     finally:
         if owner.poll() is None:owner.kill();owner.wait(timeout=5)
         if reference:

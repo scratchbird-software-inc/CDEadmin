@@ -129,7 +129,10 @@ and retained lost-reply/fence handling. Independent original decoder/client
 guardians now support hash-verified file stdin, cancellation and termination
 observation after observer loss, scoped input/credential cleanup and release of
 only the matching parked lease. Original unknown database outcomes stay unknown.
-Shell reconnect transport, missing/failed guardian and wider lifecycle
+Native Shell replay and reconnects now use the original process-bound route on
+POSIX application hosts, with independently inherited listener reservations,
+original guardian references and cancellation/reconciliation. Windows listener
+inheritance, missing/failed guardian and wider lifecycle
 reconciliation, post-replay acceptance, incremental/encrypted/external-table-space
 support, physical retention and production cutover remain open. These bounded
 artifact receipts do not close ``CMP-MY-01``.

@@ -30,7 +30,9 @@ class ReplayTransport:
             if utility is not None:utility.close();self.recovery_utility=None
 
     def execute(self,record,directory,cancel,progress,boundary):
-        reference=record['source_state']['input_reference'];staged=directory/'input';cleanup_safe=True
+        reference=record['source_state']['input_reference'];staged=directory/'input';cleanup_safe=True;load_dispatched=False
+        utility=getattr(self,'recovery_utility',None)
+        if utility is not None:utility.job_id=record['job_id']
         try:
             artifact=archive.verify(self.source_directory,self.source_identity,cancel=cancel)
             if digest(artifact)!=reference['artifact_digest']:raise archive.BinlogArchiveError('Sealed native replay input changed')
@@ -41,9 +43,10 @@ class ReplayTransport:
                 'SELECT GTID_SUBSET(%s,@@global.gtid_executed) AND GTID_SUBSET(@@global.gtid_executed,%s) AS same',
                 (before['state']['gtid_executed'],before['state']['gtid_executed']))[0]['same']!=1:
                 raise archive.BinlogArchiveError('Native target changed after review; prepare a new replay review')
-            boundary()
+            boundary();load_dispatched=True
             result=native.run_load(self.client,self.route,self.credentials,staged,record['source'],before['state']['gtid_executed'],
                 selected,directory,record['program'],cancel=cancel,progress=progress)
+            if utility is not None:utility.uncertain=result.get('tool',{}).get('process_observation',{}).get('cleanup_confirmed') is not True
             if (result.get('control') or {}).get('native_load_returned'):
                 try:result['native_coverage']=native.coverage(self.observer,artifact,selected,before)
                 except Exception as error:result['native_coverage']={'available':False,'error_type':type(error).__name__}
@@ -51,7 +54,9 @@ class ReplayTransport:
             return result
         except BaseException as error:
             observed=getattr(error,'observation',None) or getattr(error,'process_observation',{})
-            cleanup_safe=observed.get('process_observation',{}).get('cleanup_confirmed') is not False
+            cleanup_safe=observed.get('process_observation',{}).get('cleanup_confirmed') is True
+            if utility is not None and load_dispatched and not cleanup_safe and not getattr(error,'native_preparation_refused',False):
+                utility.uncertain=True
             raise
         finally:
             if cleanup_safe:shutil.rmtree(staged,ignore_errors=True)
@@ -209,9 +214,8 @@ def action(service,server,operation,request):
         from ..providers.mysql_family.mysql_connections import POOL_ARGUMENTS
         route={key:value for key,value in payload['route'].items() if key not in POOL_ARGUMENTS}
         if route.get('mysql_recovery_binding') and operation in {'review','start'}:
-            if not raw:raise archive.BinlogArchiveError('Managed recovery currently admits native raw mysqlbinlog/mysql replay; Shell reconnect transport remains separate work')
-            from ..providers.mysql_family.mysql_recovery_bridge import admit_raw_utility
-            utility=admit_raw_utility(route);route=utility.route
+            from ..providers.mysql_family.mysql_recovery_bridge import admit_replay_utility
+            utility=admit_replay_utility(route,family='raw' if raw else 'shell');route=utility.route
         client=provider.client;connection=client._connect({'route':{**route,'read_timeout':5,'write_timeout':15}})
         target=adapter.capture_target(connection)
         if operation=='inspect':return {'identity':target['identity'],'state':target['state'],'scope':'native target identity and GTID state; no mutation'}

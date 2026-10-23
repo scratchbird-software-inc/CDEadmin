@@ -1269,8 +1269,8 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def _tool_secrets(self, route, callback, *, allow_recovery_credentials=False):
         if route.get('mysql_recovery_binding') and not allow_recovery_credentials:
-            from .mysql_recovery_bridge import require_raw_utility
-            require_raw_utility(route)
+            from .mysql_recovery_bridge import require_replay_utility
+            require_replay_utility(route)
         references = dict(route.get('credential_references') or {})
         primary = route.get('credential_reference_id')
         if primary is not None:

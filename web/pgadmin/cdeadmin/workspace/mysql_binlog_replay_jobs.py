@@ -34,10 +34,12 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
         return result
 
     def progress(self,record,value):
-        if record['source_state']['input_reference'].get('family')!='raw':return super().progress(record,value)
         if not isinstance(value,dict) or not value.get('durable_tool'):return super().progress(record,value)
         reference=value['durable_tool'];name=reference.get('name')
-        if name not in {'raw-replay-decoder','raw-replay-client'}:raise BinlogArchiveError('Native replay utility reference is not admitted')
+        raw=record['source_state']['input_reference'].get('family')=='raw'
+        if not raw and name!='shell-replay-client':return super().progress(record,value)
+        if name not in ({'raw-replay-decoder','raw-replay-client'} if raw else {'shell-replay-client'}):
+            raise BinlogArchiveError('Native replay utility reference is not admitted')
         with self.store(record['job_id']) as store:
             def change(state):
                 current=self.record(state,record['job_id'],record['owner'],record['endpoint_id'])
@@ -50,14 +52,16 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
         from ..sdk import durable_tool
         tools=record.get('durable_tools')
         if not tools:return super().observe_utility(record,cancel=cancel)
-        expected={'raw-replay-decoder':record['program']['decoder']['executable_sha256'],
-            'raw-replay-client':record['program']['client']['executable_sha256']}
+        raw=record['source_state']['input_reference'].get('family')=='raw'
+        expected=({'raw-replay-decoder':record['program']['decoder']['executable_sha256'],
+            'raw-replay-client':record['program']['client']['executable_sha256']} if raw else
+            {'shell-replay-client':record['program']['executable_sha256']})
         operation=durable_tool.cancel if cancel else durable_tool.observe
         observed={}
         for name,reference in tools.items():
             if name not in expected or reference.get('name')!=name:raise BinlogArchiveError('Original native replay utility association changed')
             observed[name]=operation(self.directory(record),reference,expected[name])
-        required={'raw-replay-decoder','raw-replay-client'} if record.get('native_load_may_have_dispatched') else {'raw-replay-decoder'}
+        required=({'raw-replay-decoder','raw-replay-client'} if record.get('native_load_may_have_dispatched') else {'raw-replay-decoder'}) if raw else {'shell-replay-client'}
         stopped=required.issubset(observed) and all(observed[name].get('complete') is True and observed[name].get('cleanup_confirmed') is True for name in required)
         result={'tools':observed,'native_process_termination_confirmed':stopped,'original_native_load_outcome_unchanged':True,
             'automatic_retry':False,'observed_at':time.time()}

@@ -43,16 +43,20 @@ def _stop_owned_process(process, identity):
 
 
 def observe_process(command, *, workspace, environment, input_bytes, input_stream,
-                    timeout, capture_limit, cancel_signal=None, progress=None):
+                    timeout, capture_limit, cancel_signal=None, progress=None,inherited_fds=()):
     """Drain both streams with bounded memory and report numeric live progress."""
     if cancel_signal is not None and cancel_signal.is_set():
         return {'started':False, 'return_code':None, 'stdout':b'', 'stderr':b'',
                 'stdout_bytes':0, 'stderr_bytes':0, 'cancel_requested':True,
                 'timed_out':False, 'cleanup_confirmed':True, 'elapsed_seconds':0}
     started = time.monotonic()
+    options={}
+    if inherited_fds:
+        if os.name!='posix':raise ValueError('Native endpoint descriptor inheritance requires POSIX')
+        options['pass_fds']=tuple(inherited_fds)
     process = subprocess.Popen(command, cwd=workspace, env=environment,
         stdin=input_stream if input_stream is not None else subprocess.PIPE if input_bytes else subprocess.DEVNULL,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, close_fds=True, bufsize=0)
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, close_fds=True, bufsize=0,**options)
     try:
         identity = psutil.Process(process.pid).create_time()
     except psutil.Error:

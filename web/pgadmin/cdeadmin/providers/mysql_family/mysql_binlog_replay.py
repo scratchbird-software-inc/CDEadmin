@@ -100,6 +100,10 @@ def script(directory,target,before_gtids,selected,nonce):
 def run_load(client,route,credentials,artifact_directory,target,before_gtids,selected,workspace,expected_program,*,cancel=None,progress=None):
     workspace,artifact_directory=Path(workspace),Path(artifact_directory)
     try:
+        reservation=None
+        if route.get('mysql_recovery_binding'):
+            from .mysql_recovery_bridge import UTILITY_KEY,require_replay_utility
+            require_replay_utility(route,family='shell');reservation=route[UTILITY_KEY].bridge.listener
         try:artifact_directory.resolve().relative_to(workspace.resolve())
         except ValueError:raise BinlogArchiveError('Replay input escapes its execution-host filesystem grant') from None
         program=program_identity(client,route,workspace,cancel=cancel,progress=progress)
@@ -114,7 +118,7 @@ def run_load(client,route,credentials,artifact_directory,target,before_gtids,sel
             private_file(path);stream.write(source);stream.flush();os.fsync(stream.fileno())
         grant=ProviderToolGrant('mysql-shell',str(workspace),str(route.get('host') or 'localhost'),int(route.get('port',3306)),
             timeout_seconds=selected['timeout_seconds'],allow_unbounded_runtime=selected['timeout_seconds'] is None,
-            secret_environment_names=(CREDENTIAL_FILE,))
+            secret_environment_names=(CREDENTIAL_FILE,),durable_name='shell-replay-client')
     except BaseException as error:
         error.control={'native_load_invoked':False,'native_load_returned':False,'stage':'native_client_preparation'}
         error.native_preparation_refused=True;raise
@@ -133,7 +137,7 @@ def run_load(client,route,credentials,artifact_directory,target,before_gtids,sel
     try:
         result=credentials.use(lambda view:client._tool_runner.run(grant,['--no-defaults','--js','--log-level=none','--file='+str(path)],
             secret_config=bytes(view),secret_argument=None,secret_environment_name=CREDENTIAL_FILE,secret_suffix='.json',
-            cancel_signal=cancel,progress=progress))
+            cancel_signal=cancel,progress=progress,reservation_socket=reservation))
     except BaseException as error:
         observed=getattr(error,'process_observation',None)
         if observed is not None:

@@ -60,7 +60,8 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
         for p in ('tools/cdeadmin_mysql_physical_replay_qualification.py','web/pgadmin/cdeadmin/workspace/mysql_binlog_replay_service.py',
             'web/pgadmin/cdeadmin/providers/mysql_family/mysql_raw_binlog_replay.py',
             'web/pgadmin/cdeadmin/workspace/mysql_binlog_replay_jobs.py','web/pgadmin/static/js/Dialogs/MySQLBinlogReplay.jsx',
-            'web/pgadmin/cdeadmin/sdk/durable_tool.py','web/pgadmin/cdeadmin/sdk/tool_guardian.py','web/pgadmin/cdeadmin/sdk/tooling.py',
+            'web/pgadmin/cdeadmin/sdk/durable_tool.py','web/pgadmin/cdeadmin/sdk/tool_guardian.py','web/pgadmin/cdeadmin/sdk/tooling.py','web/pgadmin/cdeadmin/sdk/tool_process.py',
+            'web/pgadmin/cdeadmin/providers/mysql_family/mysql_binlog_replay.py','tools/cdeadmin_mysql_physical_shell_qualification.py',
             'tools/cdeadmin_mysql_binlog_replay_workspace_qualification.py'):
             proof['source_sha256'][p]=hashlib.sha256((ROOT/p).read_bytes()).hexdigest()
     names = []; volume = 'sr-physical-'+secrets.token_hex(8); root = None

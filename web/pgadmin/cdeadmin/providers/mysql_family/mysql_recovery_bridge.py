@@ -1,6 +1,7 @@
 """Application-owned SSH streams for separate native recovery registrations."""
 import atexit
 import copy
+import os
 import select
 import socket
 import threading
@@ -119,12 +120,16 @@ atexit.register(bridges.close)
 UTILITY_KEY='_mysql_recovery_raw_utility'
 
 
-class RawUtility:
-    """An unpersisted lease for the no-reconnect native raw replay clients."""
-    def __init__(self,route):
+class ReplayUtility:
+    """An unpersisted reservation of one original process-bound route."""
+    def __init__(self,route,*,family):
+        if family not in {'raw','shell'}:raise RelationalClientError('Select a native replay utility family')
+        if family=='shell' and os.name!='posix':
+            raise RelationalClientError('Managed recovery Shell replay currently requires a POSIX application execution host')
+        self.family=family
         self.binding=copy.deepcopy(route[ROUTE_KEY]);self.released=False;self.uncertain=False
         if self.binding.get('recovery_mode')!='replay':
-            raise RelationalClientError('Start a separately reviewed writable recovery instance before native raw replay')
+            raise RelationalClientError('Start a separately reviewed writable recovery instance before native replay')
         with bridges.lock:
             self.bridge=bridges.get(self.binding);self.lease=self.bridge.acquire()
         self.route={**copy.deepcopy(route),'host':'127.0.0.1','port':self.bridge.port,UTILITY_KEY:self}
@@ -134,7 +139,7 @@ class RawUtility:
         if (self.released or route.get(UTILITY_KEY) is not self or route.get(ROUTE_KEY)!=self.binding or
                 route.get('host')!='127.0.0.1' or route.get('port')!=self.bridge.port or route.get('unix_socket') or route.get('failover') or
                 bridges.get(self.binding) is not self.bridge):
-            raise RelationalClientError('Native raw recovery utility lease is unavailable or changed')
+            raise RelationalClientError('Native recovery utility lease is unavailable or changed')
 
     def __deepcopy__(self,memo):return self
 
@@ -150,12 +155,21 @@ class RawUtility:
 
 
 def admit_raw_utility(route):
-    return RawUtility(route) if route.get(ROUTE_KEY) else None
+    return admit_replay_utility(route,family='raw')
+
+
+def admit_replay_utility(route,*,family):
+    return ReplayUtility(route,family=family) if route.get(ROUTE_KEY) else None
 
 
 def require_raw_utility(route):
+    require_replay_utility(route,family='raw')
+
+
+def require_replay_utility(route,*,family=None):
     value=route.get(UTILITY_KEY)
-    if not isinstance(value,RawUtility):raise RelationalClientError('This recovery route requires an admitted native raw replay utility lease')
+    if not isinstance(value,ReplayUtility) or family is not None and value.family!=family:
+        raise RelationalClientError('This recovery route requires an admitted native replay utility lease')
     value.validate(route)
 
 

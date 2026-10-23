@@ -137,6 +137,23 @@ def test_raw_reconciliation_requires_both_original_utilities_and_preserves_unkno
 
 
 @pytest.mark.parametrize('manager',['mysql'],indirect=True)
+def test_shell_original_guardian_reconciles_without_changing_unknown_database_outcome(manager,monkeypatch):
+    jobs,endpoint,_target,review,_current=manager;item,_request=review();record=jobs.load(item['job_id'],1,endpoint)
+    jobs.update(record,state='unknown',native_load_outcome='unknown',native_load_may_have_dispatched=True,native_process_termination_confirmed=False)
+    reference={'name':'shell-replay-client','nonce':'original-shell'};jobs.progress(record,{'durable_tool':reference})
+    calls=[]
+    def observe(directory,selected,expected):
+        calls.append((selected,expected));return {'complete':True,'cleanup_confirmed':True,'credential_file_cleanup_confirmed':True}
+    monkeypatch.setattr('pgadmin.cdeadmin.sdk.durable_tool.observe',observe)
+    result=jobs.reconcile(jobs.load(item['job_id'],1,endpoint),{'native_lock_free':False})
+    assert result['native_load_outcome']=='unknown' and result['native_process_termination_confirmed'] is True
+    assert result['staged_input_cleanup']['complete'] and not result['utility_cancellation_available']
+    assert calls==[(reference,'native')]
+    with pytest.raises(BinlogArchiveError,match='replaced'):
+        jobs.progress(record,{'durable_tool':{**reference,'nonce':'another-invocation'}})
+
+
+@pytest.mark.parametrize('manager',['mysql'],indirect=True)
 def test_raw_utility_reference_cannot_be_replaced_after_admission(manager):
     jobs,endpoint,_target,review,_current=manager
     item,_request=review();record=jobs.load(item['job_id'],1,endpoint)

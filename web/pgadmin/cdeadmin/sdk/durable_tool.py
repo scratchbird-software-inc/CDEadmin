@@ -90,6 +90,7 @@ def observe(workspace, reference, expected_executable_sha256):
             'credential_file_cleanup_confirmed': result.get('credential_file_cleanup_confirmed') is True,
             'input_file_cleanup_confirmed': result.get('input_file_cleanup_confirmed') is True if intent.get('input_file') else True,
             'native_may_have_dispatched':result.get('native_may_have_dispatched'),
+            'endpoint_reservation_inherited':native.get('endpoint_reservation_inherited') is True if isinstance(native,dict) and intent.get('endpoint_reservation') else None,
             'native_process_identity': {'pid': native.get('pid'), 'process_create_time': native.get('process_create_time')}
                 if isinstance(native, dict) else None,
             'supervision_error_type': result.get('error_type')}
@@ -103,7 +104,7 @@ def cancel(workspace, reference, expected_executable_sha256):
 
 
 def run(command, *, workspace, environment, timeout, capture_limit, name,
-        credential_file=None, input_path=None, cancel_signal=None, progress=None, handoff=None):
+        credential_file=None, input_path=None, cancel_signal=None, progress=None, handoff=None,reservation_socket=None):
     """A detached guardian owns one invocation, its pipes and credential cleanup."""
     root = directory(workspace, name)
     root.mkdir(mode=0o700, exist_ok=False); private_directory(root)
@@ -111,8 +112,15 @@ def run(command, *, workspace, environment, timeout, capture_limit, name,
     process_helper = Path(__file__).with_name('tool_process.py')
     file_helper = Path(__file__).parent.parent / 'operations' / 'fileio.py'
     input_file=stage_input(input_path,workspace,root) if input_path is not None else None
+    reservation=None
+    if reservation_socket is not None:
+        if os.name!='posix' or reservation_socket.family!=socket.AF_INET or not reservation_socket.getsockopt(socket.SOL_SOCKET,socket.SO_ACCEPTCONN):
+            raise ValueError('Native endpoint reservation requires a POSIX TCP listener')
+        facts=os.fstat(reservation_socket.fileno());address=reservation_socket.getsockname()
+        if address[0]!='127.0.0.1':raise ValueError('Native endpoint reservation is not loopback')
+        reservation={'fd':reservation_socket.fileno(),'device':facts.st_dev,'inode':facts.st_ino,'address':list(address)}
     intent = {'nonce': str(uuid.uuid4()), 'command': command, 'workspace': str(workspace),
-        'input_file':input_file,
+        'input_file':input_file,'endpoint_reservation':reservation,
         'environment': environment, 'timeout': timeout, 'capture_limit': capture_limit,
         'credential_file': str(credential_file) if credential_file is not None else None,
         'host': host(), 'executable_sha256': sha(command[0]),
@@ -123,6 +131,7 @@ def run(command, *, workspace, environment, timeout, capture_limit, name,
     if progress is not None: progress({'durable_tool': reference})
     options = {'start_new_session': True} if os.name != 'nt' else {
         'creationflags': subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
+    if reservation is not None:options['pass_fds']=(reservation['fd'],)
     guardian_environment = {key: os.environ[key] for key in ('SYSTEMROOT', 'SystemRoot', 'WINDIR',
         'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'LANG', 'LC_ALL') if key in os.environ}
     process = subprocess.Popen([sys.executable, '-I', str(helper), str(root), reference['request_sha256']],

@@ -102,7 +102,11 @@ def native_replay(app,client,sid,root,physical,credentials,review,start,copied,o
                 rows=execute(post,session,'SELECT CAST(id AS CHAR),note,HEX(b) FROM t WHERE id<10 ORDER BY id')['rows']
                 assert rows==[[str(i),'physical raw 雪 '+str(i),'00FF0'+str(i)] for i in range(1,count+1)]
             finally:post('close_session',session_id=session)
-        checks.extend(cancel_independent_raw(app,client,sid,root,archive,replay,physical,target,url,output,browser_binary,driver_binary))
+        from cdeadmin_mysql_physical_shell_qualification import shell_replay
+        shell_archive=lambda action,request:http(source_url,'mysql_binlog_',action,request)
+        shell_post=lambda action,request,refused=False:http(url,'mysql_binlog_replay_',action,request,refused)
+        checks.extend(shell_replay(app,client,sid,root,shell_archive,shell_post,physical,target,url,output,browser_binary,driver_binary))
+        checks.extend(cancel_independent_replay(app,client,sid,root,archive,replay,physical,target,url,output,browser_binary,driver_binary)['checks'])
         physical('connection_detach',{'server_id':target['server_id']})
         checks.extend(['physical-base-writable-startup-native-GTID-ROW-binlogs-and-separate-leased-raw-replay-registration',
             'native-mysqlbinlog-mysql-before-after-all-replay-exact-selected-Unicode-BLOB-data',
@@ -117,10 +121,10 @@ def native_replay(app,client,sid,root,physical,credentials,review,start,copied,o
                 if value.get('remote_observation',{}).get('supervisor_finished'):break
                 time.sleep(.1)
             else:raise TimeoutError('Writable physical recovery did not stop')
-        cursor.execute('DELETE FROM sr_osc.t WHERE id<10');cursor.close()
+        cursor.execute('DELETE FROM sr_osc.t WHERE id<1000');cursor.close()
 
 
-def cancel_independent_raw(app,client,sid,root,archive,replay,physical,target,url,output,browser_binary=None,driver_binary=None):
+def cancel_independent_replay(app,client,sid,root,archive,replay,physical,target,url,output,browser_binary=None,driver_binary=None,*,family='raw'):
     """Lose only the original observer; the real native client stays blocked."""
     from flask_login import login_user
     from pgadmin.model import User,Server
@@ -128,6 +132,7 @@ def cancel_independent_raw(app,client,sid,root,archive,replay,physical,target,ur
     native=connection=cursor=None
     with app.test_request_context('/'):
         registered=Server.query.get(target['server_id']);login_user(User.query.get(registered.user_id))
+        job_owner=registered.user_id;job_endpoint=registered.endpoint_profile.id
         service=app.extensions['cdeadmin_provider_workspace'];context,payload,_=service.endpoint_service.workspace(registered,database_target_id=None)
         provider=service.endpoint_service.provider_registry.resolve(context).instance
         native=provider.client;connection=native._connect({'route':payload['route']});cursor=connection.cursor()
@@ -135,13 +140,14 @@ def cancel_independent_raw(app,client,sid,root,archive,replay,physical,target,ur
     source=root.cursor();ticket=None
     try:
         source.execute('FLUSH BINARY LOGS');source.execute('SHOW BINARY LOG STATUS');filename=source.fetchone()[0];source.fetchall()
-        source.execute('INSERT INTO sr_osc.t VALUES(4,%s,%s)',('cancelled native outcome stays unknown',b'\x00\xff\x04'))
+        source.execute('INSERT INTO sr_osc.t VALUES(%s,%s,%s)',(4 if family=='raw' else 14,'cancelled native outcome stays unknown',b'\x00\xff\x04'))
         source.execute('FLUSH BINARY LOGS')
-        sealed=archive('review',{'options':{'log_names':[filename]}});sealed=wait_job(archive('start',start_request(sealed)),archive,'completed')
+        selected_archive={'log_names':[filename]} if family=='raw' else {'start_file':filename,'start_position':'4','compression':'zstd','threads':1}
+        sealed=archive('review',{'options':selected_archive});sealed=wait_job(archive('start',start_request(sealed)),archive,'completed')
         selected={'source_server_id':sid,'archive_job_id':sealed['job_id'],'options':{'target_confirmation':target['binding']['server_uuid']}}
         ticket=replay('review',selected);original=durable_tool.run
         def observer_lost(*args,**kwargs):
-            if kwargs.get('name')=='raw-replay-client':
+            if kwargs.get('name')==('raw-replay-client' if family=='raw' else 'shell-replay-client'):
                 callback=kwargs.get('progress')
                 def progress(event):
                     if callback:callback(event)
@@ -155,8 +161,19 @@ def cancel_independent_raw(app,client,sid,root,archive,replay,physical,target,ur
             if time.monotonic()>deadline:raise TimeoutError('Original native observer remained active')
             time.sleep(.02)
         assert unknown['utility_cancellation_available'] and unknown.get('native_process_termination_confirmed') is not True
-        facts=replay('reconcile',{'job_id':ticket['job_id']})
-        assert facts['native_load_outcome']=='unknown' and facts['reconciliation']['native_lock_free'] is False
+        deadline=time.monotonic()+30
+        while time.monotonic()<deadline:
+            facts=replay('reconcile',{'job_id':ticket['job_id']})
+            if facts['reconciliation']['native_lock_free'] is False:break
+            assert not facts['native_process_termination_confirmed'],facts
+            time.sleep(.1)
+        else:raise TimeoutError('Original native replay did not acquire its SQL lock')
+        assert facts['native_load_outcome']=='unknown'
+        if family=='shell':
+            job=service.mysql_binlog_replay_jobs.load(ticket['job_id'],job_owner,job_endpoint)
+            request=json.loads((service.mysql_binlog_replay_jobs.directory(job)/'.cdeadmin-tool-shell-replay-client'/'request.json').read_text())
+            reserved=request['endpoint_reservation']
+            assert os.readlink('/proc/'+str(facts['progress']['pid'])+'/fd/'+str(reserved['fd']))=='socket:['+str(reserved['inode'])+']'
         assert not facts['interrupted_utility_observation']['native_process_termination_confirmed']
         replay('acknowledge',{'job_id':ticket['job_id'],'target_confirmation':target['binding']['server_uuid'],'observation_digest':facts['observation_digest']},refused=True)
         if browser_binary:
@@ -164,13 +181,13 @@ def cancel_independent_raw(app,client,sid,root,archive,replay,physical,target,ur
                 nonlocal cursor,connection
                 cursor.execute('UNLOCK TABLES');cursor.close();cursor=None
                 native._discard_failed_session(connection);connection=None
-            browser_cancel(app,output,target,ticket['job_id'],browser_binary,driver_binary,unlock)
+            browser_cancel(app,output,target,ticket['job_id'],browser_binary,driver_binary,unlock,folder='independent-replay-desktop' if family=='raw' else 'shell-independent-replay-desktop')
             facts=replay('reconcile',{'job_id':ticket['job_id']})
             assert facts['target_state_acknowledged_at'] and facts['native_load_outcome']=='unknown' and facts['native_process_termination_confirmed']
             assert facts['staged_input_cleanup']['complete']
             assert all(value.get('cleanup_confirmed') and value.get('credential_file_cleanup_confirmed') and value.get('input_file_cleanup_confirmed')
                 for value in facts['interrupted_utility_observation']['tools'].values())
-            return ['built-original-unknown-replay-native-cancellation-termination-facts-and-explicit-target-acknowledgement']
+            return {'checks':['built-original-unknown-'+family+'-replay-native-cancellation-termination-facts-and-explicit-target-acknowledgement'],'archive_job_id':sealed['job_id']}
         replay('cancel',{'job_id':ticket['job_id']})
         deadline=time.monotonic()+30
         while time.monotonic()<deadline:
@@ -190,8 +207,8 @@ def cancel_independent_raw(app,client,sid,root,archive,replay,physical,target,ur
         assert all(value.get('cleanup_confirmed') and value.get('credential_file_cleanup_confirmed') and value.get('input_file_cleanup_confirmed')
             for value in facts['interrupted_utility_observation']['tools'].values())
         replay('acknowledge',{'job_id':ticket['job_id'],'target_confirmation':target['binding']['server_uuid'],'observation_digest':facts['observation_digest']})
-        (output/('independent-native-replay-'+str(target['server_id'])+'.json')).write_text(json.dumps(facts,indent=2)+'\n')
-        return ['independent-native-client-cancel-after-observer-loss-preserves-unknown-data-outcome-and-proves-utility-input-credential-cleanup']
+        (output/('independent-native-'+family+'-replay-'+str(target['server_id'])+'.json')).write_text(json.dumps(facts,indent=2)+'\n')
+        return {'checks':['independent-native-'+family+'-client-cancel-after-observer-loss-preserves-unknown-data-outcome-and-proves-utility-input-credential-cleanup'],'archive_job_id':sealed['job_id']}
     finally:
         if ticket:replay('cancel',{'job_id':ticket['job_id']})
         if cursor is not None:
@@ -201,7 +218,7 @@ def cancel_independent_raw(app,client,sid,root,archive,replay,physical,target,ur
         source.close()
 
 
-def browser_cancel(app,output,target,job_id,binary,driver_binary,unlock):
+def browser_cancel(app,output,target,job_id,binary,driver_binary,unlock,*,folder='independent-replay-desktop'):
     from werkzeug.serving import make_server
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
@@ -209,7 +226,7 @@ def browser_cancel(app,output,target,job_id,binary,driver_binary,unlock):
     from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
     from cdeadmin_ui_evidence import ensure_data_explorer,expand,invoke_context_action
-    evidence=output/'independent-replay-desktop';evidence.mkdir(mode=0o700)
+    evidence=output/folder;evidence.mkdir(mode=0o700)
     http=make_server('127.0.0.1',0,app,threaded=True);thread=threading.Thread(target=http.serve_forever,daemon=True);thread.start();driver=None
     try:
         options=webdriver.ChromeOptions();options.binary_location=binary
@@ -276,35 +293,42 @@ def browser_replay(app,output,sid,password,target,root,binary,driver_binary):
     client=app.test_client()
     with client.session_transaction() as session:session['_user_id'],session['_fresh']=str(owner),True
     source_url=endpoint(app,alias);url=endpoint(app,target['server_id'])
-    def archive(action,request):
-        response=client.post(source_url,json={'action':'mysql_raw_binlog_'+action,'request':request});value=response.get_json()
+    def archive(family,action,request):
+        response=client.post(source_url,json={'action':('mysql_raw_binlog_' if family=='raw' else 'mysql_binlog_')+action,'request':request});value=response.get_json()
         assert response.status_code==200 and value.get('success'),value
         return value['data']
     cursor=root.cursor()
     try:
-        cursor.execute('FLUSH BINARY LOGS');cursor.execute('SHOW BINARY LOG STATUS');filename=cursor.fetchone()[0];cursor.fetchall()
-        cursor.execute('INSERT INTO sr_osc.t VALUES(1001001,%s,%s)',('desktop raw replay 雪',b'\x00\xff\x7f'))
-        cursor.execute('FLUSH BINARY LOGS')
-        sealed=archive('review',{'options':{'log_names':[filename]}})
-        sealed=wait_job(archive('start',start_request(sealed)),archive,'completed')
-        evidence=output/'raw-replay-desktop';evidence.mkdir(mode=0o700)
-        value=browser(app,evidence,target['server_id'],alias,sealed['job_id'],target['binding']['server_uuid'],binary,driver_binary,raw=True)
-        value['source_offline']=False
-        (evidence/'summary.json').write_text(json.dumps(value,indent=2)+'\n')
-        post=lambda action,**body:query_post(client,url,target['database_target_id'],action,**body)
-        session=post('open_session',language_profile='mysql-sql')['session_id']
-        try:
-            assert execute(post,session,'SELECT CAST(id AS CHAR),note,HEX(b) FROM t WHERE id=1001001')['rows']==[['1001001','desktop raw replay 雪','00FF7F']]
-        finally:post('close_session',session_id=session)
-        return ['built-recovery-target-menu-reviewed-native-raw-replay-and-independent-exact-data']
+        checks=[]
+        for family,row in [('raw',1001001),('shell',1001002)]:
+            cursor.execute('FLUSH BINARY LOGS');cursor.execute('SHOW BINARY LOG STATUS');filename=cursor.fetchone()[0];cursor.fetchall()
+            note='desktop '+family+' replay 雪'
+            cursor.execute('INSERT INTO sr_osc.t VALUES(%s,%s,%s)',(row,note,b'\x00\xff\x7f'))
+            cursor.execute('FLUSH BINARY LOGS')
+            selected={'log_names':[filename]} if family=='raw' else {'start_file':filename,'start_position':'4','compression':'zstd','threads':1}
+            sealed=archive(family,'review',{'options':selected})
+            source_post=lambda action,request:archive(family,action,request)
+            sealed=wait_job(archive(family,'start',start_request(sealed)),source_post,'completed')
+            evidence=output/(family+'-replay-desktop');evidence.mkdir(mode=0o700)
+            value=browser(app,evidence,target['server_id'],alias,sealed['job_id'],target['binding']['server_uuid'],binary,driver_binary,raw=family=='raw')
+            value['source_offline']=False
+            (evidence/'summary.json').write_text(json.dumps(value,indent=2)+'\n')
+            post=lambda action,**body:query_post(client,url,target['database_target_id'],action,**body)
+            session=post('open_session',language_profile='mysql-sql')['session_id']
+            try:assert execute(post,session,'SELECT CAST(id AS CHAR),note,HEX(b) FROM t WHERE id='+str(row))['rows']==[[str(row),note,'00FF7F']]
+            finally:post('close_session',session_id=session)
+            checks.append('built-recovery-target-menu-reviewed-native-'+family+'-replay-and-independent-exact-data')
+        return checks
     finally:
-        cursor.execute('DELETE FROM sr_osc.t WHERE id=1001001');cursor.close()
+        cursor.execute('DELETE FROM sr_osc.t WHERE id IN(1001001,1001002)');cursor.close()
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--output',required=True);parser.add_argument('--fixture-image',default='sr-mysql-physical:phase211')
+    parser=argparse.ArgumentParser();parser.add_argument('--output',required=True);parser.add_argument('--fixture-image',default='sr-mysql-physical:phase212')
+    parser.add_argument('--mysql-shell',required=True)
     parser.add_argument('--private-key');parser.add_argument('--prepare-fixture',action='store_true');parser.add_argument('--decoder',required=True);parser.add_argument('--client',required=True)
     parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');args=parser.parse_args()
     os.environ['CDEADMIN_MYSQL_BINLOG_BINARY']=str(Path(args.decoder).resolve(strict=True));os.environ['CDEADMIN_MYSQL_CLIENT_BINARY']=str(Path(args.client).resolve(strict=True))
+    os.environ['CDEADMIN_MYSQLSH_BINARY']=str(Path(args.mysql_shell).resolve(strict=True))
     from cdeadmin_mysql_physical_qualification import qualify
     qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,connections=True,replay=True)

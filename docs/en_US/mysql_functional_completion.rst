@@ -1917,8 +1917,13 @@ Original decoder/client guardians now retain separate immutable references,
 hash-verified private stdin and cancellation after observer loss. Reconciliation
 observes both utilities and cleanup before releasing the matching parked lease;
 the database outcome remains unknown and target acknowledgement still requires
-the exact UUID, current facts and a free native replay lock. Shell reconnect
-transport, missing/failed guardian reconciliation and wider lifecycle handling,
+the exact UUID, current facts and a free native replay lock. Managed recovery
+Shell replay now admits its extra native SQL connections and reconnects over
+that same route on POSIX application hosts. Its guardian and native process
+inherit the loopback listener reservation, preserving it after application
+loss. A separate original Shell guardian reference supports interruption
+inspection and cancellation without changing unknown database outcomes.
+Windows listener inheritance, missing/failed guardian reconciliation and wider lifecycle handling,
 incremental/encrypted/external-path admission, physical retention,
 selected replay and independent post-replay acceptance, production cutover and
 the broader native inventory remain open. ``CMP-MY-01`` and ``CMP-MY-02`` stay

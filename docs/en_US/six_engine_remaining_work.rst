@@ -115,7 +115,11 @@ one implementation scope and must not be counted as independent completion.
   decoder/client guardians now retain hash-verified private stdin and support
   cancellation/termination observation after observer loss, scoped cleanup and
   release of the matching parked lease without changing unknown database
-  outcomes. Shell reconnect transport, missing/failed guardian and wider
+  outcomes. Native Shell extra connections/reconnects now use that original
+  route on POSIX application hosts. Independent guardian/native descriptor
+  inheritance retains its listener reservation after application loss; original
+  Shell cancellation and termination observations preserve unknown outcomes.
+  Windows listener inheritance, missing/failed guardian and wider
   lifecycle reconciliation, native
   incremental/encrypted/external-path support, physical retention, selected
   replay, post-replay acceptance and cutover remain open; ``CMP-MY-01`` retains

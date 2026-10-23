@@ -207,11 +207,23 @@ input/credential cleanup. Only confirmed termination releases this job's parked
 transport lease. The original database outcome remains unknown; releasing its
 target fence still requires a free native replay lock and explicit confirmation
 of the exact target UUID and current facts. Missing or failed guardian receipts
-retain uncertainty and their reservation. Native Shell replay, which manages
-additional/reconnecting connections, requires separate transport admission.
+retain uncertainty and their reservation.
 If observation is lost during decoding before SQL dispatch, the load remains
 not dispatched while the decoder's separate process state stays observable and
 cancellable; absence of SQL dispatch does not prove decoder termination.
+Native **MySQL Shell archive** replay also admits this separately reviewed
+writable registration on a POSIX application host. The Shell session, replay
+worker connections and native reconnects use the same original process-bound
+route. Every SSH stream rechecks the original native process and its listener.
+The independent guardian and native Shell process inherit the loopback listener
+reservation, so application loss cannot allow another service to reuse that port
+while Shell is alive. Native authentication and TLS remain in effect.
+Shell has its own immutable guardian reference, cancellation and termination
+inspection. Lost replies retain the unknown database outcome and target fence;
+current lock/identity checks and explicit acknowledgement remain required.
+Windows listener inheritance remains separate platform-team implementation and
+qualification. Missing/failed guardians and wider lifecycle reconciliation also
+remain open.
 Whole-product post-replay data/definition acceptance, retention and production
 cutover also remain open; selected successful replay cases do not close them.
 

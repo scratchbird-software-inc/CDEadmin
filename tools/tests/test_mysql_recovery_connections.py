@@ -142,6 +142,22 @@ def test_unknown_native_utility_termination_retains_its_port_reservation(monkeyp
     finally:lease.uncertain=False;lease.close();registry.close()
 
 
+def test_shell_utility_uses_the_original_process_route_for_all_connections(monkeypatch):
+    registry=bridge.Bridges();monkeypatch.setattr(bridge,'bridges',registry)
+    binding={'id':'owned-shell','recovery_mode':'replay'};original=registry.install(binding,SimpleNamespace(close=Mock()),{})
+    value=bridge.admit_replay_utility({bridge.ROUTE_KEY:binding,'host':'managed-recovery.invalid','failover':[{'host':'other'}]},family='shell')
+    try:
+        bridge.require_replay_utility(value.route,family='shell')
+        assert value.route['host']=='127.0.0.1' and value.route['port']==original.port and 'failover' not in value.route
+        with pytest.raises(RelationalClientError):bridge.require_raw_utility(value.route)
+        with pytest.raises(RelationalClientError):registry.install(binding,SimpleNamespace(close=Mock()),{})
+        value.job_id='shell';value.uncertain=True;value.close()
+        with pytest.raises(RelationalClientError):registry.detach(binding)
+        bridge.confirm_raw_utility_termination(binding,'shell')
+        assert value.released
+    finally:value.uncertain=False;value.close();registry.close()
+
+
 def test_independent_termination_releases_only_the_original_jobs_utility(monkeypatch):
     registry=bridge.Bridges();monkeypatch.setattr(bridge,'bridges',registry)
     binding={'id':'owned','recovery_mode':'replay'};original=registry.install(binding,SimpleNamespace(close=Mock()),{})
