@@ -3257,7 +3257,7 @@ class ServerNode(PGChildNodeView):
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mysql_binlog_replay_sources','mysql_binlog_replay_archives','mysql_binlog_replay_boundaries','mysql_binlog_replay_inspect',
                                 'mysql_binlog_replay_review','mysql_binlog_replay_start','mysql_binlog_replay_status',
-                                'mysql_binlog_replay_list','mysql_binlog_replay_cancel','mysql_binlog_replay_reconcile','mysql_binlog_replay_acknowledge'}:
+                                'mysql_binlog_replay_list','mysql_binlog_replay_cancel','mysql_binlog_replay_observe_utilities','mysql_binlog_replay_reconcile','mysql_binlog_replay_acknowledge'}:
                     try:payload=service.mysql_binlog_replay(server,action.removeprefix('mysql_binlog_replay_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mariadb_binlog_replay_sources','mariadb_binlog_replay_archives','mariadb_binlog_replay_inspect',

@@ -15,7 +15,7 @@ class Connections(MySQLBinlogJobs):
         'Creates or reattaches a separate native MySQL registration. Source registrations and their SQL sessions are preserved.',
         'Native MySQL protocol, authentication, TLS, data types and transactions pass through a process-bound SSH stream to the reviewed loopback listener. No database password is delegated to the relay.',
         'This transport belongs to the current application process. After application restart, reattach with fresh private SSH authentication. Missing or changed instances refuse connection; there is no network fallback.',
-        'The registered recovery instance retains its reviewed read-only or writable replay startup policy and lifetime. Native raw-log replay has a private no-reconnect utility lease; Shell transport and full post-replay acceptance retain separate work.',
+        'The registered recovery instance retains its reviewed read-only or writable replay startup policy and lifetime. Raw and POSIX Shell replay retain their original utility leases. Independent utility observations remain available when SQL transport is unavailable; full post-replay acceptance remains separate.',
     )
 
 

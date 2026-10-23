@@ -1,6 +1,7 @@
 """Owned sealed archive inputs and separately admitted native recovery targets."""
 from copy import deepcopy
 import shutil
+import time
 
 from ..operations.store import JsonOperationStore
 from ..providers.mysql_family import mysql_binlog_archives as archive
@@ -147,6 +148,45 @@ def input_reference(service,owner,request):
     return reference,jobs.directory(record)/'archive',record['source']
 
 
+def release_observed_reservation(jobs,record):
+    """Release only a stopped original utility's recorded recovery binding."""
+    value=jobs.get(record['job_id'],record['owner'],record['endpoint_id'])
+    with jobs._maps_lock:
+        known=jobs.workers.get(record['job_id'])
+        if known and known[0].is_alive():return value
+    if value['state'] in {'dispatching','active','cancel_requested'} or value.get('interrupted_utility_observation',{}).get('native_process_termination_confirmed') is not True:
+        return value
+    binding=record['source_state'].get('recovery_binding')
+    if binding is None:return value
+    if (binding.get('server_uuid')!=record['source']['server_uuid'] or binding.get('owner')!=record['owner'] or
+            binding.get('endpoint_id')!=record['endpoint_id']):
+        raise archive.BinlogArchiveError('Original recovery utility binding differs from the replay target')
+    from ..providers.mysql_family.mysql_recovery_bridge import confirm_raw_utility_termination
+    count=confirm_raw_utility_termination(binding,record['job_id'])
+    if count:
+        jobs.update(record,recovery_utility_release={'binding_id':binding['id'],'released_reservations':count,
+            'native_utility_termination_confirmed':True,'database_outcome_unchanged':True,'observed_at':time.time()})
+    return jobs.get(record['job_id'],record['owner'],record['endpoint_id'])
+
+
+def principal_sessions(connection):
+    own=archive.rows(connection,'SELECT CONNECTION_ID() AS connection_id')[0]['connection_id']
+    processes=archive.rows(connection,'SHOW PROCESSLIST')
+    observer=next((row for row in processes if str(row['Id'])==str(own)),None)
+    if observer is None:raise archive.BinlogArchiveError('Native replay session activity is not observable')
+    return own,observer['User'],processes
+
+
+def principal_work(connection,expected_login=None):
+    """Observe native login sessions; retain no statement text or SQL rows."""
+    own,login,processes=principal_sessions(connection)
+    if expected_login is not None and expected_login!=login:
+        raise archive.BinlogArchiveError('Native replay login changed; inspect with its original registration credentials')
+    active=[str(row['Id']) for row in processes if row['User']==login and str(row['Id'])!=str(own) and row['Command']!='Sleep']
+    return {'native_principal_work_free':not active,'active_principal_connection_ids':active,
+        'session_scope':'other active native sessions for the original login; statement text is not retained'}
+
+
 def action(service,server,operation,request):
     from flask import current_app
     from mysql.connector import Error as NativeError
@@ -179,9 +219,13 @@ def action(service,server,operation,request):
         observed=raw_native.inventory(directory,offset=request.get('offset',0),limit=request.get('limit',100))
         return {**{key:observed[key] for key in ('groups','offset','limit','total','more')},'artifact_digest':reference['artifact_digest'],
             'scope':'observed native file headers; sealed input hashes and boundaries are verified again before execution'}
-    if operation in {'status','cancel'}:
+    if operation in {'status','cancel','observe_utilities'}:
         if set(request)!={'job_id'}:raise archive.BinlogArchiveError('Select one replay receipt')
-        return (jobs.get if operation=='status' else jobs.cancel)(request['job_id'],owner,endpoint.id)
+        if operation=='status':return jobs.get(request['job_id'],owner,endpoint.id)
+        record=jobs.load(request['job_id'],owner,endpoint.id)
+        if operation=='cancel':jobs.cancel(request['job_id'],owner,endpoint.id)
+        else:jobs.inspect_utilities(record)
+        return release_observed_reservation(jobs,jobs.load(request['job_id'],owner,endpoint.id))
     if operation=='review':
         if set(request)-{'source_server_id','archive_job_id','options','archive_family'} or not {'source_server_id','archive_job_id','options'}.issubset(request):raise archive.BinlogArchiveError('Review one sealed archive and exact target options')
         reference,source_directory,source_identity=input_reference(service,owner,request)
@@ -213,6 +257,8 @@ def action(service,server,operation,request):
         if not isinstance(provider,MySQLPilotProvider):raise archive.BinlogArchiveError('Native MySQL replay client is unavailable')
         from ..providers.mysql_family.mysql_connections import POOL_ARGUMENTS
         route={key:value for key,value in payload['route'].items() if key not in POOL_ARGUMENTS}
+        if operation=='start' and record['source_state'].get('recovery_binding',route.get('mysql_recovery_binding'))!=route.get('mysql_recovery_binding'):
+            raise archive.BinlogArchiveError('Managed recovery binding changed after review; prepare a new replay review')
         if route.get('mysql_recovery_binding') and operation in {'review','start'}:
             from ..providers.mysql_family.mysql_recovery_bridge import admit_replay_utility
             utility=admit_replay_utility(route,family='raw' if raw else 'shell');route=utility.route
@@ -224,8 +270,10 @@ def action(service,server,operation,request):
             observation=(raw_native.coverage(connection,record['source'],record['source_state']['target']) if raw else
                 native.coverage(connection,reference['summary'],selected,record['source_state']['target']))
             observation['native_lock_free']=archive.rows(connection,'SELECT IS_FREE_LOCK(%s) AS free',('cdeadmin:binlog-load:'+target['identity']['server_uuid'],))[0]['free']==1
+            if record['source_state'].get('recovery_binding'):observation.update(principal_work(connection,record['source_state'].get('native_login')))
             result=jobs.acknowledge(record,observation,request) if operation=='acknowledge' else jobs.reconcile(record,observation)
-            if result.get('interrupted_utility_observation',{}).get('native_process_termination_confirmed') is True:
+            result=release_observed_reservation(jobs,jobs.load(record['job_id'],owner,endpoint.id))
+            if 'recovery_binding' not in record['source_state'] and result.get('interrupted_utility_observation',{}).get('native_process_termination_confirmed') is True:
                 from ..providers.mysql_family.mysql_recovery_bridge import confirm_raw_utility_termination
                 confirm_raw_utility_termination(route.get('mysql_recovery_binding'),record['job_id'])
             if operation=='reconcile':result['observation_digest']=digest(observation)
@@ -244,7 +292,8 @@ def action(service,server,operation,request):
             target=raw_native.admission(connection,reference['summary'],observed,previous,selected)
         configuration=digest({'registration':MySQLMonitoringHost._configuration(server),'root':str(jobs.root),'runtime_limit':runtime_limit})
         if operation=='review':return jobs.review(owner,endpoint.id,selected,{'identity':target['identity'],
-            'state':{'target':target,'input_reference':reference,**({'input_previous_gtids':previous} if raw else {})}},configuration,program)
+            'state':{'target':target,'input_reference':reference,**({'input_previous_gtids':previous} if raw else {}),
+                **({'recovery_binding':deepcopy(route['mysql_recovery_binding']),'native_login':principal_sessions(connection)[1]} if route.get('mysql_recovery_binding') else {})}},configuration,program)
         transport=(RawReplayTransport if raw else ReplayTransport)(client,route,(raw_native.delegate_credentials if raw else archive.delegate_credentials)(client,route),connection,source_directory,source_identity);connection=None
         transport.recovery_utility=utility;utility=None
         admitted=transport;transport=None

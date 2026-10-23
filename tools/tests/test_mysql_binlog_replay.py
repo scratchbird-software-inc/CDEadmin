@@ -154,6 +154,61 @@ def test_shell_original_guardian_reconciles_without_changing_unknown_database_ou
 
 
 @pytest.mark.parametrize('manager',['mysql'],indirect=True)
+@pytest.mark.parametrize('complete',[False,True])
+@pytest.mark.parametrize('retained_binding',[False,True])
+def test_original_utility_inspection_survives_lost_sql_transport_and_keeps_target_fenced(manager,monkeypatch,complete,retained_binding):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from pgadmin.cdeadmin.providers.mysql_family import mysql_recovery_bridge as bridge
+    from pgadmin.cdeadmin.workspace import mysql_binlog_replay_service as service
+    jobs,endpoint,target,review,_current=manager;item,_request=review();record=jobs.load(item['job_id'],1,endpoint)
+    binding={'id':'original','server_uuid':target['server_uuid'],'recovery_mode':'replay','owner':1,'endpoint_id':endpoint}
+    registry=bridge.Bridges();monkeypatch.setattr(bridge,'bridges',registry)
+    original=registry.install(binding,SimpleNamespace(close=Mock()),{})
+    utility=bridge.admit_raw_utility({bridge.ROUTE_KEY:binding});utility.job_id=item['job_id'];utility.uncertain=True;utility.close();original.close()
+    try:
+        state=record['source_state'];state['input_reference']['family']='raw'
+        if retained_binding:state['recovery_binding']=binding
+        jobs.update(record,state='unknown',source_state=state,native_load_may_have_dispatched=True,native_load_outcome='unknown',
+            native_process_termination_confirmed=False,program={**record['program'],'decoder':{'executable_sha256':'decoder'},'client':{'executable_sha256':'client'}})
+        for name in ('raw-replay-decoder','raw-replay-client'):jobs.progress(jobs.load(item['job_id'],1,endpoint),{'durable_tool':{'name':name,'nonce':name}})
+        jobs.claim_fence(record);staged=jobs.directory(record)/'input';staged.mkdir();(staged/'owned-input').write_bytes(b'private original copy')
+        observe=Mock(return_value={'complete':complete,'cleanup_confirmed':complete})
+        monkeypatch.setattr('pgadmin.cdeadmin.sdk.durable_tool.observe',observe)
+        endpoint_service=SimpleNamespace(workspace=Mock(side_effect=AssertionError('Offline inspection must not contact SQL')))
+        workspace=SimpleNamespace(endpoint_service=endpoint_service)
+        monkeypatch.setattr(service,'manager',lambda *_:(jobs,2,SimpleNamespace(id=endpoint)))
+        with pytest.raises(BinlogArchiveError,match='owner'):service.action(workspace,object(),'observe_utilities',{'job_id':item['job_id']})
+        assert not observe.called
+        monkeypatch.setattr(service,'manager',lambda *_:(jobs,1,SimpleNamespace(id=endpoint)))
+        result=service.action(workspace,object(),'observe_utilities',{'job_id':item['job_id']})
+        assert result['native_load_outcome']=='unknown' and result['state']=='unknown'
+        assert result['native_process_termination_confirmed'] is complete and not endpoint_service.workspace.called
+        assert utility.released is (complete and retained_binding)
+        assert staged.exists() is (not complete) and 'target_state_acknowledged_at' not in result and 'reconciliation' not in result
+        with jobs.fence_store(target['server_uuid']) as store:assert store.read()['replay_fence']['job_id']==item['job_id']
+        if complete and retained_binding:
+            observed={'native_lock_free':True,'native_principal_work_free':False}
+            with pytest.raises(BinlogArchiveError,match='worker statements'):
+                jobs.acknowledge(jobs.load(item['job_id'],1,endpoint),observed,{'target_confirmation':target['server_uuid'],'observation_digest':digest(observed)})
+    finally:utility.uncertain=False;utility.close();registry.close()
+
+
+def test_native_principal_work_observation_covers_worker_queries_without_retaining_sql(monkeypatch):
+    from pgadmin.cdeadmin.workspace import mysql_binlog_replay_service as service
+    def rows(connection,sql):
+        if sql.startswith('SELECT CONNECTION_ID'):return [{'connection_id':7}]
+        return [{'Id':7,'User':'native@user','Command':'Query','Info':'private observer SQL'},
+            {'Id':8,'User':'native@user','Command':'Query','Info':'private native replay SQL'},
+            {'Id':9,'User':'native@user','Command':'Sleep','Info':None},
+            {'Id':10,'User':'another','Command':'Query','Info':'private unrelated SQL'}]
+    monkeypatch.setattr(service.archive,'rows',rows)
+    result=service.principal_work(object())
+    assert result['native_principal_work_free'] is False and result['active_principal_connection_ids']==['8']
+    assert 'private' not in str(result) and 'native@user' not in str(result)
+
+
+@pytest.mark.parametrize('manager',['mysql'],indirect=True)
 def test_raw_utility_reference_cannot_be_replaced_after_admission(manager):
     jobs,endpoint,_target,review,_current=manager
     item,_request=review();record=jobs.load(item['job_id'],1,endpoint)

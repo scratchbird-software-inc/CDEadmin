@@ -29,7 +29,7 @@ def reconnect_probe(client,route,credentials,directory,target):
     assert 'CDEADMIN_NATIVE_RECONNECT:'+target['server_uuid'] in result['stdout']
 
 
-def shell_replay(app,client,sid,root,archive,replay,physical,target,url,output,browser_binary=None,driver_binary=None):
+def shell_replay(app,client,sid,root,archive,replay,physical,target,url,output,browser_binary=None,driver_binary=None,*,reattach=None):
     from cdeadmin_mysql_physical_replay_qualification import wait_job,start_request,cancel_independent_replay
     from cdeadmin_mysql_recovery_connection_qualification import query_post,execute
     from pgadmin.cdeadmin.providers.mysql_family import mysql_binlog_replay as native,mysql_recovery_bridge as bridge
@@ -94,6 +94,11 @@ def shell_replay(app,client,sid,root,archive,replay,physical,target,url,output,b
         # A new review, after explicit acknowledgement, completes any remaining
         # transaction; cancellation itself never proves rollback or completion.
         selected={'source_server_id':sid,'archive_job_id':cancelled['archive_job_id'],'options':{'target_confirmation':uuid}}
+        item=replay('review',selected);wait_job(replay('start',start_request(item)),replay,'native_load_returned')
+        lost=cancel_independent_replay(app,client,sid,root,archive,replay,physical,target,url,output,browser_binary,driver_binary,
+            family='shell',lose_transport=True,reattach=reattach)
+        checks.extend(lost['checks'])
+        selected={'source_server_id':sid,'archive_job_id':lost['archive_job_id'],'options':{'target_confirmation':uuid}}
         item=replay('review',selected);wait_job(replay('start',start_request(item)),replay,'native_load_returned')
         checks.extend(['native-Shell-additional-replay-connection-and-explicit-reconnect-use-original-process-bound-route',
             'native-Shell-physical-base-before-after-all-exact-Unicode-BLOB-and-lost-reply-fence-reconciliation',

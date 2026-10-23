@@ -224,6 +224,21 @@ current lock/identity checks and explicit acknowledgement remain required.
 Windows listener inheritance remains separate platform-team implementation and
 qualification. Missing/failed guardians and wider lifecycle reconciliation also
 remain open.
+
+If the recovery SSH relay is lost, open the replay receipt and use **Inspect
+original replay utilities**. This reads the original execution-host receipts
+without connecting to MySQL; **Cancel replay** also remains independent of the
+SQL route. Once original utility termination is confirmed, the matching retained
+recovery binding can release that job's parked lease. No other job or binding
+is released. Its private staged input can then be removed while the original
+archive stays intact. The unknown database outcome and target fence remain.
+Reattach the same recovery instance using a fresh connection review and private
+SSH authentication, then inspect current target facts before acknowledgement.
+Managed replay acknowledgement also checks native session activity for the
+original login, so a free Shell guard lock cannot hide a still-running worker
+statement. Active connection IDs are retained; statement text is not retained.
+Older receipts without a retained recovery binding keep their reservation until
+the existing SQL-based reconciliation can establish the matching target.
 Whole-product post-replay data/definition acceptance, retention and production
 cutover also remain open; selected successful replay cases do not close them.
 

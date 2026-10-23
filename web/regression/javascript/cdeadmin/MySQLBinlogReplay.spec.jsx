@@ -37,16 +37,18 @@ it.each(['mysql','mariadb'])('selects an owned sealed input and exact %s target 
   expect(screen.getByText(/Recovered data has not been independently verified/)).toBeInTheDocument();
 });
 
-it('keeps unknown outcomes explicit and binds acknowledgement to current reconciliation facts',async () => {
+it.each([true,false])('keeps unknown outcomes explicit and binds acknowledgement to current reconciliation and worker facts (%s)',async workerFree => {
   const unknown={...item,state:'unknown',native_load_outcome:'unknown',native_process_termination_confirmed:true};
   const post=jest.fn(async ({action}) => ({mysql_binlog_replay_list:{jobs:[unknown],offset:0,total:1},mysql_binlog_replay_status:unknown,
-    mysql_binlog_replay_reconcile:{...unknown,reconciliation:{native_lock_free:true,all_archive_gtids_present:1},observation_digest:'fresh-native-facts'},
+    mysql_binlog_replay_reconcile:{...unknown,reconciliation:{native_lock_free:true,native_principal_work_free:workerFree,all_archive_gtids_present:1},observation_digest:'fresh-native-facts'},
     mysql_binlog_replay_acknowledge:{...unknown,target_state_acknowledged_at:123}}[action]));
   render(<Component post={post} />);fireEvent.click(screen.getByRole('button',{name:'Load replay jobs'}));await screen.findByRole('table',{name:'Native MySQL replay jobs'});
   fireEvent.click(screen.getByRole('button',{name:'Inspect replay '+item.job_id}));await screen.findByText(/This target is fenced/);
   fireEvent.click(screen.getByRole('button',{name:'Inspect current target facts'}));await screen.findByLabelText('Native replay reconciliation');
   const acknowledge=screen.getByRole('button',{name:'Acknowledge facts and release target fence'});expect(acknowledge).toBeDisabled();
-  fireEvent.change(screen.getByLabelText('Acknowledge uncertain target UUID'),{target:{value:target}});fireEvent.click(acknowledge);
+  fireEvent.change(screen.getByLabelText('Acknowledge uncertain target UUID'),{target:{value:target}});
+  if(!workerFree) {expect(acknowledge).toBeDisabled();return;}
+  fireEvent.click(acknowledge);
   await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_replay_acknowledge',request:{job_id:item.job_id,target_confirmation:target,observation_digest:'fresh-native-facts'}}));
   await screen.findByText(/original native load outcome remains uncertain/);
   expect(screen.queryByText(/This target is fenced/)).not.toBeInTheDocument();
@@ -64,6 +66,24 @@ it('allows cancelling an independently supervised utility after the application 
   fireEvent.click(screen.getByRole('button',{name:'Cancel replay'}));
   await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_replay_cancel',request:{job_id:item.job_id}}));
   expect(screen.queryByRole('button',{name:'Acknowledge facts and release target fence'})).not.toBeInTheDocument();
+});
+
+it('inspects original utilities while SQL is unavailable and discards earlier target acknowledgement facts',async () => {
+  const unknown={...item,state:'unknown',native_load_outcome:'unknown',native_process_termination_confirmed:true};
+  const post=jest.fn(async ({action}) => ({mysql_binlog_replay_list:{jobs:[unknown],offset:0,total:1},mysql_binlog_replay_status:unknown,
+    mysql_binlog_replay_reconcile:{...unknown,reconciliation:{native_lock_free:true},observation_digest:'earlier-facts'},
+    mysql_binlog_replay_observe_utilities:{...unknown,interrupted_utility_observation:{native_process_termination_confirmed:true,original_native_load_outcome_unchanged:true},recovery_utility_release:{released_reservations:1}}}[action]));
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load replay jobs'}));await screen.findByRole('table',{name:'Native MySQL replay jobs'});
+  fireEvent.click(screen.getByRole('button',{name:'Inspect replay '+item.job_id}));await screen.findByText(/This target is fenced/);
+  fireEvent.click(screen.getByRole('button',{name:'Inspect current target facts'}));await screen.findByLabelText('Native replay reconciliation');
+  fireEvent.change(screen.getByLabelText('Acknowledge uncertain target UUID'),{target:{value:target}});
+  expect(screen.getByRole('button',{name:'Acknowledge facts and release target fence'})).toBeEnabled();
+  fireEvent.click(screen.getByRole('button',{name:'Inspect original replay utilities'}));await screen.findByLabelText('Original replay utility observations');
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_replay_observe_utilities',request:{job_id:item.job_id}});
+  expect(screen.queryByLabelText('Native replay reconciliation')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Acknowledge facts and release target fence'})).not.toBeInTheDocument();
+  expect(screen.getByText(/This target is fenced/)).toBeInTheDocument();
 });
 
 it('discards an in-flight reply when the registered target changes',async () => {

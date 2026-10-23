@@ -175,15 +175,16 @@ def require_replay_utility(route,*,family=None):
 
 def confirm_raw_utility_termination(binding,job_id):
     """Release only the original job's reservation after durable observation."""
-    if not binding:return
+    if not binding:return 0
     with bridges.lock:
         original=bridges.entries.get(binding.get('id'))
-        if original is None or original.binding!=binding:return
+        if original is None or original.binding!=binding:return 0
         with original.lock:
-            pending=getattr(original,'uncertain_utilities',[])
+            pending=getattr(original,'uncertain_utilities',[]);released=0
             for value in list(pending):
                 if getattr(value,'job_id',None)==job_id:
-                    value.uncertain=False;value.close();pending.remove(value)
+                    value.uncertain=False;value.close();pending.remove(value);released+=1
+            return released
 
 
 def native_connection(connect,args,options):

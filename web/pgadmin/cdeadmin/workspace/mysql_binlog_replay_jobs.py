@@ -181,7 +181,8 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
                     entry=self.workers.get(record['job_id'])
                     if entry and entry[0] is threading.current_thread():self.workers.pop(record['job_id'],None)
 
-    def reconcile(self,record,observation):
+    def inspect_utilities(self,record):
+        """Observe original host receipts without contacting the SQL target."""
         with self._maps_lock:
             known=self.workers.get(record['job_id'])
             if known and known[0].is_alive():raise BinlogArchiveError('The native replay worker is still active')
@@ -194,6 +195,11 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
             if path.is_symlink():raise BinlogArchiveError('Original replay input cleanup scope changed')
             if path.exists():shutil.rmtree(path)
             self.update(record,staged_input_cleanup={'complete':not path.exists(),'observed_at':time.time()})
+        return self.get(record['job_id'],record['owner'],record['endpoint_id'])
+
+    def reconcile(self,record,observation):
+        self.inspect_utilities(record)
+        record=self.load(record['job_id'],record['owner'],record['endpoint_id'])
         self.update(record,reconciliation={**observation,'observed_at':time.time()},
             native_load_outcome=record.get('native_load_outcome','unknown'))
         return self.get(record['job_id'],record['owner'],record['endpoint_id'])
@@ -211,6 +217,8 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
             raise BinlogArchiveError('Confirm the exact native target and current reconciliation facts')
         if record.get('native_process_termination_confirmed') is not True or observation.get('native_lock_free') is not True:
             raise BinlogArchiveError('Native process termination and the released native replay lock must be observed before acknowledging this target')
+        if record['source_state'].get('recovery_binding') and observation.get('native_principal_work_free') is not True:
+            raise BinlogArchiveError('Native replay worker statements are still active or unobserved')
         self.update(record,target_state_acknowledged_at=time.time(),target_state_acknowledgement=observation)
         self.release_fence(record)
         return self.get(record['job_id'],record['owner'],record['endpoint_id'])

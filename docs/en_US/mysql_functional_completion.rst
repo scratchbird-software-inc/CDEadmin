@@ -1923,6 +1923,14 @@ that same route on POSIX application hosts. Its guardian and native process
 inherit the loopback listener reservation, preserving it after application
 loss. A separate original Shell guardian reference supports interruption
 inspection and cancellation without changing unknown database outcomes.
+Original utility inspection/cancellation now works without a live SQL relay.
+New replay reviews retain their exact owner/endpoint/recovery binding; only
+confirmed original termination releases that job's parked reservation, allowing
+a separately reviewed reattachment. Staged-input cleanup preserves the source
+archive. Target acknowledgement still needs fresh SQL identity/lock facts after
+reattachment, including native active-session checks for the original login;
+a still-running Shell worker statement keeps acknowledgement blocked even if
+its guard connection has closed. Legacy missing-binding receipts remain conservative.
 Windows listener inheritance, missing/failed guardian reconciliation and wider lifecycle handling,
 incremental/encrypted/external-path admission, physical retention,
 selected replay and independent post-replay acceptance, production cutover and

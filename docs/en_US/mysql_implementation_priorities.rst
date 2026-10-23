@@ -132,8 +132,13 @@ only the matching parked lease. Original unknown database outcomes stay unknown.
 Native Shell replay and reconnects now use the original process-bound route on
 POSIX application hosts, with independently inherited listener reservations,
 original guardian references and cancellation/reconciliation. Windows listener
-inheritance, missing/failed guardian and wider lifecycle
-reconciliation, post-replay acceptance, incremental/encrypted/external-table-space
+inheritance remains with the platform team. Original utility inspection and
+cancellation no longer require the SQL relay; confirmed termination can release
+the exact recorded owner/endpoint/recovery reservation before reviewed
+reattachment. Unknown database outcomes/fences persist until fresh SQL facts and
+explicit acknowledgement. Legacy missing-binding receipts, missing/failed
+guardians and wider lifecycle reconciliation remain open, alongside
+post-replay acceptance, incremental/encrypted/external-table-space
 support, physical retention and production cutover remain open. These bounded
 artifact receipts do not close ``CMP-MY-01``.
 

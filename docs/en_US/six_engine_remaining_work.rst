@@ -119,6 +119,11 @@ one implementation scope and must not be counted as independent completion.
   route on POSIX application hosts. Independent guardian/native descriptor
   inheritance retains its listener reservation after application loss; original
   Shell cancellation and termination observations preserve unknown outcomes.
+  Original utility inspection/cancellation also works without SQL transport.
+  Confirmed termination releases only the stored owner/endpoint/recovery
+  reservation before separately reviewed reattachment; fresh SQL facts are
+  still required for target acknowledgement. Legacy missing-binding receipts
+  retain conservative protection.
   Windows listener inheritance, missing/failed guardian and wider
   lifecycle reconciliation, native
   incremental/encrypted/external-path support, physical retention, selected
