@@ -1212,6 +1212,10 @@ class ServerNode(PGChildNodeView):
     def delete(self, gid, sid):
         """Delete a server node in the settings database."""
         servers = Server.query.filter_by(user_id=current_user.id, id=sid)
+        managed = servers.first()
+        if managed is not None and _cde_registration(managed)['engine_id'] == 'mysql':
+            return make_json_response(status=409, success=0, errormsg=gettext(
+                'Use this MySQL endpoint\'s Remove connection profile form.'))
         server_name = None
 
         # TODO:: A server, which is connected, cannot be deleted
@@ -1257,6 +1261,10 @@ class ServerNode(PGChildNodeView):
                 success=0,
                 errormsg=gettext("Could not find the required server.")
             )
+
+        if _cde_registration(server)['engine_id'] == 'mysql':
+            return make_json_response(status=409, success=0, errormsg=gettext(
+                'Use this MySQL endpoint\'s Edit connection profile form.'))
 
         if config.SERVER_MODE and server.shared and \
                 server.user_id != current_user.id:
@@ -3786,7 +3794,7 @@ class ServerNode(PGChildNodeView):
 
         disconnect_profile = _cde_registration(server)
         if (disconnect_profile['workflow'] == 'provider_endpoint' and
-                disconnect_profile['engine_id'] == 'firebird'):
+                disconnect_profile['engine_id'] in {'firebird', 'mysql'}):
             if _is_non_owner(server):
                 return forbidden(errormsg=gettext(
                     'Only the endpoint owner can disconnect its credentials.'))

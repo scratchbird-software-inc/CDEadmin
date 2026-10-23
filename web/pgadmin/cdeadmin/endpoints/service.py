@@ -23,7 +23,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from functools import wraps
 
-from pgadmin.cdeadmin.core import EndpointContext, ProviderReleaseError
+from pgadmin.cdeadmin.core import EndpointContext, ProviderReleaseError, ProviderRegistry
 from pgadmin.cdeadmin.navigator import server_display_name
 from pgadmin.cdeadmin.security import SecretReference
 from pgadmin.cdeadmin.security import (
@@ -150,10 +150,19 @@ def _connection_change(method):
                             'endpoint_configuration_change', None)
         if endpoint is None or not callable(admission):
             return method(self, server, *args, **kwargs)
+        from ..providers.mysql_family.mysql_recovery_bridge import bridges
+        from ..sdk import RelationalClientError
         try:
-            with admission(self.provider_registry, endpoint.id):
+            with ExitStack() as held:
+                ownership = bridges.registration_change_guard(endpoint.id)
+                if isinstance(self.provider_registry, ProviderRegistry):
+                    held.enter_context(admission(self.provider_registry, endpoint.id,
+                                                 ownership=ownership))
+                else:
+                    held.enter_context(admission(self.provider_registry, endpoint.id))
+                    held.enter_context(ownership)
                 return method(self, server, *args, **kwargs)
-        except ProviderReleaseError as exc:
+        except (ProviderReleaseError, RelationalClientError) as exc:
             raise EndpointRegistrationError(str(exc)) from None
     return guarded
 
@@ -599,6 +608,8 @@ class EndpointService:
         self.forget_server_credentials(server)
         endpoint = getattr(server, 'endpoint_profile', None)
         if endpoint is not None:
+            from ..providers.mysql_family.mysql_recovery_bridge import bridges
+            bridges.detach_endpoint(endpoint.id)
             self._record_verification(endpoint, 'unverified')
 
     @contextmanager
@@ -1246,6 +1257,8 @@ class EndpointService:
             raise EndpointRegistrationError(
                 'confirmation must exactly match the connection profile name'
             )
+        from ..providers.mysql_family.mysql_recovery_bridge import bridges
+        bridges.detach_endpoint(endpoint.id)
         return {
             'endpoint_id': endpoint.id,
             'display_name': server.name,

@@ -1943,3 +1943,41 @@ startup attempt failed its durable agent catalog seed with ``SECURITY.CONTEXT.EX
 archive SQL. No fallback database or security bypass is used. Windows/macOS
 evidence remains with the platform teams and must match the final source before
 cross-platform completion is claimed. Signing/release approvals remain separate.
+
+MySQL registration lifecycle admission
+------------------------------------
+
+MySQL now participates in the registry's configuration-change admission and
+release hooks. Retained SQL sessions block profile/route/credential changes,
+database-target removal, disconnect and registration removal even when idle:
+temporary tables and prepared statements belong to that native session.
+Dedicated catalog/collector connections, connections still being initialized,
+uncertain sessions, active execution workers and synchronous native utility
+operations also retain their ownership. Admission remains held through release
+and local metadata persistence; a released client cannot open another session,
+dedicated connection or credential-delegating native utility operation.
+Operators explicitly finish pending work and close the sessions first. Failed
+admission does not commit, roll back, cancel or replay native work.
+
+Recovery transport admission additionally checks independent original utility
+leases even when no SQL provider binding remains. Those leases prevent generic
+registration mutation as well as transport detach/replacement. An admitted
+disconnect/removal releases the idle process-bound recovery transport. MySQL's
+server Disconnect action now uses endpoint lifecycle handling instead of the
+PostgreSQL connection manager.
+Legacy PostgreSQL-style update/delete routes refuse MySQL registrations and
+direct the caller to the existing provider forms, preserving their lifecycle
+admission and exact removal confirmation.
+
+``tools/cdeadmin_mysql_registration_lifecycle_qualification.py --output
+<external-directory>`` qualifies the actual workspace and server-disconnect
+HTTP routes against owned MySQL 9.7.0 fixtures with both Connector/Python native
+implementations. Eleven checks per implementation cover refused edits/removal,
+transaction/savepoint/temporary/prepared-state preservation, explicit rollback
+and session closure, stale-client rejection, fresh verification and successful
+idle removal. Regression checks also cover concurrent connection admission,
+native utility callbacks, release failure and independent recovery reservations.
+This closes the recorded generic MySQL registration lifecycle follow-up, not
+the wider host/recovery inventory. ``CMP-MY-01``, ``CMP-MY-02`` and ``INV-MYSQL``
+remain open. Windows/macOS native acceptance remains with the platform teams;
+ScratchBird history qualification remains owner-deferred.

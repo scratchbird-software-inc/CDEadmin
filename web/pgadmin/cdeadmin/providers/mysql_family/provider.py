@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from importlib import resources as package_resources
 
@@ -1090,6 +1091,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         from .mysql_execution import Executions
         self._executions = Executions(self)
         self._session_requests = {}
+        self._native_operations = 0
         self._tool_runner = tool_runner or ProviderToolRunner({
             'mysql-shell': os.environ.get(
                 'CDEADMIN_MYSQLSH_BINARY', 'mysqlsh'
@@ -1098,6 +1100,15 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             'mysql-client': os.environ.get('CDEADMIN_MYSQL_CLIENT_BINARY','mysql'),
             'mysql-server': os.environ.get('CDEADMIN_MYSQL_SERVER_BINARY','mysqld'),
         })
+
+    def _connect(self, request):
+        # Keep admission through native initialization and handle publication.
+        # This includes dedicated catalog/collector connections, not just the
+        # interactive sessions published by the provider facade.
+        with self._executions.lock:
+            if self._executions.closing:
+                raise RelationalClientError('MySQL client is closing')
+            return super()._connect(request)
 
     def open_session(self, request):
         with self._executions.lock:
@@ -1216,6 +1227,10 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             raise
 
     def close(self):
+        with self._executions.lock:
+            if self._native_operations:
+                raise RelationalClientError('MySQL native utility work is active')
+            self._executions.closing = True
         self._executions.close()
         try:
             from .mysql_session_variables import uninstall
@@ -1267,7 +1282,24 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         except (ProviderToolError, TypeError, ValueError) as exc:
             raise RelationalClientError(str(exc)) from None
 
+    @contextmanager
+    def _native_operation(self):
+        with self._executions.lock:
+            if self._executions.closing:
+                raise RelationalClientError('MySQL client is closing')
+            self._native_operations += 1
+        try:
+            yield
+        finally:
+            with self._executions.lock:
+                self._native_operations -= 1
+
     def _tool_secrets(self, route, callback, *, allow_recovery_credentials=False):
+        with self._native_operation():
+            return self._acquire_tool_secrets(route, callback,
+                allow_recovery_credentials=allow_recovery_credentials)
+
+    def _acquire_tool_secrets(self, route, callback, *, allow_recovery_credentials=False):
         if route.get('mysql_recovery_binding') and not allow_recovery_credentials:
             from .mysql_recovery_bridge import require_replay_utility
             require_replay_utility(route)
@@ -1443,6 +1475,11 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def run_database_operation(
             self, connection, route, operation_id, options):
+        with self._native_operation():
+            return self._run_database_operation(connection, route, operation_id, options)
+
+    def _run_database_operation(
+            self, connection, route, operation_id, options):
         if operation_id == 'verify_logical':
             from .mysql_dump_verification import verify
             return verify(self, route, options)
@@ -1585,6 +1622,26 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 class MySQLPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MYSQL_PROFILE)
+
+    @contextmanager
+    def profile_change_guard(self):
+        """Preserve native sessions, including idle temporary/prepared state."""
+        native = isinstance(self.client, MySQLDBAPIClient)
+        with self.client._executions.lock if native else nullcontext():
+            if self._sessions or (native and (
+                    self.client._connections or self.client._session_requests or
+                    self.client._native_operations or
+                    self.client._uncertain_sessions or any(
+                        not token.finished.is_set()
+                        for token in self.client._executions.tokens))):
+                raise RelationalClientError(
+                    'Close MySQL SQL sessions and dedicated native work before '
+                    'changing this connection; explicitly finish pending work')
+            yield
+
+    def release_for_profile_change(self):
+        with self.profile_change_guard():
+            self.close()
 
     def apply_server_operation(self, route, record, operation):
         from ..mysql_server_application import apply_operation

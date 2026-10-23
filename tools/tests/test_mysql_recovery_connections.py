@@ -2,6 +2,7 @@
 import socket
 import json
 from types import SimpleNamespace
+import threading
 from unittest.mock import Mock
 
 import pytest
@@ -101,7 +102,7 @@ def test_native_reconnect_cannot_use_a_replaced_recovery_transport(monkeypatch):
     def acquire():
         lease=SimpleNamespace(release=Mock());leases.append(lease);return lease
     old.acquire.side_effect=acquire
-    registry=SimpleNamespace(get=Mock(return_value=old));monkeypatch.setattr(bridge,'bridges',registry)
+    registry=SimpleNamespace(get=Mock(return_value=old),lock=threading.RLock());monkeypatch.setattr(bridge,'bridges',registry)
     class Native:pass
     native=Native();native.close=Mock();native.reconnect=Mock();native.cursor=Mock()
     native.cursor.return_value.fetchone.return_value=('target','9.7.0','/recovered/')

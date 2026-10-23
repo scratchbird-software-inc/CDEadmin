@@ -6,6 +6,7 @@ import select
 import socket
 import threading
 import weakref
+from contextlib import contextmanager
 
 from ...sdk import RelationalClientError
 
@@ -87,6 +88,23 @@ class Lease:
 
 class Bridges:
     def __init__(self):self.lock=threading.RLock();self.entries={}
+    @contextmanager
+    def registration_change_guard(self, endpoint_id):
+        # Provider bindings can be absent while an independent utility retains
+        # this route. Hold the same admission locks used by utility checkout.
+        with self.lock:
+            for bridge in self.entries.values():
+                if bridge.binding['endpoint_id'] != endpoint_id:continue
+                with bridge.lock:
+                    if bridge.users:
+                        raise RelationalClientError('Release this recovery registration\'s native SQL and original utility leases before changing its configuration')
+            # Relay threads need bridge.lock to deliver native authentication
+            # during a reviewed attachment. Only checkout admission stays held.
+            yield
+    def detach_endpoint(self, endpoint_id):
+        with self.registration_change_guard(endpoint_id):
+            for bridge in tuple(self.entries.values()):
+                if bridge.binding['endpoint_id'] == endpoint_id:self.detach(bridge.binding)
     def install(self,binding,transport,request):
         with self.lock:
             previous=self.entries.get(binding['id'])
@@ -190,7 +208,9 @@ def confirm_raw_utility_termination(binding,job_id):
 def native_connection(connect,args,options):
     binding=options.pop(ROUTE_KEY,None)
     if binding is None:return connect(*args,**options)
-    bridge=bridges.get(binding);lease=bridge.acquire();native=None
+    with bridges.lock:
+        bridge=bridges.get(binding);lease=bridge.acquire()
+    native=None
     try:
         options.update(host='127.0.0.1',port=bridge.port);options.pop('unix_socket',None);options.pop('failover',None)
         native=connect(*args,**options)
@@ -203,9 +223,10 @@ def native_connection(connect,args,options):
             try:return close(*a,**kw)
             finally:release()
         def connected(*a,**kw):
-            if bridges.get(binding) is not bridge:
-                raise RelationalClientError('Recovery transport was replaced; open a new native session')
-            temporary=bridge.acquire()
+            with bridges.lock:
+                if bridges.get(binding) is not bridge:
+                    raise RelationalClientError('Recovery transport was replaced; open a new native session')
+                temporary=bridge.acquire()
             try:
                 value=reconnect(*a,**kw);verify(native,binding)
                 if state.get('lease') is None:state['lease']=bridge.acquire()

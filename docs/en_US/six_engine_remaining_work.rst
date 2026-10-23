@@ -677,3 +677,24 @@ Shared acceptance
 * HUMAN-FORMS: Externally owned by the human form-validation team.
 * NATIVE-PLATFORMS: Externally owned by the Windows/macOS platform teams.
   Their evidence is required for a cross-platform completion claim.
+
+MySQL registration lifecycle follow-up
+--------------------------------------
+
+The generic registration admission/release gap is implemented: retained native
+sessions, dedicated connections, opening connections, uncertain work, execution
+workers and synchronous utility operations prevent configuration changes.
+Independent recovery utility leases also block changes without a SQL provider
+binding. MySQL disconnect uses endpoint handling; explicit idle disconnect and
+removal retire the recovery transport and released native clients reject reuse.
+Owned Linux MySQL 9.7.0 qualification covers the actual workspace and disconnect
+routes with Python and C drivers, including transaction/savepoint/temporary-table
+and prepared-statement preservation. See the MySQL functional checklist and
+``tools/cdeadmin_mysql_registration_lifecycle_qualification.py``.
+
+This closes the generic registration follow-up only. Nine of eleven accepted
+comparison items are implemented; recovery/recoverability (``CMP-MY-01``),
+production topology/host lifecycle (``CMP-MY-02``), and remaining ``INV-MYSQL``
+reconciliation still precede the MariaDB handoff. Platform-team acceptance,
+owner-deferred ScratchBird history tests and post-beta Enterprise features
+remain separately owned.
