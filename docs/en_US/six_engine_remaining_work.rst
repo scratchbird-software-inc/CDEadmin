@@ -99,6 +99,15 @@ one implementation scope and must not be counted as independent completion.
 
 * MY-CONTINUITY: Complete base-backup/log-chain recovery, selected recovery
   targets, physical/log recovery acceptance and reviewed production cutover.
+  The :doc:`mysql_physical_backups` workspace now manages pinned native Linux
+  XtraBackup9.7.1-rc1 full backups, immutable prepare and isolated copy-back
+  artifacts over authenticated SSH. Independent supervision, exact file
+  verification, source archive holds and credential cleanup are implemented.
+  Native pure/C/API and production desktop checks include independent
+  disposable MySQL recovery. Managed recovered-instance startup, native
+  incremental/encrypted/external-path support, physical retention, selected
+  replay, post-replay acceptance and cutover remain open; ``CMP-MY-01`` retains
+  its open status and the comparison completion remains nine of eleven.
   Separate logical-dump data acceptance now integrates native Shell checksums,
   independent full row counts and table inventories under an explicitly
   confirmed server read lock. It requires complete checksum coverage and stable

@@ -108,11 +108,21 @@ an isolated target; apply selected log recovery targets; independently compare
 full data and native definitions after replay; complete dependency-aware
 retention, interruption recovery and reviewed cutover. Add reviewed recurring
 backup/drill scheduling after outcomes and dependencies are reliable.
-XtraBackup 9.7.1-rc1 is a candidate, not an admitted production dependency.
+The bounded :doc:`mysql_physical_backups` workflow admits native XtraBackup
+9.7.1-rc1 at source revision
+``b1c9c34183de95316d8889ea3d4cb31e31ffddc5`` with explicit release-candidate
+consent. It implements pinned SSH-host full backups, immutable preparation and
+copy-back into a new private directory, independently supervised outcomes,
+exact file manifests, source archive protection and credential cleanup.
+Native pure/C/API and built desktop qualification include independent disposable
+MySQL recovery. Application-managed recovered-instance startup, selected log
+recovery, post-replay acceptance, incremental/encrypted/external-table-space
+support, physical retention and production cutover remain open. These bounded
+artifact receipts do not close ``CMP-MY-01``.
 
 Comparison evidence: `XtraBackup MySQL 9.7 support and limitations <https://docs.percona.com/percona-xtrabackup/9.7/>`_;
 `XtraBackup 9.7.1-rc1 release status <https://docs.percona.com/percona-xtrabackup/9.7/release-notes/9.7.1-rc1.html>`_;
-`XtraBackup implementation at inspected revision <https://github.com/percona/percona-xtrabackup/blob/53260560c821aac874437cf4290a345fa4a87b8c/storage/innobase/xtrabackup/src/xtrabackup.cc>`_.
+`XtraBackup implementation at admitted revision <https://github.com/percona/percona-xtrabackup/blob/b1c9c34183de95316d8889ea3d4cb31e31ffddc5/storage/innobase/xtrabackup/src/xtrabackup.cc>`_.
 
 CMP-MY-02: Complete production topology, Router and host lifecycle
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

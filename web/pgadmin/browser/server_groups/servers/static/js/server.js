@@ -497,6 +497,12 @@ define('pgadmin.node.server', [
           showProviderWorkspace(gettext('MySQL database-host administration'),this,data,item,'mysql-host');
           return false;
         },
+        open_mysql_physical: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL physical backups'),this,data,item,'mysql-physical');
+          return false;
+        },
         open_mysql_local_clone: function(args) {
           const item=args?.item || pgBrowser.tree.selected();
           const data=pgBrowser.tree.itemData(item);

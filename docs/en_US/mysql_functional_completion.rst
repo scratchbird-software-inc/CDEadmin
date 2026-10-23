@@ -1869,6 +1869,38 @@ catalog reconciliation compares 30 categories plus native DDN child facts for
 privileged and restricted accounts and checks navigator reachability. These are
 separate from broader product, browser and platform acceptance.
 
+Native physical backup artifacts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The server Backup menu exposes :doc:`mysql_physical_backups`: native
+XtraBackup9.7.1-rc1 full backups, preparation of a separate copy and copy-back
+into a new private data directory on the pinned database SSH host. Exact
+release/source identity, executable fingerprints, native SQL account/roles,
+UUID and file manifests bind reviewed execution. The supported artifact scope
+is self-contained, uncompressed and unencrypted MySQL9.7.0 InnoDB/MyISAM/CSV
+instances. Release-candidate use and database credential delegation require
+separate explicit confirmations.
+
+A detached host supervisor records native replies before subsequent hashing,
+file publication and credential cleanup. The application accepts dependent
+artifacts only after those facts are independently observed. Original lost
+dispatch replies remain unknown and never trigger another launch. Prepare
+preserves the base; copy-back cannot overwrite the live source. Later
+observation and preparation do not need a surviving live source. A durable
+source-wide archive hold precedes backup dispatch.
+
+The native qualifier covers both Connector/Python interfaces, a Unicode default
+role and a password containing line-feed, quotes, backslash and Unicode,
+preserved independent pending transactions/savepoints/warnings, lost replies,
+once-only admission, all three native artifact phases and independent
+disposable MySQL recovery of InnoDB/MyISAM/CSV rows, unsigned64/Unicode/BLOB
+values, a view and a routine. The production desktop runs the same phases.
+These cases establish the recorded artifact scope. Managed recovery-instance
+startup, incremental/encrypted/external-path admission, physical retention,
+selected replay and independent post-replay acceptance, production cutover and
+the broader native inventory remain open. ``CMP-MY-01`` and ``CMP-MY-02`` stay
+open; nine of eleven comparison items are implemented and Linux-qualified.
+
 Persistent-history integration is wired. The owner correction of October 16
 defers ScratchBird history testing until explicitly resumed. The earlier native
 startup attempt failed its durable agent catalog seed with ``SECURITY.CONTEXT.EXPIRED`` / ``CATALOG_MUTATE`` before

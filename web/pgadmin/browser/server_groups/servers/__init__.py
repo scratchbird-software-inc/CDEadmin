@@ -3185,6 +3185,9 @@ class ServerNode(PGChildNodeView):
                 elif action in {'mysql_host_peer','mysql_host_catalog','mysql_host_review','mysql_host_start','mysql_host_status','mysql_host_list','mysql_host_cancel','mysql_host_reconcile'}:
                     try:payload=service.mysql_host(server,action.removeprefix('mysql_host_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_physical_peer','mysql_physical_review','mysql_physical_start','mysql_physical_status','mysql_physical_list','mysql_physical_cancel','mysql_physical_reconcile','mysql_physical_output'}:
+                    try: payload=service.mysql_physical(server,action.removeprefix('mysql_physical_'),data.get('request'))
+                    except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
                 elif action in {'mysql_instance_backup_review','mysql_instance_backup_start','mysql_instance_backup_status',
                                 'mysql_instance_backup_list','mysql_instance_backup_cancel','mysql_instance_backup_reconcile','mysql_instance_backup_cleanup_script',
                                 'mysql_instance_backup_files','mysql_instance_backup_remove_artifact','mysql_instance_backup_removal_reconcile','mysql_instance_backup_pin'}:

@@ -1,0 +1,58 @@
+import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import MySQLPhysical from 'sources/Dialogs/MySQLPhysical';
+import {withTheme} from '../fake_theme';
+const Component = withTheme(MySQLPhysical);
+const connection = {host: 'host', port: 22, username: 'operator', host_key: 'pinned', authentication: 'private_key', platform: 'posix', python: '/usr/bin/python3'};
+const review = {job_id: 'physical-job', review_digest: 'exact', state: 'reviewed', warnings: ['Native RC1 scope'],
+  source: {server_uuid: 'native-source'}, remote_review: {}, options: {connection, phase: 'backup',
+    workspace: '/private', executable: '/usr/bin/xtrabackup', mysql: '/usr/bin/mysql', sql_host: '127.0.0.1', sql_port: 3306,
+    input_job_id: null, parallel: 2, memory_bytes: 268435456, timeout_seconds: 3600, accept_release_candidate: true}};
+
+it('requires release and execution confirmations and keeps SSH secrets out of public review', async () => {
+  const post = jest.fn().mockResolvedValue(review); render(<Component post={post} />);
+  expect(post).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', {name: 'Review native physical job'})).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Physical SSH private key'), {target: {value: 'owned-private-key'}});
+  fireEvent.click(screen.getByLabelText('I accept this pinned XtraBackup release candidate for this physical operation.'));
+  fireEvent.click(screen.getByRole('button', {name: 'Review native physical job'}));
+  await screen.findByLabelText('Native physical review');
+  expect(screen.getByLabelText('Native physical review')).not.toHaveTextContent('owned-private-key');
+  expect(screen.getByRole('button', {name: 'Start reviewed physical job'})).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('I confirm this exact reviewed physical operation.'));
+  expect(screen.getByRole('button', {name: 'Start reviewed physical job'})).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('Delegate the registered database password privately to the pinned SSH host.'));
+  post.mockResolvedValue({...review, state: 'unknown'});
+  fireEvent.click(screen.getByRole('button', {name: 'Start reviewed physical job'}));
+  await waitFor(() => expect(post).toHaveBeenLastCalledWith({action: 'mysql_physical_start', request: {
+    job_id: 'physical-job', review_digest: 'exact', confirmed: true, delegate_database_credentials: true,
+    credentials: {private_key: 'owned-private-key'}}}));
+  expect(await screen.findByLabelText('Native physical receipt')).not.toHaveTextContent('owned-private-key');
+});
+
+it('loads uncertain receipts and observes them without executing again', async () => {
+  const unknown = {...review, state: 'unknown', file_verification_confirmed: false};
+  const post = jest.fn().mockResolvedValue({jobs: [unknown], offset: 0, limit: 25, more: false});
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button', {name: 'Load physical jobs'}));
+  await screen.findByRole('table', {name: 'Native physical jobs'});
+  post.mockResolvedValue(unknown);
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect physical job physical-job'}));
+  await screen.findByLabelText('Native physical receipt');
+  fireEvent.change(screen.getByLabelText('Physical SSH private key'), {target: {value: 'renewed-private-key'}});
+  post.mockResolvedValue({...unknown, file_verification_confirmed: true, remote_observation: {artifact: {prepared: false}, process_termination_confirmed: true}});
+  fireEvent.click(screen.getByRole('button', {name: 'Observe remote physical job'}));
+  expect(await screen.findByRole('button', {name: 'Use backup for separate prepare'})).toBeEnabled();
+  expect(post.mock.calls.filter(([value]) => value.action === 'mysql_physical_start')).toHaveLength(0);
+  fireEvent.click(screen.getByRole('button', {name: 'Use backup for separate prepare'}));
+  expect(screen.getByLabelText('Physical input job ID')).toHaveValue('physical-job');
+});
+
+it('invalidates a review when its native host or input changes', async () => {
+  const post = jest.fn().mockResolvedValue(review); render(<Component post={post} />);
+  fireEvent.click(screen.getByLabelText('I accept this pinned XtraBackup release candidate for this physical operation.'));
+  fireEvent.click(screen.getByRole('button', {name: 'Review native physical job'}));
+  await screen.findByLabelText('Native physical review');
+  fireEvent.change(screen.getByLabelText('XtraBackup executable'), {target: {value: '/changed/xtrabackup'}});
+  expect(screen.queryByLabelText('Native physical review')).not.toBeInTheDocument();
+  expect(post.mock.calls.filter(([value]) => value.action === 'mysql_physical_start')).toHaveLength(0);
+});
