@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TextField} from '@mui/material';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
 import MySQLPhysicalBatchRetention from './MySQLPhysicalBatchRetention';
+import MySQLPhysicalBackupSchedule from './MySQLPhysicalBackupSchedule';
 
 const initial = {connection: {host: '', port: 22, username: '', host_key: '', authentication: 'private_key', platform: 'posix', python: '/usr/bin/python3'},
   workspace: '/var/backups/scratchrobin/physical', executable: '/usr/bin/xtrabackup', mysql: '/usr/bin/mysql', phase: 'backup',
@@ -168,6 +169,7 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
     <MySQLPhysicalBatchRetention post={post} credentials={credentials} scopeJobId={receipt?.job_id} busy={busy} onBusy={setBusy} onChanged={async () => {
       if(receipt) {const value = await post({action: 'mysql_physical_status', request: {job_id: receipt.job_id}}); if(mounted.current) setReceipt(value);}
     }} />
+    <MySQLPhysicalBackupSchedule post={post} physical={options} credentials={credentials} busy={busy} onBusy={setBusy} />
     {output && <Box component="pre" aria-label="Native physical output" sx={{whiteSpace: 'pre-wrap', maxHeight: 350, overflow: 'auto'}}>{JSON.stringify(output, null, 2)}</Box>}
     {receipt?.options.phase === 'recover' && <Box sx={{my: 1}}>
       <Alert severity="info">Register this recovery instance as a separate MySQL target for the native editor and catalog. Use its reviewed loopback TCP port through pinned SSH. After application restart, reattach with fresh SSH authentication. Writable replay startups support native raw-log and POSIX Shell replay from the target’s recovery menu.</Alert>

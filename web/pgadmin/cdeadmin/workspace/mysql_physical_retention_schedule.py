@@ -52,10 +52,11 @@ def program(jobs,anchor,peer):
 
 
 def aad(grant):
-    return {'purpose':ScheduleJobs.operation,**{k:grant[k] for k in ('job_id','owner','endpoint_id','review_digest','configuration')}}
+    return {'purpose':grant['operation'],**{k:grant[k] for k in ('job_id','owner','endpoint_id','review_digest','configuration')}}
 
 
 class ScheduleHost(ArchiveHost):
+    program=staticmethod(program)
     def __init__(self,app,service):
         super().__init__(app,service)
         path=service.operation_bus.store.path
@@ -68,16 +69,26 @@ class ScheduleHost(ArchiveHost):
         if thread is not None and thread is not threading.current_thread():thread.join(timeout=5)
         return not (thread and thread.is_alive())
 
+    def anchor(self,grant,jobs):return jobs.load(grant['options']['scope_job_id'],grant['owner'],grant['endpoint_id'])
+
+    def validate_credentials(self,value):
+        from .mysql_host_service import credentials
+        return credentials(value)
+
+    def delegation(self,server,request,grant):return self.validate_credentials(request['credentials'])
+
+    def ssh_credentials(self,value):return value
+
     def authority(self,grant):
         from pgadmin.model import Server,User
         server=Server.query.filter_by(id=grant['continuation']['server_id'],user_id=grant['owner']).first()
         if User.query.filter_by(id=grant['owner'],active=True).first() is None or server is None or server.endpoint_profile is None or server.endpoint_profile.id!=grant['endpoint_id']:
             raise native.HostError('Physical policy owner or registration is unavailable')
         jobs,owner,endpoint=physical.manager(self.service,server)
-        anchor=jobs.load(grant['options']['scope_job_id'],owner,endpoint.id)
+        anchor=self.anchor(grant,jobs)
         if (grant['configuration']!=digest(MySQLMonitoringHost._configuration(server)) or
                 batch.scope(anchor)!=grant['source_state']['scope_digest'] or
-                program(jobs,anchor,grant['program']['execution_host'])!=grant['program']):
+                self.program(jobs,anchor,grant['program']['execution_host'])!=grant['program']):
             raise native.HostError('Physical policy registration, source, adapter or execution host changed')
         return server,jobs,owner,endpoint
 
@@ -86,13 +97,16 @@ class ScheduleHost(ArchiveHost):
         if (current['state']!='enabled' or current.get('valid_until',0)<=time.time() or self.stop.is_set() or
                 review_digest(current)!=current['review_digest'] or occurrence is not None and current.get('last_occurrence_id')!=occurrence):
             raise native.HostError('Physical retention policy is revoked, expired, interrupted or changed')
+        from flask import has_request_context
+        if not has_request_context() and self.app.extensions.get('sqlalchemy') is not None:
+            from pgadmin.model import db
+            db.session.expire_all()
         return self.authority(current)
 
     def credentials(self,grant):
         value=bytearray(self.keys.decrypt(grant['ssh_envelope'],aad(grant)))
         try:
-            from .mysql_host_service import credentials
-            return credentials(json.loads(value))
+            return self.validate_credentials(json.loads(value))
         finally:value[:]=b'\0'*len(value)
 
     def suspend(self,grant,error):
@@ -163,7 +177,7 @@ class ScheduleHost(ArchiveHost):
                     planned=batch.plan(records,anchor,selected['policy'],time.time()-selected['policy']['retention_days']*86400,registered=registered)
                     result=self.jobs.review(owner,endpoint.id,{'scope_job_id':anchor['job_id'],**selected},
                         {'identity':anchor['source'],'state':{'scope_digest':batch.scope(anchor),'preview':planned}},
-                        digest(MySQLMonitoringHost._configuration(server)),program(jobs,anchor,peer),continuation={'server_id':server.id})
+                        digest(MySQLMonitoringHost._configuration(server)),self.program(jobs,anchor,peer),continuation={'server_id':server.id})
                     return result
             finally:channel.close();secret.clear()
         fields={'job_id','confirmed','schedule_confirmation'}|({'review_digest','delegate_ssh_credentials','credentials'} if operation=='retention_schedule_enable' else set())
@@ -187,11 +201,10 @@ class ScheduleHost(ArchiveHost):
                 raise native.HostError('Confirm the reviewed physical schedule and encrypted SSH delegation')
             if grant['state']!='reviewed':return self.jobs.public(grant)
             self.authority(grant)
-            from .mysql_host_service import credentials
-            secret=credentials(request['credentials']);anchor=jobs.load(grant['options']['scope_job_id'],owner,endpoint.id)
-            channel=native.Transport(anchor['options']['connection'],secret)
+            secret=self.delegation(server,request,grant);anchor=self.anchor(grant,jobs)
+            channel=native.Transport(anchor['options']['connection'],self.ssh_credentials(secret))
             try:
-                if program(jobs,anchor,channel.connect())!=grant['program']:raise native.HostError('Reviewed physical schedule host changed')
+                if self.program(jobs,anchor,channel.connect())!=grant['program']:raise native.HostError('Reviewed physical schedule host changed')
                 envelope=self.keys.encrypt(json.dumps(secret).encode('utf8'),aad(grant))
             finally:channel.close();secret.clear()
             self.enabled.mkdir(parents=True,exist_ok=True,mode=0o700);private_directory(self.enabled)

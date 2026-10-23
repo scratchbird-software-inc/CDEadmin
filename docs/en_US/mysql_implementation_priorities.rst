@@ -148,8 +148,11 @@ files and removes a fixed set in dependency order. Pausing, restart observation,
 explicit interrupted-item resume and unused-review invalidation are available;
 scheduled retention now uses expiring, encrypted SSH delegation and durable
 occurrences independent of a viewer. Revocation, expiry, changed authority and
-interruption suspend future admissions. Recurring backup/drill scheduling
-remains open.
+interruption suspend future admissions. Recurring full backups and optional
+isolated native startup/stop drills now use separately scoped encrypted SSH/SQL
+delegation and durable occurrences. Interrupted native work retains workflow
+protection until independently resolved; full data/definition recovery-drill
+acceptance remains open alongside post-replay acceptance and cutover.
 
 Comparison evidence: `XtraBackup MySQL 9.7 support and limitations <https://docs.percona.com/percona-xtrabackup/9.7/>`_;
 `XtraBackup 9.7.1-rc1 release status <https://docs.percona.com/percona-xtrabackup/9.7/release-notes/9.7.1-rc1.html>`_;

@@ -11,15 +11,16 @@ from . import mysql_host_service as host
 from .mysql_monitoring_host import MySQLMonitoringHost
 
 
-def source(service, server):
+def source(service, server, *, admitted=None):
     """Admit the actual persistent engine/encryption scope, not a generic dump."""
-    captured = host.source(service, server)
+    captured = host.source(service,server) if admitted is None else host.source(service,server,admitted=admitted)
     context, payload, _root = service.endpoint_service.workspace(server, database_target_id=None)
     provider = service.endpoint_service.provider_registry.resolve(context).instance
     from ..providers.mysql_family.mysql_log_purge import private_connection
     from ..providers.mysql_family.mysql_clone import configure, rows
     route = {key: value for key,value in payload['route'].items() if key not in POOL_ARGUMENTS}
-    connection = private_connection(provider.client, {**route, 'database':None, 'read_timeout':15})
+    client,route=admitted if admitted is not None else (provider.client,route)
+    connection = private_connection(client, {**route, 'database':None, 'read_timeout':15})
     try:
         configure(connection)
         engines = rows(connection, "SELECT ENGINE AS engine,COUNT(*) AS objects FROM information_schema.TABLES "
@@ -33,7 +34,7 @@ def source(service, server):
         captured['state']['storage_engine_counts'] = engines
         captured['state']['encrypted_tablespaces'] = encrypted
         return captured
-    finally: provider.client._discard_failed_session(connection)
+    finally: client._discard_failed_session(connection)
 
 
 def options(value):
@@ -104,6 +105,7 @@ class PhysicalJobs(MySQLBinlogJobs):
         result['recovery_running'] = not record.get('artifact_removed') and remote.get('recovery_running_verified') is True
         result['recovery_sql_startup_observed'] = remote.get('sql_ready_observed') is True
         result['production_cutover_verified'] = False
+        result['backup_schedule_id']=record['source_state'].get('backup_schedule_id')
         return result
 
 
@@ -164,15 +166,19 @@ def claim(jobs, record, owner, endpoint, request):
 def action(service, server, operation, request):
     from .mysql_physical_retention import admission
     jobs,owner,endpoint=manager(service,server)
-    if operation.startswith('retention_schedule_'):
+    if operation.startswith(('retention_schedule_','backup_schedule_')):
         if not isinstance(request,dict):raise native.HostError('Select a physical schedule request')
         from ..report_scheduler.crypto import WorkerKeyError
-        try:return service.mysql_physical_scheduler.action(server,jobs,owner,endpoint,operation,request)
+        scheduler=service.mysql_backup_scheduler if operation.startswith('backup_schedule_') else service.mysql_physical_scheduler
+        try:
+            if operation.endswith('_enable'):
+                with admission(jobs):return scheduler.action(server,jobs,owner,endpoint,operation,request)
+            return scheduler.action(server,jobs,owner,endpoint,operation,request)
         except WorkerKeyError:raise native.HostError('Physical SSH delegation is unavailable; configure worker keys and review a new policy') from None
     with admission(jobs):return _action(service,server,operation,request)
 
 
-def _action(service, server, operation, request):
+def _action(service, server, operation, request, *, source_capture=None,database_credentials=None,on_review=None,scheduled_policy_id=None,authorize=None):
     if not isinstance(request, dict): raise native.HostError('Select a native physical request')
     if operation.startswith('connection_'):
         from .mysql_recovery_connections import action as connection_action
@@ -196,6 +202,9 @@ def _action(service, server, operation, request):
         fields = {'job_id', 'credentials'} | ({'review_digest', 'confirmed', 'delegate_database_credentials'} if operation == 'start' else set())
         if set(request) != fields: raise native.HostError('Select the exact physical job and private SSH authentication')
         record = jobs.load(request['job_id'], owner, endpoint.id); selected = record['options']
+        owning=record['source_state'].get('backup_schedule_id')
+        if owning and owning!=scheduled_policy_id and operation!='output' and service.mysql_backup_scheduler.read(owning)['state']=='enabled':
+            raise native.HostError('Disable the owning backup schedule before changing its native job')
         if operation == 'start' and record['state'] != 'reviewed':
             if request['confirmed'] is not True or request['review_digest'] != record['review_digest']:
                 raise native.HostError('Confirm the exact original physical review')
@@ -226,13 +235,15 @@ def _action(service, server, operation, request):
             jobs.update(record, **values)
             return jobs.get(record['job_id'], owner, endpoint.id)
         if selected['phase'] == 'backup':
-            captured = source(service, server)
+            captured = source_capture() if source_capture is not None else source(service, server)
             if operation == 'start':
                 if captured['identity'] != record['source'] or captured['state']['host_binding'] != record['source_state']['host_binding']:
                     raise native.HostError('Native physical source changed after review')
         else:
             prior = jobs.load(selected['input_job_id'], owner, endpoint.id)
-            if (prior.get('artifact_removed') or prior.get('artifact_removal') or prior.get('retention_batch_id') or prior['options']['connection'] != selected['connection'] or prior['options']['workspace'] != selected['workspace'] or
+            if (prior.get('artifact_removed') or prior.get('artifact_removal') or prior.get('retention_batch_id') or
+                    prior.get('backup_workflow_protected') and prior['source_state'].get('backup_schedule_id')!=scheduled_policy_id or
+                    prior['options']['connection'] != selected['connection'] or prior['options']['workspace'] != selected['workspace'] or
                     not jobs.public(prior)['file_verification_confirmed'] or
                     not (prior.get('remote_observation') or {}).get('restored_files' if selected['phase'] == 'recover' else 'artifact')):
                 raise native.HostError('Select an observed physical input in this owner/registration and pinned host workspace')
@@ -241,14 +252,19 @@ def _action(service, server, operation, request):
         provisional = {'options': selected, 'source': captured['identity'], 'source_state': {**captured['state'], 'remote_review': {}}, 'job_id': '', 'review_digest': ''}
         observed = transport.request(remote_request(provisional, 'inspect'))
         captured['state']['remote_review'] = observed
+        if scheduled_policy_id is not None:captured['state']['backup_schedule_id']=scheduled_policy_id
         program = {**native.program(), 'execution_host': {**peer, 'kind': 'database-server-ssh-host', 'workspace': selected['workspace']}}
         if operation == 'review':
-            return jobs.review(owner, endpoint.id, selected, captured, configuration, program)
+            value=jobs.review(owner,endpoint.id,selected,captured,configuration,program)
+            if on_review is not None:on_review(value)
+            if scheduled_policy_id is not None:jobs.update(jobs.load(value['job_id'],owner,endpoint.id),backup_workflow_protected=True)
+            return value
         if captured['state'] != record['source_state'] or program != record['program']:
             raise native.HostError('Physical host or input changed after review')
         if selected['phase'] in {'backup','recover'} and request['delegate_database_credentials'] is not True:
             raise native.HostError('Confirm private database credential delegation to the pinned database SSH host')
-        delegated = delegate(service, server) if selected['phase'] in {'backup','recover'} else None
+        delegated = (database_credentials if database_credentials is not None else delegate(service,server)) if selected['phase'] in {'backup','recover'} else None
+        if authorize is not None:authorize()
         if not claim(jobs, record, owner, endpoint.id, request): return jobs.get(record['job_id'], owner, endpoint.id)
         try:
             if selected['phase'] == 'backup':

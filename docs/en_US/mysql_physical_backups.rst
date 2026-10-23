@@ -302,8 +302,7 @@ late dispatch before releasing an unclaimed local intent. An unknown outcome or
 missing intent alone never authorizes a fresh removal. Completed manifests are
 compacted; private file inventories do not accumulate as retention history.
 
-This workflow removes reviewed individual artifacts. Recurring backup/drill
-policy, independent full post-replay acceptance
+This workflow removes reviewed individual artifacts. Independent full post-replay acceptance
 and production cutover remain under ``CMP-MY-01``. Binary-log archive protection
 has its own reviewed retirement workflow and is not silently retired here.
 Native qualification covers both Connector/Python interfaces, real pinned-host
@@ -361,7 +360,7 @@ the remaining reviews again. Cancellation never starts the next item.
 Unused previews expire after ten minutes. Invalidate an expired batch and review
 a fresh fixed set; there is no silent extension or added deletion intent.
 Original physical results, unknown database outcomes, native output and archive
-protection remain separate. Recurring backup/drill policy,
+protection remain separate. Full data/definition recovery-drill acceptance,
 full independent post-replay acceptance and production cutover remain open.
 
 Scheduled physical retention
@@ -418,3 +417,61 @@ reconciling that batch never re-enables the old policy. While the application is
 off, scans stop; restart evaluates a future due occurrence without backfilling
 missed intervals. Native qualification is available through
 ``tools/cdeadmin_mysql_physical_replay_qualification.py --schedule-only``.
+
+Recurring full backups and isolated startup drills
+--------------------------------------------------
+
+Select full-backup options in the physical workspace, then **Review recurring
+physical backup policy**. Choose the interval, policy lifetime and optional
+startup drill. The review admits the current source and native executable paths
+without dispatching a backup or storing credentials. Type the exact policy UUID,
+confirm it and explicitly delegate both SSH authentication and the registered
+single-factor SQL password before **Enable reviewed recurring backup policy**.
+The existing physical worker key authority encrypts both credentials, bound to
+this separate policy purpose, owner, endpoint, review and registration.
+
+Each due occurrence creates a new full backup. Source identity, principal/role,
+storage engines and encryption admission are checked through dedicated SQL
+connections with a private scoped resolver. The interactive client's credentials,
+sessions, transactions and savepoints are not borrowed. Erasing a prompted
+interactive password does not erase an enabled worker delegation; changing the
+registered credential or other admitted configuration suspends future work.
+Policies continue without a viewer and survive idle worker restart. Missed
+intervals are not backfilled. One occurrence runs per policy, with the next due
+time measured after completion.
+
+An optional startup drill prepares a separate copy, copies it into another new
+directory, then starts native MySQL with a fresh UUID, read-only enforcement and
+a private Unix socket. Events, replication autostart, upgrades and binary logging
+remain disabled. The worker independently observes SQL readiness, requests stop,
+and confirms original process termination and credential cleanup. The reviewed
+startup lifetime is bounded to 30–3600 seconds. Source data files and production
+listeners are unchanged. ``startup_drill_outcome=passed`` means this specific
+startup/stop sequence passed; ``database_recovery_verified`` and
+``production_cutover_verified`` remain false. Full data/definition equality,
+post-replay acceptance and production cutover retain separate gates.
+
+Every occurrence and native job reference is durable before dispatch. Workflow
+protection prevents manual or scheduled retention and unowned derivation of
+in-progress files. Successful occurrences release that workflow protection only
+after independent native-end observation. Backup artifacts and drill copies
+remain available for their existing inspection, dependency and retention
+workflows; source binary-log protection is retired separately.
+
+**Disable recurring backup policy** stops future admissions and clears the
+stored SSH/SQL delegation. Already admitted native work can continue under its
+original supervisor and reviewed timeout. An interrupted occurrence is never
+automatically repeated, including after application restart. Use **Load native
+backup occurrences** and the original physical job receipts to inspect it.
+Disable the policy before manual cancellation or reconciliation. With fresh SSH
+authentication, **Reconcile native ends and release workflow protection** cancels
+unused reviews and requires confirmed process end and credential cleanup for
+every dispatched original job. It preserves unknown outcomes and the interrupted
+occurrence state. A new policy review is required for future work.
+
+Connection-profile removal refuses enabled physical policies and protected
+backup work. Disable the policies and resolve/release their original jobs before
+removal. Enabling policies and removing their registration share lifecycle
+admission across application workers. Native qualification is available through
+``tools/cdeadmin_mysql_physical_replay_qualification.py --backup-only`` and covers
+both Connector/Python interfaces and the built desktop.

@@ -158,7 +158,7 @@ def qualify_retention(app,output,oracle,container,port,password,selected,credent
     (output/'physical-retention-summary.json').write_text(json.dumps(proof,indent=2)+'\n');return proof
 
 
-def browser(app,output,sid,job_id,password,credentials,binary,driver_binary,*,batch=False,scheduled=False,closed=None):
+def browser(app,output,sid,job_id,password,credentials,binary,driver_binary,*,batch=False,scheduled=False,recurring=False,closed=None):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -190,35 +190,39 @@ def browser(app,output,sid,job_id,password,credentials,binary,driver_binary,*,ba
         wait.until(lambda browser:any(json.loads(node.get_attribute('textContent')).get('job_id')==job_id for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="Native physical receipt"]')))
         label=wait.until(lambda browser:next((node for node in browser.find_elements(By.TAG_NAME,'label') if node.is_displayed() and node.text=='Physical SSH private key'),None))
         field=driver.find_element(By.ID,label.get_attribute('for'));wait.until(lambda _browser:field.is_enabled());field.send_keys(credentials['private_key'])
-        if batch or scheduled:
-            fields=[('Physical retention days','0'),('Minimum full-backup chains','1')]
+        if batch or scheduled or recurring:
+            fields=[('Full backup interval seconds','60'),('Full backup policy lifetime days','1'),('Startup drill lifetime seconds','60')] if recurring else [('Physical retention days','0'),('Minimum full-backup chains','1')]
+            if recurring:
+                label=driver.find_element(By.XPATH,'//label[contains(.,"Run an isolated native startup drill after each backup")]')
+                driver.execute_script('arguments[0].scrollIntoView({block:"center"});',label);label.click()
             if scheduled:fields+=[('Physical retention scan seconds','60'),('Physical retention schedule lifetime days','1')]
             for label,value in fields:
                 field=driver.find_element(By.ID,driver.find_element(By.XPATH,'//label[text()="'+label+'"]').get_attribute('for'))
                 driver.execute_script('arguments[0].scrollIntoView({block:"center"});',field);field.click()
                 from selenium.webdriver.common.keys import Keys
                 field.send_keys(Keys.CONTROL,'a');field.send_keys(value);field.send_keys(Keys.TAB)
-        click('Review physical retention schedule' if scheduled else 'Review physical retention policy' if batch else 'Review physical artifact retention')
-        receipt='Physical retention schedule receipt' if scheduled else 'Physical retention batch receipt' if batch else 'Physical retention review'
+        click('Review recurring physical backup policy' if recurring else 'Review physical retention schedule' if scheduled else 'Review physical retention policy' if batch else 'Review physical artifact retention')
+        receipt='Recurring physical backup policy receipt' if recurring else 'Physical retention schedule receipt' if scheduled else 'Physical retention batch receipt' if batch else 'Physical retention review'
         value=wait.until(lambda browser:next((json.loads(node.text) for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="'+receipt+'"]') if node.is_displayed()),None))
         if batch:assert job_id in value['plan']['job_ids'] and value['plan']['retained_full_backup_ids']
         if scheduled:assert job_id in value['preview']['job_ids'] and not value['ssh_delegation_present']
-        exact='Exact physical retention schedule UUID' if scheduled else 'Exact physical retention batch UUID' if batch else 'Exact physical job UUID to remove'
+        exact='Exact recurring backup policy UUID' if recurring else 'Exact physical retention schedule UUID' if scheduled else 'Exact physical retention batch UUID' if batch else 'Exact physical job UUID to remove'
         field=driver.find_element(By.ID,driver.find_element(By.XPATH,'//label[text()="'+exact+'"]').get_attribute('for'))
         driver.execute_script('arguments[0].scrollIntoView({block:"center"});',field)
         wait.until(lambda _browser:field.is_displayed() and field.is_enabled());field.click()
-        field.send_keys(value['job_id'] if batch or scheduled else job_id)
-        confirmation='I confirm this exact physical retention schedule.' if scheduled else 'I confirm this exact physical retention batch.' if batch else 'I confirm removal of these reviewed physical files.'
+        field.send_keys(value['job_id'] if batch or scheduled or recurring else job_id)
+        confirmation='I confirm this exact recurring native backup policy.' if recurring else 'I confirm this exact physical retention schedule.' if scheduled else 'I confirm this exact physical retention batch.' if batch else 'I confirm removal of these reviewed physical files.'
         label=driver.find_element(By.XPATH,'//label[contains(.,"'+confirmation+'")]')
         driver.execute_script('arguments[0].scrollIntoView({block:"center"});',label);label.click()
-        if scheduled:
-            label=driver.find_element(By.XPATH,'//label[contains(.,"Delegate SSH authentication encrypted for this expiring physical policy.")]')
+        if scheduled or recurring:
+            delegation='Delegate SSH and the registered SQL password encrypted for this expiring backup policy.' if recurring else 'Delegate SSH authentication encrypted for this expiring physical policy.'
+            label=driver.find_element(By.XPATH,'//label[contains(.,"'+delegation+'")]')
             driver.execute_script('arguments[0].scrollIntoView({block:"center"});',label);label.click()
-        click('Enable reviewed physical retention schedule' if scheduled else 'Run reviewed physical retention batch' if batch else 'Remove reviewed physical artifacts')
+        click('Enable reviewed recurring backup policy' if recurring else 'Enable reviewed physical retention schedule' if scheduled else 'Run reviewed physical retention batch' if batch else 'Remove reviewed physical artifacts')
         def completed(browser):
             for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="'+receipt+'"]'):
                 value=json.loads(node.get_attribute('textContent'))
-                if value.get('state')==('enabled' if scheduled else 'completed' if batch else 'removed'):return value
+                if value.get('state')==('enabled' if scheduled or recurring else 'completed' if batch else 'removed'):return value
         value=wait.until(completed)
         driver.execute_script('document.querySelectorAll("textarea,input[type=password]").forEach(e=>e.style.visibility="hidden");')
         driver.save_screenshot(str(output/'native-physical-retention.png'))
@@ -226,11 +230,12 @@ def browser(app,output,sid,job_id,password,credentials,binary,driver_binary,*,ba
         proof={'complete':True,'batch':batch,'scheduled':scheduled,'checks':['built-source-menu-native-physical-job-inspection',
             'reviewed-age-count-policy-and-exact-batch-UUID-native-removal' if batch else 'reviewed-exact-UUID-and-confirmed-native-host-removal',
             'original-receipt-refresh-without-automatic-replay'],'console_errors':errors}
-        if scheduled:
+        if scheduled or recurring:
             proof['schedule_job_id']=value['job_id'];proof['checks'][1]='exact-policy-UUID-confirmation-and-explicit-encrypted-SSH-delegation'
+            if recurring:proof['checks'][1]='exact-policy-UUID-confirmation-and-explicit-encrypted-SSH-and-SQL-delegation'
             driver.get('about:blank')
             if closed is not None:closed.set()
-            proof['checks'][2]='viewer-closed-before-background-native-removal-admission'
+            proof['checks'][2]='viewer-closed-before-background-native-backup-dispatch' if recurring else 'viewer-closed-before-background-native-removal-admission'
         (output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n');return proof
     except Exception:
         if driver:

@@ -18,6 +18,7 @@ def admission(jobs):
 
 
 def dependencies(jobs,record,owner,endpoint):
+    if record.get('backup_workflow_protected'):raise native.HostError('Resolve and release this protected backup workflow before retention')
     children=[];index=jobs.scope(owner,endpoint)/'index'
     entries=list(index.iterdir()) if index.exists() else []
     if len(entries)>10000:raise native.HostError('Physical retention dependency inventory exceeds 10000 jobs')

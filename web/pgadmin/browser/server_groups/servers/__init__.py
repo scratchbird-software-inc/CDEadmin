@@ -2895,17 +2895,16 @@ class ServerNode(PGChildNodeView):
                         server, data.get('request') or {}
                     )
                 elif action == 'endpoint_profile_remove':
-                    payload = endpoint_service_for_app(
-                        current_app
-                    ).validate_endpoint_removal(
-                        server, data.get('request') or {}
-                    )
-                    server_name = server.name
-                    get_driver(PG_DEFAULT_DRIVER).delete_manager(server.id)
-                    db.session.delete(server)
-                    db.session.commit()
-                    self.delete_shared_server(gid, sid)
-                    QueryHistory.clear_history(current_user.id, sid)
+                    from contextlib import nullcontext
+                    removal = service.mysql_backup_scheduler.removal_guard(server) if _cde_registration(server)['engine_id']=='mysql' else nullcontext()
+                    with removal:
+                        payload = endpoint_service_for_app(current_app).validate_endpoint_removal(server,data.get('request') or {})
+                        server_name = server.name
+                        get_driver(PG_DEFAULT_DRIVER).delete_manager(server.id)
+                        db.session.delete(server)
+                        db.session.commit()
+                        self.delete_shared_server(gid,sid)
+                        QueryHistory.clear_history(current_user.id,sid)
                     payload.update({
                         'removed': True,
                         'display_name': server_name,
@@ -3197,6 +3196,7 @@ class ServerNode(PGChildNodeView):
                                 'mysql_physical_retention_pin','mysql_physical_retention_review','mysql_physical_retention_start','mysql_physical_retention_status','mysql_physical_retention_reconcile','mysql_physical_retention_abandon',
                                 'mysql_physical_retention_batch_review','mysql_physical_retention_batch_list','mysql_physical_retention_batch_status','mysql_physical_retention_batch_advance','mysql_physical_retention_batch_resume','mysql_physical_retention_batch_reconcile','mysql_physical_retention_batch_cancel',
                                 'mysql_physical_retention_schedule_review','mysql_physical_retention_schedule_list','mysql_physical_retention_schedule_status','mysql_physical_retention_schedule_enable','mysql_physical_retention_schedule_disable','mysql_physical_retention_schedule_scan','mysql_physical_retention_schedule_rotate',
+                                'mysql_physical_backup_schedule_review','mysql_physical_backup_schedule_list','mysql_physical_backup_schedule_status','mysql_physical_backup_schedule_enable','mysql_physical_backup_schedule_disable','mysql_physical_backup_schedule_scan','mysql_physical_backup_schedule_rotate','mysql_physical_backup_schedule_occurrences','mysql_physical_backup_schedule_occurrence','mysql_physical_backup_schedule_release',
                                 'mysql_physical_connection_review','mysql_physical_connection_connect','mysql_physical_connection_status','mysql_physical_connection_detach','mysql_physical_connection_info'}:
                     try: payload=service.mysql_physical(server,action.removeprefix('mysql_physical_'),data.get('request'))
                     except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))

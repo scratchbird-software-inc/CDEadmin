@@ -720,7 +720,13 @@ SSH delegation. Independent workers admit one fixed occurrence at a time and
 recheck current authority before each step. Revocation, expiry and interruption
 stop future admissions; original occurrences require independent handling.
 
-Recurring backup/drill policy, independent
+Recurring full-backup and optional native startup/stop drill policies now use
+encrypted SSH/SQL delegation, dedicated SQL connections and durable native job
+references. Unresolved work retains protection until explicit reconciliation;
+registration removal refuses enabled physical policies and protected jobs.
+Startup success does not establish full data/definition recovery acceptance.
+
+Full data/definition recovery-drill acceptance, independent
 post-replay acceptance, remaining backend admission and cutover stay open under
 ``CMP-MY-01``. ``CMP-MY-02`` and remaining ``INV-MYSQL`` reconciliation still
 precede the MariaDB handoff. Linux evidence does not close platform-team gates;

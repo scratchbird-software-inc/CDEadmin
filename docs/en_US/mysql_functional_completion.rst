@@ -2005,8 +2005,11 @@ explicit interrupted-item resume and unused-review invalidation. Scheduled
 physical retention now adds explicitly delegated, encrypted and expiring SSH
 access, independently polled occurrences and revocation between steps. Changed
 authority or interrupted occurrences suspend future work without automatic
-retry. Public receipts omit encrypted credential material. Recurring
-backup/drill scheduling, full independent
+retry. Public receipts omit encrypted credential material. Recurring full-backup
+policies now add encrypted SQL delegation through dedicated connection owners,
+optional native prepare/copy-back/read-only startup/stop pipelines, durable job
+binding before dispatch and retention protection for unresolved occurrences.
+SQL startup remains distinct from full data/definition recovery acceptance. Full independent
 post-replay acceptance, remaining physical backend admission and production
 cutover remain open. ``CMP-MY-01``, ``CMP-MY-02`` and ``INV-MYSQL`` still precede
 the MariaDB implementation handoff; the comparison denominator remains nine

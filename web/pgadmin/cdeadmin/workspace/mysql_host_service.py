@@ -163,14 +163,15 @@ def manager(service, server):
     return jobs, service._principal_id(server), endpoint
 
 
-def source(service, server):
+def source(service, server, *, admitted=None):
     context, payload, _root = service.endpoint_service.workspace(server, database_target_id=None)
     provider = service.endpoint_service.provider_registry.resolve(context).instance
     if not isinstance(provider, MySQLPilotProvider):
         raise native.HostError('Native MySQL host binding is unavailable')
     from ..providers.mysql_family.mysql_connections import POOL_ARGUMENTS
     route = {key: value for key, value in payload['route'].items() if key not in POOL_ARGUMENTS}
-    connection = private_connection(provider.client, {**route, 'database': None, 'read_timeout': 5, 'write_timeout': 5})
+    client,route=admitted if admitted is not None else (provider.client,route)
+    connection = private_connection(client, {**route, 'database': None, 'read_timeout': 5, 'write_timeout': 5})
     try:
         configure(connection)
         value = rows(connection, 'SELECT VERSION() AS version,@@server_uuid AS server_uuid,'
@@ -182,7 +183,7 @@ def source(service, server):
                           'native_pid_file': value['native_pid_file'],
                           'source_connection_class': type(connection).__name__}}
     finally:
-        provider.client._discard_failed_session(connection)
+        client._discard_failed_session(connection)
 
 
 def program(peer, observed):
