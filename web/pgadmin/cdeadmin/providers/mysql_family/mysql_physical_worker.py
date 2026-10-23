@@ -189,6 +189,7 @@ def inspection(request):
         host.text(request['sql_host'])
     elif phase in {'prepare', 'copy_back'}:
         source = root / job_id(request['input_job_id'])
+        if (source/'retention-intent.json').exists():raise Refused('Physical input has entered reviewed retention')
         receipt = read_json(source / 'result.json')
         if (receipt.get('state') != 'native_returned' or receipt.get('return_code') != 0 or not receipt.get('artifact') or
                 receipt.get('error_type') or receipt.get('process_termination_confirmed') is not True or
@@ -340,6 +341,21 @@ def execute(directory):
 
 
 def dispatch(request, launch_source=None):
+    if isinstance(request,dict) and (request.get('action')=='start' or str(request.get('action','')).startswith('retention_')):
+        try:
+            import _cdeadmin_physical_retention_worker as retention
+        except ModuleNotFoundError:
+            from . import mysql_physical_retention_worker as retention
+        if request.get('schema')!='cdeadmin.mysql-physical.v1':raise Refused('Select the native physical host protocol')
+        root=root_directory(request['workspace'],host_scope(request))
+        with retention.admission(root):
+            if request['action'].startswith('retention_'):
+                return retention.dispatch(request,root,root/job_id(request['job_id']))
+            return _dispatch(request,launch_source)
+    return _dispatch(request,launch_source)
+
+
+def _dispatch(request, launch_source=None):
     if not isinstance(request, dict) or request.get('schema') != 'cdeadmin.mysql-physical.v1':
         raise Refused('Select the native physical host protocol')
     action = request.get('action')

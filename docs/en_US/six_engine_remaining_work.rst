@@ -698,3 +698,20 @@ production topology/host lifecycle (``CMP-MY-02``), and remaining ``INV-MYSQL``
 reconciliation still precede the MariaDB handoff. Platform-team acceptance,
 owner-deferred ScratchBird history tests and post-beta Enterprise features
 remain separately owned.
+
+MySQL individual physical artifact retention
+-------------------------------------------
+
+Native-host artifact pin/review/removal/reconciliation and exact-intent resume
+are implemented for full backups, prepared copies, copy-back and stopped managed
+recovery data/private logs. Application and host admission protect dependency
+edges, native process ownership and recovery registrations; unclaimed intent
+invalidation fences delayed deletion requests. Original native outcomes remain
+unchanged. Current Python/C and built desktop qualification is provided by
+``tools/cdeadmin_mysql_physical_replay_qualification.py --retention``.
+
+Batch/scheduled physical retention, recurring backup/drill policy, independent
+post-replay acceptance, remaining backend admission and cutover stay open under
+``CMP-MY-01``. ``CMP-MY-02`` and remaining ``INV-MYSQL`` reconciliation still
+precede the MariaDB handoff. Linux evidence does not close platform-team gates;
+ScratchBird history qualification remains owner-deferred.

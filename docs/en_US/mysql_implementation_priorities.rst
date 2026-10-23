@@ -139,7 +139,9 @@ reattachment. Unknown database outcomes/fences persist until fresh SQL facts and
 explicit acknowledgement. Legacy missing-binding receipts, missing/failed
 guardians and wider lifecycle reconciliation remain open, alongside
 post-replay acceptance, incremental/encrypted/external-table-space
-support, physical retention and production cutover remain open. These bounded
+support, batch/scheduled physical retention and production cutover remain open.
+Reviewed individual-artifact pin/removal, dependency admission and interrupted
+cleanup reconciliation/resume are implemented; see ``mysql_physical_backups.rst``. These bounded
 artifact receipts do not close ``CMP-MY-01``.
 
 Comparison evidence: `XtraBackup MySQL 9.7 support and limitations <https://docs.percona.com/percona-xtrabackup/9.7/>`_;

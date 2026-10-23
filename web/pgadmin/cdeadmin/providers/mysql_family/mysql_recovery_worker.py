@@ -98,6 +98,7 @@ def inspection(request):
         raise Refused('Native writable recovery requires an explicit loopback TCP listener and server ID')
     if not replay and server_id is not None:raise Refused('Read-only recovery does not accept a replay server ID')
     source = root / physical.job_id(request['input_job_id'])
+    if (source/'retention-intent.json').exists():raise Refused('Physical input has entered reviewed retention')
     receipt = physical.read_json(source / 'result.json')
     if not successful(receipt) or not receipt.get('restored_files') or receipt.get('phase') != 'copy_back':
         raise Refused('Select a completed, verified isolated copy-back as the recovery base')

@@ -19,6 +19,7 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
   const [confirmed, setConfirmed] = useState(false), [delegate, setDelegate] = useState(false), [output, setOutput] = useState(null);
   const [connectionReview, setConnectionReview] = useState(null), [connectionReceipt, setConnectionReceipt] = useState(null);
   const [connectionName, setConnectionName] = useState('Recovered MySQL'), [connectionConfirmed, setConnectionConfirmed] = useState(false), [connectionDelegate, setConnectionDelegate] = useState(false);
+  const [retention, setRetention] = useState(null), [retentionConfirmed, setRetentionConfirmed] = useState(false), [retentionName, setRetentionName] = useState('');
   const mounted = useRef(true), pending = useRef(false);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   useModalCloseGuard(() => !busy);
@@ -26,7 +27,10 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
     setBusy(true); setError('');
     try {
       const value = await post({action: 'mysql_physical_' + action, request});
-      if(mounted.current) accept(value);
+      if(mounted.current) {
+        const accepted = accept(value);
+        if(accepted?.then) await accepted;
+      }
     } catch(failure) {if(mounted.current) setError(failure.response?.data?.errormsg || failure.message || 'Native physical request failed.');}
     finally {if(mounted.current) setBusy(false);}
   };
@@ -45,17 +49,25 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
     return () => {live = false; clearInterval(timer);};
   }, [post, receipt?.job_id, receipt?.state, credentials]);
   const clearConnectionReview = () => {setConnectionReview(null); setConnectionConfirmed(false); setConnectionDelegate(false);};
-  const change = (key, value) => {setOptions(current => ({...current, [key]: value})); setReview(null); setConfirmed(false); setDelegate(false); clearConnectionReview();};
+  const change = (key, value) => {setOptions(current => ({...current, [key]: value})); setReview(null); setConfirmed(false); setDelegate(false); clearConnectionReview(); setRetention(null); setRetentionConfirmed(false); setRetentionName('');};
   const connection = (key, value) => change('connection', {...options.connection, [key]: value});
   const inspect = value => {
     setReceipt(value); setReview(value.state === 'reviewed' ? value : null); setOptions(value.options);
     setCredentials({}); setConfirmed(false); setDelegate(false); setOutput(null);
     clearConnectionReview(); setConnectionReceipt(null);
+    setRetention(null); setRetentionConfirmed(false); setRetentionName('');
   };
   const observe = operation => run(operation, {job_id: receipt.job_id, credentials}, operation === 'output' ? setOutput : setReceipt);
   const derived = phase => {
     setOptions(current => phaseOptions(current, phase, receipt.job_id));
     setReview(null); setConfirmed(false); setDelegate(false); clearConnectionReview();
+  };
+  const retain = async value => {
+    setRetention(value);
+    if(['removed', 'not_dispatched'].includes(value.state)) {
+      const current = await post({action: 'mysql_physical_status', request: {job_id: receipt.job_id}});
+      if(mounted.current) setReceipt(current);
+    }
   };
   return <Box component="section" aria-label="Native MySQL physical backups" sx={{p: 1, overflow: 'auto', flex: 1}}>
     <Alert severity="info">XtraBackup 9.7.1-rc1 runs on the pinned Linux database SSH host. Backup, prepare and copy-back retain separate files. Managed recovery starts another data copy using native MySQL 9.7.0. Choose read-only inspection or explicitly writable replay with binary logging. It stops on request or its reviewed lifetime. Recovered-data acceptance and cutover have separate gates. Closing this viewer leaves admitted remote work running.</Alert>
@@ -137,10 +149,24 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
       {receipt.file_verification_confirmed && receipt.remote_observation?.artifact && <Button disabled={busy} onClick={() => derived(receipt.remote_observation.artifact.prepared ? 'copy_back' : 'prepare')}>{receipt.remote_observation.artifact.prepared ? 'Use prepared artifact for isolated copy-back' : 'Use backup for separate prepare'}</Button>}
       {receipt.file_verification_confirmed && receipt.remote_observation?.restored_files && <Button disabled={busy} onClick={() => derived('recover')}>Use copy-back for managed recovery</Button>}
       <Box component="pre" aria-label="Native physical receipt" sx={{whiteSpace: 'pre-wrap', maxHeight: 400, overflow: 'auto'}}>{JSON.stringify(receipt, null, 2)}</Box>
+      <Box component="section" aria-label="Physical artifact retention" sx={{my: 1}}>
+        <Alert severity="warning">Physical retention removes the reviewed backup files, recovered data copy and private replay logs on the pinned SSH host. Remove dependent artifacts first, stop recovery and remove its registrations. Original receipts and native outcomes are preserved. Binary-log protection is managed separately.</Alert>
+        <FormControlLabel label="Protect this physical artifact from retention" control={<Checkbox checked={!!receipt.retention_pinned} disabled={busy || receipt.artifact_removed || !!receipt.artifact_removal} onChange={event => run('retention_pin', {job_id: receipt.job_id, pinned: event.target.checked}, setReceipt)} />} />
+        <Button disabled={busy || receipt.artifact_removed || !!receipt.artifact_removal || receipt.retention_pinned} onClick={() => run('retention_review', {job_id: receipt.job_id, credentials}, value => {setRetention(value); setRetentionConfirmed(false); setRetentionName('');})}>Review physical artifact retention</Button>
+        <Button disabled={busy || !(receipt.artifact_removal?.retention_job_id || receipt.retention_review_job_id)} onClick={() => run('retention_status', {job_id: receipt.artifact_removal?.retention_job_id || receipt.retention_review_job_id}, value => {setRetention(value); setRetentionConfirmed(false); setRetentionName('');})}>Load physical retention receipt</Button>
+        {retention && <>
+          <Box component="pre" aria-label="Physical retention review" sx={{whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto'}}>{JSON.stringify(retention, null, 2)}</Box>
+          <TextField size="small" label="Exact physical job UUID to remove" value={retentionName} disabled={busy} onChange={event => setRetentionName(event.target.value)} />
+          <FormControlLabel label="I confirm removal of these reviewed physical files." control={<Checkbox checked={retentionConfirmed} disabled={busy} onChange={event => setRetentionConfirmed(event.target.checked)} />} />
+          <Button disabled={busy || !retentionConfirmed || retentionName !== receipt.job_id || !['reviewed', 'unknown', 'removing'].includes(retention.state)} onClick={() => run('retention_start', {job_id: retention.job_id, review_digest: retention.review_digest, job_confirmation: retentionName, confirmed: true, credentials}, retain)}>{retention.state === 'reviewed' ? 'Remove reviewed physical artifacts' : 'Resume original physical removal'}</Button>
+          <Button disabled={busy} onClick={() => run('retention_reconcile', {job_id: retention.job_id, credentials}, retain)}>Inspect original physical removal</Button>
+          <Button disabled={busy || !retentionConfirmed || retentionName !== receipt.job_id || ['removed', 'not_dispatched'].includes(retention.state)} onClick={() => run('retention_abandon', {job_id: retention.job_id, review_digest: retention.review_digest, job_confirmation: retentionName, confirmed: true, credentials}, retain)}>Invalidate an unclaimed removal review</Button>
+        </>}
+      </Box>
     </Box>}
     {output && <Box component="pre" aria-label="Native physical output" sx={{whiteSpace: 'pre-wrap', maxHeight: 350, overflow: 'auto'}}>{JSON.stringify(output, null, 2)}</Box>}
     {receipt?.options.phase === 'recover' && <Box sx={{my: 1}}>
-      <Alert severity="info">Register this recovery instance as a separate MySQL target for the native editor and catalog. Use its reviewed loopback TCP port through pinned SSH. After application restart, reattach with fresh SSH authentication. Writable replay startups support native raw-log replay from the target’s recovery menu. Shell replay transport has separate admission work.</Alert>
+      <Alert severity="info">Register this recovery instance as a separate MySQL target for the native editor and catalog. Use its reviewed loopback TCP port through pinned SSH. After application restart, reattach with fresh SSH authentication. Writable replay startups support native raw-log and POSIX Shell replay from the target’s recovery menu.</Alert>
       <TextField size="small" label="Recovery registration name" value={connectionName} disabled={busy} onChange={event => {setConnectionName(event.target.value); clearConnectionReview();}} />
       <Button disabled={busy} onClick={() => run('connection_review', {job_id: receipt.job_id, name: connectionName, credentials}, value => {setConnectionReview(value); setConnectionConfirmed(false); setConnectionDelegate(false);})}>Review recovery connection</Button>
       {connectionReview && <>

@@ -1981,3 +1981,24 @@ This closes the recorded generic MySQL registration lifecycle follow-up, not
 the wider host/recovery inventory. ``CMP-MY-01``, ``CMP-MY-02`` and ``INV-MYSQL``
 remain open. Windows/macOS native acceptance remains with the platform teams;
 ScratchBird history qualification remains owner-deferred.
+
+Reviewed physical artifact retention
+------------------------------------
+
+``CMP-MY-01`` now includes native-host pin/review/removal/reconciliation for
+individual physical backups, prepared copies, isolated copy-back and stopped
+recovery data/private binary logs. Durable application and SSH-host admission
+protect input dependencies, native process ownership and retained recovery
+registrations. Interrupted cleanup resumes only its exact detached filesystem
+intent. Unclaimed review invalidation fences late dispatch. Original native
+outcomes and output are preserved; completed file inventories are compacted.
+See ``mysql_physical_backups.rst`` for the workflow and limits.
+
+``tools/cdeadmin_mysql_physical_replay_qualification.py --retention`` adds owned
+native Python/C chain-retention and built desktop evidence to the physical and
+replay qualification. This closes the individual-artifact cleanup gap. Batch
+physical retention and recurring backup/drill scheduling, full independent
+post-replay acceptance, remaining physical backend admission and production
+cutover remain open. ``CMP-MY-01``, ``CMP-MY-02`` and ``INV-MYSQL`` still precede
+the MariaDB implementation handoff; the comparison denominator remains nine
+implemented items out of eleven.

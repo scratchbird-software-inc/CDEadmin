@@ -120,3 +120,51 @@ it('reviews a separate recovery connection and requires both confirmations befor
   fireEvent.click(screen.getByRole('button', {name: 'Detach recovery transport'}));
   await waitFor(() => expect(post).toHaveBeenLastCalledWith({action: 'mysql_physical_connection_detach', request: {server_id: 42}}));
 });
+
+it('requires an explicit physical file review, exact job UUID and confirmation before retention', async () => {
+  const source = {...review, state: 'native_returned', file_verification_confirmed: true, remote_observation: {artifact: {prepared: false}}};
+  const ticket = {...review, job_id: 'retention-ticket', review_digest: 'retention-digest', options: {source_job_id: source.job_id}};
+  const removed = {...ticket, state: 'removed', removal_confirmed: true};
+  const post = jest.fn(async ({action}) => {
+    if(action === 'mysql_physical_list') return {jobs: [source], more: false};
+    if(action === 'mysql_physical_retention_review') return ticket;
+    if(action === 'mysql_physical_retention_start') return removed;
+    if(action === 'mysql_physical_status') return post.mock.calls.some(([value]) => value.action === 'mysql_physical_retention_start') ? {...source, artifact_removed: true, file_verification_confirmed: false} : source;
+    throw new Error('Unexpected action ' + action);
+  });
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button', {name: 'Load physical jobs'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Inspect physical job physical-job'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Review physical artifact retention'}));
+  await screen.findByLabelText('Physical retention review');
+  const remove = screen.getByRole('button', {name: 'Remove reviewed physical artifacts'});
+  expect(remove).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('I confirm removal of these reviewed physical files.'));
+  expect(remove).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Exact physical job UUID to remove'), {target: {value: source.job_id}});
+  fireEvent.click(remove);
+  await screen.findByRole('button', {name: 'Resume original physical removal'});
+  expect(post).toHaveBeenCalledWith({action: 'mysql_physical_retention_start', request: {job_id: ticket.job_id, review_digest: ticket.review_digest, job_confirmation: source.job_id, confirmed: true, credentials: {}}});
+  await waitFor(() => expect(screen.getByRole('button', {name: 'Inspect original physical removal'})).toBeEnabled());
+  expect(screen.getByRole('button', {name: 'Review physical artifact retention'})).toBeDisabled();
+});
+
+it('loads interrupted physical retention without automatically repeating removal', async () => {
+  const source = {...review, state: 'unknown', artifact_removal: {retention_job_id: 'original-removal'}};
+  const ticket = {...review, job_id: 'original-removal', state: 'unknown', options: {source_job_id: source.job_id}};
+  const post = jest.fn(async ({action}) => {
+    if(action === 'mysql_physical_list') return {jobs: [source], more: false};
+    if(action === 'mysql_physical_status') return source;
+    if(action === 'mysql_physical_retention_status' || action === 'mysql_physical_retention_reconcile') return ticket;
+    throw new Error('Unexpected action ' + action);
+  });
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button', {name: 'Load physical jobs'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Inspect physical job physical-job'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Load physical retention receipt'}));
+  await screen.findByLabelText('Physical retention review');
+  expect(screen.getByRole('button', {name: 'Resume original physical removal'})).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect original physical removal'}));
+  await waitFor(() => expect(screen.getByRole('button', {name: 'Inspect original physical removal'})).toBeEnabled());
+  expect(post.mock.calls.filter(([value]) => value.action === 'mysql_physical_retention_start')).toHaveLength(0);
+});

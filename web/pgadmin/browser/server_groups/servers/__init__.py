@@ -3194,6 +3194,7 @@ class ServerNode(PGChildNodeView):
                     try:payload=service.mysql_host(server,action.removeprefix('mysql_host_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mysql_physical_peer','mysql_physical_review','mysql_physical_start','mysql_physical_status','mysql_physical_list','mysql_physical_cancel','mysql_physical_reconcile','mysql_physical_output',
+                                'mysql_physical_retention_pin','mysql_physical_retention_review','mysql_physical_retention_start','mysql_physical_retention_status','mysql_physical_retention_reconcile','mysql_physical_retention_abandon',
                                 'mysql_physical_connection_review','mysql_physical_connection_connect','mysql_physical_connection_status','mysql_physical_connection_detach','mysql_physical_connection_info'}:
                     try: payload=service.mysql_physical(server,action.removeprefix('mysql_physical_'),data.get('request'))
                     except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))

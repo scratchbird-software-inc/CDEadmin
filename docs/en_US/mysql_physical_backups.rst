@@ -265,3 +265,50 @@ descriptor control, all four exposed native GTID modes and reviewed lifetime
 expiry. These receipts qualify the selected cases. Broader recovery,
 incremental, lifecycle, retention and cutover requirements remain open.
 ScratchBird history tests remain owner-deferred.
+
+Reviewed physical artifact retention
+------------------------------------
+
+Use **Protect this physical artifact from retention** to pin an artifact, or
+**Review physical artifact retention** on its original receipt to inspect the
+exact host-side paths, file count, byte count and manifest fingerprint. Removal
+requires its reviewed digest, explicit confirmation and the original physical
+job UUID. Fresh private SSH authentication reaches the recorded host; source
+SQL credentials are not delegated. The original physical result and native
+output remain available after its data files are removed.
+
+Remove dependent physical artifacts before their inputs. Cancel an unused
+review explicitly. For a managed recovery instance, stop the original native
+process, independently reconcile termination and credential cleanup, and remove
+its recovery registrations first. Application admission serializes physical
+reviews, dispatch and retention across workers. Host admission independently
+serializes dispatch and removal, checks remote child receipts, and refuses
+inputs that have entered retention. Pins, unknown native process presence,
+unreleased registrations, changed file identities, symbolic links, mounted
+artifacts and bind mounts prevent removal. Observed termination permits file
+cleanup; it does not establish successful database recovery or a native exit
+reply that was never observed.
+
+Retention covers the selected job's ``artifact`` or ``runtime-data`` directory
+and its private recovery binary logs. Its private manifest is bounded to
+200,000 entries per tree and 30 MiB. It never traverses the source data directory
+or another job's files. A durable intent precedes any rename. Exact files are
+detached into that job's private removal namespace before deletion; interrupted
+removal preserves that intent. **Inspect original physical removal** observes
+completion without deleting or repeating anything. **Resume original physical
+removal** validates the same detached identities and remaining entries; new or
+changed files are preserved. **Invalidate an unclaimed removal review** prevents
+late dispatch before releasing an unclaimed local intent. An unknown outcome or
+missing intent alone never authorizes a fresh removal. Completed manifests are
+compacted; private file inventories do not accumulate as retention history.
+
+This workflow removes reviewed individual artifacts. Batch/scheduled physical
+retention, recurring backup/drill policy, independent full post-replay acceptance
+and production cutover remain under ``CMP-MY-01``. Binary-log archive protection
+has its own reviewed retirement workflow and is not silently retired here.
+Native qualification covers both Connector/Python interfaces, real pinned-host
+backup/prepare/copy-back/recovery artifacts, dependency and pin refusal, private
+recovery log cleanup, lost replies, interrupted file removal, explicit resume,
+blocked source SQL authentication with a preserved independent transaction,
+and the built desktop workflow. Windows/macOS acceptance remains separately
+owned; ScratchBird history tests remain owner-deferred.

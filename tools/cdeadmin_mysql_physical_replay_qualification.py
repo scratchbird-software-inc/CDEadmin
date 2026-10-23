@@ -384,8 +384,8 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--output',required=True);parser.add_argument('--fixture-image',default='sr-mysql-physical:phase213')
     parser.add_argument('--mysql-shell',required=True)
     parser.add_argument('--private-key');parser.add_argument('--prepare-fixture',action='store_true');parser.add_argument('--decoder',required=True);parser.add_argument('--client',required=True)
-    parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');args=parser.parse_args()
+    parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--retention',action='store_true');parser.add_argument('--retention-only',action='store_true');args=parser.parse_args()
     os.environ['CDEADMIN_MYSQL_BINLOG_BINARY']=str(Path(args.decoder).resolve(strict=True));os.environ['CDEADMIN_MYSQL_CLIENT_BINARY']=str(Path(args.client).resolve(strict=True))
     os.environ['CDEADMIN_MYSQLSH_BINARY']=str(Path(args.mysql_shell).resolve(strict=True))
     from cdeadmin_mysql_physical_qualification import qualify
-    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,connections=True,replay=True)
+    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,connections=True,replay=True,retention=args.retention,retention_only=args.retention_only)

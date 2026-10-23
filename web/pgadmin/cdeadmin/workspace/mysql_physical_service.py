@@ -96,11 +96,12 @@ class PhysicalJobs(MySQLBinlogJobs):
         result['host_binding'] = deepcopy(record['source_state']['host_binding'])
         result['source_connection_class'] = record['source_state'].get('source_connection_class')
         remote = record.get('remote_observation') or {}
-        result['file_verification_confirmed'] = bool(remote.get('return_code') == 0 and not remote.get('error_type') and
+        result['native_process_termination_confirmed'] = remote.get('process_termination_confirmed') is True
+        result['file_verification_confirmed'] = bool(not record.get('artifact_removed') and not record.get('artifact_removal') and remote.get('return_code') == 0 and not remote.get('error_type') and
             (remote.get('artifact') or remote.get('restored_files')) and remote.get('process_termination_confirmed') is True and
             remote.get('credential_cleanup_confirmed') is True and remote.get('supervisor_finished') is True)
         result['database_recovery_verified'] = False
-        result['recovery_running'] = remote.get('recovery_running_verified') is True
+        result['recovery_running'] = not record.get('artifact_removed') and remote.get('recovery_running_verified') is True
         result['recovery_sql_startup_observed'] = remote.get('sql_ready_observed') is True
         result['production_cutover_verified'] = False
         return result
@@ -161,11 +162,20 @@ def claim(jobs, record, owner, endpoint, request):
 
 
 def action(service, server, operation, request):
+    from .mysql_physical_retention import admission
+    jobs,_owner,_endpoint=manager(service,server)
+    with admission(jobs):return _action(service,server,operation,request)
+
+
+def _action(service, server, operation, request):
     if not isinstance(request, dict): raise native.HostError('Select a native physical request')
     if operation.startswith('connection_'):
         from .mysql_recovery_connections import action as connection_action
         return connection_action(service, server, operation[11:], request)
     jobs, owner, endpoint = manager(service, server)
+    if operation.startswith('retention_'):
+        from .mysql_physical_retention import action as retention_action
+        return retention_action(service,server,jobs,owner,endpoint,operation,request)
     if operation == 'peer' and set(request) == {'host', 'port'}:
         return native.ssh.probe(request['host'], request['port'])
     if operation == 'list' and not set(request) - {'offset', 'limit'}:
@@ -214,7 +224,7 @@ def action(service, server, operation, request):
                     raise native.HostError('Native physical source changed after review')
         else:
             prior = jobs.load(selected['input_job_id'], owner, endpoint.id)
-            if (prior['options']['connection'] != selected['connection'] or prior['options']['workspace'] != selected['workspace'] or
+            if (prior.get('artifact_removed') or prior.get('artifact_removal') or prior['options']['connection'] != selected['connection'] or prior['options']['workspace'] != selected['workspace'] or
                     not jobs.public(prior)['file_verification_confirmed'] or
                     not (prior.get('remote_observation') or {}).get('restored_files' if selected['phase'] == 'recover' else 'artifact')):
                 raise native.HostError('Select an observed physical input in this owner/registration and pinned host workspace')
