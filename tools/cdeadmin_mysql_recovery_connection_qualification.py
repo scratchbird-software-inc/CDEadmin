@@ -135,7 +135,7 @@ def stopped_connection(app,client,connection,physical):
     physical('connection_detach',{'server_id':connection['server_id']})
 
 
-def browser_connection(driver,wait,click,fill,check,password,output):
+def browser_connection(driver,wait,click,fill,check,password,output,before_detach=None):
     from selenium.webdriver.common.by import By
     from cdeadmin_ui_evidence import expand,wait_for_tree_item,invoke_context_action,complete_endpoint_prompt
     from cdeadmin_sqlite_query_ui_gate import _run_query
@@ -165,9 +165,10 @@ def browser_connection(driver,wait,click,fill,check,password,output):
     assert '18446744073709551615' in driver.find_element(By.TAG_NAME,'body').text
     driver.save_screenshot(str(output/'native-recovery-editor.png'))
     close=wait.until(lambda b:next((e for e in b.find_elements(By.CSS_SELECTOR,'button[aria-label="Close query session"]') if e.is_displayed() and e.is_enabled()),None));close.click()
+    checks=before_detach(value['result']) if before_detach else []
     physical=wait.until(lambda b:next((e for e in b.find_elements(By.XPATH,'//*[normalize-space(text())="MySQL physical backups"]') if e.is_displayed()),None));physical.click()
     click('Detach recovery transport')
-    return ['built-separate-recovery-registration-native-SQL-editor-result-and-explicit-detach']
+    return [*checks,'built-separate-recovery-registration-native-SQL-editor-result-and-explicit-detach']
 
 
 if __name__=='__main__':

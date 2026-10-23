@@ -2,6 +2,9 @@ import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import MySQLPhysical from 'sources/Dialogs/MySQLPhysical';
 import {withTheme} from '../fake_theme';
 const Component = withTheme(MySQLPhysical);
+let viewportHeight;
+beforeEach(() => {viewportHeight=window.innerHeight; window.innerHeight=1200;});
+afterEach(() => {window.innerHeight=viewportHeight;});
 const connection = {host: 'host', port: 22, username: 'operator', host_key: 'pinned', authentication: 'private_key', platform: 'posix', python: '/usr/bin/python3'};
 const review = {job_id: 'physical-job', review_digest: 'exact', state: 'reviewed', warnings: ['Native RC1 scope'],
   source: {server_uuid: 'native-source'}, remote_review: {}, options: {connection, phase: 'backup',
@@ -68,7 +71,7 @@ it('derives recovery from verified copy-back and separately confirms native star
   fireEvent.click(screen.getByRole('button', {name: 'Inspect physical job physical-job'}));
   fireEvent.click(await screen.findByRole('button', {name: 'Use copy-back for managed recovery'}));
   expect(screen.getByLabelText('Recovery mysqld executable')).toHaveValue('/usr/sbin/mysqld');
-  const recoveryReview = {...review, options: {...review.options, phase: 'recover', input_job_id: 'physical-job', mysqld: '/usr/sbin/mysqld', recovery_gtid_mode: 'ON', recovery_port: 3307}};
+  const recoveryReview = {...review, options: {...review.options, phase: 'recover', input_job_id: 'physical-job', mysqld: '/usr/sbin/mysqld', recovery_gtid_mode: 'ON', recovery_port: 3307, recovery_mode: 'read_only'}};
   post.mockResolvedValue(recoveryReview);
   fireEvent.click(screen.getByRole('button', {name: 'Review native physical job'}));
   await screen.findByLabelText('Native physical review');
@@ -81,6 +84,10 @@ it('derives recovery from verified copy-back and separately confirms native star
   fireEvent.click(screen.getByRole('button', {name: 'Start reviewed physical job'}));
   expect(await screen.findByRole('button', {name: 'Stop managed recovery instance'})).toBeEnabled();
   expect(screen.getByText(/SQL startup readiness: observed/)).toBeVisible();
+  fireEvent.mouseDown(screen.getByLabelText('Recovery startup mode'));
+  fireEvent.click(screen.getByRole('option', {name: 'Replay (writable, binary logging)'}));
+  expect(screen.getByLabelText('Recovery native server ID')).toHaveValue(10001);
+  expect(screen.queryByLabelText('Native physical review')).not.toBeInTheDocument();
 });
 
 it('reviews a separate recovery connection and requires both confirmations before registering it', async () => {

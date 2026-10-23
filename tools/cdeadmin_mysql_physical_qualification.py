@@ -32,7 +32,7 @@ def prepare_fixture(output, image):
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -56,6 +56,11 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             'web/pgadmin/cdeadmin/endpoints/service.py','web/pgadmin/cdeadmin/workspace/mysql_recovery_connections.py','web/pgadmin/static/js/Dialogs/index.jsx',
             'tools/cdeadmin_mysql_recovery_connection_qualification.py']
         proof['source_sha256'].update({p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in extras})
+    if replay:
+        for p in ('tools/cdeadmin_mysql_physical_replay_qualification.py','web/pgadmin/cdeadmin/workspace/mysql_binlog_replay_service.py',
+            'web/pgadmin/cdeadmin/providers/mysql_family/mysql_raw_binlog_replay.py',
+            'tools/cdeadmin_mysql_binlog_replay_workspace_qualification.py'):
+            proof['source_sha256'][p]=hashlib.sha256((ROOT/p).read_bytes()).hexdigest()
     names = []; volume = 'sr-physical-'+secrets.token_hex(8); root = None
     data_volumes = []
     try:
@@ -106,9 +111,10 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             selected = {'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
                 'workspace':'/var/backups/scratchrobin/jobs','executable':'/usr/bin/xtrabackup','mysql':'/usr/bin/mysql',
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
-            def review(phase,input_job=None,gtid_mode='ON',lifetime=None):
+            def review(phase,input_job=None,gtid_mode='ON',lifetime=None,startup='read_only'):
                 extra={'mysqld':'/usr/sbin/mysqld','recovery_gtid_mode':gtid_mode} if phase=='recover' else {}
                 if connections and phase=='recover':extra['recovery_port']=33447
+                if startup=='replay':extra.update(recovery_mode='replay',recovery_server_id=10001+int(use_c))
                 if lifetime is not None:extra['timeout_seconds']=lifetime
                 return post('review',{'options':{**selected,'phase':phase,'input_job_id':input_job,**extra},'credentials':credentials})
             def start(value):
@@ -214,6 +220,9 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
                 stopped_connection(app,client,connection_proof,post)
             checks.append('managed-native-recovery-new-UUID-private-socket-read-only-SQL-data-and-definitions-explicit-stop-with-unknown-original-reply')
             if use_c:checks.append('owned-process-descriptor-stop-after-original-supervisor-loss-without-invented-native-exit-reply')
+            if replay:
+                from cdeadmin_mysql_physical_replay_qualification import native_replay
+                checks.extend(native_replay(app,client,sid,root,post,credentials,review,start,copied,output,use_c))
             if not use_c:
                 for mode in ('OFF','OFF_PERMISSIVE','ON_PERMISSIVE'):
                     alternate=start(review('recover',copied['job_id'],mode))
@@ -270,7 +279,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
                 cursor.execute("CREATE USER 'sr_physical_ui'@'%' IDENTIFIED BY %s",(ui_password,))
                 cursor.execute("GRANT ALL PRIVILEGES ON *.* TO 'sr_physical_ui'@'%' WITH GRANT OPTION")
             sid,_target,_post=registration(app,{'host':'127.0.0.1','port':port},ui_password,True,username='sr_physical_ui')
-            proof['browser']=browser(app,output,sid,ui_password,selected,credentials,browser_binary,driver_binary,connections=connections)
+            proof['browser']=browser(app,output,sid,ui_password,selected,credentials,browser_binary,driver_binary,connections=connections,replay=replay,replay_source=root)
         proof['complete']=True
     finally:
         if connections:
@@ -291,7 +300,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
     return proof
 
 
-def browser(app,output,sid,password,selected,credentials,binary,driver_binary,connections=False):
+def browser(app,output,sid,password,selected,credentials,binary,driver_binary,connections=False,replay=False,replay_source=None):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -334,6 +343,11 @@ def browser(app,output,sid,password,selected,credentials,binary,driver_binary,co
         check('I accept this pinned XtraBackup release candidate for this physical operation.')
         checks=[]
         for index in range(4):
+            if replay and index==3:
+                field('Recovery startup mode').click()
+                wait.until(lambda b:next(e for e in b.find_elements(By.CSS_SELECTOR,'[role="option"]') if e.text=='Replay (writable, binary logging)')).click()
+                fill('Recovery native server ID',10003)
+                fill('Physical native timeout seconds',600)
             click('Review native physical job');wait.until(lambda b:b.find_element(By.CSS_SELECTOR,'[aria-label="Native physical review"]'))
             check('I confirm this exact reviewed physical operation.')
             if index in (0,3):check('Delegate the registered database password privately to the pinned SSH host.')
@@ -348,9 +362,17 @@ def browser(app,output,sid,password,selected,credentials,binary,driver_binary,co
             elif index==2:click('Use copy-back for managed recovery');checks.append('built-isolated-copy-back-with-independent-file-verification-and-no-database-start')
             else:
                 assert final['recovery_sql_startup_observed'] and not final['database_recovery_verified']
+                if replay:
+                    identity=final['remote_observation']['sql_identity']
+                    assert identity['log_bin']==1 and identity['super_read_only']==0 and identity['server_id']==10003
+                    checks.append('built-separate-writable-replay-startup-and-private-native-binary-logging')
                 if connections:
                     from cdeadmin_mysql_recovery_connection_qualification import browser_connection
-                    checks.extend(browser_connection(driver,wait,click,fill,check,password,output))
+                    callback=None
+                    if replay:
+                        from cdeadmin_mysql_physical_replay_qualification import browser_replay
+                        callback=lambda target:browser_replay(app,output,sid,password,target,replay_source,binary,driver_binary)
+                    checks.extend(browser_connection(driver,wait,click,fill,check,password,output,before_detach=callback))
                 click('Stop managed recovery instance')
                 wait.until(lambda b:(value if (value:=receipt(b)).get('remote_observation',{}).get('supervisor_finished') else None))
                 checks.append('built-explicit-native-recovery-start-SQL-readiness-owned-process-and-stop')

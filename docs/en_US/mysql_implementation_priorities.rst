@@ -122,8 +122,11 @@ credential cleanup and process-descriptor shutdown survive loss of the original
 supervisor; missing exit replies remain unknown. Separate process-bound SSH
 registrations now expose the native recovered editor/catalog connection,
 preserving native driver semantics and refusing network fallback after
-transport/instance loss. Recovery replay utility transport and writable startup,
-selected log recovery, post-replay acceptance, incremental/encrypted/external-table-space
+transport/instance loss. Separately reviewed writable startup now provides
+private native binary logging and server-ID admission. Native raw closed-log
+replay uses a leased process-bound SSH route, native before/after/all boundaries
+and retained lost-reply/fence handling. Shell reconnect transport, broader
+independent process reconciliation, post-replay acceptance, incremental/encrypted/external-table-space
 support, physical retention and production cutover remain open. These bounded
 artifact receipts do not close ``CMP-MY-01``.
 

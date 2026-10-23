@@ -15,7 +15,7 @@ class Connections(MySQLBinlogJobs):
         'Creates or reattaches a separate native MySQL registration. Source registrations and their SQL sessions are preserved.',
         'Native MySQL protocol, authentication, TLS, data types and transactions pass through a process-bound SSH stream to the reviewed loopback listener. No database password is delegated to the relay.',
         'This transport belongs to the current application process. After application restart, reattach with fresh private SSH authentication. Missing or changed instances refuse connection; there is no network fallback.',
-        'The registered recovery instance retains its native read-only policy and reviewed lifetime. External native utilities and replay-ready startup retain separate admission work.',
+        'The registered recovery instance retains its reviewed read-only or writable replay startup policy and lifetime. Native raw-log replay has a private no-reconnect utility lease; Shell transport and full post-replay acceptance retain separate work.',
     )
 
 
@@ -72,6 +72,7 @@ def observed(transport,job):
     if not value.get('sql_identity',{}).get('port') or value['sql_identity'].get('skip_networking')!=0:
         raise physical.native.HostError('Start a recovery instance with an explicitly reviewed loopback TCP port for editor access')
     return {'server_uuid':value['sql_identity']['server_uuid'],'version':value['sql_identity']['version'],
+        'recovery_mode':job['options'].get('recovery_mode','read_only'),
         'datadir':value['data_directory'],'runtime_process':deepcopy(value['runtime_process'])}
 
 
@@ -148,7 +149,7 @@ def action(service,server,operation,request):
                 db.session.add(target);db.session.flush()
                 target_endpoint=EndpointProfile.query.filter_by(legacy_server_id=target.id).one()
                 binding={'id':str(uuid.uuid4()),'owner':owner,'endpoint_id':target_endpoint.id,'job_id':job['job_id'],
-                    **{key:current[key] for key in ('server_uuid','version','datadir')}}
+                    **{key:current[key] for key in ('server_uuid','version','datadir','recovery_mode')}}
                 model=target_endpoint.routes[0];route=json.loads(model.configuration);route[bridge.ROUTE_KEY]=binding;model.configuration=json.dumps(route)
                 target_endpoint.extension_profile.schema_reference=bridge.SCHEMA
                 target_endpoint.extension_profile.profile_data=json.dumps({'binding':binding,'source_job_id':job['job_id'],

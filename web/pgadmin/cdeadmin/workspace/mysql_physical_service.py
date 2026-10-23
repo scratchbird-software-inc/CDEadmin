@@ -40,7 +40,7 @@ def options(value):
     fields = {'connection', 'workspace', 'executable', 'mysql', 'phase', 'sql_host', 'sql_port',
         'input_job_id', 'parallel', 'memory_bytes', 'timeout_seconds', 'accept_release_candidate'}
     extra = {'mysqld', 'recovery_gtid_mode'} if isinstance(value,dict) and value.get('phase') == 'recover' else set()
-    optional = {'recovery_port'} if extra else set()
+    optional = {'recovery_port','recovery_mode','recovery_server_id'} if extra else set()
     if not isinstance(value, dict) or not fields | extra <= set(value) or set(value)-fields-extra-optional:
         raise native.HostError('Select the complete native physical host and operation options')
     selected = deepcopy(value); selected['connection'] = native.ssh.public_route(value['connection'])
@@ -63,6 +63,14 @@ def options(value):
         if type(port) is not int or port != 0 and not 1024 <= port <= 65535:
             raise native.HostError('Select no recovery TCP listener or a native loopback port from 1024 through 65535')
         selected['recovery_port'] = port
+        mode=value.get('recovery_mode','read_only')
+        if mode not in {'read_only','replay'}:raise native.HostError('Select read-only inspection or writable native replay startup')
+        selected['recovery_mode']=mode
+        if mode=='replay':
+            server_id=value.get('recovery_server_id')
+            if not port or type(server_id) is not int or not 1<=server_id<=4294967295:
+                raise native.HostError('Writable replay startup requires an explicit loopback TCP port and native server ID')
+        elif 'recovery_server_id' in value:raise native.HostError('A recovery server ID applies only to writable replay startup')
     if value['phase'] == 'backup':
         if value['input_job_id'] is not None:
             raise native.HostError('A full physical backup has no prior input')
@@ -78,7 +86,7 @@ class PhysicalJobs(MySQLBinlogJobs):
         'Full backups take native backup/read locks and copy complete supported instance files. Prepare mutates a separate private copy. Copy-back creates only a new isolated job data directory; it never overwrites the live data directory or starts a database.',
         'Native processes run under an independent supervisor on the authenticated database SSH host. Closing the viewer or losing a reply does not cancel or roll back native work. An original unknown dispatch is never automatically repeated.',
         'This full-artifact workflow requires self-contained, uncompressed and unencrypted native backup files. External tablespaces, encryption key provisioning, incrementals, post-replay acceptance and production cutover retain separate implementation/acceptance gates.',
-        'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account, with a fresh native UUID, private Unix socket and an optional explicitly selected loopback TCP listener, super_read_only, events/replication autostart disabled and no automatic upgrades. It ends on explicit stop or its reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
+        'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account with a fresh UUID, private Unix socket and selected loopback TCP listener. Read-only inspection is the default. Explicit replay startup is writable with private ROW binary logging and the selected server ID. Both disable events/replication autostart and automatic upgrades, and end on stop or reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
         'Physical files and native output are private to the selected host OS account. Broad source archive protection is acquired before backup dispatch and is retired only by its separate reviewed protection workflow.',
     )
 
@@ -121,7 +129,7 @@ def remote_request(record, action):
         'binding': deepcopy(record['source_state']['host_binding']), 'source_identity': deepcopy(record['source']),
         'reviewed': deepcopy(record['source_state']['remote_review']),
         'job_id': record['job_id'], 'input_digest': record['review_digest'],
-        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port') if key in selected}}
+        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id') if key in selected}}
 
 
 def delegate(service, server):

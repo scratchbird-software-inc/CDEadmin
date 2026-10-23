@@ -8,8 +8,9 @@ const initial = {connection: {host: '', port: 22, username: '', host_key: '', au
   sql_host: '127.0.0.1', sql_port: 3306, input_job_id: null, parallel: 2, memory_bytes: 268435456,
   timeout_seconds: 3600, accept_release_candidate: false};
 const phaseOptions = (current, phase, input_job_id) => {
-  const {mysqld, recovery_gtid_mode, recovery_port, ...base} = current;
-  return {...base, phase, input_job_id, ...(phase === 'recover' ? {mysqld: mysqld || '/usr/sbin/mysqld', recovery_gtid_mode: recovery_gtid_mode || 'ON', recovery_port: recovery_port ?? 3307} : {})};
+  const {mysqld, recovery_gtid_mode, recovery_port, recovery_mode, recovery_server_id, ...base} = current;
+  return {...base, phase, input_job_id, ...(phase === 'recover' ? {mysqld: mysqld || '/usr/sbin/mysqld', recovery_gtid_mode: recovery_gtid_mode || 'ON', recovery_port: recovery_port ?? 3307,
+    recovery_mode: recovery_mode || 'read_only', ...(recovery_mode === 'replay' ? {recovery_server_id: recovery_server_id || 10001} : {})} : {})};
 };
 export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
   const [options, setOptions] = useState(initial), [credentials, setCredentials] = useState({});
@@ -57,7 +58,7 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
     setReview(null); setConfirmed(false); setDelegate(false); clearConnectionReview();
   };
   return <Box component="section" aria-label="Native MySQL physical backups" sx={{p: 1, overflow: 'auto', flex: 1}}>
-    <Alert severity="info">XtraBackup 9.7.1-rc1 runs on the pinned Linux database SSH host. Backup, prepare and copy-back retain separate files. Managed recovery starts another data copy using native MySQL 9.7.0, a private Unix socket and read-only settings; it stops on request or its reviewed lifetime. Recovered-data acceptance, log replay and cutover have separate gates. Closing this viewer leaves admitted remote work running.</Alert>
+    <Alert severity="info">XtraBackup 9.7.1-rc1 runs on the pinned Linux database SSH host. Backup, prepare and copy-back retain separate files. Managed recovery starts another data copy using native MySQL 9.7.0. Choose read-only inspection or explicitly writable replay with binary logging. It stops on request or its reviewed lifetime. Recovered-data acceptance and cutover have separate gates. Closing this viewer leaves admitted remote work running.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap', my: 1}}>
       <TextField size="small" label="Physical SSH host" value={options.connection.host} disabled={busy} onChange={event => connection('host', event.target.value)} />
@@ -91,6 +92,14 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
         <MenuItem value="backup">Full backup</MenuItem><MenuItem value="prepare">Prepare immutable copy</MenuItem><MenuItem value="copy_back">Copy back to new isolated directory</MenuItem><MenuItem value="recover">Start managed recovery instance</MenuItem>
       </TextField>
       {options.phase === 'recover' && <>
+        <TextField select size="small" label="Recovery startup mode" value={options.recovery_mode || 'read_only'} disabled={busy} onChange={event => {
+          const {recovery_server_id, ...base} = options;
+          setOptions({...base, recovery_mode: event.target.value, ...(event.target.value === 'replay' ? {recovery_server_id: recovery_server_id || 10001} : {})});
+          setReview(null); setConfirmed(false); setDelegate(false); clearConnectionReview();
+        }}>
+          <MenuItem value="read_only">Read-only inspection</MenuItem><MenuItem value="replay">Replay (writable, binary logging)</MenuItem>
+        </TextField>
+        {options.recovery_mode === 'replay' && <TextField type="number" size="small" label="Recovery native server ID" value={options.recovery_server_id} disabled={busy} onChange={event => change('recovery_server_id', Number(event.target.value))} />}
         <TextField size="small" label="Recovery mysqld executable" value={options.mysqld} disabled={busy} onChange={event => change('mysqld', event.target.value)} />
         <TextField type="number" size="small" label="Recovery loopback TCP port (0 disables)" value={options.recovery_port || 0} disabled={busy} onChange={event => change('recovery_port', Number(event.target.value))} />
         <TextField select size="small" label="Recovery GTID mode" value={options.recovery_gtid_mode} disabled={busy} onChange={event => change('recovery_gtid_mode', event.target.value)}>
@@ -131,7 +140,7 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
     </Box>}
     {output && <Box component="pre" aria-label="Native physical output" sx={{whiteSpace: 'pre-wrap', maxHeight: 350, overflow: 'auto'}}>{JSON.stringify(output, null, 2)}</Box>}
     {receipt?.options.phase === 'recover' && <Box sx={{my: 1}}>
-      <Alert severity="info">Register this recovery instance as a separate MySQL target for the native editor and catalog. Use its reviewed loopback TCP port through pinned SSH. After application restart, reattach with fresh SSH authentication. External utility/replay transport and writable recovery startup have separate gates.</Alert>
+      <Alert severity="info">Register this recovery instance as a separate MySQL target for the native editor and catalog. Use its reviewed loopback TCP port through pinned SSH. After application restart, reattach with fresh SSH authentication. Writable replay startups support native raw-log replay from the target’s recovery menu. Shell replay transport has separate admission work.</Alert>
       <TextField size="small" label="Recovery registration name" value={connectionName} disabled={busy} onChange={event => {setConnectionName(event.target.value); clearConnectionReview();}} />
       <Button disabled={busy} onClick={() => run('connection_review', {job_id: receipt.job_id, name: connectionName, credentials}, value => {setConnectionReview(value); setConnectionConfirmed(false); setConnectionDelegate(false);})}>Review recovery connection</Button>
       {connectionReview && <>

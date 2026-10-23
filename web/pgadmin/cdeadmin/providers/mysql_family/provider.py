@@ -1269,7 +1269,8 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def _tool_secrets(self, route, callback, *, allow_recovery_credentials=False):
         if route.get('mysql_recovery_binding') and not allow_recovery_credentials:
-            raise RelationalClientError('External native utilities need separately admitted recovery transport; this connection currently supports native driver/editor operations')
+            from .mysql_recovery_bridge import require_raw_utility
+            require_raw_utility(route)
         references = dict(route.get('credential_references') or {})
         primary = route.get('credential_reference_id')
         if primary is not None:

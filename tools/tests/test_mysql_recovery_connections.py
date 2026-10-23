@@ -111,3 +111,52 @@ def test_native_reconnect_cannot_use_a_replaced_recovery_transport(monkeypatch):
     registry.get.return_value=SimpleNamespace()
     with pytest.raises(RelationalClientError,match='replaced'):result.reconnect()
     result.close();assert leases[0].release.call_count==1
+
+
+def test_raw_utility_requires_reviewed_replay_mode_and_owns_its_native_route(monkeypatch):
+    registry=bridge.Bridges();monkeypatch.setattr(bridge,'bridges',registry)
+    binding={'id':'owned','recovery_mode':'replay'}
+    original=registry.install(binding,SimpleNamespace(close=Mock()),{})
+    route={bridge.ROUTE_KEY:binding,'host':'managed-recovery.invalid','port':3306}
+    with pytest.raises(RelationalClientError):bridge.require_raw_utility(route)
+    lease=bridge.admit_raw_utility(route)
+    try:
+        bridge.require_raw_utility(lease.route)
+        assert lease.route['host']=='127.0.0.1' and lease.route['port']==original.port
+        with pytest.raises(RelationalClientError):bridge.require_raw_utility({**lease.route,'port':original.port+1})
+        with pytest.raises(RelationalClientError):registry.detach(binding)
+        with pytest.raises(RelationalClientError):bridge.admit_raw_utility({**route,bridge.ROUTE_KEY:{**binding,'recovery_mode':'read_only'}})
+    finally:lease.close();registry.close()
+    with pytest.raises(RelationalClientError):bridge.require_raw_utility(lease.route)
+
+
+def test_unknown_native_utility_termination_retains_its_port_reservation(monkeypatch):
+    registry=bridge.Bridges();monkeypatch.setattr(bridge,'bridges',registry)
+    binding={'id':'owned','recovery_mode':'replay'}
+    original=registry.install(binding,SimpleNamespace(close=Mock()),{})
+    lease=bridge.admit_raw_utility({bridge.ROUTE_KEY:binding})
+    try:
+        lease.uncertain=True;lease.close()
+        assert not lease.released and original.users==1 and original.uncertain_utilities==[lease]
+        with pytest.raises(RelationalClientError):registry.detach(binding)
+    finally:lease.uncertain=False;lease.close();registry.close()
+
+
+@pytest.mark.parametrize('extra',[
+    {'recovery_mode':'unknown'}, {'recovery_mode':'replay'},
+    {'recovery_mode':'replay','recovery_server_id':0},
+    {'recovery_mode':'replay','recovery_server_id':True},
+    {'recovery_mode':'replay','recovery_server_id':4294967296},
+    {'recovery_mode':'replay','recovery_server_id':10001,'recovery_port':0},
+    {'recovery_mode':'read_only','recovery_server_id':10001},
+])
+def test_replay_startup_refuses_ambiguous_or_incomplete_native_configuration(monkeypatch,extra):
+    from pgadmin.cdeadmin.workspace import mysql_physical_service as physical
+    monkeypatch.setattr(physical.native.ssh,'public_route',lambda value:value)
+    value={'connection':{'platform':'posix'},'workspace':'/private','executable':'/bin/xtrabackup','mysql':'/bin/mysql',
+        'phase':'recover','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':'6c304f92-1195-4d9c-9c5a-fb7974af691e',
+        'parallel':1,'memory_bytes':67108864,'timeout_seconds':120,'accept_release_candidate':True,
+        'mysqld':'/bin/mysqld','recovery_gtid_mode':'ON','recovery_port':3307}
+    assert physical.options(value)['recovery_mode']=='read_only'
+    assert physical.options({**value,'recovery_mode':'replay','recovery_server_id':10001})['recovery_server_id']==10001
+    with pytest.raises(physical.native.HostError):physical.options({**value,**extra})

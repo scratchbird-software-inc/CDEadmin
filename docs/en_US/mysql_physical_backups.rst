@@ -173,9 +173,37 @@ Source registrations and their pending sessions remain separate.
 **Detach recovery transport** requires this registration's native SQL
 connections to be explicitly closed before it releases this process's SSH
 forwarding. Replacing a transport has the same admission rule. The native recovery instance
-continues under its own supervisor/lifetime. External native utility/replay
-transport and a separately reviewed writable, binary-logging recovery startup
-remain beta implementation work.
+continues under its own supervisor/lifetime.
+
+Writable startup and native raw replay
+--------------------------------------
+
+**Recovery startup mode** defaults to **Read-only inspection**. Choosing
+**Replay (writable, binary logging)** requires an explicit native server ID and
+loopback TCP port, invalidates earlier startup consent and requires a new
+review. This starts another private data copy with a new native UUID,
+``read_only``/``super_read_only`` off, private ROW binary logs and replica-update
+logging enabled. Events, replication and Group Replication autostart remain
+disabled. Native SQL independently checks the reviewed mode, server ID and log
+paths before recording readiness. Earlier inspection instances stay read-only.
+
+Attach the replay instance as a separate registration, then open its binary-log
+recovery workspace and choose **MySQL raw closed logs**. The existing native
+``mysqlbinlog``/``mysql`` workflow uses an application-host utility lease on the
+original process-bound SSH stream. The lease retains the exact private route
+and blocks detach/replacement during native execution. Database credentials
+remain private and existing TLS options pass to the native client. The client
+disables reconnect and checks native target identity/GTID/log position before
+replay. A missing transport has no ordinary network fallback. MySQL owns log
+application, commits, GTIDs and errors; stopping a client does not prove rollback.
+
+Before/after/all transaction boundaries, original unknown replies and subsequent
+native target observation retain the existing replay/fence rules. Unknown
+utility termination retains its port reservation; broader independent process
+termination reconciliation remains open. Native Shell replay, which manages
+additional/reconnecting connections, requires separate transport admission.
+Whole-product post-replay data/definition acceptance, retention and production
+cutover also remain open; selected successful replay cases do not close them.
 
 The job list and **Inspect native physical output** provide retained facts and
 bounded output from the pinned host. Native errors and interrupted observations

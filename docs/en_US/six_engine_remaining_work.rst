@@ -110,7 +110,9 @@ one implementation scope and must not be counted as independent completion.
   supervisor loss. A separately reviewed SSH connection now registers the
   recovered instance for the native editor/catalog, with process/listener/UUID
   binding, native pure/C drivers and explicit reattachment after app restart.
-  Recovery replay utility transport and writable startup, native
+  Separately reviewed writable startup and leased native raw-log replay now
+  cover selected native before/after/all boundaries. Shell reconnect transport,
+  broader independent process reconciliation, native
   incremental/encrypted/external-path support, physical retention, selected
   replay, post-replay acceptance and cutover remain open; ``CMP-MY-01`` retains
   its open status and the comparison completion remains nine of eleven.

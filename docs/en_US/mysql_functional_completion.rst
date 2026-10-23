@@ -1910,8 +1910,11 @@ loopback TCP listener preserves native MySQL authentication/TLS and the full
 driver protocol. Native target UUID/version/data-path checks, independent
 registration observation after reply loss, explicit restart reattachment and
 a native connection lease guard protect detach/replacement lifecycle. Source
-sessions remain separate. External recovery utility/replay transport and
-writable startup, incremental/encrypted/external-path admission, physical retention,
+sessions remain separate. Separately reviewed writable startup now admits a
+native server ID/private ROW binary logs; leased native mysqlbinlog/mysql raw
+replay covers selected before/after/all boundaries and unknown native replies.
+Shell reconnect transport and broader independent process reconciliation,
+incremental/encrypted/external-path admission, physical retention,
 selected replay and independent post-replay acceptance, production cutover and
 the broader native inventory remain open. ``CMP-MY-01`` and ``CMP-MY-02`` stay
 open; nine of eleven comparison items are implemented and Linux-qualified.

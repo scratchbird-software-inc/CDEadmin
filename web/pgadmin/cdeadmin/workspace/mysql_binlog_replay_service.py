@@ -21,9 +21,13 @@ class ReplayTransport:
         self.source_directory,self.source_identity=source_directory,source_identity
 
     def close(self):
-        if self.credentials is not None:self.credentials.close();self.credentials=None
-        if self.observer is not None:
-            owned=self.observer;self.observer=None;self.client._discard_failed_session(owned)
+        try:
+            if self.credentials is not None:self.credentials.close();self.credentials=None
+            if self.observer is not None:
+                owned=self.observer;self.observer=None;self.client._discard_failed_session(owned)
+        finally:
+            utility=getattr(self,'recovery_utility',None)
+            if utility is not None:utility.close();self.recovery_utility=None
 
     def execute(self,record,directory,cancel,progress,boundary):
         reference=record['source_state']['input_reference'];staged=directory/'input';cleanup_safe=True
@@ -56,7 +60,7 @@ class ReplayTransport:
 
 class RawReplayTransport(ReplayTransport):
     def execute(self,record,directory,cancel,progress,boundary):
-        reference=record['source_state']['input_reference'];staged=directory/'input';cleanup_safe=True
+        reference=record['source_state']['input_reference'];staged=directory/'input';cleanup_safe=True;load_dispatched=False
         try:
             artifact=raw_archive.verify(self.source_directory,self.source_identity,cancel=cancel)
             if digest(artifact)!=reference['artifact_digest']:raise archive.BinlogArchiveError('Sealed native raw replay input changed')
@@ -68,8 +72,13 @@ class RawReplayTransport(ReplayTransport):
             target=raw_native.admission(self.observer,artifact,observed,previous,selected)
             before=record['source_state']['target']
             if target!=before:raise archive.BinlogArchiveError('Native raw replay target changed; prepare a new review')
+            def native_boundary():
+                nonlocal load_dispatched
+                boundary();load_dispatched=True
             result=raw_native.run_load(self.client,self.route,self.credentials,staged,record['source'],before['state'],selected,
-                observed,directory,record['program'],cancel=cancel,progress=progress,boundary=boundary)
+                observed,directory,record['program'],cancel=cancel,progress=progress,boundary=native_boundary)
+            utility=getattr(self,'recovery_utility',None)
+            if utility is not None:utility.uncertain=result.get('tool',{}).get('process_observation',{}).get('cleanup_confirmed') is not True
             if (result.get('control') or {}).get('native_load_returned'):
                 try:result['native_coverage']=raw_native.coverage(self.observer,record['source'],before)
                 except Exception as error:result['native_coverage']={'available':False,'error_type':type(error).__name__}
@@ -77,6 +86,9 @@ class RawReplayTransport(ReplayTransport):
         except BaseException as error:
             observed_error=getattr(error,'observation',None) or getattr(error,'process_observation',{})
             cleanup_safe=observed_error.get('process_observation',{}).get('cleanup_confirmed') is not False
+            utility=getattr(self,'recovery_utility',None)
+            if utility is not None and load_dispatched and observed_error.get('process_observation',{}).get('cleanup_confirmed') is not True and not getattr(error,'native_preparation_refused',False):
+                utility.uncertain=True
             raise
         finally:
             if cleanup_safe:shutil.rmtree(staged,ignore_errors=True)
@@ -187,13 +199,17 @@ def action(service,server,operation,request):
     else:raise archive.BinlogArchiveError('Native replay action is unavailable')
     raw=(reference or {}).get('family')=='raw' if operation!='inspect' else family=='raw'
     adapter=raw_native if raw else native
-    client=connection=transport=None
+    client=connection=transport=utility=None
     try:
         context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
         provider=service.endpoint_service.provider_registry.resolve(context).instance
         if not isinstance(provider,MySQLPilotProvider):raise archive.BinlogArchiveError('Native MySQL replay client is unavailable')
         from ..providers.mysql_family.mysql_connections import POOL_ARGUMENTS
         route={key:value for key,value in payload['route'].items() if key not in POOL_ARGUMENTS}
+        if route.get('mysql_recovery_binding') and operation in {'review','start'}:
+            if not raw:raise archive.BinlogArchiveError('Managed recovery currently admits native raw mysqlbinlog/mysql replay; Shell reconnect transport remains separate work')
+            from ..providers.mysql_family.mysql_recovery_bridge import admit_raw_utility
+            utility=admit_raw_utility(route);route=utility.route
         client=provider.client;connection=client._connect({'route':{**route,'read_timeout':5,'write_timeout':15}})
         target=adapter.capture_target(connection)
         if operation=='inspect':return {'identity':target['identity'],'state':target['state'],'scope':'native target identity and GTID state; no mutation'}
@@ -220,6 +236,7 @@ def action(service,server,operation,request):
         if operation=='review':return jobs.review(owner,endpoint.id,selected,{'identity':target['identity'],
             'state':{'target':target,'input_reference':reference,**({'input_previous_gtids':previous} if raw else {})}},configuration,program)
         transport=(RawReplayTransport if raw else ReplayTransport)(client,route,(raw_native.delegate_credentials if raw else archive.delegate_credentials)(client,route),connection,source_directory,source_identity);connection=None
+        transport.recovery_utility=utility;utility=None
         admitted=transport;transport=None
         return jobs.start(request,owner,endpoint.id,{'configuration':configuration,'source':target['identity'],'program':program},admitted)
     except NativeError as error:
@@ -227,3 +244,4 @@ def action(service,server,operation,request):
     finally:
         if connection is not None:client._discard_failed_session(connection)
         if transport is not None:transport.close()
+        if utility is not None:utility.close()

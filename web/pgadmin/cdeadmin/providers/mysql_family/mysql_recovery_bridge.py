@@ -116,6 +116,49 @@ bridges=Bridges()
 atexit.register(bridges.close)
 
 
+UTILITY_KEY='_mysql_recovery_raw_utility'
+
+
+class RawUtility:
+    """An unpersisted lease for the no-reconnect native raw replay clients."""
+    def __init__(self,route):
+        self.binding=copy.deepcopy(route[ROUTE_KEY]);self.released=False;self.uncertain=False
+        if self.binding.get('recovery_mode')!='replay':
+            raise RelationalClientError('Start a separately reviewed writable recovery instance before native raw replay')
+        with bridges.lock:
+            self.bridge=bridges.get(self.binding);self.lease=self.bridge.acquire()
+        self.route={**copy.deepcopy(route),'host':'127.0.0.1','port':self.bridge.port,UTILITY_KEY:self}
+        self.route.pop('unix_socket',None);self.route.pop('failover',None)
+
+    def validate(self,route):
+        if (self.released or route.get(UTILITY_KEY) is not self or route.get(ROUTE_KEY)!=self.binding or
+                route.get('host')!='127.0.0.1' or route.get('port')!=self.bridge.port or route.get('unix_socket') or route.get('failover') or
+                bridges.get(self.binding) is not self.bridge):
+            raise RelationalClientError('Native raw recovery utility lease is unavailable or changed')
+
+    def __deepcopy__(self,memo):return self
+
+    def close(self):
+        if self.uncertain:
+            # Retain the reservation when original utility termination is
+            # unknown. Closing/replacing its route cannot establish finality.
+            with self.bridge.lock:
+                pending=getattr(self.bridge,'uncertain_utilities',None)
+                if pending is None:pending=self.bridge.uncertain_utilities=[]
+                if self not in pending:pending.append(self)
+        elif not self.released:self.released=True;self.lease.release()
+
+
+def admit_raw_utility(route):
+    return RawUtility(route) if route.get(ROUTE_KEY) else None
+
+
+def require_raw_utility(route):
+    value=route.get(UTILITY_KEY)
+    if not isinstance(value,RawUtility):raise RelationalClientError('This recovery route requires an admitted native raw replay utility lease')
+    value.validate(route)
+
+
 def native_connection(connect,args,options):
     binding=options.pop(ROUTE_KEY,None)
     if binding is None:return connect(*args,**options)

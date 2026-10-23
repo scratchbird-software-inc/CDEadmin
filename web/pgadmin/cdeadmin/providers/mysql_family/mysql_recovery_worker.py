@@ -91,6 +91,12 @@ def inspection(request):
     if type(port) is not int or port != 0 and not 1024 <= port <= 65535 or port and port == request['sql_port']:
         raise Refused('Select a separate native recovery loopback TCP port or no TCP listener')
     if port:check_listener_port(port)
+    mode=request.get('recovery_mode','read_only')
+    if mode not in {'read_only','replay'}:raise Refused('Select a native recovery startup mode')
+    replay=mode=='replay';server_id=request.get('recovery_server_id')
+    if replay and (not port or type(server_id) is not int or not 1<=server_id<=4294967295):
+        raise Refused('Native writable recovery requires an explicit loopback TCP listener and server ID')
+    if not replay and server_id is not None:raise Refused('Read-only recovery does not accept a replay server ID')
     source = root / physical.job_id(request['input_job_id'])
     receipt = physical.read_json(source / 'result.json')
     if not successful(receipt) or not receipt.get('restored_files') or receipt.get('phase') != 'copy_back':
@@ -120,7 +126,8 @@ def inspection(request):
         'input': {'job_id': request['input_job_id'], 'manifest_sha256': host.digest(files), 'file_count': len(files)},
         'configuration': configuration(config), 'configuration_sha256': config_hash,
         'transport': 'loopback-tcp-and-private-unix-socket' if port else 'private-unix-socket-only', 'recovery_port':port, 'automatic_upgrade': False,
-        'replication_autostart': False, 'group_replication_autostart': False, 'event_scheduler': 'DISABLED', 'super_read_only': True,
+        'replication_autostart': False, 'group_replication_autostart': False, 'event_scheduler': 'DISABLED', 'super_read_only': not replay,
+        'recovery_mode':mode,'binary_logging':replay,'recovery_server_id':server_id,
         'recovery_gtid_mode': request['recovery_gtid_mode'], 'maximum_lifetime_seconds': request['timeout_seconds']}
 
 
@@ -194,7 +201,8 @@ def observe(directory, value, action):
 def sql_ready(request, observed, directory, option_file, data):
     query = "SELECT JSON_OBJECT('version',VERSION(),'server_uuid',@@server_uuid,'datadir',@@datadir,'socket',@@socket," \
         "'skip_networking',@@skip_networking,'port',@@port,'bind_address',CAST(@@bind_address AS CHAR CHARACTER SET utf8mb4),'skip_replica_start',@@skip_replica_start,'super_read_only',@@super_read_only,'read_only',@@read_only,'event_scheduler',@@event_scheduler," \
-        "'gtid_mode',@@gtid_mode,'gtid_executed',@@gtid_executed,'log_bin',@@log_bin," \
+        "'gtid_mode',@@gtid_mode,'gtid_executed',@@gtid_executed,'gtid_purged',@@gtid_purged,'log_bin',@@log_bin,'server_id',@@server_id," \
+        "'log_bin_basename',CAST(@@log_bin_basename AS CHAR CHARACTER SET utf8mb4),'log_bin_index',CAST(@@log_bin_index AS CHAR CHARACTER SET utf8mb4),'log_replica_updates',@@log_replica_updates,'binlog_format',CAST(@@binlog_format AS CHAR CHARACTER SET utf8mb4)," \
         "'group_replication_autostart',CAST((SELECT VARIABLE_VALUE FROM performance_schema.global_variables WHERE VARIABLE_NAME='group_replication_start_on_boot') AS CHAR CHARACTER SET utf8mb4)," \
         "'authenticated_principal',CURRENT_USER()," \
         "'active_role',CAST(CURRENT_ROLE() AS CHAR CHARACTER SET utf8mb4))"
@@ -210,13 +218,17 @@ def sql_ready(request, observed, directory, option_file, data):
     expected = request['source_identity']
     parser = configparser.ConfigParser(); parser.read_string(physical.metadata(data/'auto.cnf')); uuid = parser['auto']['server-uuid']
     physical.job_id(uuid)
+    replay=request.get('recovery_mode','read_only')=='replay'
     if (value.get('server_uuid') != uuid or uuid == expected['server_uuid'] or
             value.get('version') != expected['version'] or
             value.get('authenticated_principal') != expected['authenticated_principal'] or value.get('active_role') != expected['active_role'] or
             physical.absolute(value['datadir']) != data or physical.absolute(value['socket']) != directory/'runtime.sock' or
-            value.get('skip_networking') != (0 if request.get('recovery_port') else 1) or value.get('skip_replica_start') != 1 or value.get('super_read_only') != 1 or value.get('read_only') != 1 or
-            value.get('event_scheduler') != 'DISABLED' or value.get('log_bin') != 0 or value.get('gtid_mode') != request['recovery_gtid_mode']):
+            value.get('skip_networking') != (0 if request.get('recovery_port') else 1) or value.get('skip_replica_start') != 1 or value.get('super_read_only') != (0 if replay else 1) or value.get('read_only') != (0 if replay else 1) or
+            value.get('event_scheduler') != 'DISABLED' or value.get('log_bin') != (1 if replay else 0) or value.get('gtid_mode') != request['recovery_gtid_mode']):
         raise Refused('Native recovered SQL identity or isolation differs from the reviewed instance')
+    if replay and (value.get('server_id')!=request['recovery_server_id'] or value.get('log_replica_updates')!=1 or value.get('binlog_format')!='ROW' or
+            physical.absolute(value['log_bin_basename'])!=directory/'recovery-bin' or physical.absolute(value['log_bin_index'])!=directory/'recovery-bin.index'):
+        raise Refused('Native writable recovery binary-log configuration differs from its review')
     if request.get('recovery_port') and (value.get('port') != request['recovery_port'] or value.get('bind_address') != '127.0.0.1'):
         raise Refused('Native recovery TCP listener differs from its reviewed loopback address')
     if value.get('group_replication_autostart') not in {None,'OFF'}:
@@ -250,10 +262,14 @@ def execute(directory):
             '--log-error='+str(directory/'native-error.log'),
             '--user='+observed['os_account']['name'], '--mysqlx=OFF', '--skip-replica-start',
             '--loose-group-replication-start-on-boot=OFF',
-            '--event-scheduler=DISABLED', '--super-read-only=ON', '--skip-log-bin', '--gtid-mode='+request['recovery_gtid_mode'],
+            '--event-scheduler=DISABLED', '--gtid-mode='+request['recovery_gtid_mode'],
             '--enforce-gtid-consistency=ON', '--innodb-buffer-pool-size='+str(request['memory_bytes']),
             '--tmpdir='+str(directory), '--innodb-data-home-dir='+str(data), '--innodb-undo-directory='+str(data)]
         args += ['--'+key.replace('_','-')+'='+val for key,val in sorted(observed['configuration'].items())]
+        args += (['--read-only=OFF','--super-read-only=OFF','--log-bin='+str(directory/'recovery-bin'),
+            '--log-bin-index='+str(directory/'recovery-bin.index'),'--server-id='+str(request['recovery_server_id']),
+            '--log-replica-updates=ON','--binlog-format=ROW','--binlog-encryption=OFF'] if request.get('recovery_mode','read_only')=='replay'
+            else ['--super-read-only=ON','--skip-log-bin'])
         args += ['--bind-address=127.0.0.1','--port='+str(request['recovery_port'])] if request.get('recovery_port') else ['--skip-networking']
         if (directory/'cancel').exists(): raise InterruptedError('Recovery cancelled before native dispatch')
         option_file = physical.client_options(request,directory)
