@@ -710,7 +710,12 @@ invalidation fences delayed deletion requests. Original native outcomes remain
 unchanged. Current Python/C and built desktop qualification is provided by
 ``tools/cdeadmin_mysql_physical_replay_qualification.py --retention``.
 
-Batch/scheduled physical retention, recurring backup/drill policy, independent
+Reviewed age/count batches now preserve a minimum number of verified full-backup
+chains and execute a fixed set in dependency order. Native retained-file
+revalidation, current graph/reservation checks, pause, restart inspection,
+interrupted-item resume and unused-review invalidation are implemented.
+
+Scheduled physical retention, recurring backup/drill policy, independent
 post-replay acceptance, remaining backend admission and cutover stay open under
 ``CMP-MY-01``. ``CMP-MY-02`` and remaining ``INV-MYSQL`` reconciliation still
 precede the MariaDB handoff. Linux evidence does not close platform-team gates;

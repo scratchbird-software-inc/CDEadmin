@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TextField} from '@mui/material';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
+import MySQLPhysicalBatchRetention from './MySQLPhysicalBatchRetention';
 
 const initial = {connection: {host: '', port: 22, username: '', host_key: '', authentication: 'private_key', platform: 'posix', python: '/usr/bin/python3'},
   workspace: '/var/backups/scratchrobin/physical', executable: '/usr/bin/xtrabackup', mysql: '/usr/bin/mysql', phase: 'backup',
@@ -152,7 +153,7 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
       <Box component="section" aria-label="Physical artifact retention" sx={{my: 1}}>
         <Alert severity="warning">Physical retention removes the reviewed backup files, recovered data copy and private replay logs on the pinned SSH host. Remove dependent artifacts first, stop recovery and remove its registrations. Original receipts and native outcomes are preserved. Binary-log protection is managed separately.</Alert>
         <FormControlLabel label="Protect this physical artifact from retention" control={<Checkbox checked={!!receipt.retention_pinned} disabled={busy || receipt.artifact_removed || !!receipt.artifact_removal} onChange={event => run('retention_pin', {job_id: receipt.job_id, pinned: event.target.checked}, setReceipt)} />} />
-        <Button disabled={busy || receipt.artifact_removed || !!receipt.artifact_removal || receipt.retention_pinned} onClick={() => run('retention_review', {job_id: receipt.job_id, credentials}, value => {setRetention(value); setRetentionConfirmed(false); setRetentionName('');})}>Review physical artifact retention</Button>
+        <Button disabled={busy || receipt.artifact_removed || !!receipt.artifact_removal || !!receipt.retention_batch_id || receipt.retention_pinned} onClick={() => run('retention_review', {job_id: receipt.job_id, credentials}, value => {setRetention(value); setRetentionConfirmed(false); setRetentionName('');})}>Review physical artifact retention</Button>
         <Button disabled={busy || !(receipt.artifact_removal?.retention_job_id || receipt.retention_review_job_id)} onClick={() => run('retention_status', {job_id: receipt.artifact_removal?.retention_job_id || receipt.retention_review_job_id}, value => {setRetention(value); setRetentionConfirmed(false); setRetentionName('');})}>Load physical retention receipt</Button>
         {retention && <>
           <Box component="pre" aria-label="Physical retention review" sx={{whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto'}}>{JSON.stringify(retention, null, 2)}</Box>
@@ -164,6 +165,9 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
         </>}
       </Box>
     </Box>}
+    <MySQLPhysicalBatchRetention post={post} credentials={credentials} scopeJobId={receipt?.job_id} busy={busy} onBusy={setBusy} onChanged={async () => {
+      if(receipt) {const value = await post({action: 'mysql_physical_status', request: {job_id: receipt.job_id}}); if(mounted.current) setReceipt(value);}
+    }} />
     {output && <Box component="pre" aria-label="Native physical output" sx={{whiteSpace: 'pre-wrap', maxHeight: 350, overflow: 'auto'}}>{JSON.stringify(output, null, 2)}</Box>}
     {receipt?.options.phase === 'recover' && <Box sx={{my: 1}}>
       <Alert severity="info">Register this recovery instance as a separate MySQL target for the native editor and catalog. Use its reviewed loopback TCP port through pinned SSH. After application restart, reattach with fresh SSH authentication. Writable replay startups support native raw-log and POSIX Shell replay from the target’s recovery menu.</Alert>

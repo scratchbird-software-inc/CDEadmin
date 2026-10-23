@@ -173,6 +173,9 @@ def _action(service, server, operation, request):
         from .mysql_recovery_connections import action as connection_action
         return connection_action(service, server, operation[11:], request)
     jobs, owner, endpoint = manager(service, server)
+    if operation.startswith('retention_batch_'):
+        from .mysql_physical_batch_retention import action as batch_action
+        return batch_action(service,server,jobs,owner,endpoint,operation,request)
     if operation.startswith('retention_'):
         from .mysql_physical_retention import action as retention_action
         return retention_action(service,server,jobs,owner,endpoint,operation,request)
@@ -224,7 +227,7 @@ def _action(service, server, operation, request):
                     raise native.HostError('Native physical source changed after review')
         else:
             prior = jobs.load(selected['input_job_id'], owner, endpoint.id)
-            if (prior.get('artifact_removed') or prior.get('artifact_removal') or prior['options']['connection'] != selected['connection'] or prior['options']['workspace'] != selected['workspace'] or
+            if (prior.get('artifact_removed') or prior.get('artifact_removal') or prior.get('retention_batch_id') or prior['options']['connection'] != selected['connection'] or prior['options']['workspace'] != selected['workspace'] or
                     not jobs.public(prior)['file_verification_confirmed'] or
                     not (prior.get('remote_observation') or {}).get('restored_files' if selected['phase'] == 'recover' else 'artifact')):
                 raise native.HostError('Select an observed physical input in this owner/registration and pinned host workspace')

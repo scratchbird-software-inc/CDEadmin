@@ -302,7 +302,7 @@ late dispatch before releasing an unclaimed local intent. An unknown outcome or
 missing intent alone never authorizes a fresh removal. Completed manifests are
 compacted; private file inventories do not accumulate as retention history.
 
-This workflow removes reviewed individual artifacts. Batch/scheduled physical
+This workflow removes reviewed individual artifacts. Scheduled physical
 retention, recurring backup/drill policy, independent full post-replay acceptance
 and production cutover remain under ``CMP-MY-01``. Binary-log archive protection
 has its own reviewed retirement workflow and is not silently retired here.
@@ -312,3 +312,54 @@ recovery log cleanup, lost replies, interrupted file removal, explicit resume,
 blocked source SQL authentication with a preserved independent transaction,
 and the built desktop workflow. Windows/macOS acceptance remains separately
 owned; ScratchBird history tests remain owner-deferred.
+
+Reviewed age/count batch retention
+----------------------------------
+
+Select an original physical receipt and **Review physical retention policy**.
+Choose retention days and the minimum number of newest verified full-backup
+chains to keep. Zero days allows immediate cleanup after confirmed native end.
+Age starts at the application's observation of completed native work, rather
+than its earlier review or start time. Existing receipts without a completion
+observation acquire a conservative age anchor when first inventoried.
+
+Policies cover one owner, endpoint, original SQL identity, pinned SSH account,
+host binding and workspace. The complete local dependency graph is inspected;
+missing or cross-scope inputs, cycles and corrupt inventory prevent review.
+The newest retained full backups and their descendants are protected. Pins,
+retained recovery registrations, active/unknown native processes, other batch
+reservations and outstanding individual reviews also protect their inputs.
+If the verified full-backup count is below the requested floor, nothing is
+eligible. This count establishes file retention, not recovery acceptance.
+
+A review fixes at most 100 eligible jobs, children before their inputs. Each
+item includes its native paths, file count and byte count. Additional jobs never
+join this accepted batch. The host rehashes retained full backups at review and
+before each removal while holding its admission lock; missing, changed or
+unavailable retained files stop deletion. This may take time for large backups.
+The application also rechecks eligibility, pins, registrations, the retained
+floor, fingerprints and reservations before every step. Reserved inputs cannot
+admit new derived jobs. Batch item tickets cannot bypass the parent workflow.
+
+Type the exact batch UUID, confirm the review and select **Run reviewed physical
+retention batch**. Each request removes one reviewed item. **Pause after current
+physical removal** or closing the viewer stops future requests; work already
+admitted by the SSH host may continue. No background scheduler is enabled.
+Fresh SSH credentials are used only for the current request. Source SQL login
+is unnecessary; independent user transactions and savepoints remain untouched.
+
+Use **Load physical retention batches** after reconnecting or restarting the
+application. Status and **Inspect current physical batch step** never delete
+files. After a lost reply or interrupted worker, independent inspection and
+renewed confirmation precede **Resume original physical batch step**. Resume
+uses the same detached filesystem intent and never retries a native backup or
+recovery operation. **Invalidate unused physical batch reviews** fences late
+dispatch of unclaimed items. An already claimed removal keeps its original
+intent; inspect and, if needed, explicitly finish only that item, then invalidate
+the remaining reviews again. Cancellation never starts the next item.
+
+Unused previews expire after ten minutes. Invalidate an expired batch and review
+a fresh fixed set; there is no silent extension or added deletion intent.
+Original physical results, unknown database outcomes, native output and archive
+protection remain separate. Scheduled retention, recurring backup/drill policy,
+full independent post-replay acceptance and production cutover remain open.

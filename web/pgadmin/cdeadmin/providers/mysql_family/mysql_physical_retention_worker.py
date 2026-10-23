@@ -141,11 +141,30 @@ def observe(directory,request):
         'automatic_retry':False,'original_native_outcome_unchanged':True}
 
 
+def verify_floors(root,request):
+    floors=request.get('retained_full_backups',[])
+    if not isinstance(floors,list) or not 1<=len(floors)<=1000:raise Refused('Select retained verified full backups')
+    seen=set()
+    for selected in floors:
+        job=physical.job_id(selected['job_id'])
+        if job in seen or job==request['job_id'] and request['action']=='retention_remove':raise Refused('Retained full backup identities differ')
+        seen.add(job);directory=root/job
+        original,value=stopped(directory,{**request,**selected})
+        if (original['phase']!='backup' or original.get('source_identity')!=request.get('source_identity') or
+                value.get('return_code')!=0 or value.get('error_type') or (directory/'retention-intent.json').exists()):
+            raise Refused('Retained full backup is unavailable or belongs to another native source')
+        unmounted([directory/'artifact'])
+        if physical.public(physical.artifact(directory/'artifact',prepared=False))!=physical.public(value.get('artifact')):
+            raise Refused('Retained full backup content changed; preserve the batch')
+    return {'verified_full_backup_ids':sorted(seen)}
+
+
 def dispatch(request,root,directory):
     retention_id=physical.job_id(request['retention_id']);physical.job_id(request['job_id'])
     if not directory.is_dir() or directory.is_symlink():raise Refused('Original physical job directory is unavailable')
     stopped(directory,request)
     action=request['action'];intent_path=directory/'retention-intent.json'
+    if action=='retention_verify_floor':return verify_floors(root,request)
     if action=='retention_status':return observe(directory,request)
     if action=='retention_abandon':
         if intent_path.exists():return observe(directory,request)
@@ -154,7 +173,11 @@ def dispatch(request,root,directory):
             host.save(preview,{'review':{'retention_id':retention_id},'expires_at':0,'cancelled':True})
         return {'state':'not_claimed','removal_confirmed':False,'late_dispatch_refused':True,'automatic_retry':False}
     children=dependencies(root,request['job_id'])
-    if children:raise Refused('Retain this physical input until its dependent physical artifacts are explicitly removed')
+    planned=request.get('planned_job_ids',[])
+    if not isinstance(planned,list) or len(planned)>100 or any(not isinstance(value,str) for value in planned) or len(set(planned))!=len(planned):raise Refused('Select a bounded physical batch preview')
+    for value in planned:physical.job_id(value)
+    if children and (action!='retention_inspect' or not set(children)<=set(planned)):
+        raise Refused('Retain this physical input until its dependent physical artifacts are explicitly removed')
     if action=='retention_inspect':
         if intent_path.exists():raise Refused('Observe or resume the original physical retention intent')
         manifest=snapshot(directory)
@@ -163,6 +186,7 @@ def dispatch(request,root,directory):
         host.save(directory/'retention-review.json',{'review':review,'manifest':manifest,'expires_at':time.time()+600})
         return review
     if action!='retention_remove' or request.get('confirmed') is not True:raise Refused('Confirm the reviewed physical retention intent')
+    if request.get('retained_full_backups') is not None:verify_floors(root,request)
     if intent_path.exists():
         current=observe(directory,request)
         if current['removal_confirmed']:return current

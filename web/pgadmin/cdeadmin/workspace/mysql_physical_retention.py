@@ -53,7 +53,7 @@ def manager(service,jobs):
         return value
 
 
-def action(service,server,jobs,owner,endpoint,operation,request):
+def action(service,server,jobs,owner,endpoint,operation,request,*,batch_reservation=None,batch_floor=None):
     from .mysql_host_service import credentials
     from .mysql_monitoring_host import MySQLMonitoringHost
     tickets=manager(service,jobs)
@@ -65,22 +65,24 @@ def action(service,server,jobs,owner,endpoint,operation,request):
         jobs.update(record,retention_pinned=request['pinned']);return jobs.get(record['job_id'],owner,endpoint.id)
     if operation=='retention_review' and set(request)=={'job_id','credentials'}:
         record=jobs.load(request['job_id'],owner,endpoint.id);ticket=None
-        if record.get('artifact_removed') or record.get('artifact_removal'):raise native.HostError('Inspect the original physical retention intent')
+        if record.get('artifact_removed') or record.get('artifact_removal') or record.get('retention_batch_id'):raise native.HostError('Inspect the original physical retention intent or its owning batch')
         selected={'source_job_id':record['job_id'],'retention_id':str(uuid.uuid4())}
     elif operation in {'retention_start','retention_reconcile','retention_abandon'}:
         fields={'job_id','credentials'}|({'review_digest','confirmed','job_confirmation'} if operation!='retention_reconcile' else set())
         if set(request)!=fields:raise native.HostError('Select the exact physical retention review and private SSH authentication')
         ticket=tickets.load(request['job_id'],owner,endpoint.id);selected=ticket['options']
+        if selected.get('batch_reservation_id') and selected['batch_reservation_id']!=batch_reservation:
+            raise native.HostError('Use the owning physical retention batch for this reviewed item')
         record=jobs.load(selected['source_job_id'],owner,endpoint.id)
         prior=record.get('artifact_removal')
         if prior and prior['retention_job_id']!=ticket['job_id']:
             raise native.HostError('Another original physical removal intent owns this artifact')
-        if operation=='retention_abandon' and not prior and record.get('retention_review_job_id')!=ticket['job_id']:
-            raise native.HostError('Select the current physical retention review')
         if operation!='retention_reconcile' and (request['confirmed'] is not True or request['review_digest']!=ticket['review_digest'] or
                 review_digest(ticket)!=ticket['review_digest'] or request['job_confirmation']!=record['job_id']):
             raise native.HostError('Confirm the exact physical retention review and type its original physical job UUID')
         if ticket['state'] in {'removed','not_dispatched'}:return tickets.get(ticket['job_id'],owner,endpoint.id)
+        if operation=='retention_abandon' and not prior and record.get('retention_review_job_id')!=ticket['job_id']:
+            raise native.HostError('Select the current physical retention review')
     else:raise native.HostError('Select an explicit physical retention action')
     configuration=digest(MySQLMonitoringHost._configuration(server))
     if ticket and (ticket['configuration']!=configuration or any(ticket['program'].get(key)!=value for key,value in native.program().items())):
@@ -100,8 +102,8 @@ def action(service,server,jobs,owner,endpoint,operation,request):
         if operation=='retention_reconcile':
             observed=transport.request({**remote,'action':'retention_status'})
         else:
-            dependencies(jobs,record,owner,endpoint.id)
             if operation=='retention_start':
+                dependencies(jobs,record,owner,endpoint.id)
                 if ticket['state']=='reviewed' and ticket['expires_at']<time.time():raise native.HostError('Physical retention review expired')
                 prior=record.get('artifact_removal')
                 if prior and prior['retention_job_id']!=ticket['job_id']:raise native.HostError('Another original physical removal intent owns this artifact')
@@ -110,7 +112,8 @@ def action(service,server,jobs,owner,endpoint,operation,request):
                 jobs.update(record,artifact_removal={'retention_job_id':ticket['job_id'],'state':'unknown'})
             try:
                 observed=transport.request({**remote,'action':'retention_remove' if operation=='retention_start' else 'retention_abandon',
-                    'confirmed':True,'retention_review':ticket['source_state']['remote_review']})
+                    'confirmed':True,'retention_review':ticket['source_state']['remote_review'],
+                    **({'retained_full_backups':batch_floor} if batch_floor is not None else {})})
             except BaseException as error:
                 tickets.update(ticket,state='unknown',error_type=type(error).__name__,original_reply_unchanged=True)
                 raise

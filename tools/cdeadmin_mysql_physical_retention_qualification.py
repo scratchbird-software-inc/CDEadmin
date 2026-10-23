@@ -158,7 +158,7 @@ def qualify_retention(app,output,oracle,container,port,password,selected,credent
     (output/'physical-retention-summary.json').write_text(json.dumps(proof,indent=2)+'\n');return proof
 
 
-def browser(app,output,sid,job_id,password,credentials,binary,driver_binary):
+def browser(app,output,sid,job_id,password,credentials,binary,driver_binary,*,batch=False):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -190,21 +190,33 @@ def browser(app,output,sid,job_id,password,credentials,binary,driver_binary):
         wait.until(lambda browser:any(json.loads(node.get_attribute('textContent')).get('job_id')==job_id for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="Native physical receipt"]')))
         label=wait.until(lambda browser:next((node for node in browser.find_elements(By.TAG_NAME,'label') if node.is_displayed() and node.text=='Physical SSH private key'),None))
         field=driver.find_element(By.ID,label.get_attribute('for'));wait.until(lambda _browser:field.is_enabled());field.send_keys(credentials['private_key'])
-        click('Review physical artifact retention')
-        value=wait.until(lambda browser:next((json.loads(node.text) for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="Physical retention review"]') if node.is_displayed()),None))
-        field=driver.find_element(By.CSS_SELECTOR,'input[aria-label="Exact physical job UUID to remove"]') if driver.find_elements(By.CSS_SELECTOR,'input[aria-label="Exact physical job UUID to remove"]') else driver.find_element(By.XPATH,'//label[text()="Exact physical job UUID to remove"]/following-sibling::div/input')
+        if batch:
+            for label,value in [('Physical retention days','0'),('Minimum full-backup chains','1')]:
+                field=driver.find_element(By.ID,driver.find_element(By.XPATH,'//label[text()="'+label+'"]').get_attribute('for'))
+                driver.execute_script('arguments[0].scrollIntoView({block:"center"});',field);field.click()
+                from selenium.webdriver.common.keys import Keys
+                field.send_keys(Keys.CONTROL,'a');field.send_keys(value);field.send_keys(Keys.TAB)
+        click('Review physical retention policy' if batch else 'Review physical artifact retention')
+        receipt='Physical retention batch receipt' if batch else 'Physical retention review'
+        value=wait.until(lambda browser:next((json.loads(node.text) for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="'+receipt+'"]') if node.is_displayed()),None))
+        if batch:assert job_id in value['plan']['job_ids'] and value['plan']['retained_full_backup_ids']
+        exact='Exact physical retention batch UUID' if batch else 'Exact physical job UUID to remove'
+        field=driver.find_element(By.ID,driver.find_element(By.XPATH,'//label[text()="'+exact+'"]').get_attribute('for'))
         driver.execute_script('arguments[0].scrollIntoView({block:"center"});',field)
         wait.until(lambda _browser:field.is_displayed() and field.is_enabled());field.click()
-        field.send_keys(job_id)
-        label=driver.find_element(By.XPATH,'//label[contains(.,"I confirm removal of these reviewed physical files.")]')
+        field.send_keys(value['job_id'] if batch else job_id)
+        confirmation='I confirm this exact physical retention batch.' if batch else 'I confirm removal of these reviewed physical files.'
+        label=driver.find_element(By.XPATH,'//label[contains(.,"'+confirmation+'")]')
         driver.execute_script('arguments[0].scrollIntoView({block:"center"});',label);label.click()
-        click('Remove reviewed physical artifacts')
-        value=wait.until(lambda browser:next((json.loads(node.text) for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="Physical retention review"]') if node.is_displayed() and json.loads(node.text).get('removal_confirmed')),None))
-        assert value['state']=='removed'
+        click('Run reviewed physical retention batch' if batch else 'Remove reviewed physical artifacts')
+        value=wait.until(lambda browser:next((json.loads(node.text) for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="'+receipt+'"]') if node.is_displayed() and (json.loads(node.text).get('state')=='completed' if batch else json.loads(node.text).get('removal_confirmed'))),None))
+        assert value['state']==('completed' if batch else 'removed')
         driver.execute_script('document.querySelectorAll("textarea,input[type=password]").forEach(e=>e.style.visibility="hidden");')
         driver.save_screenshot(str(output/'native-physical-retention.png'))
         errors=[row for row in driver.get_log('browser') if row['level']=='SEVERE'];assert not errors,errors
-        proof={'complete':True,'checks':['built-source-menu-native-physical-job-inspection','reviewed-exact-UUID-and-confirmed-native-host-removal','original-receipt-refresh-without-automatic-replay'],'console_errors':errors}
+        proof={'complete':True,'batch':batch,'checks':['built-source-menu-native-physical-job-inspection',
+            'reviewed-age-count-policy-and-exact-batch-UUID-native-removal' if batch else 'reviewed-exact-UUID-and-confirmed-native-host-removal',
+            'original-receipt-refresh-without-automatic-replay'],'console_errors':errors}
         (output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n');return proof
     except Exception:
         if driver:
