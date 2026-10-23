@@ -98,7 +98,7 @@ def plan(records,anchor,selected,cutoff,*,registered=(),reservation=None):
     for job,record in nodes.items():
         if absent(record):continue
         own=reservation is not None and record.get('retention_batch_id')==reservation
-        reason=('backup_workflow' if record.get('backup_workflow_protected') else 'pinned' if record.get('retention_pinned') else 'registered_recovery' if job in registered else
+        reason=('recovery_check_policy' if record.get('recovery_check_holds') else 'backup_workflow' if record.get('backup_workflow_protected') else 'pinned' if record.get('retention_pinned') else 'registered_recovery' if job in registered else
             'other_batch' if record.get('retention_batch_id') and not own else
             'pending_removal' if record.get('artifact_removal') and not own else
             'outstanding_review' if record.get('retention_review_job_id') and not own else

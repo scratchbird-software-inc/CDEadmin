@@ -18,6 +18,7 @@ def admission(jobs):
 
 
 def dependencies(jobs,record,owner,endpoint):
+    if record.get('recovery_check_holds'):raise native.HostError('Disable recovery-check policies and resolve their occurrences before removing this input')
     if record.get('backup_workflow_protected'):raise native.HostError('Resolve and release this protected backup workflow before retention')
     children=[];index=jobs.scope(owner,endpoint)/'index'
     entries=list(index.iterdir()) if index.exists() else []

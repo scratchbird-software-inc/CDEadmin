@@ -522,3 +522,52 @@ actual differences, interrupted replies and the built desktop. This is separate
 from unattended startup-drill automation. Automatically selecting/capturing an
 expected snapshot for scheduled data checks, unexported/system-state coverage,
 wider physical backend admission and production cutover remain open.
+
+Recurring expected-checkpoint recovery drills
+---------------------------------------------
+
+Select a retained verified copy-back with **Use copy-back for managed recovery**.
+Choose read-only startup, TCP port0, trusted LOCAL INFILE checksum input and a
+30–3600-second native lifetime. Under **Recurring physical recovery checks**,
+load and select an expected full-instance backup from this source registration,
+choose the interval and policy lifetime, then review the policy. Type its exact
+UUID, confirm the future work and explicitly delegate SSH and the registered SQL
+password encrypted before enabling it. The existing physical worker key authority
+is required. These policies have a separate encrypted purpose from backups and
+retention.
+
+Every occurrence creates a fresh isolated native recovery from the same retained
+copy-back, with a new UUID and private Unix socket. It compares full row counts,
+native data checksums and exported definitions against the selected sealed dump,
+then stops the original recovered server and independently confirms termination
+and credential cleanup. The source may continue accepting writes. Its current
+state is never substituted for the selected expected checkpoint. The dump must
+include native checksum coverage and both data and definitions. Matching checks
+verify those selected exported surfaces; unexported/system state and production
+cutover remain separate. Existing recurring full-backup policies continue to
+create new backups and optional startup drills; this separate policy tests a
+specifically retained recovery point.
+
+Both retained inputs and the physical input's ancestors remain protected while
+the policy is enabled or its occurrence is unresolved. The same protection
+applies to manual and scheduled retention and connection-profile removal. Worker
+SQL connections have their own scoped resolver and never replace interactive
+credentials or sessions. Idle worker restart can use the encrypted delegation
+after an interactive password is forgotten. Credentials are erased on disabling,
+expiry or suspension. Missed intervals are not backfilled.
+
+A difference or interruption suspends future occurrences and preserves each
+original job and acceptance receipt. No uncertain occurrence is automatically
+repeated. Disable the policy before explicitly stopping or reconciling its
+original native jobs. With fresh SSH authentication, **Reconcile native ends and
+release workflow protection** requires the original acceptance utility to have
+ended and the exact original recovered server generation to have stopped. The
+server's confirmed end establishes that its private SQL locks are gone, even
+when its SQL transport is unavailable. It releases only the matching original
+utility reservation and target fence; it never changes an earlier unknown or
+different comparison into a match. Resolve any outstanding occurrence and disable
+the policy to release its two retained-input holds. Expired policies also retain
+that explicit disable action. A fresh review is required for future work.
+
+Native qualification is available through
+``tools/cdeadmin_mysql_physical_replay_qualification.py --check-only``.

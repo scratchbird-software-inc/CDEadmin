@@ -32,7 +32,7 @@ def prepare_fixture(output, image):
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -94,12 +94,20 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             cursor.execute("GRANT `physical role 雪` TO 'sr_physical'@'%'")
             cursor.execute("SET DEFAULT ROLE `physical role 雪` TO 'sr_physical'@'%'")
             cursor.execute('CREATE TABLE pending(id INT PRIMARY KEY)')
-        if schedule_only or backup_only:
+        if schedule_only or backup_only or check_only:
             import config,base64
             config.CDEADMIN_MYSQL_PHYSICAL_WORKER_KEYS={'owned-fixture':base64.b64encode(secrets.token_bytes(32)).decode('ascii')}
             config.CDEADMIN_MYSQL_PHYSICAL_WORKER_ACTIVE_KEY_ID='owned-fixture'
             config.CDEADMIN_MYSQL_RETENTION_POLL_SECONDS=.1
         app = setup_application(output)
+        if check_only:
+            from cdeadmin_mysql_physical_check_schedule_qualification import qualify_checks
+            selected={'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
+                'workspace':'/var/backups/scratchrobin/jobs','executable':'/usr/bin/xtrabackup','mysql':'/usr/bin/mysql',
+                'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
+            proof['physical_check_schedule']=qualify_checks(app,output,root,name,port,password,selected,{'private_key':key.read_text()},browser_binary,driver_binary)
+            proof['complete']=True
+            return proof
         if acceptance_only:
             from cdeadmin_mysql_physical_acceptance_qualification import qualify_acceptance
             selected={'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
@@ -323,6 +331,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
         if app is not None:
             app.extensions['cdeadmin_provider_workspace'].mysql_physical_scheduler.close()
             app.extensions['cdeadmin_provider_workspace'].mysql_backup_scheduler.close()
+            app.extensions['cdeadmin_provider_workspace'].mysql_check_scheduler.close()
         if connections:
             from pgadmin.cdeadmin.providers.mysql_family.mysql_recovery_bridge import bridges
             bridges.close()

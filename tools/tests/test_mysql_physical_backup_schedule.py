@@ -165,7 +165,8 @@ def test_registration_removal_requires_policy_disable_and_release_of_held_work(w
     with s.host.removal_guard(s.server):pass
 
 
-def test_dedicated_SQL_credentials_never_replace_or_close_the_interactive_client(monkeypatch):
+@pytest.mark.parametrize('tool_credentials',[False,True])
+def test_dedicated_SQL_credentials_never_replace_or_close_the_interactive_client(monkeypatch,tool_credentials):
     @dataclass
     class Config:
         secret_acquirer:object
@@ -178,11 +179,16 @@ def test_dedicated_SQL_credentials_never_replace_or_close_the_interactive_client
     binding=SimpleNamespace(instance=SimpleNamespace(client=original))
     endpoint=SimpleNamespace(workspace=lambda *_args,**_kwargs:(None,{'route':{'host':'pinned-source','user':'native-user','credential_reference_id':'interactive','principal_reference':'interactive-owner','pool_name':'interactive-pool'}},None),
         provider_registry=SimpleNamespace(resolve=lambda _context:binding))
-    with backup.sql_client(SimpleNamespace(endpoint_service=endpoint),object(),{'user':'native-user','password':'encrypted-worker-SQL'},'worker:owned') as (client,route):
+    with backup.sql_client(SimpleNamespace(endpoint_service=endpoint),object(),{'user':'native-user','password':'encrypted-worker-SQL'},'worker:owned',tool_credentials=tool_credentials) as (client,route):
         assert client is not original and route['credential_reference_id']!='interactive' and 'pool_name' not in route
         with client.config.secret_acquirer(route['credential_reference_id'],route['principal_reference'],'connect','database_password') as lease:
             assert lease.use(lambda value:bytes(value))==b'encrypted-worker-SQL'
         with pytest.raises(backup.native.HostError):client.config.secret_acquirer('interactive','interactive-owner','connect','database_password')
+        if tool_credentials:
+            with client.config.secret_acquirer(route['credential_reference_id'],route['principal_reference'],'provider_tool','database_password') as lease:
+                assert lease.use(lambda value:bytes(value))==b'encrypted-worker-SQL'
+        else:
+            with pytest.raises(backup.native.HostError):client.config.secret_acquirer(route['credential_reference_id'],route['principal_reference'],'provider_tool','database_password')
     assert created[0].closed and original.config.secret_acquirer is original_acquirer
 
 
@@ -191,3 +197,29 @@ def test_invalid_drill_does_not_create_or_delegate_a_policy(workflow,drill):
     s=workflow
     with pytest.raises(backup.native.HostError):s.action('review',{'options':{'physical':s.physical_options,
         'drill':drill,'interval_seconds':60,'expires_after_days':1},'credentials':{}})
+
+
+@pytest.mark.parametrize('different',[False,True])
+def test_recovery_callback_finishes_before_shutdown_and_failed_checks_preserve_protection(workflow,different):
+    s=workflow;value=s.backup_grant(False);grant=s.host.read(value['job_id']);records=s.host.occurrences(grant)
+    reviewed=records.review(1,s.endpoint.id,grant['options'],{'identity':grant['source'],'state':{}},grant['configuration'],grant['program'])
+    occurrence=records.load(reviewed['job_id'],1,s.endpoint.id);records.update(occurrence,state='running',native_jobs=[])
+    s.host.jobs.update(grant,last_occurrence_id=occurrence['job_id'])
+    options={**deepcopy(s.physical_options),'phase':'copy_back','input_job_id':None}
+    parent=s.jobs.review(1,s.endpoint.id,options,s.captured,'config',{'execution_host':{}})
+    record=s.jobs.load(parent['job_id'],1,s.endpoint.id)
+    s.jobs.update(record,state='native_returned',remote_observation={'return_code':0,'restored_files':{'files':1},'process_termination_confirmed':True,'credential_cleanup_confirmed':True,'supervisor_finished':True})
+    selected={**deepcopy(s.physical_options),'phase':'recover','input_job_id':parent['job_id'],'mysqld':'/usr/sbin/mysqld','recovery_gtid_mode':'ON'}
+    reached=[]
+    def check(runtime):
+        reached.append(runtime['job_id'])
+        assert runtime['recovery_running']
+        assert not any(action=='cancel' and job==runtime['job_id'] for action,_phase,job in s.calls)
+        if different:raise physical.native.HostError('Expected data differs')
+    if different:
+        with pytest.raises(physical.native.HostError,match='Expected data differs'):
+            s.host.step(s.server,s.jobs,grant,records,occurrence,{'ssh':{},'database':{}},selected,on_ready=check)
+    else:s.host.step(s.server,s.jobs,grant,records,occurrence,{'ssh':{},'database':{}},selected,on_ready=check)
+    assert len(reached)==1 and ('cancel','recover',reached[0]) in s.calls
+    assert s.jobs.get(reached[0],1,s.endpoint.id)['native_process_termination_confirmed']
+    assert s.jobs.load(reached[0],1,s.endpoint.id)['backup_workflow_protected']

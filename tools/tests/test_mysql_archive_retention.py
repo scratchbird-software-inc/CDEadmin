@@ -275,3 +275,15 @@ def test_pending_intent_survives_an_independent_process(fixture, monkeypatch, tm
             'assert r["artifact_removed"] and r["artifact_removal"]["state"]=="completed"')
     subprocess.run([sys.executable, '-B', '-c', code, json.dumps(payload)], check=True, timeout=30)
     assert f.jobs.get(record['job_id'], 1, f.endpoint)['artifact_removed']
+
+
+def test_recurring_recovery_baseline_hold_blocks_manual_and_planned_removal_until_released(fixture):
+    f=fixture;old=f.archive();f.archive(days=1)
+    f.jobs.update(old,recovery_check_holds={'reviewed-policy':True})
+    with pytest.raises(BinlogArchiveError,match='recovery-check policies'):
+        retention.remove(f.jobs,old['job_id'],1,f.endpoint,old['job_id'])
+    with pytest.raises(BinlogArchiveError,match='No retained archives'):
+        f.action('retention_review',{'policy':{'retention_days':0,'keep_latest':1}})
+    assert (f.jobs.directory(old)/'archive'/'owned.bin').exists()
+    f.jobs.update(old,recovery_check_holds={})
+    assert retention.remove(f.jobs,old['job_id'],1,f.endpoint,old['job_id'])['artifact_removed']

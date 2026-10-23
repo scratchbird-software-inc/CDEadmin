@@ -55,7 +55,7 @@ def program(jobs,anchor,peer):
 
 
 @contextmanager
-def sql_client(service,server,secret,principal):
+def sql_client(service,server,secret,principal,*,tool_credentials=False):
     """One connection owner; never replace an interactive client's resolver."""
     from ..providers.mysql_family.provider import MySQLDBAPIClient
     from ..providers.mysql_family.mysql_connections import POOL_ARGUMENTS
@@ -68,7 +68,7 @@ def sql_client(service,server,secret,principal):
     reference='physical-backup:'+principal
     if secret['password']:route.update(credential_reference_id=reference,principal_reference=principal,credential_kind='database_password')
     def acquire(selected,owner,purpose,kind):
-        if (selected,owner,purpose,kind)!=(reference,principal,'connect','database_password'):raise native.HostError('Physical SQL delegation scope changed')
+        if (selected,owner,kind)!=(reference,principal,'database_password') or purpose not in ({'connect','provider_tool'} if tool_credentials else {'connect'}):raise native.HostError('Physical SQL delegation scope changed')
         return SecretLease(secret['password'])
     client=MySQLDBAPIClient(replace(original.config,secret_acquirer=acquire),module=original.module)
     try:yield client,route
@@ -116,7 +116,7 @@ class ScheduleHost(retained.ScheduleHost):
             self.app.config.get('CDEADMIN_MYSQL_PHYSICAL_ROOT') or path.parent/'mysql-physical-receipts')
         owner=server.user_id;endpoint=server.endpoint_profile.id
         with retention.admission(jobs):
-            for scheduler in (self,getattr(self.service,'mysql_physical_scheduler',None)):
+            for scheduler in (self,getattr(self.service,'mysql_physical_scheduler',None),getattr(self.service,'mysql_check_scheduler',None)):
                 if scheduler is None:continue
                 offset=0
                 while True:
@@ -126,7 +126,7 @@ class ScheduleHost(retained.ScheduleHost):
                     if not page['more']:break
                     offset+=100
                     if offset>=10000:raise EndpointRegistrationError('Physical policy inventory exceeds its removal bound')
-            if any(record.get('backup_workflow_protected') for record in inventory(jobs,owner,endpoint).values()):
+            if any(record.get('backup_workflow_protected') or record.get('recovery_check_holds') for record in inventory(jobs,owner,endpoint).values()):
                 raise EndpointRegistrationError('Reconcile native backup work and release its workflow protection before removing this profile')
             yield
 
@@ -179,7 +179,7 @@ class ScheduleHost(retained.ScheduleHost):
         for record in observed:jobs.update(record,backup_workflow_protected=False)
         records.update(occurrence,protection_released=True,released_job_ids=[record['job_id'] for record in observed],released_at=time.time())
 
-    def step(self,server,jobs,grant,records,occurrence,secret,selected):
+    def step(self,server,jobs,grant,records,occurrence,secret,selected,*,on_ready=None):
         def require():return self.require(grant,occurrence['job_id'])
         def capture():
             with sql_client(self.service,server,secret['database'],'worker:'+grant['job_id']) as admitted:
@@ -194,28 +194,45 @@ class ScheduleHost(retained.ScheduleHost):
             with retention.admission(jobs):
                 require()
                 return physical._action(self.service,server,operation,{**body,'credentials':secret['ssh']},source_capture=capture,
-                    database_credentials=secret['database'],on_review=bind,scheduled_policy_id=grant['job_id'],authorize=require)
+                    database_credentials=secret['database'],on_review=bind,scheduled_policy_id=grant['job_id'],scheduled_operation=grant['operation'],authorize=require)
         value=call('review',{'options':selected})
         expected=self.anchor(grant,jobs)['source_state']['remote_review']
-        if any(key in value['remote_review'] and value['remote_review'][key]!=expected[key] for key in ('mysql','xtrabackup')):
+        if any(key in value['remote_review'] and value['remote_review'][key]!=expected[key] for key in ('mysql','xtrabackup','mysqld') if key in expected):
             raise native.HostError('Scheduled physical executable changed after policy review')
         value=call('start',{'job_id':value['job_id'],'review_digest':value['review_digest'],'confirmed':True,'delegate_database_credentials':True})
         deadline=time.monotonic()+selected['timeout_seconds']+180
-        ready=False;stopping=False
+        ready=False;stopping=False;failure=None
         while time.monotonic()<deadline:
             value=call('reconcile',{'job_id':value['job_id']})
             if value['state']=='unknown':raise native.HostError('Original scheduled native outcome is unknown; independently inspect it')
             remote=value.get('remote_observation') or {}
             if selected['phase']=='recover' and value['recovery_running'] and not stopping:
-                ready=True;value=call('cancel',{'job_id':value['job_id']});stopping=True
+                ready=True
+                if on_ready is not None:
+                    try:on_ready(value)
+                    except Exception as error:failure=error
+                value=call('cancel',{'job_id':value['job_id']});stopping=True
             elif remote.get('supervisor_finished'):
                 if remote.get('return_code')!=0 or remote.get('error_type') or not value['native_process_termination_confirmed'] or remote.get('credential_cleanup_confirmed') is not True:
                     raise native.HostError('Scheduled native work did not confirm successful completion and cleanup')
                 if selected['phase']=='recover' and not ready:raise native.HostError('Native startup drill did not observe SQL readiness')
                 if selected['phase']!='recover' and not value['file_verification_confirmed']:raise native.HostError('Scheduled physical files remain unverified')
+                if failure is not None:raise failure
                 return value
             self.stop.wait(.25)
         raise native.HostError('Original scheduled native process exceeded its observation deadline')
+
+    def perform(self,server,jobs,grant,records,occurrence,secret):
+        selected=deepcopy(grant['options']['physical']);backup=self.step(server,jobs,grant,records,occurrence,secret,selected)
+        drill=grant['options']['drill']
+        if drill:
+            parent=backup
+            for phase in ('prepare','copy_back','recover'):
+                selected={**deepcopy(grant['options']['physical']),'phase':phase,'input_job_id':parent['job_id']}
+                if phase=='recover':selected.update(mysqld=drill['mysqld'],recovery_gtid_mode=drill['gtid_mode'],recovery_port=0,recovery_mode='read_only',timeout_seconds=drill['timeout_seconds'])
+                parent=self.step(server,jobs,grant,records,occurrence,secret,selected)
+            records.update(occurrence,startup_drill_outcome='passed')
+        return {'backup_job_id':backup['job_id']}
 
     def tick(self,job_id,*,force=False):
         from .continuous_binlog_tails import file_claim
@@ -236,19 +253,11 @@ class ScheduleHost(retained.ScheduleHost):
                     value=records.review(owner,endpoint.id,grant['options'],{'identity':grant['source'],'state':{}},grant['configuration'],grant['program'],continuation={'policy_id':job_id})
                     occurrence=records.load(value['job_id'],owner,endpoint.id)
                     self.jobs.update(grant,last_occurrence_id=value['job_id'],scan_state='running')
-                    records.update(occurrence,state='running',native_jobs=[],startup_drill_outcome='not_requested' if grant['options']['drill'] is None else 'not_observed')
-                    selected=deepcopy(grant['options']['physical']);backup=self.step(server,jobs,grant,records,occurrence,secret,selected)
-                    drill=grant['options']['drill']
-                    if drill:
-                        parent=backup
-                        for phase in ('prepare','copy_back','recover'):
-                            selected={**deepcopy(grant['options']['physical']),'phase':phase,'input_job_id':parent['job_id']}
-                            if phase=='recover':selected.update(mysqld=drill['mysqld'],recovery_gtid_mode=drill['gtid_mode'],recovery_port=0,recovery_mode='read_only',timeout_seconds=drill['timeout_seconds'])
-                            parent=self.step(server,jobs,grant,records,occurrence,secret,selected)
-                        records.update(occurrence,startup_drill_outcome='passed')
+                    records.update(occurrence,state='running',native_jobs=[],startup_drill_outcome='not_requested' if grant['options'].get('drill') is None else 'not_observed')
+                    result=self.perform(server,jobs,grant,records,occurrence,secret)
                     current=records.load(occurrence['job_id'],owner,endpoint.id)
                     with retention.admission(jobs):self.release(server,jobs,grant,records,current,secret['ssh'],authorize=lambda:self.require(grant,occurrence['job_id']))
-                    records.update(occurrence,state='completed',backup_job_id=backup['job_id'],finished_at=time.time())
+                    records.update(occurrence,state='completed',finished_at=time.time(),**result)
                     self.jobs.update(grant,scan_state=None,last_scan_at=time.time(),next_scan_at=time.time()+grant['options']['interval_seconds'])
                 except Exception as error:
                     if occurrence is not None:records.update(occurrence,state='interrupted',error_type=type(error).__name__,original_native_outcomes_unchanged=True)

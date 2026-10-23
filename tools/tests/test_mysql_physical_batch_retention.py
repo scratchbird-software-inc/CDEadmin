@@ -74,7 +74,7 @@ def test_latest_full_chains_age_pins_and_all_inputs_are_preserved(setup):
 
 
 @pytest.mark.parametrize('change',[
-    {'retention_pinned':True},{'retention_batch_id':'other'},{'artifact_removal':{'state':'unknown'}},
+    {'retention_pinned':True},{'recovery_check_holds':{'policy':True}},{'retention_batch_id':'other'},{'artifact_removal':{'state':'unknown'}},
     {'retention_review_job_id':'manual-review'},{'remote_observation':{}},{'retention_age_anchor':None}])
 def test_protected_leaf_preserves_its_entire_input_chain(setup,change):
     s=setup;old=s.create();s.create('prepare',old['job_id'],**change);s.create()

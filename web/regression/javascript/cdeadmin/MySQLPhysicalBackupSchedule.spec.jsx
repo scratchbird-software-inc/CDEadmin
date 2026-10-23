@@ -1,6 +1,9 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import MySQLPhysicalBackupSchedule from 'sources/Dialogs/MySQLPhysicalBackupSchedule';
 import {withTheme} from '../fake_theme';
+const originalHeight = window.innerHeight;
+beforeAll(() => {window.innerHeight = 1800;});
+afterAll(() => {window.innerHeight = originalHeight;});
 const Component = withTheme(MySQLPhysicalBackupSchedule);
 const physical = {phase: 'backup', input_job_id: null, accept_release_candidate: true, connection: {host: 'pinned-source'}, workspace: '/private'};
 const reviewed = {job_id: 'exact-backup-policy', review_digest: 'original-backup-digest', state: 'reviewed', ssh_delegation_present: false};
@@ -55,4 +58,30 @@ it('loads interrupted occurrences without retry and releases protection only thr
   await waitFor(() => expect(screen.getByLabelText('Native backup occurrence receipt')).toHaveTextContent('protection_released'));
   expect(post).toHaveBeenLastCalledWith({action: 'mysql_physical_backup_schedule_release', request: {job_id: reviewed.job_id, occurrence_id: 'original-occurrence', confirmed: true, schedule_confirmation: reviewed.job_id, credentials: {private_key: 'transient-SSH'}}});
   expect(screen.getByLabelText('Native backup occurrence receipt')).toHaveTextContent('interrupted');
+});
+
+it('binds a recovery policy to a selected native expected backup and isolates its action family', async () => {
+  const recovery = {...physical, phase: 'recover', input_job_id: 'retained-copy', recovery_mode: 'read_only', recovery_port: 0, recovery_local_infile: true};
+  const post = jest.fn().mockResolvedValueOnce({jobs: [{job_id: 'expected-native-dump', state: 'completed'}], offset: 0, limit: 25, more: false}).mockResolvedValueOnce(reviewed);
+  render(<Component recovery post={post} physical={recovery} credentials={{private_key: 'transient-SSH'}} busy={false} onBusy={jest.fn()} />);
+  expect(screen.getByRole('button', {name: 'Review recurring physical recovery check policy'})).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', {name: 'Load expected full-instance backups'}));
+  fireEvent.mouseDown(await screen.findByRole('combobox', {name: 'Expected recovery checkpoint backup'}));
+  fireEvent.click(await screen.findByRole('option', {name: 'expected-native-dump'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Review recurring physical recovery check policy'}));
+  await screen.findByLabelText('Recurring physical recovery check policy receipt');
+  expect(post).toHaveBeenLastCalledWith({action: 'mysql_physical_check_schedule_review', request: {options: {physical: recovery, expected_backup_job_id: 'expected-native-dump', threads: 4, interval_seconds: 86400, expires_after_days: 30}, credentials: {private_key: 'transient-SSH'}}});
+  expect(post.mock.calls.some(([value]) => value.action === 'mysql_physical_backup_schedule_review')).toBe(false);
+});
+
+it('keeps expired recovery policies explicitly disableable so resolved input holds can be released', async () => {
+  const receipt = {...reviewed, state: 'expired'};
+  const post = jest.fn().mockResolvedValueOnce({jobs: [receipt]}).mockResolvedValueOnce(receipt);
+  render(<Component recovery post={post} physical={physical} credentials={{}} busy={false} onBusy={jest.fn()} />);
+  fireEvent.click(screen.getByRole('button', {name: 'Load recurring physical recovery check policies'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Inspect recurring recovery check policy ' + receipt.job_id}));
+  await screen.findByLabelText('Recurring physical recovery check policy receipt');
+  fireEvent.change(screen.getByLabelText('Exact recurring recovery check policy UUID'), {target: {value: receipt.job_id}});
+  fireEvent.click(screen.getByLabelText('I confirm this exact recurring native recovery check policy.'));
+  expect(screen.getByRole('button', {name: 'Disable recurring recovery check policy'})).toBeEnabled();
 });

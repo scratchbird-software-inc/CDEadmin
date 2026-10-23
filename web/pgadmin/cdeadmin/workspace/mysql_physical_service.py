@@ -169,10 +169,10 @@ def claim(jobs, record, owner, endpoint, request):
 def action(service, server, operation, request):
     from .mysql_physical_retention import admission
     jobs,owner,endpoint=manager(service,server)
-    if operation.startswith(('retention_schedule_','backup_schedule_')):
+    if operation.startswith(('retention_schedule_','backup_schedule_','check_schedule_')):
         if not isinstance(request,dict):raise native.HostError('Select a physical schedule request')
         from ..report_scheduler.crypto import WorkerKeyError
-        scheduler=service.mysql_backup_scheduler if operation.startswith('backup_schedule_') else service.mysql_physical_scheduler
+        scheduler=service.mysql_check_scheduler if operation.startswith('check_schedule_') else service.mysql_backup_scheduler if operation.startswith('backup_schedule_') else service.mysql_physical_scheduler
         try:
             if operation.endswith('_enable'):
                 with admission(jobs):return scheduler.action(server,jobs,owner,endpoint,operation,request)
@@ -181,7 +181,7 @@ def action(service, server, operation, request):
     with admission(jobs):return _action(service,server,operation,request)
 
 
-def _action(service, server, operation, request, *, source_capture=None,database_credentials=None,on_review=None,scheduled_policy_id=None,authorize=None):
+def _action(service, server, operation, request, *, source_capture=None,database_credentials=None,on_review=None,scheduled_policy_id=None,scheduled_operation=None,authorize=None):
     if not isinstance(request, dict): raise native.HostError('Select a native physical request')
     if operation.startswith('connection_'):
         from .mysql_recovery_connections import action as connection_action
@@ -206,7 +206,8 @@ def _action(service, server, operation, request, *, source_capture=None,database
         if set(request) != fields: raise native.HostError('Select the exact physical job and private SSH authentication')
         record = jobs.load(request['job_id'], owner, endpoint.id); selected = record['options']
         owning=record['source_state'].get('backup_schedule_id')
-        if owning and owning!=scheduled_policy_id and operation!='output' and service.mysql_backup_scheduler.read(owning)['state']=='enabled':
+        scheduler=(getattr(service,'mysql_check_scheduler',None) if record['source_state'].get('schedule_operation')=='mysql_scheduled_physical_check' else getattr(service,'mysql_backup_scheduler',None))
+        if owning and owning!=scheduled_policy_id and operation!='output' and (scheduler is None or scheduler.read(owning)['state']=='enabled'):
             raise native.HostError('Disable the owning backup schedule before changing its native job')
         if operation == 'start' and record['state'] != 'reviewed':
             if request['confirmed'] is not True or request['review_digest'] != record['review_digest']:
@@ -255,7 +256,7 @@ def _action(service, server, operation, request, *, source_capture=None,database
         provisional = {'options': selected, 'source': captured['identity'], 'source_state': {**captured['state'], 'remote_review': {}}, 'job_id': '', 'review_digest': ''}
         observed = transport.request(remote_request(provisional, 'inspect'))
         captured['state']['remote_review'] = observed
-        if scheduled_policy_id is not None:captured['state']['backup_schedule_id']=scheduled_policy_id
+        if scheduled_policy_id is not None:captured['state'].update(backup_schedule_id=scheduled_policy_id,schedule_operation=scheduled_operation or 'mysql_scheduled_physical_backup')
         program = {**native.program(), 'execution_host': {**peer, 'kind': 'database-server-ssh-host', 'workspace': selected['workspace']}}
         if operation == 'review':
             value=jobs.review(owner,endpoint.id,selected,captured,configuration,program)

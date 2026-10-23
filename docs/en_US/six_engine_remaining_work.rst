@@ -729,8 +729,10 @@ Startup success does not establish full data/definition recovery acceptance.
 Manual expected-dump data/definition acceptance on managed physical recovery
 targets, including after native replay, now has separate native checks and
 interrupted-utility handling. Private-socket registrations preserve isolation
-without requiring TCP. Scheduled expected-snapshot acceptance, unexported/system
-state, remaining backend admission and cutover stay open under
+without requiring TCP. Recurring expected-checkpoint acceptance now uses fresh private read-only
+recoveries, a selected sealed native dump, durable retention holds and original
+utility/server-generation end evidence. Unexported/system state, remaining
+backend admission and cutover stay open under
 ``CMP-MY-01``. ``CMP-MY-02`` and remaining ``INV-MYSQL`` reconciliation still
 precede the MariaDB handoff. Linux evidence does not close platform-team gates;
 ScratchBird history qualification remains owner-deferred.

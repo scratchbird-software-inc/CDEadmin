@@ -2015,7 +2015,10 @@ counts, native checksums and exported SQL definitions, including after native
 replay. Private-socket startup works without a TCP listener; trusted checksum
 input is an explicit reviewed startup choice. Original utility leases and
 independent termination observations preserve unknown checks after relay loss.
-Scheduled expected-snapshot checks, unexported/system-state coverage, remaining
-physical backend admission and production cutover remain open. ``CMP-MY-01``, ``CMP-MY-02`` and ``INV-MYSQL`` still precede
+Recurring expected-checkpoint policies now start fresh private read-only
+recoveries, compare them to a selected sealed native dump and independently stop
+them. Durable input holds, encrypted SSH/SQL delegation and explicit interrupted
+utility/server-generation release preserve original outcomes. Unexported/system
+state, remaining physical backend admission and production cutover stay open. ``CMP-MY-01``, ``CMP-MY-02`` and ``INV-MYSQL`` still precede
 the MariaDB implementation handoff; the comparison denominator remains nine
 implemented items out of eleven.

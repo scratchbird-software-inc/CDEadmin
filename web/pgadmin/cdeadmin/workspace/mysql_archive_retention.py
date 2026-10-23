@@ -158,6 +158,8 @@ def _remove(jobs, job_id, owner, endpoint, confirmation, *, expected=None, recon
                 raise BinlogArchiveError('A reviewed archive has already been removed; prepare a new retention review')
             return jobs.public(record)
         stopped(jobs, record)
+        if record.get('recovery_check_holds'):
+            raise BinlogArchiveError('Disable recovery-check policies and resolve their occurrences before removing this expected backup')
         if record.get('retention_pinned'):
             raise BinlogArchiveError('Unprotect this archive in a separate action before removing it')
         intent = record.get('artifact_removal')
@@ -239,7 +241,7 @@ def candidates(jobs, owner, endpoint, selected, *, native_source=None):
                     counts['managed_backup_protected'] += 1; continue
                 if record.get('artifact_removal'):
                     counts['pending_removal'] += 1; continue
-                if record.get('retention_pinned'):
+                if record.get('recovery_check_holds') or record.get('retention_pinned'):
                     counts['pinned'] += 1; continue
                 if (record['state'] not in RETAINED or
                         record.get('native_process_termination_confirmed') is not True or
