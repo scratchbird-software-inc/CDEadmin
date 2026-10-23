@@ -42,6 +42,8 @@ function mysqlDynamic(id, scope, engine='mysql') {
     return Boolean(match && ['name', 'collector', 'freshness', 'heartbeat', maria ? 'server_uid' : 'server_uuid', 'observed_at'].some(field => hex(field) === match[1]));
   }
   if(!maria && /^mysql_workload_summary_(?:[0-9]|1[01])$/.test(id)) return true;
+  if(!maria && (/^mysql_alert_summary_[01]$/.test(id) ||
+      /^mysql_alert_[a-f0-9]{2,128}_(?:state|condition|value|source|observed_at|action|delivery)$/.test(id))) return true;
   const workload = !maria && /^mysql_workload_(settings|consumers|instruments|epoch|digests)_([a-f0-9]{2,1024})_([a-f0-9]{2,128})$/.exec(id);
   if(workload) {
     const fields = {settings: ['performance_schema', 'digests_size', 'max_digest_length', 'stored_digest_length', 'slow_query_log', 'log_output', 'long_query_time'],

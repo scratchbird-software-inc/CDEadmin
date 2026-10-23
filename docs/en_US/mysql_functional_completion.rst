@@ -333,7 +333,7 @@ Linux native pure/C, registered-replica and built-desktop receipts close
 post-cutover definitions/data. Interrupted copies retain their original unknown
 outcome alongside observed process completion, credential cleanup and remaining
 table/trigger artifacts. Broader MySQL inventory, recovery and lifecycle gates
-remain open; the next comparison workflow is ``CMP-MY-06`` data drift verification.
+remain open; complete-table drift and alert workflows have subsequent qualified sections below.
 
 Native full-table and replica data drift
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -410,12 +410,43 @@ Independent user transactions, savepoints and warning areas remain intact.
 Built-desktop receipts qualify matched/different reports, deliberate report
 download, clearing and an independent native oracle confirming no repair writes.
 These scopes close ``CMP-MY-06``. Broader native inventory, recovery/lifecycle and
-platform acceptance remain open; ``CMP-MY-08`` MySQL alert lifecycle is next.
+platform acceptance remain open; the accepted next comparison workflow is ``CMP-MY-09`` spatial inspection.
 
 The pinned Percona Toolkit 3.7.2 checksum source requires statement-based logging
 and has replication-format/topology restrictions. It is not selected as this
 workflow's backend. See `Percona checksum limitations
 <https://docs.percona.com/percona-toolkit/pt-table-checksum.html#limitations>`_.
+
+Native MySQL alert policies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The MySQL collection policy screen now configures eleven native threshold and
+duration metrics, severity, missing-observation behavior and fixed notification
+routes. Independent collectors evaluate pending, firing, resolved, unknown and
+silenced states without any open viewer. Native identity/counter resets, stale
+or denied groups, missing denominators and missed collection windows break
+continuity. Scheduled failure backoff remains valid outage-duration evidence.
+Findings carry exact values, source/sample identities and diagnostic next steps;
+no automatic remediation is dispatched.
+
+Silence/unsilence controls are owner- and grant-authorized. DDN dashboards expose
+current read-only alert bindings. A bounded independent delivery worker rechecks
+the grant, scope, silence and admitted destination before authenticated TLS SMTP
+submission. Existing durable idempotent report-delivery occurrences retain
+successful, failed and outcome-unknown receipts; uncertain submission is not
+retried automatically. Alert rules, state, silences and 100 recent transitions
+belong to the collector process/lease. See :doc:`mysql_alerts` for admission,
+privileges, setup and operational limits.
+
+Linux MySQL 9.7.0 qualification on both native Connector/Python interfaces covers
+actual SMTP JSON attachments and lost acknowledgement, native InnoDB contention,
+status-counter reset, stopped/failed replication, denied measurements and live
+registration revocation. Existing interactive transactions, savepoints and
+warning areas remain intact. Built-desktop acceptance qualifies rule setup,
+firing/delivery receipts, silence/unsilence, a read-only DDN findings display and
+collector stop/release. These receipts close ``CMP-MY-08`` on Linux. Five accepted
+comparison workflows and broader MySQL inventory/recovery/lifecycle gaps remain
+open; owner-deferred history and platform-team acceptance remain separate.
 
 Native topology administration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

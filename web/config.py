@@ -464,6 +464,10 @@ MAIL_DEBUG = False
 CDEADMIN_REPORT_DELIVERY_PROFILES = {}
 CDEADMIN_REPORT_DELIVERY_RETENTION_DAYS = 90
 CDEADMIN_REPORT_DELIVERY_STALE_SECONDS = 600
+# MySQL collector notifications select fixed, owner-authorized JSON SMTP routes.
+# {'ops': {'label': 'Operations', 'owner_ids': [1], 'profile_id': 'smtp-ops',
+#          'target': {'recipients': ['ops@example.com']}}}
+CDEADMIN_MYSQL_ALERT_ROUTES = {}
 
 # Unattended report execution is fail-closed until an operator supplies an
 # AES-256-GCM key ring and active key ID. Values are base64-encoded 32-byte

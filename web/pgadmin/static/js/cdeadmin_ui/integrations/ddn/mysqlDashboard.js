@@ -37,6 +37,20 @@ export function mysqlDashboardFiles(snapshot, scope, engine='mysql') {
     ]});
   }
   if(engine === 'mysql') {
+    const alertsCurrent = snapshot?.state === 'collecting' && Number.isFinite(snapshot?.sample_age_seconds) &&
+      snapshot.sample_age_seconds >= 0 && snapshot.sample_age_seconds <= snapshot.stale_after_seconds;
+    panels.push({id: 'alerts', title: 'MySQL alert findings', rows: [
+      binding('mysql_alert_summary_0', ['Policy state', alertsCurrent ? 'Current collector evaluation' : 'Unavailable or stale']),
+      binding('mysql_alert_summary_1', ['Storage', 'Volatile collection lease; administration is in collection policy']),
+      ...(snapshot?.alerts?.rules || []).slice(0, 32).flatMap(item => {
+        const event = snapshot.alerts.events?.filter(event => event.rule_id === item.rule.id).at(-1);
+        return Object.entries({state: item.state, condition: item.condition, value: item.evidence?.value ?? 'Unavailable',
+          source: item.evidence?.source, observed_at: item.evidence?.observed_at,
+          action: snapshot.alert_catalog?.metrics?.find(metric => metric.id === item.rule.metric)?.action,
+          delivery: event?.delivery?.state ?? 'No transition'}).map(([field, value]) =>
+          binding(`mysql_alert_${hex(item.rule.id)}_${field}`, [`${item.rule.id}: ${field}`, alertsCurrent ? value : 'Unavailable']));
+      }),
+    ]});
     const digests = sample?.groups?.workload_digests;
     panels.push({id: 'workload', title: 'MySQL workload / instrumentation coverage', rows: [
       ...[

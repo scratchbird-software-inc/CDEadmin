@@ -193,6 +193,13 @@ class MySQLMonitor:
                             'observation_age_seconds': round(start - self._metadata_clock, 3)}
                 self._group(result, 'activity', self._activity_source())
                 self._group(result, 'replication', self.replication_source, scope='server')
+                if self.engine == 'mysql':
+                    self._group(result, 'alert_capacity', 'SELECT @@max_connections AS max_connections', scope='server')
+                    self._group(result, 'alert_transactions', 'SELECT COALESCE(MAX(TIMESTAMPDIFF(SECOND, TRX_STARTED, NOW())),0) AS value FROM information_schema.innodb_trx', scope='server')
+                    self._group(result, 'alert_locks', 'SELECT COUNT(*) AS value FROM performance_schema.data_lock_waits', scope='server')
+                    self._group(result, 'alert_replication_appliers', 'SELECT CHANNEL_NAME, SERVICE_STATE FROM performance_schema.replication_applier_status ORDER BY CHANNEL_NAME LIMIT 101', scope='server')
+                    self._group(result, 'alert_replication_workers', 'SELECT CHANNEL_NAME, WORKER_ID, LAST_ERROR_NUMBER FROM performance_schema.replication_applier_status_by_worker ORDER BY CHANNEL_NAME, WORKER_ID LIMIT 101', scope='server')
+                    self._group(result, 'alert_replication_coordinators', 'SELECT CHANNEL_NAME, LAST_ERROR_NUMBER FROM performance_schema.replication_applier_status_by_coordinator ORDER BY CHANNEL_NAME LIMIT 101', scope='server')
                 if self._transaction_active():
                     raise ValueError('Monitoring probe retained a transaction')
                 result.update(status='partial', transaction_completed=True)

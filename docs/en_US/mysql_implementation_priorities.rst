@@ -6,8 +6,8 @@ Comparison baseline: source ``0c14f90a21c80c32074c574e7914e56dc487661d``;
 MySQL 9.7.0 and Connector/Python 26.7.0.
 
 This is the accepted implementation queue arising from the MySQL management-tool
-comparison. ``CMP-MY-03``, ``CMP-MY-04``, ``CMP-MY-05``, ``CMP-MY-06`` and ``CMP-MY-07``
-are implemented and Linux-qualified; the other six comparison items remain open. They supplement
+comparison. ``CMP-MY-03``, ``CMP-MY-04``, ``CMP-MY-05``, ``CMP-MY-06``, ``CMP-MY-07`` and ``CMP-MY-08``
+are implemented and Linux-qualified; the other five comparison items remain open. They supplement
 :doc:`mysql_functional_completion` and :doc:`six_engine_remaining_work`; their
 acceptance must follow :doc:`six_engine_completion`.
 
@@ -238,13 +238,24 @@ Comparison evidence: `Percona replica checksum and limitations <https://docs.per
 CMP-MY-08: MySQL alert policies and actionable monitoring findings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Status: **open**. Priority: **P1**.
+Status: **implemented and Linux-qualified**. Priority: **P1**.
 
-Add MySQL-specific threshold/duration rules, native evidence and missing-data
-behavior; track firing/resolved/silenced states and configured notification
-delivery. Keep collection independent of viewers and administration outside
-display-only dashboards. Existing Firebird-oriented finding rules and MySQL
-counters do not establish MySQL alert lifecycle support.
+Eleven native MySQL rules now evaluate thresholds and continuous durations on
+dedicated collector connections. Pending/firing/resolved/unknown/silenced states
+retain exact native evidence and diagnostic next steps. Counter resets, missing
+or denied groups and stale sources stay explicit; scheduled failure backoff is
+included in outage-duration continuity. Configured owner-authorized JSON SMTP
+routes use authenticated TLS, bounded independent delivery and durable outcome
+receipts without automatic retries. Rule/silence administration is in collection
+policy; DDN dashboards display read-only findings with current binding checks.
+See :doc:`mysql_alerts` for setup and process/lease limits.
+
+MySQL 9.7.0 pure/C native/API and built-desktop acceptance covers actual SMTP
+submission and lost acknowledgement, native lock waits and FLUSH STATUS gaps,
+replication failures, registration revocation, transaction isolation, duration,
+silence and resolution. Affected checks pass 206 Python tests plus five subtests
+and 48 JavaScript tests. ScratchBird history qualification stays owner-deferred;
+Windows/macOS acceptance remains with the platform teams.
 
 Comparison evidence: `PMM query analytics, monitoring and alerting <https://docs.percona.com/percona-monitoring-and-management/3/discover-pmm/features.html>`_;
 `phpMyAdmin supported features <https://docs.phpmyadmin.net/en/latest/intro.html>`_.

@@ -18,6 +18,31 @@ class MySQLMonitoringHost(MonitoringHost):
         super().__init__(app, shared_host.endpoints)
         self.ownership, self.keys = shared_host.ownership, shared_host.keys
         self._admissions, self._issuing_permissions = {}, {}
+        self.alert_delivery = None
+        if self.engine == 'mysql':
+            from .mysql_alert_delivery import MySQLAlertDelivery
+            self.policy_fields = self.policy_fields | {'mysql_alert_rules'}
+            self.alert_delivery = MySQLAlertDelivery(app)
+
+    def _observation_factory(self, grant):
+        if self.engine != 'mysql' or not grant.policy.mysql_alert_rules:
+            return None
+        from .mysql_alerts import MySQLAlerts
+        admitted = self.alert_delivery.admit(grant.policy)
+        def create():
+            return MySQLAlerts(grant.policy, lambda evaluator, event, route:
+                self.alert_delivery.submit(evaluator, event, route, grant, admitted[route]), clock=self.runtime._clock)
+        return create
+
+    def silence(self, owner, sid, target, body):
+        if self.engine != 'mysql' or not isinstance(body, dict) or set(body) != {'rule_id', 'seconds'}:
+            raise ValueError('Invalid MySQL alert action')
+        self.snapshot(owner, sid, target)
+        with self._lock:
+            grant = self._grants.get((owner, sid, target))
+            if grant is None:
+                raise ValueError('Start a collector policy first')
+            return self.runtime.silence(grant.policy, grant.require, body['rule_id'], body['seconds'])
 
     def _owned_server(self, owner, sid):
         from pgadmin.model import Server, User
@@ -85,7 +110,8 @@ class MySQLMonitoringHost(MonitoringHost):
         with self._lock:
             for grant in self._grants.values():
                 grant.revoke()
-            return self.runtime.close()  # The common host owns the process lock.
+            released = self.runtime.close()  # The common host owns the process lock.
+        return (self.alert_delivery.close() if self.alert_delivery is not None else True) and released
 
     def snapshot(self, owner, sid, target):
         with self.app.app_context():
@@ -96,17 +122,23 @@ class MySQLMonitoringHost(MonitoringHost):
             if target is not None and not any(row['target_id'] == target for row in targets):
                 raise PermissionError('Monitoring target is unavailable')
             navigation = {'server_id': sid, 'name': server.name, 'databases': targets}
+        catalog = {}
+        if self.engine == 'mysql':
+            from .mysql_alerts import METRICS
+            catalog = {'alert_catalog': {'metrics': [{'id': key, 'label': item[0], 'unit': item[1],
+                'source': item[2], 'action': item[3], 'scope': 'server'} for key, item in METRICS.items()],
+                'routes': self.alert_delivery.catalog(owner)}}
         with self._lock:
             grant = self._grants.get((owner, sid, target))
             if grant is None:
                 return {'state': 'disabled', 'samples': [], 'history': 'volatile',
                     'history_available': self.history is not None,
                     'runtime_scope': 'this-process', 'collection_available': self.available,
-                    'navigation': navigation}
+                    'navigation': navigation, **catalog}
             current = self._authorizer(owner, sid, target)
             result = self.runtime.snapshot(grant.policy, lambda policy, purpose:
                 current(policy, purpose, grant.generation, grant.route_digest))
-            return {**result, 'navigation': navigation, 'history_available': self.history is not None,
+            return {**result, **catalog, 'navigation': navigation, 'history_available': self.history is not None,
                 'authentication': dict(grant.authentication),
                 'policy': {key: getattr(grant.policy, key) for key in self.policy_fields}}
 
@@ -215,6 +247,11 @@ def init_app(app, shared_host, host_class=MySQLMonitoringHost):
     from pgadmin.user_login_check import pga_login_required
     api = Blueprint(f'cdeadmin_{engine}_monitoring', __name__)
 
+    @api.after_request
+    def no_cache(response):
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
     if engine in {'mysql', 'mariadb', 'duckdb', 'sqlite'}:
         @api.route(f'/cdeadmin/api/monitoring/{engine}/<int:sid>/history', methods=['GET'])
         @pga_login_required
@@ -288,7 +325,13 @@ def init_app(app, shared_host, host_class=MySQLMonitoringHost):
         try:
             owner = current_user.id
             if request.method == 'POST':
-                data = host.enable(owner, sid, target, request.get_json(silent=True))
+                body = request.get_json(silent=True)
+                if engine == 'mysql' and isinstance(body, dict) and body.get('action') == 'silence':
+                    if set(body) != {'action', 'rule_id', 'seconds'}:
+                        raise ValueError('Invalid MySQL alert action')
+                    data = host.silence(owner, sid, target, {key: value for key, value in body.items() if key != 'action'})
+                else:
+                    data = host.enable(owner, sid, target, body)
             elif request.method == 'DELETE':
                 data = host.disable(owner, sid, target)
             else:

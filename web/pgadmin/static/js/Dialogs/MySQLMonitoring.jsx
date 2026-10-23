@@ -11,6 +11,7 @@ import {mysqlDashboardFiles, mysqlFleetFiles, mysqlFleetPublication} from '../cd
 import {duckdbDashboardFiles, duckdbFleetFiles, duckdbFleetPublication} from '../cdeadmin_ui/integrations/ddn/duckdbDashboard';
 import {sqliteDashboardFiles, sqliteFleetFiles, sqliteFleetPublication} from '../cdeadmin_ui/integrations/ddn/sqliteDashboard';
 import MySQLTrendView from './MySQLTrendView';
+import MySQLAlerts from './MySQLAlerts';
 import DuckDBTrendView from './DuckDBTrendView';
 import SQLiteTrendView from './SQLiteTrendView';
 export {mysqlDashboardFiles} from '../cdeadmin_ui/integrations/ddn/mysqlDashboard';
@@ -31,7 +32,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
   const [publishedView, setPublishedView] = useState(null), [display, setDisplay] = useState('dashboard');
   const [page, setPage] = useState('dashboard');
   const [actionError, setActionError] = useState('');
-  const [policy, setPolicy] = useState({...defaults, interval_seconds: targetId ? 5 : 15});
+  const [policy, setPolicy] = useState({...defaults, ...(engine === 'mysql' ? {mysql_alert_rules: []} : {}), interval_seconds: targetId ? 5 : 15});
   const [mode, setMode] = useState('current'), [showPassword, setShowPassword] = useState(false);
   const [credentials, setCredentials] = useState({username: '', password: '', role: ''});
   const serial = useRef(0), changing = useRef(false);
@@ -41,7 +42,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
     setSnapshot(null); setPublishedView(null); setBusy(false); setError(''); setActionError('');
     setDisplay('dashboard'); setPage('dashboard');
     setCredentials({username: '', password: '', role: ''}); setShowPassword(false); setMode('current');
-    setPolicy({...defaults, interval_seconds: targetId ? 5 : 15});
+    setPolicy({...defaults, ...(engine === 'mysql' ? {mysql_alert_rules: []} : {}), interval_seconds: targetId ? 5 : 15});
     const read = async () => {
       if(changing.current || pending) return;
       pending = true;
@@ -67,7 +68,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
   }, [endpoint, targetId, definitionEndpoint, showPolicy, scope, engineMode, engine]);
   useEffect(() => {
     if(!showPolicy || !snapshot?.policy || snapshot.state === 'disabled') return;
-    setPolicy(value => ({...value, ...Object.fromEntries([...Object.keys(defaults), ...(['mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine) ? ['history_enabled'] : [])]
+    setPolicy(value => ({...value, ...Object.fromEntries([...Object.keys(defaults), ...(engine === 'mysql' ? ['mysql_alert_rules'] : []), ...(['mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine) ? ['history_enabled'] : [])]
       .filter(key => Object.hasOwn(snapshot.policy, key)).map(key => [key, snapshot.policy[key]]))}));
     if(snapshot.authentication) {
       setMode(snapshot.authentication.mode === 'dedicated' ? 'dedicated' : 'current');
@@ -81,7 +82,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
       const response = stop ? await getApiInstance().delete(endpoint) : await getApiInstance().post(endpoint,
         {...policy, ...(['mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine) ? {history_enabled: Boolean(policy.history_enabled)} : {}),
           ...(!embedded && mode === 'dedicated' ? {credentials} : {})});
-      if(token === serial.current) setSnapshot(response.data.data);
+      if(token === serial.current) setSnapshot({...response.data.data, alert_catalog: snapshot?.alert_catalog});
     } catch(failure) {if(token === serial.current) setActionError(failure.response?.data?.errormsg || 'Monitoring policy change failed');}
     finally {if(token === serial.current) {changing.current = false; setBusy(false); setCredentials(value => ({...value, password: ''}));}}
   };
@@ -141,6 +142,8 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
           (!embedded && mode === 'dedicated' && (!credentials.username || !credentials.password))} onClick={() => change(false)}>Start collection</Button>
         <Button size="small" disabled={busy || !active} onClick={() => change(true)}>Stop collection</Button>
       </Box>
+      {engine === 'mysql' && <MySQLAlerts endpoint={endpoint} catalog={snapshot?.alert_catalog} rules={policy.mysql_alert_rules || []}
+        onChange={mysql_alert_rules => setPolicy(value => ({...value, mysql_alert_rules}))} active={active} busy={busy} alerts={snapshot?.alerts} />}
     </> : <>
       {!engineMode && <TextField select size="small" label="Display" value={display} onChange={event => setDisplay(event.target.value)}>
         <MenuItem value="dashboard">Dashboard</MenuItem><MenuItem value="trends">Retained observations</MenuItem>
