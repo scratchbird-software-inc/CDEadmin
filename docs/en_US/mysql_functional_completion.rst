@@ -1895,8 +1895,16 @@ preserved independent pending transactions/savepoints/warnings, lost replies,
 once-only admission, all three native artifact phases and independent
 disposable MySQL recovery of InnoDB/MyISAM/CSV rows, unsigned64/Unicode/BLOB
 values, a view and a routine. The production desktop runs the same phases.
-These cases establish the recorded artifact scope. Managed recovery-instance
-startup, incremental/encrypted/external-path admission, physical retention,
+These cases establish the recorded artifact scope. Managed native recovery
+instances now use a separately reviewed private data copy, native configuration
+geometry, a fresh target UUID, private Unix socket and native read-only startup.
+Version/account/roles/paths/isolation SQL observations are retained independently
+of current process presence. Credentials are removed after startup inspection.
+Explicit process-descriptor shutdown and lifetime expiry target the original
+native process birth. Shutdown after supervisor loss preserves unknown native
+exit replies and separately observed termination; original copy-back bytes stay
+intact. Pure/C/API and desktop native receipts qualify this bounded scope.
+Recovery editor/replay integration, incremental/encrypted/external-path admission, physical retention,
 selected replay and independent post-replay acceptance, production cutover and
 the broader native inventory remain open. ``CMP-MY-01`` and ``CMP-MY-02`` stay
 open; nine of eleven comparison items are implemented and Linux-qualified.

@@ -104,7 +104,10 @@ one implementation scope and must not be counted as independent completion.
   artifacts over authenticated SSH. Independent supervision, exact file
   verification, source archive holds and credential cleanup are implemented.
   Native pure/C/API and production desktop checks include independent
-  disposable MySQL recovery. Managed recovered-instance startup, native
+  disposable MySQL recovery. Managed private-socket native recovery startup and
+  shutdown now have separate reviewed supervision, immutable base copies, fresh
+  UUIDs, native SQL startup observations and process-descriptor control after
+  supervisor loss. Recovery editor/replay connection integration, native
   incremental/encrypted/external-path support, physical retention, selected
   replay, post-replay acceptance and cutover remain open; ``CMP-MY-01`` retains
   its open status and the comparison completion remains nine of eleven.

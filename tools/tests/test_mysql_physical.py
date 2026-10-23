@@ -113,7 +113,7 @@ def test_claim_checks_owner_review_expiry_and_single_dispatch(tmp_path):
 
 def test_native_transport_sends_sources_and_invocation_privately_and_has_no_password_in_loader():
     assert 'password' not in transport.LOADER
-    assert set(transport.program()) == {'host_sha256','fileio_sha256','services_sha256','physical_sha256','transport_sha256'}
+    assert set(transport.program()) == {'host_sha256','fileio_sha256','services_sha256','physical_sha256','recovery_sha256','transport_sha256'}
     with pytest.raises(transport.HostError): transport.Transport({'platform':'windows'}, {})
 
 
@@ -128,3 +128,50 @@ def test_native_return_does_not_accept_files_before_supervisor_publication_and_c
         assert jobs.get(value['job_id'],1,endpoint)['file_verification_confirmed'] is False
     jobs.update(record,remote_observation={**remote,'supervisor_finished':True,'credential_cleanup_confirmed':True})
     assert jobs.get(value['job_id'],1,endpoint)['file_verification_confirmed'] is True
+
+
+def test_recovery_configuration_preserves_native_geometry_and_refuses_external_paths_and_commands(tmp_path):
+    import configparser
+    from pgadmin.cdeadmin.providers.mysql_family import mysql_recovery_worker as recovery
+    path=tmp_path/'backup-my.cnf'
+    path.write_text('[mysqld]\ninnodb_page_size=16384\ninnodb_data_file_path=ibdata1:12M:autoextend\ninnodb_checksum_algorithm=crc32\ndatadir=/original\n')
+    assert recovery.configuration(path)=={'innodb_page_size':'16384','innodb_data_file_path':'ibdata1:12M:autoextend','innodb_checksum_algorithm':'crc32'}
+    path.write_text('[mysqld]\ninnodb_page_size=4096\ninnodb_page_size=16384\n')
+    assert recovery.configuration(path)=={'innodb_page_size':'16384'}
+    path.write_text('[mysqld]\nserver_uuid='+str(uuid.uuid4())+'\nmaster_key_id=0\ninnodb_redo_log_encrypt=OFF\ninnodb_undo_log_encrypt=0\n')
+    assert recovery.configuration(path)=={'innodb_redo_log_encrypt':'OFF','innodb_undo_log_encrypt':'0'}
+    path.write_text('[mysqld]\nmaster_key_id=1\n')
+    with pytest.raises(worker.Refused,match='keyring'):recovery.configuration(path)
+    for extra in ('plugin_load=unadmitted.so','innodb_data_file_path=/original/ibdata1:12M','!include /original/my.cnf'):
+        path.write_text('[mysqld]\n'+extra+'\n')
+        with pytest.raises((worker.Refused,configparser.Error)):
+            recovery.configuration(path)
+
+
+def test_recovery_readiness_is_not_file_or_data_acceptance(tmp_path):
+    jobs = PhysicalJobs(tmp_path/'jobs',tmp_path/'artifacts'); endpoint=str(uuid.uuid4())
+    value=jobs.review(1,endpoint,{'phase':'recover'},{'identity':{},'state':{'remote_review':{},'host_binding':{}}},'config',{'execution_host':{}})
+    record=jobs.load(value['job_id'],1,endpoint)
+    jobs.update(record,remote_observation={'recovery_running_verified':True,'sql_ready_observed':True})
+    value=jobs.get(value['job_id'],1,endpoint)
+    assert value['recovery_running'] and not value['file_verification_confirmed'] and not value['database_recovery_verified']
+
+
+def test_reused_process_birth_cannot_receive_a_recovery_stop_signal(tmp_path):
+    import sys,subprocess
+    if not sys.platform.startswith('linux'): pytest.skip('Native Linux process descriptors')
+    from pgadmin.cdeadmin.providers.mysql_family import mysql_recovery_worker as recovery
+    executable=Path(sys.executable).resolve()
+    program={'path':str(executable),'sha256':worker.host.file_hash(executable)}
+    child=subprocess.Popen([str(executable),'-c','import time;time.sleep(60)'])
+    try:
+        process=recovery.birth(child.pid,program)
+        assert recovery.present(process)
+        assert not recovery.present({**process,'start_ticks':'0'})
+        assert not recovery.stop({**process,'start_ticks':'0'})
+        assert child.poll() is None
+        assert recovery.stop(process)
+        child.wait(timeout=10)
+        assert not recovery.present(process)
+    finally:
+        if child.poll() is None:child.kill();child.wait(timeout=10)

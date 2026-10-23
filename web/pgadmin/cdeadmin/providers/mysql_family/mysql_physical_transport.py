@@ -15,7 +15,8 @@ HostError = ssh.HostError
 def sources():
     host_source, file_source, service_source = ssh.sources()
     physical_source = Path(worker.__file__).read_text(encoding='utf8')
-    return {'host': host_source, 'fileio': file_source, 'services': service_source, 'physical': physical_source}
+    return {'host': host_source, 'fileio': file_source, 'services': service_source, 'physical': physical_source,
+        'recovery': Path(worker.__file__).with_name('mysql_recovery_worker.py').read_text(encoding='utf8')}
 
 
 BOOTSTRAP = '''import json,sys,types
@@ -25,7 +26,9 @@ def load(p):
  install('_cdeadmin_native_fileio',p['fileio'])
  install('_cdeadmin_native_services',p['services'])
  install('_cdeadmin_native_worker',p['host'])
- return install('_cdeadmin_physical_worker',p['physical'])
+ m=install('_cdeadmin_physical_worker',p['physical'])
+ install('_cdeadmin_recovery_worker',p['recovery'])
+ return m
 '''
 
 
@@ -78,6 +81,8 @@ class Transport:
             response = next((line[len(marker):] for line in stdout.decode('utf8').splitlines() if line.startswith(marker)), None)
             if response is None: raise HostError('Native physical SSH reply is unavailable; the operation may still be running')
             value = json.loads(response)
-            if value.get('state') == 'refused': raise HostError(value.get('message') or 'Native physical host refused the request')
+            if value.get('state') == 'refused':
+                raise HostError((value.get('message') or 'Native physical host refused the request') +
+                    (' [' + value['error_type'] + ']' if value.get('error_type') != 'Refused' else ''))
             return value
         finally: channel.close()

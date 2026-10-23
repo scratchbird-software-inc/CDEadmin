@@ -26,6 +26,14 @@ MAX_FILES = 200000
 MAX_OUTPUT = 128 * 1024
 
 
+def recovery_module():
+    try:
+        import _cdeadmin_recovery_worker as recovery
+    except ModuleNotFoundError:
+        from . import mysql_recovery_worker as recovery
+    return recovery
+
+
 def public(value):
     if isinstance(value, list): return [public(item) for item in value]
     if isinstance(value, dict):
@@ -163,6 +171,7 @@ def executable(path, kind):
 
 
 def inspection(request):
+    if request['phase'] == 'recover': return recovery_module().inspection(request)
     if not sys.platform.startswith('linux'):
         raise Refused('The admitted XtraBackup backend requires a native Linux database host')
     binding = host_scope(request, live=request['phase'] == 'backup')
@@ -243,6 +252,7 @@ def execute(directory):
     """Detached supervisor. It survives loss of the web worker or SSH reply."""
     directory = Path(directory)
     request = read_json(directory / 'request.json')
+    if request['phase'] == 'recover': return recovery_module().execute(directory)
     value = {'state': 'native_dispatch', 'job_id': request['job_id'], 'input_digest': request['input_digest'],
         'automatic_retry': False, 'native_may_have_dispatched': False, 'process_termination_confirmed': False,
         'credential_cleanup_confirmed': False, 'supervisor_finished': False, 'started_at': time.time()}
@@ -344,11 +354,13 @@ def dispatch(request, launch_source=None):
         record = read_json(directory / 'result.json')
         if record.get('input_digest') != request['input_digest']:
             raise Refused('Physical receipt belongs to another reviewed input')
+        if request['phase'] == 'recover' and action in {'status', 'cancel'}:
+            return public(recovery_module().observe(directory, record, action))
         if action == 'cancel' and not record.get('process_termination_confirmed'):
             with (directory / 'cancel').open('ab') as stream: host.private_file(directory / 'cancel')
         if action == 'output':
             record = {'job_id': selected, 'input_digest': request['input_digest'], 'outputs': {}}
-            for name in ('stdout', 'stderr'):
+            for name in ('stdout', 'stderr', *(['native-error.log'] if request['phase'] == 'recover' else [])):
                 path = directory / name
                 if path.exists():
                     with host.regular_stream(path) as stream:

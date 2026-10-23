@@ -1,12 +1,12 @@
-Native MySQL physical artifacts
-===============================
+Native MySQL physical backups and recovery instances
+=====================================================
 
 The server **Backup → MySQL physical backups** workspace manages native
 XtraBackup full backups, preparation of a separate copy, and copy-back into a
 new isolated data directory on the authenticated database host. It uses the
 existing owner-scoped provider API, private application operation storage and
-source archive protection. These are physical artifact operations; starting a
-recovered instance, selected log recovery, independent post-replay acceptance,
+source archive protection. A separately reviewed managed recovery operation
+starts and supervises a private data copy. Selected log recovery, independent post-replay acceptance,
 dependency-aware physical retention and production cutover remain separate
 ``CMP-MY-01`` requirements.
 
@@ -95,6 +95,50 @@ It does not start a database, provision its OS ownership or service, verify
 recovered SQL data, replay logs or authorize production cutover. Those remaining
 management workflows are tracked under the recovery/lifecycle requirements.
 
+Managed native recovery instance
+--------------------------------
+
+After verified copy-back, choose **Use copy-back for managed recovery**.
+Select the exact native MySQL 9.7.0 ``mysqld`` executable, native GTID mode,
+buffer memory and maximum instance lifetime. Review and explicitly confirm the
+new operation and its separate database credential delegation. The recorded
+OS account is the authenticated SSH account; it needs permission to read the
+base and run the native server. Native startup uses that account without an
+implicit ownership or service change.
+
+The supervisor copies and hashes the selected base into a new private runtime
+directory. It consumes admitted native geometry from the original prepared
+``backup-my.cnf``, preserving its hash. External system-file mappings and
+unadmitted options refuse startup. Native MySQL assigns a fresh target UUID.
+The instance uses a private Unix socket, disabled TCP and X Protocol listeners,
+``super_read_only``, disabled events, asynchronous and Group Replication
+autostart, the selected GTID
+mode, disabled binary logging and ``upgrade=NONE``. Persisted global settings
+from the base are excluded from this explicitly reviewed isolated startup.
+
+The native client independently observes version, target UUID, account/roles,
+data/socket paths and isolation settings. Credentials are removed after that
+startup observation while supervision continues. The display retains the SQL
+startup observation separately from fresh process presence. A live process
+observation does not assert current SQL/data correctness. Full recovered-data
+acceptance and editor/replay connection integration retain their own gates.
+
+Choose **Stop managed recovery instance** to request native shutdown. A native
+Linux process descriptor binds signal delivery to the original process birth,
+executable and OS account. A reused numeric PID cannot receive that request.
+Stop requests and signal outcomes have separate durable receipts. Stop also
+works after loss of the original supervisor. In that case independent process
+termination observations preserve the missing native exit reply as unknown.
+The normal supervisor records the native exit and checks that the original
+copy-back bytes remain intact. Its reviewed lifetime also requests shutdown;
+a required forced termination stays explicit in the receipt.
+Native server error output is available through the same bounded output viewer.
+
+Opening, observing or retrying an already claimed job never launches another
+server. A new review from the preserved immutable base creates a new instance.
+Production service installation, editor/replay integration, full data/definition
+and post-replay acceptance, physical retention and cutover remain open.
+
 The job list and **Inspect native physical output** provide retained facts and
 bounded output from the pinned host. Native errors and interrupted observations
 stay visible; cancellation is a request to terminate native work and is not an
@@ -111,6 +155,10 @@ qualifies both corrected Connector/Python 26.7.0 interfaces, actual native
 backup/prepare/copy-back, independent MySQL 9.7.0 recovery fixtures, selected
 InnoDB/MyISAM/CSV data and native definitions, unknown original replies,
 independent completion and credential cleanup. Optional browser/driver flags
-qualify the production workspace. Fixture recovery confirms those selected
-cases; it does not close broader recovery, incremental, lifecycle, retention or
-cutover requirements. ScratchBird history tests remain owner-deferred.
+qualify the production workspace. Managed native recovery qualification also
+covers fresh target UUIDs, private-socket SQL/data/definition observations,
+native write refusal, explicit shutdown, original-supervisor loss and process
+descriptor control, all four exposed native GTID modes and reviewed lifetime
+expiry. These receipts qualify the selected cases. Broader recovery,
+incremental, lifecycle, retention and cutover requirements remain open.
+ScratchBird history tests remain owner-deferred.

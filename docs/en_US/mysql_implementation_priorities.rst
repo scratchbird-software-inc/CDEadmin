@@ -115,8 +115,12 @@ consent. It implements pinned SSH-host full backups, immutable preparation and
 copy-back into a new private directory, independently supervised outcomes,
 exact file manifests, source archive protection and credential cleanup.
 Native pure/C/API and built desktop qualification include independent disposable
-MySQL recovery. Application-managed recovered-instance startup, selected log
-recovery, post-replay acceptance, incremental/encrypted/external-table-space
+MySQL recovery. A separately reviewed native recovery instance now starts a
+private data copy with a fresh native UUID, private Unix socket, native read-only
+settings and bounded lifetime. Independent SQL startup/process observations,
+credential cleanup and process-descriptor shutdown survive loss of the original
+supervisor; missing exit replies remain unknown. Recovery editor/replay
+integration, selected log recovery, post-replay acceptance, incremental/encrypted/external-table-space
 support, physical retention and production cutover remain open. These bounded
 artifact receipts do not close ``CMP-MY-01``.
 

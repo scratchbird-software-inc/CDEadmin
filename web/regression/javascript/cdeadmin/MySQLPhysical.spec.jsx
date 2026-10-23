@@ -56,3 +56,29 @@ it('invalidates a review when its native host or input changes', async () => {
   expect(screen.queryByLabelText('Native physical review')).not.toBeInTheDocument();
   expect(post.mock.calls.filter(([value]) => value.action === 'mysql_physical_start')).toHaveLength(0);
 });
+
+it('derives recovery from verified copy-back and separately confirms native startup and credential delegation', async () => {
+  const copied = {...review, state: 'native_returned', options: {...review.options, phase: 'copy_back'}, file_verification_confirmed: true,
+    remote_observation: {restored_files: {database_started: false}, process_termination_confirmed: true}};
+  const post = jest.fn().mockResolvedValue({jobs: [copied], offset: 0, limit: 25, more: false});
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button', {name: 'Load physical jobs'}));
+  await screen.findByRole('table', {name: 'Native physical jobs'});
+  post.mockResolvedValue(copied);
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect physical job physical-job'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Use copy-back for managed recovery'}));
+  expect(screen.getByLabelText('Recovery mysqld executable')).toHaveValue('/usr/sbin/mysqld');
+  const recoveryReview = {...review, options: {...review.options, phase: 'recover', input_job_id: 'physical-job', mysqld: '/usr/sbin/mysqld', recovery_gtid_mode: 'ON'}};
+  post.mockResolvedValue(recoveryReview);
+  fireEvent.click(screen.getByRole('button', {name: 'Review native physical job'}));
+  await screen.findByLabelText('Native physical review');
+  expect(post).toHaveBeenLastCalledWith(expect.objectContaining({action: 'mysql_physical_review', request: expect.objectContaining({options: recoveryReview.options})}));
+  fireEvent.click(screen.getByLabelText('I confirm this exact reviewed physical operation.'));
+  expect(screen.getByRole('button', {name: 'Start reviewed physical job'})).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('Delegate the registered database password privately to the pinned SSH host.'));
+  post.mockResolvedValue({...recoveryReview, state: 'remote_running', recovery_running: true, recovery_sql_startup_observed: true,
+    remote_observation: {runtime_process_live: true}});
+  fireEvent.click(screen.getByRole('button', {name: 'Start reviewed physical job'}));
+  expect(await screen.findByRole('button', {name: 'Stop managed recovery instance'})).toBeEnabled();
+  expect(screen.getByText(/SQL startup readiness: observed/)).toBeVisible();
+});

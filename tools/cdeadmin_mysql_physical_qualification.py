@@ -44,6 +44,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
     output.mkdir(mode=0o700,parents=True,exist_ok=False)
     proof = {'complete':False,'interfaces':[],'history_testing':'not run','source_sha256':{},'owned_servers_stopped':False,'owned_physical_volume_removed':False}
     paths = ['web/pgadmin/cdeadmin/providers/mysql_family/mysql_physical_worker.py','web/pgadmin/cdeadmin/providers/mysql_family/mysql_physical_transport.py',
+        'web/pgadmin/cdeadmin/providers/mysql_family/mysql_recovery_worker.py',
         'web/pgadmin/cdeadmin/workspace/mysql_physical_service.py','web/pgadmin/cdeadmin/workspace/service.py','web/pgadmin/static/js/Dialogs/MySQLPhysical.jsx',
         'web/pgadmin/static/js/Dialogs/index.jsx','web/pgadmin/cdeadmin/context_menu.py','web/pgadmin/browser/server_groups/servers/__init__.py',
         'web/pgadmin/static/vendor/ddn/current/resource-manifest.json',str(Path(__file__).relative_to(ROOT))]
@@ -66,6 +67,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
         root = _root_connection('mysql',port); root.autocommit=True
         password = 'physical LF\nquote"slash\\雪-'+secrets.token_urlsafe(16)
         with root.cursor() as cursor:
+            cursor.execute("INSTALL PLUGIN group_replication SONAME 'group_replication.so'")
             cursor.execute('CREATE DATABASE sr_osc'); cursor.execute('USE sr_osc')
             cursor.execute('CREATE TABLE t(id BIGINT UNSIGNED PRIMARY KEY,note VARCHAR(80),b LONGBLOB) ENGINE=InnoDB')
             cursor.execute('INSERT INTO t VALUES(%s,%s,%s)',(18446744073709551615,'native 雪',b'\x00\xff'))
@@ -97,8 +99,10 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             selected = {'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
                 'workspace':'/var/backups/scratchrobin/jobs','executable':'/usr/bin/xtrabackup','mysql':'/usr/bin/mysql',
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
-            def review(phase,input_job=None):
-                return post('review',{'options':{**selected,'phase':phase,'input_job_id':input_job},'credentials':credentials})
+            def review(phase,input_job=None,gtid_mode='ON',lifetime=None):
+                extra={'mysqld':'/usr/sbin/mysqld','recovery_gtid_mode':gtid_mode} if phase=='recover' else {}
+                if lifetime is not None:extra['timeout_seconds']=lifetime
+                return post('review',{'options':{**selected,'phase':phase,'input_job_id':input_job,**extra},'credentials':credentials})
             def start(value):
                 return post('start',{'job_id':value['job_id'],'review_digest':value['review_digest'],'confirmed':True,'delegate_database_credentials':True,'credentials':credentials})
             def terminal(value):
@@ -146,10 +150,86 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             copied=terminal(start(review('copy_back',prepared['job_id'])))
             assert copied['remote_observation']['restored_files']['database_started'] is False
             checks.append('native-full-backup-immutable-prepare-and-isolated-copy-back-with-exact-byte-manifests')
+            (output/'native-backup-configuration.txt').write_text(_run(['docker','exec',name,'cat',selected['workspace']+'/'+prepared['job_id']+'/artifact/backup-my.cnf']).stdout)
+            runtime_review=review('recover',copied['job_id'])
+            post('start',{'job_id':runtime_review['job_id'],'review_digest':runtime_review['review_digest'],'confirmed':True,'delegate_database_credentials':False,'credentials':credentials},refused=True)
+            with patch.object(transport.Transport,'request',lost):
+                post('start',{'job_id':runtime_review['job_id'],'review_digest':runtime_review['review_digest'],'confirmed':True,'delegate_database_credentials':True,'credentials':credentials},refused=True)
+            limit=time.monotonic()+150
+            while time.monotonic()<limit:
+                runtime=post('reconcile',{'job_id':runtime_review['job_id'],'credentials':credentials})
+                if runtime['recovery_running']:break
+                if runtime.get('remote_observation',{}).get('supervisor_finished'):
+                    (output/'native-failure.json').write_text(json.dumps(runtime,indent=2)+'\n')
+                    (output/'native-failure-output.json').write_text(json.dumps(post('output',{'job_id':runtime['job_id'],'credentials':credentials}),indent=2)+'\n')
+                    raise RuntimeError('Managed native recovery did not qualify; inspect native-failure.json')
+                time.sleep(.2)
+            else:raise TimeoutError('Managed native recovery startup was not observed')
+            assert runtime['state']=='unknown' and runtime['recovery_sql_startup_observed']
+            assert runtime['remote_observation']['sql_identity']['group_replication_autostart']=='OFF'
+            native_output=post('output',{'job_id':runtime['job_id'],'credentials':credentials})['outputs']
+            assert 'ready for connections' in native_output['native-error.log'].lower()
+            assert all(password not in value and 'BEGIN OPENSSH PRIVATE KEY' not in value for value in native_output.values())
+            assert start(runtime_review)['state']=='unknown'
+            socket=runtime['remote_observation']['socket']
+            def recovered_sql(query,check=True):
+                return _run(['docker','exec',name,'mysql','--no-defaults','--protocol=socket','--socket='+socket,'--user=root',
+                    '--batch','--raw','--skip-column-names','--default-character-set=utf8mb4','--execute='+query],check=check)
+            value=json.loads(recovered_sql("SELECT JSON_OBJECT('id',CAST(id AS CHAR),'note',note,'bytes',HEX(b)) FROM sr_osc.t").stdout)
+            assert value=={'id':'18446744073709551615','note':'native 雪','bytes':'00FF'}
+            assert json.loads(recovered_sql("SELECT JSON_ARRAY((SELECT COUNT(*) FROM sr_osc.m),(SELECT COUNT(*) FROM sr_osc.c),(SELECT COUNT(*) FROM sr_osc.pending))").stdout)==[1,1,0]
+            for what in ('VIEW sr_osc.v','PROCEDURE sr_osc.p'):assert recovered_sql('SHOW CREATE '+what).stdout
+            assert recovered_sql('INSERT INTO sr_osc.pending VALUES(999)',False).returncode!=0
+            if use_c:
+                # Loss of the original supervisor must not require a third-party
+                # process tool or authorize a signal to a reused numeric PID.
+                pid=runtime['remote_observation']['supervisor_process']['pid']
+                _run(['docker','exec',name,'kill','-9',str(pid)])
+            stopped=post('cancel',{'job_id':runtime['job_id'],'credentials':credentials})
+            limit=time.monotonic()+60
+            while time.monotonic()<limit:
+                stopped=post('reconcile',{'job_id':runtime['job_id'],'credentials':credentials})
+                remote=stopped.get('remote_observation',{})
+                if remote.get('process_termination_confirmed') and (use_c or remote.get('supervisor_finished')):break
+                time.sleep(.2)
+            else:raise TimeoutError('Original native recovery process did not stop')
+            assert not stopped['recovery_running'] and stopped['state']=='unknown'
+            if use_c:assert stopped['remote_observation']['supervisor_control_unavailable'] and stopped['remote_observation']['native_exit_reply_unknown']
+            else:assert stopped['remote_observation']['return_code']==0
+            checks.append('managed-native-recovery-new-UUID-private-socket-read-only-SQL-data-and-definitions-explicit-stop-with-unknown-original-reply')
+            if use_c:checks.append('owned-process-descriptor-stop-after-original-supervisor-loss-without-invented-native-exit-reply')
+            if not use_c:
+                for mode in ('OFF','OFF_PERMISSIVE','ON_PERMISSIVE'):
+                    alternate=start(review('recover',copied['job_id'],mode))
+                    limit=time.monotonic()+120
+                    while time.monotonic()<limit:
+                        alternate=post('reconcile',{'job_id':alternate['job_id'],'credentials':credentials})
+                        if alternate['recovery_running']:break
+                        if alternate.get('remote_observation',{}).get('supervisor_finished'):
+                            (output/'native-failure.json').write_text(json.dumps(alternate,indent=2)+'\n');raise RuntimeError('Native GTID recovery mode failed: '+mode)
+                        time.sleep(.2)
+                    else:raise TimeoutError('Native GTID recovery startup not observed: '+mode)
+                    assert alternate['remote_observation']['sql_identity']['gtid_mode']==mode
+                    post('cancel',{'job_id':alternate['job_id'],'credentials':credentials})
+                    limit=time.monotonic()+60
+                    while time.monotonic()<limit:
+                        alternate=post('reconcile',{'job_id':alternate['job_id'],'credentials':credentials})
+                        if alternate.get('remote_observation',{}).get('supervisor_finished'):break
+                        time.sleep(.2)
+                    else:raise TimeoutError('Native GTID recovery stop not observed: '+mode)
+                    assert alternate['remote_observation']['return_code']==0 and not alternate['recovery_running']
+                expiring=start(review('recover',copied['job_id'],lifetime=2));limit=time.monotonic()+60
+                while time.monotonic()<limit:
+                    expiring=post('reconcile',{'job_id':expiring['job_id'],'credentials':credentials})
+                    if expiring.get('remote_observation',{}).get('supervisor_finished'):break
+                    time.sleep(.2)
+                else:raise TimeoutError('Native recovery lifetime did not stop the original process')
+                assert expiring['remote_observation']['lifetime_expired'] and expiring['remote_observation']['process_termination_confirmed']
+                checks.append('all-four-native-GTID-modes-and-reviewed-lifetime-shutdown')
             target_name=volume+'-target-'+str(use_c);names.append(target_name)
             _run(['docker','run','--rm','--user','0','-v',volume+':/physical','--entrypoint','chown','mysql:9.7.0','-R','mysql:mysql','/physical/jobs/'+copied['job_id']+'/artifact'])
             _run(['docker','run','--rm','-d','--name',target_name,'--mount','type=volume,source='+volume+',target=/var/lib/mysql,volume-subpath=jobs/'+copied['job_id']+'/artifact',
-                '-p','127.0.0.1::3306','mysql:9.7.0','--server-id=202','--gtid-mode=ON','--enforce-gtid-consistency=ON','--log-bin=recovered'])
+                '-p','127.0.0.1::3306','mysql:9.7.0','--server-id=202','--gtid-mode=ON','--enforce-gtid-consistency=ON','--log-bin=recovered','--loose-group-replication-start-on-boot=OFF'])
             recovered=_root_connection('mysql',_wait_until_ready('mysql',target_name,120));recovered.autocommit=True
             try:
                 with recovered.cursor() as cursor:
@@ -167,7 +247,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             assert json.loads(raw)['database_credentials'] is None and password not in raw
             checks.append('bounded-native-output-and-private-password-LF-quotes-backslash-Unicode-with-confirmed-credential-cleanup')
             proof['interfaces'].append({'use_c':use_c,'native_interface':before['source_connection_class'],'complete':True,'checks':checks,
-                'jobs':[backup['job_id'],prepared['job_id'],copied['job_id']]})
+                'jobs':[backup['job_id'],prepared['job_id'],copied['job_id'],runtime['job_id']]})
         if browser_binary:
             ui_password=secrets.token_urlsafe(24)
             with root.cursor() as cursor:
@@ -234,19 +314,24 @@ def browser(app,output,sid,password,selected,credentials,binary,driver_binary):
         assert driver.execute_script('const e=arguments[0],r=e.getBoundingClientRect(),p=e.parentElement.getBoundingClientRect();return r.top>=p.top-1 && r.bottom<=p.bottom+1 && r.right<=p.right+1;',field('Physical SSH private key'))
         check('I accept this pinned XtraBackup release candidate for this physical operation.')
         checks=[]
-        for index in range(3):
+        for index in range(4):
             click('Review native physical job');wait.until(lambda b:b.find_element(By.CSS_SELECTOR,'[aria-label="Native physical review"]'))
             check('I confirm this exact reviewed physical operation.')
-            if index==0:check('Delegate the registered database password privately to the pinned SSH host.')
+            if index in (0,3):check('Delegate the registered database password privately to the pinned SSH host.')
             click('Start reviewed physical job')
             def receipt(b):
                 node=b.find_element(By.CSS_SELECTOR,'[aria-label="Native physical receipt"]')
                 return json.loads(node.text)
-            final=wait.until(lambda b:(value if (value:=receipt(b)).get('file_verification_confirmed') else None))
-            assert final['state']=='native_returned' and final['remote_observation']['credential_cleanup_confirmed']
+            final=wait.until(lambda b:(value if (value:=receipt(b)).get('recovery_running' if index==3 else 'file_verification_confirmed') else None))
+            assert final['remote_observation']['credential_cleanup_confirmed']
             if index==0:click('Use backup for separate prepare');checks.append('built-reviewed-native-full-backup-and-private-credential-delegation')
             elif index==1:click('Use prepared artifact for isolated copy-back');checks.append('built-immutable-prepare-from-selected-native-artifact')
-            else:checks.append('built-isolated-copy-back-with-independent-file-verification-and-no-database-start')
+            elif index==2:click('Use copy-back for managed recovery');checks.append('built-isolated-copy-back-with-independent-file-verification-and-no-database-start')
+            else:
+                assert final['recovery_sql_startup_observed'] and not final['database_recovery_verified']
+                click('Stop managed recovery instance')
+                wait.until(lambda b:(value if (value:=receipt(b)).get('remote_observation',{}).get('supervisor_finished') else None))
+                checks.append('built-explicit-native-recovery-start-SQL-readiness-owned-process-and-stop')
         click('Inspect native physical output');wait.until(lambda b:b.find_element(By.CSS_SELECTOR,'[aria-label="Native physical output"]'))
         fill('Physical SSH private key','')
         driver.save_screenshot(str(output/'native-physical.png'))
