@@ -129,10 +129,15 @@ input cleanup, preserved unknown outcomes and reviewed use of a separately
 observed successful deployment. ``--legacy-helper`` selects the older SDK reader
 source for compatibility qualification; it is staged only in the owned fixture.
 
-This bounds the deployment/service adapter and Cluster traffic qualification.
-It does not close all ``CMP-MY-02`` topology families, native upgrades, production
-cutover or ``INV-MYSQL``. ClusterSet/ReplicaSet bootstrap admission does not by
-itself prove their production failure/repair acceptance. Router metadata/options,
+This bounds the deployment/service adapter and recorded traffic scenarios.
+Native upgrades, production cutover and ``INV-MYSQL`` remain separate gates.
+``--repair-families-only --mysql-shell <native-binary>`` now qualifies actual
+ReplicaSet and ClusterSet Router bootstrap/services, live metadata/options,
+primary crash and forced promotion, original-primary rejoin and planned
+switchover. TLS Router traffic, exact committed data, pending rollback and
+new-write replication are independently observed through both connector
+interfaces. These receipts qualify the installed scenarios rather than every
+possible deployment. Router metadata/options,
 routing-guideline and account workflows remain owned by the native topology
 workspace. Human form validation, platform acceptance and closed Enterprise
 features retain their separate ownership/scope.
@@ -143,4 +148,5 @@ bigint data and native metadata removal using both connector interfaces.
 ``--metadata-live`` prepares an explicitly labelled live desktop fixture; it is
 not a metadata acceptance result. ``--metadata-browser-only`` exercises the
 existing topology workspace over that fixture, with independent native row and
-removal observations. Other topology families retain their separate acceptance.
+removal observations. ReplicaSet/ClusterSet metadata set/reset acceptance is
+recorded by the separate repair-family command above.

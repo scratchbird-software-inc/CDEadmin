@@ -5,7 +5,7 @@ import secrets
 import time
 
 
-def qualify(app, client, service, post, server_id, owned, output, use_c):
+def qualify(app, client, service, post, server_id, owned, output, use_c, repair_families=None):
     import mysql.connector
     from flask import url_for
     from pgadmin.model import db, Server
@@ -99,6 +99,12 @@ def qualify(app, client, service, post, server_id, owned, output, use_c):
 
     pending = None
     try:
+        if repair_families is not None:
+            from mysql_topology_repair_qualification import qualify as repair
+            repair(execute, http, sql, connect, query, control, until, registrations,
+                owned, output, use_c, proof, post, *repair_families)
+            proof['complete'] = True
+            return proof
         initial = sql(0, 'SELECT MEMBER_ID,MEMBER_STATE,MEMBER_ROLE FROM performance_schema.replication_group_members ORDER BY MEMBER_ID')
         assert len(initial) == 3 and all(row['MEMBER_STATE'] == 'ONLINE' for row in initial)
         primary = next(index for index, peer in enumerate(owned['peers']) if peer['server_uuid'] ==

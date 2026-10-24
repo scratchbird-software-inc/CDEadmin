@@ -6,7 +6,7 @@ import secrets
 import time
 
 
-def qualify(post,selected,credentials,owned,output,use_c,keep_live=False):
+def qualify(post,selected,credentials,owned,output,use_c,keep_live=False,context='cluster'):
     import mysql.connector
     output=Path(output);proof={'complete':False,'checks':[],'history_testing':'not run','operations':[]}
     def wait(value,prefix='mysql_router_'):
@@ -37,7 +37,7 @@ def qualify(post,selected,credentials,owned,output,use_c,keep_live=False):
         try:cursor.execute(source,parameters);return cursor.fetchall()
         finally:cursor.close()
     def selected_call(operation,arguments):
-        return {'operation':'cluster.'+operation,'arguments_json':json.dumps(arguments),'context_name':'','context_options_json':'{}',
+        return {'operation':context+'.'+operation,'arguments_json':json.dumps(arguments),'context_name':'','context_options_json':'{}',
             'use_advertised_endpoint':True,'witness_server_ids':[],'target_confirmation':owned['peers'][0]['server_uuid'],'timeout_seconds':120}
     def call(operation,arguments=(),read=False):
         request={'options':selected_call(operation,list(arguments))}

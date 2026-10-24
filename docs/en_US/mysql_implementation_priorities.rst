@@ -240,7 +240,14 @@ crash, native election, pending rollback, committed-data preservation, secondary
 routing, SQL-independent Router controls and member rejoin. Live Cluster Router
 metadata listing, selected option set/reset, stale-review refusal and removal
 now have independent native acceptance, including the read/write-split route.
-The other topology families' production failure/repair acceptance remains open.
+ReplicaSet and ClusterSet now also have native Linux failure/repair and live
+Router acceptance. Their separately bootstrapped Routers carry TLS application
+traffic before and after actual primary-server loss, native forced promotion,
+original-primary rejoin and planned switchover. Independent observations cover
+exact committed data, pending rollback and new-write catch-up on every target.
+Native Router listing, selected option inspection/set/reset and independent
+metadata comparisons cover each family. Native method replies retain their
+separate meaning; these receipts do not establish every possible deployment.
 Cluster complete-outage qualification now crashes all three servers, recovers
 two with explicit native force while the third remains unreachable, and
 incrementally rejoins the restarted third member. Independent native checks

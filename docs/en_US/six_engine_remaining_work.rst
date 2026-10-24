@@ -228,7 +228,8 @@ one implementation scope and must not be counted as independent completion.
   invalidate stale reviews. Live Cluster Router listing, selected option
   set/reset, stale-review refusal and metadata removal now have independent
   native acceptance. Topology utility progress no longer depends on a binary-log
-  archive input reference. The other families' acceptance remains separate.
+  archive input reference. ReplicaSet and ClusterSet live Router metadata now
+  also have native set/reset and independent stored-value acceptance.
   Actual Cluster complete outage, native forced recovery with an independently
   unreachable member, and subsequent incremental rejoin now have separate
   native data/replication acceptance. Topology guardian loss preserves original
@@ -240,8 +241,12 @@ one implementation scope and must not be counted as independent completion.
   independent SSH-host and original guardian authority; see
   :doc:`mysql_router_hosts`. Actual Cluster primary crash/election, routed
   transaction/data preservation, read-only routing and member rejoin are
-  qualified separately from the remaining topology families, host native
-  upgrade acceptance and broader lifecycle acceptance.
+  qualified separately from host native upgrade acceptance and broader lifecycle
+  acceptance. Native ReplicaSet and ClusterSet primary crash, forced promotion,
+  original-primary rejoin and planned switchover now include TLS Router traffic,
+  exact committed values, pending rollback and independent new-write replication
+  observations. These scope-specific receipts retain native outcomes and do not
+  close the upgrade or wider inventory gates.
   Native local sandbox deploy/start/stop/kill/delete now have a separate
   offline-capable execution-host workspace with explicit OS authority,
   private dispatch passwords, native configuration/process identity checks,

@@ -2382,3 +2382,29 @@ not mark workload readiness as verified. The command is
 ``tools/cdeadmin_mysql_router_qualification.py --cluster-outage-only`` with an
 explicitly owned fixture and native Shell executable. Other topology families,
 native upgrades and the broader lifecycle inventory retain their separate gates.
+
+Native ReplicaSet and ClusterSet failover and repair
+----------------------------------------------------
+
+Native Linux qualification now includes both topology families with separately
+bootstrapped Community Routers and systemd services. Each family lists its live
+Router, inspects selected options, sets and resets a native routing option and
+independently compares the stored metadata. TLS application traffic then writes
+exact bigint, Unicode and binary data before the original primary is killed.
+The reviewed native forced-promotion method runs from a surviving registration;
+fresh Router connections independently reach the new primary and verify
+committed data, pending rollback and replication of a new write.
+
+The original server restarts with the same native UUID. Native ReplicaSet
+incremental rejoin, or ClusterSet original-cluster reboot and rejoin, restores
+three-target replication. A separately reviewed planned switchover then moves
+Router writes to the third target and independently verifies their delivery.
+Native return values do not set workload readiness to verified. Between owned
+fixture scenarios, dissolution is followed by positive metadata/channel and
+outgoing-replica-registration observations before server reuse.
+
+Run ``tools/cdeadmin_mysql_router_qualification.py --repair-families-only`` with
+an explicitly owned three-member fixture and native Shell executable. Receipts
+qualify their installed Linux interfaces and scenarios. Native upgrades,
+production recovery cutover and the broader product inventory remain open;
+Windows/macOS acceptance remains with the platform teams.

@@ -12,12 +12,12 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output,fixture,use_c=False,faults_only=False,legacy_helper=None,metadata_only=False,mysql_shell=None,metadata_live=False,topology_faults=False,cluster_outage=False):
+def qualify(output,fixture,use_c=False,faults_only=False,legacy_helper=None,metadata_only=False,mysql_shell=None,metadata_live=False,topology_faults=False,cluster_outage=False,repair_families=False):
     output=Path(output).resolve();fixture=Path(fixture).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Keep owned qualification state outside source')
     output.mkdir(parents=True,exist_ok=False);owned=json.loads(fixture.read_text())
     if not owned.get('complete') or not owned['network'].startswith('sr-router240-'):raise ValueError('Select the explicitly owned native Router fixture')
-    if metadata_only or topology_faults or cluster_outage:os.environ['CDEADMIN_MYSQLSH_BINARY']=str(Path(mysql_shell).resolve(strict=True))
+    if metadata_only or topology_faults or cluster_outage or repair_families:os.environ['CDEADMIN_MYSQLSH_BINARY']=str(Path(mysql_shell).resolve(strict=True))
     from cdeadmin_mysql_dump_verification_qualification import setup_application
     app=setup_application(output)
     from flask import url_for
@@ -53,7 +53,12 @@ def qualify(output,fixture,use_c=False,faults_only=False,legacy_helper=None,meta
                 (output/'http-failure.json').write_text(json.dumps(value,indent=2)+'\n')
                 raise AssertionError('Native Router application request failed: '+action)
             return value['data']
-        catalog=post('catalog',{});assert catalog['identity']['server_uuid']==seed['server_uuid']
+        if repair_families:
+            catalog=post('inspect',{},prefix='mysql_topology_')
+            catalog['suggested_seed']={'host':seed['host'],'port':3306,'user':'root',
+                'ssl_mode':'REQUIRED','ssl_ca':None,'ssl_cert':None,'ssl_key':None}
+        else:catalog=post('catalog',{})
+        assert catalog['identity']['server_uuid']==seed['server_uuid']
         key=Path(owned['private_key']).read_text();credentials={'private_key':key}
         chosen={'connection':{'host':owned['router_address'],'port':22,'username':'root','host_key':owned['host_key'],
             'authentication':'private_key','platform':'posix','python':'python3'},'executable':'/usr/bin/mysqlrouter',
@@ -75,9 +80,10 @@ def qualify(output,fixture,use_c=False,faults_only=False,legacy_helper=None,meta
             accepted=topology_recovery(app,client,service,post,server.id,owned,output,use_c)
             proof.update(complete=accepted['complete'],checks=accepted['checks'],server_id=server.id)
             return proof
-        if cluster_outage:
+        if cluster_outage or repair_families:
             from mysql_cluster_outage_qualification import qualify as outage
-            accepted=outage(app,client,service,post,server.id,owned,output,use_c)
+            accepted=outage(app,client,service,post,server.id,owned,output,use_c,
+                (chosen,credentials) if repair_families else None)
             proof.update(complete=accepted['complete'],checks=accepted['checks'],server_id=server.id)
             return proof
         reviewed=post('review',{'options':chosen,'credentials':credentials})
@@ -243,7 +249,7 @@ def qualify(output,fixture,use_c=False,faults_only=False,legacy_helper=None,meta
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',required=True);parser.add_argument('--fixture',required=True);parser.add_argument('--use-c',action='store_true')
     parser.add_argument('--browser-only-application');parser.add_argument('--server-id',type=int);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
-    parser.add_argument('--faults-only',action='store_true');parser.add_argument('--legacy-helper');parser.add_argument('--browser-resume-job');parser.add_argument('--metadata-only',action='store_true');parser.add_argument('--mysql-shell');parser.add_argument('--metadata-live',action='store_true');parser.add_argument('--metadata-browser-only',action='store_true');parser.add_argument('--topology-faults-only',action='store_true');parser.add_argument('--cluster-outage-only',action='store_true');args=parser.parse_args()
+    parser.add_argument('--faults-only',action='store_true');parser.add_argument('--legacy-helper');parser.add_argument('--browser-resume-job');parser.add_argument('--metadata-only',action='store_true');parser.add_argument('--mysql-shell');parser.add_argument('--metadata-live',action='store_true');parser.add_argument('--metadata-browser-only',action='store_true');parser.add_argument('--topology-faults-only',action='store_true');parser.add_argument('--cluster-outage-only',action='store_true');parser.add_argument('--repair-families-only',action='store_true');args=parser.parse_args()
     if args.browser_only_application:
         if not all((args.server_id,args.browser_binary,args.driver_binary)):parser.error('Select the native application server and desktop binaries')
         if args.metadata_browser_only:
@@ -252,5 +258,5 @@ if __name__=='__main__':
         else:
             from mysql_router_ui_qualification import qualify as desktop
             result=desktop(args.output,args.fixture,args.browser_only_application,args.server_id,args.browser_binary,args.driver_binary,args.browser_resume_job)
-    else:result=qualify(args.output,args.fixture,args.use_c,args.faults_only,args.legacy_helper,args.metadata_only,args.mysql_shell,args.metadata_live,args.topology_faults_only,args.cluster_outage_only)
+    else:result=qualify(args.output,args.fixture,args.use_c,args.faults_only,args.legacy_helper,args.metadata_only,args.mysql_shell,args.metadata_live,args.topology_faults_only,args.cluster_outage_only,args.repair_families_only)
     print(json.dumps({'complete':result['complete'],'checks':len(result['checks'])}))
