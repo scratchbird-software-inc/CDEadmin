@@ -77,3 +77,24 @@ it('reviews exact service controls and reuses a prior association for offline st
   await waitFor(() => expect(post).toHaveBeenLastCalledWith(expect.objectContaining({action:'mysql_host_review',request:expect.objectContaining({options:expect.objectContaining({operation:'service_start',binding_job_id:'host-job',service:{manager:'systemd',name:'mysql@owned.service'}})})})));
   expect(post.mock.calls.filter(([value])=>value.action==='mysql_host_start')).toHaveLength(1);
 });
+it('reviews exact uploaded native option-file bytes and dispatches only the resulting installation review',async()=> {
+  const review={job_id:'install',review_digest:'exact-bytes',state:'reviewed',source:{server_uuid:'source'},execution_host:{hostname:'owned'},remote_observation:{configuration_deployment:{replacement_sha256:'reviewed-hash'}},warnings:[]};
+  const post=jest.fn().mockResolvedValue(review);
+  render(<Component post={post} />);
+  fireEvent.change(screen.getByLabelText('Native configuration file (blank: no defaults)'),{target:{value:'/owned/my.cnf'}});
+  fireEvent.mouseDown(screen.getByLabelText('Native host operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Install option file (Linux)'}));
+  const data=new Uint8Array([91,109,121,115,113,108,100,93,10]);
+  fireEvent.change(screen.getByLabelText('Replacement native option file'),{target:{files:[{name:'my.cnf',arrayBuffer:()=>Promise.resolve(data.buffer)}]}});
+  await screen.findByText(/Selected file: my.cnf/);
+  fireEvent.click(screen.getByRole('button',{name:'Review native option-file installation'}));
+  await screen.findByLabelText('Native host diagnostic review');
+  const request=post.mock.calls.at(-1)[0];expect(request.action).toBe('mysql_host_review');
+  expect(request.request.options.operation).toBe('deploy_config');
+  expect(request.request.options.configuration_replacement).toEqual({base64:'W215c3FsZF0K'});
+  expect(request.request.options).not.toHaveProperty('service');
+  fireEvent.click(screen.getByLabelText('Authorize the reviewed option-file installation on this database SSH host'));
+  post.mockResolvedValue({...review,state:'native_process_returned',remote_receipt:{result:{return_code:0},configuration_deployment_result:{installed:true,restart_issued:false}}});
+  fireEvent.click(screen.getByRole('button',{name:'Confirm native option-file installation'}));
+  await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'mysql_host_start',request:{job_id:'install',review_digest:'exact-bytes',confirmed:true,credentials:{password:''}}}));
+});

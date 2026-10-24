@@ -308,6 +308,12 @@ def configuration_graph(filename, context):
             'atomic_native_file_read_snapshot': False}
 
 
+def configuration_module():
+    if '_cdeadmin_native_configuration' in sys.modules:return sys.modules['_cdeadmin_native_configuration']
+    from . import mysql_host_configuration
+    return mysql_host_configuration
+
+
 def inspect(request, expected=None):
     host = binding(request['binding'])
     selected = text(request.get('executable', 'mysqld'))
@@ -345,6 +351,10 @@ def inspect(request, expected=None):
         raise Refused('The native configuration graph changed during inspection')
     result = {'host': host, 'program': {'path': str(executable), 'sha256': checksum, 'version_output': output.strip()},
               'configuration': configuration, 'included_configuration_files_attested': True}
+    if request.get('configuration_replacement') is not None:
+        result['configuration_deployment']=configuration_module().inspect(request,result,globals())
+        if expected is not None and result['configuration_deployment']!=expected.get('configuration_deployment'):
+            raise Refused('The prospective native option-file inputs changed after review')
     if request.get('service') is not None:
         result['service'] = native_services.inspect(request, result, process, file_hash, regular_stream, Refused)
         if expected is not None and result['service'] != expected.get('service'):
@@ -365,7 +375,7 @@ def dispatch(request):
     action = request.get('action')
     if action == 'inspect':
         return inspect(request)
-    if action not in {'validate_config', 'service_start', 'service_stop', 'service_restart', 'status'}:
+    if action not in {'validate_config', 'service_start', 'service_stop', 'service_restart', 'deploy_config', 'status'}:
         raise Refused('The native MySQL host action is unavailable')
     host = binding(request['binding'])
     root = Path(text(request['workspace']))
@@ -414,7 +424,7 @@ def dispatch(request):
     value = {'state': 'native_dispatch', 'job_id': job_id, 'input_digest': expected,
              'observation': observed, 'automatic_retry': False, 'remote_database_mutation': action != 'validate_config',
              'validation_scope': ('native mysqld configuration check; not server readiness or upgrade acceptance'
-                 if action == 'validate_config' else 'native service manager request; not SQL readiness or transaction finality'),
+                 if action == 'validate_config' else 'native option-file installation; no service restart or SQL readiness assertion' if action=='deploy_config' else 'native service manager request; not SQL readiness or transaction finality'),
              'transaction_finality_interpreted_by_common_code': False}
     save(receipt, value)
     configuration = observed['configuration']
@@ -422,6 +432,10 @@ def dispatch(request):
     if action == 'validate_config':
         result = process(Path(observed['program']['path']), [*arguments, '--validate-config'], directory, timeout,
                          configuration_context=configuration['context'] if configuration else None)
+    elif action=='deploy_config':
+        deployment=configuration_module().execute(request,observed,directory,timeout,globals())
+        value['configuration_deployment_result']=deployment
+        result=deployment['native_validation']
     else:
         result = native_services.execute(action, observed['service'], directory, timeout, process, Refused)
         value['service_request'] = {'operation': action, 'manager_client_completed': result['return_code'] == 0,
@@ -430,7 +444,7 @@ def dispatch(request):
     value.update(state='native_process_returned', result=result)
     # Persist native completion before making any later filesystem observation.
     save(receipt, value)
-    if action != 'validate_config':
+    if action in {'service_start','service_stop','service_restart'}:
         try:
             after = {**request, 'previous_service_binding': observed['service']}
             value['service_after_process'] = {'observed': True,
@@ -442,7 +456,7 @@ def dispatch(request):
         try:
             graph = configuration_graph(configuration['path'], configuration['context'])
             value['configuration_after_process'] = {'observed': True,
-                'matches_review': graph == configuration['graph'], 'graph': graph,
+                'matches_review': graph == (observed['configuration_deployment']['prospective_configuration_graph'] if action=='deploy_config' else configuration['graph']), 'graph': graph,
                 'atomic_native_file_read_snapshot': False}
         except Exception as error:
             value['configuration_after_process'] = {'observed': False, 'error_type': type(error).__name__,

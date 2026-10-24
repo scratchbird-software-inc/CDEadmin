@@ -10,7 +10,7 @@ import socket
 import time
 
 from ...operations import fileio
-from . import mysql_host_worker, mysql_host_services
+from . import mysql_host_worker, mysql_host_services, mysql_host_configuration
 
 
 class HostError(ValueError):
@@ -23,6 +23,8 @@ m=types.ModuleType('_cdeadmin_native_fileio')
 exec(p['fileio'],m.__dict__);sys.modules[m.__name__]=m
 s=types.ModuleType('_cdeadmin_native_services')
 exec(p['services'],s.__dict__);sys.modules[s.__name__]=s
+c=types.ModuleType('_cdeadmin_native_configuration')
+exec(p['configuration_worker'],c.__dict__);sys.modules[c.__name__]=c
 n={'__name__':'_cdeadmin_native_worker'}
 exec(p['worker'],n)
 try:r=n['dispatch'](p['request'])
@@ -79,6 +81,7 @@ def program():
     return {'worker_sha256': hashlib.sha256(worker.encode('utf8')).hexdigest(),
             'fileio_sha256': hashlib.sha256(helper.encode('utf8')).hexdigest(),
             'services_sha256': hashlib.sha256(services.encode('utf8')).hexdigest(),
+            'configuration_worker_sha256':hashlib.sha256(Path(mysql_host_configuration.__file__).read_bytes()).hexdigest(),
             'transport_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 
 
@@ -166,7 +169,7 @@ class Transport:
         if self.transport is None or not self.transport.is_authenticated():
             raise HostError('Authenticate the independently owned database-host SSH transport first')
         worker, helper, services = sources(); marker = 'CDEADMIN_NATIVE_HOST_' + secrets.token_hex(16) + ':'
-        envelope = {'request': request, 'worker': worker, 'fileio': helper, 'services': services, 'marker': marker}
+        envelope = {'request': request, 'worker': worker, 'fileio': helper, 'services': services, 'configuration_worker':Path(mysql_host_configuration.__file__).read_text(), 'marker': marker}
         payload = json.dumps(envelope, ensure_ascii=True).encode('utf8')
         if len(payload) > 1024 * 1024:
             raise HostError('Native host request exceeds its admitted bound')

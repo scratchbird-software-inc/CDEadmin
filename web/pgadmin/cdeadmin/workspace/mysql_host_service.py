@@ -2,6 +2,8 @@
 from copy import deepcopy
 from pathlib import Path
 import threading
+import base64
+import hashlib
 import time
 
 from ..core import EndpointContext
@@ -19,7 +21,7 @@ SERVICE_ACTIONS = {'service_start', 'service_stop', 'service_restart'}
 
 def options(value):
     required = {'connection', 'executable', 'configuration_file', 'workspace', 'timeout_seconds'}
-    if not isinstance(value, dict) or not required <= set(value) or set(value) - required - {'operation', 'service', 'binding_job_id', 'disconnect_all_clients'}:
+    if not isinstance(value, dict) or not required <= set(value) or set(value) - required - {'operation', 'service', 'binding_job_id', 'disconnect_all_clients','configuration_replacement'}:
         raise native.HostError('Select the exact native host, executable, configuration and private workspace')
     selected = deepcopy(value); selected['connection'] = native.public_route(selected['connection'])
     for key in ('executable', 'workspace'):
@@ -31,8 +33,20 @@ def options(value):
     if type(selected['timeout_seconds']) is not int or not 1 <= selected['timeout_seconds'] <= 3600:
         raise native.HostError('Select native diagnostic runtime from 1 through 3600 seconds')
     operation = selected.get('operation', 'validate_config')
-    if operation not in SERVICE_ACTIONS | {'validate_config'}:
+    if operation not in SERVICE_ACTIONS | {'validate_config','deploy_config'}:
         raise native.HostError('Select a native MySQL host operation')
+    if operation=='deploy_config':
+        if config is None:raise native.HostError('Select an existing native option file to replace')
+        replacement=selected.get('configuration_replacement')
+        if isinstance(replacement,dict) and set(replacement)=={'base64'}:
+            try:
+                if not isinstance(replacement['base64'],str) or len(replacement['base64'])>700000:raise ValueError()
+                data=base64.b64decode(replacement['base64'],validate=True)
+            except (ValueError,TypeError):raise native.HostError('Select bounded exact native option-file bytes') from None
+            selected['configuration_replacement']={**replacement,'sha256':hashlib.sha256(data).hexdigest()}
+        try:native.mysql_host_configuration.content(selected,native.HostError)
+        except (ValueError,TypeError):raise native.HostError('Select exact native option-file bytes and their SHA256') from None
+    elif 'configuration_replacement' in selected:raise native.HostError('Option-file replacement applies only to native configuration installation')
     if operation in SERVICE_ACTIONS:
         service = selected.get('service')
         if (not isinstance(service, dict) or set(service) != {'manager', 'name'} or
@@ -63,6 +77,7 @@ def native_request(record, action):
             'configuration_file': selected['configuration_file'], 'workspace': selected['workspace'],
             'timeout_seconds': selected['timeout_seconds'], 'reviewed': record['source_state']['remote_review'],
             'job_id': record['job_id'], 'input_digest': record['review_digest']}
+    if selected.get('operation')=='deploy_config' and action!='status':value['configuration_replacement']=selected['configuration_replacement']
     if selected.get('operation') in SERVICE_ACTIONS:
         value.update(service=selected['service'], native_pid_file=record['source_state']['native_pid_file'],
                      previous_service_binding=record['source_state']['remote_review'].get('service'))
@@ -82,6 +97,8 @@ class HostJobs(MySQLBinlogJobs):
     def public(self, record):
         result = super().public(record)
         result['execution_host'] = deepcopy(record['program']['execution_host'])
+        if 'configuration_replacement' in result['options']:
+            selected=result['options']['configuration_replacement'];result['options']['configuration_replacement']={'sha256':selected['sha256'],'content_omitted':True}
         result['remote_observation'] = deepcopy(record['source_state']['remote_review'])
         result['cancellation_scope'] = 'before_native_dispatch_only'
         result['source_identity_scope'] = record['source_state'].get('source_identity_scope', 'current_online_native_source')
@@ -90,6 +107,13 @@ class HostJobs(MySQLBinlogJobs):
 
     def review(self, owner, endpoint, selected, captured, configuration, program, continuation=None):
         result = super().review(owner, endpoint, selected, captured, configuration, program, continuation)
+        if selected.get('operation')=='deploy_config':
+            record=self.load(result['job_id'],owner,endpoint)
+            self.update(record,remote_database_mutation=True,warnings=list(self.review_warnings)+[
+                'Installs the exact selected option-file bytes after native mysqld validation in a private Linux mount view. No service restart is issued.',
+                'Original file ownership and permissions are preserved; a private original-file copy is retained with the host job. Native diagnostics can quote option values in this owner-scoped receipt.',
+                'Review and dispatch compare the original and prospective include graphs. Concurrent external writers are not frozen. A missing reply never causes automatic replacement retry.'])
+            result=self.get(record['job_id'],owner,endpoint)
         if selected.get('operation') in SERVICE_ACTIONS:
             record = self.load(result['job_id'], owner, endpoint)
             self.update(record, remote_database_mutation=True, warnings=list(self.review_warnings) + [
@@ -244,7 +268,7 @@ def action(service, server, operation, request):
     else:
         raise native.HostError('Native host action is unavailable')
     configuration = digest(MySQLMonitoringHost._configuration(server))
-    if record is not None and (record['configuration'] != configuration or
+    if record is not None and operation!='reconcile' and (record['configuration'] != configuration or
             any(record['program'].get(key) != value for key, value in native.program().items())):
         raise native.HostError('Use the recorded registration, host adapter and file-permission helper for this receipt')
     transport = native.Transport(selected['connection'], credentials(request['credentials']))
@@ -261,6 +285,7 @@ def action(service, server, operation, request):
         inspection = {'schema': 'cdeadmin.mysql-native-host.v1', 'action': 'inspect',
             'binding': captured['state']['host_binding'], 'executable': selected['executable'],
             'configuration_file': selected['configuration_file']}
+        if selected.get('operation')=='deploy_config':inspection['configuration_replacement']=selected['configuration_replacement']
         if selected.get('operation') in SERVICE_ACTIONS:
             inspection.update(service=selected['service'], native_pid_file=captured['state']['native_pid_file'],
                               previous_service_binding=captured['state'].get('previous_service_binding'))

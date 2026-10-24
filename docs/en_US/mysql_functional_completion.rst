@@ -2199,3 +2199,37 @@ failed observation remains unconfirmed. Aggregate cleanup requires all admitted
 original clients; one successful observation cannot clear a partially observed
 operation. This completes the unavailable-evidence handling, without asserting
 that a historical operation with missing facts has become recoverable.
+
+
+Reviewed native host option-file deployment
+--------------------------------------------
+
+The native host workspace now installs an explicitly reviewed replacement for
+an existing MySQL option file. Upload exact bytes or edit UTF-8 text inside the
+workspace. The private job retains the bytes; public review fields contain their
+digest and the prospective native include graph. Native file ownership, permissions and extended attributes (including native
+POSIX ACLs) survive installation. A private original-file copy remains with the
+host receipt. Option values can appear in native diagnostic output, which is
+scoped to the job's authenticated owner.
+
+The Linux adapter validates the proposed bytes with the pinned native mysqld in
+a private child mount namespace at the original configuration filename. Relative,
+home, directory, symlink and circular include semantics use the existing native
+configuration observer. Validation does not substitute a differently named root
+file. The SSH account needs native mount-namespace and file-replacement
+authority. Native refusal leaves the selected option file unchanged.
+
+Original and prospective include graphs bind review and dispatch. Changing an
+included file requires a new review. After successful native validation, the
+adapter rechecks the original file/parent identities and bytes, retains a private
+original copy and atomically replaces the selected resolved file. It does not
+restart the server or claim SQL readiness. Later configuration observations stay
+separate from the original installation result. Concurrent installers lock the original file inode; external writers are
+not frozen. Repeated dispatch and lost-reply reconciliation never reinstall the
+file automatically; read-only reconciliation can use the recorded host request
+after local adapter or registration configuration changes.
+
+This implements the option-file deployment part of ``CMP-MY-02``. Initialization,
+production service installation/upgrades, Router deployment/traffic and the
+remaining topology failure/repair and recovery cutover gates remain separate.
+Windows/macOS implementation and qualification stay with the platform teams.

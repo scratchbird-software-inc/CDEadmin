@@ -231,8 +231,10 @@ Status: **open**. Priority: **P0**.
 
 Complete bootstrap/outage/failover/repair with independent unreachable-member,
 replication and application-traffic evidence; deploy/bootstrap/supervise
-Router; implement reviewed host option-file deployment, initialization, service
-installation and upgrades. Preserve existing sandbox and administrator account
+Router; complete initialization, service installation and upgrades. Reviewed
+native Linux option-file deployment now validates the proposed original-filename
+view, binds old/new include graphs and atomically preserves file ownership and
+permissions without a service restart; see :doc:`mysql_functional_completion`. Preserve existing sandbox and administrator account
 workflows. Qualify certificate login and secondary-to-primary routing
 separately.
 

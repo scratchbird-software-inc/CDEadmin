@@ -10,12 +10,15 @@ export default function MySQLHost({post}) {
   const [executable,setExecutable]=useState('mysqld'),[configuration,setConfiguration]=useState(''),[workspace,setWorkspace]=useState('/tmp/scratchrobin-native-host'),[timeout,setTimeoutValue]=useState(60);
   const [operation,setOperation]=useState('validate_config'),[serviceName,setServiceName]=useState('mysql.service'),[bindingJob,setBindingJob]=useState(''),[disconnect,setDisconnect]=useState(false);
   const [catalog,setCatalog]=useState(null),[peer,setPeer]=useState(null),[review,setReview]=useState(null),[confirmed,setConfirmed]=useState(false),[receipt,setReceipt]=useState(null),[jobs,setJobs]=useState(null);
+  const [replacement,setReplacement]=useState(null),[proposedText,setProposedText]=useState(''),[replacementName,setReplacementName]=useState('');
   const [busy,setBusy]=useState(false),[error,setError]=useState('');const generation=useRef(0);
-  useEffect(() => {generation.current++;setCatalog(null);setPeer(null);setReview(null);setReceipt(null);setJobs(null);setConfirmed(false);setError('');setBusy(false);setPassword('');setKey('');setPhrase('');return () => {generation.current++;};},[post]);
+  useEffect(() => {generation.current++;setCatalog(null);setPeer(null);setReview(null);setReceipt(null);setJobs(null);setConfirmed(false);setError('');setBusy(false);setPassword('');setKey('');setPhrase('');setReplacement(null);setProposedText('');setReplacementName('');return () => {generation.current++;};},[post]);
   const change=setter => event => {setter(event.target.value);setReview(null);setConfirmed(false);};
   const credentials=() => authentication==='password' ? {password} : {private_key:key,private_key_password:phrase};
   const selected=() => ({connection:{host,port,username:user,host_key:hostKey,authentication,platform,python},executable,configuration_file:configuration || null,workspace,timeout_seconds:timeout,
-    ...(operation==='validate_config' ? {} : {operation,service:{manager:'systemd',name:serviceName},binding_job_id:bindingJob || null,disconnect_all_clients:disconnect})});
+    ...(operation==='validate_config' ? {} : operation==='deploy_config' ? {operation,configuration_replacement:replacement} : {operation,service:{manager:'systemd',name:serviceName},binding_job_id:bindingJob || null,disconnect_all_clients:disconnect})});
+  const propose=bytes=>{let binary='';for(let index=0;index<bytes.length;index+=16384)binary+=String.fromCharCode(...bytes.subarray(index,index+16384));setReplacement({base64:btoa(binary)});setReview(null);setConfirmed(false);};
+  const upload=async file=>{if(!file)return;const token=generation.current;try{const bytes=new Uint8Array(await file.arrayBuffer());if(token!==generation.current)return;propose(bytes);setReplacementName(file.name);try{setProposedText(new TextDecoder('utf-8',{fatal:true}).decode(bytes));}catch{setProposedText('');}}catch(failure){if(token===generation.current)setError(failure.message);}};
   const run=async (action,request,accept) => {
     const token=generation.current;setBusy(true);setError('');
     try {const value=await post({action:'mysql_host_'+action,request});if(token===generation.current)accept(value);}
@@ -35,7 +38,7 @@ export default function MySQLHost({post}) {
   },[post,receipt?.job_id,receipt?.state]);
   const load=offset => run('list',{offset,limit:25},setJobs);
   const inspect=value => {
-    setReceipt(value);setReview(null);setConfirmed(false);setPassword('');setKey('');setPhrase('');
+    setReceipt(value);setReview(null);setConfirmed(false);setReplacement(null);setProposedText('');setReplacementName('');setPassword('');setKey('');setPhrase('');
     const connection=value.options.connection;
     setHost(connection.host);setPort(connection.port);setUser(connection.username);setHostKey(connection.host_key);
     setAuthentication(connection.authentication);setPlatform(connection.platform);setPython(connection.python);
@@ -81,20 +84,27 @@ export default function MySQLHost({post}) {
       <TextField size="small" type="number" label="Native diagnostic timeout seconds" value={timeout} onChange={event => {setTimeoutValue(Number(event.target.value));setReview(null);setConfirmed(false);}} />
       <TextField select size="small" label="Native host operation" value={operation} onChange={change(setOperation)}>
         <MenuItem value="validate_config">Check configuration</MenuItem>
+        {platform==='posix' && <MenuItem value="deploy_config">Install option file (Linux)</MenuItem>}
         {platform==='posix' && ['start','stop','restart'].map(action => <MenuItem key={action} value={'service_'+action}>{action} MySQL service (Linux systemd)</MenuItem>)}
       </TextField>
-      {operation!=='validate_config' && <>
+      {operation.startsWith('service_') && <>
         <TextField size="small" label="Exact systemd MySQL unit" value={serviceName} onChange={change(setServiceName)} />
         <TextField size="small" label="Prior verified service job (for offline SQL)" value={bindingJob} onChange={change(setBindingJob)} />
         <FormControlLabel label="Disconnect all native service clients" control={<Checkbox checked={disconnect} onChange={event => {setDisconnect(event.target.checked);setReview(null);setConfirmed(false);}} />} />
       </>}
-      <Button disabled={busy} onClick={() => run('review',{options:selected(),credentials:credentials()},value => {setReview(value);setConfirmed(false);})}>{operation==='validate_config' ? 'Review native host configuration check' : 'Review native host service action'}</Button>
+      {operation==='deploy_config' && <Box sx={{width:'100%'}}>
+        <Alert severity="info">Install reviewed option-file bytes after native validation. This preserves the existing file ownership and permissions and does not restart MySQL. The SSH account needs authority to replace the file and create the private Linux validation view.</Alert>
+        <Button component="label" disabled={busy}>Load replacement native option file<input hidden type="file" aria-label="Replacement native option file" onChange={event=>upload(event.target.files?.[0])} /></Button>
+        {replacementName && <Box>Selected file: {replacementName}. Uploaded bytes are retained until you edit the text.</Box>}
+        <TextField multiline minRows={6} fullWidth label="Proposed native option-file text (UTF-8)" value={proposedText} disabled={busy} onChange={event=>{const value=event.target.value;setProposedText(value);setReplacementName('');propose(new TextEncoder().encode(value));}} />
+      </Box>}
+      <Button disabled={busy} onClick={() => run('review',{options:selected(),credentials:credentials()},value => {setReview(value);setConfirmed(false);})}>{operation==='validate_config' ? 'Review native host configuration check' : operation==='deploy_config' ? 'Review native option-file installation' : 'Review native host service action'}</Button>
     </Box>
     {review && <Box>
       <ul>{review.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
       <Box component="pre" aria-label="Native host diagnostic review" sx={{whiteSpace:'pre-wrap',maxHeight:260,overflow:'auto'}}>{JSON.stringify({source:review.source,source_identity_scope:review.source_identity_scope,execution_host:review.execution_host,observation:review.remote_observation},null,2)}</Box>
-      <FormControlLabel label={operation==='validate_config' ? 'Authorize the reviewed native mysqld configuration check on this database SSH host' : 'Authorize the reviewed native MySQL service action on this database SSH host'} control={<Checkbox disabled={busy || review.state!=='reviewed'} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />} />
-      <Button disabled={busy || !confirmed || review.state!=='reviewed'} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true,credentials:credentials()},value => {setReceipt(value);setReview(current => ({...current,state:value.state}));setConfirmed(false);})}>{operation==='validate_config' ? 'Confirm native host configuration check' : 'Confirm native host service action'}</Button>
+      <FormControlLabel label={operation==='validate_config' ? 'Authorize the reviewed native mysqld configuration check on this database SSH host' : operation==='deploy_config' ? 'Authorize the reviewed option-file installation on this database SSH host' : 'Authorize the reviewed native MySQL service action on this database SSH host'} control={<Checkbox disabled={busy || review.state!=='reviewed'} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />} />
+      <Button disabled={busy || !confirmed || review.state!=='reviewed'} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true,credentials:credentials()},value => {setReceipt(value);setReview(current => ({...current,state:value.state}));setConfirmed(false);})}>{operation==='validate_config' ? 'Confirm native host configuration check' : operation==='deploy_config' ? 'Confirm native option-file installation' : 'Confirm native host service action'}</Button>
     </Box>}
     {jobs && <><Table size="small" aria-label="Native host diagnostic receipts"><TableHead><TableRow>{['Job','Host','State','Receipt'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
       {jobs.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{job.execution_host.hostname}</TableCell><TableCell>{job.state}</TableCell><TableCell><Button disabled={busy} aria-label={'Inspect native host job '+job.job_id} onClick={() => run('status',{job_id:job.job_id},inspect)}>Inspect</Button></TableCell></TableRow>)}

@@ -44,7 +44,7 @@ CMD ["mysqld"]
     return key
 
 
-def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=False, browser_binary=None, driver_binary=None):
+def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=False, browser_binary=None, driver_binary=None, configuration_deployment=False):
     output = Path(output).resolve()
     if output == ROOT or ROOT in output.parents:
         raise ValueError('Keep disposable native fixtures outside source')
@@ -63,6 +63,8 @@ def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=Fal
                  'web/pgadmin/cdeadmin/providers/mysql_family/mysql_host_transport.py',
                  'web/pgadmin/cdeadmin/providers/mysql_family/mysql_host_worker.py',
                  'web/pgadmin/cdeadmin/providers/mysql_family/mysql_host_services.py',
+                 'web/pgadmin/cdeadmin/providers/mysql_family/mysql_host_configuration.py',
+                 'tools/mysql_host_configuration_qualification.py',
                  'web/pgadmin/cdeadmin/workspace/mysql_host_service.py',
                  'web/pgadmin/cdeadmin/workspace/service.py',
                  'web/pgadmin/cdeadmin/context_menu.py',
@@ -80,7 +82,7 @@ def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=Fal
         hostname = 'sr-mysql-host-' + secrets.token_hex(6)
         def start(label):
             name = hostname + '-' + label
-            _run(['docker', 'run', '-d', '--rm', '--name', name, '--hostname', hostname,
+            _run(['docker', 'run', '-d', '--rm', '--name', name, '--hostname', hostname, *(['--cap-add=SYS_ADMIN'] if configuration_deployment else []),
                   '-e', 'MYSQL_ALLOW_EMPTY_PASSWORD=yes', '-p', '127.0.0.1::3306', '-p', '127.0.0.1::22',
                   fixture_image, 'mysqld', '--server-id=101', '--gtid-mode=ON', '--enforce-gtid-consistency=ON', '--log-bin=sr-host'])
             containers.append(name)
@@ -286,9 +288,12 @@ def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=Fal
         password_review = review(password_options, {'password': ssh_password})
         http('cancel', {'job_id': password_review['job_id']})
         proof['checks'].append('actual-pinned-host-SSH-password-authentication')
+        if configuration_deployment:
+            from mysql_host_configuration_qualification import qualify as install_configuration
+            proof['checks'].extend(install_configuration(review,http,admitted,wait,config,remote,root,output,selected))
         if browser_binary:
             config('[mysqld]\nmax_connections=151\n')
-            proof['browser'] = browser(app, output, sid, selected, key, browser_binary, driver_binary)
+            proof['browser'] = browser(app, output, sid, selected, key, browser_binary, driver_binary,configuration_deployment)
             proof['checks'].append('built-application-context-menu-review-confirm-native-process-and-reconciliation-with-zero-browser-errors')
         with root.cursor() as query:
             query.execute('SELECT CAST(id AS CHAR),body,HEX(payload) FROM sr_host_diagnostic.t')
@@ -319,7 +324,7 @@ def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=Fal
     return proof
 
 
-def browser(app, output, sid, selected, key, binary, driver_binary):
+def browser(app, output, sid, selected, key, binary, driver_binary,configuration_deployment=False):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -375,12 +380,24 @@ def browser(app, output, sid, selected, key, binary, driver_binary):
         wait.until(lambda browser: any('native_process_returned' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
         click('Reconcile native host receipt')
         wait.until(lambda browser: 'original_ssh_acknowledgement_unchanged' in browser.find_element(By.CSS_SELECTOR, '[aria-label="Native host diagnostic receipt"]').get_attribute('textContent'))
+        if configuration_deployment:
+            field('Native configuration file (blank: no defaults)','/tmp/selected.cnf')
+            label=driver.find_element(By.XPATH,'//label[normalize-space()="Native host operation"]')
+            driver.find_element(By.ID,label.get_attribute('for')).click()
+            wait.until(lambda browser:browser.find_element(By.CSS_SELECTOR,'li[data-value="deploy_config"]')).click()
+            field('Proposed native option-file text (UTF-8)','[mysqld]\n# native configuration 雪\nmax_connections=177\n')
+            click('Review native option-file installation')
+            wait.until(lambda browser:'configuration_deployment' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native host diagnostic review"]').get_attribute('textContent'))
+            checkbox=driver.find_element(By.XPATH,'//label[contains(normalize-space(),"Authorize the reviewed option-file installation")]//input')
+            driver.execute_script('arguments[0].click()',checkbox)
+            click('Confirm native option-file installation')
+            wait.until(lambda browser:'"installed": true' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native host diagnostic receipt"]').get_attribute('textContent'))
         driver.execute_script('document.querySelectorAll("input,textarea").forEach(e=>e.style.visibility="hidden")')
         driver.save_screenshot(str(output / 'native-host-diagnostics.png'))
         errors = [entry for entry in driver.get_log('browser') if entry['level'] == 'SEVERE']
         (output / 'browser-console.json').write_text(json.dumps(errors, indent=2) + '\n')
         assert not errors
-        return {'complete': True, 'console_errors': 0, 'native_review_confirm_and_receipt_reconciliation': True}
+        return {'complete': True, 'console_errors': 0, 'native_review_confirm_and_receipt_reconciliation': True,'native_option_file_installation':configuration_deployment}
     except BaseException:
         if driver is not None:
             driver.execute_script('document.querySelectorAll("input,textarea").forEach(e=>e.style.visibility="hidden")')
@@ -399,11 +416,11 @@ if __name__ == '__main__':
     parser.add_argument('--fixture-image', default='scratchrobin-mysql-host-fixture:current')
     parser.add_argument('--ssh-private-key')
     parser.add_argument('--prepare-fixture', action='store_true')
-    parser.add_argument('--use-c', action='store_true')
+    parser.add_argument('--use-c', action='store_true');parser.add_argument('--configuration-deployment', action='store_true')
     parser.add_argument('--browser-binary'); parser.add_argument('--driver-binary')
     args = parser.parse_args()
     if not args.prepare_fixture and not args.ssh_private_key:
         parser.error('Supply --prepare-fixture or --ssh-private-key for the owned fixture image')
     result = qualify(args.output, fixture_image=args.fixture_image, private_key=args.ssh_private_key,
-                     prepare=args.prepare_fixture, use_c=args.use_c, browser_binary=args.browser_binary, driver_binary=args.driver_binary)
+                     prepare=args.prepare_fixture, use_c=args.use_c, browser_binary=args.browser_binary, driver_binary=args.driver_binary,configuration_deployment=args.configuration_deployment)
     print(json.dumps({'complete': result['complete'], 'checks': len(result['checks'])}))
