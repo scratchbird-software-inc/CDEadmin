@@ -455,7 +455,7 @@ def run(client, route, credentials, selected, seed, members, workspace, program,
     grant = ProviderToolGrant('mysql-shell', str(workspace), seed['connection'].get('host') or 'localhost',
         int(seed['connection'].get('port', 3306)), timeout_seconds=selected['timeout_seconds'],
         allow_unbounded_runtime=selected['timeout_seconds'] is None, secret_environment_names=(CREDENTIAL_FILE,),
-        durable_name='mysql-topology')
+        durable_name='mysql-topology',guard_parent_death=True)
     def invoke(view):
         if boundary is not None: boundary()
         observed = client._tool_runner.run(grant,

@@ -217,7 +217,7 @@ def test_guardian_refuses_changed_stdin_before_native_dispatch(tmp_path):
 
 
 @pytest.mark.skipif(not sys.platform.startswith('linux'),reason='Linux native parent-death and kernel session qualification')
-@pytest.mark.parametrize('fault',[None,'credential-link','input-changed','namespace'])
+@pytest.mark.parametrize('fault',[None,'credential-link','input-changed','namespace','progress-nonce','progress-pid','progress-birth'])
 def test_original_guardian_loss_stops_its_native_client_and_retains_unknown_reply(tmp_path,monkeypatch,fault):
     import psutil
     web=Path(__file__).resolve().parents[2]/'web';root=durable_tool.directory(tmp_path,'owned-guardian-loss')
@@ -238,7 +238,7 @@ ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str
     owner=subprocess.Popen([sys.executable,'-c',code,str(tmp_path),str(web)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     native=None;guardian=None;reference=None
     try:
-        wait_until(lambda:(tmp_path/'native-started.json').exists())
+        wait_until(lambda:(tmp_path/'native-started.json').exists() and (root/'progress.json').exists())
         native=psutil.Process(json.loads((tmp_path/'native-started.json').read_text())['pid'])
         reference=json.loads((tmp_path/'reference.json').read_text());intent=json.loads((root/'request.json').read_text())
         guardian=psutil.Process(json.loads((root/'started.json').read_text())['guardian_pid'])
@@ -251,6 +251,12 @@ ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str
         elif fault=='namespace':
             previous=durable_tool.host
             monkeypatch.setattr(durable_tool,'host',lambda:{**previous(),'pid_namespace':'pid:[another]'})
+        elif fault and fault.startswith('progress-'):
+            progress=json.loads((root/'progress.json').read_text())
+            if fault=='progress-nonce':progress['nonce']='another-invocation'
+            elif fault=='progress-pid':progress['observation']['pid']=True
+            else:progress['observation']['process_create_time']=float('nan')
+            (root/'progress.json').write_text(json.dumps(progress))
         observed=durable_tool.observe(tmp_path,reference,durable_tool.sha(sys.executable))
         assert observed['complete'] is False and observed['native_outcome_inferred'] is False
         assert 'return_code' not in observed and not (root/'result.json').exists()
@@ -263,6 +269,11 @@ ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str
             assert observed['credential_file_cleanup_confirmed'] is (fault!='credential-link')
             assert observed['input_file_cleanup_confirmed'] is (fault!='input-changed')
             assert observed['independent_reconciliation']['guardian_lock_independently_free']
+            if fault and fault.startswith('progress-'):
+                assert not observed.get('native_process_identity')
+                assert observed['independent_reconciliation']['original_process_identity_error_type']=='ValueError'
+            else:
+                assert observed['native_process_identity']=={'pid':native.pid,'process_create_time':native.create_time()}
         with pytest.raises(FileExistsError):
             ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str(tmp_path),'127.0.0.1',3306,
                 durable_name='owned-guardian-loss',guard_parent_death=True),['-c','raise RuntimeError("never replay")'])

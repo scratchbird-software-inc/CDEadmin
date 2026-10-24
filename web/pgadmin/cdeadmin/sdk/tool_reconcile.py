@@ -9,6 +9,7 @@ from pathlib import Path
 import stat
 import signal
 import hashlib
+import math
 
 import psutil
 
@@ -59,6 +60,19 @@ def fingerprint(path):
     with Path(path).open('rb') as stream:
         while chunk:=stream.read(1048576):digest.update(chunk)
     return digest.hexdigest()
+
+
+def original_process_identity(root, reference):
+    """Read historical client identity, separately from its missing final reply."""
+    progress = document(root / 'progress.json')
+    if progress.get('nonce') != reference['nonce']:
+        raise ValueError('Original native progress belongs to another invocation')
+    observed = progress['observation']
+    pid, birth = observed['pid'], observed['process_create_time']
+    if (type(pid) is not int or pid < 1 or type(birth) not in {int, float} or
+            not math.isfinite(birth) or birth <= 0):
+        raise ValueError('Original native progress process identity is unavailable')
+    return {'pid': pid, 'process_create_time': birth}
 
 
 def legacy_anchor(root,intent,reference,current_host,write):
@@ -224,6 +238,10 @@ def reconcile(root,intent,reference,current_host,write,*,cancel=False):
                         except (OSError,ValueError,KeyError,psutil.Error):result['original_native_cancellation_requested']=False
                     return {**result,'reason':'original_native_session_still_present'}
                 result['native_process_termination_confirmed']=True
+                if not revoked:
+                    try:result['native_process_identity']=original_process_identity(root,reference)
+                    except (OSError,ValueError,KeyError,TypeError) as error:
+                        result['original_process_identity_error_type']=type(error).__name__
                 credential=intent.get('credential_file');selected=intent.get('input_file')
                 result.update(credential_file_cleanup_confirmed=credential is None,input_file_cleanup_confirmed=selected is None)
                 for label,path,parent,expected,wipe in (

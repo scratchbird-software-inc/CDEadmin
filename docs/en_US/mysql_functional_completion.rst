@@ -2152,6 +2152,19 @@ It removes only identity-checked private credentials and staged input. A missing
 completion receipt remains missing: process cleanup never supplies a return code,
 changes the original database outcome or retries a load/replay.
 
+Native topology clients now use the same Linux guardian-death policy. After
+independent termination, the original nonce-bound progress receipt preserves
+the historical client PID and process birth even when the final utility receipt
+is missing. Invalid or foreign progress cannot supply that identity. Recovery
+uses it to inspect the original member connections separately from utility
+termination. Both connectors qualify actual guardian loss during SQL fanout
+blocked by native locks on all three Cluster members: acknowledgement remains
+refused while server work survives, becomes available only after independent
+member-session absence and clone idleness, and preserves the original unknown
+outcome without replay. The native command is
+``tools/cdeadmin_mysql_router_qualification.py --topology-faults-only`` with an
+explicitly owned three-member fixture and native Shell executable.
+
 Older managed client references can be reconciled after guardian loss when the
 original living client can still be identified. Original command, executable,
 process birth, user and session must match before a separate witness is saved.
@@ -2352,3 +2365,20 @@ native pure/C and desktop acceptance through the existing topology workspace;
 see :doc:`mysql_router_hosts`. Its original single native Shell utility reference
 is retained without depending on a binary-log replay input. History qualification
 stays owner-deferred.
+
+Native Cluster complete-outage repair
+-------------------------------------
+
+The existing reviewed ``instance.reboot_cluster`` and
+``cluster.rejoin_instance`` workflows now have independent Linux qualification
+for a real three-server crash. Two servers restart with Group Replication
+disabled while the third stays independently unreachable. Explicit native
+``force`` recovery restores the reachable partition; the third server is then
+restarted and incrementally rejoined through the application. Independent
+queries verify native UUIDs and member roles, committed exact bigint/Unicode/
+binary values, rollback of pending work and replication of a new write after
+repair. Native method replies remain separate from those observations and do
+not mark workload readiness as verified. The command is
+``tools/cdeadmin_mysql_router_qualification.py --cluster-outage-only`` with an
+explicitly owned fixture and native Shell executable. Other topology families,
+native upgrades and the broader lifecycle inventory retain their separate gates.

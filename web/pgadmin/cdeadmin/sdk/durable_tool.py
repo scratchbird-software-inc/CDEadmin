@@ -110,6 +110,8 @@ def independent(root,intent,reference,observed,*,cancel=False):
     value={**observed,'independent_reconciliation':facts}
     if facts.get('native_process_termination_confirmed') is True:
         value.update(original_cleanup_confirmed=observed.get('cleanup_confirmed'),cleanup_confirmed=True)
+        if not observed.get('native_process_identity') and facts.get('native_process_identity'):
+            value['native_process_identity']=facts['native_process_identity']
         for key in ('credential_file_cleanup_confirmed','input_file_cleanup_confirmed'):value[key]=observed.get(key) is True or facts.get(key) is True
     return value
 

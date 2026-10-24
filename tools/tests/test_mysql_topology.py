@@ -81,6 +81,7 @@ def test_native_control_redaction_preserves_booleans_and_uint64_result_json(tmp_
     monkeypatch.setattr(native,'program_identity',lambda *_args,**_kwargs:program)
     class Runner:
         def run(self,_grant,arguments,**_kwargs):
+            assert _grant.durable_name=='mysql-topology' and _grant.guard_parent_death is True
             source=(tmp_path/'native-topology.py').read_text()
             tree=ast.parse(source)
             settings=next(node for node in tree.body if isinstance(node,ast.Assign) and

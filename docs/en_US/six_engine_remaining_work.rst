@@ -229,6 +229,12 @@ one implementation scope and must not be counted as independent completion.
   set/reset, stale-review refusal and metadata removal now have independent
   native acceptance. Topology utility progress no longer depends on a binary-log
   archive input reference. The other families' acceptance remains separate.
+  Actual Cluster complete outage, native forced recovery with an independently
+  unreachable member, and subsequent incremental rejoin now have separate
+  native data/replication acceptance. Topology guardian loss preserves original
+  progress identity for surviving server-work observations; target acknowledgement
+  remains blocked until independently observed member idleness and never
+  rewrites an unknown original reply.
   Native Router
   bootstrap/deployment and Linux service installation/control now use
   independent SSH-host and original guardian authority; see

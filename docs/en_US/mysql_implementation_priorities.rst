@@ -241,6 +241,13 @@ routing, SQL-independent Router controls and member rejoin. Live Cluster Router
 metadata listing, selected option set/reset, stale-review refusal and removal
 now have independent native acceptance, including the read/write-split route.
 The other topology families' production failure/repair acceptance remains open.
+Cluster complete-outage qualification now crashes all three servers, recovers
+two with explicit native force while the third remains unreachable, and
+incrementally rejoins the restarted third member. Independent native checks
+cover committed exact data, pending rollback and new-write replication after
+repair. Original topology guardian loss also retains the original process
+identity for separate surviving server-work checks; acknowledgement waits for
+positive member idleness and preserves unknown outcomes.
 Native Linux service installation now creates
 a reviewed systemd unit with separate start and boot controls. Native Linux initialization
 now supports new registrations before SQL is available, with secure/insecure
