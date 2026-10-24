@@ -2165,3 +2165,18 @@ Both native drivers qualify worker loss, guardian loss, a missing completion
 receipt and a legacy managed orphan. The built desktop qualifies the independent
 observation control. These receipts do not close inventory/system-state recovery,
 production cutover, ``CMP-MY-02`` or ``INV-MYSQL``.
+
+
+Independent native system-table recovery checks
+-----------------------------------------------
+
+Expected native instance dumps now optionally seal selected system-table
+checkpoints under source backup/read locks. Independent acceptance compares
+native definitions, column metadata, complete counts and row-multiset digests
+without importing system tables. System differences remain separate from
+exported data/definition/account results and fail the selected acceptance.
+Physical recovery qualification covers all 25 admitted native system tables;
+logical/API checks exercise a foreign-server difference and a lost source-unlock
+reply with independent original-session cleanup observation. See
+:doc:`mysql_physical_backups` for checkpoint selection and the remaining native
+runtime, host-state and cutover boundaries. ``CMP-MY-01`` stays open.

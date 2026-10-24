@@ -14,6 +14,7 @@ class InstanceBackupJobs(MySQLBinlogJobs):
     native_verify = staticmethod(native.verify)
     review_warnings = (
         'Native instance dumping can pause source writes while establishing its snapshot. The utility owns consistency and account visibility checks.',
+        'Optional system-table checkpoints hold a server-wide read lock throughout the native dump; they compare native state without importing system tables.',
         'Account definitions can contain authentication material. Backup files stay in the private application-host job directory.',
         'Native completion, sealed backup metadata and successful database recovery have separate receipts. Cancellation can leave partial output and does not restart this job.',
     )
@@ -39,6 +40,8 @@ class InstanceBackupJobs(MySQLBinlogJobs):
                     fields['backup_protection_id'] = value['backup_id']
                 if isinstance(value, dict) and value.get('durable_tool'):
                     fields['durable_tool'] = value['durable_tool']
+                if isinstance(value,dict) and value.get('server_lock_owner'):
+                    fields['server_lock_owner']=value['server_lock_owner']
                 self.update(record, **fields)
             result = transport.execute(record, self.directory(record), cancel, progress)
             self.update(record, state='completed', result=result,
@@ -78,6 +81,12 @@ class InstanceBackupJobs(MySQLBinlogJobs):
         if record.get('native_process_termination_confirmed') is not True:
             raise native.BinlogArchiveError('Confirm native utility termination before accepting backup files')
         directory = self.directory(record)
+        if record['options'].get('system_state_tables'):
+            from ..providers.mysql_family import mysql_system_state as system
+            archive=directory/('archive' if (directory/'archive').exists() else 'archive.incoming')
+            checkpoint=system.read(archive,record['source']['server_uuid'])
+            if [row['table'] for row in checkpoint['tables']]!=record['options']['system_state_tables']:
+                raise native.BinlogArchiveError('Original reviewed system checkpoint coverage is unavailable')
         if not (directory / 'archive').exists() and (directory / 'archive.incoming').exists():
             verified = native.verify(directory / 'archive.incoming', record['source'])
             seal(directory / 'archive.incoming', directory / 'archive')
@@ -141,8 +150,13 @@ class InstanceBackupTransport:
         self.client, self.route, self.credentials, self.protection = client, route, credentials, protection
 
     def close(self):
-        if self.credentials is not None:
-            self.credentials.close(); self.credentials = None
+        try:
+            if self.credentials is not None:
+                self.credentials.close(); self.credentials = None
+        finally:
+            connection=getattr(self,'system_connection',None)
+            if connection is not None:
+                self.system_connection=None;self.client._discard_failed_session(connection)
 
     def execute(self, record, directory, cancel, progress):
         result = ticket = None
@@ -152,8 +166,11 @@ class InstanceBackupTransport:
             ticket = self.protection.begin(record['source'], 'MySQL instance', str(directory / 'archive'),
                 {**record['options'], '_instance_scope': True, '_instance_job_id': record['job_id']})
             progress({'stage': 'native_dump', 'backup_id': ticket.backup_id})
-            result = native.run_dump(self.client, self.route, self.credentials, record['source'], record['options'],
-                directory / 'archive.incoming', directory, record['program'], cancel=cancel, progress=progress)
+            if record['options'].get('system_state_tables'):
+                result=self.system_dump(record,directory,cancel,progress)
+            else:
+                result = native.run_dump(self.client, self.route, self.credentials, record['source'], record['options'],
+                    directory / 'archive.incoming', directory, record['program'], cancel=cancel, progress=progress)
             progress({'stage': 'sealing_files', 'backup_id': ticket.backup_id, 'native_dump_acknowledged': True})
             seal(directory / 'archive.incoming', directory / 'archive', cancel=cancel)
             observed = native.verify(directory / 'archive', record['source'], cancel=cancel)
@@ -181,3 +198,45 @@ class InstanceBackupTransport:
                                    native_dump_completion_acknowledged=acknowledged)
                 except Exception: pass
             raise
+
+
+    def system_dump(self,record,directory,cancel,progress):
+        from ..providers.mysql_family import mysql_system_state as system
+        from ..providers.mysql_family import mysql_acceptance_lock_owner as locks
+        connection=self.system_connection;cursor=connection.cursor();acquired=[];result=None;failure=None
+        try:
+            owner=locks.acquire(connection,record['job_id'],record['source']['server_uuid'])
+            progress({'server_lock_owner':owner})
+            cursor.execute('SET SESSION lock_wait_timeout=5')
+            for statement,release in [('LOCK INSTANCE FOR BACKUP','UNLOCK INSTANCE'),('FLUSH TABLES WITH READ LOCK','UNLOCK TABLES')]:
+                cursor.execute(statement);acquired.append(release)
+            expected=system.capture(connection,record['options']['system_state_tables'],cancel=cancel)
+            if expected['source_uuid']!=record['source']['server_uuid']:
+                raise native.BinlogArchiveError('System checkpoint reached another source')
+            result=native.run_dump(self.client,self.route,self.credentials,record['source'],record['options'],
+                directory/'archive.incoming',directory,record['program'],cancel=cancel,progress=progress)
+            after=system.capture(connection,record['options']['system_state_tables'],cancel=cancel)
+            if after!=expected:raise native.BinlogArchiveError('Native system tables changed during the expected dump')
+            system.save(directory/'archive.incoming',expected)
+            result['artifact']=native.verify(directory/'archive.incoming',record['source'],cancel=cancel)
+            return result
+        except BaseException as error:
+            failure=error
+            if result is not None:
+                error.observation=result['tool'];error.native_dump_acknowledged=result.get('native_dump_acknowledged') is True
+                error.native_control=result.get('native_control')
+            raise
+        finally:
+            failures=[]
+            for statement in reversed(acquired):
+                try:cursor.execute(statement)
+                except Exception as error:failures.append(type(error).__name__)
+            try:cursor.close()
+            except Exception as error:failures.append(type(error).__name__)
+            if result is not None:result['system_source_locks_released']=not failures
+            if failures and failure is None:
+                error=native.BinlogArchiveError('Original system checkpoint lock release is unconfirmed')
+                if result is not None:
+                    error.observation=result['tool'];error.native_dump_acknowledged=result.get('native_dump_acknowledged') is True
+                    error.native_control=result.get('native_control')
+                raise error

@@ -992,3 +992,41 @@ This does not establish resolution of every legacy utility/guardian receipt or
 production cutover. Run
 ``tools/cdeadmin_mysql_physical_reconciliation_qualification.py`` with an explicit
 preceding native source fixture to reproduce this workflow.
+
+
+Native system-table checkpoints
+-------------------------------
+
+An expected instance dump can also retain independent system-table checkpoints.
+Set ``system_state_tables`` to exact native table names and explicitly select
+``system_state_write_pause_confirmed: true``. This option holds an instance
+backup lock and server-wide read lock throughout the dump. It requires native
+SELECT and lock privileges; denied or incomplete observations fail the job.
+The ordinary dump options, native consistency and immutable archive protections
+still apply. The checkpoint belongs to that explicitly selected expected dump,
+not automatically to the time of another physical backup or later log target.
+
+Supported tables cover native accounts/grants/roles/password history, plugins,
+components, loadable functions, foreign servers, help data, time zones and
+optimizer costs. The retained record contains exact definition/column digests,
+full row counts and streaming digests of the complete row multiset. SQL NULL,
+bytes and duplicate rows remain distinct. Raw system-table rows, foreign-server
+passwords and authentication values are not returned. Before/after source
+observations must match. Checkpoint files join the sealed dump manifest and
+required coverage survives explicit interrupted-file reconciliation.
+
+Independent acceptance compares those selected tables under the target's
+existing backup/read locks. A system-table difference fails that acceptance even
+when exported table data, object SQL and account SQL match. Native logical loads
+do not import this checkpoint or write system tables. Physical recovery can
+preserve and independently verify the native rows. Linux qualification includes
+all 25 supported tables after native prepare/copy-back/private recovery, both
+connectors, a same-row-count foreign-server change and unchanged source bytes.
+
+``Observe original source lock cleanup`` independently checks the original
+private source session after a missing unlock reply. It preserves the dump's
+original acknowledgement and leaves file acceptance separate. Native SQL
+readiness, runtime plugin activation/dependency files, hidden dictionary state,
+replication positions, volatile statistics/logs, host configuration and production
+cutover retain their own checks. These selected table comparisons do not assert
+complete server-state or production acceptance.

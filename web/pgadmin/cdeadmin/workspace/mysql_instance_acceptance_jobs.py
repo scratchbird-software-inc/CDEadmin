@@ -72,7 +72,7 @@ class InstanceAcceptanceJobs(MySQLBinlogReplayJobs):
             result = transport.execute(record, self.directory(record), cancel, progress, boundary)
             stopped = result['tool']['process_observation'].get('cleanup_confirmed') is True
             accepted = result['selected_dump_surfaces_verified']
-            different = any(result.get(key, {}).get('matched') is False for key in ('data', 'definitions', 'accounts'))
+            different = any(result.get(key, {}).get('matched') is False for key in ('data', 'definitions', 'accounts','system_state'))
             self.update(record, state='unknown' if not stopped else 'cancelled' if cancel.is_set() and not result['native_checks_returned'] else 'verification_observed', result=result,
                 acceptance_outcome='matched' if accepted else 'not_matched' if different else 'unconfirmed',
                 native_load_outcome='not_dispatched', native_process_termination_confirmed=stopped,
@@ -148,6 +148,10 @@ class InstanceAcceptanceTransport:
             if before != record['source_state']['target']:
                 raise native.BinlogArchiveError('Native acceptance target changed after review')
             result['row_counts'] = native.table_counts(cursor, selected)
+            if selected.get('system_state_tables'):
+                expected=native.system_state.read(staged,artifact['source_uuid'])
+                observed=native.system_state.capture(self.connection,selected['system_state_tables'],cancel=cancel)
+                result['system_state']=native.system_state.compare(expected,observed)
             if cancel.is_set(): raise InterruptedError('Acceptance cancelled before native checks')
             observed = native.run_checks(self.client, self.route, self.credentials, staged, directory / 'target-definitions',
                 record['source'], selected, before['state'], directory, record['program'], record['options'],
@@ -175,7 +179,7 @@ class InstanceAcceptanceTransport:
             native.unchanged(staged, artifact)
             result['artifact_unchanged'] = True
             result['selected_dump_surfaces_verified'] = bool(qualified and result['target_unchanged'] and
-                all(result[key]['matched'] is True for key in ('data', 'definitions', 'accounts') if result[key]['requested']))
+                all(result[key]['matched'] is True for key in ('data', 'definitions', 'accounts','system_state') if result.get(key,{}).get('requested')))
             return result
         except BaseException as error:
             prior = getattr(error, 'native_check_result', None)

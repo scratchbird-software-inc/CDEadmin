@@ -47,6 +47,8 @@ def action(service, server, operation, request):
         if reviewed['state'] != 'reviewed':
             return jobs.start(request, owner, endpoint.id, {}, None)
         selected = reviewed['options']
+    elif operation=='observe_source_locks' and set(request)=={'job_id'}:
+        record=jobs.load(request['job_id'],owner,endpoint.id);selected=record['options']
     elif operation == 'review' and set(request) == {'options'}:
         selected = None
     else:
@@ -66,12 +68,21 @@ def action(service, server, operation, request):
             'CURRENT_USER() AS authenticated_principal,CURRENT_ROLE() AS active_role')[0]
         if source['version'].split('-')[0] != '9.7.0':
             raise native.BinlogArchiveError('Select native MySQL9.7.0 for an instance backup')
+        if operation=='observe_source_locks':
+            if source!=record['source']:raise native.BinlogArchiveError('Source lock observation reached another server or principal')
+            from ..providers.mysql_family import mysql_acceptance_lock_owner as locks
+            observation=locks.observe(connection,record)
+            jobs.update(record,source_lock_cleanup_observation={**observation,'original_native_reply_unchanged':True,'automatic_retry':False})
+            return jobs.get(record['job_id'],owner,endpoint.id)
         program = program_identity(client, route, workspace)
         configuration = digest({'registration': MySQLMonitoringHost._configuration(server), 'root': str(jobs.root),
-            'adapter_sha256': hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest()})
+            'adapter_sha256': hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest(),
+            'system_state_adapter_sha256':hashlib.sha256(Path(native.system_state.__file__).read_bytes()).hexdigest()})
         if operation == 'review':
             return jobs.review(owner, endpoint.id, selected, {'identity': source, 'state': {}}, configuration, program)
         transport = InstanceBackupTransport(client, route, delegate_credentials(client, route), jobs.backup_protection.scoped(owner, endpoint.id))
+        if selected.get('system_state_tables'):
+            transport.system_connection=connection;connection=None
         admitted = transport; transport = None
         return jobs.start(request, owner, endpoint.id, {'configuration': configuration, 'source': source, 'program': program}, admitted)
     except NativeError as error:

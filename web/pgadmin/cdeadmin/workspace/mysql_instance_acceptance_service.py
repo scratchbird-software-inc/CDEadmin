@@ -114,7 +114,8 @@ def action(service, server, operation, request):
         workspace = jobs.prepare_scope(owner, endpoint.id)
         program = program_identity(client, route, workspace)
         configuration = digest({'registration': MySQLMonitoringHost._configuration(server), 'root': str(jobs.root),
-            'adapter_sha256': hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest()})
+            'adapter_sha256': hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest(),
+            'system_state_adapter_sha256':hashlib.sha256(Path(native.system_state.__file__).read_bytes()).hexdigest()})
         if operation == 'review': return jobs.review(owner, endpoint.id, selected,
             {'identity': target['identity'], 'state': {'input_reference': reference, 'target': target, 'scopes': scopes,
                 **({'recovery_binding': deepcopy(binding), 'native_login': principal_sessions(connection)[1], 'physical_recovery': recovery} if binding else {})}}, configuration, program)

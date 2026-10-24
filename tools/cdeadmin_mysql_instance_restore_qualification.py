@@ -11,7 +11,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=False):
+def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=False,system_state=False):
     output=Path(output).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Keep native evidence outside source')
     output.mkdir(mode=0o700,parents=True,exist_ok=False)
@@ -31,6 +31,8 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
         'web/pgadmin/static/js/Dialogs/MySQLInstanceRestores.jsx','tools/cdeadmin_mysql_instance_restore_qualification.py']
     paths+=['web/pgadmin/cdeadmin/sdk/'+name for name in ('tooling.py','durable_tool.py','tool_guardian.py','tool_process.py','tool_reconcile.py')]
     paths+=['web/pgadmin/cdeadmin/workspace/mysql_binlog_jobs.py','tools/mysql_interruption_qualification.py']
+    if system_state:
+        paths+=['web/pgadmin/cdeadmin/providers/mysql_family/mysql_system_state.py','web/pgadmin/cdeadmin/workspace/mysql_instance_backup_jobs.py','web/pgadmin/cdeadmin/workspace/mysql_instance_backup_service.py']
     if acceptance:
         paths+=['web/pgadmin/cdeadmin/providers/mysql_family/mysql_instance_acceptance.py',
             'web/pgadmin/cdeadmin/providers/mysql_family/mysql_acceptance_lock_owner.py',
@@ -48,6 +50,8 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
                     handle=_root_connection('mysql',route['port']);handle.autocommit=True;handles.append(handle);q=handle.cursor();cursors.append(q)
                     q.execute('ALTER USER CURRENT_USER() IDENTIFIED BY %s',(password,))
                 qs,qt=cursors
+                if system_state:
+                    for q in cursors:q.execute("CREATE SERVER sr_system_checkpoint FOREIGN DATA WRAPPER mysql OPTIONS(HOST 'native-original.example',DATABASE 'native',USER 'fixture',PASSWORD 'private-system-state-fixture')")
                 for schema in ('sr_restored_a','sr_restored_b'):
                     qs.execute('CREATE DATABASE '+schema+' CHARACTER SET utf8mb4')
                     qs.execute('CREATE TABLE '+schema+'.t(id BIGINT PRIMARY KEY,body TEXT,payload LONGBLOB)')
@@ -92,8 +96,39 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
                         if time.monotonic()>deadline:raise TimeoutError('Owned native instance recovery deadline')
                         time.sleep(.05);value=http('status',{'job_id':value['job_id']},**kwargs)
                     return value
-                backup=wait(start(http('review',{'options':{'users':True,'checksum':True,'threads':1,**({'exclude_users':['root']} if acceptance else {})}},url=surl,prefix='mysql_instance_backup_'),url=surl,prefix='mysql_instance_backup_'),url=surl,prefix='mysql_instance_backup_')
+                backup=wait(start(http('review',{'options':{'users':True,'checksum':True,'threads':1,**({'system_state_tables':['servers','plugin','component','func','time_zone','time_zone_name','time_zone_transition','time_zone_transition_type','time_zone_leap_second'],'system_state_write_pause_confirmed':True} if system_state else {}),**({'exclude_users':['root']} if acceptance else {})}},url=surl,prefix='mysql_instance_backup_'),url=surl,prefix='mysql_instance_backup_'),url=surl,prefix='mysql_instance_backup_')
                 assert backup['state']=='completed',backup
+                if system_state:
+                    assert backup['result']['system_source_locks_released'] and backup['server_lock_owner']['admitted']
+                    observed=http('observe_source_locks',{'job_id':backup['job_id']},url=surl,prefix='mysql_instance_backup_')
+                    assert observed['source_lock_cleanup_observation']['released']
+                    from pgadmin.cdeadmin.workspace.mysql_instance_backup_jobs import InstanceBackupTransport
+                    original_system_dump=InstanceBackupTransport.system_dump
+                    def lost_source_unlock(self,*args,**kwargs):
+                        connection=self.system_connection;cursor=connection.cursor
+                        class LostReply:
+                            def __init__(self,owned):self.owned=owned
+                            def __getattr__(self,key):return getattr(self.owned,key)
+                            def execute(self,statement,*parameters,**options):
+                                value=self.owned.execute(statement,*parameters,**options)
+                                if statement=='UNLOCK TABLES':raise OSError('Owned lost source unlock reply')
+                                return value
+                        connection.cursor=lambda *a,**kw:LostReply(cursor(*a,**kw))
+                        try:return original_system_dump(self,*args,**kwargs)
+                        finally:connection.cursor=cursor
+                    InstanceBackupTransport.system_dump=lost_source_unlock
+                    try:
+                        options={'users':False,'threads':1,'system_state_tables':['servers'],'system_state_write_pause_confirmed':True}
+                        lost=wait(start(http('review',{'options':options},url=surl,prefix='mysql_instance_backup_'),url=surl,prefix='mysql_instance_backup_'),url=surl,prefix='mysql_instance_backup_')
+                    finally:InstanceBackupTransport.system_dump=original_system_dump
+                    assert lost['state']=='native_returned_unverified' and lost['native_dump_acknowledged'],lost
+                    observed=http('observe_source_locks',{'job_id':lost['job_id']},url=surl,prefix='mysql_instance_backup_')
+                    assert observed['source_lock_cleanup_observation']['released'] and observed['state']=='native_returned_unverified'
+                    verified=http('reconcile',{'job_id':lost['job_id']},url=surl,prefix='mysql_instance_backup_')
+                    assert verified['state']=='artifact_verified' and verified['native_dump_acknowledged']
+                    assert verified['result']['artifact']['system_state_checkpoint']['tables']==['servers']
+                    proof['checks'].append('lost-source-unlock-reply-keeps-native-dump-acknowledgement-with-independent-original-lock-cleanup-and-separate-required-system-checkpoint-file-acceptance')
+
                 target_uuid=http('inspect',{})['identity']['server_uuid']
                 selected={'target_confirmation':target_uuid,'load_users':True,'exclude_users':['root'],
                     'checksum':True,'threads':1,'skip_binlog':True,'update_gtid_set':'append','timeout_seconds':120}
@@ -133,6 +168,18 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
                     assert accepted['acceptance_outcome']=='matched',accepted
                     assert all(accepted['result'][key]['matched'] is True for key in ('data','definitions','accounts'))
                     proof['checks'].append('independent-native-full-dump-count-checksum-schema-and-exported-account-definition-acceptance-under-explicit-server-read-and-instance-backup-locks')
+                    if system_state:
+                        assert accepted['result']['system_state']['matched'] is True
+                        assert 'private-system-state-fixture' not in json.dumps(accepted)
+                        qt.execute("ALTER SERVER sr_system_checkpoint OPTIONS(HOST 'native-changed.example')")
+                        changed=accept()
+                        assert changed['acceptance_outcome']=='not_matched' and changed['result']['system_state']['matched'] is False
+                        assert all(changed['result'][key]['matched'] for key in ('data','definitions','accounts'))
+                        assert [row['table'] for row in changed['result']['system_state']['differences']]==['servers']
+                        assert not changed['result']['selected_dump_surfaces_verified']
+                        qt.execute("ALTER SERVER sr_system_checkpoint OPTIONS(HOST 'native-original.example')")
+                        assert accept()['acceptance_outcome']=='matched'
+                        proof['checks'].append('native-system-checkpoint-with-held-source-locks-sealed-digests-and-independent-detection-of-unexported-foreign-server-change-without-import')
                     qt.execute('UPDATE sr_restored_a.t SET body="same count changed value"')
                     changed=accept();assert changed['acceptance_outcome']=='not_matched' and changed['result']['data']['matched'] is False
                     assert changed['result']['row_counts']['matched'] and changed['result']['definitions']['matched'] and changed['result']['accounts']['matched']
@@ -282,7 +329,7 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
                     interruption_checks,interrupted_restore_id=qualify_interruption(service,db_client,backup,uid,
                         target,target_uuid,review,http,qt,shell,output,password)
                     proof['checks'].extend(interruption_checks)
-                if binary:proof['browser']=browser(app,output,tid,backup['job_id'],target_uuid,binary,driver_binary,acceptance,recovered_acceptance_id,interrupted_restore_id)
+                if binary:proof['browser']=browser(app,output,tid,backup['job_id'],target_uuid,binary,driver_binary,acceptance,recovered_acceptance_id,interrupted_restore_id,system_state)
                 proof['native_connection_classes']=sorted(set(classes));assert proof['native_connection_classes']==[('CharsetCMySQLConnection' if use_c else 'CharsetMySQLConnection')]
                 proof['complete']=True
             finally:
@@ -294,7 +341,7 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
     return proof
 
 
-def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary,acceptance=False,recovered_acceptance_id=None,interrupted_restore_id=None):
+def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary,acceptance=False,recovered_acceptance_id=None,interrupted_restore_id=None,system_state=False):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -346,7 +393,10 @@ def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary,acceptance
             click('Confirm and start independent acceptance')
             wait.until(lambda b:any('Recorded outcome: matched.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
             table=driver.find_element(By.CSS_SELECTOR,'[aria-label="Recorded dump acceptance surfaces"]')
-            assert table.get_attribute('textContent').count('Matched')==3
+            assert table.get_attribute('textContent').count('Matched')==(4 if system_state else 3)
+            if system_state:
+                assert 'system_stateMatched' in table.get_attribute('textContent')
+                checks.append('separate-native-system-table-checkpoint-result-in-built-desktop')
             checks+=['independent-read-lock-confirmation-and-reviewed-acceptance','separate-exported-data-definition-account-results']
             if recovered_acceptance_id:
                 click('Load independent acceptance jobs');click('Inspect acceptance '+recovered_acceptance_id)
@@ -374,5 +424,5 @@ def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary,acceptance
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',required=True);parser.add_argument('--mysql-shell',required=True);parser.add_argument('--use-c',action='store_true')
-    parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--acceptance',action='store_true')
-    args=parser.parse_args();proof=qualify(args.output,args.mysql_shell,args.use_c,args.browser_binary,args.driver_binary,args.acceptance);print(json.dumps({'complete':proof['complete'],'checks':len(proof['checks'])}))
+    parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--acceptance',action='store_true');parser.add_argument('--system-state',action='store_true')
+    args=parser.parse_args();proof=qualify(args.output,args.mysql_shell,args.use_c,args.browser_binary,args.driver_binary,args.acceptance,args.system_state);print(json.dumps({'complete':proof['complete'],'checks':len(proof['checks'])}))

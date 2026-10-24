@@ -57,6 +57,7 @@ def program(jobs,anchor,peer):
     from . import mysql_instance_acceptance_jobs as accepted
     return {**backups.program(jobs,anchor,peer),'check_scheduler_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'acceptance_adapter_sha256':hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest(),
+        'system_state_adapter_sha256':hashlib.sha256(Path(native.system_state.__file__).read_bytes()).hexdigest(),
         'acceptance_jobs_sha256':hashlib.sha256(Path(accepted.__file__).read_bytes()).hexdigest()}
 
 

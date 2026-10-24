@@ -16,7 +16,7 @@ it('reviews and separately starts independent acceptance only after explicit wri
   post.mockResolvedValue({...review,state:'verification_observed',acceptance_outcome:'matched',result});
   fireEvent.click(screen.getByRole('button',{name:'Confirm and start independent acceptance'}));
   await screen.findByText(/Recorded outcome: matched/);
-  expect(screen.getByText('Not exported / not checked')).toBeInTheDocument();
+  expect(screen.getAllByText('Not exported / not checked')).toHaveLength(2);
   expect(post.mock.calls.some(([value])=>value.action.startsWith('mysql_instance_restore_'))).toBe(false);
 });
 it('keeps failed or cancelled checks unconfirmed instead of reporting a difference',async()=> {
@@ -59,5 +59,17 @@ it('observes the original physical acceptance utility independently of the SQL t
   fireEvent.click(screen.getByRole('button',{name:'Observe original acceptance utility without SQL connection'}));
   await waitFor(()=>expect(screen.getByRole('button',{name:'Observe original acceptance utility without SQL connection'})).toBeEnabled());
   expect(post).toHaveBeenLastCalledWith({action:'mysql_instance_acceptance_observe_utilities',request:{job_id:'physical-check'}});
+  expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_acceptance_start')).toBe(false);
+});
+
+it('shows a system-table difference independently of matching exported data',async()=> {
+  const receipt={job_id:'system-difference',state:'verification_observed',acceptance_outcome:'not_matched',target:{server_uuid:'target'},
+    result:{data:{requested:true,matched:true},definitions:{requested:true,matched:true},accounts:{requested:true,matched:true},system_state:{requested:true,matched:false},server_locks_released:true}};
+  const post=jest.fn(({action})=>Promise.resolve(action==='mysql_instance_acceptance_list' ? {jobs:[receipt],total:1,offset:0} : receipt));
+  render(<Component post={post} />);fireEvent.click(screen.getByText('Independent dump acceptance'));
+  fireEvent.click(screen.getByRole('button',{name:'Load independent acceptance jobs'}));fireEvent.click(await screen.findByRole('button',{name:'Inspect acceptance system-difference'}));
+  await screen.findByRole('table',{name:'Recorded dump acceptance surfaces'});
+  expect(screen.getByText('system_state').closest('tr')).toHaveTextContent('Different');
+  expect(screen.getByText('data').closest('tr')).toHaveTextContent('Matched');
   expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_acceptance_start')).toBe(false);
 });

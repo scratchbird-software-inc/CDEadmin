@@ -3202,7 +3202,7 @@ class ServerNode(PGChildNodeView):
                     try: payload=service.mysql_physical(server,action.removeprefix('mysql_physical_'),data.get('request'))
                     except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
                 elif action in {'mysql_instance_backup_review','mysql_instance_backup_start','mysql_instance_backup_status',
-                                'mysql_instance_backup_list','mysql_instance_backup_cancel','mysql_instance_backup_reconcile','mysql_instance_backup_cleanup_script',
+                                'mysql_instance_backup_list','mysql_instance_backup_observe_source_locks','mysql_instance_backup_cancel','mysql_instance_backup_reconcile','mysql_instance_backup_cleanup_script',
                                 'mysql_instance_backup_files','mysql_instance_backup_remove_artifact','mysql_instance_backup_removal_reconcile','mysql_instance_backup_pin'}:
                     try: payload = service.mysql_instance_backup(server, action.removeprefix('mysql_instance_backup_'), data.get('request'))
                     except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))

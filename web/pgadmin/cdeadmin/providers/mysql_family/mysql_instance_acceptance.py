@@ -11,6 +11,7 @@ from ...sdk.tooling import ProviderToolGrant
 from .mysql_binlog_archives import BinlogArchiveError, manifest, connection_options, program_identity
 from .mysql_dump_verification import document, inventory, quote
 from .mysql_shell_tools import NATIVE_ERROR_FUNCTION
+from . import mysql_system_state as system_state
 
 
 def options(value):
@@ -58,11 +59,11 @@ def scopes(directory, artifact):
                 required.add(object_base + '.sql')
             if not required <= paths:
                 raise BinlogArchiveError('Native exported object SQL files are incomplete')
-    if not (data or definitions or accounts):
+    if not (data or definitions or accounts or artifact.get('system_state_checkpoint')):
         raise BinlogArchiveError('Select a dump with an exported acceptance surface')
     return {'schemas': [row['schema'] for row in schemas], 'users': artifact['users'],
             'data_requested': data, 'definitions_requested': definitions, 'accounts_requested': accounts,
-            'tables': tables}
+            'tables': tables,**({'system_state_tables':artifact['system_state_checkpoint']['tables']} if artifact.get('system_state_checkpoint') else {})}
 
 
 def definition_hash(path):

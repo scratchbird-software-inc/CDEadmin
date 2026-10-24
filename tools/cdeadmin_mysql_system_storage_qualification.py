@@ -4,14 +4,15 @@ Use an owned disposable fixture only. Run the repository DDN prerequisite first.
 This gate never promotes the candidate; the builder combines all native gates.
 """
 from pathlib import Path
-import argparse,json,secrets,subprocess,time
+import argparse,json,secrets,subprocess,time,hashlib,sys
 from cdeadmin_mysql_namespace_qualification import captured_sources
 ROOT=Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--package',required=True,type=Path)
 parser.add_argument('--output',required=True,type=Path)
 parser.add_argument('--fixture-image',required=True)
-args=parser.parse_args();out=args.output.resolve();pkg=args.package.resolve(strict=True)
+parser.add_argument('--system-state',action='store_true')
+args=parser.parse_args();system_state_requested=args.system_state;out=args.output.resolve();pkg=args.package.resolve(strict=True)
 if out==ROOT or ROOT in out.parents:raise ValueError('Keep qualification outside source')
 out.mkdir(mode=0o700,parents=True);name='sr-undo-recovery-'+secrets.token_hex(6);volumes=[];runtime=None
 bootstrap,hashes=captured_sources()
@@ -27,10 +28,24 @@ def sql(statement,socket='/var/run/mysqld/mysqld.sock'):
 def native(stage,args):
  r=host(binary,'--no-defaults',*args,check=False);(out/(stage+'.log')).write_text(r.stdout+r.stderr);proof[stage+'_return_code']=r.returncode
  if r.returncode:raise RuntimeError('Native '+stage+' failed')
+def system_checkpoint(port):
+ sys.path[:0]=[str(ROOT),str(ROOT/'web')]
+ import config
+ import mysql.connector
+ from pgadmin.cdeadmin.providers.mysql_family import mysql_system_state as system
+ port=int(run(['docker','port',name,str(port)+'/tcp']).stdout.strip().rsplit(':',1)[1])
+ values=[];classes=[]
+ for pure in (True,False):
+  connection=mysql.connector.connect(user='root',host='127.0.0.1',port=port,autocommit=True,connection_timeout=5,use_pure=pure)
+  try:values.append(system.capture(connection,sorted(system.TABLES)));classes.append(type(connection).__name__)
+  finally:connection.close()
+ assert values[0]==values[1]
+ proof['system_state_connection_classes']=classes
+ return values[0]
 def source_hashes():
  return python("from pathlib import Path;import hashlib,json;roots=[Path('/var/lib/mysql'),Path('/var/lib/sr-undo-a'),Path('/var/lib/sr-undo-b'),Path('/var/lib/sr-system-a'),Path('/var/lib/sr-system-b')];print(json.dumps({str(f):hashlib.sha256(f.read_bytes()).hexdigest() for root in roots for f in sorted(root.rglob('*')) if f.is_file()}))")
 try:
- run(['docker','run','--rm','-d','--cap-add=SYS_ADMIN','--name',name,'--mount',f'type=bind,source={pkg},target=/opt/sr-undo232,readonly','-e','MYSQL_ALLOW_EMPTY_PASSWORD=yes','--entrypoint','/bin/bash',args.fixture_image,'-c','mkdir -p /var/lib/sr-undo-a /var/lib/sr-undo-b /var/lib/sr-system-a /var/lib/sr-system-b && chown mysql:mysql /var/lib/sr-undo-a /var/lib/sr-undo-b /var/lib/sr-system-a /var/lib/sr-system-b && exec /bin/bash /opt/physical-start.sh "$@"','--','mysqld','--server-id=232','--gtid-mode=ON','--enforce-gtid-consistency=ON','--log-bin=undo-source','--innodb-directories=/var/lib/sr-undo-a;/var/lib/sr-undo-b','--innodb-data-home-dir=','--innodb-data-file-path=/var/lib/sr-system-a/same:12M;/var/lib/sr-system-b/same:12M:autoextend'])
+ run(['docker','run','--rm','-d','--cap-add=SYS_ADMIN','--name',name,*(['--publish','127.0.0.1::3306','--publish','127.0.0.1::3307','-e','MYSQL_ROOT_HOST=%'] if system_state_requested else []),'--mount',f'type=bind,source={pkg},target=/opt/sr-undo232,readonly','-e','MYSQL_ALLOW_EMPTY_PASSWORD=yes','--entrypoint','/bin/bash',args.fixture_image,'-c','mkdir -p /var/lib/sr-undo-a /var/lib/sr-undo-b /var/lib/sr-system-a /var/lib/sr-system-b && chown mysql:mysql /var/lib/sr-undo-a /var/lib/sr-undo-b /var/lib/sr-system-a /var/lib/sr-system-b && exec /bin/bash /opt/physical-start.sh "$@"','--','mysqld','--server-id=232','--gtid-mode=ON','--enforce-gtid-consistency=ON','--log-bin=undo-source','--innodb-directories=/var/lib/sr-undo-a;/var/lib/sr-undo-b','--innodb-data-home-dir=','--innodb-data-file-path=/var/lib/sr-system-a/same:12M;/var/lib/sr-system-b/same:12M:autoextend'])
  volumes=[m['Name'] for m in json.loads(run(['docker','inspect','--format','{{json .Mounts}}',name]).stdout) if m['Type']=='volume']
  for _ in range(180):
   if host('/usr/bin/mysqladmin','--user=root','--protocol=TCP','--host=127.0.0.1','ping',check=False).returncode==0:break
@@ -46,6 +61,10 @@ try:
   'variables':{'innodb_data_home_dir':'','innodb_data_file_path':'/var/lib/sr-system-a/same:12M;/var/lib/sr-system-b/same:12M:autoextend','innodb_undo_directory':'./','innodb_directories':'/var/lib/sr-undo-a;/var/lib/sr-undo-b'},
   'files':[{'file_name':file,'tablespace_name':'innodb_system','file_type':'TABLESPACE'} for file in ('/var/lib/sr-system-a/same','/var/lib/sr-system-b/same')]+[
    {'file_name':row[1],'tablespace_name':row[2],'file_type':'UNDO LOG','undo_number':(0xFFFFFFEF-int(row[0]))%127+1} for row in source_rows]}}
+ if system_state_requested:
+  sql("CREATE SERVER sr_system_checkpoint FOREIGN DATA WRAPPER mysql OPTIONS(HOST 'native-system.example',DATABASE 'native',USER 'fixture',PASSWORD 'private-system-state-fixture')")
+  proof['expected_system_state']=system_checkpoint(3306)
+  proof['system_state_module_sha256']=hashlib.sha256((ROOT/'web/pgadmin/cdeadmin/providers/mysql_family/mysql_system_state.py').read_bytes()).hexdigest()
  host('mkdir','-p',root)
  native('backup',['--scratchrobin-system-file-numbers','--backup','--host=127.0.0.1','--user=root','--ssl-mode=REQUIRED','--datadir=/var/lib/mysql','--target-dir='+root+'/full','--parallel=2'])
  proof['backed_up_system_files']=python("from pathlib import Path;import json;p=Path('"+root+"/full');print(json.dumps(sorted(f.name for f in p.iterdir() if f.name.startswith('sr-system-'))))");assert proof['backed_up_system_files']==['sr-system-0.ibdata','sr-system-1.ibdata']
@@ -61,15 +80,29 @@ try:
  native('copy-back',['--copy-back','--target-dir='+root+'/prepared','--datadir='+root+'/copied','--innodb-data-home-dir='+root+'/copied','--innodb-log-group-home-dir='+root+'/copied',*copy_plan['arguments']])
  proof['copied_undo_files']=python("from pathlib import Path;import json;p=Path('"+root+"/undo-copy-back');print(json.dumps(sorted(f.name for f in p.iterdir() if f.name.startswith(('undo_','sr-undo-')))))")
  context=python(bootstrap+"\nfrom pathlib import Path\np=sys.modules['_cdeadmin_physical_worker'];g=p.geometry_module();paths=p.paths_module();value="+repr(proof['storage_geometry'])+";request="+repr(storage_request)+";request['phase']='copy_back';context=paths.admission(request,[],storage=value);g.finish_copy_back(Path('"+root+"'),Path('"+root+"/prepared'),Path('"+root+"/copied'),value,context);print(json.dumps(context))")
+ if system_state_requested:assert system_checkpoint(3306)==proof['expected_system_state']
  host('/usr/bin/mysqladmin','--user=root','--socket=/var/run/mysqld/mysqld.sock','shutdown');before=source_hashes()
  runtime_plan=python(bootstrap+"\nfrom pathlib import Path\np=sys.modules['_cdeadmin_physical_worker'];aliases,options=p.paths_module().runtime(Path('"+root+"'),Path('"+root+"/copied'),"+repr(context)+");print(json.dumps({'aliases':aliases,'options':options}))")
  aliases=runtime_plan['aliases']
  args=['/usr/sbin/mysqld','--no-defaults','--persisted-globals-load=OFF','--upgrade=NONE','--datadir=/var/lib/mysql','--innodb-data-home-dir=/var/lib/mysql','--innodb-data-file-path=/var/lib/sr-system-a/same:12M;/var/lib/sr-system-b/same:12M:autoextend','--innodb-undo-directory=/var/lib/mysql','--innodb-directories=/var/lib/sr-undo-a;/var/lib/sr-undo-b','--socket='+root+'/recovered.sock','--pid-file='+root+'/recovered.pid','--log-error='+root+'/recovered-error.log','--tmpdir='+root,'--user=root','--mysqlx=OFF','--skip-networking','--skip-replica-start','--event-scheduler=DISABLED','--server-id=2321','--gtid-mode=ON','--enforce-gtid-consistency=ON','--log-bin='+root+'/private-bin','--innodb-buffer-pool-size=67108864']
+ if system_state_requested:
+  args.remove('--skip-networking');args+=['--bind-address=0.0.0.0','--port=3307']
  runtime=python(bootstrap+"\nfrom pathlib import Path\np=sys.modules['_cdeadmin_physical_worker'];r=sys.modules['_cdeadmin_recovery_worker'];ns=sys.modules['_cdeadmin_physical_paths'];directory=Path('"+root+"');view=ns.activate(directory,"+repr(aliases)+",directory=directory)\nwith (directory/'recovered.stdout').open('w') as out:\n child=p.subprocess.Popen("+repr(args)+",stdout=out,stderr=p.subprocess.STDOUT,start_new_session=True)\ntry:process=r.birth(child.pid,{'path':'/usr/sbin/mysqld','sha256':p.host.file_hash(Path('/usr/sbin/mysqld'))})\nexcept BaseException:child.kill();child.wait();raise\nprint(json.dumps({'process':process,'view':view}))")
  for _ in range(120):
   if host('/usr/bin/mysqladmin','--user=root','--socket='+root+'/recovered.sock','ping',check=False).returncode==0:break
   time.sleep(.25)
  else:(out/'recovered-error.log').write_text(host('cat',root+'/recovered-error.log',check=False).stdout);raise RuntimeError('Owned recovered instance not ready')
+ if system_state_requested:
+  from pgadmin.cdeadmin.providers.mysql_family import mysql_system_state as system
+  observed=system_checkpoint(3307);comparison=system.compare(proof['expected_system_state'],observed)
+  proof['recovered_system_state']=comparison
+  if not comparison['matched']:raise AssertionError('Native physical system-table checkpoint differs')
+  sql("ALTER SERVER sr_system_checkpoint OPTIONS(HOST 'native-changed.example')",root+'/recovered.sock')
+  changed=system.compare(proof['expected_system_state'],system_checkpoint(3307))
+  assert not changed['matched'] and [row['table'] for row in changed['differences']]==['servers']
+  proof['private_system_state_change']=changed
+  sql("ALTER SERVER sr_system_checkpoint OPTIONS(HOST 'native-system.example')",root+'/recovered.sock')
+  assert system.compare(proof['expected_system_state'],system_checkpoint(3307))['matched']
  proof['recovered_rows']=sql('SELECT id,note,HEX(b) FROM duplicate232.t WHERE id=1',root+'/recovered.sock');assert proof['recovered_rows']=='1\tnative duplicate undo 雪\t00FF\n'
  proof['recovered_system_payload']=sql('SELECT LENGTH(b),SHA2(b,256) FROM duplicate232.t WHERE id=3',root+'/recovered.sock');assert proof['recovered_system_payload']==proof['source_system_payload']
  proof['recovered_system_catalog']=sql("SELECT FILE_NAME,TABLESPACE_NAME FROM information_schema.FILES WHERE TABLESPACE_NAME='innodb_system' ORDER BY FILE_NAME",root+'/recovered.sock');assert proof['recovered_system_catalog']==proof['source_system_catalog']

@@ -58,7 +58,7 @@ export default function MySQLInstanceAcceptance({post,sourceServerId,backupJobId
       {receipt.native_error_code && <Alert severity="error">Native acceptance failure code: {receipt.native_error_code}</Alert>}
       {receipt.result && <>
         <Table size="small" aria-label="Recorded dump acceptance surfaces"><TableHead><TableRow><TableCell>Exported surface</TableCell><TableCell>Recorded result</TableCell></TableRow></TableHead><TableBody>
-          {['data','definitions','accounts'].map(key=><TableRow key={key}><TableCell>{key}</TableCell><TableCell>{!receipt.result[key]?.requested ? 'Not exported / not checked' : receipt.result[key]?.matched===true ? 'Matched' : receipt.result[key]?.matched===false ? 'Different' : 'Unconfirmed'}</TableCell></TableRow>)}
+          {['data','definitions','accounts','system_state'].map(key=><TableRow key={key}><TableCell>{key}</TableCell><TableCell>{!receipt.result[key]?.requested ? 'Not exported / not checked' : receipt.result[key]?.matched===true ? 'Matched' : receipt.result[key]?.matched===false ? 'Different' : 'Unconfirmed'}</TableCell></TableRow>)}
         </TableBody></Table>
         {receipt.result.server_locks_released===false && (receipt.recovery_fence_release_confirmed===true ?
           <Alert severity="info">The original unlock replies were unconfirmed. A later native observation confirmed that the private SQL session and its server locks are gone. Original check results are unchanged.</Alert> :

@@ -46,3 +46,18 @@ it('can cancel an interrupted durable backup without treating cancellation as co
   expect(screen.getByText(/Native dump reply acknowledged: no/)).toBeInTheDocument();
   expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_backup_start')).toBe(false);
 });
+it('observes original source locks separately from dump acknowledgement and file acceptance',async()=> {
+  const receipt={job_id:'owned',source:{server_uuid:'native'},state:'native_returned_unverified',native_dump_acknowledged:true,server_lock_owner:{admitted:true}};
+  const post=jest.fn().mockResolvedValue({jobs:[receipt],total:1,offset:0});
+  render(<Component post={post} endpointUrl="/workspace/owned" />);
+  fireEvent.click(screen.getByRole('button',{name:'Load instance backup jobs'}));
+  await screen.findByRole('table',{name:'Instance backup jobs'});
+  post.mockResolvedValue(receipt);fireEvent.click(screen.getByRole('button',{name:'Inspect instance backup owned'}));
+  await screen.findByRole('button',{name:'Observe original source lock cleanup'});
+  post.mockResolvedValue({...receipt,source_lock_cleanup_observation:{qualified:true,released:true}});
+  fireEvent.click(screen.getByRole('button',{name:'Observe original source lock cleanup'}));
+  await screen.findByText(/Original source lock cleanup: confirmed/);
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_instance_backup_observe_source_locks',request:{job_id:'owned'}});
+  expect(screen.getByText(/Native dump reply acknowledged: yes/)).toBeInTheDocument();
+  expect(post.mock.calls.some(([request])=>['mysql_instance_backup_reconcile','mysql_instance_backup_start'].includes(request.action))).toBe(false);
+});

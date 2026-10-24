@@ -12,6 +12,7 @@ from ...sdk.tooling import ProviderToolGrant
 from .mysql_binlog_archives import BinlogArchiveError, connection_options, manifest
 from .mysql_dump_verification import document
 from .mysql_shell_tools import NATIVE_ERROR_FUNCTION
+from . import mysql_system_state as system_state
 
 CREDENTIAL_FILE = 'CDEADMIN_MYSQL_INSTANCE_DUMP_CREDENTIAL_FILE'
 INSTANCE_FIELDS = {'users': 'users', 'include_schemas': 'includeSchemas', 'exclude_schemas': 'excludeSchemas',
@@ -27,6 +28,14 @@ def options(value, route):
     if 'path' in selected:
         raise BinlogArchiveError('Managed instance output uses its private job directory')
     timeout = selected.pop('timeout_seconds', 3600)
+    system_tables=selected.pop('system_state_tables',None)
+    pause=selected.pop('system_state_write_pause_confirmed',False)
+    if system_tables is not None:
+        system_tables=system_state.selection(system_tables)
+        if pause is not True or selected.get('consistent',True) is not True:
+            raise BinlogArchiveError('Explicitly confirm a consistent system checkpoint with a server-wide write pause throughout the dump')
+    elif pause is not False:
+        raise BinlogArchiveError('Select native system tables before confirming their write pause')
     if timeout is not None and (type(timeout) is not int or not 1 <= timeout <= 2147483647):
         raise BinlogArchiveError('Select positive native client runtime seconds or null for no deadline')
     instance = {name: selected.pop(name) for name in INSTANCE_FIELDS if name in selected}
@@ -53,7 +62,7 @@ def options(value, route):
     # Enterprise object_policy execution is post beta. Native declaration
     # handling does not establish the missing closed implementation.
     native['dataMaskingPolicies'] = False
-    return {'native_options': native, 'timeout_seconds': timeout}
+    return {'native_options': native, 'timeout_seconds': timeout,**({'system_state_tables':system_tables,'system_state_write_pause_confirmed':True} if system_tables else {})}
 
 
 def _names(value, label):
@@ -90,6 +99,9 @@ def verify(directory, expected_source, *, cancel=None):
     users = _names(top['users'], 'account') if 'users' in top else None
     if users is not None and not any(row['path'] == '@.users.sql' for row in files):
         raise BinlogArchiveError('Native instance account DDL is missing')
+    system_checkpoint=None
+    if any(row['path']==system_state.FILE for row in files):
+        system_checkpoint=system_state.read(directory,expected_source['server_uuid'])
     boundary = top.get('source', {}).get('binlog', {})
     if manifest(directory, cancel=cancel) != files:
         raise BinlogArchiveError('Native instance backup changed during verification')
@@ -100,6 +112,7 @@ def verify(directory, expected_source, *, cancel=None):
             'native_gtid_snapshot_inconsistent': top.get('gtidExecutedInconsistent') is True,
             'native_boundary': {name: str(boundary[name]) for name in ('file', 'position', 'gtidExecuted') if name in boundary},
             'native_checksums_included': top.get('checksum') is True,
+            **({'system_state_checkpoint':{'file':system_state.FILE,'tables':[row['table'] for row in system_checkpoint['tables']], 'sha256':system_state.digest(system_checkpoint)}} if system_checkpoint else {}),
             'verification_scope': 'Native dump completion, exact file hashes and schema/account metadata; not restored data/definition equality or physical recoverability',
             'data_recovery_verified': False, 'production_cutover_verified': False}
 
