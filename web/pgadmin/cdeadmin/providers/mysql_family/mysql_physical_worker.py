@@ -27,6 +27,7 @@ REVISION = 'b1c9c34183de95316d8889ea3d4cb31e31ffddc5'
 MAX_FILES = 200000
 MAX_OUTPUT = 128 * 1024
 RAW_READER_PATCH = '40abc6e5ca994a84bfc65db8dd30c92b53a09c372d42163b7ae284d9a051c761'
+UNDO_READER_PATCH = 'dd79a7fc860b0bf063c8eb3f8d5bc49f331cc33c02bc3d1297d53fa867e4a610'
 
 
 def recovery_module():
@@ -238,23 +239,29 @@ def executable(path, kind):
     return {'path': str(path), 'sha256': host.file_hash(path), 'version_output': output.strip()}
 
 
-def raw_storage_backend(executable):
+def raw_storage_backend(executable,*,optional=False):
     """Bind the source-qualified reader and its private native dependencies."""
     root=Path(executable['path']).parent.parent
     try:
+        if optional and not (root/'PROVENANCE.json').exists():return None
         if (root/'PROVENANCE.json').is_symlink():raise Refused('Select the original native package provenance')
         value=read_json(root/'PROVENANCE.json')
+        numbered=isinstance(value,dict) and value.get('patch_sha256')==UNDO_READER_PATCH
+        patch=UNDO_READER_PATCH if numbered else RAW_READER_PATCH
+        capabilities=['raw-system-files-v1', 'undo-numbers-v1'] if numbered else ['raw-system-files-v1']
         if (not isinstance(value,dict) or value.get('schema')!='scratchrobin.native-backup-build.v1' or value.get('upstream_revision')!=REVISION or
-                value.get('patch_sha256')!=RAW_READER_PATCH or value.get('binary_sha256')!=executable['sha256'] or
-                value.get('research_candidate_only') is not False or value.get('capabilities')!=['raw-system-files-v1']):
+                value.get('patch_sha256')!=patch or value.get('binary_sha256')!=executable['sha256'] or
+                value.get('research_candidate_only') is not False or value.get('capabilities')!=capabilities):
             raise Refused('Native system files require the separately qualified native backup dependency')
         qualification=value.get('qualification',{})
         if (not isinstance(qualification,dict) or qualification.get('binary_sha256')!=executable['sha256'] or
                 qualification.get('qualified_extents')!=['fixed','autoextended'] or qualification.get('multiple_system_files') is not True):
             raise Refused('Qualify fixed, autoextended and multiple native raw system files before admission')
+        if numbered and qualification.get('duplicate_undo_paths') is not True:
+            raise Refused('Qualify native duplicate undo paths before admitting numbered backup names')
         files=value['package_files']
         if (not isinstance(files,dict) or len(files)>128 or files.get('bin/xtrabackup')!=executable['sha256'] or
-                files.get('native-raw.patch')!=RAW_READER_PATCH):
+                files.get('native-raw.patch')!=patch):
             raise Refused('Native raw-reader package identity is unavailable')
         for name,checksum in files.items():
             path=Path(name)
@@ -266,7 +273,8 @@ def raw_storage_backend(executable):
         if not isinstance(libraries,dict) or not libraries or any(files.get('lib/'+name)!=checksum for name,checksum in libraries.items()):
             raise Refused('Native raw-reader dependencies are unavailable')
         return {'format':'raw-system-files-v1','manifest_sha256':host.file_hash(root/'PROVENANCE.json'),
-            'patch_sha256':RAW_READER_PATCH,'binary_sha256':executable['sha256'],'libraries':libraries}
+            'patch_sha256':patch,'binary_sha256':executable['sha256'],'libraries':libraries,
+            **({'undo_naming':geometry_module().UNDO_NAMING} if numbered else {})}
     except (OSError,ValueError,KeyError,TypeError):
         raise Refused('Native system files require the separately qualified native backup dependency') from None
 
@@ -341,11 +349,21 @@ def inspection(request):
     if keyring is not None:observed['keyring']=keyring
     entries=observed.get('incremental_input',observed.get('input',{})).get('artifact',{}).get('external_tablespaces',[])
     storage=observed.get('incremental_input',observed.get('input',{})).get('artifact',{}).get('storage_geometry')
-    if phase in {'backup','incremental'}:storage=geometry_module().from_source(request,filesystem=True)
+    if phase in {'backup','incremental'}:
+        try:storage=geometry_module().from_source(request,filesystem=True)
+        except geometry_module().ResolutionRequired:storage=None
     source_specification=(request.get('source_storage') or {}).get('variables',{}).get('innodb_data_file_path') if phase in {'backup','incremental'} else geometry_module().configuration(root/request['input_job_id']/'artifact').get('innodb_data_file_path')
-    multiple_system_files=source_specification is not None and len(geometry_module().system_spec(source_specification))>1
-    if multiple_system_files or storage is not None and any(row.get('raw_mode') for row in storage['system_files']):
-        observed['raw_storage_backend']=raw_storage_backend(observed['xtrabackup'])
+    specification=geometry_module().system_spec(source_specification) if source_specification is not None else []
+    required=len(specification)>1 or any(row.get('raw_mode') for row in specification) or storage is not None and storage.get('undo_naming') is not None
+    explicit_undo=phase in {'backup','incremental'} and any(row.get('file_type')=='UNDO LOG' and
+        (row.get('undo_number',0)>2 or row.get('tablespace_name') not in {'innodb_undo_001','innodb_undo_002'})
+        for row in (request.get('source_storage') or {}).get('files',[]))
+    backend=raw_storage_backend(observed['xtrabackup']) if required else raw_storage_backend(observed['xtrabackup'],optional=True) if explicit_undo else None
+    if phase in {'backup','incremental'} and any(row.get('raw_mode') for row in specification) and backend['patch_sha256']==RAW_READER_PATCH:
+        raise Refused('Select the current qualified native backup dependency for parallel raw-system reads')
+    if backend is not None:observed['raw_storage_backend']=backend
+    if phase in {'backup','incremental'}:
+        storage=geometry_module().from_source(request,filesystem=True,undo_naming=backend.get('undo_naming') if backend else None)
     external=paths_module().admission(request,entries,storage=storage)
     if external is not None:
         observed['external_paths']=external

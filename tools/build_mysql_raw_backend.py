@@ -101,6 +101,8 @@ def build(args):
             from cdeadmin_mysql_physical_qualification import prepare_fixture
             fixture='sr-mysql-raw-fixture:'+secrets.token_hex(8)
             prepare_fixture(work,fixture,missing_paths='root')
+        logged([sys.executable,'-B',str(ROOT/'tools/cdeadmin_mysql_undo_storage_qualification.py'),'--package',str(package),
+            '--fixture-image',fixture,'--output',str(work/'qualification-undo')],'qualification-undo.log')
         logged([sys.executable,'-B',str(ROOT/'tools/cdeadmin_mysql_raw_storage_qualification.py'),'--package',str(package),
             '--fixture-image',fixture,'--output',str(work/'qualification-fixed')],'qualification-fixed.log')
         logged([sys.executable,'-B',str(ROOT/'tools/cdeadmin_mysql_raw_storage_qualification.py'),'--package',str(package),
@@ -108,7 +110,7 @@ def build(args):
         logged([sys.executable,'-B',str(ROOT/'tools/cdeadmin_mysql_raw_storage_qualification.py'),'--package',str(package),
             '--fixture-image',fixture,'--output',str(work/'qualification-multiple'),'--autoextend','--multiple','--fixed-receipt',
             str(work/'qualification-fixed/summary.json'),'--auto-receipt',str(work/'qualification-autoextended/summary.json'),
-            '--admit-package'],'qualification-multiple.log')
+            '--undo-receipt',str(work/'qualification-undo/summary.json'),'--admit-package'],'qualification-multiple.log')
         final=work/'package';shutil.move(str(package),final);receipt['package']=str(final)
         receipt['complete']=True
     finally:

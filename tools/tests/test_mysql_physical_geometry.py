@@ -292,3 +292,71 @@ def test_retained_external_storage_preserves_null_defaults_and_native_effective_
     assert value['undo_home']=='/original/data' and value['scan_directories']==[]
     assert geometry.audit(directory)==value
     assert recovery.configuration(directory/'backup-my.cnf',mapped_storage=value)['innodb_data_file_path']==value['variables']['innodb_data_file_path']
+
+
+@pytest.mark.parametrize('number',[1,2,3,4,127])
+def test_native_undo_number_survives_truncation_space_id_rotation(number):
+    for generation in (0,1,399999):
+        space_id=0xFFFFFFEF-(number-1)-127*generation
+        assert geometry.undo_number(space_id)==number
+
+
+@pytest.mark.parametrize('space_id',[None,True,'4294967277',0,0xFFFFFFF0,0xFFFFFFF0-127*400000-1])
+def test_unobserved_or_non_native_undo_space_ids_are_refused(space_id):
+    with pytest.raises(worker.Refused):geometry.undo_number(space_id)
+
+
+def numbered_source():
+    request=source();undo=[row for row in request['source_storage']['files'] if row['file_type']=='UNDO LOG']
+    undo.append({'file_name':'/other/same.ibu','tablespace_name':'second_named_undo','file_type':'UNDO LOG'})
+    request['source_storage']['files']=[row for row in request['source_storage']['files'] if row['file_type']!='UNDO LOG']+undo
+    for number,row in enumerate(undo,1):row['undo_number']=number
+    undo[2]['file_name']='/undo/same.ibu'
+    return request
+
+
+def test_duplicate_native_undo_paths_need_qualified_naming_and_keep_original_identities(tmp_path):
+    request=numbered_source()
+    with pytest.raises(geometry.ResolutionRequired,match='qualified numbered'):geometry.from_source(request)
+    value=geometry.from_source(request,undo_naming=geometry.UNDO_NAMING)
+    assert [row['backup_name'] for row in value['undo_files']]==['undo_001','undo_002','sr-undo-3.ibu','sr-undo-4.ibu']
+    assert [row['source_file'] for row in value['undo_files']][-2:]==['/undo/same.ibu','/other/same.ibu']
+    original=tmp_path/'original';original.mkdir()
+    (original/'backup-my.cnf').write_text('[mysqld]\ninnodb_data_file_path=/system/first:12M;/system/second:12M:autoextend\ninnodb_undo_directory=/undo\n')
+    assert geometry.capture(request,original,reviewed=value)==value
+    assert geometry.audit(original)==value
+    job=tmp_path/'job';job.mkdir();target=job/'artifact';target.mkdir();pool=job/'undo-copy-back';pool.mkdir()
+    for row in value['undo_files']:(pool/row['backup_name']).write_bytes(('native '+str(row['undo_number'])).encode())
+    context=paths.admission({**request,'phase':'copy_back'},[],storage=value)
+    geometry.finish_copy_back(job,original,target,value,context)
+    assert geometry.destination('/undo/same.ibu',target,context).read_bytes()==b'native 3'
+    assert geometry.destination('/other/same.ibu',target,context).read_bytes()==b'native 4'
+
+
+@pytest.mark.parametrize('fault',['missing-number','duplicate-number','bool','range','unknown-naming','no-consent'])
+def test_numbered_undo_does_not_guess_identity_or_downgrade_review(fault):
+    request=numbered_source();naming=geometry.UNDO_NAMING;row=request['source_storage']['files'][-1]
+    if fault=='missing-number':row.pop('undo_number')
+    elif fault=='duplicate-number':row['undo_number']=3
+    elif fault=='bool':row['undo_number']=True
+    elif fault=='range':row['undo_number']=128
+    elif fault=='unknown-naming':naming='guessed'
+    else:request['isolate_external_paths']=False
+    with pytest.raises(worker.Refused):geometry.from_source(request,undo_naming=naming)
+
+
+@pytest.mark.parametrize('kind',['numbered','filesystem','unqualified-numbered','both'])
+def test_application_review_requires_the_specific_pending_host_observation(kind):
+    from pgadmin.cdeadmin.workspace import mysql_physical_service as service
+    value=geometry.from_source(numbered_source(),undo_naming=geometry.UNDO_NAMING)
+    captured={'state':{'native_undo_naming_pending':True}}
+    if kind in {'filesystem','both'}:captured['state']['native_storage_resolution_pending']=True
+    if kind=='both':value['resolved_paths']={'/retained/link/../file':'/retained/effective/file'}
+    if kind=='unqualified-numbered':value.pop('undo_naming')
+    observed={'external_paths':{'storage':value}}
+    if kind in {'filesystem','unqualified-numbered'}:
+        with pytest.raises(service.native.HostError):service.resolve_storage(captured,observed)
+    else:
+        service.resolve_storage(captured,observed)
+        assert {'file_name':'/undo/same.ibu'} in captured['state']['native_external_files']
+        assert {'file_name':'/other/same.ibu'} in captured['state']['native_external_files']

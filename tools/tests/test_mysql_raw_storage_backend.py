@@ -45,3 +45,25 @@ def test_raw_reader_requires_qualified_source_exact_package_bytes_and_private_de
         admitted=worker.raw_storage_backend(executable)
         assert admitted['binary_sha256']==executable['sha256']
         assert admitted['libraries']==value['libraries']
+
+
+@pytest.mark.parametrize('fault',[None,'missing-proof','old-capabilities','candidate','altered-dependency'])
+def test_numbered_native_undo_profile_requires_its_own_qualified_source(tmp_path,monkeypatch,fault):
+    value,executable=package(tmp_path,monkeypatch)
+    monkeypatch.setattr(worker,'UNDO_READER_PATCH',value['patch_sha256'])
+    value['capabilities'].append('undo-numbers-v1');value['qualification']['duplicate_undo_paths']=True
+    if fault=='missing-proof':value['qualification'].pop('duplicate_undo_paths')
+    elif fault=='old-capabilities':value['capabilities'].pop()
+    elif fault=='candidate':value['research_candidate_only']=True
+    elif fault=='altered-dependency':(tmp_path/'lib/libnative.so.1').write_bytes(b'other native library')
+    (tmp_path/'PROVENANCE.json').write_text(json.dumps(value))
+    if fault:
+        with pytest.raises(worker.Refused):worker.raw_storage_backend(executable,optional=True)
+    else:
+        assert worker.raw_storage_backend(executable)['undo_naming']=='native-number-v1'
+
+
+def test_stock_native_backup_utility_remains_usable_for_unambiguous_legacy_undo(tmp_path):
+    executable={'path':str(tmp_path/'bin/xtrabackup'),'sha256':'0'*64}
+    assert worker.raw_storage_backend(executable,optional=True) is None
+    with pytest.raises(worker.Refused):worker.raw_storage_backend(executable)

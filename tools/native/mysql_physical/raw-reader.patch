@@ -1,3 +1,21 @@
+diff --git a/storage/innobase/fil/fil0fil.cc b/storage/innobase/fil/fil0fil.cc
+index 2780f989..c0b7dda1 100644
+--- a/storage/innobase/fil/fil0fil.cc
++++ b/storage/innobase/fil/fil0fil.cc
+@@ -4148,7 +4148,13 @@ bool fil_node_open_file(fil_node_t *file) {
+ 
+   shard->mutex_acquire();
+ 
++#ifdef XTRABACKUP
++  /* A parallel raw-file cursor may already have opened the first system
++  file to populate the native space-header extent. Check under the shard lock. */
++  bool res = file->is_open || shard->open_file(file);
++#else
+   bool res = shard->open_file(file);
++#endif
+ 
+   shard->mutex_release();
+ 
 diff --git a/storage/innobase/fsp/fsp0sysspace.cc b/storage/innobase/fsp/fsp0sysspace.cc
 index 58882f39..69e47a40 100644
 --- a/storage/innobase/fsp/fsp0sysspace.cc
@@ -19,9 +37,18 @@ index 58882f39..69e47a40 100644
        [[fallthrough]];
  
 diff --git a/storage/innobase/xtrabackup/src/backup_copy.cc b/storage/innobase/xtrabackup/src/backup_copy.cc
-index d5c84258..913a700f 100644
+index d5c84258..44279d1e 100644
 --- a/storage/innobase/xtrabackup/src/backup_copy.cc
 +++ b/storage/innobase/xtrabackup/src/backup_copy.cc
+@@ -2118,7 +2118,7 @@ bool should_skip_file_on_copy_back(const char *filepath) {
+   /* skip innodb data files */
+   for (auto iter(srv_sys_space.files_begin()), end(srv_sys_space.files_end());
+        iter != end; ++iter) {
+-    if (strcmp(iter->name(), filename) == 0) {
++    if (strcmp(base_name(iter->name()), filename) == 0) {
+       return true;
+     }
+   }
 @@ -2405,8 +2405,12 @@ bool copy_back(int argc, char **argv) {
         iter != end; ++iter) {
      const char *filename = base_name(iter->name());
@@ -37,10 +64,10 @@ index d5c84258..913a700f 100644
      }
    }
 diff --git a/storage/innobase/xtrabackup/src/fil_cur.cc b/storage/innobase/xtrabackup/src/fil_cur.cc
-index db04712e..05728a74 100644
+index db04712e..da753452 100644
 --- a/storage/innobase/xtrabackup/src/fil_cur.cc
 +++ b/storage/innobase/xtrabackup/src/fil_cur.cc
-@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+@@ -23,11 +23,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  /* Source file cursor implementation */
  
  #include <my_base.h>
@@ -48,7 +75,28 @@ index db04712e..05728a74 100644
  
  #include <fil0fil.h>
  #include <fsp0sysspace.h>
-@@ -170,6 +171,48 @@ xb_fil_cur_result_t xb_fil_cur_open(
+ #include <srv0start.h>
+ #include <trx0sys.h>
++#include <trx0purge.h>
+ #include <univ.i>
+ 
+ #include "common.h"
+@@ -139,6 +141,14 @@ xb_fil_cur_result_t xb_fil_cur_open(
+   strncpy(cursor->rel_path, xb_get_relative_path(node->space, cursor->abs_path),
+           sizeof(cursor->rel_path) - 1);
+ 
++  if (srv_backup_mode && fsp_is_undo_tablespace(node->space->id) &&
++      undo::id2num(node->space->id) > FSP_IMPLICIT_UNDO_TABLESPACES) {
++    /* Explicit undo files can share a basename in different directories.
++    The native undo number is unique and survives space-ID rotation. */
++    snprintf(cursor->rel_path, sizeof(cursor->rel_path), "sr-undo-%u.ibu",
++             static_cast<unsigned>(undo::id2num(node->space->id)));
++  }
++
+   /* In the backup mode we should already have a tablespace handle created
+   by fil_load_single_table_tablespace() unless it is a system
+   tablespace or srv_close_files is true. Otherwise we open the file here.
+@@ -170,6 +180,48 @@ xb_fil_cur_result_t xb_fil_cur_open(
      return (XB_FIL_CUR_ERROR);
    }
  

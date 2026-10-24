@@ -15,6 +15,19 @@ from . import mysql_host_service as host
 from .mysql_monitoring_host import MySQLMonitoringHost
 
 
+def resolve_storage(captured,observed):
+    """Resolve each pending native layout using its own authenticated-host facts."""
+    if captured['state'].get('native_storage_resolution_pending') or captured['state'].get('native_undo_naming_pending'):
+        resolved=observed.get('external_paths',{}).get('storage')
+        if not resolved or captured['state'].get('native_storage_resolution_pending') and not resolved.get('resolved_paths'):
+            raise native.HostError('Native source filesystem resolution was not observed on its authenticated host')
+        if captured['state'].get('native_undo_naming_pending') and resolved.get('undo_naming')!=native.worker.geometry_module().UNDO_NAMING:
+            raise native.HostError('Qualified native undo naming was not observed on its authenticated host')
+        modeled,_directories=native.worker.geometry_module().external_entries(resolved)
+        captured['state']['native_external_files']=[{'file_name':name} for name in sorted(
+            {row['file_name'] for row in captured['state'].get('native_external_files',[])}|{row['file_name'] for row in modeled})]
+
+
 def source(service, server, *, admitted=None, keyring=None, isolate_external_paths=False):
     """Admit the actual persistent engine/encryption scope, not a generic dump."""
     captured = host.source(service,server) if admitted is None else host.source(service,server,admitted=admitted)
@@ -56,8 +69,13 @@ def source(service, server, *, admitted=None, keyring=None, isolate_external_pat
             'CAST(@@innodb_data_file_path AS CHAR CHARACTER SET utf8mb4) AS innodb_data_file_path,'
             'CAST(@@innodb_undo_directory AS CHAR CHARACTER SET utf8mb4) AS innodb_undo_directory,'
             'CAST(@@innodb_directories AS CHAR CHARACTER SET utf8mb4) AS innodb_directories')[0]
-        storage_files=rows(connection,"SELECT FILE_NAME AS file_name,TABLESPACE_NAME AS tablespace_name,FILE_TYPE AS file_type "
+        storage_files=rows(connection,"SELECT FILE_ID AS file_id,FILE_NAME AS file_name,TABLESPACE_NAME AS tablespace_name,FILE_TYPE AS file_type "
             "FROM information_schema.FILES WHERE ENGINE='InnoDB' AND (TABLESPACE_NAME='innodb_system' OR FILE_TYPE='UNDO LOG') ORDER BY FILE_NAME")
+        for row in storage_files:
+            space_id=row.pop('file_id',None)
+            if row['file_type']=='UNDO LOG' and space_id is not None:
+                try:row['undo_number']=native.worker.geometry_module().undo_number(space_id)
+                except native.worker.Refused as error:raise native.HostError(str(error)) from None
         captured['state']['native_storage_source']={'variables':storage_variables,'files':storage_files}
         data=PurePosixPath(captured['state']['host_binding']['datadir'])
         files=rows(connection,'SELECT CAST(PATH AS CHAR CHARACTER SET utf8mb4) AS file_name FROM information_schema.INNODB_DATAFILES ORDER BY PATH')
@@ -72,6 +90,9 @@ def source(service, server, *, admitted=None, keyring=None, isolate_external_pat
             try:
                 storage=geometry.from_source({'source_storage':captured['state']['native_storage_source'],
                     'binding':captured['state']['host_binding'],'isolate_external_paths':isolate_external_paths})
+            except geometry.UndoNamingRequired:
+                if isolate_external_paths is not True:raise native.HostError('Review native undo-path isolation before backing up duplicate filenames') from None
+                captured['state']['native_undo_naming_pending']=True;storage=None
             except geometry.ResolutionRequired:
                 if isolate_external_paths is not True:raise native.HostError('Review native filesystem path isolation before resolving source storage paths') from None
                 captured['state']['native_storage_resolution_pending']=True;storage=None
@@ -416,13 +437,7 @@ def _action(service, server, operation, request, *, source_capture=None,database
             if tls is not None: captured['state']['sql_tls_policy'] = tls['policy']
         provisional = {'options': selected, 'source': captured['identity'], 'source_state': {**captured['state'], 'remote_review': {}}, 'job_id': '', 'review_digest': ''}
         observed = transport.request(remote_request(provisional, 'inspect'))
-        if captured['state'].get('native_storage_resolution_pending'):
-            resolved=observed.get('external_paths',{}).get('storage')
-            if not resolved or not resolved.get('resolved_paths'):
-                raise native.HostError('Native source filesystem resolution was not observed on its authenticated host')
-            modeled,_directories=native.worker.geometry_module().external_entries(resolved)
-            captured['state']['native_external_files']=[{'file_name':name} for name in sorted(
-                {row['file_name'] for row in captured['state'].get('native_external_files',[])}|{row['file_name'] for row in modeled})]
+        resolve_storage(captured,observed)
         captured['state']['remote_review'] = observed
         if scheduled_policy_id is not None:captured['state'].update(backup_schedule_id=scheduled_policy_id,schedule_operation=scheduled_operation or 'mysql_scheduled_physical_backup')
         program = {**native.program(), 'execution_host': {**peer, 'kind': 'database-server-ssh-host', 'workspace': selected['workspace']}}

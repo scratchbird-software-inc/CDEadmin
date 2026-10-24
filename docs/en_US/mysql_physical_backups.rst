@@ -26,23 +26,26 @@ to that status; this does not relabel it as a generally available release.
 See `the release source <https://github.com/percona/percona-xtrabackup/tree/b1c9c34183de95316d8889ea3d4cb31e31ffddc5>`_
 and `upstream physical restore instructions <https://docs.percona.com/percona-xtrabackup/9.7/restore-a-backup.html>`_.
 
-Raw and multiple system-file reader
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Raw, multiple-system-file and numbered-undo reader
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Raw system tablespaces and multiple system-file workflows require the separately qualified native reader built by
 ``tools/build_mysql_raw_backend.py``. The stock pinned utility rejects raw files
 in read-only mode; removing the raw marker alone can return success while copying
 zero pages. ScratchRobin refuses that utility for raw storage.
 
-The GPL patch in ``tools/native/mysql_physical/raw-reader.patch`` changes only
-the backup build's read-only raw-file admission and its Linux block-device
-cursor size. It copies the native system-space extent, bounded by
+The GPL patch in ``tools/native/mysql_physical/raw-reader.patch`` changes the
+backup build's read-only raw-file admission and its Linux block-device cursor
+size. It copies the native system-space extent, bounded by
 the opened device capacity. The final autoextended file uses InnoDB's cached
 system-space header size with preceding file extents accounted for. Native
 system-file copy-back preserves prepared bytes directly: later system files
 start at a nonzero logical page and cannot be interpreted as FSP headers.
 This also fixes the upstream crash for populated later regular system files.
-Server-build behavior is preserved. Native InnoDB
+System-file skip checks compare basenames even when private copy-back options
+use absolute paths. The backup-only file-open helper checks an already opened
+node under the native shard lock; parallel cursors can read the first raw file
+header without opening the same native node twice. Server-build behavior is preserved. Native InnoDB
 page reading, checksums, redo application and SQL recovery remain native.
 The qualification gate observes read-only backup descriptors and verifies native
 prepare/copy-back, recovered SQL reads/writes (including a 40 MiB payload in an
@@ -56,7 +59,7 @@ work area::
 
 The builder fetches the exact upstream revision/submodule, applies the pinned
 patch, builds in a container with a read-only source mount, collects complete
-compiler failures, packages private dependencies, and runs the real raw-device
+compiler failures, packages private dependencies, and runs fixed, autoextended, multiple-device and duplicate-undo native
 qualification before admitting the package. It requires Linux x86-64, Docker
 and permission for the disposable fixture's loop-device and mount operations.
 It allocates its own autocleared loop device atomically; it never selects an
@@ -68,6 +71,35 @@ Select its ``bin/xtrabackup`` path and enable external-path isolation in the
 physical workspace. The package manifest binds the admitted patch, executable
 and private library hashes at review and dispatch. Unqualified candidates and
 changed package files are refused.
+
+Explicit undo tablespaces may share a filename in different directories. The
+current native package stores them as ``sr-undo-<native-number>.ibu`` during
+backup. The number comes from MySQL's reserved space-ID mapping and survives
+native space-ID rotation. Built-in ``undo_001`` and ``undo_002`` keep their native
+names. The application retains the original catalog names, source paths and
+stable undo numbers in the sealed storage metadata. Native prepare applies redo
+to the numbered files; copy-back restores each file to its own private original
+path before native startup. InnoDB pages, IDs and redo bytes are not rewritten by
+the application. Select the current qualified package and review path isolation
+for this layout. Stock utilities retain the existing unambiguous filename layout;
+they cannot back up colliding flattened names. Earlier qualified raw packages
+remain recognizable for retained preparation/copy-back/control, but new raw
+captures require the current package with the parallel-open correction.
+
+The native duplicate-name gate is
+``tools/cdeadmin_mysql_undo_storage_qualification.py --package <package>
+--fixture-image <owned-physical-fixture> --output <outside-repo>``. Application
+qualification uses ``cdeadmin_mysql_physical_keyring_qualification.py --external
+--geometry --duplicate-undo --native-backend <package>`` for encrypted full and
+incremental recovery, source/private master-key rotation, both native connectors,
+lost replies and recurring startup drills. Its browser/driver arguments exercise
+the built workspace. ``cdeadmin_mysql_physical_missing_qualification.py
+--geometry --duplicate-undo --native-backend <package> --missing-paths parent``
+qualifies encrypted incremental recovery after source shutdown and removal of
+all original mount paths, including native read-only/replay editor connections
+and private writes with the held source files unchanged. Both application gates
+also need the usual output/fixture creation or existing fixture/key arguments.
+Duplicate system-file basenames remain separate work.
 
 Original ``raw``/``newraw`` declarations stay in retained source/backup metadata.
 Preparation, private copy-back and recovery startup use regular private files

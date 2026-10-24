@@ -21,8 +21,17 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
     if external:
         _run(['docker','exec',container,'mkdir','-p','/var/lib/mysql-external/with; space 雪'])
         _run(['docker','exec',container,'chown','mysql:mysql','/var/lib/mysql-external/with; space 雪'])
+    duplicate_files=(storage or {}).get('duplicate_undo_files',[])
+    if duplicate_files:
+        for path in duplicate_files:
+            host_root=str(Path(path).parent)
+            _run(['docker','exec',container,'mkdir','-p',host_root])
+            _run(['docker','exec',container,'chown','mysql:mysql',host_root])
     with oracle.cursor() as cursor:
         if storage:cursor.execute('CREATE UNDO TABLESPACE sr_geometry_undo ADD DATAFILE %s',(storage['undo_root']+'/extra.ibu',))
+        for index,path in enumerate(duplicate_files):cursor.execute('CREATE UNDO TABLESPACE sr_duplicate_'+str(index)+' ADD DATAFILE %s',(path,))
+        if duplicate_files:
+            cursor.execute("SELECT FILE_NAME,TABLESPACE_NAME FROM information_schema.FILES WHERE FILE_TYPE='UNDO LOG' ORDER BY FILE_NAME");undo_catalog=[list(row) for row in cursor.fetchall()]
         cursor.execute("CREATE TABLE sr_osc.encrypted_data(id INT PRIMARY KEY,note VARCHAR(80),b LONGBLOB) ENCRYPTION='Y'")
         cursor.execute("INSERT INTO sr_osc.encrypted_data VALUES(1,'encrypted base 雪',X'00FF')")
         if external:
@@ -91,10 +100,14 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
             base=phase('backup');material=base['remote_observation']['artifact']['keyring']
             assert material['private_key_material_retained'] and material['encryption']=={'redo':True,'undo':True,'binlog':True}
             if external:
-                assert {row['file_name'] for row in base['native_external_files']}==set(external_files)|set(storage_files)
+                assert {row['file_name'] for row in base['native_external_files']}==set(external_files)|set(storage_files)|set(duplicate_files)
                 if storage:
                     retained=base['remote_observation']['artifact']['storage_geometry']
                     assert [row['source_file'] for row in retained['system_files']]==storage['system_files']
+                    if duplicate_files:
+                        assert retained['undo_naming']=='native-number-v1'
+                        assert len({row['backup_name'] for row in retained['undo_files']})==len(retained['undo_files'])
+                        checks.append('duplicate-native-undo-basenames-use-qualified-stable-numbers-and-retain-exact-original-paths')
                     assert storage['empty_root'] in retained['scan_directories']
                     if storage.get('filesystem_links'):
                         assert retained['resolved_paths'] and retained['catalog_files']
@@ -149,6 +162,7 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
                 session=post('open_session',language_profile='mysql-sql',history_sensitive=True)['session_id']
                 try:
                     assert execute(post,session,'SELECT note,HEX(b) FROM encrypted_data WHERE id='+str(2+int(use_c)))['rows']==[['encrypted delta 雪','00FF01']]
+                    if duplicate_files:assert execute(post,session,"SELECT FILE_NAME,TABLESPACE_NAME FROM information_schema.FILES WHERE FILE_TYPE='UNDO LOG' ORDER BY FILE_NAME")['rows']==undo_catalog
                     if storage:
                         assert execute(post,session,'SELECT @@innodb_data_file_path,@@innodb_undo_directory')['rows']==[
                             [storage['runtime_data_file_spec'],storage['undo_root']]]
@@ -216,7 +230,8 @@ if __name__=='__main__':
     parser.add_argument('--geometry',action='store_true')
     parser.add_argument('--relative-storage',action='store_true')
     parser.add_argument('--circular-storage',action='store_true')
+    parser.add_argument('--duplicate-undo',action='store_true')
     parser.add_argument('--native-backend',type=Path)
     args=parser.parse_args()
     from cdeadmin_mysql_physical_qualification import qualify
-    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,keyring_only=not args.external,external_only=args.external,keyring_desktop_only=args.desktop_only,storage_geometry=args.geometry,relative_storage=args.relative_storage,circular_storage=args.circular_storage,native_backend=args.native_backend)
+    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,keyring_only=not args.external,external_only=args.external,keyring_desktop_only=args.desktop_only,storage_geometry=args.geometry,relative_storage=args.relative_storage,circular_storage=args.circular_storage,native_backend=args.native_backend,duplicate_undo=args.duplicate_undo)

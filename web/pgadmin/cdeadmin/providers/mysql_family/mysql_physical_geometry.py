@@ -18,10 +18,22 @@ Refused=physical.Refused
 FILE='.scratchrobin-storage.json'
 STAGED='prepare-storage.json'
 VARIABLES={'innodb_data_home_dir','innodb_data_file_path','innodb_undo_directory','innodb_directories'}
+UNDO_NAMING='native-number-v1'
+
+
+def undo_number(space_id):
+    """MySQL9.7 undo::id2num; the number survives native ID rotation."""
+    if type(space_id) is not int or not 0xFFFFFFF0-127*400000<=space_id<=0xFFFFFFEF:
+        raise Refused('Native undo space ID is unavailable or outside its reserved range')
+    return (0xFFFFFFEF-space_id)%127+1
 
 
 class ResolutionRequired(Refused):
     """Only the authenticated source filesystem can resolve this path."""
+
+
+class UndoNamingRequired(ResolutionRequired):
+    """Qualified native backup names must resolve duplicate source basenames."""
 
 
 def absolute(value,base=None,*,resolve=None):
@@ -79,9 +91,10 @@ def system_spec(value):
     return result
 
 
-def from_source(request,*,filesystem=False,observed_paths=None):
+def from_source(request,*,filesystem=False,observed_paths=None,undo_naming=None):
     source=request.get('source_storage')
     if source is None:return None
+    if undo_naming not in {None,UNDO_NAMING}:raise Refused('Native undo backup naming is incompatible')
     if not isinstance(source,dict) or set(source)!={'variables','files'}:
         raise Refused('Select exact native storage variables and file identities')
     values=source['variables'];files=source['files'];datadir=absolute(request['binding']['datadir'])
@@ -105,7 +118,7 @@ def from_source(request,*,filesystem=False,observed_paths=None):
     data_home=home(values['innodb_data_home_dir'],datadir,resolve=resolve);undo_home=home(values['innodb_undo_directory'],datadir,resolve=resolve)
     system=[];undo=[];seen=set()
     for row in files:
-        if not isinstance(row,dict) or set(row)!={'file_name','tablespace_name','file_type'}:
+        if not isinstance(row,dict) or not {'file_name','tablespace_name','file_type'}<=set(row) or set(row)-{'file_name','tablespace_name','file_type','undo_number'}:
             raise Refused('Native storage file identity is unavailable')
         # System FILES names use data-home. Relative undo FILES names already
         # contain their configured undo-directory prefix and use datadir.
@@ -113,15 +126,24 @@ def from_source(request,*,filesystem=False,observed_paths=None):
         if name in seen:raise Refused('Native storage file identity is duplicated')
         seen.add(name)
         if row['file_type']=='UNDO LOG':
+            number=row.get('undo_number')
+            if 'undo_number' in row and (type(number) is not int or not 1<=number<=127):
+                raise Refused('Native undo number is unavailable or outside its engine range')
+            if undo_naming is not None and number is None:raise Refused('Observe native undo space IDs before using numbered backup names')
             undo.append({'source_file':name,'backup_name':PurePosixPath(name).name,
-                'tablespace_name':physical.host.text(row['tablespace_name'])})
-        elif row['file_type']=='TABLESPACE' and row['tablespace_name']=='innodb_system':system.append(name)
+                'tablespace_name':physical.host.text(row['tablespace_name']),**({'undo_number':number} if number is not None else {})})
+            if undo_naming is not None and number>2:undo[-1]['backup_name']='sr-undo-'+str(number)+'.ibu'
+        elif row['file_type']=='TABLESPACE' and row['tablespace_name']=='innodb_system' and 'undo_number' not in row:system.append(name)
         else:raise Refused('Select only native system and undo file identities')
     specifications=system_spec(values['innodb_data_file_path'])
     for row in specifications:row['source_file']=absolute(row['native_name'],data_home,resolve=resolve)
     if {row['source_file'] for row in specifications}!=set(system):
         raise Refused('Native system-file specification differs from its observed catalog')
-    if len({row['backup_name'] for row in undo})!=len(undo):raise Refused('Native flattened undo-file identities are ambiguous')
+    numbers=[row['undo_number'] for row in undo if 'undo_number' in row]
+    if len(numbers)!=len(set(numbers)):raise Refused('Native undo number is duplicated')
+    if len({row['backup_name'] for row in undo})!=len(undo):
+        if len(numbers)==len(undo):raise UndoNamingRequired('Duplicate native undo filenames require a qualified numbered backup layout')
+        raise Refused('Native flattened undo-file identities are ambiguous')
     directories=[]
     for value in (values['innodb_directories'] or '').split(';'):
         if not value:continue
@@ -130,18 +152,20 @@ def from_source(request,*,filesystem=False,observed_paths=None):
     if len(directories)>256:raise Refused('Native storage directory inventory exceeds its bound')
     result={'format':'mysql-9.7-storage-v1','original_datadir':datadir,'variables':values,
         'data_home':data_home,'undo_home':undo_home,'system_files':specifications,'undo_files':undo,'scan_directories':directories}
+    numbered=undo_naming is not None and any(row['undo_number']>2 for row in undo)
+    if numbered:result['undo_naming']=undo_naming
     if observed_paths is not None and resolved!=observed_paths:
         raise Refused('Retained filesystem resolution contains unobserved native paths')
     if resolved:result.update(resolved_paths=resolved,catalog_files=files)
     external=any(not PurePosixPath(row['source_file']).is_relative_to(PurePosixPath(datadir)) for row in [*specifications,*undo])
-    needed=external or bool(directories) or data_home!=datadir or undo_home!=datadir or any('/' in row['native_name'] or row.get('raw_mode') for row in specifications)
+    needed=numbered or external or bool(directories) or data_home!=datadir or undo_home!=datadir or any('/' in row['native_name'] or row.get('raw_mode') for row in specifications)
     if needed and request.get('isolate_external_paths') is not True:
         raise Refused('Review native storage-path isolation before using external system/undo files or retained scan roots')
     return result if needed else None
 
 
 def capture(request,directory,*,reviewed=None):
-    value=from_source(request,filesystem=True)
+    value=from_source(request,filesystem=True,undo_naming=reviewed.get('undo_naming') if reviewed else None)
     if reviewed is not None and value!=reviewed:
         raise Refused('Native filesystem storage paths changed after their reviewed capture')
     if value is None:return None
@@ -158,14 +182,15 @@ def audit(directory):
     if not path.exists():return None
     value=physical.read_json(path)
     required={'format','original_datadir','variables','data_home','undo_home','system_files','undo_files','scan_directories'}
-    if not isinstance(value,dict) or not required<=set(value) or set(value)-required-{'resolved_paths','catalog_files'} or value['format']!='mysql-9.7-storage-v1':
+    if not isinstance(value,dict) or not required<=set(value) or set(value)-required-{'resolved_paths','catalog_files','undo_naming'} or value['format']!='mysql-9.7-storage-v1':
         raise Refused('Retained native storage geometry is incompatible')
     if ('resolved_paths' in value)!=('catalog_files' in value):raise Refused('Retain original native catalog paths with their filesystem resolution')
     files=[{'file_name':row['source_file'],'tablespace_name':'innodb_system','file_type':'TABLESPACE'} for row in value['system_files']]
-    files.extend({'file_name':row['source_file'],'tablespace_name':row['tablespace_name'],'file_type':'UNDO LOG'} for row in value['undo_files'])
+    files.extend({'file_name':row['source_file'],'tablespace_name':row['tablespace_name'],'file_type':'UNDO LOG',
+        **({'undo_number':row['undo_number']} if 'undo_number' in row else {})} for row in value['undo_files'])
     # Preserve all original spellings; several aliases can name the same file.
     if 'catalog_files' in value:files=value['catalog_files']
-    expected=from_source({'binding':{'datadir':value['original_datadir']},'source_storage':{'variables':value['variables'],'files':files},'isolate_external_paths':True},observed_paths=value.get('resolved_paths'))
+    expected=from_source({'binding':{'datadir':value['original_datadir']},'source_storage':{'variables':value['variables'],'files':files},'isolate_external_paths':True},observed_paths=value.get('resolved_paths'),undo_naming=value.get('undo_naming'))
     if expected!=value:raise Refused('Retained native storage paths differ from their original catalog/specification')
     native=configuration(directory)
     if not configuration_matches(native,value):

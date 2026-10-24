@@ -212,3 +212,17 @@ def test_external_system_or_undo_geometry_refuses_before_any_native_preparation_
         worker.inspection({'phase':phase,'workspace':str(root),'executable':'/native/xtrabackup','input_job_id':identity,
             'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'binding':{'datadir':'/original'}})
     spawn.assert_not_called()
+
+
+def test_legacy_raw_package_can_control_old_artifacts_but_cannot_start_new_racy_backup(tmp_path,monkeypatch):
+    from test_mysql_physical_geometry import source
+    request=source();request.update(phase='backup',workspace=str(tmp_path),executable='/legacy/bin/xtrabackup',
+        parallel=2,memory_bytes=67108864,timeout_seconds=120,mysql='/usr/bin/mysql',sql_host='127.0.0.1',sql_port=3306)
+    request['source_storage']['variables']['innodb_data_file_path']='/dev/owned:32Mraw'
+    request['source_storage']['files']=[row for row in request['source_storage']['files'] if row['file_type']=='UNDO LOG']+[
+        {'file_name':'/dev/owned','tablespace_name':'innodb_system','file_type':'TABLESPACE'}]
+    monkeypatch.setattr(worker,'host_scope',lambda *_args,**_kwargs:request['binding'])
+    monkeypatch.setattr(worker,'root_directory',lambda *_args:tmp_path)
+    monkeypatch.setattr(worker,'executable',lambda *_args:{'path':'/legacy/bin/xtrabackup'})
+    monkeypatch.setattr(worker,'raw_storage_backend',lambda *_args,**_kwargs:{'patch_sha256':worker.RAW_READER_PATCH})
+    with pytest.raises(worker.Refused,match='current qualified native'):worker.inspection(request)

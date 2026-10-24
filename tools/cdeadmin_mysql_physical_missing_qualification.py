@@ -58,8 +58,17 @@ def qualify_missing(app,output,oracle,container,port,password,selected,credentia
     def source_hashes():
         return host('/usr/bin/python3','-c',
             "import pathlib,hashlib,json;p=pathlib.Path('/var/backups/scratchrobin/source-held');print(json.dumps({str(f.relative_to(p)):hashlib.sha256(f.read_bytes()).hexdigest() for f in sorted(p.rglob('*')) if f.is_file()},sort_keys=True))")
+    duplicate_files=(storage or {}).get('duplicate_undo_files',[])
+    if duplicate_files:
+        for path in duplicate_files:
+            host_root=str(Path(path).parent)
+            _run(['docker','exec',container,'mkdir','-p',host_root])
+            _run(['docker','exec',container,'chown','mysql:mysql',host_root])
     with oracle.cursor() as cursor:
         if storage:cursor.execute('CREATE UNDO TABLESPACE sr_missing_undo ADD DATAFILE %s',(storage['undo_root']+'/extra.ibu',))
+        for index,path in enumerate(duplicate_files):cursor.execute('CREATE UNDO TABLESPACE sr_duplicate_'+str(index)+' ADD DATAFILE %s',(path,))
+        if duplicate_files:
+            cursor.execute("SELECT FILE_NAME,TABLESPACE_NAME FROM information_schema.FILES WHERE FILE_TYPE='UNDO LOG' ORDER BY FILE_NAME");undo_catalog=[list(row) for row in cursor.fetchall()]
         cursor.execute("CREATE TABLE sr_osc.encrypted_missing(id INT PRIMARY KEY,note VARCHAR(80),b LONGBLOB) ENCRYPTION='Y'")
         cursor.execute("INSERT INTO sr_osc.encrypted_missing VALUES(1,'native missing 雪',X'00FF01')")
         cursor.execute("CREATE TABLE sr_osc.external_missing(id INT PRIMARY KEY,note VARCHAR(80)) ENGINE=InnoDB ENCRYPTION='Y' DATA DIRECTORY=%s",(external_root,))
@@ -117,8 +126,16 @@ def qualify_missing(app,output,oracle,container,port,password,selected,credentia
             try:
                 with guard.cursor() as cursor:
                     cursor.execute('INSERT INTO sr_osc.pending VALUES(%s)',(22500+int(use_c),));cursor.execute('SAVEPOINT missing_guard')
-                base=case.phase('backup');prepared=case.phase('prepare',base['job_id']);case.copied=case.phase('copy_back',prepared['job_id'])
-                assert len(base['native_external_files'])==(7 if storage else 2)
+                base=case.phase('backup')
+                if duplicate_files:
+                    with oracle.cursor() as cursor:cursor.execute("INSERT INTO sr_osc.encrypted_missing VALUES(%s,'native duplicate delta',X'AAFF')",(10+int(use_c),))
+                    delta=case.wait(case.start(case.review('incremental',base['job_id'])))
+                    redo=case.phase('prepare_redo',base['job_id'])
+                    applied=case.wait(case.start(case.review('prepare_redo',redo['job_id'],incremental_job_id=delta['job_id'])))
+                    prepared=case.phase('prepare',applied['job_id'])
+                else:prepared=case.phase('prepare',base['job_id'])
+                case.copied=case.phase('copy_back',prepared['job_id'])
+                assert len(base['native_external_files'])==((7 if storage else 2)+len(duplicate_files))
                 if storage:
                     retained=base['remote_observation']['artifact']['storage_geometry']
                     assert retained['data_home']==(storage['system_root'] if storage['data_home'] else datadir)
@@ -152,10 +169,13 @@ def qualify_missing(app,output,oracle,container,port,password,selected,credentia
                 def post(action,**body):return query_post(case.client,endpoint(app,case.attached['server_id']),case.attached['database_target_id'],action,**body)
                 session=post('open_session',language_profile='mysql-sql',history_sensitive=True)['session_id']
                 try:
-                    assert execute(post,session,'SELECT note,HEX(b) FROM encrypted_missing')['rows']==[['native missing 雪','00FF01']]
+                    assert execute(post,session,'SELECT note,HEX(b) FROM encrypted_missing WHERE id=1')['rows']==[['native missing 雪','00FF01']]
                     assert execute(post,session,'SELECT CAST(id AS CHAR),HEX(b) FROM t')['rows']==[['18446744073709551615','00FF']]
                     for table in ('external_missing','general_missing'):
                         assert execute(post,session,'SELECT note FROM '+table)['rows']==[['native original external']]
+                    if duplicate_files:
+                        assert execute(post,session,"SELECT FILE_NAME,TABLESPACE_NAME FROM information_schema.FILES WHERE FILE_TYPE='UNDO LOG' ORDER BY FILE_NAME")['rows']==undo_catalog
+                        assert execute(post,session,'SELECT HEX(b) FROM encrypted_missing WHERE id='+str(10+int(case.use_c)))['rows']==[['AAFF']]
                     if mode=='replay':
                         execute(post,session,'ALTER INSTANCE ROTATE INNODB MASTER KEY')
                         execute(post,session,"CREATE TABLE external_new(id INT PRIMARY KEY) ENGINE=InnoDB DATA DIRECTORY='"+external_root+"'")
@@ -193,6 +213,8 @@ if __name__=='__main__':
     parser.add_argument('--geometry',action='store_true')
     parser.add_argument('--relative-storage',action='store_true')
     parser.add_argument('--circular-storage',action='store_true')
+    parser.add_argument('--duplicate-undo',action='store_true')
+    parser.add_argument('--native-backend',type=Path)
     args=parser.parse_args()
     from cdeadmin_mysql_physical_qualification import qualify
-    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,missing_paths=args.missing_paths,storage_geometry=args.geometry,relative_storage=args.relative_storage,circular_storage=args.circular_storage)
+    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,missing_paths=args.missing_paths,storage_geometry=args.geometry,relative_storage=args.relative_storage,circular_storage=args.circular_storage,native_backend=args.native_backend,duplicate_undo=args.duplicate_undo)

@@ -16,3 +16,6 @@ web/pgadmin/static/js/cdeadmin_ui/specifications/ai_discovery_zero_grey/**/*.md 
 
 # Unified patches preserve a single context prefix on otherwise blank lines.
 tools/driver_patches/mysql-connector-python-26.7.0-query-attributes.patch whitespace=-blank-at-eol
+
+# Native GPL source patches retain upstream blank context lines.
+tools/native/mysql_physical/raw-reader.patch whitespace=-blank-at-eol

@@ -45,7 +45,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False,circular_storage=False,reconciliation_only=False,legacy_sources=None,native_backend=None):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False,circular_storage=False,reconciliation_only=False,legacy_sources=None,native_backend=None,duplicate_undo=False):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -105,6 +105,9 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             storage['scan_settings']=';'.join(setting(root) if circular_storage and root!=external_root else posixpath.relpath(root,datadir) if relative_storage else root for root in (external_root,storage['undo_root'],storage['empty_root']))
             storage['data_file_spec']=('system one 雪:12M;system.two:12M:autoextend' if storage['data_home'] else
                 storage['system_files'][0]+':12M;'+storage['system_files'][1]+':12M:autoextend')
+        if duplicate_undo:
+            if not storage:raise ValueError('Select native storage geometry for duplicate undo qualification')
+            storage['duplicate_undo_files']=[storage['undo_root']+'/a/same.ibu',storage['undo_root']+'/b/same.ibu']
         if storage:storage['runtime_data_file_spec']=';'.join(path+suffix for path,suffix in zip(storage['system_files'],(':12M',':12M:autoextend'))) if circular_storage else storage['data_file_spec']
         key = prepare_fixture(output,image,keyring=encrypted,external=external_only or bool(missing_paths),missing_paths=missing_paths or ('parent' if reconciliation_only else None),storage=storage,native_backend=native_backend) if prepare else Path(key).resolve(strict=True)
         proof['fixture_image'] = _image_identity(image)

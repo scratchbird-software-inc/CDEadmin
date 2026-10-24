@@ -190,7 +190,7 @@ and autoextended raw system files, multiple raw devices, native system-file
 copy-back and private file aliases when original device nodes are absent.
 Native system-space payloads, incremental recovery and the built desktop have
 separate qualification; see :doc:`mysql_physical_backups` for the dependency.
-Unmapped legacy layouts and duplicate flattened undo basenames remain open alongside system-state,
+Duplicate system-file basenames and unmapped legacy layouts remain open alongside system-state,
 guardian, cutover and broader inventory requirements.
 Managed physical targets now support separately reviewed expected-dump acceptance
 through private-socket or TCP connections, with full counts, native checksums and

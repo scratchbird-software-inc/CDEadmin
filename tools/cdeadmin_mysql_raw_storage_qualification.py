@@ -78,6 +78,7 @@ def main():
     parser.add_argument('--fixed-receipt',type=Path)
     parser.add_argument('--auto-receipt',type=Path)
     parser.add_argument('--multiple',action='store_true')
+    parser.add_argument('--undo-receipt',type=Path)
     options=parser.parse_args();pkg=options.package.resolve(strict=True);out=options.output.resolve()
     if out==ROOT or ROOT in out.parents:raise ValueError('Keep qualification output outside source')
     assert (pkg/'PROVENANCE.json').is_file(),'Package the completed native candidate first'
@@ -204,8 +205,16 @@ def main():
      auto=json.loads(options.auto_receipt.read_text())
      assert auto['complete'] and auto['owned_container_and_data_removed'] and auto['loop_cleanup_observation'].get('owned_loop_detached')
      assert auto['native_package']['binary_sha256']==value['binary_sha256'] and auto['autoextended_payload_verified'] and auto['original_source_block_and_files_unchanged']
-     value.update(research_candidate_only=False,capabilities=['raw-system-files-v1'],application_raw_admission=True)
+     numbered=value['patch_sha256']=='dd79a7fc860b0bf063c8eb3f8d5bc49f331cc33c02bc3d1297d53fa867e4a610'
+     if numbered:
+      assert options.undo_receipt,'Qualify duplicate native undo paths before package admission'
+      undo=json.loads(options.undo_receipt.read_text())
+      assert undo['complete'] and undo['owned_container_and_data_removed'] and undo['original_source_files_unchanged'] and undo['original_recovery_end_observed']
+      assert undo['native_package']['binary_sha256']==value['binary_sha256'] and undo['source_undo_catalog']==undo['recovered_undo_catalog']
+      assert undo['backed_up_undo_files']==['sr-undo-3.ibu','sr-undo-4.ibu','undo_001','undo_002']
+     value.update(research_candidate_only=False,capabilities=['raw-system-files-v1']+(['undo-numbers-v1'] if numbered else []),application_raw_admission=True)
      value['qualification']={'scope':'native raw system files','binary_sha256':value['binary_sha256'],'qualified_extents':['fixed','autoextended'],'multiple_system_files':True,'source_block_fd_access_modes':proof['backup']['source_block_fd_access_modes'],'source_bytes_unchanged':True,'configured_extent_bytes':proof['backup_system_bytes'],'device_capacity_bytes':proof['source_device_capacity_bytes']}
+     if numbered:value['qualification']['duplicate_undo_paths']=True
      (pkg/'PROVENANCE.json').write_text(json.dumps(value,indent=2)+'\n')
      try:
       scope={};exec(bootstrap,scope)
