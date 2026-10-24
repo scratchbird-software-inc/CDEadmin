@@ -10,7 +10,7 @@ starts and supervises a private data copy. Selected log recovery, independent
 exported-data/definition acceptance, dependency-aware retention and scheduling
 have separate reviewed workflows. Native GPL file-keyring recovery is described
 below. Native system/undo geometry and external InnoDB table/tablespace isolation
-are also described below. Circular filesystem references, raw-device files,
+are also described below. Raw-device files,
 unmapped legacy layouts and external MERGE-path admission,
 unexported/system-state acceptance and production cutover remain open under
 ``CMP-MY-01``.
@@ -753,7 +753,7 @@ include private external runtime files and interrupted copy-back input copies.
 
 This admission covers InnoDB per-table external data and general tablespaces,
 with retained native system/undo geometry as described below.
-Circular filesystem references, raw-device files, unmapped legacy layouts and external MERGE members,
+Raw-device files, unmapped legacy layouts and external MERGE members,
 broader engine inventory, system-state acceptance, legacy/guardian
 resolution and production cutover remain tracked recovery work. Unsupported
 unmapped absolute system geometry and external undo storage refuse before
@@ -815,7 +815,7 @@ DDL. All held original source files remain unchanged through recovery and stop.
 Use ``tools/cdeadmin_mysql_physical_keyring_qualification.py --external --geometry``
 for the native encrypted incremental workflow. Add ``--geometry`` to either
 missing-path qualification variant above for source-offline recovery. Native
-filesystem resolution for circular path references, raw-device specifications and
+raw-device specifications and
 duplicate flattened undo basenames require further backend admission. Legacy
 artifacts without the required retained mapping remain refused before native
 preparation or copy-back. These boundaries remain recovery implementation work.
@@ -833,7 +833,28 @@ configured directories are retained even when no external file requires them.
 
 Add ``--relative-storage`` to the geometry qualification commands to exercise
 native encrypted full/incremental recovery, recurring drills, and source-offline
-missing parent/root directories through both connectors. Circular references
-with parent traversal after a descended path component remain refused until
-their actual filesystem resolution can be retained; they are not normalized by
-guessing across possible symlinks.
+missing parent/root directories through both connectors.
+
+Observed filesystem paths
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Paths containing a parent reference after a descended component are resolved
+on the authenticated database host. Symbolic links are followed before ``..``;
+lexical path normalization cannot establish this identity. The reviewed and
+sealed metadata retains the original settings and catalog spellings together
+with the observed effective paths. Changed or unavailable resolution prevents
+verified publication. Preparation and copy-back still use private utility
+destinations; runtime storage options use the retained canonical identities.
+
+The original source traversal directories and links are unnecessary during
+recovery. Offline metadata audit uses retained observations bound to the sealed
+artifact and copy-back. Add ``--circular-storage`` alongside ``--geometry
+--relative-storage`` to exercise actual symlink/parent traversal with encrypted
+incrementals, recurring drills and source-offline missing parent/root recovery
+through both connectors.
+
+Raw-device recovery remains open. An owned loop-device probe starts MySQL, but
+the pinned XtraBackup raw specification refuses. Removing that marker reports
+success while copying zero system pages; native preparation fails. Native
+Clone also reports completion with a zero-byte system file. Neither result
+establishes usable recovery, and neither is admitted as a physical backup.

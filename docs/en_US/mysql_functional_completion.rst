@@ -2108,7 +2108,11 @@ directories are qualified through both connectors. Native relative homes and
 scan roots retain original settings and effective paths; system and undo
 catalog names use their native data-home/datadir bases. Nested homes and leading
 parent references feed the same encrypted recovery and source-offline workflows.
-Circular filesystem references, raw-device files, duplicate flattened undo basenames, unmapped legacy
+Circular paths now retain observed native filesystem resolution and original
+catalog spellings, including symbolic links followed by parent traversal.
+Private runtime paths and offline audit use the sealed canonical mapping;
+encrypted incrementals, recurring drills and missing parent/root recovery are
+qualified through both connectors. Raw-device files, duplicate flattened undo basenames, unmapped legacy
 layouts, external MERGE members and the broader recovery/inventory gates remain
 open. Unmapped geometry refuses before native preparation or copy-back.
 See :doc:`mysql_physical_backups`.

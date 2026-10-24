@@ -177,7 +177,11 @@ drills and source-offline recovery through both connectors are qualified.
 Native relative homes/scan roots, nested directories and leading parent
 references now retain their effective paths without discarding original
 settings. System and undo catalog paths use their distinct native bases.
-Circular filesystem references, raw-device files, unmapped legacy layouts,
+Circular paths now retain actual host filesystem resolution, including symbolic
+links followed by parent traversal. Original catalog spellings survive offline
+audit; private runtime options use canonical identities. Native encrypted
+incrementals, recurring drills and source-offline recovery qualify this mapping
+through both connectors. Raw-device files, unmapped legacy layouts,
 duplicate flattened undo basenames and external MERGE members remain open alongside system-state,
 guardian, cutover and broader inventory requirements.
 Managed physical targets now support separately reviewed expected-dump acceptance

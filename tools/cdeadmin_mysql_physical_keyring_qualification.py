@@ -96,6 +96,10 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
                     retained=base['remote_observation']['artifact']['storage_geometry']
                     assert [row['source_file'] for row in retained['system_files']]==storage['system_files']
                     assert storage['empty_root'] in retained['scan_directories']
+                    if storage.get('filesystem_links'):
+                        assert retained['resolved_paths'] and retained['catalog_files']
+                        assert retained['data_home']==storage['system_root'] and retained['undo_home']==storage['undo_root']
+                        checks.append('native-symlink-parent-paths-retain-host-observed-effective-identities-and-original-catalog-spellings')
             with oracle.cursor() as cursor:
                 cursor.execute('ALTER INSTANCE ROTATE INNODB MASTER KEY')
                 cursor.execute('INSERT INTO sr_osc.encrypted_data VALUES(%s,%s,%s)',(2+int(use_c),'encrypted delta 雪',b'\x00\xff\x01'))
@@ -147,7 +151,7 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
                     assert execute(post,session,'SELECT note,HEX(b) FROM encrypted_data WHERE id='+str(2+int(use_c)))['rows']==[['encrypted delta 雪','00FF01']]
                     if storage:
                         assert execute(post,session,'SELECT @@innodb_data_file_path,@@innodb_undo_directory')['rows']==[
-                            [storage['data_file_spec'],storage['undo_root']]]
+                            [storage['runtime_data_file_spec'],storage['undo_root']]]
                     if external:
                         for table in external_tables:
                             assert execute(post,session,'SELECT note FROM '+table+' WHERE id='+str(2+int(use_c)))['rows']==[['native external delta']]
@@ -211,6 +215,7 @@ if __name__=='__main__':
     parser.add_argument('--desktop-only',action='store_true')
     parser.add_argument('--geometry',action='store_true')
     parser.add_argument('--relative-storage',action='store_true')
+    parser.add_argument('--circular-storage',action='store_true')
     args=parser.parse_args()
     from cdeadmin_mysql_physical_qualification import qualify
-    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,keyring_only=not args.external,external_only=args.external,keyring_desktop_only=args.desktop_only,storage_geometry=args.geometry,relative_storage=args.relative_storage)
+    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,keyring_only=not args.external,external_only=args.external,keyring_desktop_only=args.desktop_only,storage_geometry=args.geometry,relative_storage=args.relative_storage,circular_storage=args.circular_storage)

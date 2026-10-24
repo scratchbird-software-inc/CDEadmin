@@ -781,6 +781,9 @@ startup drills and source-offline recovery with missing parent/root directories
 have native evidence through both connectors. Relative homes/scan roots, nested
 directories and leading parent references now use native data-home/datadir
 resolution and retain original settings alongside effective paths. Circular
-filesystem resolution, raw devices, duplicate flattened undo names, unmapped legacy layouts,
+paths now retain observed filesystem identities and original catalog spellings,
+including symbolic links followed by parent traversal. Encrypted incremental
+and source-offline recovery use the same sealed mapping through both connectors.
+Raw devices, duplicate flattened undo names, unmapped legacy layouts,
 external MERGE members and the
 remaining inventory/system-state/guardian/cutover work still precede handoff.

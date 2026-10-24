@@ -63,10 +63,18 @@ def source(service, server, *, admitted=None, keyring=None, isolate_external_pat
         files=rows(connection,'SELECT CAST(PATH AS CHAR CHARACTER SET utf8mb4) AS file_name FROM information_schema.INNODB_DATAFILES ORDER BY PATH')
         try:
             geometry=native.worker.geometry_module()
-            effective=[geometry.absolute(row['file_name'],str(data)) for row in files]
+            effective=[]
+            for row in files:
+                try:effective.append(geometry.absolute(row['file_name'],str(data)))
+                except geometry.ResolutionRequired:
+                    captured['state']['native_storage_resolution_pending']=True
             external=[{'file_name':name} for name in sorted(set(effective)) if not PurePosixPath(name).is_relative_to(data)]
-            storage=geometry.from_source({'source_storage':captured['state']['native_storage_source'],
-                'binding':captured['state']['host_binding'],'isolate_external_paths':isolate_external_paths})
+            try:
+                storage=geometry.from_source({'source_storage':captured['state']['native_storage_source'],
+                    'binding':captured['state']['host_binding'],'isolate_external_paths':isolate_external_paths})
+            except geometry.ResolutionRequired:
+                if isolate_external_paths is not True:raise native.HostError('Review native filesystem path isolation before resolving source storage paths') from None
+                captured['state']['native_storage_resolution_pending']=True;storage=None
         except native.worker.Refused as error:raise native.HostError(str(error)) from None
         if storage is not None:
             modeled,_directories=native.worker.geometry_module().external_entries(storage)
@@ -154,7 +162,7 @@ class PhysicalJobs(MySQLBinlogJobs):
         'The admitted backend is upstream XtraBackup9.7.1-rc1, a release candidate. Its original native replies, verified files and recovery acceptance are separate facts.',
         'Full backups take native backup/read locks and copy complete supported instance files. Prepare mutates a separate private copy. Copy-back creates only a new isolated job data directory; it never overwrites the live data directory or starts a database.',
         'Native processes run under an independent supervisor on the authenticated database SSH host. Closing the viewer or losing a reply does not cancel or roll back native work. An original unknown dispatch is never automatically repeated.',
-        'This workflow requires complete, uncompressed native backup files. Encrypted data/log recovery requires explicitly retained native file-keyring material and matching components. Incrementals require exact base lineage and contiguous LSNs; apply to separate redo-only copies, then finalize. Native system/undo and external tablespace paths require retained source metadata and reviewed Linux filesystem isolation. Relative homes/scan roots resolve from the native datadir and recovery uses the retained effective paths. Circular filesystem references, raw-device files, unmapped legacy layouts and external MERGE members require additional admission. Production cutover remains separate.',
+        'This workflow requires complete, uncompressed native backup files. Encrypted data/log recovery requires explicitly retained native file-keyring material and matching components. Incrementals require exact base lineage and contiguous LSNs; apply to separate redo-only copies, then finalize. Native system/undo and external tablespace paths require retained source metadata and reviewed Linux filesystem isolation. Relative homes/scan roots resolve from the native datadir and recovery uses the retained effective paths. Circular paths require retained filesystem resolution observed on the database host. Raw-device files, unmapped legacy layouts and external MERGE members require additional admission. Production cutover remains separate.',
         'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account with a fresh UUID, private Unix socket and selected loopback TCP listener. Read-only inspection is the default. Explicit replay startup is writable with private ROW binary logging and the selected server ID. Both disable events/replication autostart and automatic upgrades, and end on stop or reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
         'Physical files and native output are private to the selected host OS account. Broad source archive protection is acquired before backup dispatch and is retired only by its separate reviewed protection workflow.',
         'Physical recovery preserves MEMORY table definitions; native MySQL discards their volatile rows on restart. Inspect the listed MEMORY tables and use the logical backup workflow when their current rows must be retained.',
@@ -384,6 +392,13 @@ def _action(service, server, operation, request, *, source_capture=None,database
             if tls is not None: captured['state']['sql_tls_policy'] = tls['policy']
         provisional = {'options': selected, 'source': captured['identity'], 'source_state': {**captured['state'], 'remote_review': {}}, 'job_id': '', 'review_digest': ''}
         observed = transport.request(remote_request(provisional, 'inspect'))
+        if captured['state'].get('native_storage_resolution_pending'):
+            resolved=observed.get('external_paths',{}).get('storage')
+            if not resolved or not resolved.get('resolved_paths'):
+                raise native.HostError('Native source filesystem resolution was not observed on its authenticated host')
+            modeled,_directories=native.worker.geometry_module().external_entries(resolved)
+            captured['state']['native_external_files']=[{'file_name':name} for name in sorted(
+                {row['file_name'] for row in captured['state'].get('native_external_files',[])}|{row['file_name'] for row in modeled})]
         captured['state']['remote_review'] = observed
         if scheduled_policy_id is not None:captured['state'].update(backup_schedule_id=scheduled_policy_id,schedule_operation=scheduled_operation or 'mysql_scheduled_physical_backup')
         program = {**native.program(), 'execution_host': {**peer, 'kind': 'database-server-ssh-host', 'workspace': selected['workspace']}}

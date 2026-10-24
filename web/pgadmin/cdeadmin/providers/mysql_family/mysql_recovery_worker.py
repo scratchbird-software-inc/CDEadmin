@@ -63,7 +63,7 @@ def configuration(path, *, keyring=False, original_datadir=None, mapped_storage=
             raise Refused('Native recovery geometry is not an admitted enumeration')
     if mapped_storage is not None:
         if (values.get('innodb_data_file_path')!=mapped_storage['variables']['innodb_data_file_path'] or
-                physical.geometry_module().home(values.get('innodb_undo_directory','./'),mapped_storage['original_datadir'])!=mapped_storage['undo_home']):
+                values.get('innodb_undo_directory','./')!=mapped_storage['variables']['innodb_undo_directory']):
             raise Refused('Native backup geometry differs from its retained private mapping')
     if 'innodb_data_file_path' in values and mapped_storage is None:
         # Native basename/size/autoextend syntax; absolute/external system-file

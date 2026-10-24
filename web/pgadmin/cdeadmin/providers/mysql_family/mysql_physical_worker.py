@@ -279,7 +279,7 @@ def inspection(request):
     if keyring is not None:observed['keyring']=keyring
     entries=observed.get('incremental_input',observed.get('input',{})).get('artifact',{}).get('external_tablespaces',[])
     storage=observed.get('incremental_input',observed.get('input',{})).get('artifact',{}).get('storage_geometry')
-    if phase in {'backup','incremental'}:storage=geometry_module().from_source(request)
+    if phase in {'backup','incremental'}:storage=geometry_module().from_source(request,filesystem=True)
     external=paths_module().admission(request,entries,storage=storage)
     if external is not None:
         observed['external_paths']=external
@@ -463,7 +463,7 @@ def execute(directory):
             keyring_module().restore_prepare_material(directory,target)
             geometry_module().restore_prepare(directory,target)
         if child.returncode == 0:
-            if phase in {'backup','incremental'}:geometry_module().capture(request,target)
+            if phase in {'backup','incremental'}:geometry_module().capture(request,target,reviewed=observed.get('external_paths',{}).get('storage'))
             if phase in {'backup','incremental'} and observed.get('keyring'):
                 keyring_module().capture(directory,target,observed['keyring'])
             if phase == 'copy_back':

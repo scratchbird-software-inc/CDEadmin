@@ -123,6 +123,10 @@ def qualify_missing(app,output,oracle,container,port,password,selected,credentia
                     retained=base['remote_observation']['artifact']['storage_geometry']
                     assert retained['data_home']==(storage['system_root'] if storage['data_home'] else datadir)
                     assert retained['variables']['innodb_data_file_path']==storage['data_file_spec']
+                    if storage.get('filesystem_links'):
+                        assert retained['resolved_paths'] and retained['catalog_files']
+                        assert retained['data_home']==storage['system_root'] and retained['undo_home']==storage['undo_root']
+                        case.checks.append('native-symlink-parent-paths-retain-host-observed-effective-identities-and-original-catalog-spellings')
                     assert [row['source_file'] for row in retained['system_files']]==storage['system_files']
                     assert storage['empty_root'] in retained['scan_directories']
                 with guard.cursor() as cursor:
@@ -164,7 +168,7 @@ def qualify_missing(app,output,oracle,container,port,password,selected,credentia
                             execute(post,session,"CREATE UNDO TABLESPACE sr_private_undo ADD DATAFILE '"+storage['undo_root']+"/private.ibu'")
                     if storage:
                         assert execute(post,session,'SELECT @@innodb_data_file_path,@@innodb_undo_directory')['rows']==[
-                            [storage['data_file_spec'],storage['undo_root']]]
+                            [storage['runtime_data_file_spec'],storage['undo_root']]]
                 finally:post('close_session',session_id=session)
                 assert absent() and source_hashes()==original
                 case.close()
@@ -188,6 +192,7 @@ if __name__=='__main__':
     parser.add_argument('--private-key');parser.add_argument('--missing-paths',choices=('parent','root'),required=True)
     parser.add_argument('--geometry',action='store_true')
     parser.add_argument('--relative-storage',action='store_true')
+    parser.add_argument('--circular-storage',action='store_true')
     args=parser.parse_args()
     from cdeadmin_mysql_physical_qualification import qualify
-    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,missing_paths=args.missing_paths,storage_geometry=args.geometry,relative_storage=args.relative_storage)
+    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,missing_paths=args.missing_paths,storage_geometry=args.geometry,relative_storage=args.relative_storage,circular_storage=args.circular_storage)

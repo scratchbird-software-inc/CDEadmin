@@ -180,3 +180,73 @@ def test_internal_nondefault_homes_are_retained_even_without_external_files():
         row['file_name']='./'+Path(row['file_name']).name if row['file_type']=='TABLESPACE' else 'undo/'+Path(row['file_name']).name
     value=geometry.from_source(request)
     assert value and value['data_home']=='/server/data/system' and value['undo_home']=='/server/data/undo'
+
+
+def circular_source(tmp_path):
+    request=source();data=tmp_path/'data';data.mkdir()
+    request['binding']['datadir']=str(data)
+    for name in ('system','undo','empty'):
+        root=tmp_path/name;(root/'deep/nested').mkdir(parents=True)
+        (root/'deep/leaf').mkdir();(root/'link').symlink_to(root/'deep/nested',target_is_directory=True)
+    values=request['source_storage']['variables']
+    values.update(innodb_data_home_dir='../system/link/../leaf',
+        innodb_data_file_path='first:12M;second:12M:autoextend',innodb_undo_directory='../undo/link/../leaf',
+        innodb_directories='../empty/link/../leaf')
+    for row in request['source_storage']['files']:
+        name=Path(row['file_name']).name
+        row['file_name']=name if row['file_type']=='TABLESPACE' else '../undo/link/../leaf/'+name
+        ((tmp_path/('system' if row['file_type']=='TABLESPACE' else 'undo')/'deep/leaf')/name).write_bytes(b'owned native file')
+    return request
+
+
+def test_native_filesystem_resolution_preserves_symlink_parent_semantics_and_offline_audit(tmp_path):
+    request=circular_source(tmp_path)
+    with pytest.raises(geometry.ResolutionRequired):geometry.from_source(request)
+    value=geometry.from_source(request,filesystem=True)
+    assert value['data_home']==str(tmp_path/'system/deep/leaf')
+    assert value['undo_home']==str(tmp_path/'undo/deep/leaf')
+    assert value['scan_directories']==[str(tmp_path/'empty/deep/leaf')]
+    assert value['catalog_files']==request['source_storage']['files']
+    artifact=tmp_path/'artifact';artifact.mkdir()
+    (artifact/'backup-my.cnf').write_text('[mysqld]\ninnodb_data_file_path='+value['variables']['innodb_data_file_path']+
+        '\ninnodb_undo_directory='+value['variables']['innodb_undo_directory']+'\n')
+    assert geometry.capture(request,artifact,reviewed=value)==value
+    import shutil
+    for name in ('system','undo','empty'):shutil.rmtree(tmp_path/name)
+    assert geometry.audit(artifact)==value
+    assert recovery.configuration(artifact/'backup-my.cnf',mapped_storage=value)['innodb_data_file_path']==value['variables']['innodb_data_file_path']
+
+
+def test_source_filesystem_resolution_must_still_match_original_review(tmp_path):
+    request=circular_source(tmp_path);value=geometry.from_source(request,filesystem=True)
+    root=tmp_path/'empty';(root/'other/leaf').mkdir(parents=True);(root/'other/nested').mkdir()
+    (root/'link').unlink();(root/'link').symlink_to(root/'other/nested',target_is_directory=True)
+    with pytest.raises(worker.Refused,match='changed after'):geometry.capture(request,tmp_path/'unused',reviewed=value)
+
+
+@pytest.mark.parametrize('fault',['missing','extra','relative','circular','catalog'])
+def test_retained_resolution_cannot_omit_or_invent_original_filesystem_paths(tmp_path,fault):
+    request=circular_source(tmp_path);value=geometry.from_source(request,filesystem=True);observed=deepcopy(value['resolved_paths'])
+    key=next(iter(observed))
+    if fault=='missing':del observed[key]
+    elif fault=='extra':observed['/unobserved/link/../file']='/unobserved/file'
+    elif fault=='relative':observed[key]='relative'
+    elif fault=='circular':observed[key]='/again/link/../file'
+    else:request['source_storage']['files'][0]['file_name']='unobserved-system-file'
+    with pytest.raises(worker.Refused):geometry.from_source(request,observed_paths=observed)
+
+
+def test_missing_circular_source_directory_is_not_lexically_guessed(tmp_path):
+    request=circular_source(tmp_path);(tmp_path/'system/link').unlink()
+    with pytest.raises(worker.Refused,match='unavailable'):geometry.from_source(request,filesystem=True)
+
+
+def test_runtime_uses_retained_system_identities_after_original_traversal_dirs_disappear(tmp_path):
+    request=circular_source(tmp_path);value=geometry.from_source(request,filesystem=True)
+    context=paths.admission({**request,'phase':'copy_back'},[],storage=value)
+    directory=tmp_path/'runtime';data=directory/'data';(data/'external-data').mkdir(parents=True)
+    aliases,args=paths.runtime(directory,data,context)
+    assert '--innodb-data-home-dir='+value['data_home'] in args
+    assert '--innodb-undo-directory='+value['undo_home'] in args
+    assert '--innodb-data-file-path='+str(tmp_path/'system/deep/leaf/first')+':12M;'+str(tmp_path/'system/deep/leaf/second')+':12M:autoextend' in args
+    assert all('..' not in Path(row['source_root']).parts for row in aliases)

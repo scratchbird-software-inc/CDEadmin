@@ -123,10 +123,13 @@ def runtime(directory,data,context):
         scan=sorted(set(storage['scan_directories'])|{str(path) for path in roots(entries)})
     data_home=context['original_datadir'] if storage is None else storage['variables']['innodb_data_home_dir']
     if storage is not None and data_home not in {'','.', './'}:data_home=storage['data_home']
-    return selected,['--datadir='+context['original_datadir'],
+    arguments=['--datadir='+context['original_datadir'],
         '--innodb-data-home-dir='+data_home,
         '--innodb-undo-directory='+(context['original_datadir'] if storage is None else storage['undo_home']),
         '--innodb-directories='+';'.join(scan)]
+    if storage is not None and storage.get('resolved_paths'):
+        arguments.append('--innodb-data-file-path='+';'.join(row['source_file']+':'+row['suffix'] for row in storage['system_files']))
+    return selected,arguments
 
 
 def roots(entries):

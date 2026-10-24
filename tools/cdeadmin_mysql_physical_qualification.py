@@ -33,6 +33,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
         ('RUN mkdir -p /sr-source225/mysql /sr-external225 && chown -R mysql:mysql /sr-source225 /sr-external225\n' if missing_paths=='root' else '')+
         ('RUN mkdir -p '+ ' '.join(storage[key] for key in ('system_root','undo_root','empty_root'))+
          ' && chown mysql:mysql '+ ' '.join(storage[key] for key in ('system_root','undo_root','empty_root'))+'\n' if storage else '')+
+        ('RUN '+ ' && '.join('mkdir -p '+target+' && ln -s '+target+' '+link for link,target in storage.get('filesystem_links',[]))+'\n' if storage and storage.get('filesystem_links') else '')+
         'COPY authorized_keys /root/.ssh/authorized_keys\n'
         'RUN chmod 600 /root/.ssh/authorized_keys && printf "%s\\n" "PermitRootLogin prohibit-password" "PasswordAuthentication no" "UsePAM no" "PrintMotd no" > /etc/ssh/sshd_config.d/physical-fixture.conf && xtrabackup --version\n'
         'COPY start.sh /opt/physical-start.sh\nENTRYPOINT ["/bin/bash","/opt/physical-start.sh"]\nCMD ["mysqld"]\n')
@@ -41,7 +42,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False,circular_storage=False):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -85,14 +86,22 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
         prefix='/sr-geometry227' if missing_paths=='root' else '/var/lib/mysql'
         storage={key:prefix+'-'+suffix for key,suffix in [('system_root','system'),('undo_root','undo'),('empty_root','empty')]} if storage_geometry else None
         if storage:
+            if circular_storage and not relative_storage:raise ValueError('Select relative storage for circular-path qualification')
             if relative_storage:storage={key:value+'/deep' for key,value in storage.items()}
+            if circular_storage:
+                storage={key:value+'/leaf' for key,value in storage.items()}
+                storage['filesystem_links']=[(str(Path(storage[key]).parent.parent/'link'),str(Path(storage[key]).parent/'nested')) for key in ('system_root','undo_root','empty_root')]
             storage['system_files']=[storage['system_root']+'/system one 雪',storage['system_root']+'/system.two']
             import posixpath
             storage['data_home']=posixpath.relpath(storage['system_root'],datadir) if relative_storage else storage['system_root'] if missing_paths=='root' else ''
             storage['undo_setting']=posixpath.relpath(storage['undo_root'],datadir) if relative_storage else storage['undo_root']
-            storage['scan_settings']=';'.join(posixpath.relpath(root,datadir) if relative_storage else root for root in (external_root,storage['undo_root'],storage['empty_root']))
+            if circular_storage:
+                def setting(root):return posixpath.relpath(str(Path(root).parent.parent/'link'),datadir)+'/../leaf'
+                storage['data_home']=setting(storage['system_root']);storage['undo_setting']=setting(storage['undo_root'])
+            storage['scan_settings']=';'.join(setting(root) if circular_storage and root!=external_root else posixpath.relpath(root,datadir) if relative_storage else root for root in (external_root,storage['undo_root'],storage['empty_root']))
             storage['data_file_spec']=('system one 雪:12M;system.two:12M:autoextend' if storage['data_home'] else
                 storage['system_files'][0]+':12M;'+storage['system_files'][1]+':12M:autoextend')
+        if storage:storage['runtime_data_file_spec']=';'.join(path+suffix for path,suffix in zip(storage['system_files'],(':12M',':12M:autoextend'))) if circular_storage else storage['data_file_spec']
         key = prepare_fixture(output,image,keyring=encrypted,external=external_only or bool(missing_paths),missing_paths=missing_paths,storage=storage) if prepare else Path(key).resolve(strict=True)
         proof['fixture_image'] = _image_identity(image)
         _run(['docker','volume','create',volume])
