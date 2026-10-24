@@ -26,7 +26,7 @@ def dependencies(jobs,record,owner,endpoint):
     for entry in entries:
         if entry.name.startswith('.'):continue
         item=jobs.load(entry.name.split('_',1)[-1],owner,endpoint)
-        if item['options'].get('input_job_id')!=record['job_id'] or item.get('artifact_removed'):continue
+        if record['job_id'] not in (item['options'].get('input_job_id'),item['options'].get('incremental_job_id')) or item.get('artifact_removed'):continue
         if item['state']=='cancelled' and item.get('native_may_have_dispatched') is False:continue
         children.append(item['job_id'])
     from .mysql_recovery_connections import targets

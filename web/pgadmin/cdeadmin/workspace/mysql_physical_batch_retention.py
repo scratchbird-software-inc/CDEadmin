@@ -71,19 +71,19 @@ def fingerprint(record):
 def plan(records,anchor,selected,cutoff,*,registered=(),reservation=None):
     """Preserve kept descendants and every input of a retained node."""
     selected=policy(selected);key=scope(anchor);nodes={job:record for job,record in records.items() if scope(record)==key}
-    children={job:set() for job in nodes};parents={}
-    if any(record['options'].get('input_job_id') in nodes and job not in nodes and not absent(record) for job,record in records.items()):
-        raise native.HostError('Physical batch child belongs to another native scope; preserve its input')
+    children={job:set() for job in nodes};parents={job:set() for job in nodes}
+    def inputs(record):return {value for key in ('input_job_id','incremental_job_id') if (value:=record['options'].get(key)) is not None}
+    if any(inputs(record)&nodes.keys() and job not in nodes and not absent(record) for job,record in records.items()):
+        raise native.HostError('Physical batch child belongs to another native scope; preserve its inputs')
     for job,record in nodes.items():
-        parent=record['options'].get('input_job_id')
-        if parent is not None:
+        for parent in inputs(record):
             if parent not in nodes:raise native.HostError('Physical batch dependency is missing or belongs to another native scope')
-            children[parent].add(job);parents[job]=parent
+            children[parent].add(job);parents[job].add(parent)
     degree={job:len(children[job]) for job in nodes};queue=[(nodes[job]['created_at'],job) for job,count in degree.items() if not count];heapq.heapify(queue);order=[]
     while queue:
         _created,job=heapq.heappop(queue);order.append(job)
-        if job in parents:
-            parent=parents[job];degree[parent]-=1
+        for parent in parents[job]:
+            degree[parent]-=1
             if not degree[parent]:heapq.heappush(queue,(nodes[parent]['created_at'],parent))
     if len(order)!=len(nodes):raise native.HostError('Physical batch dependency graph contains a cycle')
     protected={};full=sorted((record for record in nodes.values() if not absent(record) and not record.get('artifact_removal') and verified_full(record)),
@@ -109,7 +109,8 @@ def plan(records,anchor,selected,cutoff,*,registered=(),reservation=None):
     if len(full)<selected['keep_latest']:
         for job in nodes:protected.setdefault(job,'insufficient_verified_full_backups')
     for job in order:
-        if job in protected and job in parents:protected.setdefault(parents[job],'input_of_retained_job')
+        if job in protected:
+            for parent in parents[job]:protected.setdefault(parent,'input_of_retained_job')
     eligible=[job for job in order if job not in protected and not absent(nodes[job])]
     chosen=eligible[:MAX_BATCH]
     counts={}

@@ -140,21 +140,26 @@ def artifact(directory, *, prepared=None):
     if tablespaces != {'version': 3, 'external_tablespaces': []}:
         raise Refused('External tablespaces require a separately reviewed physical path mapping')
     if (info.get('server_version') != '9.7.0' or info.get('tool_version') != VERSION or
-            info.get('partial') != 'N' or info.get('incremental') != 'N' or
+            info.get('partial') != 'N' or info.get('incremental') not in ({'Y'} if checkpoint.get('backup_type')=='incremental' else {'N','Y'} if checkpoint.get('backup_type') in {'log-applied','full-prepared'} else {'N'}) or
             info.get('compressed') != 'N' or info.get('encrypted') != 'N' or
-            checkpoint.get('backup_type') not in {'full-backuped', 'full-prepared'}):
-        raise Refused('Select an admitted complete, uncompressed full MySQL9.7.0 physical artifact')
+            checkpoint.get('backup_type') not in {'full-backuped', 'log-applied', 'full-prepared', 'incremental'}):
+        raise Refused('Select an admitted complete, uncompressed MySQL9.7.0 physical artifact')
     if prepared is not None and (checkpoint['backup_type'] == 'full-prepared') != prepared:
         raise Refused('Physical artifact preparation state differs from its selected operation')
     for key in ('from_lsn', 'to_lsn', 'last_lsn'):
         if not re.fullmatch(r'[0-9]+', checkpoint.get(key, '')):
             raise Refused('Native physical LSN metadata is unavailable')
+    low,high,last = (int(checkpoint[key]) for key in ('from_lsn','to_lsn','last_lsn'))
+    if not 0 <= low <= high <= last <= 18446744073709551615 or checkpoint['backup_type'] != 'incremental' and low != 0:
+        raise Refused('Native physical checkpoint LSN range is invalid')
     files = manifest(directory)
-    return {'format': 'xtrabackup-9.7-full', 'checkpoint': checkpoint,
+    return {'format': 'xtrabackup-9.7-incremental' if checkpoint['backup_type'] == 'incremental' else 'xtrabackup-9.7-full', 'checkpoint': checkpoint,
         'backup_uuid': info['uuid'], 'server_version': info['server_version'],
         'tool_version': info['tool_version'], 'binlog_info': metadata(directory / 'xtrabackup_binlog_info'),
         'files': files, 'manifest_sha256': host.digest(files), 'total_bytes': str(sum(int(item['bytes']) for item in files)),
-        'prepared': checkpoint['backup_type'] == 'full-prepared', 'database_recovery_verified': False}
+        'prepared': checkpoint['backup_type'] == 'full-prepared', 'database_recovery_verified': False,
+        **({'redo_only':True} if checkpoint['backup_type']=='log-applied' else {}),
+        **({'native_incremental_info':True} if info['incremental']=='Y' and checkpoint['backup_type']!='incremental' else {})}
 
 
 def executable(path, kind):
@@ -170,37 +175,71 @@ def executable(path, kind):
     return {'path': str(path), 'sha256': host.file_hash(path), 'version_output': output.strip()}
 
 
+def input_artifact(request, root, selected):
+    source=root/job_id(selected)
+    if (source/'retention-intent.json').exists():raise Refused('Physical input has entered reviewed retention')
+    original=read_json(source/'request.json');receipt=read_json(source/'result.json')
+    if (original.get('job_id')!=selected or original.get('binding')!=request['binding'] or absolute(original.get('workspace'))!=root or
+            original.get('input_digest')!=receipt.get('input_digest') or receipt.get('state')!='native_returned' or
+            receipt.get('return_code')!=0 or receipt.get('error_type') or not receipt.get('artifact') or
+            receipt.get('process_termination_confirmed') is not True or receipt.get('credential_cleanup_confirmed') is not True):
+        raise Refused('Select a completed verified physical input from this original source and host workspace')
+    verified=artifact(source/'artifact')
+    if verified!=receipt['artifact']:raise Refused('Physical input bytes changed after native publication')
+    chain=receipt.get('lineage')
+    if chain is None and original.get('phase')=='backup' and not original.get('input_job_id'):
+        chain={'base_job_id':selected,'incremental_job_ids':[]}
+    if not isinstance(chain,dict) or set(chain)!={'base_job_id','incremental_job_ids'} or not isinstance(chain['incremental_job_ids'],list) or len(chain['incremental_job_ids'])>128:
+        raise Refused('Original native incremental lineage is unavailable or exceeds its bound')
+    ids=[job_id(chain['base_job_id']),*[job_id(value) for value in chain['incremental_job_ids']]]
+    if len(set(ids))!=len(ids):raise Refused('Native incremental lineage contains a repeated input')
+    if original['phase'] in {'backup','incremental'} and ids[-1]!=selected:raise Refused('Native backup lineage tip differs from its original job')
+    return {'job_id':selected,'artifact':public(verified),'lineage':chain}
+
+
 def inspection(request):
     if request['phase'] == 'recover': return recovery_module().inspection(request)
     if not sys.platform.startswith('linux'):
         raise Refused('The admitted XtraBackup backend requires a native Linux database host')
-    binding = host_scope(request, live=request['phase'] == 'backup')
+    phase=request['phase']
+    binding = host_scope(request, live=phase in {'backup','incremental'})
     root = root_directory(request['workspace'], binding)
     observed = {'host': binding, 'workspace': str(root), 'xtrabackup': executable(request['executable'], 'xtrabackup'),
         'release_status': 'RC1', 'source_revision': REVISION}
-    phase = request['phase']
     for name, low, high in [('parallel', 1, 64), ('memory_bytes', 67108864, 17179869184), ('timeout_seconds', 1, 604800)]:
         if type(request.get(name)) is not int or not low <= request[name] <= high:
             raise Refused('Select bounded native physical ' + name)
-    if phase == 'backup':
+    if phase in {'backup','incremental'}:
         observed['mysql'] = executable(request['mysql'], 'mysql')
         if type(request.get('sql_port')) is not int or not 1 <= request['sql_port'] <= 65535:
             raise Refused('Select the source TCP port reachable from the database host')
         host.text(request['sql_host'])
-    elif phase in {'prepare', 'copy_back'}:
-        source = root / job_id(request['input_job_id'])
-        if (source/'retention-intent.json').exists():raise Refused('Physical input has entered reviewed retention')
-        receipt = read_json(source / 'result.json')
-        if (receipt.get('state') != 'native_returned' or receipt.get('return_code') != 0 or not receipt.get('artifact') or
-                receipt.get('error_type') or receipt.get('process_termination_confirmed') is not True or
-                receipt.get('credential_cleanup_confirmed') is not True):
-            raise Refused('Select a completed verified native physical input')
-        verified = artifact(source / 'artifact', prepared=phase == 'copy_back')
-        if verified != receipt['artifact']:
-            raise Refused('Physical input bytes changed after native publication')
-        observed['input'] = {'job_id': request['input_job_id'], 'artifact': public(verified)}
-    else:
-        raise Refused('Select a native backup, prepare or isolated copy-back operation')
+    if phase=='backup':
+        if request.get('input_job_id') is not None:raise Refused('A full backup has no input')
+    elif phase in {'incremental','prepare','prepare_redo','copy_back'}:
+        source=input_artifact(request,root,request['input_job_id']);observed['input']=source
+        checkpoint=source['artifact']['checkpoint']['backup_type']
+        if phase=='incremental' and checkpoint not in {'full-backuped','incremental'}:
+            raise Refused('Base an incremental on an immutable raw full or incremental backup')
+        if phase=='incremental' and len(source['lineage']['incremental_job_ids'])>=128:
+            raise Refused('Native incremental chain exceeds128 increments')
+        if phase=='copy_back' and checkpoint!='full-prepared':raise Refused('Finalize native preparation before copy-back')
+        if phase in {'prepare','prepare_redo'} and checkpoint not in {'full-backuped','log-applied'}:
+            raise Refused('Prepare a full or redo-only base; raw incremental files are not a complete data directory')
+        delta=request.get('incremental_job_id')
+        if delta is not None:
+            if phase!='prepare_redo' or checkpoint!='log-applied':raise Refused('Apply an incremental only to a separately retained redo-only base')
+            increment=input_artifact(request,root,delta);observed['incremental_input']=increment
+            lineage=increment['lineage']
+            if (increment['artifact']['checkpoint']['backup_type']!='incremental' or not lineage['incremental_job_ids'] or
+                    lineage['incremental_job_ids'][-1]!=delta or
+                    source['lineage']!={'base_job_id':lineage['base_job_id'],'incremental_job_ids':lineage['incremental_job_ids'][:-1]} or
+                    source['artifact']['checkpoint']['to_lsn']!=increment['artifact']['checkpoint']['from_lsn']):
+                raise Refused('Select the exact next contiguous native incremental from this full-backup lineage')
+        elif phase=='prepare_redo' and checkpoint=='log-applied':
+            raise Refused('Select the next incremental or finalize this redo-only copy')
+    else:raise Refused('Select a native full/incremental backup, preparation or isolated copy-back')
+    if phase!='prepare_redo' and request.get('incremental_job_id') is not None:raise Refused('An additional incremental input applies only to redo-only preparation')
     return observed
 
 
@@ -257,26 +296,33 @@ def execute(directory):
     value = {'state': 'native_dispatch', 'job_id': request['job_id'], 'input_digest': request['input_digest'],
         'automatic_retry': False, 'native_may_have_dispatched': False, 'process_termination_confirmed': False,
         'credential_cleanup_confirmed': False, 'supervisor_finished': False, 'started_at': time.time()}
-    child = option_file = None
+    child = option_file = staged_increment = None
     try:
         observed = inspection(request)
         if observed != request['reviewed']:
             raise Refused('Native physical source, utility or artifact changed after review')
         phase = request['phase']; target = directory / 'artifact'
-        if phase == 'backup':
+        if phase in {'backup','incremental'}:
             option_file = client_options(request, directory)
             value['sql_identity'] = identity(request, observed, option_file, directory)
             args = ['--defaults-file=' + str(option_file), '--backup', '--datadir=' + observed['host']['datadir'],
                 '--target-dir=' + str(target), '--parallel=' + str(request['parallel'])]
+            if phase=='incremental':args.append('--incremental-basedir='+str(Path(observed['workspace'])/request['input_job_id']/'artifact'))
         else:
             original = Path(observed['workspace']) / request['input_job_id'] / 'artifact'
-            if phase == 'prepare':
+            if phase in {'prepare','prepare_redo'}:
                 # Prepare mutates a private derived copy; the original base and
                 # its dependency boundary remain immutable and independently usable.
                 shutil.copytree(original, target)
                 if public(artifact(target, prepared=False)) != observed['input']['artifact']:
                     raise Refused('Staged physical bytes differ from the selected immutable base')
                 args = ['--no-defaults', '--prepare', '--target-dir=' + str(target), '--use-memory=' + str(request['memory_bytes'])]
+                if phase=='prepare_redo':args.append('--apply-log-only')
+                if observed.get('incremental_input'):
+                    staged_increment=directory/'delta-input'
+                    shutil.copytree(Path(observed['workspace'])/request['incremental_job_id']/'artifact',staged_increment)
+                    if public(artifact(staged_increment))!=observed['incremental_input']['artifact']:raise Refused('Staged incremental differs from its immutable input')
+                    args.append('--incremental-dir='+str(staged_increment))
             else:
                 target.mkdir(mode=0o700)
                 args = ['--no-defaults', '--copy-back', '--target-dir=' + str(original), '--datadir=' + str(target),
@@ -315,8 +361,15 @@ def execute(directory):
                     'data_directory': str(target), 'database_recovery_verified': False}
             else:
                 value['artifact'] = artifact(target, prepared=phase == 'prepare')
-            if phase != 'backup' and public(artifact(original, prepared=phase == 'copy_back')) != observed['input']['artifact']:
-                raise Refused('Original physical input changed during the native operation')
+                if phase=='prepare_redo' and not value['artifact'].get('redo_only'):raise Refused('Native preparation did not retain its redo-only state')
+            if phase!='backup':
+                if input_artifact(request,Path(observed['workspace']),request['input_job_id'])!=observed['input']:
+                    raise Refused('Original physical input changed during the native operation')
+                if observed.get('incremental_input') and input_artifact(request,Path(observed['workspace']),request['incremental_job_id'])!=observed['incremental_input']:
+                    raise Refused('Original incremental input changed during the native operation')
+            lineage=({'base_job_id':request['job_id'],'incremental_job_ids':[]} if phase=='backup' else observed.get('incremental_input',observed['input'])['lineage'])
+            if phase=='incremental':lineage={**lineage,'incremental_job_ids':[*lineage['incremental_job_ids'],request['job_id']]}
+            value['lineage']=lineage
     except BaseException as error:
         if child is not None and child.poll() is None:
             try: os.killpg(child.pid, signal.SIGKILL); child.wait(timeout=15)
@@ -331,6 +384,7 @@ def execute(directory):
         # executable. A later observer can distinguish an incomplete cleanup.
         try:
             if option_file is not None: option_file.unlink(missing_ok=True)
+            if staged_increment is not None and staged_increment.exists() and (child is None or child.poll() is not None):shutil.rmtree(staged_increment)
             request['database_credentials'] = None
             host.save(directory / 'request.json', request)
             value['credential_cleanup_confirmed'] = True

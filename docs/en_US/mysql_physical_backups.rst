@@ -571,3 +571,57 @@ that explicit disable action. A fresh review is required for future work.
 
 Native qualification is available through
 ``tools/cdeadmin_mysql_physical_replay_qualification.py --check-only``.
+
+Native incremental chains and redo-only preparation
+---------------------------------------------------
+
+From a verified full or incremental backup, **Take incremental from this backup**
+reviews a new native incremental against that exact immutable input. Confirm
+registered SQL-password delegation separately before starting it. XtraBackup
+owns the live backup, native locks, changed-page capture and checkpoint. Each
+incremental retains its native metadata, byte manifest, original source/host and
+ordered full-backup lineage. LSNs are decimal strings, preserving their full
+native width. Broad binary-log protection is acquired before dispatch, as for a
+full backup. Unknown dispatch replies are observed independently and never
+replayed automatically.
+
+To recover a chain:
+
+1. Select the original full backup and **Use separate redo-only copy for
+   incrementals**. Review and start initial redo-only preparation, leaving the
+   additional incremental selection empty. This runs native preparation without
+   undo on a new private copy; it preserves the original full backup.
+2. From that verified redo-only copy, select **Use separate redo-only copy for
+   incrementals**, load retained incremental inputs, and choose the exact next
+   incremental. Review and start the apply. Both the base and delta are copied
+   privately before the native utility runs. Repeat for each increment in order.
+3. Select **Finalize redo-only copy for recovery**, review and start final native
+   preparation with undo. Only the resulting prepared artifact can proceed to
+   isolated copy-back and managed recovery.
+
+The native checkpoint and ordered lineage must agree. Applying a delta from
+another full backup, skipping or repeating an increment, using raw incremental
+files as a complete data directory, or copying back a redo-only target is refused.
+A chain supports up to128 retained increments; start a new full backup before
+exceeding that bound. The last incremental's native ``xtrabackup_info`` is copied
+by XtraBackup into merged targets and can retain ``incremental=Y``. The original
+marker is preserved; ``log-applied`` versus ``full-prepared`` in the native
+checkpoint determines preparation state, together with the recorded lineage.
+
+Every apply records dependencies on both original inputs. Manual and batch
+retention preserve both branches and all ancestors until dependent work is
+removed or cancelled before dispatch. Native host-side dependency checks also
+cover the additional delta input. Temporary delta copies are removed after the
+native process ends; interrupted copies remain inside the original job's reviewed
+retention scope. Final preparation and recovery create further immutable
+checkpoints; the original full and incremental files remain reusable for another
+explicit recovery branch.
+
+Independent native expected-dump acceptance and recurring retained-checkpoint
+drills can use copy-backs derived from a finalized incremental chain. Native file
+publication, SQL startup, selected exported data/definition acceptance and
+production cutover remain separate facts. Qualification is available through
+``tools/cdeadmin_mysql_physical_replay_qualification.py --incremental-only`` and
+covers two native increments, InnoDB/MyISAM/CSV changes, new and altered objects,
+an independent pending source transaction, lost replies, immutable input hashes,
+private recovery, data/definition acceptance and the built desktop.

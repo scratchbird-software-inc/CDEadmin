@@ -41,7 +41,7 @@ def options(value):
     fields = {'connection', 'workspace', 'executable', 'mysql', 'phase', 'sql_host', 'sql_port',
         'input_job_id', 'parallel', 'memory_bytes', 'timeout_seconds', 'accept_release_candidate'}
     extra = {'mysqld', 'recovery_gtid_mode'} if isinstance(value,dict) and value.get('phase') == 'recover' else set()
-    optional = {'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile'} if extra else set()
+    optional = {'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile'} if extra else ({'incremental_job_id'} if isinstance(value,dict) and value.get('phase')=='prepare_redo' else set())
     if not isinstance(value, dict) or not fields | extra <= set(value) or set(value)-fields-extra-optional:
         raise native.HostError('Select the complete native physical host and operation options')
     selected = deepcopy(value); selected['connection'] = native.ssh.public_route(value['connection'])
@@ -55,8 +55,8 @@ def options(value):
     for key, low, high in [('parallel', 1, 64), ('memory_bytes', 64 * 1024 * 1024, 16 * 1024**3), ('timeout_seconds', 1, 604800)]:
         if type(value[key]) is not int or not low <= value[key] <= high:
             raise native.HostError('Select bounded native physical ' + key)
-    if value['phase'] not in {'backup', 'prepare', 'copy_back', 'recover'}:
-        raise native.HostError('Select backup, prepare, isolated copy-back or managed recovery')
+    if value['phase'] not in {'backup','incremental','prepare','prepare_redo','copy_back','recover'}:
+        raise native.HostError('Select full/incremental backup, redo-only/final preparation, isolated copy-back or managed recovery')
     if extra and value['recovery_gtid_mode'] not in {'OFF','OFF_PERMISSIVE','ON_PERMISSIVE','ON'}:
         raise native.HostError('Select the native recovery GTID mode explicitly')
     if extra:
@@ -75,6 +75,8 @@ def options(value):
             if not port or type(server_id) is not int or not 1<=server_id<=4294967295:
                 raise native.HostError('Writable replay startup requires an explicit loopback TCP port and native server ID')
         elif 'recovery_server_id' in value:raise native.HostError('A recovery server ID applies only to writable replay startup')
+    if value['phase']=='prepare_redo':
+        selected['incremental_job_id']=identity(value['incremental_job_id']) if value.get('incremental_job_id') is not None else None
     if value['phase'] == 'backup':
         if value['input_job_id'] is not None:
             raise native.HostError('A full physical backup has no prior input')
@@ -89,7 +91,7 @@ class PhysicalJobs(MySQLBinlogJobs):
         'The admitted backend is upstream XtraBackup9.7.1-rc1, a release candidate. Its original native replies, verified files and recovery acceptance are separate facts.',
         'Full backups take native backup/read locks and copy complete supported instance files. Prepare mutates a separate private copy. Copy-back creates only a new isolated job data directory; it never overwrites the live data directory or starts a database.',
         'Native processes run under an independent supervisor on the authenticated database SSH host. Closing the viewer or losing a reply does not cancel or roll back native work. An original unknown dispatch is never automatically repeated.',
-        'This full-artifact workflow requires self-contained, uncompressed and unencrypted native backup files. External tablespaces, encryption key provisioning, incrementals, post-replay acceptance and production cutover retain separate implementation/acceptance gates.',
+        'This workflow requires self-contained, uncompressed and unencrypted native backup files. Incrementals require the exact retained native base lineage and contiguous LSNs. Apply them to separate redo-only copies, then finalize preparation before copy-back. External tablespaces, key provisioning and production cutover remain separate.',
         'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account with a fresh UUID, private Unix socket and selected loopback TCP listener. Read-only inspection is the default. Explicit replay startup is writable with private ROW binary logging and the selected server ID. Both disable events/replication autostart and automatic upgrades, and end on stop or reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
         'Physical files and native output are private to the selected host OS account. Broad source archive protection is acquired before backup dispatch and is retired only by its separate reviewed protection workflow.',
     )
@@ -135,7 +137,7 @@ def remote_request(record, action):
         'binding': deepcopy(record['source_state']['host_binding']), 'source_identity': deepcopy(record['source']),
         'reviewed': deepcopy(record['source_state']['remote_review']),
         'job_id': record['job_id'], 'input_digest': record['review_digest'],
-        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile') if key in selected}}
+        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','incremental_job_id') if key in selected}}
 
 
 def delegate(service, server):
@@ -238,12 +240,12 @@ def _action(service, server, operation, request, *, source_capture=None,database
                 values['state'] = 'native_returned' if remote.get('return_code') == 0 else 'native_failed' if remote.get('native_reply_observed') else 'not_dispatched'
             jobs.update(record, **values)
             return jobs.get(record['job_id'], owner, endpoint.id)
-        if selected['phase'] == 'backup':
+        if selected['phase'] in {'backup','incremental'}:
             captured = source_capture() if source_capture is not None else source(service, server)
             if operation == 'start':
                 if captured['identity'] != record['source'] or captured['state']['host_binding'] != record['source_state']['host_binding']:
                     raise native.HostError('Native physical source changed after review')
-        else:
+        if selected['phase']!='backup':
             prior = jobs.load(selected['input_job_id'], owner, endpoint.id)
             if (prior.get('artifact_removed') or prior.get('artifact_removal') or prior.get('retention_batch_id') or
                     prior.get('backup_workflow_protected') and prior['source_state'].get('backup_schedule_id')!=scheduled_policy_id or
@@ -251,8 +253,19 @@ def _action(service, server, operation, request, *, source_capture=None,database
                     not jobs.public(prior)['file_verification_confirmed'] or
                     not (prior.get('remote_observation') or {}).get('restored_files' if selected['phase'] == 'recover' else 'artifact')):
                 raise native.HostError('Select an observed physical input in this owner/registration and pinned host workspace')
-            captured = {'identity': deepcopy(prior['source']), 'state': {key: deepcopy(prior['source_state'][key])
-                for key in ('host_binding', 'source_connection_class') if key in prior['source_state']}}
+            if selected['phase']=='incremental':
+                if captured['identity']!=prior['source'] or captured['state']['host_binding']!=prior['source_state']['host_binding']:
+                    raise native.HostError('The incremental source differs from its original base and principal')
+            else:
+                captured = {'identity': deepcopy(prior['source']), 'state': {key: deepcopy(prior['source_state'][key])
+                    for key in ('host_binding', 'source_connection_class') if key in prior['source_state']}}
+            if selected.get('incremental_job_id') is not None:
+                delta=jobs.load(selected['incremental_job_id'],owner,endpoint.id)
+                if (delta['options']['phase']!='incremental' or delta.get('artifact_removed') or delta.get('artifact_removal') or delta.get('retention_batch_id') or
+                        delta.get('backup_workflow_protected') or not jobs.public(delta)['file_verification_confirmed'] or
+                        delta['source']!=prior['source'] or delta['source_state']['host_binding']!=prior['source_state']['host_binding'] or
+                        delta['options']['connection']!=selected['connection'] or delta['options']['workspace']!=selected['workspace']):
+                    raise native.HostError('Select a verified incremental in this exact original source and host workspace')
         provisional = {'options': selected, 'source': captured['identity'], 'source_state': {**captured['state'], 'remote_review': {}}, 'job_id': '', 'review_digest': ''}
         observed = transport.request(remote_request(provisional, 'inspect'))
         captured['state']['remote_review'] = observed
@@ -265,17 +278,17 @@ def _action(service, server, operation, request, *, source_capture=None,database
             return value
         if captured['state'] != record['source_state'] or program != record['program']:
             raise native.HostError('Physical host or input changed after review')
-        if selected['phase'] in {'backup','recover'} and request['delegate_database_credentials'] is not True:
+        if selected['phase'] in {'backup','incremental','recover'} and request['delegate_database_credentials'] is not True:
             raise native.HostError('Confirm private database credential delegation to the pinned database SSH host')
-        delegated = (database_credentials if database_credentials is not None else delegate(service,server)) if selected['phase'] in {'backup','recover'} else None
+        delegated = (database_credentials if database_credentials is not None else delegate(service,server)) if selected['phase'] in {'backup','incremental','recover'} else None
         if authorize is not None:authorize()
         if not claim(jobs, record, owner, endpoint.id, request): return jobs.get(record['job_id'], owner, endpoint.id)
         try:
-            if selected['phase'] == 'backup':
+            if selected['phase'] in {'backup','incremental'}:
                 from .mysql_backup_protection import manager as protection
-                ticket = protection(service).scoped(owner, endpoint.id).begin(record['source'], 'Full physical instance',
+                ticket = protection(service).scoped(owner, endpoint.id).begin(record['source'], 'Incremental physical instance' if selected['phase']=='incremental' else 'Full physical instance',
                     selected['workspace'] + '/' + record['job_id'] + '/artifact', {})
-                ticket.update(backup_kind='mysql_native_xtrabackup_full', native_physical_job_id=record['job_id'],
+                ticket.update(backup_kind='mysql_native_xtrabackup_incremental' if selected['phase']=='incremental' else 'mysql_native_xtrabackup_full', native_physical_job_id=record['job_id'],
                     execution_host=program['execution_host'])
                 jobs.update(record, backup_protection_id=ticket.backup_id)
             payload = remote_request(record, 'start'); payload['database_credentials'] = delegated

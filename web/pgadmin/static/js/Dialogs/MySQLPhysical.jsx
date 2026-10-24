@@ -10,13 +10,14 @@ const initial = {connection: {host: '', port: 22, username: '', host_key: '', au
   sql_host: '127.0.0.1', sql_port: 3306, input_job_id: null, parallel: 2, memory_bytes: 268435456,
   timeout_seconds: 3600, accept_release_candidate: false};
 const phaseOptions = (current, phase, input_job_id) => {
-  const {mysqld, recovery_gtid_mode, recovery_port, recovery_mode, recovery_server_id, recovery_local_infile, ...base} = current;
-  return {...base, phase, input_job_id, ...(phase === 'recover' ? {mysqld: mysqld || '/usr/sbin/mysqld', recovery_gtid_mode: recovery_gtid_mode || 'ON', recovery_port: recovery_port ?? 3307,
+  const {mysqld, recovery_gtid_mode, recovery_port, recovery_mode, recovery_server_id, recovery_local_infile, incremental_job_id, ...base} = current;
+  return {...base, phase, input_job_id, ...(phase === 'prepare_redo' ? {incremental_job_id: incremental_job_id || null} : {}), ...(phase === 'recover' ? {mysqld: mysqld || '/usr/sbin/mysqld', recovery_gtid_mode: recovery_gtid_mode || 'ON', recovery_port: recovery_port ?? 3307,
     recovery_mode: recovery_mode || 'read_only', recovery_local_infile: recovery_local_infile ?? false, ...(recovery_mode === 'replay' ? {recovery_server_id: recovery_server_id || 10001} : {})} : {})};
 };
 export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
   const [options, setOptions] = useState(initial), [credentials, setCredentials] = useState({});
   const [review, setReview] = useState(null), [receipt, setReceipt] = useState(null), [jobs, setJobs] = useState(null);
+  const [incrementals, setIncrementals] = useState(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [peer, setPeer] = useState(null);
   const [confirmed, setConfirmed] = useState(false), [delegate, setDelegate] = useState(false), [output, setOutput] = useState(null);
   const [connectionReview, setConnectionReview] = useState(null), [connectionReceipt, setConnectionReceipt] = useState(null);
@@ -103,7 +104,7 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
         setOptions(current => phaseOptions(current, phase, phase === 'backup' ? null : current.input_job_id));
         setReview(null); setConfirmed(false); setDelegate(false); clearConnectionReview();
       }}>
-        <MenuItem value="backup">Full backup</MenuItem><MenuItem value="prepare">Prepare immutable copy</MenuItem><MenuItem value="copy_back">Copy back to new isolated directory</MenuItem><MenuItem value="recover">Start managed recovery instance</MenuItem>
+        <MenuItem value="backup">Full backup</MenuItem><MenuItem value="incremental">Incremental from retained backup</MenuItem><MenuItem value="prepare_redo">Prepare separate redo-only copy / apply incremental</MenuItem><MenuItem value="prepare">Prepare immutable copy</MenuItem><MenuItem value="copy_back">Copy back to new isolated directory</MenuItem><MenuItem value="recover">Start managed recovery instance</MenuItem>
       </TextField>
       {options.phase === 'recover' && <>
         <TextField select size="small" label="Recovery startup mode" value={options.recovery_mode || 'read_only'} disabled={busy} onChange={event => {
@@ -126,6 +127,15 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
       <TextField type="number" size="small" label="Prepare memory bytes" value={options.memory_bytes} disabled={busy} onChange={event => change('memory_bytes', Number(event.target.value))} />
       <TextField type="number" size="small" label="Physical native timeout seconds" value={options.timeout_seconds} disabled={busy} onChange={event => change('timeout_seconds', Number(event.target.value))} />
     </Box>
+    {options.phase === 'prepare_redo' && <Box component="section" aria-label="Native incremental preparation">
+      <Alert severity="info">Prepare a raw full backup without undo, or select the exact next retained incremental for a redo-only copy. Each step copies both inputs privately. Finalize the resulting redo-only copy before copy-back or recovery. Native lineage and LSN checks refuse gaps, repeats and another base.</Alert>
+      <Button disabled={busy} onClick={() => run('list', {offset: 0, limit: 25}, setIncrementals)}>Load retained incremental inputs</Button>
+      {incrementals && <TextField select fullWidth size="small" label="Retained incremental to apply" value={options.incremental_job_id || ''} disabled={busy} onChange={event => change('incremental_job_id', event.target.value || null)}>
+        <MenuItem value="">Initial redo-only preparation of a full backup</MenuItem>
+        {incrementals.jobs.filter(value => value.options.phase === 'incremental' && value.file_verification_confirmed).map(value => <MenuItem key={value.job_id} value={value.job_id}>{value.job_id}: {value.remote_observation?.artifact?.checkpoint?.from_lsn} → {value.remote_observation?.artifact?.checkpoint?.to_lsn}</MenuItem>)}
+      </TextField>}
+      {incrementals?.more && <Button disabled={busy} onClick={() => run('list', {offset: incrementals.offset + incrementals.limit, limit: incrementals.limit}, value => setIncrementals(current => ({...value, jobs: [...current.jobs, ...value.jobs]})))}>More retained incremental inputs</Button>}
+    </Box>}
     <FormControlLabel label="I accept this pinned XtraBackup release candidate for this physical operation." control={<Checkbox checked={options.accept_release_candidate} disabled={busy} onChange={event => change('accept_release_candidate', event.target.checked)} />} />
     <Box sx={{display: 'flex', gap: 1, my: 1}}>
       <Button disabled={busy || !options.accept_release_candidate} onClick={() => run('review', {options, credentials}, value => {setReview(value); setReceipt(value); setConfirmed(false); setDelegate(false);})}>Review native physical job</Button>
@@ -135,8 +145,8 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
     {review && <Box>
       <Box component="pre" aria-label="Native physical review" sx={{whiteSpace: 'pre-wrap', maxHeight: 280, overflow: 'auto'}}>{JSON.stringify({job_id: review.job_id, source: review.source, remote_review: review.remote_review, warnings: review.warnings}, null, 2)}</Box>
       <FormControlLabel label="I confirm this exact reviewed physical operation." control={<Checkbox checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} />} />
-      {['backup', 'recover'].includes(review.options.phase) && <FormControlLabel label="Delegate the registered database password privately to the pinned SSH host." control={<Checkbox checked={delegate} disabled={busy} onChange={event => setDelegate(event.target.checked)} />} />}
-      <Button disabled={busy || !confirmed || review.state !== 'reviewed' || ['backup', 'recover'].includes(review.options.phase) && !delegate} onClick={() => run('start',
+      {['backup', 'incremental', 'recover'].includes(review.options.phase) && <FormControlLabel label="Delegate the registered database password privately to the pinned SSH host." control={<Checkbox checked={delegate} disabled={busy} onChange={event => setDelegate(event.target.checked)} />} />}
+      <Button disabled={busy || !confirmed || review.state !== 'reviewed' || ['backup', 'incremental', 'recover'].includes(review.options.phase) && !delegate} onClick={() => run('start',
         {job_id: review.job_id, review_digest: review.review_digest, confirmed, delegate_database_credentials: delegate, credentials}, value => {setReceipt(value); setReview(null);})}>Start reviewed physical job</Button>
     </Box>}
     {jobs && <><Table size="small" aria-label="Native physical jobs"><TableHead><TableRow>{['Job', 'Operation', 'State', 'Inspect'].map(name => <TableCell key={name}>{name}</TableCell>)}</TableRow></TableHead>
@@ -149,7 +159,11 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
       <Button disabled={busy} onClick={() => observe('reconcile')}>Observe remote physical job</Button>
       <Button disabled={busy || receipt.remote_observation?.process_termination_confirmed} onClick={() => observe('cancel')}>{receipt.options.phase === 'recover' ? 'Stop managed recovery instance' : 'Request native physical cancellation'}</Button>
       <Button disabled={busy} onClick={() => observe('output')}>Inspect native physical output</Button>
-      {receipt.file_verification_confirmed && receipt.remote_observation?.artifact && <Button disabled={busy} onClick={() => derived(receipt.remote_observation.artifact.prepared ? 'copy_back' : 'prepare')}>{receipt.remote_observation.artifact.prepared ? 'Use prepared artifact for isolated copy-back' : 'Use backup for separate prepare'}</Button>}
+      {receipt.file_verification_confirmed && receipt.remote_observation?.artifact && <>
+        {receipt.remote_observation.artifact.format !== 'xtrabackup-9.7-incremental' && <Button disabled={busy} onClick={() => derived(receipt.remote_observation.artifact.prepared ? 'copy_back' : 'prepare')}>{receipt.remote_observation.artifact.prepared ? 'Use prepared artifact for isolated copy-back' : receipt.remote_observation.artifact.redo_only ? 'Finalize redo-only copy for recovery' : 'Use backup for separate prepare'}</Button>}
+        {['backup', 'incremental'].includes(receipt.options.phase) && <Button disabled={busy} onClick={() => derived('incremental')}>Take incremental from this backup</Button>}
+        {!receipt.remote_observation.artifact.prepared && receipt.remote_observation.artifact.format !== 'xtrabackup-9.7-incremental' && <Button disabled={busy} onClick={() => {setIncrementals(null); derived('prepare_redo');}}>Use separate redo-only copy for incrementals</Button>}
+      </>}
       {receipt.file_verification_confirmed && receipt.remote_observation?.restored_files && <Button disabled={busy} onClick={() => derived('recover')}>Use copy-back for managed recovery</Button>}
       <Box component="pre" aria-label="Native physical receipt" sx={{whiteSpace: 'pre-wrap', maxHeight: 400, overflow: 'auto'}}>{JSON.stringify(receipt, null, 2)}</Box>
       <Box component="section" aria-label="Physical artifact retention" sx={{my: 1}}>

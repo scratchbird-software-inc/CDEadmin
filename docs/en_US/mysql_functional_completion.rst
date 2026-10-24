@@ -2022,3 +2022,17 @@ utility/server-generation release preserve original outcomes. Unexported/system
 state, remaining physical backend admission and production cutover stay open. ``CMP-MY-01``, ``CMP-MY-02`` and ``INV-MYSQL`` still precede
 the MariaDB implementation handoff; the comparison denominator remains nine
 implemented items out of eleven.
+
+
+Native physical incremental recovery
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Reviewed native incremental jobs now retain their exact full-backup lineage and
+LSN checkpoints. Separate redo-only copies apply a privately staged next delta,
+then final native preparation performs undo before copy-back. Both original
+inputs and their ancestry are retained by manual, batch and host-side dependency
+gates. Unknown original dispatch replies remain unknown after independent native
+publication; no utility is automatically repeated. Native recovery and selected
+expected-dump data/definition acceptance qualify the restored checkpoint.
+Encryption, external path mappings, additional engines, unexported/system state,
+production cutover and the wider lifecycle/inventory gates remain open.

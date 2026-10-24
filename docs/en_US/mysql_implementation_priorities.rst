@@ -138,7 +138,11 @@ the exact recorded owner/endpoint/recovery reservation before reviewed
 reattachment. Unknown database outcomes/fences persist until fresh SQL facts and
 explicit acknowledgement. Legacy missing-binding receipts, missing/failed
 guardians and wider lifecycle reconciliation remain open, alongside
-incremental/encrypted/external-table-space support and production cutover.
+encrypted/external-table-space support and production cutover. Native
+incremental capture and private redo-only apply/final preparation now preserve
+exact full-backup lineage, contiguous LSNs and both immutable input dependencies.
+Raw deltas cannot be restored alone; finalized chains use the existing recovery
+and expected-dump acceptance workflows.
 Managed physical targets now support separately reviewed expected-dump acceptance
 through private-socket or TCP connections, with full counts, native checksums and
 exported-definition comparisons, including after native replay. Each receipt

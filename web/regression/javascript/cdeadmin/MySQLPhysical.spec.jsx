@@ -168,3 +168,29 @@ it('loads interrupted physical retention without automatically repeating removal
   await waitFor(() => expect(screen.getByRole('button', {name: 'Inspect original physical removal'})).toBeEnabled());
   expect(post.mock.calls.filter(([value]) => value.action === 'mysql_physical_retention_start')).toHaveLength(0);
 });
+
+it('derives an incremental from a verified immutable backup and requires separate SQL delegation', async () => {
+  const full = {...review, state: 'native_returned', file_verification_confirmed: true, remote_observation: {artifact: {format: 'xtrabackup-9.7-full', prepared: false}}};
+  const post = jest.fn().mockResolvedValue({jobs: [full], offset: 0, limit: 25, more: false});
+  render(<Component post={post} />);fireEvent.click(screen.getByRole('button', {name: 'Load physical jobs'}));
+  post.mockResolvedValue(full);fireEvent.click(await screen.findByRole('button', {name: 'Inspect physical job ' + full.job_id}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Take incremental from this backup'}));
+  expect(screen.getByLabelText('Physical input job ID')).toHaveValue(full.job_id);
+  post.mockResolvedValue({...review, options: {...review.options, phase: 'incremental', input_job_id: full.job_id}});
+  fireEvent.click(screen.getByRole('button', {name: 'Review native physical job'}));await screen.findByLabelText('Native physical review');
+  expect(post).toHaveBeenLastCalledWith(expect.objectContaining({request: expect.objectContaining({options: expect.objectContaining({phase: 'incremental', input_job_id: full.job_id})})}));
+  fireEvent.click(screen.getByLabelText('I confirm this exact reviewed physical operation.'));
+  expect(screen.getByRole('button', {name: 'Start reviewed physical job'})).toBeDisabled();
+  expect(screen.getByLabelText('Delegate the registered database password privately to the pinned SSH host.')).not.toBeChecked();
+});
+
+it('raw incremental files cannot be offered as a complete prepared data directory', async () => {
+  const delta = {...review, options: {...review.options, phase: 'incremental'}, state: 'native_returned', file_verification_confirmed: true,
+    remote_observation: {artifact: {format: 'xtrabackup-9.7-incremental', prepared: false}}};
+  const post = jest.fn().mockResolvedValue({jobs: [delta], offset: 0, limit: 25, more: false});
+  render(<Component post={post} />);fireEvent.click(screen.getByRole('button', {name: 'Load physical jobs'}));
+  post.mockResolvedValue(delta);fireEvent.click(await screen.findByRole('button', {name: 'Inspect physical job ' + delta.job_id}));
+  await screen.findByRole('button', {name: 'Take incremental from this backup'});
+  expect(screen.queryByRole('button', {name: 'Use backup for separate prepare'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', {name: 'Use prepared artifact for isolated copy-back'})).not.toBeInTheDocument();
+});

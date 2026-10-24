@@ -736,3 +736,12 @@ backend admission and cutover stay open under
 ``CMP-MY-01``. ``CMP-MY-02`` and remaining ``INV-MYSQL`` reconciliation still
 precede the MariaDB handoff. Linux evidence does not close platform-team gates;
 ScratchBird history qualification remains owner-deferred.
+
+
+MySQL native incremental recovery now records a full-rooted ordered chain,
+contiguous native LSNs, separate redo-only apply and final undo preparation.
+Both original inputs remain immutable and protected through application and
+host-side retention dependencies. Finalized chains feed the existing private
+recovery and independent expected-dump acceptance workflows. Remaining physical
+backend admission includes encryption, external paths and additional engines;
+unexported/system state, cutover and ``CMP-MY-02``/``INV-MYSQL`` stay open.

@@ -90,7 +90,7 @@ def dependencies(root,selected):
         if record.get('job_id')!=directory.name:raise Refused('Physical dependency job identity differs')
         intent=directory/'retention-intent.json'
         removed=intent.exists() and physical.read_json(intent).get('state')=='removed'
-        if record.get('input_job_id')==selected and not removed:children.append(directory.name)
+        if selected in (record.get('input_job_id'),record.get('incremental_job_id')) and not removed:children.append(directory.name)
     return sorted(children)
 
 
@@ -103,7 +103,7 @@ def unmounted(paths):
 
 
 def snapshot(directory):
-    names=['artifact','runtime-data']
+    names=['artifact','runtime-data','delta-input']
     names += sorted(p.name for p in directory.glob('recovery-bin.*') if
         p.name=='recovery-bin.index' or re.fullmatch(r'recovery-bin\.\d{6,}',p.name))
     unmounted([directory/name for name in names])
