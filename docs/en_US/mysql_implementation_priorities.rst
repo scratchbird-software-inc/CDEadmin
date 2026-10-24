@@ -237,9 +237,11 @@ controls start/stop/restart and boot enablement. Original guardian receipts,
 unknown acknowledgements and later native observations remain separate.
 Three-member Cluster qualification covers TLS-routed exact data, actual primary
 crash, native election, pending rollback, committed-data preservation, secondary
-routing, SQL-independent Router controls and member rejoin. Live selected-Router
-metadata mutation/removal and the other topology families' production
-failure/repair acceptance remain open. Native Linux service installation now creates
+routing, SQL-independent Router controls and member rejoin. Live Cluster Router
+metadata listing, selected option set/reset, stale-review refusal and removal
+now have independent native acceptance, including the read/write-split route.
+The other topology families' production failure/repair acceptance remains open.
+Native Linux service installation now creates
 a reviewed systemd unit with separate start and boot controls. Native Linux initialization
 now supports new registrations before SQL is available, with secure/insecure
 native bootstrap, original-writer controls and separate outcome observations. Reviewed

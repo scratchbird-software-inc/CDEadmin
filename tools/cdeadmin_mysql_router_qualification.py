@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import secrets
 import sys
@@ -11,11 +12,12 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output,fixture,use_c=False,faults_only=False,legacy_helper=None):
+def qualify(output,fixture,use_c=False,faults_only=False,legacy_helper=None,metadata_only=False,mysql_shell=None,metadata_live=False):
     output=Path(output).resolve();fixture=Path(fixture).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Keep owned qualification state outside source')
     output.mkdir(parents=True,exist_ok=False);owned=json.loads(fixture.read_text())
     if not owned.get('complete') or not owned['network'].startswith('sr-router240-'):raise ValueError('Select the explicitly owned native Router fixture')
+    if metadata_only:os.environ['CDEADMIN_MYSQLSH_BINARY']=str(Path(mysql_shell).resolve(strict=True))
     from cdeadmin_mysql_dump_verification_qualification import setup_application
     app=setup_application(output)
     from flask import url_for
@@ -42,8 +44,8 @@ def qualify(output,fixture,use_c=False,faults_only=False,legacy_helper=None):
             url=url_for('NODE-server.cde_workspace_id',gid=group.id,sid=server.id)
         with client.session_transaction() as session:session['_user_id']=str(uid);session['_fresh']=True
         assert client.post(verify,json={'password':'true'}).get_json()['success']
-        def post(action,request,refused=False):
-            response=client.post(url,json={'action':'mysql_router_'+action,'request':request});value=response.get_json()
+        def post(action,request,refused=False,prefix='mysql_router_'):
+            response=client.post(url,json={'action':prefix+action,'request':request});value=response.get_json()
             if refused:
                 assert response.status_code==400,value
                 return value
@@ -61,6 +63,12 @@ def qualify(output,fixture,use_c=False,faults_only=False,legacy_helper=None):
             from mysql_router_recovery_qualification import qualify as recover
             recovered=recover(post,chosen,credentials,owned,output,use_c,legacy_helper)
             proof.update(complete=recovered['complete'],checks=recovered['checks'],unknown_completed_bootstrap_job=recovered['unknown_completed_bootstrap_job'],server_id=server.id)
+            return proof
+        if metadata_only:
+            from mysql_router_metadata_qualification import qualify as metadata
+            accepted=metadata(post,chosen,credentials,owned,output,use_c,metadata_live)
+            proof.update(complete=accepted['complete'],checks=accepted['checks'],server_id=server.id,
+                desktop_fixture_only=metadata_live,scope='owned_live_fixture_setup_only' if metadata_live else 'native_live_Router_metadata_acceptance')
             return proof
         reviewed=post('review',{'options':chosen,'credentials':credentials})
         assert reviewed['execution_host']['hostname']=='sr-router-native-host'
@@ -215,6 +223,9 @@ def qualify(output,fixture,use_c=False,faults_only=False,legacy_helper=None):
         proof.update(complete=True,native_router_id=deployment['native_router_ids'][0],job_id=current['job_id'],deployment=chosen['directory'],server_id=server.id)
     finally:
         jobs=getattr(service,'mysql_router_jobs',None);proof['owned_jobs_stopped']=jobs.close() if jobs is not None else True
+        for name in ('mysql_topology_jobs','mysql_binlog_replay_jobs'):
+            jobs=getattr(service,name,None)
+            if jobs is not None:jobs.close()
         (output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n')
     return proof
 
@@ -222,10 +233,14 @@ def qualify(output,fixture,use_c=False,faults_only=False,legacy_helper=None):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',required=True);parser.add_argument('--fixture',required=True);parser.add_argument('--use-c',action='store_true')
     parser.add_argument('--browser-only-application');parser.add_argument('--server-id',type=int);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
-    parser.add_argument('--faults-only',action='store_true');parser.add_argument('--legacy-helper');parser.add_argument('--browser-resume-job');args=parser.parse_args()
+    parser.add_argument('--faults-only',action='store_true');parser.add_argument('--legacy-helper');parser.add_argument('--browser-resume-job');parser.add_argument('--metadata-only',action='store_true');parser.add_argument('--mysql-shell');parser.add_argument('--metadata-live',action='store_true');parser.add_argument('--metadata-browser-only',action='store_true');args=parser.parse_args()
     if args.browser_only_application:
         if not all((args.server_id,args.browser_binary,args.driver_binary)):parser.error('Select the native application server and desktop binaries')
-        from mysql_router_ui_qualification import qualify as desktop
-        result=desktop(args.output,args.fixture,args.browser_only_application,args.server_id,args.browser_binary,args.driver_binary,args.browser_resume_job)
-    else:result=qualify(args.output,args.fixture,args.use_c,args.faults_only,args.legacy_helper)
+        if args.metadata_browser_only:
+            from mysql_router_metadata_ui_qualification import qualify as desktop
+            result=desktop(args.output,args.fixture,args.browser_only_application,args.server_id,args.browser_binary,args.driver_binary,args.mysql_shell)
+        else:
+            from mysql_router_ui_qualification import qualify as desktop
+            result=desktop(args.output,args.fixture,args.browser_only_application,args.server_id,args.browser_binary,args.driver_binary,args.browser_resume_job)
+    else:result=qualify(args.output,args.fixture,args.use_c,args.faults_only,args.legacy_helper,args.metadata_only,args.mysql_shell,args.metadata_live)
     print(json.dumps({'complete':result['complete'],'checks':len(result['checks'])}))

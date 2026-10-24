@@ -2345,6 +2345,10 @@ data, actual primary crash/election, pending-transaction rollback, committed
 data preservation, read-only secondary routing, SQL-independent service
 controls and crashed-member rejoin. The built desktop qualifies the dedicated
 context menu and native bootstrap/service reviews. This bounds the recorded
-Cluster/deployment scope; other topology failure/repair, live selected-Router
-metadata mutation/removal, upgrades, cutover and inventory remain under their
-owning requirements. History qualification stays owner-deferred.
+Cluster/deployment scope; other topology failure/repair, upgrades, cutover and
+inventory remain under their owning requirements. Live Cluster Router metadata
+listing, selected option set/reset, stale-review refusal and removal now have
+native pure/C and desktop acceptance through the existing topology workspace;
+see :doc:`mysql_router_hosts`. Its original single native Shell utility reference
+is retained without depending on a binary-log replay input. History qualification
+stays owner-deferred.

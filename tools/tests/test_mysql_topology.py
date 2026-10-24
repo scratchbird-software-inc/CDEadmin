@@ -221,3 +221,23 @@ def test_native_inspection_does_not_claim_or_release_an_uncertain_recovery_targe
     assert jobs.get(planned['job_id'],1,endpoint)['remote_database_mutation'] is False
     with replays.fence_store(target['server_uuid']) as store:assert store.read()['replay_fence']['job_id']==replay['job_id']
     jobs.close();replays.close()
+
+
+def test_topology_retains_its_original_utility_reference_without_replay_archive_inputs(tmp_path,monkeypatch):
+    from pgadmin.cdeadmin.sdk import durable_tool
+    jobs,replays,endpoint,target,planned=setup(tmp_path,'cluster.list_routers','[]')
+    record=jobs.load(planned['job_id'],1,endpoint)
+    assert 'input_reference' not in record['source_state']
+    reference={'name':'mysql-topology','nonce':'original','request_sha256':'signed','host':{'hostname':'owned'}}
+    jobs.progress(record,{'durable_tool':reference})
+    record=jobs.load(record['job_id'],1,endpoint);assert record['durable_tool']==reference
+    record['program']['executable_sha256']='native-shell'
+    observation={'complete':True,'cleanup_confirmed':True,'return_code':0,'native_outcome_inferred':False}
+    def observe(directory,saved,fingerprint):
+        assert saved==reference and fingerprint=='native-shell'
+        return observation
+    monkeypatch.setattr(durable_tool,'observe',observe)
+    facts=jobs.observe_utility(record)
+    assert facts['native_process_termination_confirmed'] and facts['return_code']==0
+    assert jobs.load(record['job_id'],1,endpoint)['interrupted_utility_observation']['native_outcome_inferred'] is False
+    jobs.close();replays.close()

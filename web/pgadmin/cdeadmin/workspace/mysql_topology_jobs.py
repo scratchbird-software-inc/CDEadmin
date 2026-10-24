@@ -14,6 +14,14 @@ class TopologyJobs(InstanceRestoreJobs):
         'Operations that can use clone recovery acquire conservative archive holds. Inspect and explicitly retire those holds separately from the topology outcome.',
     )
 
+    def progress(self, record, value):
+        # Topology runs one native Shell utility. Replay's progress adapter
+        # requires an archive input_reference which topology jobs do not have.
+        return MySQLBinlogJobs.progress(self, record, value)
+
+    def observe_utility(self, record, *, cancel=False):
+        return MySQLBinlogJobs.observe_utility(self, record, cancel=cancel)
+
     def public(self, record):
         result = MySQLBinlogJobs.public(self, record)
         result['target'] = result.pop('source')

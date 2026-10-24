@@ -90,6 +90,23 @@ readiness remain distinct. Lost replies are never retried automatically; later
 successful inspection does not rewrite an original unknown outcome. An
 interrupted routed commit retains the native client's uncertain outcome.
 
+Live Router metadata and selected routing options
+-------------------------------------------------
+
+The native topology workspace lists actual running Routers and their selected
+native options. Select the exact native ``hostname::router-name`` identity for
+``cluster.set_router_option``; native set/reset preserves the difference between
+a value and null. Reviews bind the current Router metadata, so a changed native
+option invalidates an older unstarted request. Removal uses the native
+``remove_router_metadata`` method and preserves its native scope. Stopping a
+Router and removing its metadata are separate reviewed operations.
+
+Topology operations keep their single original MySQL Shell utility reference
+independently of binary-log archive/replay inputs. Utility progress, original
+inspection and cancellation do not require a replay archive input reference.
+The native read/write-split classic endpoint is separately qualified alongside
+the earlier read/write and read-only traffic routes.
+
 Qualification and remaining scope
 ----------------------------------
 
@@ -119,3 +136,11 @@ itself prove their production failure/repair acceptance. Router metadata/options
 routing-guideline and account workflows remain owned by the native topology
 workspace. Human form validation, platform acceptance and closed Enterprise
 features retain their separate ownership/scope.
+
+``--metadata-only --mysql-shell <native-binary>`` qualifies live Cluster Router
+listing, selected option set/reset, stale-review refusal, read/write-split exact
+bigint data and native metadata removal using both connector interfaces.
+``--metadata-live`` prepares an explicitly labelled live desktop fixture; it is
+not a metadata acceptance result. ``--metadata-browser-only`` exercises the
+existing topology workspace over that fixture, with independent native row and
+removal observations. Other topology families retain their separate acceptance.
