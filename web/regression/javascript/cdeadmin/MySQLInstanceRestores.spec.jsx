@@ -59,3 +59,14 @@ it('observes a missing guardian receipt without connecting to SQL or replaying t
   expect(screen.getByText(/Original native load outcome: unknown/)).toBeInTheDocument();
   expect(post.mock.calls.some(([value])=>['mysql_instance_restore_reconcile','mysql_instance_restore_start','mysql_instance_restore_acknowledge'].includes(value.action))).toBe(false);
 });
+it('explains unavailable original utility identity without enabling a guessed cancellation',async()=> {
+  const receipt={job_id:'legacy-missing',state:'unknown',target:{server_uuid:'target'},native_load_outcome:'unknown',native_process_termination_confirmed:false,
+    utility_observation_unavailable:{reason:'original_durable_reference_unavailable'}};
+  const post=jest.fn(({action})=>Promise.resolve(action==='mysql_instance_restore_list' ? {jobs:[receipt],total:1,offset:0} : receipt));
+  render(<Component post={post} endpointUrl="/workspace/owned" />);
+  fireEvent.click(screen.getByRole('button',{name:'Load instance restore jobs'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Inspect instance restore legacy-missing'}));
+  await screen.findByText(/The original utility reference is unavailable/);
+  expect(screen.getByRole('button',{name:'Cancel instance restore'})).toBeDisabled();
+  expect(post.mock.calls.some(([value])=>['mysql_instance_restore_start','mysql_instance_restore_cancel'].includes(value.action))).toBe(false);
+});

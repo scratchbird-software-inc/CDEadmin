@@ -2180,3 +2180,22 @@ logical/API checks exercise a foreign-server difference and a lost source-unlock
 reply with independent original-session cleanup observation. See
 :doc:`mysql_physical_backups` for checkpoint selection and the remaining native
 runtime, host-state and cutover boundaries. ``CMP-MY-01`` stays open.
+
+
+Unavailable original utility evidence
+-------------------------------------
+
+Older receipts without an original durable utility reference now record an
+explicit unavailable-evidence diagnostic. SQL-independent inspection neither
+signals a guessed process nor confirms termination, changes the database outcome
+or releases target protection. Backup, restore, replay and acceptance views show
+that limitation. Existing positive native cleanup facts remain unchanged.
+Original facts that were never retained cannot be reconstructed from current SQL
+state; these receipts remain unknown when their required evidence is missing.
+
+For multi-client raw replay, each original decoder/client observation is collected
+even when another original reference is missing, changed or unreadable. Each
+failed observation remains unconfirmed. Aggregate cleanup requires all admitted
+original clients; one successful observation cannot clear a partially observed
+operation. This completes the unavailable-evidence handling, without asserting
+that a historical operation with missing facts has become recoverable.

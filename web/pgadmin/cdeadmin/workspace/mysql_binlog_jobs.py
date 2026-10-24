@@ -138,13 +138,19 @@ class MySQLBinlogJobs:
     def observe_utility(self,record,*,cancel=False):
         from ..sdk import durable_tool
         reference=record.get('durable_tool')
-        if reference is None:return None
+        if reference is None:
+            if record.get('native_process_termination_confirmed') is not True:
+                self.update(record,utility_observation_unavailable={
+                    'reason':'original_durable_reference_unavailable','cleanup_confirmed':None,
+                    'cancellation_requested':False,'automatic_retry':False,'native_outcome_inferred':False,
+                    'original_native_outcome_unchanged':True})
+            return None
         observe=durable_tool.cancel if cancel else durable_tool.observe
         try:result=observe(self.directory(record),reference,record['program']['executable_sha256'])
         except (OSError,ValueError) as error:
             result={'complete':False,'cleanup_confirmed':None,'native_outcome_inferred':False,'observation_error_type':type(error).__name__}
         result={**result,'native_process_termination_confirmed':durable_tool.terminated(result)}
-        values={'interrupted_utility_observation':result}
+        values={'interrupted_utility_observation':result,'utility_observation_unavailable':None}
         if durable_tool.terminated(result):
             values['native_process_termination_confirmed']=True
             if record['state'] in ACTIVE and self.public(record)['state']=='unknown':values['state']='unknown'

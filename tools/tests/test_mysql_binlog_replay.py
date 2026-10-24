@@ -330,3 +330,30 @@ def test_unavailable_native_credentials_are_an_admission_refusal(monkeypatch):
     with pytest.raises(ProviderWorkspaceError,match='binding is unavailable') as caught:
         ProviderWorkspaceService.mysql_binlog_replay(object(),object(),'review',{})
     assert 'Private' not in str(caught.value)
+
+
+@pytest.mark.parametrize('cancel',[False,True])
+@pytest.mark.parametrize('failed',['raw-replay-decoder','raw-replay-client'])
+@pytest.mark.parametrize('error_type',[OSError,ValueError])
+def test_one_unreadable_raw_receipt_keeps_collecting_other_original_client_facts(tmp_path,monkeypatch,cancel,failed,error_type):
+    from pgadmin.cdeadmin.sdk import durable_tool
+    jobs=MySQLBinlogReplayJobs(tmp_path/'jobs',tmp_path/'replays');endpoint=str(uuid.uuid4());target=str(uuid.uuid4())
+    value=jobs.review(1,endpoint,options({'target_confirmation':target}),{'identity':{'server_uuid':target},'state':{
+        'target':{},'input_reference':{'family':'raw','server_id':7,'endpoint_id':endpoint,'job_id':str(uuid.uuid4()),'artifact_digest':'bytes','summary':{'total_bytes':'1'}}}},
+        'configuration',{'execution_host':{'hostname':'owned-test'},'decoder':{'executable_sha256':'decoder'},'client':{'executable_sha256':'client'}})
+    record=jobs.load(value['job_id'],1,endpoint);jobs.claim_fence(record)
+    jobs.update(record,state='unknown',native_load_outcome='unknown',native_load_may_have_dispatched=True,native_process_termination_confirmed=False)
+    for name in ('raw-replay-decoder','raw-replay-client'):jobs.progress(record,{'durable_tool':{'name':name,'nonce':name}})
+    calls=[]
+    def observe(directory,reference,expected):
+        calls.append(reference['name'])
+        if reference['name']==failed:raise error_type('Private original receipt details')
+        return {'complete':True,'cleanup_confirmed':True}
+    monkeypatch.setattr(durable_tool,'cancel' if cancel else 'observe',observe)
+    result=jobs.observe_utility(jobs.load(record['job_id'],1,endpoint),cancel=cancel)
+    assert len(calls)==2 and set(calls)=={'raw-replay-decoder','raw-replay-client'} and not result['native_process_termination_confirmed']
+    assert result['tools'][failed]['observation_error_type']==error_type.__name__
+    assert 'Private original receipt details' not in str(result)
+    current=jobs.get(record['job_id'],1,endpoint);assert current['state']=='unknown' and current['native_load_outcome']=='unknown'
+    with jobs.fence_store(target) as store:assert store.read()['replay_fence']['job_id']==record['job_id']
+    jobs.close()

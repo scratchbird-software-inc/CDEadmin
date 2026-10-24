@@ -65,6 +65,7 @@ export default function MySQLInstanceAcceptance({post,sourceServerId,backupJobId
           <Alert severity="warning">Private server-lock cleanup is unconfirmed. Target protection remains active. Observe the acceptance target to check the original private SQL session.</Alert>)}
       </>}
       <Button disabled={busy} onClick={()=>run('status',{job_id:receipt.job_id},setReceipt)}>Refresh acceptance receipt</Button>
+      {receipt.utility_observation_unavailable && receipt.native_process_termination_confirmed!==true && <Alert severity="warning">The original utility reference is unavailable. This receipt cannot confirm cleanup or cancel that client. The original outcome is unchanged.</Alert>}
       {receipt.interrupted_utility_observation && <Alert severity={receipt.native_process_termination_confirmed===true ? 'info' : 'warning'}>Interrupted utility cleanup: {receipt.native_process_termination_confirmed===true ? 'confirmed' : 'unconfirmed'}. Earlier checks are unchanged; private SQL-lock cleanup and target acknowledgement remain separate.</Alert>}
       <Button disabled={busy || !ACTIVE.has(receipt.state) && receipt.state!=='reviewed' && !(receipt.state==='unknown' && receipt.durable_tool && receipt.native_process_termination_confirmed!==true)} onClick={()=>run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel independent acceptance</Button>
       <Button disabled={busy || ACTIVE.has(receipt.state)} onClick={()=>run('observe_utilities',{job_id:receipt.job_id},setReceipt)}>Observe original acceptance utility without SQL connection</Button>

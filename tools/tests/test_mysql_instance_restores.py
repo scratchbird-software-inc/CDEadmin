@@ -100,3 +100,20 @@ def test_original_restore_utility_observation_uses_owned_scope_without_target_sq
     jobs.inspect_utilities.assert_called_once_with(record)
     assert all(call.args==('original',7,'owned-endpoint') for call in jobs.load.call_args_list)
     endpoint_service.workspace.assert_not_called()
+
+
+@pytest.mark.parametrize('cancel',[False,True])
+def test_missing_original_reference_reports_unavailable_without_guessed_process_control(tmp_path,monkeypatch,cancel):
+    jobs,replays,endpoint,target,review=setup(tmp_path);planned=review();record=jobs.load(planned['job_id'],1,endpoint)
+    jobs.claim_fence(record)
+    jobs.update(record,state='unknown',native_load_outcome='unknown',native_process_termination_confirmed=False)
+    unexpected=Mock(side_effect=AssertionError('No guessed native invocation may be observed or signalled'))
+    monkeypatch.setattr('pgadmin.cdeadmin.sdk.durable_tool.observe',unexpected)
+    monkeypatch.setattr('pgadmin.cdeadmin.sdk.durable_tool.cancel',unexpected)
+    assert jobs.observe_utility(jobs.load(record['job_id'],1,endpoint),cancel=cancel) is None
+    current=jobs.get(record['job_id'],1,endpoint)
+    assert current['utility_observation_unavailable']['reason']=='original_durable_reference_unavailable'
+    assert current['utility_observation_unavailable']['cancellation_requested'] is False
+    assert current['state']=='unknown' and current['native_load_outcome']=='unknown' and not current['native_process_termination_confirmed']
+    with replays.fence_store(target['server_uuid']) as store:assert store.read()['replay_fence']['job_id']==record['job_id']
+    unexpected.assert_not_called();jobs.close();replays.close()

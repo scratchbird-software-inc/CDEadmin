@@ -100,6 +100,27 @@ def qualify(service,db_client,backup,uid,target,target_uuid,review,http,query,sh
                 else:owner.kill();owner.wait(timeout=5)
                 lost=http('status',{'job_id':record['job_id']})
                 assert lost['state']=='unknown' and lost['native_load_outcome']=='unknown' and not lost['native_process_termination_confirmed']
+                if mode=='worker-completion':
+                    import psutil
+                    reference=current['durable_tool'];connect=db_client._connect
+                    def no_sql(*_args,**_kwargs):raise AssertionError('Missing-reference observation must not contact SQL')
+                    jobs.update(record,durable_tool=None);db_client._connect=no_sql
+                    try:
+                        unavailable=http('observe_utilities',{'job_id':record['job_id']})
+                        assert unavailable['state']=='unknown' and unavailable['native_load_outcome']=='unknown'
+                        assert not unavailable['native_process_termination_confirmed']
+                        assert unavailable['utility_observation_unavailable']['reason']=='original_durable_reference_unavailable'
+                        assert not unavailable['utility_observation_unavailable']['cancellation_requested']
+                        assert psutil.Process(current['progress']['pid']).is_running()
+                        with jobs.fence_store(target_uuid) as store:assert store.read()['replay_fence']['job_id']==record['job_id']
+                        (Path(output)/'missing-original-reference.json').write_text(json.dumps({
+                            'state':unavailable['state'],'native_load_outcome':unavailable['native_load_outcome'],
+                            'native_process_termination_confirmed':False,'original_native_client_still_present':True,
+                            'target_fence_retained':True,'diagnostic':unavailable['utility_observation_unavailable'],
+                            'history_testing':'not run'},indent=2)+'\n')
+                        checks.append('missing-original-utility-reference-is-explicitly-unavailable-while-native-client-remains-alive-without-SQL-or-guessed-cleanup')
+                    finally:
+                        jobs.update(record,durable_tool=reference);db_client._connect=connect
                 if cancel:http('cancel',{'job_id':record['job_id']})
                 if guardian_loss:
                     deadline=time.monotonic()+15;connect=db_client._connect

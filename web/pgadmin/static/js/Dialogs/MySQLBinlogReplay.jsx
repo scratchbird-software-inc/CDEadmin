@@ -107,6 +107,7 @@ export default function MySQLBinlogReplay({post,engine='mysql'}) {
       {engine==='mysql' && <Button disabled={busy || ACTIVE.has(receipt.state)} onClick={() => run('observe_utilities',{job_id:receipt.job_id},value => {setReceipt(value);setFacts(null);setAck('');})}>Inspect original replay utilities</Button>}
       <Button disabled={busy || ACTIVE.has(receipt.state)} onClick={() => run('reconcile',{job_id:receipt.job_id},value => {setReceipt(value);setFacts(value);setAck('');})}>Inspect current target facts</Button>
       <Button onClick={save}>Download replay receipt</Button>
+      {receipt.utility_observation_unavailable && receipt.native_process_termination_confirmed!==true && <Alert severity="warning">The original utility reference is unavailable. This receipt cannot confirm cleanup or cancel that client. The original outcome is unchanged.</Alert>}
       {receipt.interrupted_utility_observation && <Box component="pre" aria-label="Original replay utility observations" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{JSON.stringify({utilities:receipt.interrupted_utility_observation,staged_input_cleanup:receipt.staged_input_cleanup,recovery_utility_release:receipt.recovery_utility_release},null,2)}</Box>}
       {facts && <Box component="pre" aria-label="Native replay reconciliation" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify(facts.interrupted_utility_observation ?
         {...facts.reconciliation,native_utilities:facts.interrupted_utility_observation} : facts.reconciliation,null,2)}</Box>}
