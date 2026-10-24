@@ -113,3 +113,33 @@ def test_changed_native_router_configuration_refuses_service_control_before_mana
         'configuration_path':str(router.target/'mysqlrouter.conf'),'configuration_sha256':'changed','native_router_ids':['native']})
     with pytest.raises(worker.Refused,match='configuration changed'):services.runtime(request,worker)
     router.native.process.assert_not_called()
+
+
+def test_later_router_files_do_not_supply_a_missing_original_dispatch_result(router,monkeypatch):
+    job=str(uuid.uuid4());directory=Path(router.request['options']['workspace'])/job;directory.mkdir(parents=True)
+    original={'state':'native_dispatch','operation':'bootstrap','job_id':job,'input_digest':'original',
+        'observation':{'program':{'sha256':'original-executable'},'directory':str(router.target)},'sdk_sha256':{},'durable_tool':{'original':'reference'}}
+    import json
+    path=directory/'result.json';path.write_text(json.dumps(original));before=path.read_bytes()
+    monkeypatch.setattr(worker,'sdk',lambda *args,**kwargs:SimpleNamespace(observe=lambda *args:{'complete':True,'return_code':0,'cleanup_confirmed':True}))
+    monkeypatch.setattr(worker,'deployment',lambda *args:{'native_router_ids':['native-generated']})
+    result=worker.dispatch({**router.request,'action':'status','job_id':job,'input_digest':'original'},transport.sources())
+    assert result['current_deployment_observation']=={'observed':True,'native_router_ids':['native-generated']}
+    assert result['state']=='native_dispatch' and 'result' not in result and path.read_bytes()==before
+
+
+@pytest.mark.parametrize('return_code',[0,1,None])
+def test_review_of_later_router_deployment_requires_original_utility_success_and_keeps_unknown(return_code):
+    from pgadmin.cdeadmin.workspace.mysql_router_service import bound_source
+    options={'connection':{'host':'original'},'executable':'/native/mysqlrouter','directory':'/original/router','user':'router','binding_job_id':'original'}
+    deployment={'observed':True,'directory':'/original/router','directory_identity':[1,2],'configuration_path':'/original/router/mysqlrouter.conf',
+        'configuration_sha256':'actual','native_router_ids':['native-generated']}
+    prior={'state':'unknown','options':options,'source':{'server_uuid':'original'},'source_state':{'seed':{},'remote_review':{}},
+        'reconciliation':{'remote_receipt':{'observation':{'program':{'sha256':'original'}},
+            'current_deployment_observation':deployment,'utility_observation':{'complete':True,'cleanup_confirmed':True,'return_code':return_code}}}}
+    jobs=SimpleNamespace(load=lambda *args:prior)
+    if return_code==0:
+        value=bound_source(jobs,'owner','endpoint',options);assert value['state']['deployment_binding']['deployment']['native_router_ids']==['native-generated']
+    else:
+        with pytest.raises(transport.HostError,match='observed completed deployment'):bound_source(jobs,'owner','endpoint',options)
+    assert prior['state']=='unknown' and 'remote_receipt' not in prior

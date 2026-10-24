@@ -49,6 +49,49 @@ def wait_until(callback, seconds=15):
     raise TimeoutError('Owned durable utility fixture deadline')
 
 
+@pytest.mark.skipif(not sys.platform.startswith('linux'),reason='Linux original session and PIDFD qualification')
+def test_non_daemon_router_session_survives_guardian_loss_and_cancels_only_its_original_client(tmp_path):
+    import psutil,pwd
+    web=Path(__file__).resolve().parents[2]/'web';root=durable_tool.directory(tmp_path,'router-bootstrap')
+    secret=tmp_path/'private-input';secret.write_bytes(b'owned-router-input\n')
+    code='''import json,os,sys,types
+from pathlib import Path
+package=types.ModuleType('pgadmin');package.__path__=[sys.argv[2]+'/pgadmin'];sys.modules['pgadmin']=package
+sys.path.insert(0,sys.argv[2])
+from pgadmin.cdeadmin.sdk import durable_tool
+root=Path(sys.argv[1])
+def progress(value):
+ if value.get('durable_tool'):(root/'reference.json').write_text(json.dumps(value['durable_tool']))
+durable_tool.run([sys.executable,'-c',"import os,time,json;from pathlib import Path;(Path.cwd()/'native-started.json').write_text(json.dumps({'pid':os.getpid()}));time.sleep(45)",
+ '--bootstrap=mysql://owned-fixture','--user='+sys.argv[3]],workspace=root,environment=dict(os.environ),timeout=60,capture_limit=1024,
+ name='router-bootstrap',input_path=root/'private-input',credential_file=root/'private-input',progress=progress,guard_parent_death=False)
+'''
+    owner=subprocess.Popen([sys.executable,'-c',code,str(tmp_path),str(web),pwd.getpwuid(os.geteuid()).pw_name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    native=guardian=None
+    try:
+        wait_until(lambda:(tmp_path/'native-started.json').exists() and (root/'progress.json').exists())
+        native=psutil.Process(json.loads((tmp_path/'native-started.json').read_text())['pid'])
+        reference=json.loads((tmp_path/'reference.json').read_text());guardian=psutil.Process(json.loads((root/'started.json').read_text())['guardian_pid'])
+        assert json.loads((root/'request.json').read_text())['kernel_policy'] is None
+        guardian.kill();owner.wait(timeout=10)
+        observed=durable_tool.observe(tmp_path,reference,durable_tool.sha(sys.executable))
+        assert native.is_running() and not durable_tool.terminated(observed)
+        assert observed['independent_reconciliation']['reason']=='original_native_session_still_present'
+        cancelled=durable_tool.cancel(tmp_path,reference,durable_tool.sha(sys.executable))
+        assert cancelled['independent_reconciliation']['original_native_cancellation_requested']
+        wait_until(lambda:not native.is_running() or native.status()==psutil.STATUS_ZOMBIE)
+        ended=durable_tool.observe(tmp_path,reference,durable_tool.sha(sys.executable))
+        assert durable_tool.terminated(ended) and ended['credential_file_cleanup_confirmed'] and ended['input_file_cleanup_confirmed']
+        assert ended['complete'] is False and ended['native_outcome_inferred'] is False
+        assert not (root/'result.json').exists() and not secret.exists() and not (root/'stdin.bin').exists()
+    finally:
+        if owner.poll() is None:owner.kill();owner.wait(timeout=5)
+        for process in (native,guardian):
+            if process is not None:
+                try:process.kill()
+                except psutil.NoSuchProcess:pass
+
+
 def test_durable_receipt_keeps_private_output_separate_and_scrubs_credentials(tmp_path):
     events=[]
     result=ProviderToolRunner({'python':sys.executable}).run(

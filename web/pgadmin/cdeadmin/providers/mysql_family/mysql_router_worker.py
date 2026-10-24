@@ -208,6 +208,20 @@ def arguments(value,observed):
     return [*result,*value['extra_arguments']]
 
 
+def original_observation(directory,result,sources,*,cancel=False):
+    tools=sdk(directory,expected=result.get('sdk_sha256'));reference=result['durable_tool'];fingerprint=result['observation']['program']['sha256']
+    facts=(tools.cancel if cancel else tools.observe)(directory,reference,fingerprint)
+    if (facts.get('independent_reconciliation') or {}).get('reason')=='original_kernel_policy_unavailable':
+        # Preserve and verify the original helper bytes. A current reader can
+        # add typed session observations over an older signed Router request;
+        # it never replaces original code/results or dispatches the utility.
+        with tempfile.TemporaryDirectory(prefix='scratchrobin-router-observer-') as temporary:
+            current=sdk(Path(temporary),sources)
+            facts=(current.cancel if cancel else current.observe)(directory,reference,fingerprint)
+            facts['reader_scope']='current_reader_over_unchanged_original_request'
+    return facts
+
+
 def dispatch(request,sources):
     if not isinstance(request,dict) or request.get('schema')!='cdeadmin.mysql-router-host.v1':raise Refused('Select the native Router host protocol')
     action=request.get('action')
@@ -230,9 +244,11 @@ def dispatch(request,sources):
             if action!='status':raise Refused('Observe the original service commands; service requests cannot be replayed or cancelled as bootstrap')
             return service_module().observe(result,directory,sys.modules[__name__],request)
         if result.get('durable_tool'):
-            tools=sdk(directory,expected=result.get('sdk_sha256'));reference=result['durable_tool'];fingerprint=result['observation']['program']['sha256']
-            facts=(tools.cancel if action=='cancel' else tools.observe)(directory,reference,fingerprint)
+            facts=original_observation(directory,result,sources,cancel=action=='cancel')
             result['utility_observation']=facts
+            if facts.get('cleanup_confirmed') is True:
+                try:result['current_deployment_observation']={'observed':True,**deployment(result['observation']['directory'])}
+                except Exception as error:result['current_deployment_observation']={'observed':False,'error_type':type(error).__name__}
             if action=='acknowledge':
                 if facts.get('cleanup_confirmed') is not True:raise Refused('Original Router bootstrap writers have not ended')
                 release_claim(result,directory);result['deployment_claim_released']=True
@@ -246,7 +262,7 @@ def dispatch(request,sources):
     native.private_directory(directory);tools=sdk(directory,sources)
     result={'state':'native_dispatch','job_id':job,'input_digest':digest,'observation':observed,'automatic_retry':False,
         'sdk_sha256':sdk_hashes(sources),'sql_readiness_observed':False,'bootstrap_metadata_mutations_may_have_occurred':operation=='bootstrap',
-        'operation':operation}
+        'operation':operation,'dispatcher_identity':{'pid':os.getpid(),'start_ticks':Path('/proc/self/stat').read_text().rpartition(')')[2].split()[19]}}
     native.save(path,result)
     if operation!='bootstrap':
         try:return service_module().execute(request,observed,directory,sources,result,sys.modules[__name__])

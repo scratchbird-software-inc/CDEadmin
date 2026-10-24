@@ -98,7 +98,7 @@ def execute(request,observed,directory,sources,result,router):
                 result.setdefault('native_commands',[]).append({'index':index,'executable_sha256':checksum,'durable_tool':event['durable_tool']})
                 native.save(directory/'result.json',result)
         outcome=tools.run([str(executable),*arguments],workspace=directory,environment=native.environment(executable,directory),
-            timeout=timeout,capture_limit=65536,name='router-service-'+str(index),progress=progress,guard_parent_death=False)
+            timeout=timeout,capture_limit=65536,name='router-service-'+str(index),progress=progress,guard_parent_death=True)
         value={key:item for key,item in outcome.items() if key not in {'stdout','stderr'}}
         value['outputs']={name:{'base64':base64.b64encode(outcome[name]).decode()} for name in ('stdout','stderr')}
         return value

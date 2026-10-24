@@ -149,6 +149,9 @@ def bound_source(jobs,owner,endpoint,selected):
     if prior['options'].get('operation','bootstrap')=='bootstrap':
         completed=remote if remote.get('deployment_observation') else later
         deployment=completed.get('deployment_observation') or {}
+        facts=later.get('utility_observation') or {}
+        if deployment.get('observed') is not True and facts.get('cleanup_confirmed') is True and facts.get('complete') is True and facts.get('return_code')==0:
+            completed=later;deployment=completed.get('current_deployment_observation') or {}
         if deployment.get('observed') is not True:raise native.HostError('Select a native Router receipt with an observed completed deployment')
         from ..providers.mysql_family.mysql_router_services import stable
         binding={'observation':completed['observation'],'deployment':stable(deployment)}

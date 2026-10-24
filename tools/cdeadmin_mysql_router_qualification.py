@@ -11,7 +11,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output,fixture,use_c=False):
+def qualify(output,fixture,use_c=False,faults_only=False,legacy_helper=None):
     output=Path(output).resolve();fixture=Path(fixture).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Keep owned qualification state outside source')
     output.mkdir(parents=True,exist_ok=False);owned=json.loads(fixture.read_text())
@@ -57,6 +57,11 @@ def qualify(output,fixture,use_c=False):
             'authentication':'private_key','platform':'posix','python':'python3'},'executable':'/usr/bin/mysqlrouter',
             'directory':'/opt/sr-router-'+secrets.token_hex(8),'workspace':'/tmp/sr-router-jobs','user':'mysqlrouter','base_port':16446,
             'bind_address':'0.0.0.0','seed':catalog['suggested_seed'],'extra_arguments':['--name=sr-native-router-'+secrets.token_hex(8),'--conf-skip-x-protocol'],'timeout_seconds':120}
+        if faults_only:
+            from mysql_router_recovery_qualification import qualify as recover
+            recovered=recover(post,chosen,credentials,owned,output,use_c,legacy_helper)
+            proof.update(complete=recovered['complete'],checks=recovered['checks'],unknown_completed_bootstrap_job=recovered['unknown_completed_bootstrap_job'],server_id=server.id)
+            return proof
         reviewed=post('review',{'options':chosen,'credentials':credentials})
         assert reviewed['execution_host']['hostname']=='sr-router-native-host'
         assert reviewed['remote_observation']['seed']['server_uuid']==seed['server_uuid']
@@ -216,10 +221,11 @@ def qualify(output,fixture,use_c=False):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',required=True);parser.add_argument('--fixture',required=True);parser.add_argument('--use-c',action='store_true')
-    parser.add_argument('--browser-only-application');parser.add_argument('--server-id',type=int);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');args=parser.parse_args()
+    parser.add_argument('--browser-only-application');parser.add_argument('--server-id',type=int);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
+    parser.add_argument('--faults-only',action='store_true');parser.add_argument('--legacy-helper');parser.add_argument('--browser-resume-job');args=parser.parse_args()
     if args.browser_only_application:
         if not all((args.server_id,args.browser_binary,args.driver_binary)):parser.error('Select the native application server and desktop binaries')
         from mysql_router_ui_qualification import qualify as desktop
-        result=desktop(args.output,args.fixture,args.browser_only_application,args.server_id,args.browser_binary,args.driver_binary)
-    else:result=qualify(args.output,args.fixture,args.use_c)
+        result=desktop(args.output,args.fixture,args.browser_only_application,args.server_id,args.browser_binary,args.driver_binary,args.browser_resume_job)
+    else:result=qualify(args.output,args.fixture,args.use_c,args.faults_only,args.legacy_helper)
     print(json.dumps({'complete':result['complete'],'checks':len(result['checks'])}))

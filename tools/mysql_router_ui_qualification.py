@@ -5,7 +5,7 @@ import secrets
 import threading
 
 
-def qualify(output,fixture,application_directory,sid,binary,driver_binary):
+def qualify(output,fixture,application_directory,sid,binary,driver_binary,resume_job=None):
     output=Path(output);output.mkdir(parents=True,exist_ok=False);owned=json.loads(Path(fixture).read_text())
     if not owned.get('complete') or not owned['network'].startswith('sr-router240-'):raise ValueError('Select the explicitly owned native fixture')
     from cdeadmin_mysql_dump_verification_qualification import setup_application
@@ -77,27 +77,39 @@ def qualify(output,fixture,application_directory,sid,binary,driver_binary):
             driver.execute_script('arguments[0].scrollIntoView({block:"center"});',node);node.click()
             wait.until(lambda browser:browser.find_element(By.XPATH,'//label[normalize-space()="Original Router deployment or service job"]/following-sibling::div//input').get_attribute('value')==result['job_id'])
             field('Router SSH private key',Path(owned['private_key']).read_text())
-        field('Router SSH host',owned['router_address']);field('Router SSH username','root');field('Expected Router OpenSSH host key',owned['host_key'])
-        select('Router SSH authentication','private_key');field('Router SSH private key',Path(owned['private_key']).read_text())
-        field('Native Router operating-system user','mysqlrouter');field('Native Router deployment directory','/opt/sr-ui-router-'+secrets.token_hex(8))
-        field('Router base port',16446);field('Router bind address','0.0.0.0')
-        field('Additional native bootstrap arguments (one per line)','--name=sr-ui-'+secrets.token_hex(6)+'\n--conf-skip-x-protocol')
-        click('Use registered metadata seed');wait.until(lambda browser:browser.find_element(By.XPATH,'//label[normalize-space()="Router metadata seed host"]/following-sibling::div//input').get_attribute('value')==owned['peers'][0]['host'])
-        click('Review native Router request');wait.until(lambda browser:value('Native Router review'));authorize();bootstrapped=finish('bootstrap')
-        assert bootstrapped['remote_receipt']['deployment_observation']['native_router_ids']
-        proof['checks'].append('built-desktop-owner-context-menu-private-SSH-native-bootstrap-exact-review-and-native-ID')
+        if resume_job:
+            inspect({'job_id':resume_job})
+            click('Inspect original Router invocation')
+            bootstrapped=wait.until(lambda browser:current if (current:=value('Native Router receipt')) and current.get('reconciliation') else None)
+            facts=bootstrapped['reconciliation']['remote_receipt']
+            assert bootstrapped['state']=='unknown' and not bootstrapped.get('ssh_reply_observed')
+            assert facts['utility_observation']['return_code']==0 and facts['current_deployment_observation']['observed']
+            click('Acknowledge ended Router bootstrap')
+            wait.until(lambda browser:current if (current:=value('Native Router receipt')) and current['reconciliation']['remote_receipt'].get('deployment_claim_released') else None)
+            (output/'bootstrap.json').write_text(json.dumps(bootstrapped,indent=2)+'\n')
+            proof['checks'].append('built-desktop-original-unknown-receipt-current-successful-files-separate-inspection-and-ended-writer-acknowledgement')
+        else:
+            field('Router SSH host',owned['router_address']);field('Router SSH username','root');field('Expected Router OpenSSH host key',owned['host_key'])
+            select('Router SSH authentication','private_key');field('Router SSH private key',Path(owned['private_key']).read_text())
+            field('Native Router operating-system user','mysqlrouter');field('Native Router deployment directory','/opt/sr-ui-router-'+secrets.token_hex(8))
+            field('Router base port',16446);field('Router bind address','0.0.0.0')
+            field('Additional native bootstrap arguments (one per line)','--name=sr-ui-'+secrets.token_hex(6)+'\n--conf-skip-x-protocol')
+            click('Use registered metadata seed');wait.until(lambda browser:browser.find_element(By.XPATH,'//label[normalize-space()="Router metadata seed host"]/following-sibling::div//input').get_attribute('value')==owned['peers'][0]['host'])
+            click('Review native Router request');wait.until(lambda browser:value('Native Router review'));authorize();bootstrapped=finish('bootstrap')
+            assert bootstrapped['remote_receipt']['deployment_observation']['native_router_ids']
+            proof['checks'].append('built-desktop-owner-context-menu-private-SSH-native-bootstrap-exact-review-and-native-ID')
         inspect(bootstrapped);field('Exact Router systemd unit','sr-ui-router-'+secrets.token_hex(6)+'.service')
         click('Review native Router request');wait.until(lambda browser:current if (current:=value('Native Router review')) and current['observation'].get('installation') else None);authorize();installed=finish('install_service')
         assert installed['remote_receipt']['service_installation_result']['installed']
         current=installed
-        for operation in ('service_enable','service_disable','service_start','service_restart','service_stop'):
+        for operation in (('service_start','service_stop') if resume_job else ('service_enable','service_disable','service_start','service_restart','service_stop')):
             inspect(current);select('Native Router operation',operation)
             if operation in {'service_stop','service_restart'}:
                 label=driver.find_element(By.XPATH,'//label[contains(normalize-space(),"Disconnect all routed clients")]');driver.execute_script('arguments[0].scrollIntoView({block:"center"});',label);label.click()
             click('Review native Router request');wait.until(lambda browser:current if (current:=value('Native Router review')) and current['observation'].get('service') else None);authorize();current=finish(operation)
         field('Router SSH private key',Path(owned['private_key']).read_text())
         click('Inspect original Router invocation');wait.until(lambda browser:current if (current:=value('Native Router receipt')) and current.get('reconciliation') else None)
-        proof['checks'].append('built-desktop-native-unit-installation-enable-disable-start-restart-stop-and-original-receipt-observation')
+        proof['checks'].append('built-desktop-reviewed-unit-installation-start-stop-from-original-unknown-and-separate-service-receipt' if resume_job else 'built-desktop-native-unit-installation-enable-disable-start-restart-stop-and-original-receipt-observation')
         errors=[row for row in driver.get_log('browser') if row['level']=='SEVERE'];assert not errors,errors
         driver.save_screenshot(str(output/'desktop.png'));proof.update(complete=True,console_errors=errors,version=driver.capabilities['browserVersion'])
     except BaseException:

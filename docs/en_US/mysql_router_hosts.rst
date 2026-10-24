@@ -46,6 +46,22 @@ claim only after original writer termination and cleanup are confirmed. It
 does not remove partial deployment files or roll back native account/metadata
 changes. A missing original receipt remains unknown.
 
+If the SSH dispatcher ends while the original guardian continues, later
+inspection reports current deployment-file facts separately from the missing
+original dispatcher result. An independently retained native utility success and
+confirmed writer termination can bind a new, explicitly reviewed service
+installation to those observed files. It does not change the original unknown
+SSH outcome. A failed or absent utility result cannot supply this success.
+
+The non-daemonizing Router bootstrap also has independent Linux session
+reconciliation after guardian loss. Kernel boot/namespace and original admission
+facts retain the writer fence. Original progress, command, executable and process
+birth identity constrain PIDFD cancellation; native user changes retain their
+native meaning. Cleanup verifies the original private input identities. A current
+compatibility reader can add these facts over an older signed request after
+verifying its saved original helper bytes, without replacing them or rerunning
+the utility. No native return code is inferred when its receipt is missing.
+
 Install and control the service
 -------------------------------
 
@@ -88,6 +104,13 @@ The built desktop uses the owner context menu and explicit native
 bootstrap/service reviews; ``--browser-only-application`` selects its retained
 owned qualification application and registration. Keep fixtures/evidence outside
 the implementation repository. ScratchBird history tests are not run.
+
+``--faults-only`` additionally qualifies real dispatcher loss and combined
+dispatcher/guardian loss while a native Router waits on an owned metadata-table
+lock. The test resumes or cancels that exact original process and checks private
+input cleanup, preserved unknown outcomes and reviewed use of a separately
+observed successful deployment. ``--legacy-helper`` selects the older SDK reader
+source for compatibility qualification; it is staged only in the owned fixture.
 
 This bounds the deployment/service adapter and Cluster traffic qualification.
 It does not close all ``CMP-MY-02`` topology families, native upgrades, production

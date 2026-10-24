@@ -16,6 +16,36 @@ from ..operations.fileio import exclusive_file_lock
 
 POLICY = 'linux-parent-death-kill-v1'
 LEGACY_CLIENTS={'mysql-instance-backup','mysql-instance-restore','mysql-instance-acceptance','shell-replay-client','raw-replay-decoder','raw-replay-client'}
+SESSION_CLIENTS={'router-bootstrap'}
+
+
+def stop_session_client(intent,reference,started,root,live):
+    """Bind a non-daemonizing Router bootstrap across its native UID change."""
+    progress=document(root/'progress.json')
+    if progress.get('nonce')!=reference['nonce']:raise ValueError('Original native progress identity changed')
+    observed=progress['observation'];pid=observed['pid']
+    if type(pid) is not int or pid<1:raise ValueError('Original Router process identity is unavailable')
+    if len(live)!=1 or live[0]['pid']!=pid:return False
+    # Only Router bootstrap is admitted to this policy. Its selected --user
+    # may change the native UID and clear Linux parent-death signaling.
+    command=intent['command']
+    users=[value.split('=',1)[1] for value in command if value.startswith('--user=')]
+    if len(users)!=1 or not any(value.startswith('--bootstrap=') for value in command):
+        raise ValueError('Original Router bootstrap arguments are unavailable')
+    import pwd
+    account=pwd.getpwuid(int(users[0])) if users[0].isdigit() else pwd.getpwnam(users[0])
+    allowed={os.geteuid()}
+    if os.geteuid()==0:allowed.add(account.pw_uid)
+    descriptor=os.pidfd_open(pid)
+    try:
+        process=psutil.Process(pid);uids=process.uids()
+        if (process.create_time()!=observed['process_create_time'] or process.cmdline()!=command or
+                os.getsid(pid)!=started['guardian_pid'] or uids.real not in allowed or uids.effective not in allowed or
+                fingerprint(Path('/proc')/str(pid)/'exe')!=intent['executable_sha256']):
+            raise ValueError('Original native Router process changed before cancellation')
+        signal.pidfd_send_signal(descriptor,signal.SIGKILL)
+        return True
+    finally:os.close(descriptor)
 
 
 def document(path):
@@ -122,7 +152,8 @@ def reconcile(root,intent,reference,current_host,write,*,cancel=False):
     result={'available':False,'native_process_termination_confirmed':False,
         'native_outcome_inferred':False,'automatic_retry':False}
     legacy=intent.get('kernel_policy') is None and reference['name'] in LEGACY_CLIENTS
-    if intent.get('kernel_policy')!=POLICY and not legacy:
+    session=intent.get('kernel_policy') is None and reference['name'] in SESSION_CLIENTS
+    if intent.get('kernel_policy')!=POLICY and not legacy and not session:
         return {**result,'reason':'original_kernel_policy_unavailable'}
     original=intent['host'];boot=original.get('linux_boot_id')
     if (not boot and not legacy) or not current_host.get('linux_boot_id'):
@@ -188,6 +219,9 @@ def reconcile(root,intent,reference,current_host,write,*,cancel=False):
                     if legacy and cancel:
                         try:result['legacy_native_cancellation_requested']=stop_legacy_client(intent,witness,live)
                         except (OSError,ValueError,psutil.Error):result['legacy_native_cancellation_requested']=False
+                    if session and cancel:
+                        try:result['original_native_cancellation_requested']=stop_session_client(intent,reference,started,root,live)
+                        except (OSError,ValueError,KeyError,psutil.Error):result['original_native_cancellation_requested']=False
                     return {**result,'reason':'original_native_session_still_present'}
                 result['native_process_termination_confirmed']=True
                 credential=intent.get('credential_file');selected=intent.get('input_file')
