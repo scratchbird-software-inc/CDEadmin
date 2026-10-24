@@ -2098,5 +2098,6 @@ the same directory aliases and private keyrings. The original process remains
 observable and stoppable after executable pathname replacement because its
 actual executing image and birth identify it. External system/undo geometry,
 MERGE members and
-the broader recovery/inventory gates remain open; absolute system geometry is
-refused before native copy-back. See :doc:`mysql_physical_backups`.
+the broader recovery/inventory gates remain open; absolute system geometry and
+unmapped external undo storage are refused before native preparation or
+copy-back. See :doc:`mysql_physical_backups`.

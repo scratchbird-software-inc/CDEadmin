@@ -15,6 +15,7 @@ from pgadmin.cdeadmin.workspace import mysql_physical_batch_retention as batch
 
 def make(path,kind='full-backuped',low=0,high=123,last=124):
     if not path.exists():full_artifact(path)
+    (path/'backup-my.cnf').write_text('[mysqld]\ninnodb_data_file_path=ibdata1:12M:autoextend\n')
     (path/'xtrabackup_checkpoints').write_text(f'backup_type = {kind}\nfrom_lsn = {low}\nto_lsn = {high}\nlast_lsn = {last}\n')
     if kind=='incremental':
         p=path/'xtrabackup_info';p.write_text(p.read_text().replace('incremental = N','incremental = Y'))
@@ -64,6 +65,15 @@ def test_prepare_admits_only_the_exact_next_native_delta_and_both_sealed_inputs(
     assert value['incremental_input']['lineage']['incremental_job_ids']==[inc]
     (root/inc/'artifact'/'ibdata1').write_bytes(b'changed after publication')
     with pytest.raises(worker.Refused,match='bytes changed'):worker.inspection({**request,'input_job_id':redo,'incremental_job_id':inc})
+
+
+def test_redo_apply_checks_unmapped_geometry_in_the_sealed_delta_before_native_dispatch(chain):
+    root,request,_base,redo,inc,_create=chain
+    (root/inc/'artifact'/'backup-my.cnf').write_text('[mysqld]\ninnodb_data_file_path=/original/system.ibd:12M:autoextend\n')
+    receipt=worker.read_json(root/inc/'result.json');receipt['artifact']=worker.artifact(root/inc/'artifact')
+    worker.host.save(root/inc/'result.json',receipt)
+    with pytest.raises(worker.Refused,match='system tablespaces'):
+        worker.inspection({**request,'input_job_id':redo,'incremental_job_id':inc})
 
 
 @pytest.mark.parametrize('fault',['foreign-base','gap','repeated','missing-delta','raw-base','copy-redo','prepare-delta','foreign-source'])

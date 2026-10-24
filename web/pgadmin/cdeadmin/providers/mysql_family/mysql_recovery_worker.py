@@ -26,7 +26,7 @@ def successful(value):
         value.get('process_termination_confirmed') is True)
 
 
-def configuration(path, *, keyring=False):
+def configuration(path, *, keyring=False, original_datadir=None):
     """Consume only admitted native geometry, never arbitrary server options."""
     text = physical.metadata(path)
     # XtraBackup can emit an observed option after its original command-line
@@ -67,6 +67,10 @@ def configuration(path, *, keyring=False):
         for item in values['innodb_data_file_path'].split(';'):
             if not re.fullmatch(r'[A-Za-z0-9_.-]+:[0-9]+[KMG]?(?::autoextend(?::max:[0-9]+[KMG]?)?)?', item) or item.split(':')[0] in {'.', '..'}:
                 raise Refused('Native system tablespaces need separately admitted recovery path mapping')
+    if original_datadir is not None:
+        undo=values.get('innodb_undo_directory','./')
+        if undo not in {'','.', './'} and (not Path(undo).is_absolute() or physical.absolute(undo)!=physical.absolute(original_datadir)):
+            raise Refused('Native undo storage needs separately admitted recovery path mapping')
     return {key: value for key,value in values.items() if key not in paths | metadata | {'server_id', 'innodb_log_block_size', 'innodb_undo_tablespaces', 'innodb_log_checksums'}}
 
 
@@ -150,7 +154,7 @@ def inspection(request):
         'mysqld': physical.executable(request['mysqld'], 'mysqld'),
         'os_account': {'uid': os.geteuid(), 'gid': os.getegid(), 'name': account.pw_name},
         'input': {'job_id': request['input_job_id'], 'manifest_sha256': host.digest(files), 'file_count': len(files)},
-        'configuration': configuration(config,keyring=keyring is not None), 'configuration_sha256': config_hash,
+        'configuration': configuration(config,keyring=keyring is not None,original_datadir=request['binding']['datadir']), 'configuration_sha256': config_hash,
         **({'keyring':keyring} if keyring is not None else {}),
         **({'external_paths':external} if external is not None else {}),
         'transport': 'loopback-tcp-and-private-unix-socket' if port else 'private-unix-socket-only', 'recovery_port':port, 'automatic_upgrade': False,

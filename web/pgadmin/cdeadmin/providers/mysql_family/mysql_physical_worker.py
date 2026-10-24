@@ -271,8 +271,10 @@ def inspection(request):
     external=paths_module().admission(request,entries)
     if external is not None:
         observed['external_paths']=external
-    if phase=='copy_back':
-        recovery_module().configuration(root/request['input_job_id']/'artifact'/'backup-my.cnf',keyring=keyring is not None)
+    if phase in {'prepare','prepare_redo','copy_back'}:
+        for selected in [request['input_job_id'],*([request['incremental_job_id']] if request.get('incremental_job_id') else [])]:
+            recovery_module().configuration(root/selected/'artifact'/'backup-my.cnf',keyring=keyring is not None,
+                original_datadir=request['binding']['datadir'])
     return observed
 
 

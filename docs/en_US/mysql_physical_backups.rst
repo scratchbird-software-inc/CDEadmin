@@ -754,7 +754,8 @@ This admission covers InnoDB per-table external data and general tablespaces.
 External system/undo geometry, external MERGE members,
 broader engine inventory, system-state acceptance, legacy/guardian
 resolution and production cutover remain tracked recovery work. Unsupported
-absolute system geometry refuses before native copy-back. It is not treated as
+absolute system geometry and unmapped external undo storage refuse before
+native preparation or copy-back. They are not treated as
 an ordinary table path or as a successful restore. Native qualification is
 ``tools/cdeadmin_mysql_physical_keyring_qualification.py --external``; use
 ``--desktop-only`` with browser/driver paths for the built desktop workflow.

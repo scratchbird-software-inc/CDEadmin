@@ -138,17 +138,19 @@ def test_uncertain_filesystem_view_blocks_connections_but_preserves_original_pro
     assert not value['filesystem_isolation_observation']['native_filesystem_isolation_observed']
 
 
-def test_absolute_system_geometry_refuses_copy_back_even_without_external_table_metadata(tmp_path,monkeypatch):
+@pytest.mark.parametrize('phase,checkpoint',[('prepare','full-backuped'),('prepare_redo','full-backuped'),('copy_back','full-prepared')])
+@pytest.mark.parametrize('geometry',['innodb_data_file_path=/original/system.ibd:12M:autoextend','innodb_undo_directory=/external-undo'])
+def test_external_system_or_undo_geometry_refuses_before_any_native_preparation_or_copy_back(tmp_path,monkeypatch,phase,checkpoint,geometry):
     import uuid
     from unittest.mock import Mock
     root=tmp_path/'private';root.mkdir();identity=str(uuid.uuid4());directory=root/identity/'artifact';directory.mkdir(parents=True)
-    (directory/'backup-my.cnf').write_text('[mysqld]\ninnodb_data_file_path=/original/system.ibd:12M:autoextend\n')
+    (directory/'backup-my.cnf').write_text('[mysqld]\n'+geometry+'\n')
     monkeypatch.setattr(worker,'host_scope',lambda *_args,**_kwargs:{'datadir':'/original'})
     monkeypatch.setattr(worker,'root_directory',lambda *_args:root)
     monkeypatch.setattr(worker,'executable',lambda *_args:{'path':'/native/xtrabackup'})
-    monkeypatch.setattr(worker,'input_artifact',lambda *_args:{'artifact':{'checkpoint':{'backup_type':'full-prepared'}}})
+    monkeypatch.setattr(worker,'input_artifact',lambda *_args:{'artifact':{'checkpoint':{'backup_type':checkpoint}}})
     spawn=Mock();monkeypatch.setattr(worker.subprocess,'Popen',spawn)
     with pytest.raises(worker.Refused):
-        worker.inspection({'phase':'copy_back','workspace':str(root),'executable':'/native/xtrabackup','input_job_id':identity,
-            'parallel':2,'memory_bytes':268435456,'timeout_seconds':120})
+        worker.inspection({'phase':phase,'workspace':str(root),'executable':'/native/xtrabackup','input_job_id':identity,
+            'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'binding':{'datadir':'/original'}})
     spawn.assert_not_called()
