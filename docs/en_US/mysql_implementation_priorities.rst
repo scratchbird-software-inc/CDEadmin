@@ -255,6 +255,14 @@ cover committed exact data, pending rollback and new-write replication after
 repair. Original topology guardian loss also retains the original process
 identity for separate surviving server-work checks; acknowledgement waits for
 positive member idleness and preserves unknown outcomes.
+Reviewed Linux service upgrades now validate an installed 9.7 candidate, display
+and recheck native Shell preflight, stop the bound original process, and select
+native AUTO upgrade through a reviewed unit drop-in. Older sources use explicit
+SSH/process/filesystem authority before normal 9.7 SQL admission. Native 8.4.8
+upgrade, exact data preservation and original-dispatcher loss/recovery have
+separate acceptance; manager replies, current processes, upgrade history and
+SQL/data checks retain distinct meanings. Native metadata/rolling-deployment
+acceptance and inventory remain separate from this installed-host scope.
 Native Linux service installation now creates
 a reviewed systemd unit with separate start and boot controls. Native Linux initialization
 now supports new registrations before SQL is available, with secure/insecure

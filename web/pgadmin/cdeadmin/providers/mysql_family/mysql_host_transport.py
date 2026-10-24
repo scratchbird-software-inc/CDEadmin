@@ -10,7 +10,7 @@ import socket
 import time
 
 from ...operations import fileio
-from . import mysql_host_worker, mysql_host_services, mysql_host_configuration, mysql_host_initialization, mysql_host_installation
+from . import mysql_host_worker, mysql_host_services, mysql_host_configuration, mysql_host_initialization, mysql_host_installation, mysql_host_upgrade
 
 
 class HostError(ValueError):
@@ -29,6 +29,8 @@ i=types.ModuleType('_cdeadmin_native_initialization')
 exec(p['initialization_worker'],i.__dict__);sys.modules[i.__name__]=i
 j=types.ModuleType('_cdeadmin_native_installation')
 exec(p['installation_worker'],j.__dict__);sys.modules[j.__name__]=j
+u=types.ModuleType('_cdeadmin_native_upgrade')
+exec(p['upgrade_worker'],u.__dict__);sys.modules[u.__name__]=u
 n={'__name__':'_cdeadmin_native_worker'}
 exec(p['worker'],n)
 try:r=n['dispatch'](p['request'],p.get('initialization_supervisor'))
@@ -46,6 +48,7 @@ def load(p):
  install('_cdeadmin_native_configuration',p['configuration'])
  install('_cdeadmin_native_initialization',p['initialization'])
  install('_cdeadmin_native_installation',p['installation'])
+ install('_cdeadmin_native_upgrade',p['upgrade'])
  return install('_cdeadmin_native_worker',p['host'])
 '''
 
@@ -101,6 +104,7 @@ def program():
             'configuration_worker_sha256':hashlib.sha256(Path(mysql_host_configuration.__file__).read_bytes()).hexdigest(),
             'initialization_worker_sha256':hashlib.sha256(Path(mysql_host_initialization.__file__).read_bytes()).hexdigest(),
             'installation_worker_sha256':hashlib.sha256(Path(mysql_host_installation.__file__).read_bytes()).hexdigest(),
+            'upgrade_worker_sha256':hashlib.sha256(Path(mysql_host_upgrade.__file__).read_bytes()).hexdigest(),
             'transport_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 
 
@@ -123,8 +127,11 @@ class Transport:
         self.route = public_route(route)
         self.credentials = credentials
         self.connection = self.transport = None
+        self.upgrade_secret=None
 
     def close(self):
+        if self.upgrade_secret is not None:
+            secret,self.upgrade_secret=self.upgrade_secret,None;secret.close()
         if self.transport is not None:
             self.transport.close(); self.transport = None
         if self.connection is not None:
@@ -187,10 +194,13 @@ class Transport:
     def request(self, request, timeout=90):
         if self.transport is None or not self.transport.is_authenticated():
             raise HostError('Authenticate the independently owned database-host SSH transport first')
+        if request.get('upgrade') is not None and request.get('action') not in {'status','acknowledge_upgrade'}:
+            if self.upgrade_secret is None:raise HostError('Supply private native upgrade-check credentials for review and dispatch')
+            request={**request,'upgrade_check_secret':self.upgrade_secret.use(lambda view:json.loads(bytes(view)))}
         worker, helper, services = sources(); marker = 'CDEADMIN_NATIVE_HOST_' + secrets.token_hex(16) + ':'
-        module_sources={'host':worker,'fileio':helper,'services':services,'configuration':Path(mysql_host_configuration.__file__).read_text(),'initialization':Path(mysql_host_initialization.__file__).read_text(),'installation':Path(mysql_host_installation.__file__).read_text()}
+        module_sources={'host':worker,'fileio':helper,'services':services,'configuration':Path(mysql_host_configuration.__file__).read_text(),'initialization':Path(mysql_host_initialization.__file__).read_text(),'installation':Path(mysql_host_installation.__file__).read_text(),'upgrade':Path(mysql_host_upgrade.__file__).read_text()}
         supervisor=INITIALIZATION_BOOTSTRAP+'\nm=load('+repr(module_sources)+')\nsys.modules[\"_cdeadmin_native_initialization\"].guardian(sys.argv[1],m.__dict__)\n'
-        envelope = {'installation_worker':module_sources['installation'],'initialization_worker':module_sources['initialization'],'initialization_supervisor':supervisor,'request': request, 'worker': worker, 'fileio': helper, 'services': services, 'configuration_worker':Path(mysql_host_configuration.__file__).read_text(), 'marker': marker}
+        envelope = {'upgrade_worker':module_sources['upgrade'],'installation_worker':module_sources['installation'],'initialization_worker':module_sources['initialization'],'initialization_supervisor':supervisor,'request': request, 'worker': worker, 'fileio': helper, 'services': services, 'configuration_worker':Path(mysql_host_configuration.__file__).read_text(), 'marker': marker}
         payload = json.dumps(envelope, ensure_ascii=True).encode('utf8')
         if len(payload) > 1024 * 1024:
             raise HostError('Native host request exceeds its admitted bound')

@@ -6,9 +6,11 @@ import base64
 import hashlib
 import time
 import posixpath
+import json
 
 from ..core import EndpointContext
 from ..operations.store import JsonOperationStore
+from ..security import SecretLease
 from ..providers.mysql_family import mysql_host_transport as native
 from ..providers.mysql_family.mysql_clone import configure, rows
 from ..providers.mysql_family.mysql_log_purge import private_connection
@@ -17,12 +19,12 @@ from .mysql_binlog_jobs import DurableCancellation, MySQLBinlogJobs, digest, ide
 from .mysql_monitoring_host import MySQLMonitoringHost
 
 
-SERVICE_ACTIONS = {'service_start', 'service_stop', 'service_restart','service_enable','service_disable','install_service'}
+SERVICE_ACTIONS = {'service_start', 'service_stop', 'service_restart','service_enable','service_disable','install_service','upgrade_service'}
 
 
 def options(value):
     required = {'connection', 'executable', 'configuration_file', 'workspace', 'timeout_seconds'}
-    if not isinstance(value, dict) or not required <= set(value) or set(value) - required - {'operation', 'service', 'binding_job_id', 'disconnect_all_clients','configuration_replacement','initialization','service_installation'}:
+    if not isinstance(value, dict) or not required <= set(value) or set(value) - required - {'operation', 'service', 'binding_job_id', 'disconnect_all_clients','configuration_replacement','initialization','service_installation','upgrade'}:
         raise native.HostError('Select the exact native host, executable, configuration and private workspace')
     selected = deepcopy(value); selected['connection'] = native.public_route(selected['connection'])
     for key in ('executable', 'workspace'):
@@ -49,6 +51,15 @@ def options(value):
                 not installation['user'] or '\0' in installation['user'] or len(installation['user'])>512):
             raise native.HostError('Select the native user option for this new MySQL service')
     elif 'service_installation' in selected:raise native.HostError('Service installation options apply only to a new native unit')
+    if operation=='upgrade_service':
+        upgrade=selected.get('upgrade')
+        paths={'executable','configuration_file','basedir','user','source_datadir','source_pid_file','shell_executable'}
+        if (not isinstance(upgrade,dict) or set(upgrade)!=paths|{'check_connection'} or
+                any(not isinstance(upgrade[key],str) or not upgrade[key] or '\0' in upgrade[key] or len(upgrade[key])>32768 for key in paths) or
+                not isinstance(upgrade['check_connection'],dict) or set(upgrade['check_connection'])&{'password','password2','password3'} or
+                selected.get('binding_job_id') is not None):
+            raise native.HostError('Select the exact native upgrade candidate, option file, base directory and user for the running original source')
+    elif 'upgrade' in selected:raise native.HostError('Upgrade options apply only to the reviewed native service upgrade')
     if operation=='deploy_config':
         if config is None:raise native.HostError('Select an existing native option file to replace')
         replacement=selected.get('configuration_replacement')
@@ -66,7 +77,7 @@ def options(value):
         if (not isinstance(service, dict) or set(service) != {'manager', 'name'} or
                 service['manager'] != 'systemd' or not isinstance(service['name'], str) or not service['name']):
             raise native.HostError('Select the exact native systemd MySQL unit')
-        if operation in {'service_stop', 'service_restart'} and selected.get('disconnect_all_clients') is not True:
+        if operation in {'service_stop', 'service_restart','upgrade_service'} and selected.get('disconnect_all_clients') is not True:
             raise native.HostError('Confirm disconnection of all clients on the native MySQL service')
         if selected.get('binding_job_id') is not None:
             selected['binding_job_id'] = identity(selected['binding_job_id'])
@@ -93,6 +104,9 @@ def native_request(record, action):
             'job_id': record['job_id'], 'input_digest': record['review_digest']}
     if selected.get('operation')=='initialize_data':value['initialization']=selected['initialization']
     if selected.get('operation')=='install_service':value['service_installation']=selected['service_installation']
+    if selected.get('operation')=='upgrade_service':value['upgrade']=selected['upgrade']
+    if record['source_state'].get('original_upgrade_service') is not None:
+        value['original_upgrade_service']=record['source_state']['original_upgrade_service']
     if selected.get('operation')=='deploy_config' and action!='status':value['configuration_replacement']=selected['configuration_replacement']
     if selected.get('operation') in SERVICE_ACTIONS:
         value.update(service=selected['service'], native_pid_file=record['source_state']['native_pid_file'],
@@ -144,7 +158,7 @@ class HostJobs(MySQLBinlogJobs):
                 'This request controls the exact selected native service. Stop/restart disconnect every client; native MySQL owns unfinished-transaction rollback and later recovery.',
                 'The unit fragment/drop-in bytes and command identities are observed. External scripts, environment files and credentials remain native service-manager inputs; this review does not freeze a complete startup-input snapshot.',
                 'The service-manager client outcome and subsequent unit/process facts do not prove SQL readiness. A timeout or lost SSH reply never causes automatic replay.',
-                'An offline review uses the explicitly selected prior owner/registration service association. Its SQL principal facts are previous observations; current SSH host authority authorizes this service request.'])
+                'An offline review uses the explicitly selected prior owner/registration service association and its recorded identity scope. Current SSH host authority authorizes this service request; no new SQL principal is inferred.'])
             result = self.get(record['job_id'], owner, endpoint)
         if selected.get('operation')=='install_service':
             record=self.load(result['job_id'],owner,endpoint)
@@ -153,6 +167,14 @@ class HostJobs(MySQLBinlogJobs):
                 'Native mysqld and systemd validate the reviewed inputs before exclusive unit publication. The service manager rereads all unit definitions after installation; concurrent external unit edits are not frozen.',
                 'Installation does not start or enable the service and does not establish SQL readiness. Start, enable and disable use separate reviewed native controls.',
                 'A missing reply never causes another installation. Reconciliation reports the private phase receipt, current unit bytes and current native association separately from the original manager result.'])
+            result=self.get(record['job_id'],owner,endpoint)
+        if selected.get('operation')=='upgrade_service':
+            record=self.load(result['job_id'],owner,endpoint)
+            self.update(record,warnings=[
+                'Stops the bound original native MySQL service and disconnects every client. MySQL owns pending-work rollback and the candidate performs its native AUTO data-dictionary/server upgrade.',
+                'The candidate configuration, executable, unit drop-in and original native instance/process bind this review. Existing unit definitions remain; the explicit drop-in replaces ExecStart for this service.',
+                'Native upgrades can change data irreversibly. Retain a usable backup and review native upgrade-checker warnings before proceeding. No automatic downgrade, filesystem rollback or uncertain-operation replay is provided.',
+                'Native service-manager completion, process association, native upgrade history and SQL/data acceptance are separate observations. Original host phases and a data-directory claim survive a lost reply; acknowledge only independently ended original execution.'])
             result=self.get(record['job_id'],owner,endpoint)
         return result
 
@@ -266,7 +288,7 @@ def program(peer, observed):
 def capture(service, server, jobs, owner, endpoint, selected, configuration):
     reference = selected.get('binding_job_id')
     if reference is None:
-        return source(service, server)
+        return source(service,server)
     known = jobs.load(reference, owner, endpoint)
     old_connection = known['options']['connection']; connection = selected['connection']
     original=(known.get('reconciliation') or {}).get('remote_receipt') or known.get('remote_receipt') or {}
@@ -280,23 +302,38 @@ def capture(service, server, jobs, owner, endpoint, selected, configuration):
             'state':{'host_binding':{**{key:identity[key] for key in ('server_uuid','datadir')},'hostname':hostname},
                 'native_pid_file':posixpath.join(identity['datadir'],'mysqld.pid'),
                 'source_identity_scope':'previous_native_initializer_uuid_checked_on_host'}}
-    association = known['source_state'].get('remote_review', {}).get('service') or original.get('service_installation_result',{}).get('installed_service_binding') or original.get('service_installation_reconciliation',{}).get('service')
+    upgraded=original.get('upgrade_reconciliation') or {}
+    association = (upgraded.get('native_service') if known['options'].get('operation')=='upgrade_service' and upgraded.get('observed') else None) or known['source_state'].get('remote_review', {}).get('service') or original.get('service_installation_result',{}).get('installed_service_binding') or original.get('service_installation_reconciliation',{}).get('service')
     if (known['configuration'] != configuration or not association or
             association.get('service_binding_verified') is not True or
             association.get('selected_service') != selected['service'] or
             any(old_connection.get(key) != connection.get(key) for key in ('host', 'port', 'host_key', 'platform'))):
         raise native.HostError('Select a verified service association for this registration and pinned database host')
+    legacy_service=None
+    if (known['options'].get('operation')=='upgrade_service' and upgraded.get('native_upgrade_write_not_dispatched') is True and
+            selected['executable']==known['options']['executable'] and selected['configuration_file']==known['options']['configuration_file']):
+        legacy_service=deepcopy(known['source_state']['remote_review']['program'])
+    elif known['source_state'].get('original_upgrade_service') is not None:
+        legacy_service=deepcopy(known['source_state']['original_upgrade_service'])
     return {'identity': deepcopy(known['source']), 'state': {
         'host_binding': deepcopy(known['source_state']['host_binding']),
         'native_pid_file': known['source_state']['native_pid_file'],
         'source_connection_class': known['source_state'].get('source_connection_class'),
-        'source_identity_scope': 'previous_installed_native_service_association' if known['source'].get('kind')=='previous_native_initializer' or association.get('source_association')=='installed_native_unit_for_observed_datadir' else 'previous_online_service_association',
-        'binding_job_id': reference, 'previous_service_binding': deepcopy(association)}}
+        'source_identity_scope': 'previous_native_upgrade_service_association' if known['options'].get('operation')=='upgrade_service' or legacy_service is not None else 'previous_installed_native_service_association' if known['source'].get('kind')=='previous_native_initializer' or association.get('source_association')=='installed_native_unit_for_observed_datadir' else 'previous_online_service_association',
+        'binding_job_id': reference, 'previous_service_binding': deepcopy(association),
+        **({'original_upgrade_service':legacy_service} if legacy_service is not None else {})}}
 
 
 def action(service, server, operation, request):
     if not isinstance(request, dict):
         raise native.HostError('Select a native database-host request')
+    private_upgrade=None
+    if 'upgrade_check_secret' in request:
+        request=dict(request);private_upgrade=request.pop('upgrade_check_secret')
+        if (operation not in {'review','start'} or not isinstance(private_upgrade,dict) or not private_upgrade or
+                set(private_upgrade)-{'password','password2','password3'} or
+                any(not isinstance(value,str) or len(value.encode('utf8'))>65536 for value in private_upgrade.values())):
+            raise native.HostError('Supply bounded native upgrade-check authentication factors separately')
     jobs, owner, endpoint = manager(service, server)
     if operation == 'peer' and set(request) == {'host', 'port'}:
         return native.probe(request['host'], request['port'])
@@ -305,9 +342,9 @@ def action(service, server, operation, request):
     if operation in {'status', 'cancel'} and set(request) == {'job_id'}:
         return (jobs.get if operation == 'status' else jobs.cancel)(request['job_id'], owner, endpoint.id)
     if operation == 'catalog' and not request:
-        return source(service, server)
+        return source(service,server)
     record = None
-    if operation in {'start','reconcile','cancel_initialization','acknowledge_initialization'}:
+    if operation in {'start','reconcile','cancel_initialization','acknowledge_initialization','acknowledge_upgrade'}:
         record = jobs.load(request.get('job_id'), owner, endpoint.id)
         fields = {'job_id', 'credentials'} | ({'review_digest', 'confirmed'} if operation == 'start' else set())
         if set(request) != fields:
@@ -325,34 +362,49 @@ def action(service, server, operation, request):
         selected = options(request['options'])
     else:
         raise native.HostError('Native host action is unavailable')
+    if operation in {'review','start'} and (selected.get('operation')=='upgrade_service')!=(private_upgrade is not None):
+        raise native.HostError('Supply private checker authentication only for the selected native upgrade')
     configuration = digest(MySQLMonitoringHost._configuration(server))
     if record is not None and operation=='start' and (record['configuration'] != configuration or
             any(record['program'].get(key) != value for key, value in native.program().items())):
         raise native.HostError('Use the recorded registration, host adapter and file-permission helper for this receipt')
     transport = native.Transport(selected['connection'], credentials(request['credentials']))
+    if private_upgrade is not None:transport.upgrade_secret=SecretLease(json.dumps(private_upgrade).encode())
     try:
         peer = transport.connect()
-        if operation in {'reconcile','cancel_initialization','acknowledge_initialization'}:
-            if operation!='reconcile' and selected.get('operation')!='initialize_data':raise native.HostError('Select an original native initialization request')
+        if operation in {'reconcile','cancel_initialization','acknowledge_initialization','acknowledge_upgrade'}:
+            if (operation in {'cancel_initialization','acknowledge_initialization'} and selected.get('operation')!='initialize_data' or
+                    operation=='acknowledge_upgrade' and selected.get('operation')!='upgrade_service'):
+                raise native.HostError('Select the matching original native host operation')
             remote = transport.request(native_request(record,'status' if operation=='reconcile' else operation))
             if remote.get('input_digest') != record['review_digest']:
                 raise native.HostError('The remote receipt does not match this reviewed native host job')
             jobs.update(record, reconciliation={'remote_receipt': remote, 'observed_at': time.time(),
                         'original_ssh_acknowledgement_unchanged': True})
             return jobs.get(record['job_id'], owner, endpoint.id)
-        bootstrap=selected.get('operation')=='initialize_data'
+        upgrading=selected.get('operation')=='upgrade_service'
+        bootstrap=selected.get('operation')=='initialize_data' or upgrading
         captured=None if bootstrap else capture(service,server,jobs,owner,endpoint.id,selected,configuration)
-        binding={'scope':native.mysql_host_initialization.SCOPE,'datadir':selected['initialization']['datadir']} if bootstrap else captured['state']['host_binding']
+        binding=({'scope':native.mysql_host_upgrade.SCOPE,'datadir':selected['upgrade']['source_datadir']} if upgrading else
+            {'scope':native.mysql_host_initialization.SCOPE,'datadir':selected['initialization']['datadir']} if bootstrap else captured['state']['host_binding'])
         inspection={'schema':'cdeadmin.mysql-native-host.v1','action':'inspect','binding':binding,
             'executable':selected['executable'],'configuration_file':selected['configuration_file']}
-        if bootstrap:inspection['initialization']=selected['initialization']
+        if bootstrap and not upgrading:inspection['initialization']=selected['initialization']
         if selected.get('operation')=='deploy_config':inspection['configuration_replacement']=selected['configuration_replacement']
         if selected.get('operation') in SERVICE_ACTIONS:
-            inspection.update(service=selected['service'], native_pid_file=captured['state']['native_pid_file'],
-                              previous_service_binding=captured['state'].get('previous_service_binding'))
+            inspection.update(service=selected['service'], native_pid_file=selected['upgrade']['source_pid_file'] if upgrading else captured['state']['native_pid_file'],
+                              previous_service_binding=None if upgrading else captured['state'].get('previous_service_binding'))
+            if not upgrading and captured['state'].get('original_upgrade_service') is not None:
+                inspection['original_upgrade_service']=captured['state']['original_upgrade_service']
         if selected.get('operation')=='install_service':inspection['service_installation']=selected['service_installation']
+        if selected.get('operation')=='upgrade_service':inspection['upgrade']=selected['upgrade']
         observed = transport.request(inspection)
-        if bootstrap:
+        if upgrading:
+            captured={'identity':{'kind':'native_upgrade_host_filesystem','server_uuid':observed['host']['server_uuid']},
+                'state':{'host_binding':{key:observed['host'][key] for key in ('server_uuid','hostname','datadir')},
+                    'native_pid_file':selected['upgrade']['source_pid_file'],
+                    'source_identity_scope':'authenticated_ssh_native_process_dictionary_file_and_filesystem_UUID; old SQL profile is not admitted'}}
+        elif bootstrap:
             captured={'identity':{'kind':'authenticated_ssh_host','hostname':observed['host']['hostname'],'native_instance_identity':None},
                 'state':{'host_binding':{'scope':native.mysql_host_initialization.SCOPE,'datadir':observed['host']['datadir']},
                     'source_identity_scope':'authenticated_ssh_host_before_native_initialization'}}

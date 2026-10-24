@@ -247,6 +247,14 @@ one implementation scope and must not be counted as independent completion.
   exact committed values, pending rollback and independent new-write replication
   observations. These scope-specific receipts retain native outcomes and do not
   close the upgrade or wider inventory gates.
+  Reviewed installed-host upgrades now integrate native 9.7 Shell preflight,
+  private authentication, candidate configuration/unit validation, original
+  process stop and native AUTO upgrade. Explicit SSH/process/filesystem authority
+  permits the older source without admitting it to the normal 9.7 SQL profile.
+  Actual dispatcher loss preserves the unknown outcome and pending-stop
+  protection; independent completion allows acknowledgement and a new reviewed
+  original-service restart. Native metadata/rolling-deployment acceptance,
+  cutover and the broader inventory remain open.
   Native local sandbox deploy/start/stop/kill/delete now have a separate
   offline-capable execution-host workspace with explicit OS authority,
   private dispatch passwords, native configuration/process identity checks,

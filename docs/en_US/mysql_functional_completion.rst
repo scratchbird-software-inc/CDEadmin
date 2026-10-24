@@ -2408,3 +2408,40 @@ an explicitly owned three-member fixture and native Shell executable. Receipts
 qualify their installed Linux interfaces and scenarios. Native upgrades,
 production recovery cutover and the broader product inventory remain open;
 Windows/macOS acceptance remains with the platform teams.
+
+Reviewed native Linux service upgrades
+---------------------------------------
+
+Database-host administration now reviews an installed MySQL 9.7 candidate for
+a running 8.4 LTS or MySQL 9 innovation source. SSH authority, filesystem UUID,
+open dictionary file, executable, PID birth, systemd group and unit definitions
+bind the source before normal 9.7 SQL-profile admission. The old version is not
+admitted to the ordinary editor/catalog profile.
+
+Native Shell 9.7 runs its upgrade checker against an explicit local socket or
+loopback connection. Its native report and warnings are shown in review and
+rechecked before shutdown; errors prevent data-upgrade dispatch. Authentication
+factors travel privately outside retained options and through native stdin.
+Candidate configuration and unit validation precede the original service stop.
+A reviewed unit drop-in selects the candidate and native ``--upgrade=AUTO``
+startup. MySQL owns dictionary migration; no automatic downgrade or filesystem
+rollback is provided.
+
+Original manager results, process facts, native upgrade history and subsequent
+SQL/data acceptance remain separate. Owner-scoped phase receipts and a
+data-directory claim survive an uncertain reply. Linux manager clients use a
+parent-death policy. Acknowledgement requires ended original execution and a
+stable observed native unit. An active candidate also requires its completed
+native upgrade history; pending stops and unfinished upgrades remain protected. A new reviewed
+original-service start can recover a stopped pre-upgrade source. Original
+unknown outcomes stay unknown and are never replayed.
+
+``tools/cdeadmin_mysql_upgrade_qualification.py`` uses an explicitly owned
+SSH/systemd fixture. Native pure/C acceptance covers 8.4.8-to-9.7.0 upgrade,
+unchanged UUID and exact bigint/Unicode/binary data. ``--interrupt`` kills the
+actual dispatcher and stopped native client during a delayed stop, verifies
+pending-work protection and explicitly restarts the original service before a
+new upgrade. Desktop invocation adds ``--browser-binary`` and
+``--driver-binary``. These receipts qualify their recorded Linux scenarios;
+metadata/rolling-deployment acceptance, cutover and wider inventory remain
+separate gates.

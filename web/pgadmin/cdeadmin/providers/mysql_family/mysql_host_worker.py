@@ -124,7 +124,7 @@ def environment(executable, workspace):
             'TMPDIR': str(workspace), 'PATH': os.pathsep.join((str(executable.parent), os.defpath))}
 
 
-def process(executable, arguments, workspace, timeout, configuration_context=None):
+def process(executable, arguments, workspace, timeout, configuration_context=None, *, guard_parent_death=False,input_bytes=None):
     started = time.time()
     native_environment = environment(executable, workspace)
     working_directory = workspace
@@ -133,9 +133,27 @@ def process(executable, arguments, workspace, timeout, configuration_context=Non
         native_environment['HOME'] = configuration_context['home_directory']
         if os.name == 'nt':
             native_environment['USERPROFILE'] = configuration_context['home_directory']
+    options={}
+    if guard_parent_death:
+        if not sys.platform.startswith('linux') or Path(executable).stat().st_mode&(stat.S_ISUID|stat.S_ISGID):
+            raise Refused('Native manager-client supervision requires an unprivileged Linux executable')
+        try:capabilities=os.getxattr(executable,'security.capability')
+        except OSError as error:
+            if error.errno not in {61,95}:raise
+            capabilities=b''
+        if capabilities:raise Refused('Native manager-client supervision does not admit executable capabilities')
+        import ctypes
+        import signal
+        library=ctypes.CDLL(None,use_errno=True);parent=os.getpid()
+        def guard():
+            if library.prctl(1,signal.SIGKILL,0,0,0)!=0:os._exit(126)
+            if os.getppid()!=parent:os.kill(os.getpid(),signal.SIGKILL)
+        options['preexec_fn']=guard
+    if input_bytes is not None and (not isinstance(input_bytes,bytes) or len(input_bytes)>1048576):
+        raise Refused('Native private input exceeds its admitted bound')
     child = subprocess.Popen([str(executable), *arguments], cwd=str(working_directory),
-        env=native_environment, stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+        env=native_environment, stdin=subprocess.PIPE if input_bytes is not None else subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False,**options)
     observations = {}
     def read(name, stream):
         kept = bytearray(); total = 0; checksum = hashlib.sha256()
@@ -154,6 +172,16 @@ def process(executable, arguments, workspace, timeout, configuration_context=Non
                for name, stream in (('stdout', child.stdout), ('stderr', child.stderr))]
     for reader in readers:
         reader.start()
+    input_errors=[];writer=None
+    if input_bytes is not None:
+        def send():
+            try:child.stdin.write(input_bytes)
+            except OSError as error:input_errors.append(type(error).__name__)
+            finally:
+                try:child.stdin.close()
+                except OSError as error:
+                    if not input_errors:input_errors.append(type(error).__name__)
+        writer=threading.Thread(target=send,daemon=True);writer.start()
     timed_out = False
     try:
         child.wait(timeout=timeout)
@@ -161,10 +189,12 @@ def process(executable, arguments, workspace, timeout, configuration_context=Non
         timed_out = True; child.kill(); child.wait()
     for reader in readers:
         reader.join(timeout=5)
+    if writer is not None:writer.join(timeout=5)
     return {'return_code': child.returncode, 'timed_out': timed_out,
             'streams_closed': not any(reader.is_alive() for reader in readers),
             'outputs': observations, 'started_at': started, 'finished_at': time.time(),
-            'native_process_termination_observed': child.returncode is not None}
+            'native_process_termination_observed': child.returncode is not None,
+            **({'private_input_closed':not writer.is_alive(),'private_input_error_type':input_errors[0] if input_errors else None} if writer is not None else {})}
 
 
 def configuration_graph(filename, context):
@@ -326,9 +356,17 @@ def installation_module():
     return mysql_host_installation
 
 
+def upgrade_module():
+    if '_cdeadmin_native_upgrade' in sys.modules:return sys.modules['_cdeadmin_native_upgrade']
+    from . import mysql_host_upgrade
+    return mysql_host_upgrade
+
+
 def request_binding(request):
     if request.get('binding',{}).get('scope')=='mysql-initialization-host-v1':
         return initialization_module().host_binding(request['binding'])
+    if request.get('binding',{}).get('scope')=='mysql-upgrade-host-v1':
+        return upgrade_module().host_binding(request['binding'],globals())
     return binding(request['binding'])
 
 
@@ -363,7 +401,13 @@ def inspect(request, expected=None):
         version = process(executable, ['--no-defaults', '--version'], Path(temporary), 15)
     output = b''.join(base64.b64decode(version['outputs'].get(key, {}).get('base64', '')) for key in ('stdout', 'stderr')).decode('utf8', errors='replace')
     import re
-    if version['return_code'] != 0 or not re.search(r'\bVer\s+9\.7\.0(?:\s|[-(])', output):
+    original_upgrade_service=request.get('original_upgrade_service')
+    if original_upgrade_service is not None and (not isinstance(original_upgrade_service,dict) or
+            original_upgrade_service.get('path')!=str(executable) or original_upgrade_service.get('sha256')!=checksum or
+            request.get('previous_service_binding',{}).get('service_binding_verified') is not True):
+        raise Refused('The original pre-upgrade service association changed')
+    admitted_version=r'\bVer\s+(?:8\.4\.\d+|9\.[0-6]\.\d+)(?:\s|[-(])' if request.get('upgrade') is not None or original_upgrade_service is not None else r'\bVer\s+9\.7\.0(?:\s|[-(])'
+    if version['return_code'] != 0 or not re.search(admitted_version, output):
         raise Refused('Select the native MySQL9.7.0 mysqld on this database host')
     if configuration and configuration_graph(configuration['path'], configuration['context']) != configuration['graph']:
         raise Refused('The native configuration graph changed during inspection')
@@ -385,6 +429,10 @@ def inspect(request, expected=None):
         result['service'] = native_services.inspect(request, result, process, file_hash, regular_stream, Refused)
         if expected is not None and result['service'] != expected.get('service'):
             raise Refused('The native service definition, state or process changed after review')
+    if request.get('upgrade') is not None:
+        result['upgrade_plan']=upgrade_module().inspect(request,result,globals())
+        if expected is not None and result['upgrade_plan']!=expected.get('upgrade_plan'):
+            raise Refused('The original native upgrade inputs changed after review')
     return result
 
 
@@ -401,7 +449,7 @@ def dispatch(request,launch_source=None):
     action = request.get('action')
     if action == 'inspect':
         return inspect(request)
-    if action not in {'validate_config', 'service_start', 'service_stop', 'service_restart','service_enable','service_disable','install_service', 'deploy_config', 'initialize_data','cancel_initialization','acknowledge_initialization','status'}:
+    if action not in {'validate_config', 'service_start', 'service_stop', 'service_restart','service_enable','service_disable','install_service', 'deploy_config', 'initialize_data','cancel_initialization','acknowledge_initialization','upgrade_service','acknowledge_upgrade','status'}:
         raise Refused('The native MySQL host action is unavailable')
     host = request_binding(request)
     root = Path(text(request['workspace']))
@@ -417,12 +465,14 @@ def dispatch(request,launch_source=None):
     expected = text(request['input_digest'])
     unavailable = {'state': 'unknown', 'job_id': job_id, 'input_digest': expected,
                    'remote_receipt_available': False, 'automatic_retry': False}
-    if action in {'status','cancel_initialization','acknowledge_initialization'} or directory.exists():
+    if action in {'status','cancel_initialization','acknowledge_initialization','acknowledge_upgrade'} or directory.exists():
         if not receipt.is_file():
             return unavailable
         value = json.loads(receipt.read_text(encoding='utf8'))
         if value.get('input_digest') != expected:
             raise Refused('The remote host receipt belongs to another reviewed input')
+        if value.get('upgrade_request'):
+            return upgrade_module().observe(directory,value,globals(),acknowledge=action=='acknowledge_upgrade')
         if request.get('initialization') is not None and (directory/'initializer-request.json').exists():
             return initialization_module().observe(directory,value,globals(),cancel=action=='cancel_initialization',acknowledge=action=='acknowledge_initialization')
         if action=='status' and value.get('observation',{}).get('service_installation'):
@@ -439,6 +489,7 @@ def dispatch(request,launch_source=None):
                 value['service_reconciliation'] = {'observed': False, 'error_type': type(error).__name__,
                     'original_native_result_unchanged': True}
         return value
+    if action!='initialize_data':upgrade_module().admitted(request,globals())
     observed = inspect(request, request.get('reviewed', {}))
     if observed != request.get('reviewed'):
         raise Refused('The native host, executable or configuration changed after review')
@@ -461,6 +512,13 @@ def dispatch(request,launch_source=None):
     arguments = ['--defaults-file=' + configuration['path']] if configuration else ['--no-defaults']
     if action=='initialize_data':
         return initialization_module().start(request,observed,directory,globals(),launch_source)
+    if action=='upgrade_service':
+        value['upgrade_request']={key:request[key] for key in ('service','native_pid_file','binding','job_id','input_digest')}
+        save(receipt,value)
+        upgraded=upgrade_module().execute(request,observed,directory,timeout,globals())
+        value.update(state='native_process_returned',result=upgraded['native_result'],upgrade_result=upgraded)
+        save(receipt,value)
+        return upgrade_module().observe(directory,value,globals())
     if action == 'validate_config':
         result = process(Path(observed['program']['path']), [*arguments, '--validate-config'], directory, timeout,
                          configuration_context=configuration['context'] if configuration else None)

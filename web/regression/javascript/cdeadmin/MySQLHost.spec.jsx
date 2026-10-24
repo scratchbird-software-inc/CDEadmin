@@ -10,6 +10,22 @@ const review={job_id:'host-job',review_digest:'exact',state:'reviewed',warnings:
   execution_host:{kind:'database-server-ssh-host',hostname:'database'},remote_observation:{},
   options:{connection:{host:'database',port:22,username:'operator',host_key:'expected',authentication:'password',platform:'posix',python:'python3'}}};
 
+it('shows native upgrade preflight errors and keeps private authentication outside the retained options',async()=> {
+  const planned={...review,remote_observation:{upgrade_plan:{preflight:{report:{errorCount:2,warningCount:19,noticeCount:0,summary:'Native incompatible objects'}}}}};
+  const post=jest.fn().mockResolvedValue(planned);render(<Component post={post} />);
+  fireEvent.mouseDown(screen.getByLabelText('Native host operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Upgrade native MySQL service to 9.7 (Linux systemd)'}));
+  fireEvent.change(screen.getByLabelText('Upgrade-check password'),{target:{value:'private-native-check-password'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review native host service action'}));
+  await screen.findByText(/Native upgrade checker: 2 errors, 19 warnings/);
+  expect(post.mock.calls.at(-1)[0].request.upgrade_check_secret).toEqual({password:'private-native-check-password'});
+  expect(JSON.stringify(post.mock.calls.at(-1)[0].request.options)).not.toContain('private-native-check-password');
+  expect(screen.getByLabelText('Native host diagnostic review')).not.toHaveTextContent('private-native-check-password');
+  fireEvent.click(screen.getByLabelText('Authorize the reviewed native MySQL service action on this database SSH host'));
+  expect(screen.getByRole('button',{name:'Confirm native host service action'})).toBeDisabled();
+  expect(post.mock.calls.some(([value])=>value.action==='mysql_host_start')).toBe(false);
+});
+
 it('separates SSH secrets from review facts and requires exact native host confirmation',async () => {
   const post=jest.fn().mockResolvedValue(review);render(<Component post={post} />);
   fireEvent.change(screen.getByLabelText('SSH password'),{target:{value:'native-private-secret'}});
