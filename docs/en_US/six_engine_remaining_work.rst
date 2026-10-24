@@ -762,3 +762,12 @@ External mappings, remaining engine
 inventory, unexported/system-state acceptance, legacy/guardian resolution and
 cutover remain implementation work. The comparison count remains nine of
 eleven; Linux evidence does not close platform or owner-deferred history gates.
+
+MySQL external InnoDB per-table/general tablespaces now use separately reviewed
+native copy-back maps and private native filesystem aliases. The actual native
+process sees a read-only host and writable private data/workspace. Independent
+namespace, directory and mount observations protect editor admission while
+preserving original-process cancellation. Encrypted incremental recovery,
+external DDL, literal child paths and recurring drills share that admission.
+External system/undo geometry, MERGE members, missing original aliases and the
+remaining inventory/system-state/guardian/cutover work still precede handoff.

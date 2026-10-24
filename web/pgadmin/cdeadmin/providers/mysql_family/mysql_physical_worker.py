@@ -43,6 +43,14 @@ def keyring_module():
     return keyring
 
 
+def paths_module():
+    try:
+        import _cdeadmin_physical_paths as paths
+    except ModuleNotFoundError:
+        from . import mysql_physical_paths as paths
+    return paths
+
+
 def public(value):
     if isinstance(value, list): return [public(item) for item in value]
     if isinstance(value, dict):
@@ -143,11 +151,7 @@ def manifest(directory):
 def artifact(directory, *, prepared=None):
     checkpoint = properties(directory / 'xtrabackup_checkpoints')
     info = properties(directory / 'xtrabackup_info')
-    tablespaces = read_json(directory / 'xtrabackup_tablespaces')
-    # Native copy-back can recreate original external paths. This workflow
-    # admits self-contained instances, rather than granting those paths.
-    if tablespaces != {'version': 3, 'external_tablespaces': []}:
-        raise Refused('External tablespaces require a separately reviewed physical path mapping')
+    tablespaces = paths_module().tablespaces(directory)
     if (info.get('server_version') != '9.7.0' or info.get('tool_version') != VERSION or
             info.get('partial') != 'N' or info.get('incremental') not in ({'Y'} if checkpoint.get('backup_type')=='incremental' else {'N','Y'} if checkpoint.get('backup_type') in {'log-applied','full-prepared'} else {'N'}) or
             info.get('compressed') != 'N' or info.get('encrypted') != 'N' or
@@ -178,7 +182,8 @@ def artifact(directory, *, prepared=None):
         'prepared': checkpoint['backup_type'] == 'full-prepared', 'database_recovery_verified': False,
         **({'redo_only':True} if checkpoint['backup_type']=='log-applied' else {}),
         **({'native_incremental_info':True} if info['incremental']=='Y' and checkpoint['backup_type']!='incremental' else {}),
-        **({'keyring':keyring} if keyring is not None else {})}
+        **({'keyring':keyring} if keyring is not None else {}),
+        **({'external_tablespaces':tablespaces['external_tablespaces']} if tablespaces['external_tablespaces'] else {})}
 
 
 def executable(path, kind):
@@ -262,6 +267,12 @@ def inspection(request):
     snapshot=observed.get('incremental_input',observed.get('input',{})).get('artifact',{}).get('keyring')
     keyring=keyring_module().inspect(request,snapshot)
     if keyring is not None:observed['keyring']=keyring
+    entries=observed.get('incremental_input',observed.get('input',{})).get('artifact',{}).get('external_tablespaces',[])
+    external=paths_module().admission(request,entries)
+    if external is not None:
+        observed['external_paths']=external
+    if phase=='copy_back':
+        recovery_module().configuration(root/request['input_job_id']/'artifact'/'backup-my.cnf',keyring=keyring is not None)
     return observed
 
 
@@ -354,7 +365,7 @@ def execute(directory):
     value = {'state': 'native_dispatch', 'job_id': request['job_id'], 'input_digest': request['input_digest'],
         'automatic_retry': False, 'native_may_have_dispatched': False, 'process_termination_confirmed': False,
         'credential_cleanup_confirmed': False, 'supervisor_finished': False, 'started_at': time.time()}
-    child = option_file = staged_increment = native_config = None
+    child = option_file = staged_increment = native_config = staged_copy_back = None
     try:
         observed = inspection(request)
         if observed != request['reviewed']:
@@ -395,7 +406,11 @@ def execute(directory):
                     keyring_module().stage_prepare_material(directory,target)
             else:
                 target.mkdir(mode=0o700)
-                args = ['--no-defaults', '--copy-back', '--target-dir=' + str(original), '--datadir=' + str(target),
+                copy_input=original
+                if observed.get('external_paths'):
+                    staged_copy_back,_plan=paths_module().stage_copy_back(directory,original,target,observed['input']['artifact'])
+                    copy_input=staged_copy_back
+                args = ['--no-defaults', '--copy-back', '--target-dir=' + str(copy_input), '--datadir=' + str(target),
                     '--innodb-data-home-dir=' + str(target), '--innodb-undo-directory=' + str(target),
                     '--innodb-log-group-home-dir=' + str(target)]
         if observed.get('keyring'):args.append('--xtrabackup-plugin-dir='+observed['keyring']['xtrabackup_plugin_dir'])
@@ -438,6 +453,8 @@ def execute(directory):
                     'data_directory': str(target), 'database_recovery_verified': False}
             else:
                 value['artifact'] = artifact(target, prepared=phase == 'prepare')
+                if value['artifact'].get('external_tablespaces') and request.get('isolate_external_paths') is not True:
+                    raise Refused('Native external files were not admitted for this backup; verified publication withheld')
                 if phase=='prepare_redo' and not value['artifact'].get('redo_only'):raise Refused('Native preparation did not retain its redo-only state')
             if phase!='backup':
                 if input_artifact(request,Path(observed['workspace']),request['input_job_id'])!=observed['input']:
@@ -465,6 +482,7 @@ def execute(directory):
             clean_client_options(directory)
             keyring_module().cleanup(directory,material_retained=value.get('native_may_have_dispatched') is True)
             if staged_increment is not None and staged_increment.exists() and (child is None or child.poll() is not None):shutil.rmtree(staged_increment)
+            if staged_copy_back is not None and staged_copy_back.exists() and (child is None or child.poll() is not None):shutil.rmtree(staged_copy_back)
             if request.get('keyring'):
                 value['native_key_material_retained']=(directory/keyring_module().TRANSITION).exists() or (directory/'artifact'/keyring_module().DIRECTORY).is_dir()
             request['database_credentials'] = None

@@ -9,7 +9,8 @@ source archive protection. A separately reviewed managed recovery operation
 starts and supervises a private data copy. Selected log recovery, independent
 exported-data/definition acceptance, dependency-aware retention and scheduling
 have separate reviewed workflows. Native GPL file-keyring recovery is described
-below. External-path admission,
+below. External InnoDB table/tablespace isolation is also described below.
+External system/undo/MERGE-path admission,
 unexported/system-state acceptance and production cutover remain open under
 ``CMP-MY-01``.
 
@@ -703,3 +704,52 @@ ScratchRobin does not parse or regenerate native key records. Original utility
 failures remain visible and are never automatically retried. External paths,
 unexported/system-state acceptance, interrupted legacy/guardian resolution and
 production cutover remain separate ``CMP-MY-01`` requirements.
+
+External InnoDB tables and general tablespaces
+----------------------------------------------
+
+Enable **Isolate external InnoDB paths in a private Linux filesystem view**
+before backing up external InnoDB tables or general tablespaces. The review
+lists the source files. Full and incremental artifacts retain native external
+tablespace metadata and exact byte manifests. Preparation preserves original
+inputs. Copy-back stages another verified input copy and rewrites only its
+native utility path map, directing every restored external file into the new
+private artifact. Native catalogs and data pages are not rewritten by the app.
+
+Managed recovery moves external payloads into a separate private runtime tree.
+A separately admitted Linux mount namespace presents the original datadir and
+external directory names as aliases of those private copies. Native MySQL sees
+its original paths and matching data/undo homes, so native ``DATA DIRECTORY``
+validation and create/insert/drop operations retain their semantics. Its host
+filesystem view is read-only; the private workspace is writable. Native
+``@@datadir`` therefore reports the original alias, while the receipt separately
+identifies the actual private data directory and exact namespace bindings.
+The fresh UUID, original native PID and pinned SSH connection identify the
+recovered instance. No network fallback is permitted.
+
+The selected Linux64 SSH account must possess mount-namespace and
+``mount_setattr`` privileges. Recovery admission tests that capability in a
+separate process; a refusal starts no recovery server. Original alias directories
+must exist and remain separate from the private workspace. The independent
+observer verifies the native process's actual namespace, directory identities
+and host/workspace mount permissions before admitting an editor connection.
+Uncertain filesystem evidence blocks connections while preserving cancellation
+of the independently identified original native process. Lost native replies
+remain unknown. Recurring backup/startup-drill policies use the same admission
+and retained dependencies after worker restart.
+
+Encrypted external tables use the separately retained GPL file-keyring workflow
+above. Literal spaces, Unicode and semicolons in child directory names retain
+their native filenames; a containing native scan directory avoids interpreting
+a literal semicolon as a directory-list separator. Source data/key files and
+immutable backup inputs remain unchanged. Manual, batch and scheduled retention
+include private external runtime files and interrupted copy-back input copies.
+
+This admission covers InnoDB per-table external data and general tablespaces.
+External system/undo geometry, external MERGE members, missing original alias
+directories, broader engine inventory, system-state acceptance, legacy/guardian
+resolution and production cutover remain tracked recovery work. Unsupported
+absolute system geometry refuses before native copy-back. It is not treated as
+an ordinary table path or as a successful restore. Native qualification is
+``tools/cdeadmin_mysql_physical_keyring_qualification.py --external``; use
+``--desktop-only`` with browser/driver paths for the built desktop workflow.

@@ -11,6 +11,20 @@ const review = {job_id: 'physical-job', review_digest: 'exact', state: 'reviewed
     workspace: '/private', executable: '/usr/bin/xtrabackup', mysql: '/usr/bin/mysql', sql_host: '127.0.0.1', sql_port: 3306,
     input_job_id: null, parallel: 2, memory_bytes: 268435456, timeout_seconds: 3600, accept_release_candidate: true}};
 
+it('requires explicit external-path isolation and invalidates review when the selection changes', async () => {
+  const post = jest.fn(({request}) => Promise.resolve({...review, options: request.options, native_external_files: [{file_name: '/native/external/table.ibd'}]}));
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByLabelText('I accept this pinned XtraBackup release candidate for this physical operation.'));
+  fireEvent.click(screen.getByLabelText('Isolate external InnoDB paths in a private Linux filesystem view'));
+  fireEvent.click(screen.getByRole('button', {name: 'Review native physical job'}));
+  await screen.findByLabelText('Native physical review');
+  expect(post.mock.calls[0][0].request.options.isolate_external_paths).toBe(true);
+  expect(screen.getByLabelText('Native physical review')).toHaveTextContent('/native/external/table.ibd');
+  fireEvent.click(screen.getByLabelText('Isolate external InnoDB paths in a private Linux filesystem view'));
+  expect(screen.queryByLabelText('Native physical review')).not.toBeInTheDocument();
+  expect(post.mock.calls.some(([value]) => value.action === 'mysql_physical_start')).toBe(false);
+});
+
 it('reviews native keyring retention explicitly and invalidates approval when its component directory changes', async () => {
   const post = jest.fn(({request}) => Promise.resolve({...review, options: request.options,
     source_encryption: {redo: true, undo: true, binlog: true}}));

@@ -103,7 +103,7 @@ def unmounted(paths):
 
 
 def snapshot(directory):
-    names=['artifact','runtime-data','delta-input','runtime-plugins','private','native-keyring-input','.scratchrobin-transition.key',*[f'recovery-{name}.pem' for name in ('ssl_ca','ssl_cert','ssl_key')]]
+    names=['artifact','runtime-data','runtime-external','delta-input','copy-back-input','runtime-plugins','private','native-keyring-input','.scratchrobin-transition.key',*[f'recovery-{name}.pem' for name in ('ssl_ca','ssl_cert','ssl_key')]]
     names += sorted(p.name for p in directory.glob('recovery-bin.*') if
         p.name=='recovery-bin.index' or re.fullmatch(r'recovery-bin\.\d{6,}',p.name))
     unmounted([directory/name for name in names])

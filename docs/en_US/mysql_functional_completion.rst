@@ -2078,3 +2078,19 @@ failures and unknown original replies remain separate from verified artifacts.
 This source-backed file-keyring workflow does not implement other keyring
 providers or close the remaining external mapping, system-state, guardian and
 cutover requirements. See :doc:`mysql_physical_backups`.
+
+Native external InnoDB recovery isolation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+External per-table InnoDB files and general tablespaces now use explicitly
+reviewed native copy-back maps and private Linux mount namespaces. Native
+datadir/data/undo aliases consistently select private copies; the rest of the
+host view is read-only. Native encrypted incremental recovery, external DDL and
+literal child path names preserve source bytes. Actual process namespace and
+directory/mount facts gate editor admission; uncertain facts retain independent
+original-process cancellation and unknown database outcomes. Recurring drills
+and physical retention cover the same private external files. The backend
+requires admitted Linux64 mount privileges and existing original alias
+directories. External system/undo geometry, MERGE members, missing aliases and
+the broader recovery/inventory gates remain open; absolute system geometry is
+refused before native copy-back. See :doc:`mysql_physical_backups`.

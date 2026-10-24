@@ -3,6 +3,7 @@ from copy import deepcopy
 import base64
 import hashlib
 from pathlib import Path
+from pathlib import PurePosixPath
 import time
 
 from ..providers.mysql_family import mysql_physical_transport as native
@@ -14,7 +15,7 @@ from . import mysql_host_service as host
 from .mysql_monitoring_host import MySQLMonitoringHost
 
 
-def source(service, server, *, admitted=None, keyring=None):
+def source(service, server, *, admitted=None, keyring=None, isolate_external_paths=False):
     """Admit the actual persistent engine/encryption scope, not a generic dump."""
     captured = host.source(service,server) if admitted is None else host.source(service,server,admitted=admitted)
     context, payload, _root = service.endpoint_service.workspace(server, database_target_id=None)
@@ -50,6 +51,12 @@ def source(service, server, *, admitted=None, keyring=None):
             captured['state']['native_keyring_source']={'component':'component_keyring_file','data_file':status['data_file'],
                 'server_plugin_directory':plugin,'encryption':flags}
         captured['state']['source_encryption']=flags
+        data=PurePosixPath(captured['state']['host_binding']['datadir'])
+        files=rows(connection,'SELECT CAST(PATH AS CHAR CHARACTER SET utf8mb4) AS file_name FROM information_schema.INNODB_DATAFILES ORDER BY PATH')
+        external=[row for row in files if PurePosixPath(row['file_name']).is_absolute() and not PurePosixPath(row['file_name']).is_relative_to(data)]
+        if external and isolate_external_paths is not True:
+            raise native.HostError('Review native external-path isolation before backing up external InnoDB files')
+        if external:captured['state']['native_external_files']=external
         captured['state']['storage_engine_counts'] = engines
         captured['state']['encrypted_tablespaces'] = encrypted
         volatile = rows(connection, "SELECT TABLE_SCHEMA AS schema_name,TABLE_NAME AS table_name,TABLE_ROWS AS current_rows FROM information_schema.TABLES "
@@ -65,10 +72,12 @@ def options(value):
     fields = {'connection', 'workspace', 'executable', 'mysql', 'phase', 'sql_host', 'sql_port',
         'input_job_id', 'parallel', 'memory_bytes', 'timeout_seconds', 'accept_release_candidate'}
     extra = {'mysqld', 'recovery_gtid_mode'} if isinstance(value,dict) and value.get('phase') == 'recover' else set()
-    optional = ({'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls'} if extra else ({'incremental_job_id'} if isinstance(value,dict) and value.get('phase')=='prepare_redo' else set()))|{'keyring'}
+    optional = ({'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls'} if extra else ({'incremental_job_id'} if isinstance(value,dict) and value.get('phase')=='prepare_redo' else set()))|{'keyring','isolate_external_paths'}
     if not isinstance(value, dict) or not fields | extra <= set(value) or set(value)-fields-extra-optional:
         raise native.HostError('Select the complete native physical host and operation options')
     selected = deepcopy(value); selected['connection'] = native.ssh.public_route(value['connection'])
+    if 'isolate_external_paths' in value and type(value['isolate_external_paths']) is not bool:
+        raise native.HostError('Select native external-path isolation explicitly')
     if 'keyring' in value:
         material=value['keyring']
         if (not isinstance(material,dict) or set(material)!={'xtrabackup_plugin_dir'} or
@@ -128,7 +137,7 @@ class PhysicalJobs(MySQLBinlogJobs):
         'The admitted backend is upstream XtraBackup9.7.1-rc1, a release candidate. Its original native replies, verified files and recovery acceptance are separate facts.',
         'Full backups take native backup/read locks and copy complete supported instance files. Prepare mutates a separate private copy. Copy-back creates only a new isolated job data directory; it never overwrites the live data directory or starts a database.',
         'Native processes run under an independent supervisor on the authenticated database SSH host. Closing the viewer or losing a reply does not cancel or roll back native work. An original unknown dispatch is never automatically repeated.',
-        'This workflow requires self-contained, uncompressed native backup files. Encrypted data/log recovery requires explicitly retained native file-keyring material and matching components. Incrementals require exact base lineage and contiguous LSNs; apply to separate redo-only copies, then finalize. External tablespaces and production cutover remain separate.',
+        'This workflow requires complete, uncompressed native backup files. Encrypted data/log recovery requires explicitly retained native file-keyring material and matching components. Incrementals require exact base lineage and contiguous LSNs; apply to separate redo-only copies, then finalize. External InnoDB table/tablespace recovery requires separately reviewed Linux filesystem isolation. External system/undo/MERGE paths and production cutover remain separate.',
         'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account with a fresh UUID, private Unix socket and selected loopback TCP listener. Read-only inspection is the default. Explicit replay startup is writable with private ROW binary logging and the selected server ID. Both disable events/replication autostart and automatic upgrades, and end on stop or reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
         'Physical files and native output are private to the selected host OS account. Broad source archive protection is acquired before backup dispatch and is retired only by its separate reviewed protection workflow.',
         'Physical recovery preserves MEMORY table definitions; native MySQL discards their volatile rows on restart. Inspect the listed MEMORY tables and use the logical backup workflow when their current rows must be retained.',
@@ -145,8 +154,11 @@ class PhysicalJobs(MySQLBinlogJobs):
         if 'volatile_memory_tables' in record['source_state']:
             result['volatile_memory_tables'] = deepcopy(record['source_state']['volatile_memory_tables'])
         if 'source_encryption' in record['source_state']:result['source_encryption']=deepcopy(record['source_state']['source_encryption'])
+        if 'native_external_files' in record['source_state']:result['native_external_files']=deepcopy(record['source_state']['native_external_files'])
         if record['options'].get('keyring'):
-            result['warnings'].append('Native file-keyring and transition-key material is retained privately with this backup. Recovery uses separate keyring and native plugin copies; their retention follows the protected physical dependency chain.')
+            result['warnings']=[*result['warnings'],'Native file-keyring and transition-key material is retained privately with this backup. Recovery uses separate keyring and native plugin copies; their retention follows the protected physical dependency chain.']
+        if record['options'].get('isolate_external_paths'):
+            result['warnings']=[*result['warnings'],'Native external recovery requires mount-namespace and mount_setattr privileges on the selected Linux SSH account. It preserves original native directory names as private aliases, makes the host view read-only, and permits writes within the private workspace. Actual native-process namespace and directory identities are independently checked.']
         result['source_connection_class'] = record['source_state'].get('source_connection_class')
         remote = record.get('remote_observation') or {}
         result['native_process_termination_confirmed'] = remote.get('process_termination_confirmed') is True
@@ -186,7 +198,7 @@ def remote_request(record, action):
         'job_id': record['job_id'], 'input_digest': record['review_digest'],
         **({'sql_tls_policy': deepcopy(record['source_state']['sql_tls_policy'])} if 'sql_tls_policy' in record['source_state'] else {}),
         **({'source_keyring':deepcopy(record['source_state']['native_keyring_source'])} if 'native_keyring_source' in record['source_state'] else {}),
-        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','incremental_job_id','keyring') if key in selected}}
+        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','incremental_job_id','keyring','isolate_external_paths') if key in selected}}
 
 
 def sql_tls(service, server):
@@ -324,7 +336,7 @@ def _action(service, server, operation, request, *, source_capture=None,database
             jobs.update(record, **values)
             return jobs.get(record['job_id'], owner, endpoint.id)
         if selected['phase'] in {'backup','incremental'}:
-            captured = source_capture() if source_capture is not None else source(service, server, keyring=selected.get('keyring'))
+            captured = source_capture() if source_capture is not None else source(service, server, keyring=selected.get('keyring'),isolate_external_paths=selected.get('isolate_external_paths',False))
             if operation == 'start':
                 if captured['identity'] != record['source'] or captured['state']['host_binding'] != record['source_state']['host_binding']:
                     raise native.HostError('Native physical source changed after review')

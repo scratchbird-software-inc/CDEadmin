@@ -158,6 +158,14 @@ Recovered native read-only/replay instances use private keyrings, plugin and
 dependency copies, with independently observed encryption variables and keyring
 paths. Recurring startup drills retain this admission across worker restart.
 See :doc:`mysql_physical_backups` for native boundaries and durable-key retention.
+External InnoDB per-table/general tablespaces now have separately reviewed
+copy-back path maps and native recovery filesystem isolation. Original directory
+aliases select private data; the host view is read-only. Independent process/
+namespace checks protect editor admission without blocking original-process stop.
+Encrypted incrementals, native external DDL, literal child path names and recurring
+startup drills use the same isolation. External system/undo geometry, MERGE
+members and missing alias-directory recovery remain open alongside system-state,
+guardian, cutover and broader inventory requirements.
 Managed physical targets now support separately reviewed expected-dump acceptance
 through private-socket or TCP connections, with full counts, native checksums and
 exported-definition comparisons, including after native replay. Each receipt

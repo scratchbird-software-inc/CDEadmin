@@ -140,6 +140,7 @@ def inspection(request):
         raise Refused('The native backup configuration changed after preparation')
     material=physical.keyring_module().audit(source/'artifact')
     keyring=physical.keyring_module().inspect(request,material)
+    external=physical.paths_module().admission(request,base['artifact'].get('external_tablespaces',[]))
     # The UUID is assigned after review. All accepted job identities have the
     # same length, so the socket pathname bound is known before dispatch.
     if len(os.fsencode(str(root / ('0' * 36) / 'runtime.sock'))) > 100:
@@ -151,6 +152,7 @@ def inspection(request):
         'input': {'job_id': request['input_job_id'], 'manifest_sha256': host.digest(files), 'file_count': len(files)},
         'configuration': configuration(config,keyring=keyring is not None), 'configuration_sha256': config_hash,
         **({'keyring':keyring} if keyring is not None else {}),
+        **({'external_paths':external} if external is not None else {}),
         'transport': 'loopback-tcp-and-private-unix-socket' if port else 'private-unix-socket-only', 'recovery_port':port, 'automatic_upgrade': False,
         'replication_autostart': False, 'group_replication_autostart': False, 'event_scheduler': 'DISABLED', 'super_read_only': not replay,
         'recovery_local_infile':request.get('recovery_local_infile',False),
@@ -205,6 +207,10 @@ def observe(directory, value, action):
         try:
             live = present(process)
             value['runtime_process_live'] = live
+            if live and value.get('filesystem_isolation'):
+                try:value['filesystem_isolation_observation']=physical.paths_module().observe(process['pid'],value['filesystem_isolation'])
+                except (OSError,Refused) as error:
+                    value['filesystem_isolation_observation']={'native_filesystem_isolation_observed':False,'error_type':type(error).__name__}
             value['process_presence_observed_at'] = time.time()
             if not live:
                 value['process_termination_confirmed'] = True
@@ -217,7 +223,8 @@ def observe(directory, value, action):
             value['runtime_process_live'] = None
             value['process_presence_unknown'] = True
     value['recovery_running_verified'] = bool(value.get('sql_ready_observed') and value.get('runtime_process_live') is True and
-        value.get('credential_cleanup_confirmed') is True and not value.get('error_type'))
+        value.get('credential_cleanup_confirmed') is True and not value.get('error_type') and
+        (not value.get('filesystem_isolation') or value.get('filesystem_isolation_observation',{}).get('native_filesystem_isolation_observed') is True))
     if value.get('supervisor_process_live') is False and not value.get('supervisor_finished'):
         value['supervisor_control_unavailable'] = True
         value['native_exit_reply_unknown'] = True
@@ -256,7 +263,7 @@ def sql_ready(request, observed, directory, option_file, data):
     if (value.get('server_uuid') != uuid or uuid == expected['server_uuid'] or
             value.get('version') != expected['version'] or
             value.get('authenticated_principal') != expected['authenticated_principal'] or value.get('active_role') != expected['active_role'] or
-            physical.absolute(value['datadir']) != data or physical.absolute(value['socket']) != directory/'runtime.sock' or
+            physical.absolute(value['datadir']) != (physical.absolute(observed['external_paths']['original_datadir']) if observed.get('external_paths') else data) or physical.absolute(value['socket']) != directory/'runtime.sock' or
             value.get('skip_networking') != (0 if request.get('recovery_port') else 1) or value.get('skip_replica_start') != 1 or value.get('super_read_only') != (0 if replay else 1) or value.get('read_only') != (0 if replay else 1) or
             value.get('local_infile') != int(request.get('recovery_local_infile',False)) or
             value.get('event_scheduler') != 'DISABLED' or value.get('log_bin') != (1 if replay else 0) or value.get('gtid_mode') != request['recovery_gtid_mode']):
@@ -320,9 +327,16 @@ def execute(directory):
             '--log-replica-updates=ON','--binlog-format=ROW','--binlog-encryption=OFF'] if request.get('recovery_mode','read_only')=='replay'
             else ['--super-read-only=ON','--skip-log-bin'])
         if observed.get('keyring'):args+=physical.keyring_module().runtime(directory,data,observed['keyring'])
+        aliases=None
+        if observed.get('external_paths'):
+            aliases,native_paths=physical.paths_module().runtime(directory,data,observed['external_paths'])
+            args+=native_paths
         args += ['--bind-address=127.0.0.1','--port='+str(request['recovery_port'])] if request.get('recovery_port') else ['--skip-networking']
         if (directory/'cancel').exists(): raise InterruptedError('Recovery cancelled before native dispatch')
         option_file = physical.client_options(request,directory)
+        if aliases is not None:
+            value['filesystem_isolation']=physical.paths_module().activate(Path(observed['workspace']),aliases)
+            save()
         value['native_may_have_dispatched'] = True; save()
         with (directory/'stdout').open('xb') as stdout, (directory/'stderr').open('xb') as stderr:
             host.private_file(directory/'stdout'); host.private_file(directory/'stderr')
@@ -342,7 +356,8 @@ def execute(directory):
                     ready = sql_ready(request,observed,directory,option_file,data)
                     if ready:
                         clean(); value.update(state='recovery_running',sql_ready_observed=True,sql_identity=ready,
-                            sql_ready_at=time.time(),data_directory=str(data),socket=str(directory/'runtime.sock'))
+                            sql_ready_at=time.time(),data_directory=observed['external_paths']['original_datadir'] if aliases is not None else str(data),
+                            physical_data_directory=str(data),socket=str(directory/'runtime.sock'))
                         save()
                     elif time.monotonic() >= ready_deadline:
                         raise Refused('Native recovered SQL readiness was not observed before its startup deadline')
