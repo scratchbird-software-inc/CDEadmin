@@ -3189,7 +3189,7 @@ class ServerNode(PGChildNodeView):
                         payload = service.mysql_workload(server, action.removeprefix('mysql_workload_'), data.get('request'))
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
-                elif action in {'mysql_host_peer','mysql_host_catalog','mysql_host_review','mysql_host_start','mysql_host_status','mysql_host_list','mysql_host_cancel','mysql_host_reconcile'}:
+                elif action in {'mysql_host_peer','mysql_host_catalog','mysql_host_review','mysql_host_start','mysql_host_status','mysql_host_list','mysql_host_cancel','mysql_host_reconcile','mysql_host_cancel_initialization','mysql_host_acknowledge_initialization'}:
                     try:payload=service.mysql_host(server,action.removeprefix('mysql_host_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mysql_physical_peer','mysql_physical_review','mysql_physical_start','mysql_physical_status','mysql_physical_list','mysql_physical_cancel','mysql_physical_reconcile','mysql_physical_output',

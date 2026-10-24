@@ -314,8 +314,20 @@ def configuration_module():
     return mysql_host_configuration
 
 
+def initialization_module():
+    if '_cdeadmin_native_initialization' in sys.modules:return sys.modules['_cdeadmin_native_initialization']
+    from . import mysql_host_initialization
+    return mysql_host_initialization
+
+
+def request_binding(request):
+    if request.get('binding',{}).get('scope')=='mysql-initialization-host-v1':
+        return initialization_module().host_binding(request['binding'])
+    return binding(request['binding'])
+
+
 def inspect(request, expected=None):
-    host = binding(request['binding'])
+    host = request_binding(request)
     selected = text(request.get('executable', 'mysqld'))
     resolved = shutil.which(selected)
     if resolved is None:
@@ -351,6 +363,10 @@ def inspect(request, expected=None):
         raise Refused('The native configuration graph changed during inspection')
     result = {'host': host, 'program': {'path': str(executable), 'sha256': checksum, 'version_output': output.strip()},
               'configuration': configuration, 'included_configuration_files_attested': True}
+    if request.get('initialization') is not None:
+        result['initialization_plan']=initialization_module().inspect(request,result)
+        if expected is not None and result['initialization_plan']!=expected.get('initialization_plan'):
+            raise Refused('Native initialization target changed after review')
     if request.get('configuration_replacement') is not None:
         result['configuration_deployment']=configuration_module().inspect(request,result,globals())
         if expected is not None and result['configuration_deployment']!=expected.get('configuration_deployment'):
@@ -369,15 +385,15 @@ def save(path, value):
     durable_replace(temporary, path)
 
 
-def dispatch(request):
+def dispatch(request,launch_source=None):
     if not isinstance(request, dict) or request.get('schema') != 'cdeadmin.mysql-native-host.v1':
         raise Refused('Select the native MySQL host protocol')
     action = request.get('action')
     if action == 'inspect':
         return inspect(request)
-    if action not in {'validate_config', 'service_start', 'service_stop', 'service_restart', 'deploy_config', 'status'}:
+    if action not in {'validate_config', 'service_start', 'service_stop', 'service_restart', 'deploy_config', 'initialize_data','cancel_initialization','acknowledge_initialization','status'}:
         raise Refused('The native MySQL host action is unavailable')
-    host = binding(request['binding'])
+    host = request_binding(request)
     root = Path(text(request['workspace']))
     if not root.is_absolute():
         raise Refused('Select an absolute private host workspace')
@@ -391,12 +407,14 @@ def dispatch(request):
     expected = text(request['input_digest'])
     unavailable = {'state': 'unknown', 'job_id': job_id, 'input_digest': expected,
                    'remote_receipt_available': False, 'automatic_retry': False}
-    if action == 'status' or directory.exists():
+    if action in {'status','cancel_initialization','acknowledge_initialization'} or directory.exists():
         if not receipt.is_file():
             return unavailable
         value = json.loads(receipt.read_text(encoding='utf8'))
         if value.get('input_digest') != expected:
             raise Refused('The remote host receipt belongs to another reviewed input')
+        if request.get('initialization') is not None and (directory/'initializer-request.json').exists():
+            return initialization_module().observe(directory,value,globals(),cancel=action=='cancel_initialization',acknowledge=action=='acknowledge_initialization')
         if action == 'status' and request.get('service') is not None and value.get('observation', {}).get('service'):
             # A later unit observation never rewrites the original manager
             # client outcome, and never submits a service action again.
@@ -424,11 +442,13 @@ def dispatch(request):
     value = {'state': 'native_dispatch', 'job_id': job_id, 'input_digest': expected,
              'observation': observed, 'automatic_retry': False, 'remote_database_mutation': action != 'validate_config',
              'validation_scope': ('native mysqld configuration check; not server readiness or upgrade acceptance'
-                 if action == 'validate_config' else 'native option-file installation; no service restart or SQL readiness assertion' if action=='deploy_config' else 'native service manager request; not SQL readiness or transaction finality'),
+                 if action == 'validate_config' else 'native data-directory initialization; no SQL readiness assertion' if action=='initialize_data' else 'native option-file installation; no service restart or SQL readiness assertion' if action=='deploy_config' else 'native service manager request; not SQL readiness or transaction finality'),
              'transaction_finality_interpreted_by_common_code': False}
     save(receipt, value)
     configuration = observed['configuration']
     arguments = ['--defaults-file=' + configuration['path']] if configuration else ['--no-defaults']
+    if action=='initialize_data':
+        return initialization_module().start(request,observed,directory,globals(),launch_source)
     if action == 'validate_config':
         result = process(Path(observed['program']['path']), [*arguments, '--validate-config'], directory, timeout,
                          configuration_context=configuration['context'] if configuration else None)

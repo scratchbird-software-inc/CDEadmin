@@ -10,7 +10,7 @@ import socket
 import time
 
 from ...operations import fileio
-from . import mysql_host_worker, mysql_host_services, mysql_host_configuration
+from . import mysql_host_worker, mysql_host_services, mysql_host_configuration, mysql_host_initialization
 
 
 class HostError(ValueError):
@@ -25,11 +25,25 @@ s=types.ModuleType('_cdeadmin_native_services')
 exec(p['services'],s.__dict__);sys.modules[s.__name__]=s
 c=types.ModuleType('_cdeadmin_native_configuration')
 exec(p['configuration_worker'],c.__dict__);sys.modules[c.__name__]=c
+i=types.ModuleType('_cdeadmin_native_initialization')
+exec(p['initialization_worker'],i.__dict__);sys.modules[i.__name__]=i
 n={'__name__':'_cdeadmin_native_worker'}
 exec(p['worker'],n)
-try:r=n['dispatch'](p['request'])
+try:r=n['dispatch'](p['request'],p.get('initialization_supervisor'))
 except Exception as e:r={'state':'refused','error_type':type(e).__name__,'message':str(e) if isinstance(e,n['Refused']) else 'Native host observation failed'}
 print(p['marker']+json.dumps(r,ensure_ascii=True,separators=(',',':')),flush=True)
+'''
+
+
+INITIALIZATION_BOOTSTRAP = '''import sys,types
+def install(name,source):
+ m=types.ModuleType(name);sys.modules[name]=m;exec(source,m.__dict__);return m
+def load(p):
+ install('_cdeadmin_native_fileio',p['fileio'])
+ install('_cdeadmin_native_services',p['services'])
+ install('_cdeadmin_native_configuration',p['configuration'])
+ install('_cdeadmin_native_initialization',p['initialization'])
+ return install('_cdeadmin_native_worker',p['host'])
 '''
 
 
@@ -82,6 +96,7 @@ def program():
             'fileio_sha256': hashlib.sha256(helper.encode('utf8')).hexdigest(),
             'services_sha256': hashlib.sha256(services.encode('utf8')).hexdigest(),
             'configuration_worker_sha256':hashlib.sha256(Path(mysql_host_configuration.__file__).read_bytes()).hexdigest(),
+            'initialization_worker_sha256':hashlib.sha256(Path(mysql_host_initialization.__file__).read_bytes()).hexdigest(),
             'transport_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 
 
@@ -169,7 +184,9 @@ class Transport:
         if self.transport is None or not self.transport.is_authenticated():
             raise HostError('Authenticate the independently owned database-host SSH transport first')
         worker, helper, services = sources(); marker = 'CDEADMIN_NATIVE_HOST_' + secrets.token_hex(16) + ':'
-        envelope = {'request': request, 'worker': worker, 'fileio': helper, 'services': services, 'configuration_worker':Path(mysql_host_configuration.__file__).read_text(), 'marker': marker}
+        module_sources={'host':worker,'fileio':helper,'services':services,'configuration':Path(mysql_host_configuration.__file__).read_text(),'initialization':Path(mysql_host_initialization.__file__).read_text()}
+        supervisor=INITIALIZATION_BOOTSTRAP+'\nm=load('+repr(module_sources)+')\nsys.modules[\"_cdeadmin_native_initialization\"].guardian(sys.argv[1],m.__dict__)\n'
+        envelope = {'initialization_worker':module_sources['initialization'],'initialization_supervisor':supervisor,'request': request, 'worker': worker, 'fileio': helper, 'services': services, 'configuration_worker':Path(mysql_host_configuration.__file__).read_text(), 'marker': marker}
         payload = json.dumps(envelope, ensure_ascii=True).encode('utf8')
         if len(payload) > 1024 * 1024:
             raise HostError('Native host request exceeds its admitted bound')

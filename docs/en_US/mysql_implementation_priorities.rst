@@ -231,7 +231,9 @@ Status: **open**. Priority: **P0**.
 
 Complete bootstrap/outage/failover/repair with independent unreachable-member,
 replication and application-traffic evidence; deploy/bootstrap/supervise
-Router; complete initialization, service installation and upgrades. Reviewed
+Router; complete service installation and upgrades. Native Linux initialization
+now supports new registrations before SQL is available, with secure/insecure
+native bootstrap, original-writer controls and separate outcome observations. Reviewed
 native Linux option-file deployment now validates the proposed original-filename
 view, binds old/new include graphs and atomically preserves file ownership and
 permissions without a service restart; see :doc:`mysql_functional_completion`. Preserve existing sandbox and administrator account

@@ -44,7 +44,7 @@ CMD ["mysqld"]
     return key
 
 
-def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=False, browser_binary=None, driver_binary=None, configuration_deployment=False):
+def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=False, browser_binary=None, driver_binary=None, configuration_deployment=False,initialization=False):
     output = Path(output).resolve()
     if output == ROOT or ROOT in output.parents:
         raise ValueError('Keep disposable native fixtures outside source')
@@ -65,6 +65,8 @@ def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=Fal
                  'web/pgadmin/cdeadmin/providers/mysql_family/mysql_host_services.py',
                  'web/pgadmin/cdeadmin/providers/mysql_family/mysql_host_configuration.py',
                  'tools/mysql_host_configuration_qualification.py',
+                 'tools/mysql_host_initialization_qualification.py',
+                 'web/pgadmin/cdeadmin/providers/mysql_family/mysql_host_initialization.py',
                  'web/pgadmin/cdeadmin/workspace/mysql_host_service.py',
                  'web/pgadmin/cdeadmin/workspace/service.py',
                  'web/pgadmin/cdeadmin/context_menu.py',
@@ -103,16 +105,17 @@ def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=Fal
             uid = User.query.first().id
             group = ServerGroup.query.filter_by(user_id=uid).order_by(ServerGroup.id).first()
             app.blueprints['NODE-engine_type'].connector_visibility['mysql'].set(True, user_id=uid)
-            def register(label):
+            def register(label,pending=False):
                 item = Server(user_id=uid, servergroup_id=group.id, name=label, host='127.0.0.1',
                               port=port, username='root', maintenance_db=None, save_password=0)
                 item._cde_endpoint_registration = registration_profile('mysql-native')
-                item._cde_endpoint_route_configuration = {'host': '127.0.0.1', 'port': port, 'user': 'root',
+                item._cde_endpoint_route_configuration = {'host': 'initialization-pending.invalid' if pending else '127.0.0.1', 'port': port, 'user': 'root',
                     'use_pure': not use_c, 'credential_kinds': ['database_password']}
                 db.session.add(item); db.session.commit()
                 return item.id, url_for('NODE-server.verify_endpoint_id', gid=group.id, sid=item.id), url_for('NODE-server.cde_workspace_id', gid=group.id, sid=item.id)
             sid, verify, url = register('Owned MySQL host diagnostics')
             _other, other_verify, other_url = register('Independent MySQL registration')
+            pending_sid,_pending_verify,pending_url=register('New native MySQL initialization',pending=True)
         with client.session_transaction() as session:
             session['_user_id'] = str(uid); session['_fresh'] = True
         assert client.post(verify, json={'password': password}).get_json()['success']
@@ -291,9 +294,12 @@ def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=Fal
         if configuration_deployment:
             from mysql_host_configuration_qualification import qualify as install_configuration
             proof['checks'].extend(install_configuration(review,http,admitted,wait,config,remote,root,output,selected))
+        if initialization:
+            from mysql_host_initialization_qualification import qualify as initialize
+            proof['checks'].extend(initialize(http,admitted,remote,output,selected,credential,pending_url))
         if browser_binary:
             config('[mysqld]\nmax_connections=151\n')
-            proof['browser'] = browser(app, output, sid, selected, key, browser_binary, driver_binary,configuration_deployment)
+            proof['browser'] = browser(app, output, sid, selected, key, browser_binary, driver_binary,configuration_deployment,initialization)
             proof['checks'].append('built-application-context-menu-review-confirm-native-process-and-reconciliation-with-zero-browser-errors')
         with root.cursor() as query:
             query.execute('SELECT CAST(id AS CHAR),body,HEX(payload) FROM sr_host_diagnostic.t')
@@ -324,7 +330,7 @@ def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=Fal
     return proof
 
 
-def browser(app, output, sid, selected, key, binary, driver_binary,configuration_deployment=False):
+def browser(app, output, sid, selected, key, binary, driver_binary,configuration_deployment=False,initialization=False):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -362,7 +368,8 @@ def browser(app, output, sid, selected, key, binary, driver_binary,configuration
             from selenium.webdriver.common.keys import Keys
             node = wait.until(lambda browser: browser.find_element(By.XPATH, '//label[normalize-space()="'+label+'"]'))
             control = driver.find_element(By.ID, node.get_attribute('for'))
-            control.click(); control.send_keys(Keys.CONTROL, 'a'); control.send_keys(str(value))
+            control.click(); control.send_keys(Keys.CONTROL, 'a')
+            control.send_keys(Keys.BACKSPACE if str(value)=='' else str(value))
             wait.until(lambda _browser: control.get_attribute('value') == str(value))
         field('Database SSH host', selected['connection']['host']); field('SSH port', selected['connection']['port'])
         field('SSH username', 'root'); field('Expected OpenSSH public host key', selected['connection']['host_key'])
@@ -392,12 +399,27 @@ def browser(app, output, sid, selected, key, binary, driver_binary,configuration
             driver.execute_script('arguments[0].click()',checkbox)
             click('Confirm native option-file installation')
             wait.until(lambda browser:'"installed": true' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native host diagnostic receipt"]').get_attribute('textContent'))
+        if initialization:
+            field('Native configuration file (blank: no defaults)','')
+            label=driver.find_element(By.XPATH,'//label[normalize-space()="Native host operation"]')
+            driver.find_element(By.ID,label.get_attribute('for')).click()
+            wait.until(lambda browser:browser.find_element(By.CSS_SELECTOR,'li[data-value="initialize_data"]')).click()
+            field('Native initialization data directory','/tmp/sr-desktop-initialization')
+            click('Review native data-directory initialization')
+            wait.until(lambda browser:'initialization_plan' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native host diagnostic review"]').get_attribute('textContent'))
+            assert 'authenticated_ssh_host_before_native_initialization' in driver.find_element(By.CSS_SELECTOR,'[aria-label="Native host diagnostic review"]').get_attribute('textContent')
+            checkbox=driver.find_element(By.XPATH,'//label[contains(normalize-space(),"Authorize the reviewed native data-directory initialization")]//input')
+            driver.execute_script('arguments[0].click()',checkbox)
+            click('Confirm native data-directory initialization')
+            wait.until(lambda browser:'"native_initialization_returned": true' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native host diagnostic receipt"]').get_attribute('textContent'))
+            click('Reconcile native host receipt')
+            wait.until(lambda browser:'"process_termination_confirmed": true' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native host diagnostic receipt"]').get_attribute('textContent'))
         driver.execute_script('document.querySelectorAll("input,textarea").forEach(e=>e.style.visibility="hidden")')
         driver.save_screenshot(str(output / 'native-host-diagnostics.png'))
         errors = [entry for entry in driver.get_log('browser') if entry['level'] == 'SEVERE']
         (output / 'browser-console.json').write_text(json.dumps(errors, indent=2) + '\n')
         assert not errors
-        return {'complete': True, 'console_errors': 0, 'native_review_confirm_and_receipt_reconciliation': True,'native_option_file_installation':configuration_deployment}
+        return {'complete': True, 'console_errors': 0, 'native_review_confirm_and_receipt_reconciliation': True,'native_option_file_installation':configuration_deployment,'native_data_directory_initialization':initialization}
     except BaseException:
         if driver is not None:
             driver.execute_script('document.querySelectorAll("input,textarea").forEach(e=>e.style.visibility="hidden")')
@@ -416,11 +438,11 @@ if __name__ == '__main__':
     parser.add_argument('--fixture-image', default='scratchrobin-mysql-host-fixture:current')
     parser.add_argument('--ssh-private-key')
     parser.add_argument('--prepare-fixture', action='store_true')
-    parser.add_argument('--use-c', action='store_true');parser.add_argument('--configuration-deployment', action='store_true')
+    parser.add_argument('--use-c', action='store_true');parser.add_argument('--configuration-deployment', action='store_true');parser.add_argument('--initialization', action='store_true')
     parser.add_argument('--browser-binary'); parser.add_argument('--driver-binary')
     args = parser.parse_args()
     if not args.prepare_fixture and not args.ssh_private_key:
         parser.error('Supply --prepare-fixture or --ssh-private-key for the owned fixture image')
     result = qualify(args.output, fixture_image=args.fixture_image, private_key=args.ssh_private_key,
-                     prepare=args.prepare_fixture, use_c=args.use_c, browser_binary=args.browser_binary, driver_binary=args.driver_binary,configuration_deployment=args.configuration_deployment)
+                     prepare=args.prepare_fixture, use_c=args.use_c, browser_binary=args.browser_binary, driver_binary=args.driver_binary,configuration_deployment=args.configuration_deployment,initialization=args.initialization)
     print(json.dumps({'complete': result['complete'], 'checks': len(result['checks'])}))

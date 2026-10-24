@@ -98,3 +98,28 @@ it('reviews exact uploaded native option-file bytes and dispatches only the resu
   fireEvent.click(screen.getByRole('button',{name:'Confirm native option-file installation'}));
   await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'mysql_host_start',request:{job_id:'install',review_digest:'exact-bytes',confirmed:true,credentials:{password:''}}}));
 });
+
+it('initializes without requesting a SQL binding and keeps original outcome separate from later writer termination',async()=> {
+  const planned={...review,source:{kind:'authenticated_ssh_host',native_instance_identity:null},source_identity_scope:'authenticated_ssh_host_before_native_initialization',options:{...review.options,operation:'initialize_data',initialization:{datadir:'/owned/new',user:'mysql',secure:true}}};
+  const post=jest.fn().mockResolvedValue(planned);render(<Component post={post} />);
+  fireEvent.mouseDown(screen.getByLabelText('Native host operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Initialize MySQL data directory (Linux)'}));
+  fireEvent.change(screen.getByLabelText('Native initialization data directory'),{target:{value:'/owned/new'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review native data-directory initialization'}));
+  await screen.findByLabelText('Native host diagnostic review');
+  expect(post).toHaveBeenLastCalledWith(expect.objectContaining({action:'mysql_host_review',request:expect.objectContaining({options:expect.objectContaining({operation:'initialize_data',initialization:{datadir:'/owned/new',user:'mysql',secure:true}})})}));
+  expect(post.mock.calls.some(([value])=>value.action==='mysql_host_catalog')).toBe(false);
+  fireEvent.click(screen.getByLabelText('Authorize the reviewed native data-directory initialization on this SSH host'));
+  const unknown={...planned,state:'unknown',remote_receipt:{state:'native_dispatch'}};
+  post.mockResolvedValue(unknown);fireEvent.click(screen.getByRole('button',{name:'Confirm native data-directory initialization'}));
+  await screen.findByText(/Native host job host-job: unknown/);
+  expect(screen.getByRole('button',{name:'Acknowledge ended initialization and release its directory claim'})).toBeDisabled();
+  post.mockResolvedValue({...unknown,reconciliation:{remote_receipt:{state:'native_dispatch',initialization_reconciliation:{process_termination_confirmed:true,original_native_result_unchanged:true}}}});
+  fireEvent.click(screen.getByRole('button',{name:'Cancel original native initializer'}));
+  await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'mysql_host_cancel_initialization',request:{job_id:'host-job',credentials:{password:''}}}));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Acknowledge ended initialization and release its directory claim'})).toBeEnabled());
+  expect(screen.getByText(/Native initialization result: unconfirmed or unsuccessful/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button',{name:'Acknowledge ended initialization and release its directory claim'}));
+  await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'mysql_host_acknowledge_initialization',request:{job_id:'host-job',credentials:{password:''}}}));
+  expect(post.mock.calls.filter(([value])=>value.action==='mysql_host_start')).toHaveLength(1);
+});

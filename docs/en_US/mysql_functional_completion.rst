@@ -1199,8 +1199,9 @@ and role identity. Native SHUTDOWN privilege and RESTART supervisor refusals are
 preserved. RESTART's native implicit commit applies to its private attachment;
 server-wide disconnection and rollback remain engine-owned effects. A returned
 acknowledgement reports request acceptance only, with no automatic retry or
-inferred termination, process generation or readiness. Full host initialization,
-start/service control and upgrade workflows remain separate outstanding work.
+inferred termination, process generation or readiness. Native host initialization
+and Linux systemd controls have separate workflows below; production service
+installation and upgrade acceptance remain outstanding.
 The native qualifier uses unmanaged and supervised owned fixtures to observe
 actual refusals, process changes, preserved committed data and native rollback of
 pending transactions. Disposable retained fixtures remove their anonymous data
@@ -1293,8 +1294,9 @@ unknown; reconciliation reads the durable result and new unit/process facts
 without resubmitting a service action or changing the original acknowledgement.
 Changed reviewed inputs and native manager policy refusals are preserved.
 Unit fragments/drop-ins and command identities do not freeze external scripts,
-environment/credential files or a complete startup-input snapshot. Initialization,
-service installation/configuration deployment, upgrades, physical recovery and
+environment/credential files or a complete startup-input snapshot. Native
+initialization and option-file deployment have separate workflows below. Service
+installation, upgrades, physical recovery and
 the separate Windows/macOS manager implementations/acceptance remain open.
 
 ``tools/cdeadmin_mysql_service_qualification.py --fixture <owned-fixture.json>
@@ -2229,7 +2231,45 @@ not frozen. Repeated dispatch and lost-reply reconciliation never reinstall the
 file automatically; read-only reconciliation can use the recorded host request
 after local adapter or registration configuration changes.
 
-This implements the option-file deployment part of ``CMP-MY-02``. Initialization,
-production service installation/upgrades, Router deployment/traffic and the
+This implements the option-file deployment part of ``CMP-MY-02``. Production
+service installation/upgrades, Router deployment/traffic and the
 remaining topology failure/repair and recovery cutover gates remain separate.
 Windows/macOS implementation and qualification stay with the platform teams.
+
+
+Native data-directory initialization before SQL registration
+-------------------------------------------------------------
+
+The native host workspace initializes a new or native-empty Linux MySQL data
+directory through authenticated, pinned SSH. An unverified MySQL registration
+can open this workflow without a working SQL connection. Review records host,
+boot/process namespace, native executable and option-file graph, selected data
+directory and parent identities, native user option and secure-password mode.
+There is no invented pre-initialization server UUID. The successful native
+initializer creates the UUID read from its new ``auto.cnf``; SQL readiness remains
+a separate observation. Native hidden entries and ``lost+found`` remain intact;
+existing engine data or changed reviewed inputs refuse before dispatch.
+
+Both secure ``--initialize`` and explicit ``--initialize-insecure`` use the
+pinned native MySQL9.7 executable. MySQL owns option precedence, filesystem
+ownership, bootstrap errors and password expiration. Secure initialization
+emits its temporary root password into the private owner-scoped native output.
+No command string or application-generated system tables substitute for native
+initialization. Partial files remain after failure, timeout or cancellation.
+
+A detached guardian admits the initializer once and holds private output files
+across SSH/application loss and native user changes. A canonical directory claim
+prevents another workspace from dispatching a competing initializer. Explicit
+cancellation addresses the original guardian; after guardian loss, cancellation
+requires the original process birth, session and kernel process handle.
+Independent reconciliation checks the original boot/namespace, admission marker,
+guardian lock and original session. Releasing a directory claim requires observed
+writer termination and explicit acknowledgement. Missing admission or process
+facts retain protection. Native completion, original SSH acknowledgement and
+later writer observations remain separate; a missing native result is not filled
+in and initialization is never automatically retried.
+
+This implements the initialization part of ``CMP-MY-02``. Service installation,
+native upgrade acceptance, Router deployment/traffic, topology failure/repair
+and production recovery cutover remain separate completion gates. Windows/macOS
+implementation and qualification remain with the platform teams.

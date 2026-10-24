@@ -246,8 +246,9 @@ one implementation scope and must not be counted as independent completion.
   validation remain distinct from topology-primary account setup. Supplying a
   password for an existing bootstrap account preserves the native error and
   uncertain-outcome fence; explicit observation/acknowledgement is required
-  before another mutation. Host option-file deployment and broader production
-  installation, upgrade and recovery acceptance remain open.
+  before another mutation. Broader production service installation, upgrade and
+  recovery acceptance remain open; reviewed native option-file deployment and
+  pre-SQL initialization are described in :doc:`mysql_functional_completion`.
   Existing extra grants remain. Automatic secondary-seed routing, certificate
   login acceptance and replication catch-up are separate qualification work.
   Native SQL fanout now exposes each topology's ``execute`` method with native
@@ -269,7 +270,7 @@ one implementation scope and must not be counted as independent completion.
   membership, resolved paths and native permission/depth rules, with review and
   dispatch rechecks and a separate post-process observation. This does not freeze
   concurrent configuration writers. Persisted settings/service arguments,
-  configuration deployment, initialization, service installation, upgrades and
+  service installation, upgrades and
   physical recovery remain separate work. Native Linux systemd start/stop/restart
   now have exact unit/process association, prior owner/registration binding for
   offline startup, durable manager-client outcomes and read-only reconciliation.
