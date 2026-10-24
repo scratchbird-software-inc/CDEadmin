@@ -1200,8 +1200,8 @@ preserved. RESTART's native implicit commit applies to its private attachment;
 server-wide disconnection and rollback remain engine-owned effects. A returned
 acknowledgement reports request acceptance only, with no automatic retry or
 inferred termination, process generation or readiness. Native host initialization
-and Linux systemd controls have separate workflows below; production service
-installation and upgrade acceptance remain outstanding.
+and Linux systemd installation/controls have separate workflows below; native
+upgrade acceptance remains outstanding.
 The native qualifier uses unmanaged and supervised owned fixtures to observe
 actual refusals, process changes, preserved committed data and native rollback of
 pending transactions. Disposable retained fixtures remove their anonymous data
@@ -1295,8 +1295,8 @@ without resubmitting a service action or changing the original acknowledgement.
 Changed reviewed inputs and native manager policy refusals are preserved.
 Unit fragments/drop-ins and command identities do not freeze external scripts,
 environment/credential files or a complete startup-input snapshot. Native
-initialization and option-file deployment have separate workflows below. Service
-installation, upgrades, physical recovery and
+initialization, option-file deployment and service creation have separate
+workflows below. Native upgrades, broader physical recovery and
 the separate Windows/macOS manager implementations/acceptance remain open.
 
 ``tools/cdeadmin_mysql_service_qualification.py --fixture <owned-fixture.json>
@@ -2232,7 +2232,7 @@ file automatically; read-only reconciliation can use the recorded host request
 after local adapter or registration configuration changes.
 
 This implements the option-file deployment part of ``CMP-MY-02``. Production
-service installation/upgrades, Router deployment/traffic and the
+native upgrades, Router deployment/traffic and the
 remaining topology failure/repair and recovery cutover gates remain separate.
 Windows/macOS implementation and qualification stay with the platform teams.
 
@@ -2269,7 +2269,52 @@ facts retain protection. Native completion, original SSH acknowledgement and
 later writer observations remain separate; a missing native result is not filled
 in and initialization is never automatically retried.
 
-This implements the initialization part of ``CMP-MY-02``. Service installation,
-native upgrade acceptance, Router deployment/traffic, topology failure/repair
+This implements the initialization part of ``CMP-MY-02``. Service creation is
+described below. Native upgrade acceptance, Router deployment/traffic, topology failure/repair
 and production recovery cutover remain separate completion gates. Windows/macOS
 implementation and qualification remain with the platform teams.
+
+
+Reviewed native Linux service installation and boot controls
+-------------------------------------------------------------
+
+The database-host workspace installs a new native systemd unit for an observed
+MySQL UUID/data directory and executable. An existing online source can supply
+the binding, or a completed native initialization receipt can supply it before
+a SQL endpoint exists. The latter is explicitly labelled a previous initializer
+identity, checked again through authenticated SSH and the native ``auto.cnf``.
+No current SQL principal or SQL readiness is invented. The selected mysqld
+binary, systemd tools and operating-system user must already exist on that host.
+
+Review binds the exact generated unit text, direct native executable/arguments,
+user option, configuration/include graph, PID filename, systemd tool bytes and
+installation directory identity. Unit working directory and HOME preserve the
+selected native configuration context. MySQL retains its native user-option
+precedence. Native ``mysqld --validate-config`` and ``systemd-analyze verify``
+run before exclusive unit publication. An existing unit file, symlink or loaded
+unit is refused. A competing file cannot be overwritten between validation and
+publication. The installed unit is flushed before native ``daemon-reload``; that
+manager command rereads all unit definitions, including concurrent external
+changes. These observations do not freeze other host administrators.
+
+Installation does not start or enable MySQL. Separate reviewed start/stop/restart
+and enable/disable actions use the native service manager. Boot enablement is
+reported from native ``UnitFileState``. The installed inactive association checks
+actual D-Bus command identities and loaded unit bytes against the reviewed
+definition, retaining the native data-directory UUID. Offline control rejects
+changed original unit files or commands until the association can be rebound.
+An accepted manager client or active unit does not establish SQL readiness.
+
+A private phase receipt separates native configuration validation, unit
+validation, exclusive file publication and daemon-reload outcome. Read-only
+reconciliation reports that receipt, current file identity/digest, load state
+and current association independently from the original SSH acknowledgement.
+A missing daemon-reload result stays missing; observing installed bytes does not
+supply its return code. Neither installation nor a service request is repeated
+automatically after interruption.
+
+This implements native Linux service creation and boot controls under
+``CMP-MY-02``. Native upgrades, Router deployment/traffic, remaining topology
+failure/repair, production recovery cutover and inventory reconciliation remain
+separate gates. Windows/macOS implementation and qualification stay with the
+platform teams.

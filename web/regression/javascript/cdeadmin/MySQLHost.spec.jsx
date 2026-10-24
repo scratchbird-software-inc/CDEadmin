@@ -123,3 +123,27 @@ it('initializes without requesting a SQL binding and keeps original outcome sepa
   await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'mysql_host_acknowledge_initialization',request:{job_id:'host-job',credentials:{password:''}}}));
   expect(post.mock.calls.filter(([value])=>value.action==='mysql_host_start')).toHaveLength(1);
 });
+
+it('uses a completed initializer for a separately reviewed native service installation',async()=> {
+  const initialized={...review,state:'native_process_returned',options:{...review.options,operation:'initialize_data',initialization:{datadir:'/owned/new',user:'mysql',secure:true}},remote_receipt:{initialization_result:{native_initialization_returned:true}}};
+  const post=jest.fn().mockResolvedValue({jobs:[initialized],total:1,offset:0});render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load native host receipts'}));
+  await screen.findByRole('table',{name:'Native host diagnostic receipts'});
+  post.mockResolvedValue(initialized);fireEvent.click(screen.getByRole('button',{name:'Inspect native host job host-job'}));
+  await screen.findByText(/Native host job host-job: native_process_returned/);
+  fireEvent.mouseDown(screen.getByLabelText('Native host operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Install new MySQL service (Linux systemd)'}));
+  expect(screen.getByLabelText('Prior verified service job (for offline SQL)')).toHaveValue('host-job');
+  fireEvent.change(screen.getByLabelText('Exact systemd MySQL unit'),{target:{value:'owned-new.service'}});
+  const planned={...review,job_id:'install',options:{...review.options,operation:'install_service'},remote_observation:{service_installation:{automatic_start:false}}};
+  post.mockResolvedValue(planned);fireEvent.click(screen.getByRole('button',{name:'Review native host service action'}));
+  await screen.findByLabelText('Native host diagnostic review');
+  expect(post).toHaveBeenLastCalledWith(expect.objectContaining({action:'mysql_host_review',request:expect.objectContaining({options:expect.objectContaining({operation:'install_service',binding_job_id:'host-job',service:{manager:'systemd',name:'owned-new.service'},service_installation:{user:'mysql'}})})}));
+  expect(post.mock.calls.at(-1)[0].request.options).not.toHaveProperty('initialization');
+  fireEvent.click(screen.getByLabelText('Authorize the reviewed native MySQL service action on this database SSH host'));
+  post.mockResolvedValue({...planned,state:'native_process_returned',remote_receipt:{result:{return_code:0},service_installation_result:{installed:true,restart_issued:false,enable_issued:false}}});
+  fireEvent.click(screen.getByRole('button',{name:'Confirm native host service action'}));
+  await screen.findByText(/Native service unit installation: file installed/);
+  expect(screen.getByText(/Installation does not start or enable MySQL/)).toBeVisible();
+  expect(post.mock.calls.filter(([value])=>value.action==='mysql_host_start')).toHaveLength(1);
+});

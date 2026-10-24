@@ -5,6 +5,7 @@ import threading
 import base64
 import hashlib
 import time
+import posixpath
 
 from ..core import EndpointContext
 from ..operations.store import JsonOperationStore
@@ -16,12 +17,12 @@ from .mysql_binlog_jobs import DurableCancellation, MySQLBinlogJobs, digest, ide
 from .mysql_monitoring_host import MySQLMonitoringHost
 
 
-SERVICE_ACTIONS = {'service_start', 'service_stop', 'service_restart'}
+SERVICE_ACTIONS = {'service_start', 'service_stop', 'service_restart','service_enable','service_disable','install_service'}
 
 
 def options(value):
     required = {'connection', 'executable', 'configuration_file', 'workspace', 'timeout_seconds'}
-    if not isinstance(value, dict) or not required <= set(value) or set(value) - required - {'operation', 'service', 'binding_job_id', 'disconnect_all_clients','configuration_replacement','initialization'}:
+    if not isinstance(value, dict) or not required <= set(value) or set(value) - required - {'operation', 'service', 'binding_job_id', 'disconnect_all_clients','configuration_replacement','initialization','service_installation'}:
         raise native.HostError('Select the exact native host, executable, configuration and private workspace')
     selected = deepcopy(value); selected['connection'] = native.public_route(selected['connection'])
     for key in ('executable', 'workspace'):
@@ -42,6 +43,12 @@ def options(value):
                 len(initial['datadir'])>32768 or len(initial['user'])>512):
             raise native.HostError('Select exact native data directory, user and secure initialization mode')
     elif 'initialization' in selected:raise native.HostError('Initialization options apply only to a new native data directory')
+    if operation=='install_service':
+        installation=selected.get('service_installation')
+        if (not isinstance(installation,dict) or set(installation)!={'user'} or not isinstance(installation['user'],str) or
+                not installation['user'] or '\0' in installation['user'] or len(installation['user'])>512):
+            raise native.HostError('Select the native user option for this new MySQL service')
+    elif 'service_installation' in selected:raise native.HostError('Service installation options apply only to a new native unit')
     if operation=='deploy_config':
         if config is None:raise native.HostError('Select an existing native option file to replace')
         replacement=selected.get('configuration_replacement')
@@ -85,6 +92,7 @@ def native_request(record, action):
             'timeout_seconds': selected['timeout_seconds'], 'reviewed': record['source_state']['remote_review'],
             'job_id': record['job_id'], 'input_digest': record['review_digest']}
     if selected.get('operation')=='initialize_data':value['initialization']=selected['initialization']
+    if selected.get('operation')=='install_service':value['service_installation']=selected['service_installation']
     if selected.get('operation')=='deploy_config' and action!='status':value['configuration_replacement']=selected['configuration_replacement']
     if selected.get('operation') in SERVICE_ACTIONS:
         value.update(service=selected['service'], native_pid_file=record['source_state']['native_pid_file'],
@@ -138,6 +146,14 @@ class HostJobs(MySQLBinlogJobs):
                 'The service-manager client outcome and subsequent unit/process facts do not prove SQL readiness. A timeout or lost SSH reply never causes automatic replay.',
                 'An offline review uses the explicitly selected prior owner/registration service association. Its SQL principal facts are previous observations; current SSH host authority authorizes this service request.'])
             result = self.get(record['job_id'], owner, endpoint)
+        if selected.get('operation')=='install_service':
+            record=self.load(result['job_id'],owner,endpoint)
+            self.update(record,warnings=[
+                'Creates the reviewed new Linux systemd unit for the observed MySQL UUID/data directory, executable, native user option and selected configuration. Existing unit files and native definitions are never replaced.',
+                'Native mysqld and systemd validate the reviewed inputs before exclusive unit publication. The service manager rereads all unit definitions after installation; concurrent external unit edits are not frozen.',
+                'Installation does not start or enable the service and does not establish SQL readiness. Start, enable and disable use separate reviewed native controls.',
+                'A missing reply never causes another installation. Reconciliation reports the private phase receipt, current unit bytes and current native association separately from the original manager result.'])
+            result=self.get(record['job_id'],owner,endpoint)
         return result
 
     def run(self, record, transport, signal):
@@ -253,7 +269,18 @@ def capture(service, server, jobs, owner, endpoint, selected, configuration):
         return source(service, server)
     known = jobs.load(reference, owner, endpoint)
     old_connection = known['options']['connection']; connection = selected['connection']
-    association = known['source_state'].get('remote_review', {}).get('service')
+    original=(known.get('reconciliation') or {}).get('remote_receipt') or known.get('remote_receipt') or {}
+    if selected.get('operation')=='install_service' and known['options'].get('operation')=='initialize_data':
+        initialized=original.get('initialization_result') or {}
+        if (known['configuration']!=configuration or not initialized.get('native_initialization_returned') or
+                not initialized.get('native_identity') or any(old_connection.get(key)!=connection.get(key) for key in ('host','port','host_key','platform'))):
+            raise native.HostError('Select the matching completed native initializer on this SSH host')
+        identity=initialized['native_identity'];hostname=known['source_state']['remote_review']['host']['hostname']
+        return {'identity':{'server_uuid':identity['server_uuid'],'kind':'previous_native_initializer'},
+            'state':{'host_binding':{**{key:identity[key] for key in ('server_uuid','datadir')},'hostname':hostname},
+                'native_pid_file':posixpath.join(identity['datadir'],'mysqld.pid'),
+                'source_identity_scope':'previous_native_initializer_uuid_checked_on_host'}}
+    association = known['source_state'].get('remote_review', {}).get('service') or original.get('service_installation_result',{}).get('installed_service_binding') or original.get('service_installation_reconciliation',{}).get('service')
     if (known['configuration'] != configuration or not association or
             association.get('service_binding_verified') is not True or
             association.get('selected_service') != selected['service'] or
@@ -263,7 +290,7 @@ def capture(service, server, jobs, owner, endpoint, selected, configuration):
         'host_binding': deepcopy(known['source_state']['host_binding']),
         'native_pid_file': known['source_state']['native_pid_file'],
         'source_connection_class': known['source_state'].get('source_connection_class'),
-        'source_identity_scope': 'previous_online_service_association',
+        'source_identity_scope': 'previous_installed_native_service_association' if known['source'].get('kind')=='previous_native_initializer' or association.get('source_association')=='installed_native_unit_for_observed_datadir' else 'previous_online_service_association',
         'binding_job_id': reference, 'previous_service_binding': deepcopy(association)}}
 
 
@@ -323,6 +350,7 @@ def action(service, server, operation, request):
         if selected.get('operation') in SERVICE_ACTIONS:
             inspection.update(service=selected['service'], native_pid_file=captured['state']['native_pid_file'],
                               previous_service_binding=captured['state'].get('previous_service_binding'))
+        if selected.get('operation')=='install_service':inspection['service_installation']=selected['service_installation']
         observed = transport.request(inspection)
         if bootstrap:
             captured={'identity':{'kind':'authenticated_ssh_host','hostname':observed['host']['hostname'],'native_instance_identity':None},

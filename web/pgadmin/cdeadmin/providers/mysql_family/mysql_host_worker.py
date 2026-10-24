@@ -320,6 +320,12 @@ def initialization_module():
     return mysql_host_initialization
 
 
+def installation_module():
+    if '_cdeadmin_native_installation' in sys.modules:return sys.modules['_cdeadmin_native_installation']
+    from . import mysql_host_installation
+    return mysql_host_installation
+
+
 def request_binding(request):
     if request.get('binding',{}).get('scope')=='mysql-initialization-host-v1':
         return initialization_module().host_binding(request['binding'])
@@ -371,7 +377,11 @@ def inspect(request, expected=None):
         result['configuration_deployment']=configuration_module().inspect(request,result,globals())
         if expected is not None and result['configuration_deployment']!=expected.get('configuration_deployment'):
             raise Refused('The prospective native option-file inputs changed after review')
-    if request.get('service') is not None:
+    if request.get('service_installation') is not None:
+        result['service_installation']=installation_module().inspect(request,result,globals())
+        if expected is not None and result['service_installation']!=expected.get('service_installation'):
+            raise Refused('The native service installation inputs changed after review')
+    elif request.get('service') is not None:
         result['service'] = native_services.inspect(request, result, process, file_hash, regular_stream, Refused)
         if expected is not None and result['service'] != expected.get('service'):
             raise Refused('The native service definition, state or process changed after review')
@@ -391,7 +401,7 @@ def dispatch(request,launch_source=None):
     action = request.get('action')
     if action == 'inspect':
         return inspect(request)
-    if action not in {'validate_config', 'service_start', 'service_stop', 'service_restart', 'deploy_config', 'initialize_data','cancel_initialization','acknowledge_initialization','status'}:
+    if action not in {'validate_config', 'service_start', 'service_stop', 'service_restart','service_enable','service_disable','install_service', 'deploy_config', 'initialize_data','cancel_initialization','acknowledge_initialization','status'}:
         raise Refused('The native MySQL host action is unavailable')
     host = request_binding(request)
     root = Path(text(request['workspace']))
@@ -415,6 +425,8 @@ def dispatch(request,launch_source=None):
             raise Refused('The remote host receipt belongs to another reviewed input')
         if request.get('initialization') is not None and (directory/'initializer-request.json').exists():
             return initialization_module().observe(directory,value,globals(),cancel=action=='cancel_initialization',acknowledge=action=='acknowledge_initialization')
+        if action=='status' and value.get('observation',{}).get('service_installation'):
+            return installation_module().observe(directory,value,globals())
         if action == 'status' and request.get('service') is not None and value.get('observation', {}).get('service'):
             # A later unit observation never rewrites the original manager
             # client outcome, and never submits a service action again.
@@ -456,6 +468,10 @@ def dispatch(request,launch_source=None):
         deployment=configuration_module().execute(request,observed,directory,timeout,globals())
         value['configuration_deployment_result']=deployment
         result=deployment['native_validation']
+    elif action=='install_service':
+        installation=installation_module().execute(request,observed,directory,timeout,globals())
+        value['service_installation_result']=installation
+        result=installation['native_result']
     else:
         result = native_services.execute(action, observed['service'], directory, timeout, process, Refused)
         value['service_request'] = {'operation': action, 'manager_client_completed': result['return_code'] == 0,
@@ -464,7 +480,10 @@ def dispatch(request,launch_source=None):
     value.update(state='native_process_returned', result=result)
     # Persist native completion before making any later filesystem observation.
     save(receipt, value)
-    if action in {'service_start','service_stop','service_restart'}:
+    if action=='install_service' and installation.get('installed_service_binding'):
+        value['service_after_process']={'observed':True,'service':installation['installed_service_binding']}
+        save(receipt,value)
+    if action in {'service_start','service_stop','service_restart','service_enable','service_disable'}:
         try:
             after = {**request, 'previous_service_binding': observed['service']}
             value['service_after_process'] = {'observed': True,

@@ -47,7 +47,7 @@ def inspect(request, observed, run, file_hash, regular_stream, refused):
             return query(['get-property', 'org.freedesktop.systemd1', address,
                           'org.freedesktop.systemd1.' + interface, field])
         unit = {field: property_value('Unit', field) for field in
-                ('Id', 'Names', 'LoadState', 'ActiveState', 'SubState', 'FragmentPath', 'DropInPaths', 'InvocationID')}
+                ('Id', 'Names', 'LoadState', 'ActiveState', 'SubState', 'FragmentPath', 'DropInPaths', 'InvocationID','UnitFileState')}
         service = {field: property_value('Service', field) for field in ('MainPID', 'ControlGroup', 'ExecStart', 'ExecStop')}
     if (unit['LoadState'] != 'loaded' or not isinstance(unit['Names'], list) or name not in unit['Names'] or
             not isinstance(unit['DropInPaths'], list) or type(service['MainPID']) is not int):
@@ -96,6 +96,8 @@ def inspect(request, observed, run, file_hash, regular_stream, refused):
         if (not isinstance(previous, dict) or previous.get('service_binding_verified') is not True or
                 previous.get('selected_service') != selected or previous.get('unit', {}).get('Id') != unit['Id']):
             raise refused('Select a prior verified MySQL service review for offline service control')
+        if files!=previous.get('definition_files') or commands!=previous.get('command_sha256'):
+            raise refused('The original offline MySQL service definition changed; rebind its running native instance')
     unit['Names'] = sorted(unit['Names'])
     return {'manager': 'systemd', 'selected_service': dict(selected), 'unit': unit,
             'manager_programs': programs, 'definition_files': files, 'command_sha256': commands,
@@ -106,7 +108,7 @@ def inspect(request, observed, run, file_hash, regular_stream, refused):
 
 
 def execute(operation, service, workspace, timeout, run, refused):
-    actions = {'service_start': 'start', 'service_stop': 'stop', 'service_restart': 'restart'}
+    actions = {'service_start': 'start', 'service_stop': 'stop', 'service_restart': 'restart','service_enable':'enable','service_disable':'disable'}
     if operation not in actions:
         raise refused('Select a native MySQL service action')
     executable = Path(service['manager_programs']['systemctl']['path'])

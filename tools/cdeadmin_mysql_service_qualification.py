@@ -13,12 +13,13 @@ import json
 from pathlib import Path
 import sys
 import time
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / 'web'), str(ROOT / 'tools')]
 
 
-def qualify(output, fixture, browser_binary=None, driver_binary=None):
+def qualify(output, fixture, browser_binary=None, driver_binary=None,installation=False,installation_only=False):
     output = Path(output).resolve(); fixture = Path(fixture).resolve()
     if output == ROOT or ROOT in output.parents:
         raise ValueError('Keep native fixture evidence outside source')
@@ -61,7 +62,8 @@ def qualify(output, fixture, browser_binary=None, driver_binary=None):
     proof = {'complete': False, 'interfaces': [], 'history_testing': 'not run', 'full_mysql_product_complete': False}
     paths = ['tools/cdeadmin_mysql_service_qualification.py', 'web/pgadmin/cdeadmin/workspace/mysql_host_service.py']
     paths += ['web/pgadmin/cdeadmin/providers/mysql_family/' + name for name in
-              ('mysql_host_services.py', 'mysql_host_worker.py', 'mysql_host_transport.py')]
+              ('mysql_host_services.py', 'mysql_host_worker.py', 'mysql_host_transport.py','mysql_host_installation.py','mysql_host_initialization.py')]
+    paths+=['tools/mysql_service_installation_qualification.py','web/pgadmin/static/js/Dialogs/MySQLHost.jsx']
     proof['source_sha256'] = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in paths}
     def connection(pure=False):
         return mysql.connector.connect(host='127.0.0.1', port=configuration['mysql_port'],
@@ -122,6 +124,10 @@ def qualify(output, fixture, browser_binary=None, driver_binary=None):
             def admitted(record):
                 return {'job_id': record['job_id'], 'review_digest': record['review_digest'], 'confirmed': True, 'credentials': credentials}
             row = {'use_pure': pure, 'checks': []}; proof['interfaces'].append(row)
+            if installation_only:
+                from mysql_service_installation_qualification import qualify as install
+                row['installation']=install(app,client,selected,credentials,host_script,output,pure)
+                continue
             wrong = {**selected, 'operation': 'service_restart', 'service': {'manager': 'systemd', 'name': 'ssh.service'}}
             post('review', {'options': wrong, 'credentials': credentials}, refused=True)
             row['checks'].append('another-service-refused-before-dispatch')
@@ -226,8 +232,14 @@ def qualify(output, fixture, browser_binary=None, driver_binary=None):
             assert recovery['remote_receipt']['service_request']['manager_client_completed']
             oracle = ready(); oracle.close()
             row['checks'].append('native-completed-stop-with-lost-SSH-reply-remains-unknown-reconciles-without-replay-and-allows-new-reviewed-offline-start')
+            if installation:
+                from mysql_service_installation_qualification import qualify as install
+                row['installation']=install(app,client,selected,credentials,host_script,output,pure)
         if browser_binary:
-            proof['browser'] = browser(app, output, item.id, selected, configuration, ready, browser_binary, driver_binary)
+            proof['browser'] = browser(app, output, item.id, selected, configuration, ready, browser_binary, driver_binary,proof['interfaces'][-1].get('installation'))
+        if installation:
+            from mysql_service_installation_qualification import cleanup
+            for pure in (True,False):cleanup(host_script,pure)
         proof['complete'] = True
     finally:
         jobs = getattr(service, 'mysql_host_jobs', None)
@@ -236,7 +248,7 @@ def qualify(output, fixture, browser_binary=None, driver_binary=None):
     return proof
 
 
-def browser(app, output, sid, selected, configuration, ready, binary, driver_binary):
+def browser(app, output, sid, selected, configuration, ready, binary, driver_binary,installation=None):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -277,7 +289,9 @@ def browser(app, output, sid, selected, configuration, ready, binary, driver_bin
             wait.until(lambda browser: node.get_attribute('value') == str(value))
         def select(label, value):
             tag = driver.find_element(By.XPATH, '//label[normalize-space()="' + label + '"]')
-            driver.find_element(By.ID, tag.get_attribute('for')).click()
+            control=driver.find_element(By.ID, tag.get_attribute('for'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"center"});',control)
+            wait.until(lambda _browser:control.is_displayed() and control.is_enabled());control.click()
             wait.until(lambda browser: browser.find_element(By.CSS_SELECTOR, 'li[data-value="' + value + '"]')).click()
         def load_key():
             node = wait.until(lambda browser: browser.find_element(By.XPATH, '//label[contains(normalize-space(),"Load SSH private key")]//input[@type="file"]'))
@@ -310,7 +324,7 @@ def browser(app, output, sid, selected, configuration, ready, binary, driver_bin
             if operation == 'service_start': assert review['source_identity_scope'] == 'previous_online_service_association'
             checkbox = driver.find_element(By.XPATH, '//label[contains(normalize-space(),"Authorize the reviewed native MySQL service action")]//input')
             driver.execute_script('arguments[0].click()', checkbox); click('Confirm native host service action')
-            receipt = wait.until(lambda browser: current if (current := value('Native host diagnostic receipt')) and current['state'] == 'native_process_returned' else None)
+            receipt = wait.until(lambda browser: current if (current := value('Native host diagnostic receipt')) and current['options']['operation']==operation and current['state'] == 'native_process_returned' else None)
             assert receipt['remote_receipt']['service_request']['manager_client_completed']
             assert not receipt['remote_receipt']['service_request']['database_readiness_observed']
             if operation == 'service_stop': stopped_job = receipt['job_id']
@@ -321,6 +335,30 @@ def browser(app, output, sid, selected, configuration, ready, binary, driver_bin
             assert reconciled['reconciliation']['remote_receipt']['service_reconciliation']['observed']
             checks.append({'operation': operation, 'native_service_manager_completed': True,
                 'offline_workspace_reopened_with_prior_binding': operation == 'service_start'})
+        if installation:
+            close_workspace(driver,wait);sid=installation['server_id'];open_workspace()
+            click('Load native host receipts')
+            button=wait.until(lambda browser:browser.find_element(By.CSS_SELECTOR,'button[aria-label="Inspect native host job '+installation['initialized_job_id']+'"]'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"center"});',button);button.click();load_key()
+            select('Native host operation','install_service');field('Exact systemd MySQL unit','sr-installed-desktop.service')
+            click('Review native host service action')
+            reviewed=wait.until(lambda browser:current if (current:=value('Native host diagnostic review')) and current['observation'].get('service_installation') else None)
+            assert reviewed['source_identity_scope']=='previous_native_initializer_uuid_checked_on_host'
+            checkbox=driver.find_element(By.XPATH,'//label[contains(normalize-space(),"Authorize the reviewed native MySQL service action")]//input')
+            driver.execute_script('arguments[0].click()',checkbox);click('Confirm native host service action')
+            installed=wait.until(lambda browser:current if (current:=value('Native host diagnostic receipt')) and current['options']['operation']=='install_service' and current['state']=='native_process_returned' else None)
+            result=installed['remote_receipt']['service_installation_result']
+            assert result['installed'] and result['daemon_reload']['return_code']==0 and result['installed_service_binding']['unit']['ActiveState']=='inactive'
+            assert not result['restart_issued'] and not result['enable_issued']
+            field('Prior verified service job (for offline SQL)',installed['job_id'])
+            for operation,state in (('service_enable','enabled'),('service_disable','disabled')):
+                select('Native host operation',operation);click('Review native host service action')
+                wait.until(lambda browser:current if (current:=value('Native host diagnostic review')) and current['observation'].get('service') else None)
+                checkbox=driver.find_element(By.XPATH,'//label[contains(normalize-space(),"Authorize the reviewed native MySQL service action")]//input')
+                driver.execute_script('arguments[0].click()',checkbox);click('Confirm native host service action')
+                current=wait.until(lambda browser:current if (current:=value('Native host diagnostic receipt')) and current['options']['operation']==operation and current['state']=='native_process_returned' else None)
+                assert current['remote_receipt']['service_after_process']['service']['unit']['UnitFileState']==state
+            checks.append({'operation':'native_service_installation','unverified_SQL_registration':True,'native_file_installed':True,'automatic_start':False,'automatic_enable':False,'separate_enable_disable':True})
         driver.execute_script('document.querySelectorAll("input,textarea").forEach(e=>e.style.visibility="hidden")')
         driver.save_screenshot(str(output / 'native-host-service.png'))
         errors = [row for row in driver.get_log('browser') if row['level'] == 'SEVERE']; assert not errors, errors
@@ -338,7 +376,7 @@ def browser(app, output, sid, selected, configuration, ready, binary, driver_bin
         http.shutdown(); thread.join(timeout=10)
 
 
-def browser_only(output, fixture, application_directory, sid, binary, driver_binary):
+def browser_only(output, fixture, application_directory, sid, binary, driver_binary,installation_evidence=None):
     """Repeat browser evidence against the same persisted owner/registration."""
     output = Path(output).resolve(); configuration = json.loads(Path(fixture).read_text())
     if output == ROOT or ROOT in output.parents or configuration.get('owned_fixture') is not True:
@@ -378,9 +416,16 @@ def browser_only(output, fixture, application_directory, sid, binary, driver_bin
         'web/pgadmin/cdeadmin/context_menu.py', 'web/pgadmin/static/js/Dialogs/MySQLHost.jsx',
         'web/pgadmin/browser/server_groups/servers/static/js/server.js']
     names += ['web/pgadmin/cdeadmin/providers/mysql_family/' + name for name in ('mysql_host_services.py', 'mysql_host_worker.py', 'mysql_host_transport.py')]
+    names+=['web/pgadmin/cdeadmin/providers/mysql_family/mysql_host_installation.py','web/pgadmin/cdeadmin/providers/mysql_family/mysql_host_initialization.py','tools/mysql_service_installation_qualification.py']
     proof['source_sha256'] = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in names}
     try:
-        proof['browser'] = browser(app, output, sid, selected, configuration, ready, binary, driver_binary)
+        installation=json.loads(Path(installation_evidence).read_text()) if installation_evidence else None
+        if installation:
+            assert installation['complete'] and installation['history_testing']=='not run'
+            from cdeadmin_mysql_service_fixture import ssh
+            script='from pathlib import Path;import subprocess;name="sr-installed-desktop.service";subprocess.run(["systemctl","stop","--",name],capture_output=True);subprocess.run(["systemctl","disable","--",name],capture_output=True);Path("/etc/systemd/system/"+name).unlink(missing_ok=True);subprocess.run(["systemctl","daemon-reload"],check=True)'
+            subprocess.run([*ssh(configuration),'python3 -'],input=script,text=True,check=True,capture_output=True)
+        proof['browser'] = browser(app, output, sid, selected, configuration, ready, binary, driver_binary,installation)
         proof['complete'] = True
     finally:
         service = service_for_app(app); jobs = getattr(service, 'mysql_host_jobs', None)
@@ -394,10 +439,13 @@ if __name__ == '__main__':
     parser.add_argument('--output', required=True); parser.add_argument('--fixture', required=True)
     parser.add_argument('--browser-binary'); parser.add_argument('--driver-binary')
     parser.add_argument('--browser-only-application'); parser.add_argument('--server-id', type=int)
+    parser.add_argument('--installation',action='store_true')
+    parser.add_argument('--installation-only',action='store_true')
+    parser.add_argument('--installation-evidence')
     args = parser.parse_args()
     if args.browser_only_application:
         if not args.server_id or not args.browser_binary: parser.error('Browser-only evidence requires server ID and browser binary')
-        result = browser_only(args.output, args.fixture, args.browser_only_application, args.server_id, args.browser_binary, args.driver_binary)
+        result = browser_only(args.output, args.fixture, args.browser_only_application, args.server_id, args.browser_binary, args.driver_binary,args.installation_evidence)
     else:
-        result = qualify(args.output, args.fixture, args.browser_binary, args.driver_binary)
+        result = qualify(args.output, args.fixture, args.browser_binary, args.driver_binary,args.installation or args.installation_only,args.installation_only)
     print(json.dumps({'complete': result['complete'], 'interfaces': len(result.get('interfaces', []))}))

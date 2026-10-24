@@ -227,7 +227,7 @@ one implementation scope and must not be counted as independent completion.
   ReplicaSet and ClusterSet. Native document and Router configuration changes
   invalidate stale reviews. Live selected-Router mutation/removal acceptance,
   Router deployment/bootstrap and actual traffic/failure tests remain open,
-  alongside host service installation/upgrades and broader lifecycle acceptance.
+  alongside host native upgrade acceptance and broader lifecycle acceptance.
   Native local sandbox deploy/start/stop/kill/delete now have a separate
   offline-capable execution-host workspace with explicit OS authority,
   private dispatch passwords, native configuration/process identity checks,
@@ -246,9 +246,8 @@ one implementation scope and must not be counted as independent completion.
   validation remain distinct from topology-primary account setup. Supplying a
   password for an existing bootstrap account preserves the native error and
   uncertain-outcome fence; explicit observation/acknowledgement is required
-  before another mutation. Broader production service installation, upgrade and
-  recovery acceptance remain open; reviewed native option-file deployment and
-  pre-SQL initialization are described in :doc:`mysql_functional_completion`.
+  before another mutation. Broader production upgrade and recovery acceptance remain open; reviewed native
+  service creation/boot controls, option-file deployment and pre-SQL initialization are described in :doc:`mysql_functional_completion`.
   Existing extra grants remain. Automatic secondary-seed routing, certificate
   login acceptance and replication catch-up are separate qualification work.
   Native SQL fanout now exposes each topology's ``execute`` method with native
@@ -270,8 +269,7 @@ one implementation scope and must not be counted as independent completion.
   membership, resolved paths and native permission/depth rules, with review and
   dispatch rechecks and a separate post-process observation. This does not freeze
   concurrent configuration writers. Persisted settings/service arguments,
-  service installation, upgrades and
-  physical recovery remain separate work. Native Linux systemd start/stop/restart
+  native upgrades and broader recovery remain separate work. Native Linux systemd start/stop/restart
   now have exact unit/process association, prior owner/registration binding for
   offline startup, durable manager-client outcomes and read-only reconciliation.
   This does not establish SQL readiness, freeze external unit inputs or qualify

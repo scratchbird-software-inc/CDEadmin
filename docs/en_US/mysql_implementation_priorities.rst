@@ -231,7 +231,8 @@ Status: **open**. Priority: **P0**.
 
 Complete bootstrap/outage/failover/repair with independent unreachable-member,
 replication and application-traffic evidence; deploy/bootstrap/supervise
-Router; complete service installation and upgrades. Native Linux initialization
+Router; complete native upgrades. Native Linux service installation now creates
+a reviewed systemd unit with separate start and boot controls. Native Linux initialization
 now supports new registrations before SQL is available, with secure/insecure
 native bootstrap, original-writer controls and separate outcome observations. Reviewed
 native Linux option-file deployment now validates the proposed original-filename

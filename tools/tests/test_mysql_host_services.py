@@ -30,7 +30,7 @@ def systemd(tmp_path, monkeypatch):
     monkeypatch.setattr(services.shutil, 'which', lambda name: '/usr/bin/' + name)
     values = {'Id': 'mysql.service', 'Names': ['mysql.service', 'mysqld.service'], 'LoadState': 'loaded',
         'ActiveState': 'active', 'SubState': 'running', 'FragmentPath': str(unit), 'DropInPaths': [],
-        'InvocationID': [1, 2, 3], 'MainPID': 12344, 'ControlGroup': '/system.slice/mysql.service',
+        'InvocationID': [1, 2, 3],'UnitFileState':'enabled', 'MainPID': 12344, 'ControlGroup': '/system.slice/mysql.service',
         'ExecStart': [['/native/mysqld', ['mysqld', '--private-key-password=must-not-leak'], False, 1, 2, 3]], 'ExecStop': []}
     def run(program, arguments, directory, timeout):
         data = ['/org/freedesktop/systemd1/unit/mysql_2eservice'] if 'LoadUnit' in arguments else values[arguments[-1]]
@@ -76,6 +76,15 @@ def test_service_file_changes_and_native_argv_are_bounded_review_facts(systemd):
     assert run.call_args.args[1] == ['--no-ask-password', '--no-pager', '--job-mode=fail', 'stop', '--', 'mysqld.service']
 
 
+@pytest.mark.parametrize('changed',['file','command'])
+def test_offline_original_service_definition_changes_require_a_new_running_instance_binding(systemd,changed):
+    known=inspect(systemd);systemd[4].update(ActiveState='inactive',SubState='dead',MainPID=0,ControlGroup='')
+    systemd[0]['previous_service_binding']=known
+    if changed=='file':systemd[6].write_text('[Service]\nExecStart=/another/service\n')
+    else:systemd[4]['ExecStart'][0][1].append('--changed-native-argument')
+    with pytest.raises(worker.Refused,match='offline MySQL service definition changed'):inspect(systemd)
+
+
 @pytest.mark.parametrize('operation', ['service_stop', 'service_restart'])
 def test_service_disconnect_requires_explicit_native_consent(operation):
     base = {'connection': {'host': 'owned', 'port': 22, 'username': 'operator', 'host_key': 'key',
@@ -87,16 +96,18 @@ def test_service_disconnect_requires_explicit_native_consent(operation):
     assert workspace.options({**base, 'disconnect_all_clients': True})['operation'] == operation
 
 
-def test_offline_capture_is_owner_registration_and_pinned_host_scoped_without_sql(monkeypatch):
+@pytest.mark.parametrize('kind',[None,'previous_native_initializer'])
+def test_offline_capture_is_owner_registration_and_pinned_host_scoped_without_sql(monkeypatch,kind):
     selected = {'binding_job_id': 'old', 'connection': {'host': 'db', 'port': 22, 'host_key': 'pinned', 'platform': 'posix'},
                 'service': {'manager': 'systemd', 'name': 'mysql.service'}}
     association = {'service_binding_verified': True, 'selected_service': selected['service']}
     known = {'configuration': 'registration', 'options': selected, 'source': {'server_uuid': 'native'},
              'source_state': {'host_binding': {'server_uuid': 'native'}, 'native_pid_file': '/run/mysql.pid', 'remote_review': {'service': association}}}
+    if kind:known['source']['kind']=kind
     jobs = Mock(); jobs.load.return_value = known
     source = Mock(side_effect=AssertionError('Offline service capture must not run SQL')); monkeypatch.setattr(workspace, 'source', source)
     captured = workspace.capture(None, None, jobs, 1, 'endpoint', selected, 'registration')
-    assert captured['state']['source_identity_scope'] == 'previous_online_service_association'
+    assert captured['state']['source_identity_scope'] == ('previous_installed_native_service_association' if kind else 'previous_online_service_association')
     jobs.load.assert_called_once_with('old', 1, 'endpoint'); source.assert_not_called()
     changed = deepcopy(selected); changed['connection']['host_key'] = 'other'
     with pytest.raises(ValueError, match='verified service association'):

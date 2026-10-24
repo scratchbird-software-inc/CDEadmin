@@ -17,7 +17,7 @@ export default function MySQLHost({post}) {
   const change=setter => event => {setter(event.target.value);setReview(null);setConfirmed(false);};
   const credentials=() => authentication==='password' ? {password} : {private_key:key,private_key_password:phrase};
   const selected=() => ({connection:{host,port,username:user,host_key:hostKey,authentication,platform,python},executable,configuration_file:configuration || null,workspace,timeout_seconds:timeout,
-    ...(operation==='validate_config' ? {} : operation==='deploy_config' ? {operation,configuration_replacement:replacement} : operation==='initialize_data' ? {operation,initialization:{datadir:initialDirectory,user:initialUser,secure:secureInitialization}} : {operation,service:{manager:'systemd',name:serviceName},binding_job_id:bindingJob || null,disconnect_all_clients:disconnect})});
+    ...(operation==='validate_config' ? {} : operation==='deploy_config' ? {operation,configuration_replacement:replacement} : operation==='initialize_data' ? {operation,initialization:{datadir:initialDirectory,user:initialUser,secure:secureInitialization}} : {operation,service:{manager:'systemd',name:serviceName},binding_job_id:bindingJob || null,disconnect_all_clients:disconnect,...(operation==='install_service' ? {service_installation:{user:initialUser}} : {})})});
   const propose=bytes=>{let binary='';for(let index=0;index<bytes.length;index+=16384)binary+=String.fromCharCode(...bytes.subarray(index,index+16384));setReplacement({base64:btoa(binary)});setReview(null);setConfirmed(false);};
   const upload=async file=>{if(!file)return;const token=generation.current;try{const bytes=new Uint8Array(await file.arrayBuffer());if(token!==generation.current)return;propose(bytes);setReplacementName(file.name);try{setProposedText(new TextDecoder('utf-8',{fatal:true}).decode(bytes));}catch{setProposedText('');}}catch(failure){if(token===generation.current)setError(failure.message);}};
   const run=async (action,request,accept) => {
@@ -46,7 +46,8 @@ export default function MySQLHost({post}) {
     setExecutable(value.options.executable || 'mysqld');setConfiguration(value.options.configuration_file || '');
     setWorkspace(value.options.workspace || '');setTimeoutValue(value.options.timeout_seconds || 60);
     setOperation(value.options.operation || 'validate_config');setServiceName(value.options.service?.name || 'mysql.service');
-    setBindingJob(value.options.service ? value.job_id : '');setDisconnect(false);
+    setBindingJob(value.options.service || value.options.operation==='initialize_data' ? value.job_id : '');setDisconnect(false);
+    if(value.options.service_installation)setInitialUser(value.options.service_installation.user);
     if(value.options.initialization){setInitialDirectory(value.options.initialization.datadir);setInitialUser(value.options.initialization.user);setSecureInitialization(value.options.initialization.secure);}
   };
   const observed=receipt?.reconciliation?.remote_receipt || receipt?.remote_receipt;
@@ -88,12 +89,14 @@ export default function MySQLHost({post}) {
         <MenuItem value="validate_config">Check configuration</MenuItem>
         {platform==='posix' && <MenuItem value="deploy_config">Install option file (Linux)</MenuItem>}
         {platform==='posix' && <MenuItem value="initialize_data">Initialize MySQL data directory (Linux)</MenuItem>}
-        {platform==='posix' && ['start','stop','restart'].map(action => <MenuItem key={action} value={'service_'+action}>{action} MySQL service (Linux systemd)</MenuItem>)}
+        {platform==='posix' && <MenuItem value="install_service">Install new MySQL service (Linux systemd)</MenuItem>}
+        {platform==='posix' && ['start','stop','restart','enable','disable'].map(action => <MenuItem key={action} value={'service_'+action}>{action} MySQL service (Linux systemd)</MenuItem>)}
       </TextField>
-      {operation.startsWith('service_') && <>
+      {(operation.startsWith('service_') || operation==='install_service') && <>
         <TextField size="small" label="Exact systemd MySQL unit" value={serviceName} onChange={change(setServiceName)} />
-        <TextField size="small" label="Prior verified service job (for offline SQL)" value={bindingJob} onChange={change(setBindingJob)} />
-        <FormControlLabel label="Disconnect all native service clients" control={<Checkbox checked={disconnect} onChange={event => {setDisconnect(event.target.checked);setReview(null);setConfirmed(false);}} />} />
+        <TextField size="small" label="Prior verified service job (for offline SQL)" helperText="For installation, select a completed initialization receipt. Service controls use a verified service receipt." value={bindingJob} onChange={change(setBindingJob)} />
+        {operation==='install_service' && <><TextField size="small" label="Native service user option" value={initialUser} onChange={change(setInitialUser)} /><Alert severity="info">Create a new native unit after MySQL and systemd validation. Existing unit files are preserved. Installation rereads systemd definitions without starting or enabling MySQL. Select a completed initialization receipt for a new instance before SQL is available.</Alert></>}
+        {['service_stop','service_restart'].includes(operation) && <FormControlLabel label="Disconnect all native service clients" control={<Checkbox checked={disconnect} onChange={event => {setDisconnect(event.target.checked);setReview(null);setConfirmed(false);}} />} />}
       </>}
       {operation==='initialize_data' && <Box sx={{width:'100%'}}>
         <Alert severity="warning">Initialize a new or native-empty MySQL data directory on this SSH host. A current SQL connection is not required. Native secure initialization produces an expired temporary root password in the private native output. Failure or cancellation can leave partial files. No SQL readiness or service installation is implied.</Alert>
@@ -126,6 +129,7 @@ export default function MySQLHost({post}) {
         <Button disabled={busy || observed?.initialization_reconciliation?.process_termination_confirmed!==true} onClick={()=>run('acknowledge_initialization',{job_id:receipt.job_id,credentials:credentials()},setReceipt)}>Acknowledge ended initialization and release its directory claim</Button>
       </Box>}
       {observed?.service_request && <Alert severity="info">Service-manager completion applies to the selected unit. SQL readiness is unconfirmed; reconnect and verify the MySQL endpoint when the service is available. Do not repeat an uncertain request.</Alert>}
+      {observed?.service_installation_result && <Alert severity={observed.service_installation_result.installed ? 'info' : 'warning'}>Native service unit installation: {observed.service_installation_result.installed ? 'file installed' : 'not installed'}. Installation does not start or enable MySQL. Inspect the native validation and manager results separately; use this receipt as the prior service association for reviewed startup.</Alert>}
       {observed?.service_after_process?.observed===false && <Alert severity="warning">The service-manager result is retained. The later native unit/process observation is unavailable.</Alert>}
       {configurationAfter && (configurationAfter.observed!==true || configurationAfter.matches_review!==true) &&
         <Alert severity="warning">{configurationAfter.observed===true ?
