@@ -19,7 +19,8 @@ def sources():
     return {'host': host_source, 'fileio': file_source, 'services': service_source, 'physical': physical_source,
         'recovery': Path(worker.__file__).with_name('mysql_recovery_worker.py').read_text(encoding='utf8'),
         'stream': Path(worker.__file__).with_name('mysql_recovery_stream.py').read_text(encoding='utf8'),
-        'retention': Path(worker.__file__).with_name('mysql_physical_retention_worker.py').read_text(encoding='utf8')}
+        'retention': Path(worker.__file__).with_name('mysql_physical_retention_worker.py').read_text(encoding='utf8'),
+        'keyring': Path(worker.__file__).with_name('mysql_physical_keyring.py').read_text(encoding='utf8')}
 
 
 BOOTSTRAP = '''import json,sys,types
@@ -30,6 +31,7 @@ def load(p):
  install('_cdeadmin_native_services',p['services'])
  install('_cdeadmin_native_worker',p['host'])
  m=install('_cdeadmin_physical_worker',p['physical'])
+ install('_cdeadmin_keyring_worker',p['keyring'])
  install('_cdeadmin_recovery_worker',p['recovery'])
  install('_cdeadmin_recovery_stream',p['stream'])
  install('_cdeadmin_physical_retention_worker',p['retention'])

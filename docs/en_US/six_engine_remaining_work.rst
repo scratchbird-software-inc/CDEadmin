@@ -743,7 +743,7 @@ contiguous native LSNs, separate redo-only apply and final undo preparation.
 Both original inputs remain immutable and protected through application and
 host-side retention dependencies. Finalized chains feed the existing private
 recovery and independent expected-dump acceptance workflows. Remaining physical
-backend admission includes encryption, external paths and additional engines;
+backend admission includes external paths and additional engines;
 unexported/system state, cutover and ``CMP-MY-02``/``INV-MYSQL`` stay open.
 
 MySQL physical workflows now preserve registered native TLS policy and transfer
@@ -752,7 +752,13 @@ TLS provisioning for certificate-authenticated isolated recovery and recurring
 startup drills. ARCHIVE, BLACKHOLE, self-contained MRG_MYISAM and native MEMORY
 definition/restart behavior are admitted alongside InnoDB/MyISAM/CSV. MEMORY
 volatile-row loss is disclosed and external MERGE members remain refused.
-Native key provisioning/encryption, external mappings, remaining engine
+Native GPL file-keyring provisioning now supports encrypted full/incremental
+chains, source key rotation, private native preparation and isolated native
+read-only/replay recovery with its own plugin/dependency/keyring copies.
+Durable opaque keys follow the protected backup chain; transient secrets are
+cleaned independently. Native SQL verifies the private keyring path and original
+encryption policy; recurring startup drills retain this admission after restart.
+External mappings, remaining engine
 inventory, unexported/system-state acceptance, legacy/guardian resolution and
 cutover remain implementation work. The comparison count remains nine of
 eleven; Linux evidence does not close platform or owner-deferred history gates.

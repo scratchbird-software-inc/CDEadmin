@@ -11,6 +11,26 @@ const review = {job_id: 'physical-job', review_digest: 'exact', state: 'reviewed
     workspace: '/private', executable: '/usr/bin/xtrabackup', mysql: '/usr/bin/mysql', sql_host: '127.0.0.1', sql_port: 3306,
     input_job_id: null, parallel: 2, memory_bytes: 268435456, timeout_seconds: 3600, accept_release_candidate: true}};
 
+it('reviews native keyring retention explicitly and invalidates approval when its component directory changes', async () => {
+  const post = jest.fn(({request}) => Promise.resolve({...review, options: request.options,
+    source_encryption: {redo: true, undo: true, binlog: true}}));
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByLabelText('I accept this pinned XtraBackup release candidate for this physical operation.'));
+  fireEvent.click(screen.getByLabelText('Retain native file-keyring material for encrypted backup and isolated recovery'));
+  fireEvent.change(screen.getByLabelText('Native XtraBackup keyring component directory'), {target: {value: '/native/xtra/plugin'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Review native physical job'}));
+  await screen.findByLabelText('Native physical review');
+  expect(post.mock.calls[0][0].request.options.keyring).toEqual({xtrabackup_plugin_dir: '/native/xtra/plugin'});
+  expect(screen.getByLabelText('Native physical review')).toHaveTextContent('source_encryption');
+  fireEvent.change(screen.getByLabelText('Native XtraBackup keyring component directory'), {target: {value: '/replaced/plugin'}});
+  expect(screen.queryByLabelText('Native physical review')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText('Retain native file-keyring material for encrypted backup and isolated recovery'));
+  fireEvent.click(screen.getByRole('button', {name: 'Review native physical job'}));
+  await screen.findByLabelText('Native physical review');
+  expect(post.mock.calls[1][0].request.options).not.toHaveProperty('keyring');
+  expect(post.mock.calls.some(([value]) => value.action === 'mysql_physical_start')).toBe(false);
+});
+
 it('reviews recovery server TLS paths and invalidates approval when a certificate changes', async () => {
   const copied = {...review, state: 'native_returned', options: {...review.options, phase: 'copy_back'}, file_verification_confirmed: true, remote_observation: {restored_files: {database_started: false}}};
   const post = jest.fn().mockResolvedValueOnce({jobs: [copied], offset: 0, limit: 25, more: false}).mockResolvedValueOnce(copied)

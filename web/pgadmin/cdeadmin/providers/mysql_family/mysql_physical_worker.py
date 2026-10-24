@@ -35,6 +35,14 @@ def recovery_module():
     return recovery
 
 
+def keyring_module():
+    try:
+        import _cdeadmin_keyring_worker as keyring
+    except ModuleNotFoundError:
+        from . import mysql_physical_keyring as keyring
+    return keyring
+
+
 def public(value):
     if isinstance(value, list): return [public(item) for item in value]
     if isinstance(value, dict):
@@ -162,13 +170,15 @@ def artifact(directory, *, prepared=None):
             if (Path(member).is_absolute() or '\0' in member or '\\' in member or
                     not (path.parent/member).resolve().is_relative_to(directory.resolve())):
                 raise Refused('External MERGE members require a separately reviewed native path mapping')
+    keyring=keyring_module().audit(directory)
     return {'format': 'xtrabackup-9.7-incremental' if checkpoint['backup_type'] == 'incremental' else 'xtrabackup-9.7-full', 'checkpoint': checkpoint,
         'backup_uuid': info['uuid'], 'server_version': info['server_version'],
         'tool_version': info['tool_version'], 'binlog_info': metadata(directory / 'xtrabackup_binlog_info'),
         'files': files, 'manifest_sha256': host.digest(files), 'total_bytes': str(sum(int(item['bytes']) for item in files)),
         'prepared': checkpoint['backup_type'] == 'full-prepared', 'database_recovery_verified': False,
         **({'redo_only':True} if checkpoint['backup_type']=='log-applied' else {}),
-        **({'native_incremental_info':True} if info['incremental']=='Y' and checkpoint['backup_type']!='incremental' else {})}
+        **({'native_incremental_info':True} if info['incremental']=='Y' and checkpoint['backup_type']!='incremental' else {}),
+        **({'keyring':keyring} if keyring is not None else {})}
 
 
 def executable(path, kind):
@@ -249,6 +259,9 @@ def inspection(request):
             raise Refused('Select the next incremental or finalize this redo-only copy')
     else:raise Refused('Select a native full/incremental backup, preparation or isolated copy-back')
     if phase!='prepare_redo' and request.get('incremental_job_id') is not None:raise Refused('An additional incremental input applies only to redo-only preparation')
+    snapshot=observed.get('incremental_input',observed.get('input',{})).get('artifact',{}).get('keyring')
+    keyring=keyring_module().inspect(request,snapshot)
+    if keyring is not None:observed['keyring']=keyring
     return observed
 
 
@@ -257,7 +270,7 @@ def native_environment(directory):
         'LC_ALL': 'C', 'HOME': str(directory), 'TMPDIR': str(directory)}
 
 
-def client_options(request, directory):
+def client_options(request, directory, *, transition_key=None):
     credentials = request['database_credentials']
     if not isinstance(credentials, dict) or not {'user', 'password'} <= set(credentials) or set(credentials)-{'user','password','tls'}:
         raise Refused('Delegate the selected single-factor native database credential explicitly')
@@ -298,6 +311,9 @@ def client_options(request, directory):
         stream.write('[client]\nuser=' + quote(credentials['user']) + '\npassword=' + quote(credentials['password']) +
             '\nhost=' + quote(request['sql_host']) + '\nport=' + str(request['sql_port']) + '\nprotocol=tcp\n' +
             ''.join(key+'='+quote(value)+'\n' for key,value in settings.items()))
+        if transition_key is not None:
+            if not re.fullmatch('[0-9a-f]{64}',transition_key):raise Refused('Native transition key is invalid')
+            stream.write('[xtrabackup]\ntransition-key='+quote(transition_key)+'\n')
     return path
 
 
@@ -338,14 +354,18 @@ def execute(directory):
     value = {'state': 'native_dispatch', 'job_id': request['job_id'], 'input_digest': request['input_digest'],
         'automatic_retry': False, 'native_may_have_dispatched': False, 'process_termination_confirmed': False,
         'credential_cleanup_confirmed': False, 'supervisor_finished': False, 'started_at': time.time()}
-    child = option_file = staged_increment = None
+    child = option_file = staged_increment = native_config = None
     try:
         observed = inspection(request)
         if observed != request['reviewed']:
             raise Refused('Native physical source, utility or artifact changed after review')
         phase = request['phase']; target = directory / 'artifact'
         if phase in {'backup','incremental'}:
-            option_file = client_options(request, directory)
+            if observed.get('keyring'):
+                prior=Path(observed['workspace'])/request['input_job_id']/'artifact' if phase=='incremental' else None
+                transition=keyring_module().backup_key(directory,prior)
+                option_file=client_options(request,directory,transition_key=transition)
+            else:option_file = client_options(request, directory)
             value['sql_identity'] = identity(request, observed, option_file, directory)
             args = ['--defaults-file=' + str(option_file), '--backup', '--datadir=' + observed['host']['datadir'],
                 '--target-dir=' + str(target), '--parallel=' + str(request['parallel'])]
@@ -365,11 +385,20 @@ def execute(directory):
                     shutil.copytree(Path(observed['workspace'])/request['incremental_job_id']/'artifact',staged_increment)
                     if public(artifact(staged_increment))!=observed['incremental_input']['artifact']:raise Refused('Staged incremental differs from its immutable input')
                     args.append('--incremental-dir='+str(staged_increment))
+                if observed.get('keyring'):
+                    material=keyring_module().apply_snapshot(target,staged_increment)
+                    keys=(staged_increment if staged_increment is not None else target)/'xtrabackup_keys'
+                    if material is not None and keys.is_file():
+                        option_file=keyring_module().native_options(directory,keyring_module().read_key(target/keyring_module().DIRECTORY))
+                        native_config=keyring_module().prepare_options(target,option_file)
+                        args[0]='--defaults-file='+str(option_file)
+                    keyring_module().stage_prepare_material(directory,target)
             else:
                 target.mkdir(mode=0o700)
                 args = ['--no-defaults', '--copy-back', '--target-dir=' + str(original), '--datadir=' + str(target),
                     '--innodb-data-home-dir=' + str(target), '--innodb-undo-directory=' + str(target),
                     '--innodb-log-group-home-dir=' + str(target)]
+        if observed.get('keyring'):args.append('--xtrabackup-plugin-dir='+observed['keyring']['xtrabackup_plugin_dir'])
         if (directory / 'cancel').exists():
             raise InterruptedError('Cancelled before native dispatch')
         value.update(native_may_have_dispatched=True, phase=phase)
@@ -395,8 +424,14 @@ def execute(directory):
             process_termination_confirmed=True, native_reply_observed=True, finished_at=time.time())
         # Native completion is a fact before hashing/metadata/cleanup can fail.
         finish(directory, value)
+        if native_config is not None:
+            keyring_module().restore_prepare_options(target,native_config);native_config=None
+        if phase in {'prepare','prepare_redo'}:keyring_module().restore_prepare_material(directory,target)
         if child.returncode == 0:
+            if phase in {'backup','incremental'} and observed.get('keyring'):
+                keyring_module().capture(directory,target,observed['keyring'])
             if phase == 'copy_back':
+                keyring_module().copied_snapshot(original,target)
                 copied = manifest(target)
                 value['restored_files'] = {'files': copied, 'manifest_sha256': host.digest(copied),
                     'total_bytes': str(sum(int(item['bytes']) for item in copied)), 'database_started': False,
@@ -425,8 +460,13 @@ def execute(directory):
         # Invocation secrets are never part of a public receipt or retained
         # executable. A later observer can distinguish an incomplete cleanup.
         try:
+            if native_config is not None:keyring_module().restore_prepare_options(target,native_config)
+            if request['phase'] in {'prepare','prepare_redo'}:keyring_module().restore_prepare_material(directory,directory/'artifact')
             clean_client_options(directory)
+            keyring_module().cleanup(directory,material_retained=value.get('native_may_have_dispatched') is True)
             if staged_increment is not None and staged_increment.exists() and (child is None or child.poll() is not None):shutil.rmtree(staged_increment)
+            if request.get('keyring'):
+                value['native_key_material_retained']=(directory/keyring_module().TRANSITION).exists() or (directory/'artifact'/keyring_module().DIRECTORY).is_dir()
             request['database_credentials'] = None
             host.save(directory / 'request.json', request)
             value['credential_cleanup_confirmed'] = True

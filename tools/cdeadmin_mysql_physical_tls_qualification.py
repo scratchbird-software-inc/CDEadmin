@@ -191,8 +191,10 @@ def qualify_schedule(app,physical,sid,password,selected,server_tls,credentials):
     from pgadmin.cdeadmin.workspace.mysql_physical_backup_schedule import ScheduleHost
     with app.app_context():service=app.extensions['cdeadmin_provider_workspace']
     schedule=lambda action,body:physical('backup_schedule_'+action,body)
-    policy=schedule('review',{'options':{'physical':deepcopy(selected),'drill':{'mysqld':'/usr/sbin/mysqld','gtid_mode':'ON',
-        'timeout_seconds':60,'recovery_tls':server_tls,'recovery_port':33477},'interval_seconds':60,'expires_after_days':1},'credentials':credentials})
+    drill={'mysqld':'/usr/sbin/mysqld','gtid_mode':'ON','timeout_seconds':60}
+    if server_tls is not None:drill.update(recovery_tls=server_tls,recovery_port=33477)
+    policy=schedule('review',{'options':{'physical':deepcopy(selected),'drill':drill,
+        'interval_seconds':60,'expires_after_days':1},'credentials':credentials})
     confirm={'job_id':policy['job_id'],'confirmed':True,'schedule_confirmation':policy['job_id']}
     def wait(previous=None):
         deadline=time.monotonic()+360

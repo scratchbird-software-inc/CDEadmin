@@ -113,7 +113,7 @@ def test_claim_checks_owner_review_expiry_and_single_dispatch(tmp_path):
 
 def test_native_transport_sends_sources_and_invocation_privately_and_has_no_password_in_loader():
     assert 'password' not in transport.LOADER
-    assert set(transport.program()) == {'host_sha256','fileio_sha256','services_sha256','physical_sha256','recovery_sha256','stream_sha256','retention_sha256','transport_sha256'}
+    assert set(transport.program()) == {'host_sha256','fileio_sha256','services_sha256','physical_sha256','keyring_sha256','recovery_sha256','stream_sha256','retention_sha256','transport_sha256'}
     with pytest.raises(transport.HostError): transport.Transport({'platform':'windows'}, {})
 
 

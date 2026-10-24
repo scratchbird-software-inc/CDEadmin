@@ -98,6 +98,12 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
       <TextField size="small" label="XtraBackup executable" value={options.executable} disabled={busy} onChange={event => change('executable', event.target.value)} />
       <TextField size="small" label="Native host mysql client" value={options.mysql} disabled={busy} onChange={event => change('mysql', event.target.value)} />
       <TextField size="small" label="Private physical workspace" value={options.workspace} disabled={busy} sx={{minWidth: 320}} onChange={event => change('workspace', event.target.value)} />
+      <FormControlLabel label="Retain native file-keyring material for encrypted backup and isolated recovery" control={<Checkbox checked={!!options.keyring} disabled={busy} onChange={event => {
+        const {keyring: _keyring, ...base} = options;
+        setOptions({...base, ...(event.target.checked ? {keyring: {xtrabackup_plugin_dir: '/usr/lib64/xtrabackup/plugin'}} : {})});
+        setReview(null); setConfirmed(false); setDelegate(false); clearConnectionReview();
+      }} />} />
+      {options.keyring && <TextField size="small" label="Native XtraBackup keyring component directory" value={options.keyring.xtrabackup_plugin_dir} disabled={busy} onChange={event => change('keyring', {xtrabackup_plugin_dir: event.target.value})} />}
       <TextField size="small" label="Backup source SQL hostname or address" value={options.sql_host} disabled={busy} onChange={event => change('sql_host', event.target.value)} />
       <TextField size="small" type="number" label="Backup source native TCP port" value={options.sql_port} disabled={busy} onChange={event => change('sql_port', Number(event.target.value))} />
       <TextField select size="small" label="Physical operation" value={options.phase} disabled={busy} onChange={event => {
@@ -150,7 +156,7 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
       <Button disabled={busy} onClick={() => run('connection_info', {}, inspect)}>Load this registration’s recovery instance</Button>
     </Box>
     {review && <Box>
-      <Box component="pre" aria-label="Native physical review" sx={{whiteSpace: 'pre-wrap', maxHeight: 280, overflow: 'auto'}}>{JSON.stringify({job_id: review.job_id, source: review.source, sql_tls_policy: review.sql_tls_policy,
+      <Box component="pre" aria-label="Native physical review" sx={{whiteSpace: 'pre-wrap', maxHeight: 280, overflow: 'auto'}}>{JSON.stringify({job_id: review.job_id, source: review.source, source_encryption: review.source_encryption, sql_tls_policy: review.sql_tls_policy,
         storage_engine_counts: review.storage_engine_counts, volatile_memory_tables: review.volatile_memory_tables, remote_review: review.remote_review, warnings: review.warnings}, null, 2)}</Box>
       <FormControlLabel label="I confirm this exact reviewed physical operation." control={<Checkbox checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} />} />
       {['backup', 'incremental', 'recover'].includes(review.options.phase) && <FormControlLabel label="Delegate the registered database password privately to the pinned SSH host." control={<Checkbox checked={delegate} disabled={busy} onChange={event => setDelegate(event.target.checked)} />} />}

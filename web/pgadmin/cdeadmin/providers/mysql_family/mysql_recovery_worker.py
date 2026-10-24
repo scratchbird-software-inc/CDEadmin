@@ -26,7 +26,7 @@ def successful(value):
         value.get('process_termination_confirmed') is True)
 
 
-def configuration(path):
+def configuration(path, *, keyring=False):
     """Consume only admitted native geometry, never arbitrary server options."""
     text = physical.metadata(path)
     # XtraBackup can emit an observed option after its original command-line
@@ -47,7 +47,11 @@ def configuration(path):
     if set(values) - allowed:
         raise Refused('Native backup configuration needs additional recovery option admission: ' + ', '.join(sorted(set(values)-allowed)))
     if 'server_uuid' in values: physical.job_id(values['server_uuid'])
-    if values.get('master_key_id','0') != '0' or any(values[key] not in {'0','OFF'} for key in encryption & values.keys()):
+    if not re.fullmatch('[0-9]+',values.get('master_key_id','0')) or int(values.get('master_key_id','0'))>18446744073709551615:
+        raise Refused('Native recovery master-key identity is unavailable')
+    if any(values[key] not in {'0','1','ON','OFF','true','false'} for key in encryption & values.keys()):
+        raise Refused('Native recovery encryption setting is not an admitted boolean')
+    if not keyring and (values.get('master_key_id','0') != '0' or any(values[key] not in {'0','OFF'} for key in encryption & values.keys())):
         raise Refused('Encrypted native recovery requires separately admitted keyring provisioning')
     for key in numeric & values.keys():
         if not re.fullmatch(r'[0-9]+', values[key]):
@@ -134,6 +138,8 @@ def inspection(request):
     config_hash = host.file_hash(config)
     if not any(item['path'] == 'backup-my.cnf' and item['sha256'] == config_hash for item in base['artifact']['files']):
         raise Refused('The native backup configuration changed after preparation')
+    material=physical.keyring_module().audit(source/'artifact')
+    keyring=physical.keyring_module().inspect(request,material)
     # The UUID is assigned after review. All accepted job identities have the
     # same length, so the socket pathname bound is known before dispatch.
     if len(os.fsencode(str(root / ('0' * 36) / 'runtime.sock'))) > 100:
@@ -143,7 +149,8 @@ def inspection(request):
         'mysqld': physical.executable(request['mysqld'], 'mysqld'),
         'os_account': {'uid': os.geteuid(), 'gid': os.getegid(), 'name': account.pw_name},
         'input': {'job_id': request['input_job_id'], 'manifest_sha256': host.digest(files), 'file_count': len(files)},
-        'configuration': configuration(config), 'configuration_sha256': config_hash,
+        'configuration': configuration(config,keyring=keyring is not None), 'configuration_sha256': config_hash,
+        **({'keyring':keyring} if keyring is not None else {}),
         'transport': 'loopback-tcp-and-private-unix-socket' if port else 'private-unix-socket-only', 'recovery_port':port, 'automatic_upgrade': False,
         'replication_autostart': False, 'group_replication_autostart': False, 'event_scheduler': 'DISABLED', 'super_read_only': not replay,
         'recovery_local_infile':request.get('recovery_local_infile',False),
@@ -226,7 +233,11 @@ def sql_ready(request, observed, directory, option_file, data):
         "'log_bin_basename',CAST(@@log_bin_basename AS CHAR CHARACTER SET utf8mb4),'log_bin_index',CAST(@@log_bin_index AS CHAR CHARACTER SET utf8mb4),'log_replica_updates',@@log_replica_updates,'binlog_format',CAST(@@binlog_format AS CHAR CHARACTER SET utf8mb4)," \
         "'group_replication_autostart',CAST((SELECT VARIABLE_VALUE FROM performance_schema.global_variables WHERE VARIABLE_NAME='group_replication_start_on_boot') AS CHAR CHARACTER SET utf8mb4)," \
         "'authenticated_principal',CURRENT_USER()," \
-        "'active_role',CAST(CURRENT_ROLE() AS CHAR CHARACTER SET utf8mb4))"
+        "'active_role',CAST(CURRENT_ROLE() AS CHAR CHARACTER SET utf8mb4)" + (
+        ",'native_keyring_component',CAST((SELECT STATUS_VALUE FROM performance_schema.keyring_component_status WHERE STATUS_KEY='Component_name') AS CHAR CHARACTER SET utf8mb4),"
+        "'native_keyring_data_file',CAST((SELECT STATUS_VALUE FROM performance_schema.keyring_component_status WHERE STATUS_KEY='Data_file') AS CHAR CHARACTER SET utf8mb4),"
+        "'innodb_redo_log_encrypt',@@innodb_redo_log_encrypt,'innodb_undo_log_encrypt',@@innodb_undo_log_encrypt,'binlog_encryption',@@binlog_encryption"
+        if observed.get('keyring') else '') + ')'
     route=(['--host=127.0.0.1','--protocol=tcp','--port='+str(request['recovery_port'])] if observed.get('recovery_tls') else
         ['--host=localhost','--protocol=socket','--socket='+str(directory/'runtime.sock')])
     result = subprocess.run([observed['mysql']['path'], '--defaults-file='+str(option_file), *route,
@@ -257,6 +268,13 @@ def sql_ready(request, observed, directory, option_file, data):
         raise Refused('Native recovery TCP listener differs from its reviewed loopback address')
     if value.get('group_replication_autostart') not in {None,'OFF'}:
         raise Refused('Native recovered Group Replication autostart is not disabled')
+    if observed.get('keyring'):
+        context=observed['keyring']
+        if (value.get('native_keyring_component')!='component_keyring_file' or
+                physical.absolute(value['native_keyring_data_file'])!=data/physical.keyring_module().DIRECTORY/'keyring' or
+                any(value.get(option)!=int(context['encryption'][key]) for option,key in
+                    [('innodb_redo_log_encrypt','redo'),('innodb_undo_log_encrypt','undo'),('binlog_encryption','binlog')])):
+            raise Refused('Native recovered keyring or encryption policy differs from the private reviewed instance')
     return value
 
 
@@ -301,6 +319,7 @@ def execute(directory):
             '--log-bin-index='+str(directory/'recovery-bin.index'),'--server-id='+str(request['recovery_server_id']),
             '--log-replica-updates=ON','--binlog-format=ROW','--binlog-encryption=OFF'] if request.get('recovery_mode','read_only')=='replay'
             else ['--super-read-only=ON','--skip-log-bin'])
+        if observed.get('keyring'):args+=physical.keyring_module().runtime(directory,data,observed['keyring'])
         args += ['--bind-address=127.0.0.1','--port='+str(request['recovery_port'])] if request.get('recovery_port') else ['--skip-networking']
         if (directory/'cancel').exists(): raise InterruptedError('Recovery cancelled before native dispatch')
         option_file = physical.client_options(request,directory)

@@ -2034,7 +2034,7 @@ inputs and their ancestry are retained by manual, batch and host-side dependency
 gates. Unknown original dispatch replies remain unknown after independent native
 publication; no utility is automatically repeated. Native recovery and selected
 expected-dump data/definition acceptance qualify the restored checkpoint.
-Encryption, external path mappings, additional engines, unexported/system state,
+External path mappings, additional engines, unexported/system state,
 production cutover and the wider lifecycle/inventory gates remain open.
 
 Native physical TLS and additional storage engines
@@ -2057,7 +2057,24 @@ qualification exercises both drivers, real hostname mismatch, policy tampering,
 incremental recovery, live/restored MERGE separation, recurring worker restart
 and the built desktop. The pinned XtraBackup backend exposes one password slot;
 existing MySQL MFA driver support is preserved rather than emulated in that
-utility. Native encryption/key provisioning, external mappings, remaining engine
+utility. External mappings, remaining engine
 inventory, unexported/system-state acceptance, interrupted legacy/guardian
 resolution and production cutover remain open. These additions do not close
 ``CMP-MY-01`` or the broader MySQL product matrix.
+
+Native encrypted physical recovery
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Explicit native GPL file-keyring retention supports encrypted full/incremental
+backups, source master-key rotation, private native redo/final preparation and
+copy-back. Each chain retains opaque native keyring bytes and a private native
+transition key. Managed read-only and replay recovery stage separate plugin,
+dependency and keyring copies; native SQL readiness verifies the actual keyring
+path and redo/undo/binlog encryption policy. Recovery-side key rotation preserves
+the source and sealed inputs. Recurring backup/startup-drill delegation includes
+this admission after worker restart. Durable keys follow physical dependency
+retention; ephemeral credential files are cleaned separately. Native utility
+failures and unknown original replies remain separate from verified artifacts.
+This source-backed file-keyring workflow does not implement other keyring
+providers or close the remaining external mapping, system-state, guardian and
+cutover requirements. See :doc:`mysql_physical_backups`.

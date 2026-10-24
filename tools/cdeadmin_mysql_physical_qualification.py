@@ -14,7 +14,7 @@ sys.path[:0] = [str(ROOT), str(ROOT/'web'), str(ROOT/'tools')]
 BACKEND = 'percona/percona-xtrabackup@sha256:580747a61714d1884040794fc8a144179f5e3fe6ae839701d8958fe73a4e5e2b'
 
 
-def prepare_fixture(output, image):
+def prepare_fixture(output, image, *, keyring=False):
     build = output/'fixture-build'; build.mkdir()
     key = build/'private-key'
     subprocess.run(['ssh-keygen','-q','-t','ed25519','-N','','-f',str(key)],check=True)
@@ -24,6 +24,10 @@ def prepare_fixture(output, image):
     (context/'Dockerfile').write_text('FROM '+BACKEND+' AS pxb\nFROM mysql:9.7.0\nUSER root\n'
         'RUN microdnf install -y python3 openssh-server procps-ng && microdnf clean all && ssh-keygen -A && mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh\n'
         'COPY --from=pxb /usr/bin/xtrabackup /usr/bin/xtrabackup\nCOPY --from=pxb /usr/lib/private /usr/lib/private\n'
+        'COPY --from=pxb /usr/lib64/xtrabackup /usr/lib64/xtrabackup\n'+
+        ('RUN mkdir -p /var/lib/mysql-keyring && touch /var/lib/mysql-keyring/keyring && chown -R mysql:mysql /var/lib/mysql-keyring && chmod 600 /var/lib/mysql-keyring/keyring && '
+         "printf '%s' '{\"components\":\"file://component_keyring_file\"}' > /usr/sbin/mysqld.my && "
+         "printf '%s' '{\"path\":\"/var/lib/mysql-keyring/keyring\",\"read_only\":false}' > /usr/lib64/mysql/plugin/component_keyring_file.cnf\n" if keyring else '')+
         'COPY authorized_keys /root/.ssh/authorized_keys\n'
         'RUN chmod 600 /root/.ssh/authorized_keys && printf "%s\\n" "PermitRootLogin prohibit-password" "PasswordAuthentication no" "UsePAM no" "PrintMotd no" > /etc/ssh/sshd_config.d/physical-fixture.conf && xtrabackup --version\n'
         'COPY start.sh /opt/physical-start.sh\nENTRYPOINT ["/bin/bash","/opt/physical-start.sh"]\nCMD ["mysqld"]\n')
@@ -32,7 +36,7 @@ def prepare_fixture(output, image):
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -67,13 +71,14 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
     names = []; volume = 'sr-physical-'+secrets.token_hex(8); root = None; app = None
     data_volumes = []
     try:
-        key = prepare_fixture(output,image) if prepare else Path(key).resolve(strict=True)
+        key = prepare_fixture(output,image,keyring=keyring_only) if prepare else Path(key).resolve(strict=True)
         proof['fixture_image'] = _image_identity(image)
         _run(['docker','volume','create',volume])
         name = volume+'-source'; names.append(name)
         _run(['docker','run','--rm','-d','--name',name,'--hostname',name,'-v',volume+':/var/backups/scratchrobin',
             '-e','MYSQL_ALLOW_EMPTY_PASSWORD=yes','-p','127.0.0.1::3306','-p','127.0.0.1::22',image,
-            'mysqld','--server-id=101','--gtid-mode=ON','--enforce-gtid-consistency=ON','--log-bin=physical'])
+            'mysqld','--server-id=101','--gtid-mode=ON','--enforce-gtid-consistency=ON','--log-bin=physical']+
+            (['--innodb-redo-log-encrypt=ON','--innodb-undo-log-encrypt=ON','--binlog-encryption=ON'] if keyring_only else []))
         mounts=json.loads(_run(['docker','inspect','--format','{{json .Mounts}}',name]).stdout)
         data_volumes=[m['Name'] for m in mounts if m['Type']=='volume' and m['Destination']=='/var/lib/mysql']
         proof['owned_source_data_volumes']=data_volumes
@@ -94,17 +99,20 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             cursor.execute("GRANT `physical role 雪` TO 'sr_physical'@'%'")
             cursor.execute("SET DEFAULT ROLE `physical role 雪` TO 'sr_physical'@'%'")
             cursor.execute('CREATE TABLE pending(id INT PRIMARY KEY)')
-        if schedule_only or backup_only or check_only or tls_only:
+        if schedule_only or backup_only or check_only or tls_only or keyring_only:
             import config,base64
             config.CDEADMIN_MYSQL_PHYSICAL_WORKER_KEYS={'owned-fixture':base64.b64encode(secrets.token_bytes(32)).decode('ascii')}
             config.CDEADMIN_MYSQL_PHYSICAL_WORKER_ACTIVE_KEY_ID='owned-fixture'
             config.CDEADMIN_MYSQL_RETENTION_POLL_SECONDS=.1
         app = setup_application(output)
-        if incremental_only or tls_only:
+        if incremental_only or tls_only or keyring_only:
             selected={'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
                 'workspace':'/var/backups/scratchrobin/jobs','executable':'/usr/bin/xtrabackup','mysql':'/usr/bin/mysql',
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
-            if tls_only:
+            if keyring_only:
+                from cdeadmin_mysql_physical_keyring_qualification import qualify_keyring
+                proof['physical_keyring']=qualify_keyring(app,output,root,name,port,password,selected,{'private_key':key.read_text()},browser_binary,driver_binary)
+            elif tls_only:
                 from cdeadmin_mysql_physical_tls_qualification import qualify_tls
                 proof['physical_tls']=qualify_tls(app,output,root,name,port,password,selected,{'private_key':key.read_text()},browser_binary,driver_binary,desktop_only=tls_desktop_only)
             else:
@@ -403,6 +411,9 @@ def browser(app,output,sid,password,selected,credentials,binary,driver_binary,co
             ('Physical SSH private key',credentials['private_key']),('Private physical workspace',selected['workspace']),('Physical native timeout seconds',120)]:fill(label,value)
         assert driver.execute_script('const e=arguments[0],r=e.getBoundingClientRect(),p=e.parentElement.getBoundingClientRect();return r.top>=p.top-1 && r.bottom<=p.bottom+1 && r.right<=p.right+1;',field('Physical SSH private key'))
         check('I accept this pinned XtraBackup release candidate for this physical operation.')
+        if selected.get('keyring'):
+            check('Retain native file-keyring material for encrypted backup and isolated recovery')
+            fill('Native XtraBackup keyring component directory',selected['keyring']['xtrabackup_plugin_dir'])
         checks=[]
         for index in range(4):
             if replay and index==3:

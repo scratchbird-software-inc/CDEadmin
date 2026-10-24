@@ -14,7 +14,7 @@ from . import mysql_host_service as host
 from .mysql_monitoring_host import MySQLMonitoringHost
 
 
-def source(service, server, *, admitted=None):
+def source(service, server, *, admitted=None, keyring=None):
     """Admit the actual persistent engine/encryption scope, not a generic dump."""
     captured = host.source(service,server) if admitted is None else host.source(service,server,admitted=admitted)
     context, payload, _root = service.endpoint_service.workspace(server, database_target_id=None)
@@ -33,8 +33,23 @@ def source(service, server, *, admitted=None):
         if unsupported:
             raise native.HostError('This physical backend has not admitted these persistent storage engines: ' + ', '.join(str(item) for item in unsupported))
         encrypted = rows(connection, "SELECT COUNT(*) AS encrypted FROM information_schema.INNODB_TABLESPACES WHERE ENCRYPTION='Y'")[0]['encrypted']
-        if encrypted:
-            raise native.HostError('Encrypted tablespaces require separately admitted native keyring provisioning for physical recovery')
+        native_flags=rows(connection,"SELECT @@global.innodb_redo_log_encrypt AS redo_encrypted,@@global.innodb_undo_log_encrypt AS undo_encrypted,@@global.binlog_encryption AS binlog_encrypted")[0]
+        flags={key:native_flags[key+'_encrypted'] for key in ('redo','undo','binlog')}
+        if any(flags.get(key) not in {0,1} for key in ('redo','undo','binlog')):
+            raise native.HostError('Native source encryption flags are unavailable')
+        flags={key:bool(flags[key]) for key in ('redo','undo','binlog')}
+        if (encrypted or any(flags.values())) and keyring is None:
+            raise native.HostError('Review native file-keyring retention and isolated recovery before backing up encrypted data or logs')
+        if keyring is not None:
+            status={str(row['status_key']).lower():row['status_value'] for row in rows(connection,
+                'SELECT STATUS_KEY AS status_key,STATUS_VALUE AS status_value FROM performance_schema.keyring_component_status')}
+            if (status.get('component_name')!='component_keyring_file' or status.get('component_status')!='Active' or
+                    status.get('license')!='GPL' or not status.get('data_file')):
+                raise native.HostError('This native backend requires the initialized source-available component_keyring_file')
+            plugin=rows(connection,'SELECT CAST(@@plugin_dir AS CHAR CHARACTER SET utf8mb4) AS plugin_directory')[0]['plugin_directory']
+            captured['state']['native_keyring_source']={'component':'component_keyring_file','data_file':status['data_file'],
+                'server_plugin_directory':plugin,'encryption':flags}
+        captured['state']['source_encryption']=flags
         captured['state']['storage_engine_counts'] = engines
         captured['state']['encrypted_tablespaces'] = encrypted
         volatile = rows(connection, "SELECT TABLE_SCHEMA AS schema_name,TABLE_NAME AS table_name,TABLE_ROWS AS current_rows FROM information_schema.TABLES "
@@ -50,10 +65,16 @@ def options(value):
     fields = {'connection', 'workspace', 'executable', 'mysql', 'phase', 'sql_host', 'sql_port',
         'input_job_id', 'parallel', 'memory_bytes', 'timeout_seconds', 'accept_release_candidate'}
     extra = {'mysqld', 'recovery_gtid_mode'} if isinstance(value,dict) and value.get('phase') == 'recover' else set()
-    optional = {'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls'} if extra else ({'incremental_job_id'} if isinstance(value,dict) and value.get('phase')=='prepare_redo' else set())
+    optional = ({'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls'} if extra else ({'incremental_job_id'} if isinstance(value,dict) and value.get('phase')=='prepare_redo' else set()))|{'keyring'}
     if not isinstance(value, dict) or not fields | extra <= set(value) or set(value)-fields-extra-optional:
         raise native.HostError('Select the complete native physical host and operation options')
     selected = deepcopy(value); selected['connection'] = native.ssh.public_route(value['connection'])
+    if 'keyring' in value:
+        material=value['keyring']
+        if (not isinstance(material,dict) or set(material)!={'xtrabackup_plugin_dir'} or
+                not isinstance(material['xtrabackup_plugin_dir'],str) or not material['xtrabackup_plugin_dir'].startswith('/') or
+                '\0' in material['xtrabackup_plugin_dir'] or len(material['xtrabackup_plugin_dir'])>4096):
+            raise native.HostError('Select the absolute native XtraBackup file-keyring component directory')
     if selected['connection']['platform'] != 'posix' or value['accept_release_candidate'] is not True:
         raise native.HostError('Confirm the admitted Linux XtraBackup9.7.1-rc1 release candidate explicitly')
     for key in ('workspace', 'executable', 'mysql', *(['mysqld'] if extra else [])):
@@ -107,7 +128,7 @@ class PhysicalJobs(MySQLBinlogJobs):
         'The admitted backend is upstream XtraBackup9.7.1-rc1, a release candidate. Its original native replies, verified files and recovery acceptance are separate facts.',
         'Full backups take native backup/read locks and copy complete supported instance files. Prepare mutates a separate private copy. Copy-back creates only a new isolated job data directory; it never overwrites the live data directory or starts a database.',
         'Native processes run under an independent supervisor on the authenticated database SSH host. Closing the viewer or losing a reply does not cancel or roll back native work. An original unknown dispatch is never automatically repeated.',
-        'This workflow requires self-contained, uncompressed and unencrypted native backup files. Incrementals require the exact retained native base lineage and contiguous LSNs. Apply them to separate redo-only copies, then finalize preparation before copy-back. External tablespaces, key provisioning and production cutover remain separate.',
+        'This workflow requires self-contained, uncompressed native backup files. Encrypted data/log recovery requires explicitly retained native file-keyring material and matching components. Incrementals require exact base lineage and contiguous LSNs; apply to separate redo-only copies, then finalize. External tablespaces and production cutover remain separate.',
         'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account with a fresh UUID, private Unix socket and selected loopback TCP listener. Read-only inspection is the default. Explicit replay startup is writable with private ROW binary logging and the selected server ID. Both disable events/replication autostart and automatic upgrades, and end on stop or reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
         'Physical files and native output are private to the selected host OS account. Broad source archive protection is acquired before backup dispatch and is retired only by its separate reviewed protection workflow.',
         'Physical recovery preserves MEMORY table definitions; native MySQL discards their volatile rows on restart. Inspect the listed MEMORY tables and use the logical backup workflow when their current rows must be retained.',
@@ -123,6 +144,9 @@ class PhysicalJobs(MySQLBinlogJobs):
             result['storage_engine_counts'] = deepcopy(record['source_state']['storage_engine_counts'])
         if 'volatile_memory_tables' in record['source_state']:
             result['volatile_memory_tables'] = deepcopy(record['source_state']['volatile_memory_tables'])
+        if 'source_encryption' in record['source_state']:result['source_encryption']=deepcopy(record['source_state']['source_encryption'])
+        if record['options'].get('keyring'):
+            result['warnings'].append('Native file-keyring and transition-key material is retained privately with this backup. Recovery uses separate keyring and native plugin copies; their retention follows the protected physical dependency chain.')
         result['source_connection_class'] = record['source_state'].get('source_connection_class')
         remote = record.get('remote_observation') or {}
         result['native_process_termination_confirmed'] = remote.get('process_termination_confirmed') is True
@@ -161,7 +185,8 @@ def remote_request(record, action):
         'reviewed': deepcopy(record['source_state']['remote_review']),
         'job_id': record['job_id'], 'input_digest': record['review_digest'],
         **({'sql_tls_policy': deepcopy(record['source_state']['sql_tls_policy'])} if 'sql_tls_policy' in record['source_state'] else {}),
-        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','incremental_job_id') if key in selected}}
+        **({'source_keyring':deepcopy(record['source_state']['native_keyring_source'])} if 'native_keyring_source' in record['source_state'] else {}),
+        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','incremental_job_id','keyring') if key in selected}}
 
 
 def sql_tls(service, server):
@@ -299,7 +324,7 @@ def _action(service, server, operation, request, *, source_capture=None,database
             jobs.update(record, **values)
             return jobs.get(record['job_id'], owner, endpoint.id)
         if selected['phase'] in {'backup','incremental'}:
-            captured = source_capture() if source_capture is not None else source(service, server)
+            captured = source_capture() if source_capture is not None else source(service, server, keyring=selected.get('keyring'))
             if operation == 'start':
                 if captured['identity'] != record['source'] or captured['state']['host_binding'] != record['source_state']['host_binding']:
                     raise native.HostError('Native physical source changed after review')

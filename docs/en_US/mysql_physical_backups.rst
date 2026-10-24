@@ -8,7 +8,8 @@ existing owner-scoped provider API, private application operation storage and
 source archive protection. A separately reviewed managed recovery operation
 starts and supervises a private data copy. Selected log recovery, independent
 exported-data/definition acceptance, dependency-aware retention and scheduling
-have separate reviewed workflows. Encryption/external-path admission,
+have separate reviewed workflows. Native GPL file-keyring recovery is described
+below. External-path admission,
 unexported/system-state acceptance and production cutover remain open under
 ``CMP-MY-01``.
 
@@ -657,3 +658,48 @@ production cutover remain separate facts. Qualification is available through
 covers two native increments, InnoDB/MyISAM/CSV changes, new and altered objects,
 an independent pending source transaction, lost replies, immutable input hashes,
 private recovery, data/definition acceptance and the built desktop.
+
+Encrypted native backups and private file-keyring recovery
+----------------------------------------------------------
+
+Enable **Retain native file-keyring material for encrypted backup and isolated
+recovery** and select the **Native XtraBackup keyring component directory** on
+the pinned host. The admitted implementation is MySQL9.7.0's active GPL
+``component_keyring_file`` with the matching native XtraBackup component.
+Reviews capture the source's redo, undo and binary-log encryption settings,
+the native component identity, and hashes of the host server/plugin libraries.
+Encrypted tables or logs require explicit key-retention consent. Other keyring
+implementations are not silently substituted.
+
+Each sealed artifact retains an opaque copy of the native keyring and a private
+native transition key. Incrementals reuse their exact original chain key and
+retain the latest keyring snapshot, including source master-key rotations.
+These are durable backup keys, distinct from the temporary database password
+and TLS files. They follow the same protected dependency chain and reviewed
+retention as the physical data. Public receipts expose hashes and policy, never
+key contents. Preserve access to this material when retaining or moving backups.
+
+Native preparation uses a separate working copy. Its private configuration
+temporarily includes a secret native option file; both the include and option
+file are removed after utility termination. Opaque keyring material is held
+outside the native working datadir during incremental cleanup and restored
+before sealing. Original inputs are rehashed and remain unchanged. A failed or
+unknown dispatched backup retains its private transition key for recovery and
+reviewed retention; it is never erased merely because a result is uncertain.
+
+Managed recovery copies the native plugins and their packaged private libraries
+into its own job, writes a private file-component configuration, and uses a
+separate keyring inside its private data directory. It preserves a retained
+local component manifest and the source redo/undo/binlog encryption settings.
+Independent native SQL readiness verifies the component's actual keyring path
+and encryption variables. Read-only and writable replay startup both use this
+isolation; recovered master-key rotation changes neither the live source keys
+nor the sealed backup keys. Recurring backup/startup-drill policies carry the
+same explicit admission and encrypted worker delegation.
+
+Qualification uses ``tools/cdeadmin_mysql_physical_keyring_qualification.py``.
+The native engine and utility own encryption, preparation and key rotation;
+ScratchRobin does not parse or regenerate native key records. Original utility
+failures remain visible and are never automatically retried. External paths,
+unexported/system-state acceptance, interrupted legacy/guardian resolution and
+production cutover remain separate ``CMP-MY-01`` requirements.

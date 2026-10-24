@@ -138,7 +138,7 @@ the exact recorded owner/endpoint/recovery reservation before reviewed
 reattachment. Unknown database outcomes/fences persist until fresh SQL facts and
 explicit acknowledgement. Legacy missing-binding receipts, missing/failed
 guardians and wider lifecycle reconciliation remain open, alongside
-encrypted/external-table-space support and production cutover. Native
+external-table-space support and production cutover. Native
 incremental capture and private redo-only apply/final preparation now preserve
 exact full-backup lineage, contiguous LSNs and both immutable input dependencies.
 Raw deltas cannot be restored alone; finalized chains use the existing recovery
@@ -151,6 +151,13 @@ MRG_MYISAM and MEMORY definition/restart behavior join InnoDB/MyISAM/CSV
 admission. MEMORY volatile-row loss is disclosed; external MERGE member paths
 remain refused. The pinned utility's single password option is an upstream
 backend restriction; it does not remove existing MySQL MFA client support.
+Explicit GPL file-keyring retention now supports native encrypted full and
+incremental chains, stable private transition keys and source master-key
+rotation. Preparation preserves opaque keys outside native incremental cleanup.
+Recovered native read-only/replay instances use private keyrings, plugin and
+dependency copies, with independently observed encryption variables and keyring
+paths. Recurring startup drills retain this admission across worker restart.
+See :doc:`mysql_physical_backups` for native boundaries and durable-key retention.
 Managed physical targets now support separately reviewed expected-dump acceptance
 through private-socket or TCP connections, with full counts, native checksums and
 exported-definition comparisons, including after native replay. Each receipt

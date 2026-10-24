@@ -108,7 +108,7 @@ class ScheduleHost(retained.ScheduleHost):
     def delegation(self,server,request,grant):
         value=self.validate_credentials({'ssh':request['credentials'],'database':physical.delegate(self.service,server)})
         with sql_client(self.service,server,value['database'],'worker:'+grant['job_id']) as admitted:
-            captured=physical.source(self.service,server,admitted=admitted)
+            captured=physical.source(self.service,server,admitted=admitted,keyring=grant['options']['physical'].get('keyring'))
         if captured['identity']!=grant['source'] or captured['state']['host_binding']!=grant['source_state']['template']['source_state']['host_binding']:
             raise native.HostError('Reviewed backup source changed before SQL delegation')
         return value
@@ -145,7 +145,7 @@ class ScheduleHost(retained.ScheduleHost):
             if not self.keys.available:raise native.HostError('Configure physical worker encryption keys before scheduling backups')
             selected=options(request['options'])
             with retention.admission(jobs):
-                captured=physical.source(self.service,server)
+                captured=physical.source(self.service,server,keyring=selected['physical'].get('keyring'))
                 template={'options':selected['physical'],'source':captured['identity'],'source_state':{**captured['state'],'remote_review':{}},'job_id':'','review_digest':''}
                 channel=native.Transport(selected['physical']['connection'],host.credentials(request['credentials']))
                 try:
@@ -192,7 +192,7 @@ class ScheduleHost(retained.ScheduleHost):
         def require():return self.require(grant,occurrence['job_id'])
         def capture():
             with sql_client(self.service,server,secret['database'],'worker:'+grant['job_id']) as admitted:
-                value=physical.source(self.service,server,admitted=admitted)
+                value=physical.source(self.service,server,admitted=admitted,keyring=selected.get('keyring'))
             if value['identity']!=grant['source'] or value['state']['host_binding']!=self.anchor(grant,jobs)['source_state']['host_binding']:
                 raise native.HostError('Scheduled physical source identity changed')
             return value
