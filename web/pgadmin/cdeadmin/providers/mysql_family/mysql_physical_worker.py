@@ -26,6 +26,7 @@ VERSION = '9.7.1-rc1'
 REVISION = 'b1c9c34183de95316d8889ea3d4cb31e31ffddc5'
 MAX_FILES = 200000
 MAX_OUTPUT = 128 * 1024
+RAW_READER_PATCH = '40abc6e5ca994a84bfc65db8dd30c92b53a09c372d42163b7ae284d9a051c761'
 
 
 def recovery_module():
@@ -237,6 +238,39 @@ def executable(path, kind):
     return {'path': str(path), 'sha256': host.file_hash(path), 'version_output': output.strip()}
 
 
+def raw_storage_backend(executable):
+    """Bind the source-qualified reader and its private native dependencies."""
+    root=Path(executable['path']).parent.parent
+    try:
+        if (root/'PROVENANCE.json').is_symlink():raise Refused('Select the original native package provenance')
+        value=read_json(root/'PROVENANCE.json')
+        if (not isinstance(value,dict) or value.get('schema')!='scratchrobin.native-backup-build.v1' or value.get('upstream_revision')!=REVISION or
+                value.get('patch_sha256')!=RAW_READER_PATCH or value.get('binary_sha256')!=executable['sha256'] or
+                value.get('research_candidate_only') is not False or value.get('capabilities')!=['raw-system-files-v1']):
+            raise Refused('Native system files require the separately qualified native backup dependency')
+        qualification=value.get('qualification',{})
+        if (not isinstance(qualification,dict) or qualification.get('binary_sha256')!=executable['sha256'] or
+                qualification.get('qualified_extents')!=['fixed','autoextended'] or qualification.get('multiple_system_files') is not True):
+            raise Refused('Qualify fixed, autoextended and multiple native raw system files before admission')
+        files=value['package_files']
+        if (not isinstance(files,dict) or len(files)>128 or files.get('bin/xtrabackup')!=executable['sha256'] or
+                files.get('native-raw.patch')!=RAW_READER_PATCH):
+            raise Refused('Native raw-reader package identity is unavailable')
+        for name,checksum in files.items():
+            path=Path(name)
+            if (not isinstance(checksum,str) or not re.fullmatch('[a-f0-9]{64}',checksum) or path.is_absolute() or
+                    any(part in {'','.', '..'} for part in name.split('/')) or
+                    not absolute(str(root/path)).is_relative_to(root) or host.file_hash(absolute(str(root/path)))!=checksum):
+                raise Refused('Native raw-reader package bytes changed')
+        libraries=value['libraries']
+        if not isinstance(libraries,dict) or not libraries or any(files.get('lib/'+name)!=checksum for name,checksum in libraries.items()):
+            raise Refused('Native raw-reader dependencies are unavailable')
+        return {'format':'raw-system-files-v1','manifest_sha256':host.file_hash(root/'PROVENANCE.json'),
+            'patch_sha256':RAW_READER_PATCH,'binary_sha256':executable['sha256'],'libraries':libraries}
+    except (OSError,ValueError,KeyError,TypeError):
+        raise Refused('Native system files require the separately qualified native backup dependency') from None
+
+
 def input_artifact(request, root, selected):
     source=root/job_id(selected)
     if (source/'retention-intent.json').exists():raise Refused('Physical input has entered reviewed retention')
@@ -308,6 +342,10 @@ def inspection(request):
     entries=observed.get('incremental_input',observed.get('input',{})).get('artifact',{}).get('external_tablespaces',[])
     storage=observed.get('incremental_input',observed.get('input',{})).get('artifact',{}).get('storage_geometry')
     if phase in {'backup','incremental'}:storage=geometry_module().from_source(request,filesystem=True)
+    source_specification=(request.get('source_storage') or {}).get('variables',{}).get('innodb_data_file_path') if phase in {'backup','incremental'} else geometry_module().configuration(root/request['input_job_id']/'artifact').get('innodb_data_file_path')
+    multiple_system_files=source_specification is not None and len(geometry_module().system_spec(source_specification))>1
+    if multiple_system_files or storage is not None and any(row.get('raw_mode') for row in storage['system_files']):
+        observed['raw_storage_backend']=raw_storage_backend(observed['xtrabackup'])
     external=paths_module().admission(request,entries,storage=storage)
     if external is not None:
         observed['external_paths']=external

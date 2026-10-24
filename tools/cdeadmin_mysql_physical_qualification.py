@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import secrets
+import shutil
 import subprocess
 import sys
 import time
@@ -14,12 +15,13 @@ sys.path[:0] = [str(ROOT), str(ROOT/'web'), str(ROOT/'tools')]
 BACKEND = 'percona/percona-xtrabackup@sha256:580747a61714d1884040794fc8a144179f5e3fe6ae839701d8958fe73a4e5e2b'
 
 
-def prepare_fixture(output, image, *, keyring=False, external=False, missing_paths=None, storage=None):
+def prepare_fixture(output, image, *, keyring=False, external=False, missing_paths=None, storage=None,native_backend=None):
     build = output/'fixture-build'; build.mkdir()
     key = build/'private-key'
     subprocess.run(['ssh-keygen','-q','-t','ed25519','-N','','-f',str(key)],check=True)
     context = build/'context'; context.mkdir()
     (context/'authorized_keys').write_bytes(key.with_suffix('.pub').read_bytes())
+    if native_backend:shutil.copytree(Path(native_backend).resolve(strict=True),context/'native-backend')
     (context/'start.sh').write_text('#!/bin/bash\nset -e\n/usr/sbin/sshd -D >/tmp/physical-sshd.log 2>&1 &\n'+
         ('/usr/local/bin/docker-entrypoint.sh "$@" &\ndatabase=$!\nwait "$database" || true\nexec /bin/sleep infinity\n' if missing_paths else 'exec /usr/local/bin/docker-entrypoint.sh "$@"\n'))
     (context/'Dockerfile').write_text('FROM '+BACKEND+' AS pxb\nFROM mysql:9.7.0\nUSER root\n'
@@ -34,6 +36,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
         ('RUN mkdir -p '+ ' '.join(storage[key] for key in ('system_root','undo_root','empty_root'))+
          ' && chown mysql:mysql '+ ' '.join(storage[key] for key in ('system_root','undo_root','empty_root'))+'\n' if storage else '')+
         ('RUN '+ ' && '.join('mkdir -p '+target+' && ln -s '+target+' '+link for link,target in storage.get('filesystem_links',[]))+'\n' if storage and storage.get('filesystem_links') else '')+
+        ('COPY native-backend /opt/sr-native-backend\n' if native_backend else '')+
         'COPY authorized_keys /root/.ssh/authorized_keys\n'
         'RUN chmod 600 /root/.ssh/authorized_keys && printf "%s\\n" "PermitRootLogin prohibit-password" "PasswordAuthentication no" "UsePAM no" "PrintMotd no" > /etc/ssh/sshd_config.d/physical-fixture.conf && xtrabackup --version\n'
         'COPY start.sh /opt/physical-start.sh\nENTRYPOINT ["/bin/bash","/opt/physical-start.sh"]\nCMD ["mysqld"]\n')
@@ -42,7 +45,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False,circular_storage=False,reconciliation_only=False,legacy_sources=None):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False,circular_storage=False,reconciliation_only=False,legacy_sources=None,native_backend=None):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -50,6 +53,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
     from cdeadmin_mysql_online_ddl_qualification import registration
     from cdeadmin_mysql_family_object_live_orchestrator import _run, _wait_until_ready, _root_connection, _published_port, _image_identity
     output = Path(output).resolve()
+    native_executable='/opt/sr-native-backend/bin/xtrabackup' if native_backend else '/usr/bin/xtrabackup'
     if output == ROOT or ROOT in output.parents: raise ValueError('Keep private qualification outside source')
     output.mkdir(mode=0o700,parents=True,exist_ok=False)
     proof = {'complete':False,'interfaces':[],'history_testing':'not run','source_sha256':{},'owned_servers_stopped':False,'owned_physical_volume_removed':False}
@@ -102,7 +106,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             storage['data_file_spec']=('system one 雪:12M;system.two:12M:autoextend' if storage['data_home'] else
                 storage['system_files'][0]+':12M;'+storage['system_files'][1]+':12M:autoextend')
         if storage:storage['runtime_data_file_spec']=';'.join(path+suffix for path,suffix in zip(storage['system_files'],(':12M',':12M:autoextend'))) if circular_storage else storage['data_file_spec']
-        key = prepare_fixture(output,image,keyring=encrypted,external=external_only or bool(missing_paths),missing_paths=missing_paths or ('parent' if reconciliation_only else None),storage=storage) if prepare else Path(key).resolve(strict=True)
+        key = prepare_fixture(output,image,keyring=encrypted,external=external_only or bool(missing_paths),missing_paths=missing_paths or ('parent' if reconciliation_only else None),storage=storage,native_backend=native_backend) if prepare else Path(key).resolve(strict=True)
         proof['fixture_image'] = _image_identity(image)
         _run(['docker','volume','create',volume])
         source_mounts=[]
@@ -149,7 +153,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
         app = setup_application(output)
         if incremental_only or tls_only or keyring_only or external_only or missing_paths or reconciliation_only:
             selected={'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
-                'workspace':'/var/backups/scratchrobin/jobs','executable':'/usr/bin/xtrabackup','mysql':'/usr/bin/mysql',
+                'workspace':'/var/backups/scratchrobin/jobs','executable':native_executable,'mysql':'/usr/bin/mysql',
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
             if reconciliation_only:
                 from cdeadmin_mysql_physical_reconciliation_qualification import qualify_reconciliation
@@ -171,7 +175,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
         if check_only:
             from cdeadmin_mysql_physical_check_schedule_qualification import qualify_checks
             selected={'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
-                'workspace':'/var/backups/scratchrobin/jobs','executable':'/usr/bin/xtrabackup','mysql':'/usr/bin/mysql',
+                'workspace':'/var/backups/scratchrobin/jobs','executable':native_executable,'mysql':'/usr/bin/mysql',
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
             proof['physical_check_schedule']=qualify_checks(app,output,root,name,port,password,selected,{'private_key':key.read_text()},browser_binary,driver_binary)
             proof['complete']=True
@@ -179,7 +183,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
         if acceptance_only:
             from cdeadmin_mysql_physical_acceptance_qualification import qualify_acceptance
             selected={'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
-                'workspace':'/var/backups/scratchrobin/jobs','executable':'/usr/bin/xtrabackup','mysql':'/usr/bin/mysql',
+                'workspace':'/var/backups/scratchrobin/jobs','executable':native_executable,'mysql':'/usr/bin/mysql',
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
             proof['physical_acceptance']=qualify_acceptance(app,output,root,port,password,selected,{'private_key':key.read_text()},browser_binary,driver_binary)
             proof['complete']=True
@@ -187,7 +191,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
         if retention_only or batch_only or schedule_only or backup_only:
             from cdeadmin_mysql_physical_retention_qualification import qualify_retention
             selected={'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
-                'workspace':'/var/backups/scratchrobin/jobs','executable':'/usr/bin/xtrabackup','mysql':'/usr/bin/mysql',
+                'workspace':'/var/backups/scratchrobin/jobs','executable':native_executable,'mysql':'/usr/bin/mysql',
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
             if not batch_only and not schedule_only and not backup_only:proof['physical_retention']=qualify_retention(app,output,root,name,port,password,selected,{'private_key':key.read_text()},browser_binary,driver_binary)
             from cdeadmin_mysql_physical_batch_retention_qualification import qualify_batch
@@ -217,7 +221,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
                 return data['data']
             credentials = {'private_key':key.read_text()}
             selected = {'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
-                'workspace':'/var/backups/scratchrobin/jobs','executable':'/usr/bin/xtrabackup','mysql':'/usr/bin/mysql',
+                'workspace':'/var/backups/scratchrobin/jobs','executable':native_executable,'mysql':'/usr/bin/mysql',
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
             def review(phase,input_job=None,gtid_mode='ON',lifetime=None,startup='read_only'):
                 extra={'mysqld':'/usr/sbin/mysqld','recovery_gtid_mode':gtid_mode} if phase=='recover' else {}
@@ -457,7 +461,8 @@ def browser(app,output,sid,password,selected,credentials,binary,driver_binary,co
             if not label.find_element(By.CSS_SELECTOR,'input').is_selected():label.click()
         for label,value in [('Physical SSH host',selected['connection']['host']),('Physical SSH port',selected['connection']['port']),
             ('Physical SSH user','root'),('Pinned physical SSH public key',selected['connection']['host_key']),
-            ('Physical SSH private key',credentials['private_key']),('Private physical workspace',selected['workspace']),('Physical native timeout seconds',120)]:fill(label,value)
+            ('Physical SSH private key',credentials['private_key']),('XtraBackup executable',selected['executable']),
+            ('Native host mysql client',selected['mysql']),('Private physical workspace',selected['workspace']),('Physical native timeout seconds',120)]:fill(label,value)
         assert driver.execute_script('const e=arguments[0],r=e.getBoundingClientRect(),p=e.parentElement.getBoundingClientRect();return r.top>=p.top-1 && r.bottom<=p.bottom+1 && r.right<=p.right+1;',field('Physical SSH private key'))
         check('I accept this pinned XtraBackup release candidate for this physical operation.')
         if selected.get('keyring'):

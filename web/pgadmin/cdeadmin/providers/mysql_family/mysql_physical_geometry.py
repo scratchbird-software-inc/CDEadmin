@@ -68,11 +68,12 @@ def system_spec(value):
     if not isinstance(value,str) or not value or len(value)>65536:raise Refused('Native system-file specification is unavailable')
     result=[]
     for item in value.split(';'):
-        match=re.fullmatch(r'([^:;\x00\r\n]+):([0-9]+[KkMmGg]?(?::autoextend(?::max:[0-9]+[KkMmGg]?)?)?)',item)
+        match=re.fullmatch(r'([^:;\x00\r\n]+):([0-9]+[KkMmGg]?(?::autoextend(?::max:[0-9]+[KkMmGg]?)?)?)((?:new)?raw)?',item)
         if not match:raise Refused('Native system-file geometry needs additional admission')
-        name,suffix=match.groups();path=PurePosixPath(name)
+        name,suffix,raw=match.groups();path=PurePosixPath(name)
         if path.name in {'','.', '..'}:raise Refused('Native system-file identity is ambiguous')
-        result.append({'native_name':name,'backup_name':path.name,'suffix':suffix})
+        result.append({'native_name':name,'backup_name':path.name,'suffix':suffix+(raw or ''),
+            **({'raw_mode':raw,'regular_suffix':suffix} if raw else {})})
     if len(result)>256 or len({row['backup_name'] for row in result})!=len(result):
         raise Refused('Native flattened system-file identities are ambiguous')
     return result
@@ -133,7 +134,7 @@ def from_source(request,*,filesystem=False,observed_paths=None):
         raise Refused('Retained filesystem resolution contains unobserved native paths')
     if resolved:result.update(resolved_paths=resolved,catalog_files=files)
     external=any(not PurePosixPath(row['source_file']).is_relative_to(PurePosixPath(datadir)) for row in [*specifications,*undo])
-    needed=external or bool(directories) or data_home!=datadir or undo_home!=datadir or any('/' in row['native_name'] for row in specifications)
+    needed=external or bool(directories) or data_home!=datadir or undo_home!=datadir or any('/' in row['native_name'] or row.get('raw_mode') for row in specifications)
     if needed and request.get('isolate_external_paths') is not True:
         raise Refused('Review native storage-path isolation before using external system/undo files or retained scan roots')
     return result if needed else None
@@ -201,14 +202,15 @@ def external_entries(value):
     for kind,rows in [('SYSTEM',value['system_files']),('UNDO_LOG',value['undo_files'])]:
         for row in rows:
             if not PurePosixPath(row['source_file']).is_relative_to(datadir):
-                entries.append({'file_name':row['source_file'],'tablespace_name':row.get('tablespace_name',row['backup_name']),'tablespace_type':kind})
+                entries.append({'file_name':row['source_file'],'tablespace_name':row.get('tablespace_name',row['backup_name']),
+                    'tablespace_type':'RAW_SYSTEM' if row.get('raw_mode') else kind})
     directories=sorted(set(value['scan_directories'])|{value['data_home'],value['undo_home']})
     return entries,[root for root in directories if not PurePosixPath(root).is_relative_to(datadir)]
 
 
 def prepare_arguments(directory,value):
     if value is None:return []
-    return ['--innodb-data-file-path='+';'.join(row['backup_name']+':'+row['suffix'] for row in value['system_files']),
+    return ['--innodb-data-file-path='+';'.join(row['backup_name']+':'+row.get('regular_suffix',row['suffix']) for row in value['system_files']),
         '--innodb-data-home-dir='+str(directory),'--innodb-undo-directory='+str(directory)]
 
 
@@ -244,7 +246,7 @@ def destination(source,target,context):
 
 def copy_back_arguments(directory,target,value,context):
     if value is None:return []
-    return ['--innodb-data-file-path='+';'.join(str(destination(row['source_file'],target,context))+':'+row['suffix'] for row in value['system_files']),
+    return ['--innodb-data-file-path='+';'.join(str(destination(row['source_file'],target,context))+':'+row.get('regular_suffix',row['suffix']) for row in value['system_files']),
         '--innodb-undo-directory='+str(directory/'undo-copy-back')]
 
 
@@ -268,7 +270,9 @@ def finish_copy_back(directory,original,target,value,context):
         if source.is_symlink() or not source.is_file() or output.exists():raise Refused('Native copied undo destination is ambiguous')
         output.parent.mkdir(mode=0o700,parents=True,exist_ok=True);source.rename(output)
     pool.rmdir()
-    for row in context['plan']:(target/row['relative_root']).mkdir(mode=0o700,parents=True,exist_ok=True)
+    for row in context['plan']:
+        path=target/row['relative_root']
+        (path.parent if row.get('kind')=='file' else path).mkdir(mode=0o700,parents=True,exist_ok=True)
     (target/'external-data').mkdir(mode=0o700,exist_ok=True)
     for root in sorted(set(value['scan_directories'])|{value['data_home'],value['undo_home']}):
         path=destination(root,target,context);path.mkdir(mode=0o700,parents=True,exist_ok=True)

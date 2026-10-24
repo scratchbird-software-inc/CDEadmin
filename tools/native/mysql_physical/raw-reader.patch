@@ -1,0 +1,99 @@
+diff --git a/storage/innobase/fsp/fsp0sysspace.cc b/storage/innobase/fsp/fsp0sysspace.cc
+index 58882f39..69e47a40 100644
+--- a/storage/innobase/fsp/fsp0sysspace.cc
++++ b/storage/innobase/fsp/fsp0sysspace.cc
+@@ -478,6 +478,7 @@ dberr_t SysTablespace::open_file(Datafile &file) {
+     case SRV_OLD_RAW:
+       srv_start_raw_disk_in_use = true;
+ 
++#ifndef XTRABACKUP
+       if (srv_read_only_mode && !m_ignore_read_only) {
+         ib::error(ER_IB_MSG_443)
+             << "Can't open a raw device '" << file.m_filepath
+@@ -486,6 +487,7 @@ dberr_t SysTablespace::open_file(Datafile &file) {
+ 
+         return (DB_ERROR);
+       }
++#endif
+ 
+       [[fallthrough]];
+ 
+diff --git a/storage/innobase/xtrabackup/src/backup_copy.cc b/storage/innobase/xtrabackup/src/backup_copy.cc
+index d5c84258..913a700f 100644
+--- a/storage/innobase/xtrabackup/src/backup_copy.cc
++++ b/storage/innobase/xtrabackup/src/backup_copy.cc
+@@ -2405,8 +2405,12 @@ bool copy_back(int argc, char **argv) {
+        iter != end; ++iter) {
+     const char *filename = base_name(iter->name());
+ 
++    /* Only the first system file starts with an FSP header. Later files
++    start at a nonzero logical page, so their payload must not be parsed
++    as page-size/encryption metadata. System files are not compressed or
++    individually encrypted; retain their prepared native bytes exactly. */
+     if (!(ret = copy_or_move_file(filename, iter->name(), dst_dir, 1,
+-                                  FILE_PURPOSE_DATAFILE))) {
++                                  FILE_PURPOSE_OTHER))) {
+       goto cleanup;
+     }
+   }
+diff --git a/storage/innobase/xtrabackup/src/fil_cur.cc b/storage/innobase/xtrabackup/src/fil_cur.cc
+index db04712e..05728a74 100644
+--- a/storage/innobase/xtrabackup/src/fil_cur.cc
++++ b/storage/innobase/xtrabackup/src/fil_cur.cc
+@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ /* Source file cursor implementation */
+ 
+ #include <my_base.h>
++#include <limits>
+ 
+ #include <fil0fil.h>
+ #include <fsp0sysspace.h>
+@@ -170,6 +171,48 @@ xb_fil_cur_result_t xb_fil_cur_open(
+     return (XB_FIL_CUR_ERROR);
+   }
+ 
++#ifdef __linux__
++  if (S_ISBLK(cursor->statinfo.st_mode)) {
++    /* Linux reports st_size == 0 for block devices. Copy the configured
++    system-space extent, bounded by the opened device's actual capacity.
++    os_file_get_size preserves the descriptor's current position. */
++    const auto capacity = os_file_get_size(cursor->file);
++    const uint64_t page_bytes = univ_page_size.physical();
++    uint64_t pages = node->size;
++    if (cursor->is_system && srv_sys_space.can_auto_extend_last_file() &&
++        node == &node->space->files.back()) {
++      auto *first = &node->space->files.front();
++      if (node->space->size_in_header == 0 && !fil_node_open_file(first)) {
++        xb::error() << "Cannot read the native raw system-space header";
++        xb_fil_cur_close(cursor);
++        return (XB_FIL_CUR_ERROR);
++      }
++      uint64_t preceding_pages = 0;
++      for (const auto &file : node->space->files) {
++        if (&file == node) break;
++        preceding_pages += file.size;
++      }
++      const uint64_t total_pages = node->space->size_in_header;
++      if (total_pages < preceding_pages + pages) {
++        xb::error() << "Native raw system-space extent is smaller than its configuration";
++        xb_fil_cur_close(cursor);
++        return (XB_FIL_CUR_ERROR);
++      }
++      pages = total_pages - preceding_pages;
++    }
++    const auto maximum = std::numeric_limits<decltype(cursor->statinfo.st_size)>::max();
++    if (capacity == static_cast<os_offset_t>(-1) || pages == 0 ||
++        page_bytes == 0 || pages > static_cast<uint64_t>(maximum) / page_bytes ||
++        pages * page_bytes > capacity) {
++      xb::error() << "Invalid configured raw system-space size or device capacity: "
++                  << cursor->abs_path;
++      xb_fil_cur_close(cursor);
++      return (XB_FIL_CUR_ERROR);
++    }
++    cursor->statinfo.st_size = static_cast<decltype(cursor->statinfo.st_size)>(pages * page_bytes);
++  }
++#endif
++
+   if (srv_unix_file_flush_method == SRV_UNIX_O_DIRECT ||
+       srv_unix_file_flush_method == SRV_UNIX_O_DIRECT_NO_FSYNC) {
+     os_file_set_nocache(cursor->file.m_file, node->name, "OPEN");

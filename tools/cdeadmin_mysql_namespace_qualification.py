@@ -34,21 +34,27 @@ import json,os,subprocess,sys
 paths=sys.modules['_cdeadmin_physical_paths'];recovery=sys.modules['_cdeadmin_recovery_worker'];physical=sys.modules['_cdeadmin_physical_worker']
 workspace=Path('/var/backups/sr-namespace');directory=workspace/'job';roots=[]
 for index,name in enumerate(ALIASES):
- data=directory/('runtime-data' if index==0 else 'runtime-extra-'+str(index));data.mkdir(parents=True)
- (data/'value').write_text('private recovered bytes')
- roots.append({'source_root':name,'private_root':str(data),'initial_alias_exists':Path(name).exists()})
+ data=directory/('runtime-data' if index==0 else 'runtime-extra-'+str(index))
+ if name in FILE_ALIASES:
+  data.parent.mkdir(parents=True,exist_ok=True);data.write_text('private recovered bytes')
+  if CREATE_ORIGINAL_FILES:Path(name).write_text('original host file')
+ else:
+  data.mkdir(parents=True);(data/'value').write_text('private recovered bytes')
+ roots.append({'source_root':name,'private_root':str(data),'initial_alias_exists':Path(name).exists(),**({'kind':'file'} if name in FILE_ALIASES else {})})
 canary=Path('/tmp/sr-namespace-canary');canary.write_text('original host bytes')
 program={'path':str(Path(sys.executable).resolve()),'sha256':physical.host.file_hash(Path(sys.executable))}
 controller=recovery.birth(os.getpid(),program)
 capability=paths.capability(projection=any(not row['initial_alias_exists'] for row in roots),root_projection=ROOT_PROJECTION)
-view=paths.activate(workspace,[{key:row[key] for key in ('source_root','private_root')} for row in roots],directory=directory)
+view=paths.activate(workspace,[{key:row[key] for key in ('source_root','private_root','kind') if key in row} for row in roots],directory=directory)
 assert recovery.present(controller)
 try:canary.write_text('must not overwrite the host')
 except OSError as error:assert error.errno==30
 else:raise RuntimeError('Native host view unexpectedly writable')
 for index,row in enumerate(roots):
- (Path(row['source_root'])/'value').write_text('private alias write '+str(index))
- assert (Path(row['private_root'])/'value').read_text()=='private alias write '+str(index)
+ source=Path(row['source_root']);private=Path(row['private_root'])
+ if row.get('kind')!='file':source=source/'value';private=private/'value'
+ source.write_text('private alias write '+str(index))
+ assert private.read_text()=='private alias write '+str(index)
 child=subprocess.Popen([sys.executable,'-B','-c','import time;time.sleep(60)'],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
 try:
  process=recovery.birth(child.pid,program)
@@ -64,7 +70,10 @@ paths=sys.modules['_cdeadmin_physical_paths'];recovery=sys.modules['_cdeadmin_re
 record=RECORD;process=record['process']
 for index,row in enumerate(record['roots']):
  assert Path(row['source_root']).exists()==row['initial_alias_exists']
- assert (Path(row['private_root'])/'value').read_text()=='private alias write '+str(index)
+ private=Path(row['private_root'])
+ if row.get('kind')!='file':private=private/'value'
+ assert private.read_text()=='private alias write '+str(index)
+ if row.get('kind')=='file' and row['initial_alias_exists']:assert Path(row['source_root']).read_text()=='original host file'
 assert Path('/tmp/sr-namespace-canary').read_text()=='original host bytes'
 assert recovery.present(process)
 observed=paths.observe(process['pid'],record['view'])
@@ -95,12 +104,13 @@ def qualify(output,image,*,prepare=False):
     proof['fixture_image']={'requested_reference':image,'image_id':details['Id'],'architecture':details['Architecture'],'os':details['Os']}
     for variant,aliases,root_projection in [('existing',['/var/lib/mysql'],False),
             ('missing-parent',['/var/lib/sr-namespace-missing/data'],False),('missing-root',['/sr-namespace-missing/data'],True),
-            ('mixed-missing-roots',['/sr-main-missing/data','/var/lib/sr-external-missing/data'],True)]:
+            ('mixed-missing-roots',['/sr-main-missing/data','/var/lib/sr-external-missing/data'],True),
+            ('existing-file',['/var/lib/sr-file-original'],False),('missing-file',['/sr-file-missing/device'],True)]:
         name='sr-namespace-'+secrets.token_hex(8);volumes=[];case={'variant':variant,'complete':False}
         try:
             subprocess.run(['docker','run','--rm','-d','--cap-add=SYS_ADMIN','--name',name,'--entrypoint','/bin/sleep',image,'3600'],capture_output=True,check=True)
             volumes=[row['Name'] for row in json.loads(subprocess.check_output(['docker','inspect','--format','{{json .Mounts}}',name],text=True)) if row['Type']=='volume']
-            code=bootstrap+'ALIASES='+repr(aliases)+'\nROOT_PROJECTION='+repr(root_projection)+'\n'+START
+            code=bootstrap+'ALIASES='+repr(aliases)+'\nROOT_PROJECTION='+repr(root_projection)+'\nFILE_ALIASES='+repr(aliases if variant.endswith('file') else [])+'\nCREATE_ORIGINAL_FILES='+repr(variant=='existing-file')+'\n'+START
             result=subprocess.run(['docker','exec','-i',name,'python3','-'],input=code,capture_output=True,text=True,timeout=30)
             (output/(variant+'-start.log')).write_text(result.stdout+result.stderr)
             if result.returncode:raise RuntimeError('Native namespace startup failed; inspect '+variant+'-start.log')

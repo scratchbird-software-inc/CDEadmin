@@ -216,6 +216,7 @@ if __name__=='__main__':
     parser.add_argument('--geometry',action='store_true')
     parser.add_argument('--relative-storage',action='store_true')
     parser.add_argument('--circular-storage',action='store_true')
+    parser.add_argument('--native-backend',type=Path)
     args=parser.parse_args()
     from cdeadmin_mysql_physical_qualification import qualify
-    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,keyring_only=not args.external,external_only=args.external,keyring_desktop_only=args.desktop_only,storage_geometry=args.geometry,relative_storage=args.relative_storage,circular_storage=args.circular_storage)
+    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,keyring_only=not args.external,external_only=args.external,keyring_desktop_only=args.desktop_only,storage_geometry=args.geometry,relative_storage=args.relative_storage,circular_storage=args.circular_storage,native_backend=args.native_backend)

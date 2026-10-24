@@ -185,8 +185,12 @@ Circular paths now retain actual host filesystem resolution, including symbolic
 links followed by parent traversal. Original catalog spellings survive offline
 audit; private runtime options use canonical identities. Native encrypted
 incrementals, recurring drills and source-offline recovery qualify this mapping
-through both connectors. Raw-device files, unmapped legacy layouts,
-duplicate flattened undo basenames remain open alongside system-state,
+through both connectors. A source-qualified native reader now supports fixed
+and autoextended raw system files, multiple raw devices, native system-file
+copy-back and private file aliases when original device nodes are absent.
+Native system-space payloads, incremental recovery and the built desktop have
+separate qualification; see :doc:`mysql_physical_backups` for the dependency.
+Unmapped legacy layouts and duplicate flattened undo basenames remain open alongside system-state,
 guardian, cutover and broader inventory requirements.
 Managed physical targets now support separately reviewed expected-dump acceptance
 through private-socket or TCP connections, with full counts, native checksums and

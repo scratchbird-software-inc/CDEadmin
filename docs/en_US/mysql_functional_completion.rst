@@ -2113,7 +2113,10 @@ Circular paths now retain observed native filesystem resolution and original
 catalog spellings, including symbolic links followed by parent traversal.
 Private runtime paths and offline audit use the sealed canonical mapping;
 encrypted incrementals, recurring drills and missing parent/root recovery are
-qualified through both connectors. Raw-device files, duplicate flattened undo basenames, unmapped legacy
+qualified through both connectors. Native fixed/autoextended raw system files
+and multiple system-file copy-back now use a source-qualified reader and private
+file aliases. Qualification includes system-space payloads, native incremental
+recovery and source-offline editors with missing device nodes. Duplicate flattened undo basenames, unmapped legacy
 layouts and the broader recovery/inventory gates remain
 open. Unmapped geometry refuses before native preparation or copy-back.
 See :doc:`mysql_physical_backups`.

@@ -71,6 +71,39 @@ def test_namespace_plan_never_hides_its_private_workspace_or_required_runtime(tm
         with pytest.raises(worker.Refused):paths.validate_roots(workspace,[{'source_root':str(source_root),'private_root':str(data)}])
 
 
+def test_file_alias_keeps_exact_private_file_identity_and_cannot_hide_required_runtime(tmp_path):
+    workspace=tmp_path/'private';workspace.mkdir();private=workspace/'system';private.write_bytes(b'private system pages')
+    original=tmp_path/'original-system';original.write_bytes(b'original source pages')
+    selected={'source_root':str(original),'private_root':str(private),'kind':'file'}
+    assert paths.validate_roots(workspace,[selected])==[selected]
+    assert original.read_bytes()==b'original source pages'
+    for source in ('/etc/passwd','/etc/group','/proc','/dev',str(workspace)):
+        with pytest.raises(worker.Refused):paths.validate_roots(workspace,[{**selected,'source_root':source}])
+
+
+@pytest.mark.parametrize('fault',['missing-kind','unknown-kind','private-directory','source-directory','fifo','private-link'])
+def test_file_alias_cannot_silently_change_kind_or_select_special_private_payload(tmp_path,fault):
+    import os
+    workspace=tmp_path/'private';workspace.mkdir();private=workspace/'system';private.write_bytes(b'owned regular pages')
+    original=tmp_path/'original';original.write_bytes(b'owned original pages')
+    row={'source_root':str(original),'private_root':str(private),'kind':'file'}
+    if fault=='missing-kind':row.pop('kind')
+    elif fault=='unknown-kind':row['kind']='block'
+    elif fault=='private-directory':private.unlink();private.mkdir()
+    elif fault=='source-directory':original.unlink();original.mkdir()
+    elif fault=='fifo':original.unlink();os.mkfifo(original)
+    else:private.unlink();private.symlink_to(original)
+    with pytest.raises(worker.Refused):paths.validate_roots(workspace,[row])
+
+
+def test_runtime_file_alias_preserves_nested_private_copy_back_path(tmp_path):
+    directory=tmp_path/'job';data=directory/'data';private=data/'external-data/0/raw-system';private.parent.mkdir(parents=True);private.write_bytes(b'private pages')
+    context={'original_datadir':'/original/data','plan':[{'source_root':'/dev/owned-system','relative_root':'external-data/0/raw-system','kind':'file'}]}
+    aliases,_args=paths.runtime(directory,data,context)
+    assert aliases[1]=={'source_root':'/dev/owned-system','private_root':str(directory/'runtime-external/0/raw-system'),'kind':'file'}
+    assert Path(aliases[1]['private_root']).read_bytes()==b'private pages'
+
+
 def test_missing_native_namespace_privilege_does_not_start_recovery(monkeypatch):
     observed=[]
     def run(command,**_kwargs):observed.append(command);return SimpleNamespace(returncode=1,stdout=b'',stderr=b'Operation not permitted')
@@ -136,6 +169,31 @@ def test_uncertain_filesystem_view_blocks_connections_but_preserves_original_pro
     assert value['state']=='unknown'
     assert not value['recovery_running_verified']
     assert not value['filesystem_isolation_observation']['native_filesystem_isolation_observed']
+
+
+@pytest.mark.parametrize('phase,checkpoint',[('prepare','full-backuped'),('prepare_redo','full-backuped'),('copy_back','full-prepared')])
+@pytest.mark.parametrize('admitted',[False,True])
+def test_multiple_internal_system_files_require_corrected_backend_without_external_mounts(tmp_path,monkeypatch,phase,checkpoint,admitted):
+    import uuid
+    from unittest.mock import Mock
+    root=tmp_path/'private';root.mkdir();identity=str(uuid.uuid4());directory=root/identity/'artifact';directory.mkdir(parents=True)
+    (directory/'backup-my.cnf').write_text('[mysqld]\ninnodb_data_file_path=first:12M;second:12M:autoextend\n')
+    monkeypatch.setattr(worker,'host_scope',lambda *_args,**_kwargs:{'datadir':'/original'})
+    monkeypatch.setattr(worker,'root_directory',lambda *_args:root)
+    monkeypatch.setattr(worker,'executable',lambda *_args:{'path':'/native/xtrabackup'})
+    monkeypatch.setattr(worker,'input_artifact',lambda *_args:{'artifact':{'checkpoint':{'backup_type':checkpoint}}})
+    backend=Mock(return_value={'format':'qualified-native-system-files'})
+    if not admitted:backend.side_effect=worker.Refused('Corrected native system-file copy-back is not qualified')
+    monkeypatch.setattr(worker,'raw_storage_backend',backend)
+    spawn=Mock();monkeypatch.setattr(worker.subprocess,'Popen',spawn)
+    request={'phase':phase,'workspace':str(root),'executable':'/native/xtrabackup','input_job_id':identity,
+        'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'binding':{'datadir':'/original'}}
+    if not admitted:
+        with pytest.raises(worker.Refused,match='Corrected native'):worker.inspection(request)
+    else:
+        observed=worker.inspection(request)
+        assert observed['raw_storage_backend']=={'format':'qualified-native-system-files'} and 'external_paths' not in observed
+    backend.assert_called_once();spawn.assert_not_called()
 
 
 @pytest.mark.parametrize('phase,checkpoint',[('prepare','full-backuped'),('prepare_redo','full-backuped'),('copy_back','full-prepared')])

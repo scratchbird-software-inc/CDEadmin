@@ -786,7 +786,9 @@ resolution and retain original settings alongside effective paths. Circular
 paths now retain observed filesystem identities and original catalog spellings,
 including symbolic links followed by parent traversal. Encrypted incremental
 and source-offline recovery use the same sealed mapping through both connectors.
-Raw devices, duplicate flattened undo names, unmapped legacy layouts,
+Fixed/autoextended raw devices and multiple system files now have a corrected,
+source-qualified native reader, private copy-back and missing-device aliases.
+Duplicate flattened undo names, unmapped legacy layouts,
 and the remaining inventory/system-state/guardian/cutover work still precede
 handoff. Physical control now survives adapter/registration changes, missing
 duplicated bindings with matching original host facts, and native supervisor

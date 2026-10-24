@@ -10,8 +10,7 @@ starts and supervises a private data copy. Selected log recovery, independent
 exported-data/definition acceptance, dependency-aware retention and scheduling
 have separate reviewed workflows. Native GPL file-keyring recovery is described
 below. Native system/undo geometry and external InnoDB table/tablespace isolation
-are also described below. Raw-device files,
-unmapped legacy storage layouts,
+are also described below. Unmapped legacy storage layouts,
 unexported/system-state acceptance and production cutover remain open under
 ``CMP-MY-01``.
 
@@ -26,6 +25,56 @@ release remains a release candidate. Each operation requires explicit consent
 to that status; this does not relabel it as a generally available release.
 See `the release source <https://github.com/percona/percona-xtrabackup/tree/b1c9c34183de95316d8889ea3d4cb31e31ffddc5>`_
 and `upstream physical restore instructions <https://docs.percona.com/percona-xtrabackup/9.7/restore-a-backup.html>`_.
+
+Raw and multiple system-file reader
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Raw system tablespaces and multiple system-file workflows require the separately qualified native reader built by
+``tools/build_mysql_raw_backend.py``. The stock pinned utility rejects raw files
+in read-only mode; removing the raw marker alone can return success while copying
+zero pages. ScratchRobin refuses that utility for raw storage.
+
+The GPL patch in ``tools/native/mysql_physical/raw-reader.patch`` changes only
+the backup build's read-only raw-file admission and its Linux block-device
+cursor size. It copies the native system-space extent, bounded by
+the opened device capacity. The final autoextended file uses InnoDB's cached
+system-space header size with preceding file extents accounted for. Native
+system-file copy-back preserves prepared bytes directly: later system files
+start at a nonzero logical page and cannot be interpreted as FSP headers.
+This also fixes the upstream crash for populated later regular system files.
+Server-build behavior is preserved. Native InnoDB
+page reading, checksums, redo application and SQL recovery remain native.
+The qualification gate observes read-only backup descriptors and verifies native
+prepare/copy-back, recovered SQL reads/writes (including a 40 MiB payload in an
+autoextended raw system tablespace), unchanged source bytes, independent
+namespace/process facts and owned-device cleanup.
+
+After the repository DDN freshness prerequisite, build in an external private
+work area::
+
+    python3 tools/build_mysql_raw_backend.py --work /absolute/private/mysql-native-build
+
+The builder fetches the exact upstream revision/submodule, applies the pinned
+patch, builds in a container with a read-only source mount, collects complete
+compiler failures, packages private dependencies, and runs the real raw-device
+qualification before admitting the package. It requires Linux x86-64, Docker
+and permission for the disposable fixture's loop-device and mount operations.
+It allocates its own autocleared loop device atomically; it never selects an
+existing host device. Default owned source/build/fixture artifacts are removed
+after success; the package and concise build/qualification evidence remain.
+
+Install the resulting ``package`` directory as one unit on the database host.
+Select its ``bin/xtrabackup`` path and enable external-path isolation in the
+physical workspace. The package manifest binds the admitted patch, executable
+and private library hashes at review and dispatch. Unqualified candidates and
+changed package files are refused.
+
+Original ``raw``/``newraw`` declarations stay in retained source/backup metadata.
+Preparation, private copy-back and recovery startup use regular private files
+without raw initialization markers. A file alias presents the original device
+name only inside the isolated native process. Missing original device nodes use
+private parent projections. The host source device and directory contents stay
+unchanged. Production cutover remains separately reviewed work.
 
 Certificate-authenticated recovery
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -754,7 +803,7 @@ include private external runtime files and interrupted copy-back input copies.
 
 This admission covers InnoDB per-table external data and general tablespaces,
 with retained native system/undo geometry as described below.
-Raw-device files, unmapped legacy storage layouts,
+Unmapped legacy storage layouts,
 broader engine inventory, system-state acceptance, legacy/guardian
 resolution and production cutover remain tracked recovery work. Unsupported
 unmapped absolute system geometry and external undo storage refuse before
@@ -813,11 +862,11 @@ empty-directory and keyring mount paths; both connectors still support native
 read-only/replay recovery, editor queries, new undo tablespaces and external
 DDL. All held original source files remain unchanged through recovery and stop.
 
-Use ``tools/cdeadmin_mysql_physical_keyring_qualification.py --external --geometry``
+Use ``tools/cdeadmin_mysql_physical_keyring_qualification.py --external --geometry
+--native-backend /absolute/qualified/package``
 for the native encrypted incremental workflow. Add ``--geometry`` to either
-missing-path qualification variant above for source-offline recovery. Native
-raw-device specifications and
-duplicate flattened undo basenames require further backend admission. Legacy
+missing-path qualification variant above for source-offline recovery. Duplicate
+flattened undo basenames require further backend admission. Legacy
 artifacts without the required retained mapping remain refused before native
 preparation or copy-back. These boundaries remain recovery implementation work.
 
@@ -854,11 +903,15 @@ artifact and copy-back. Add ``--circular-storage`` alongside ``--geometry
 incrementals, recurring drills and source-offline missing parent/root recovery
 through both connectors.
 
-Raw-device recovery remains open. An owned loop-device probe starts MySQL, but
-the pinned XtraBackup raw specification refuses. Removing that marker reports
-success while copying zero system pages; native preparation fails. Native
-Clone also reports completion with a zero-byte system file. Neither result
-establishes usable recovery, and neither is admitted as a physical backup.
+Raw-device recovery uses the corrected backend described above. Native gates
+cover fixed-size extents on larger devices, autoextension, populated multiple
+system files, exact payload checksums and recovery after device nodes are
+removed. ``tools/cdeadmin_mysql_raw_application_qualification.py --autoextend
+--multiple`` exercises native full/incremental chains, lost-reply handling,
+read-only/writable recovered editors and the built desktop. Supplied package,
+fixture image and external output paths bind each run to its actual dependency
+and application source. Stock utility/Clone completion alone is not admitted
+as evidence of usable raw recovery.
 
 Native MERGE member names
 ~~~~~~~~~~~~~~~~~~~~~~~~~

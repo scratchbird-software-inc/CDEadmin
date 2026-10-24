@@ -36,15 +36,35 @@ def test_capture_preserves_exact_original_geometry_empty_scan_roots_and_page_byt
     assert (directory/geometry.FILE).stat().st_mode&0o077==0
 
 
-@pytest.mark.parametrize('fault',['no-consent','catalog-mismatch','undo-name-collision','circular-home','raw-device'])
+@pytest.mark.parametrize('fault',['no-consent','catalog-mismatch','undo-name-collision','circular-home'])
 def test_unadmitted_source_storage_is_refused_before_sealing_or_native_dispatch(fault):
     request=source()
     if fault=='no-consent':request['isolate_external_paths']=False
     elif fault=='catalog-mismatch':request['source_storage']['files'][0]['file_name']='/different/file'
     elif fault=='undo-name-collision':request['source_storage']['files'].append({'file_name':'/other/extra.ibu','tablespace_name':'different_undo','file_type':'UNDO LOG'})
     elif fault=='circular-home':request['source_storage']['variables']['innodb_data_home_dir']='/system/link/../different'
-    else:request['source_storage']['variables']['innodb_data_file_path']='/system/first:12Mraw'
     with pytest.raises(worker.Refused):geometry.from_source(request)
+
+
+@pytest.mark.parametrize('mode',['raw','newraw'])
+def test_raw_system_geometry_retains_native_mode_and_uses_only_private_regular_files(tmp_path,mode):
+    request=source();variables=request['source_storage']['variables']
+    variables['innodb_data_file_path']='/dev/source-system:32M'+mode
+    request['source_storage']['files']=[row for row in request['source_storage']['files'] if row['file_type']=='UNDO LOG']+[
+        {'file_name':'/dev/source-system','tablespace_name':'innodb_system','file_type':'TABLESPACE'}]
+    value=geometry.from_source(request)
+    raw=value['system_files'][0]
+    assert raw['raw_mode']==mode and raw['suffix']=='32M'+mode and raw['regular_suffix']=='32M'
+    assert geometry.prepare_arguments(tmp_path,value)[0]=='--innodb-data-file-path=source-system:32M'
+    context=paths.admission({**request,'phase':'copy_back'},[],storage=value)
+    selected=next(row for row in context['plan'] if row.get('kind')=='file')
+    assert selected['source_root']=='/dev/source-system'
+    private=geometry.destination('/dev/source-system',tmp_path,context)
+    assert geometry.copy_back_arguments(tmp_path,tmp_path,value,context)[0]=='--innodb-data-file-path='+str(private)+':32M'
+    data=tmp_path/'data';(data/'external-data').mkdir(parents=True)
+    _aliases,arguments=paths.runtime(tmp_path,data,context)
+    assert '--innodb-data-file-path=/dev/source-system:32M' in arguments
+    assert all('newraw' not in arg and not arg.endswith('32Mraw') for arg in arguments)
 
 
 def test_native_checkpoint_geometry_must_match_reviewed_source(tmp_path):

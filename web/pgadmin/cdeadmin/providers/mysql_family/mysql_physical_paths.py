@@ -25,6 +25,18 @@ PRIVATE=0x40000
 NEW_MOUNT_NAMESPACE=0x20000
 
 
+def alias_kind(row):
+    kind=row.get('kind','directory')
+    if kind not in {'directory','file'}:raise Refused('Select a native directory or file alias')
+    return kind
+
+
+def compatible_source(path,kind):
+    if not path.exists():return True
+    mode=path.stat().st_mode
+    return stat.S_ISDIR(mode) if kind=='directory' else stat.S_ISREG(mode) or stat.S_ISBLK(mode)
+
+
 def tablespaces(directory):
     """Validate native metadata without rewriting catalog or page contents."""
     value=physical.read_json(directory/'xtrabackup_tablespaces')
@@ -99,8 +111,8 @@ def admission(request,entries,*,storage=None):
         workspace=physical.absolute(request['workspace']);missing=[];root_projection=False
         for row in [{'source_root':result['original_datadir']},*selected]:
             source=physical.absolute(row['source_root'])
-            if (source.exists() and not source.is_dir() or workspace.is_relative_to(source) or source.is_relative_to(workspace)):
-                raise Refused('Native recovery aliases must be directories separate from the private workspace')
+            if (not compatible_source(source,alias_kind(row)) or workspace.is_relative_to(source) or source.is_relative_to(workspace)):
+                raise Refused('Native recovery aliases must have their retained kind and be separate from the private workspace')
             if not source.exists():
                 missing.append(str(source));parent=source.parent
                 while not parent.exists():parent=parent.parent
@@ -114,12 +126,13 @@ def runtime(directory,data,context):
     external=directory/'runtime-external'
     (data/'external-data').rename(external)
     selected=[{'source_root':context['original_datadir'],'private_root':str(data)}]
-    selected.extend({'source_root':row['source_root'],'private_root':str(external/Path(row['relative_root']).name)} for row in context['plan'])
+    selected.extend({'source_root':row['source_root'],'private_root':str(external/Path(row['relative_root']).relative_to('external-data')),
+        **({'kind':'file'} if alias_kind(row)=='file' else {})} for row in context['plan'])
     storage=context.get('storage')
     scan=[row['source_root'] for row in context['plan']]
     if storage is not None:
         entries=[{'file_name':file['source_file'],'tablespace_name':file['tablespace_name'],'tablespace_type':file['tablespace_type']}
-            for row in context['plan'] for file in row['files'] if file['tablespace_type']!='SYSTEM']
+            for row in context['plan'] for file in row['files'] if file['tablespace_type'] not in {'SYSTEM','RAW_SYSTEM'}]
         scan=sorted(set(storage['scan_directories'])|{str(path) for path in roots(entries)})
     data_home=context['original_datadir'] if storage is None else storage['variables']['innodb_data_home_dir']
     if storage is not None and data_home not in {'','.', './'}:data_home=storage['data_home']
@@ -127,8 +140,8 @@ def runtime(directory,data,context):
         '--innodb-data-home-dir='+data_home,
         '--innodb-undo-directory='+(context['original_datadir'] if storage is None else storage['undo_home']),
         '--innodb-directories='+';'.join(scan)]
-    if storage is not None and storage.get('resolved_paths'):
-        arguments.append('--innodb-data-file-path='+';'.join(row['source_file']+':'+row['suffix'] for row in storage['system_files']))
+    if storage is not None and (storage.get('resolved_paths') or any(row.get('raw_mode') for row in storage['system_files'])):
+        arguments.append('--innodb-data-file-path='+';'.join(row['source_file']+':'+row.get('regular_suffix',row['suffix']) for row in storage['system_files']))
     return selected,arguments
 
 
@@ -148,6 +161,8 @@ def roots(entries):
 
 
 def plan(entries,directories=()):
+    raw=[entry for entry in entries if entry['tablespace_type']=='RAW_SYSTEM']
+    entries=[entry for entry in entries if entry['tablespace_type']!='RAW_SYSTEM']
     candidates=set(roots(entries))|{Path(root) for root in directories}
     selected=sorted((path for path in candidates if not any(path!=other and path.is_relative_to(other) for other in candidates)),key=str)
     result=[]
@@ -157,6 +172,13 @@ def plan(entries,directories=()):
             'files':[{'source_file':entry['file_name'],
                 'relative_file':str(Path(entry['file_name']).relative_to(root)),
                 'tablespace_name':entry['tablespace_name'],'tablespace_type':entry['tablespace_type']} for entry in members]})
+    for index,entry in enumerate(raw):
+        source=Path(entry['file_name'])
+        if any(source.is_relative_to(root) for root in selected):
+            raise Refused('Raw system-file aliases require a separate native device path')
+        result.append({'source_root':str(source),'relative_root':'external-data/files/'+str(index)+'/'+source.name,
+            'kind':'file','files':[{'source_file':str(source),'relative_file':'.',
+                'tablespace_name':entry['tablespace_name'],'tablespace_type':'RAW_SYSTEM'}]})
     return result
 
 
@@ -198,15 +220,17 @@ def validate_roots(workspace,selected):
     workspace=physical.absolute(str(workspace));result=[];seen=set()
     if not isinstance(selected,list) or len(selected)>256:raise Refused('Native mount plan exceeds its bound')
     for row in selected:
-        if not isinstance(row,dict) or set(row)!={'source_root','private_root'}:raise Refused('Select exact native source/private directory pairs')
+        if not isinstance(row,dict) or not {'source_root','private_root'}<=set(row) or set(row)-{'source_root','private_root','kind'}:
+            raise Refused('Select exact native source/private alias pairs and their retained kind')
+        kind=alias_kind(row)
         source=physical.absolute(row['source_root']);target=physical.absolute(row['private_root'])
         if (source in seen or source==Path('/') or workspace.is_relative_to(source) or
                 source.is_relative_to(workspace) or not target.is_relative_to(workspace) or
-                source.exists() and not source.is_dir() or not target.is_dir()):
-            raise Refused('Native external aliases must be directory paths separate from the private workspace')
+                not compatible_source(source,kind) or not (target.is_dir() if kind=='directory' else target.is_file())):
+            raise Refused('Native external aliases must have their retained kind and be separate from the private workspace')
         if any(Path(name).is_relative_to(source) for name in (sys.executable,'/proc','/sys','/dev','/etc/passwd','/etc/group')):
             raise Refused('Native external aliases cannot hide required host runtime paths')
-        seen.add(source);result.append({'source_root':str(source),'private_root':str(target)})
+        seen.add(source);result.append({'source_root':str(source),'private_root':str(target),**({'kind':'file'} if kind=='file' else {})})
     return sorted(result,key=lambda row:(len(Path(row['source_root']).parts),row['source_root']))
 
 
@@ -279,7 +303,8 @@ def activate(workspace,selected,*,directory=None):
                 private_parent=any(parent.is_relative_to(Path(prior['parent'])) and device==prior['device'] for prior in projections)
             if not private_parent:
                 projections.append(project_parent(native,workspace,parent,len(projections),cancel,directory=directory))
-            source.mkdir(parents=True)
+            if alias_kind(row)=='directory':source.mkdir(parents=True)
+            else:source.parent.mkdir(parents=True,exist_ok=True);source.touch(mode=0o600,exist_ok=False)
         checked(native.mount(os.fsencode(row['private_root']),os.fsencode(source),None,BIND|MOUNT_REC,None))
         a=source.stat();b=Path(row['private_root']).stat()
         if (a.st_dev,a.st_ino)!=(b.st_dev,b.st_ino):raise Refused('Native mounted directory differs from its private target')
@@ -314,5 +339,7 @@ def observe(pid,expected):
     mounts={decode(row[4]):set(row[5].split(',')) for row in entries}
     if 'ro' not in mounts.get('/',set()) or 'rw' not in mounts.get(expected['workspace'],set()):
         raise Refused('Original native process host/private mount permissions changed')
+    files=sum(alias_kind(row)=='file' for row in expected['roots'])
     return {'native_filesystem_isolation_observed':True,'private_namespace':expected['private_namespace'],
-        'host_root_readonly':True,'private_workspace_writable':True,'external_directory_aliases':len(expected['roots'])}
+        'host_root_readonly':True,'private_workspace_writable':True,'external_directory_aliases':len(expected['roots'])-files,
+        **({'external_file_aliases':files} if files else {})}
