@@ -745,3 +745,14 @@ host-side retention dependencies. Finalized chains feed the existing private
 recovery and independent expected-dump acceptance workflows. Remaining physical
 backend admission includes encryption, external paths and additional engines;
 unexported/system state, cutover and ``CMP-MY-02``/``INV-MYSQL`` stay open.
+
+MySQL physical workflows now preserve registered native TLS policy and transfer
+client certificate material privately to the pinned host, with explicit server
+TLS provisioning for certificate-authenticated isolated recovery and recurring
+startup drills. ARCHIVE, BLACKHOLE, self-contained MRG_MYISAM and native MEMORY
+definition/restart behavior are admitted alongside InnoDB/MyISAM/CSV. MEMORY
+volatile-row loss is disclosed and external MERGE members remain refused.
+Native key provisioning/encryption, external mappings, remaining engine
+inventory, unexported/system-state acceptance, legacy/guardian resolution and
+cutover remain implementation work. The comparison count remains nine of
+eleven; Linux evidence does not close platform or owner-deferred history gates.

@@ -75,6 +75,20 @@ def check_listener_port(port):
         except OSError:raise Refused('Selected recovery loopback TCP port is already occupied') from None
 
 
+def tls_files(request):
+    selected=request.get('recovery_tls')
+    if selected is None:return None
+    if not request.get('recovery_port') or not isinstance(selected,dict) or set(selected)!={'ssl_ca','ssl_cert','ssl_key'}:
+        raise Refused('Native recovery TLS requires its own loopback listener and host CA/certificate/key')
+    result={}
+    for name,value in selected.items():
+        path=physical.absolute(value)
+        with host.regular_stream(path) as stream:data=stream.read(131073)
+        if not data or len(data)>131072:raise Refused('Native recovery TLS material exceeds its bound')
+        result[name]={'path':str(path),'sha256':physical.hashlib.sha256(data).hexdigest()}
+    return result
+
+
 def inspection(request):
     if not sys.platform.startswith('linux') or not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
         raise Refused('Managed recovery requires a native Linux host with process descriptor control')
@@ -92,6 +106,9 @@ def inspection(request):
         raise Refused('Select a separate native recovery loopback TCP port or no TCP listener')
     if type(request.get('recovery_local_infile',False)) is not bool:raise Refused('Select trusted recovery checksum input explicitly')
     if port:check_listener_port(port)
+    tls=tls_files(request)
+    if 'ssl_cert' in request.get('sql_tls_policy',{}).get('files',{}) and tls is None:
+        raise Refused('Provision native recovery server TLS and a loopback port for the delegated certificate profile')
     mode=request.get('recovery_mode','read_only')
     if mode not in {'read_only','replay'}:raise Refused('Select a native recovery startup mode')
     replay=mode=='replay';server_id=request.get('recovery_server_id')
@@ -130,6 +147,7 @@ def inspection(request):
         'transport': 'loopback-tcp-and-private-unix-socket' if port else 'private-unix-socket-only', 'recovery_port':port, 'automatic_upgrade': False,
         'replication_autostart': False, 'group_replication_autostart': False, 'event_scheduler': 'DISABLED', 'super_read_only': not replay,
         'recovery_local_infile':request.get('recovery_local_infile',False),
+        **({'recovery_tls':tls} if tls is not None else {}),
         'recovery_mode':mode,'binary_logging':replay,'recovery_server_id':server_id,
         'recovery_gtid_mode': request['recovery_gtid_mode'], 'maximum_lifetime_seconds': request['timeout_seconds']}
 
@@ -209,8 +227,10 @@ def sql_ready(request, observed, directory, option_file, data):
         "'group_replication_autostart',CAST((SELECT VARIABLE_VALUE FROM performance_schema.global_variables WHERE VARIABLE_NAME='group_replication_start_on_boot') AS CHAR CHARACTER SET utf8mb4)," \
         "'authenticated_principal',CURRENT_USER()," \
         "'active_role',CAST(CURRENT_ROLE() AS CHAR CHARACTER SET utf8mb4))"
-    result = subprocess.run([observed['mysql']['path'], '--defaults-file='+str(option_file), '--host=localhost', '--protocol=socket',
-        '--socket='+str(directory/'runtime.sock'), '--batch', '--raw', '--skip-column-names', '--default-character-set=utf8mb4', '--execute='+query],
+    route=(['--host=127.0.0.1','--protocol=tcp','--port='+str(request['recovery_port'])] if observed.get('recovery_tls') else
+        ['--host=localhost','--protocol=socket','--socket='+str(directory/'runtime.sock')])
+    result = subprocess.run([observed['mysql']['path'], '--defaults-file='+str(option_file), *route,
+        '--batch', '--raw', '--skip-column-names', '--default-character-set=utf8mb4', '--execute='+query],
         cwd=directory, env=physical.native_environment(directory), capture_output=True, timeout=5, check=False)
     if result.returncode:
         error = re.search(rb'ERROR ([0-9]+)', result.stderr)
@@ -250,7 +270,7 @@ def execute(directory):
     value['supervisor_process'] = birth(os.getpid(), {'path':str(executable),'sha256':host.file_hash(executable)})
     def save(): physical.finish(directory,value)
     def clean():
-        if option_file is not None: option_file.unlink(missing_ok=True)
+        physical.clean_client_options(directory)
         request['database_credentials'] = None; host.save(directory/'request.json',request)
         value['credential_cleanup_confirmed'] = True
     try:
@@ -271,6 +291,12 @@ def execute(directory):
             '--enforce-gtid-consistency=ON', '--innodb-buffer-pool-size='+str(request['memory_bytes']),
             '--tmpdir='+str(directory), '--innodb-data-home-dir='+str(data), '--innodb-undo-directory='+str(data)]
         args += ['--'+key.replace('_','-')+'='+val for key,val in sorted(observed['configuration'].items())]
+        for name,selected in observed.get('recovery_tls',{}).items():
+            target=directory/('recovery-'+name+'.pem')
+            with host.regular_stream(Path(selected['path'])) as stream:tls_data=stream.read(131073)
+            if physical.hashlib.sha256(tls_data).hexdigest()!=selected['sha256']:raise Refused('Native recovery TLS files changed after review')
+            with target.open('xb') as stream:host.private_file(target);stream.write(tls_data)
+            args.append('--'+name.replace('_','-')+'='+str(target))
         args += (['--read-only=OFF','--super-read-only=OFF','--log-bin='+str(directory/'recovery-bin'),
             '--log-bin-index='+str(directory/'recovery-bin.index'),'--server-id='+str(request['recovery_server_id']),
             '--log-replica-updates=ON','--binlog-format=ROW','--binlog-encryption=OFF'] if request.get('recovery_mode','read_only')=='replay'
@@ -319,4 +345,8 @@ def execute(directory):
     finally:
         try: clean()
         except Exception as error: value['credential_cleanup_error_type'] = type(error).__name__
+        if child is None or child.poll() is not None:
+            try:
+                for name in ('ssl_ca','ssl_cert','ssl_key'):(directory/('recovery-'+name+'.pem')).unlink(missing_ok=True)
+            except OSError as error:value['server_tls_cleanup_error_type']=type(error).__name__
         value.update(supervisor_finished=True,supervisor_finished_at=time.time()); save()

@@ -42,9 +42,9 @@ def options(value):
     if not isinstance(value,dict) or set(value)!={'physical','expected_backup_job_id','threads','interval_seconds','expires_after_days'}:
         raise physical.native.HostError('Select a retained recovery checkpoint, expected dump and expiring check policy')
     selected=physical.options(value['physical'])
-    if (selected['phase']!='recover' or selected['recovery_mode']!='read_only' or selected['recovery_port']!=0 or
+    if (selected['phase']!='recover' or selected['recovery_mode']!='read_only' or selected['recovery_port']!=0 and not selected.get('recovery_tls') or
             selected['recovery_local_infile'] is not True or not 30<=selected['timeout_seconds']<=3600):
-        raise physical.native.HostError('Scheduled acceptance requires a private-socket read-only recovery, trusted checksum input and a30–3600-second lifetime')
+        raise physical.native.HostError('Scheduled acceptance requires private-socket or provisioned TLS read-only recovery, trusted checksum input and a30–3600-second lifetime')
     native.options({'target_confirmation':str(uuid.UUID(int=0)),'server_wide_write_pause_confirmed':True,
         'threads':value['threads'],'timeout_seconds':selected['timeout_seconds']})
     from .mysql_binlog_jobs import identity
@@ -110,6 +110,8 @@ class ScheduleHost(backups.ScheduleHost):
                     raise physical.native.HostError('The expected dump belongs to another physical source')
                 template={'options':selected['physical'],'source':deepcopy(parent['source']),
                     'source_state':{**deepcopy(parent['source_state']),'remote_review':{}},'job_id':'','review_digest':''}
+                tls=physical.sql_tls(self.service,server)
+                if tls is not None:template['source_state']['sql_tls_policy']=tls['policy']
                 channel=physical.native.Transport(selected['physical']['connection'],backups.host.credentials(request['credentials']))
                 try:
                     peer=channel.connect();template['source_state']['remote_review']=channel.request(physical.remote_request(template,'inspect'))

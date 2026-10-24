@@ -1,5 +1,8 @@
 """Reviewed native physical artifacts on an independently authenticated DB host."""
 from copy import deepcopy
+import base64
+import hashlib
+from pathlib import Path
 import time
 
 from ..providers.mysql_family import mysql_physical_transport as native
@@ -25,7 +28,8 @@ def source(service, server, *, admitted=None):
         configure(connection)
         engines = rows(connection, "SELECT ENGINE AS engine,COUNT(*) AS objects FROM information_schema.TABLES "
             "WHERE TABLE_SCHEMA NOT IN ('information_schema','performance_schema','sys') AND TABLE_TYPE='BASE TABLE' GROUP BY ENGINE ORDER BY ENGINE")
-        unsupported = [row['engine'] for row in engines if row['engine'] not in {'InnoDB','MyISAM','CSV'}]
+        unsupported = [row['engine'] for row in engines if (row['engine'] or '').casefold() not in
+            {'innodb','myisam','csv','archive','blackhole','mrg_myisam','memory'}]
         if unsupported:
             raise native.HostError('This physical backend has not admitted these persistent storage engines: ' + ', '.join(str(item) for item in unsupported))
         encrypted = rows(connection, "SELECT COUNT(*) AS encrypted FROM information_schema.INNODB_TABLESPACES WHERE ENCRYPTION='Y'")[0]['encrypted']
@@ -33,6 +37,11 @@ def source(service, server, *, admitted=None):
             raise native.HostError('Encrypted tablespaces require separately admitted native keyring provisioning for physical recovery')
         captured['state']['storage_engine_counts'] = engines
         captured['state']['encrypted_tablespaces'] = encrypted
+        volatile = rows(connection, "SELECT TABLE_SCHEMA AS schema_name,TABLE_NAME AS table_name,TABLE_ROWS AS current_rows FROM information_schema.TABLES "
+            "WHERE TABLE_SCHEMA NOT IN ('information_schema','performance_schema','sys') AND ENGINE='MEMORY' ORDER BY TABLE_SCHEMA,TABLE_NAME")
+        if volatile: captured['state']['volatile_memory_tables'] = volatile
+        tls = sql_tls(service, server)
+        if tls is not None: captured['state']['sql_tls_policy'] = tls['policy']
         return captured
     finally: client._discard_failed_session(connection)
 
@@ -41,7 +50,7 @@ def options(value):
     fields = {'connection', 'workspace', 'executable', 'mysql', 'phase', 'sql_host', 'sql_port',
         'input_job_id', 'parallel', 'memory_bytes', 'timeout_seconds', 'accept_release_candidate'}
     extra = {'mysqld', 'recovery_gtid_mode'} if isinstance(value,dict) and value.get('phase') == 'recover' else set()
-    optional = {'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile'} if extra else ({'incremental_job_id'} if isinstance(value,dict) and value.get('phase')=='prepare_redo' else set())
+    optional = {'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls'} if extra else ({'incremental_job_id'} if isinstance(value,dict) and value.get('phase')=='prepare_redo' else set())
     if not isinstance(value, dict) or not fields | extra <= set(value) or set(value)-fields-extra-optional:
         raise native.HostError('Select the complete native physical host and operation options')
     selected = deepcopy(value); selected['connection'] = native.ssh.public_route(value['connection'])
@@ -50,8 +59,10 @@ def options(value):
     for key in ('workspace', 'executable', 'mysql', *(['mysqld'] if extra else [])):
         if not isinstance(value[key], str) or not value[key] or '\x00' in value[key] or len(value[key]) > 4096:
             raise native.HostError('Select bounded absolute paths on the authenticated database host')
-    if value['sql_host'] not in {'127.0.0.1', '::1', 'localhost'} or type(value['sql_port']) is not int or not 1 <= value['sql_port'] <= 65535:
-        raise native.HostError('Select the source loopback TCP address on its authenticated database host')
+    if (not isinstance(value['sql_host'],str) or not value['sql_host'] or len(value['sql_host'])>253 or
+            any(character.isspace() or character in '/\\\0' for character in value['sql_host']) or
+            type(value['sql_port']) is not int or not 1 <= value['sql_port'] <= 65535):
+        raise native.HostError('Select the source TCP hostname or address reachable from its authenticated database host')
     for key, low, high in [('parallel', 1, 64), ('memory_bytes', 64 * 1024 * 1024, 16 * 1024**3), ('timeout_seconds', 1, 604800)]:
         if type(value[key]) is not int or not low <= value[key] <= high:
             raise native.HostError('Select bounded native physical ' + key)
@@ -64,6 +75,11 @@ def options(value):
         if type(port) is not int or port != 0 and not 1024 <= port <= 65535:
             raise native.HostError('Select no recovery TCP listener or a native loopback port from 1024 through 65535')
         selected['recovery_port'] = port
+        if 'recovery_tls' in value:
+            tls = value['recovery_tls']
+            if (not port or not isinstance(tls,dict) or set(tls)!={'ssl_ca','ssl_cert','ssl_key'} or
+                    any(not isinstance(path,str) or not path.startswith('/') or '\0' in path or len(path)>4096 for path in tls.values())):
+                raise native.HostError('Select a recovery TCP port and absolute host CA, server certificate and key paths')
         local = value.get('recovery_local_infile', False)
         if type(local) is not bool: raise native.HostError('Explicitly select trusted recovery checksum input')
         selected['recovery_local_infile'] = local
@@ -94,12 +110,19 @@ class PhysicalJobs(MySQLBinlogJobs):
         'This workflow requires self-contained, uncompressed and unencrypted native backup files. Incrementals require the exact retained native base lineage and contiguous LSNs. Apply them to separate redo-only copies, then finalize preparation before copy-back. External tablespaces, key provisioning and production cutover remain separate.',
         'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account with a fresh UUID, private Unix socket and selected loopback TCP listener. Read-only inspection is the default. Explicit replay startup is writable with private ROW binary logging and the selected server ID. Both disable events/replication autostart and automatic upgrades, and end on stop or reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
         'Physical files and native output are private to the selected host OS account. Broad source archive protection is acquired before backup dispatch and is retired only by its separate reviewed protection workflow.',
+        'Physical recovery preserves MEMORY table definitions; native MySQL discards their volatile rows on restart. Inspect the listed MEMORY tables and use the logical backup workflow when their current rows must be retained.',
     )
 
     def public(self, record):
         result = super().public(record)
         result['remote_review'] = deepcopy(record['source_state']['remote_review'])
         result['host_binding'] = deepcopy(record['source_state']['host_binding'])
+        if 'sql_tls_policy' in record['source_state']:
+            result['sql_tls_policy'] = deepcopy(record['source_state']['sql_tls_policy'])
+        if 'storage_engine_counts' in record['source_state']:
+            result['storage_engine_counts'] = deepcopy(record['source_state']['storage_engine_counts'])
+        if 'volatile_memory_tables' in record['source_state']:
+            result['volatile_memory_tables'] = deepcopy(record['source_state']['volatile_memory_tables'])
         result['source_connection_class'] = record['source_state'].get('source_connection_class')
         remote = record.get('remote_observation') or {}
         result['native_process_termination_confirmed'] = remote.get('process_termination_confirmed') is True
@@ -137,7 +160,42 @@ def remote_request(record, action):
         'binding': deepcopy(record['source_state']['host_binding']), 'source_identity': deepcopy(record['source']),
         'reviewed': deepcopy(record['source_state']['remote_review']),
         'job_id': record['job_id'], 'input_digest': record['review_digest'],
-        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','incremental_job_id') if key in selected}}
+        **({'sql_tls_policy': deepcopy(record['source_state']['sql_tls_policy'])} if 'sql_tls_policy' in record['source_state'] else {}),
+        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','incremental_job_id') if key in selected}}
+
+
+def sql_tls(service, server):
+    """Carry the registered client policy and exact files across pinned SSH."""
+    context, payload, _root = service.endpoint_service.workspace(server, database_target_id=None)
+    route = payload['route']
+    files = {}
+    for name in ('ssl_ca', 'ssl_cert', 'ssl_key'):
+        if route.get(name):
+            from ..providers.mysql_family.mysql_host_worker import regular_stream
+            try:
+                with regular_stream(Path(route[name])) as stream:
+                    data = stream.read(131073)
+            except (OSError, ValueError):
+                raise native.HostError('Registered native TLS material is unavailable: ' + name) from None
+            if not data or len(data) > 131072:
+                raise native.HostError('Registered native TLS material exceeds its bound: ' + name)
+            files[name] = base64.b64encode(data).decode('ascii')
+    settings = {'ssl-mode': 'VERIFY_IDENTITY' if route.get('ssl_verify_identity') else
+        'VERIFY_CA' if route.get('ssl_verify_cert') else 'REQUIRED'}
+    for source, target, separator in [('ssl_cipher', 'ssl-cipher', ':'),
+            ('tls_versions', 'tls-version', ','), ('tls_ciphersuites', 'tls-ciphersuites', ':')]:
+        value = route.get(source)
+        if value:
+            if isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value):
+                value = separator.join(value)
+            if not isinstance(value, str) or '\0' in value or len(value) > 4096:
+                raise native.HostError('Registered native TLS settings are invalid')
+            settings[target] = value
+    if not files and settings == {'ssl-mode': 'REQUIRED'}:
+        return None
+    policy = {'options': settings, 'files': {name: hashlib.sha256(base64.b64decode(data)).hexdigest()
+        for name, data in files.items()}}
+    return {'policy': policy, 'files': files}
 
 
 def delegate(service, server):
@@ -146,12 +204,12 @@ def delegate(service, server):
     if not isinstance(provider, MySQLPilotProvider):
         raise native.HostError('Native MySQL backup credential delegation is unavailable')
     route = {key: value for key, value in payload['route'].items() if key not in POOL_ARGUMENTS}
-    if route.get('ssl_verify_identity') or route.get('ssl_verify_cert') or route.get('ssl_ca'):
-        raise native.HostError('Registered TLS verification requires separately admitted host-side certificate paths; it cannot be lowered for physical backup')
+    tls = sql_tls(service, server)
     def sealed(values):
         if len(values) > 1:
             raise native.HostError('This physical backend has not admitted native multiple-factor credential delegation')
-        return {'user': route.get('user') or route.get('username'), 'password': values[0] if values else ''}
+        return {'user': route.get('user') or route.get('username'), 'password': values[0] if values else '',
+            **({'tls': tls} if tls is not None else {})}
     return provider.client._tool_secrets(route, sealed, allow_recovery_credentials=True)
 
 
@@ -266,6 +324,9 @@ def _action(service, server, operation, request, *, source_capture=None,database
                         delta['source']!=prior['source'] or delta['source_state']['host_binding']!=prior['source_state']['host_binding'] or
                         delta['options']['connection']!=selected['connection'] or delta['options']['workspace']!=selected['workspace']):
                     raise native.HostError('Select a verified incremental in this exact original source and host workspace')
+        if selected['phase'] == 'recover':
+            tls = sql_tls(service, server)
+            if tls is not None: captured['state']['sql_tls_policy'] = tls['policy']
         provisional = {'options': selected, 'source': captured['identity'], 'source_state': {**captured['state'], 'remote_review': {}}, 'job_id': '', 'review_digest': ''}
         observed = transport.request(remote_request(provisional, 'inspect'))
         captured['state']['remote_review'] = observed

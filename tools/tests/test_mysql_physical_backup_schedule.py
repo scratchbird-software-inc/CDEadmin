@@ -27,6 +27,7 @@ def workflow(scheduled,monkeypatch):
     monkeypatch.setattr(physical,'manager',lambda *_args:(s.jobs,1,s.endpoint))
     monkeypatch.setattr(physical,'source',lambda *_args,**_kwargs:deepcopy(captured))
     monkeypatch.setattr(physical,'delegate',lambda *_args:{'user':'native-user','password':'private-SQL-password'})
+    monkeypatch.setattr(physical,'sql_tls',lambda *_args:None)
     @contextmanager
     def sql(*_args):yield (None,{'host':'owned'})
     monkeypatch.setattr(backup,'sql_client',sql)

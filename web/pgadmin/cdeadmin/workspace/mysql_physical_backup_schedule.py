@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import replace
 import hashlib
+import json
 from pathlib import Path
 import time
 
@@ -41,11 +42,15 @@ def options(value):
     selected=physical.options(value['physical'])
     if selected['phase']!='backup':raise native.HostError('A recurring full backup has no input job')
     drill=value['drill']
-    if drill is not None and (not isinstance(drill,dict) or set(drill)!={'mysqld','gtid_mode','timeout_seconds'} or
+    if drill is not None and (not isinstance(drill,dict) or not {'mysqld','gtid_mode','timeout_seconds'}<=set(drill) or set(drill)-{'mysqld','gtid_mode','timeout_seconds','recovery_tls','recovery_port'} or
             not isinstance(drill['mysqld'],str) or not drill['mysqld'].startswith('/') or '\0' in drill['mysqld'] or len(drill['mysqld'])>4096 or
             drill['gtid_mode'] not in {'OFF','OFF_PERMISSIVE','ON_PERMISSIVE','ON'} or
             type(drill['timeout_seconds']) is not int or not 30<=drill['timeout_seconds']<=3600):
         raise native.HostError('Select an absolute native mysqld, GTID mode and startup drill lifetime of30–3600 seconds')
+    if drill is not None:
+        physical.options({**selected,'phase':'recover','input_job_id':'00000000-0000-0000-0000-000000000001',
+            'mysqld':drill['mysqld'],'recovery_gtid_mode':drill['gtid_mode'],
+            **{key:drill[key] for key in ('recovery_tls','recovery_port') if key in drill}})
     retained.options({'policy':{'retention_days':0,'keep_latest':1},**{key:value[key] for key in ('interval_seconds','expires_after_days')}})
     return {**deepcopy(value),'physical':selected}
 
@@ -87,12 +92,16 @@ class ScheduleHost(retained.ScheduleHost):
     def anchor(self,grant,jobs):return deepcopy(grant['source_state']['template'])
 
     def validate_credentials(self,value):
-        if not isinstance(value,dict) or set(value)!={'ssh','database'} or not isinstance(value['database'],dict) or set(value['database'])!={'user','password'}:
+        if (not isinstance(value,dict) or set(value)!={'ssh','database'} or not isinstance(value['database'],dict) or
+                not {'user','password'}<=set(value['database']) or set(value['database'])-{'user','password','tls'}):
             raise native.HostError('Physical backup requires scoped SSH and SQL delegation')
         sql=value['database']
         if any(not isinstance(sql[key],str) or '\0' in sql[key] or len(sql[key].encode('utf8'))>limit for key,limit in [('user',1024),('password',16384)]) or not sql['user']:
             raise native.HostError('Physical SQL delegation is invalid')
-        return {'ssh':host.credentials(value['ssh']),'database':dict(sql)}
+        if 'tls' in sql and (not isinstance(sql['tls'],dict) or set(sql['tls'])!={'policy','files'} or
+                len(json.dumps(sql['tls'],ensure_ascii=True))>600000):
+            raise native.HostError('Physical TLS delegation is invalid or exceeds its bound')
+        return {'ssh':host.credentials(value['ssh']),'database':deepcopy(sql)}
 
     def ssh_credentials(self,value):return value['ssh']
 
@@ -230,6 +239,7 @@ class ScheduleHost(retained.ScheduleHost):
             for phase in ('prepare','copy_back','recover'):
                 selected={**deepcopy(grant['options']['physical']),'phase':phase,'input_job_id':parent['job_id']}
                 if phase=='recover':selected.update(mysqld=drill['mysqld'],recovery_gtid_mode=drill['gtid_mode'],recovery_port=0,recovery_mode='read_only',timeout_seconds=drill['timeout_seconds'])
+                if phase=='recover':selected.update({key:deepcopy(drill[key]) for key in ('recovery_tls','recovery_port') if key in drill})
                 parent=self.step(server,jobs,grant,records,occurrence,secret,selected)
             records.update(occurrence,startup_drill_outcome='passed')
         return {'backup_job_id':backup['job_id']}

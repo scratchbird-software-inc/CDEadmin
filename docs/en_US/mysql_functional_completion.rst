@@ -2036,3 +2036,28 @@ publication; no utility is automatically repeated. Native recovery and selected
 expected-dump data/definition acceptance qualify the restored checkpoint.
 Encryption, external path mappings, additional engines, unexported/system state,
 production cutover and the wider lifecycle/inventory gates remain open.
+
+Native physical TLS and additional storage engines
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Physical backup delegation now carries exact registered CA/client certificate/
+private-key files privately over pinned SSH, preserving native certificate and
+hostname verification, TLS versions and ciphers. Reviews expose fingerprints
+and policy; private client files are removed after use. Isolated recovery can
+stage separately reviewed host server TLS files on its own loopback listener,
+supporting X.509-required accounts and the process-bound native editor route.
+Expiring encrypted worker delegation carries TLS material for recurring backups
+and native startup drills after interactive credentials are erased.
+
+ARCHIVE, BLACKHOLE and self-contained MRG_MYISAM physical recovery join
+InnoDB/MyISAM/CSV. Native MEMORY definitions survive with empty-after-restart
+semantics; volatile source rows are disclosed. MERGE members escaping the
+private artifact remain refused until path mapping is implemented. The native
+qualification exercises both drivers, real hostname mismatch, policy tampering,
+incremental recovery, live/restored MERGE separation, recurring worker restart
+and the built desktop. The pinned XtraBackup backend exposes one password slot;
+existing MySQL MFA driver support is preserved rather than emulated in that
+utility. Native encryption/key provisioning, external mappings, remaining engine
+inventory, unexported/system-state acceptance, interrupted legacy/guardian
+resolution and production cutover remain open. These additions do not close
+``CMP-MY-01`` or the broader MySQL product matrix.

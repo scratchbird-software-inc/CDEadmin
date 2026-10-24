@@ -1,5 +1,6 @@
 """Standalone, private host-side XtraBackup jobs; native utilities own recovery."""
 import configparser
+import base64
 import hashlib
 import json
 import os
@@ -153,6 +154,14 @@ def artifact(directory, *, prepared=None):
     if not 0 <= low <= high <= last <= 18446744073709551615 or checkpoint['backup_type'] != 'incremental' and low != 0:
         raise Refused('Native physical checkpoint LSN range is invalid')
     files = manifest(directory)
+    for item in files:
+        if Path(item['path']).suffix.casefold() != '.mrg':continue
+        path=directory/item['path']
+        for member in metadata(path).splitlines():
+            if not member or member.startswith('#'):continue
+            if (Path(member).is_absolute() or '\0' in member or '\\' in member or
+                    not (path.parent/member).resolve().is_relative_to(directory.resolve())):
+                raise Refused('External MERGE members require a separately reviewed native path mapping')
     return {'format': 'xtrabackup-9.7-incremental' if checkpoint['backup_type'] == 'incremental' else 'xtrabackup-9.7-full', 'checkpoint': checkpoint,
         'backup_uuid': info['uuid'], 'server_version': info['server_version'],
         'tool_version': info['tool_version'], 'binlog_info': metadata(directory / 'xtrabackup_binlog_info'),
@@ -250,18 +259,51 @@ def native_environment(directory):
 
 def client_options(request, directory):
     credentials = request['database_credentials']
-    if not isinstance(credentials, dict) or set(credentials) != {'user', 'password'}:
+    if not isinstance(credentials, dict) or not {'user', 'password'} <= set(credentials) or set(credentials)-{'user','password','tls'}:
         raise Refused('Delegate the selected single-factor native database credential explicitly')
     def quote(value):
         if not isinstance(value, str) or '\x00' in value:
             raise Refused('Native client option text is invalid')
         return '"' + value.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t') + '"'
+    settings = {'ssl-mode': 'REQUIRED'}
+    tls = credentials.get('tls')
+    if tls is not None:
+        if (not isinstance(tls,dict) or set(tls)!={'policy','files'} or
+                tls['policy']!=request.get('sql_tls_policy') or not isinstance(tls['files'],dict)):
+            raise Refused('Native TLS delegation differs from its exact reviewed policy')
+        policy=tls['policy']
+        if (not isinstance(policy,dict) or set(policy)!={'options','files'} or not isinstance(policy['options'],dict) or
+                set(policy['options'])-{'ssl-mode','ssl-cipher','tls-version','tls-ciphersuites'} or
+                policy['options'].get('ssl-mode') not in {'REQUIRED','VERIFY_CA','VERIFY_IDENTITY'} or
+                not isinstance(policy['files'],dict) or set(policy['files'])!=set(tls['files']) or
+                set(tls['files'])-{'ssl_ca','ssl_cert','ssl_key'}):
+            raise Refused('Native TLS delegation contains an unadmitted option or file')
+        settings=dict(policy['options'])
+        for name,encoded in tls['files'].items():
+            if not isinstance(encoded,str) or len(encoded)>174764:raise Refused('Native TLS file exceeds its bound')
+            data=base64.b64decode(encoded,validate=True)
+            if not data or len(data)>131072 or hashlib.sha256(data).hexdigest()!=policy['files'][name]:
+                raise Refused('Native TLS file differs from its original reviewed bytes')
+            target=directory/('client-'+name+'.pem')
+            with target.open('xb') as stream:
+                host.private_file(target);stream.write(data)
+            settings[name.replace('_','-')]=str(target)
+    elif request.get('sql_tls_policy') is not None:
+        raise Refused('Delegate the reviewed native TLS files and verification policy explicitly')
+    if any(not isinstance(value,str) or len(value)>4096 for value in settings.values()):
+        raise Refused('Native TLS option exceeds its bound')
     path = directory / 'client.cnf'
     with path.open('x', encoding='utf8') as stream:
         host.private_file(path)
         stream.write('[client]\nuser=' + quote(credentials['user']) + '\npassword=' + quote(credentials['password']) +
-            '\nhost=' + quote(request['sql_host']) + '\nport=' + str(request['sql_port']) + '\nprotocol=tcp\nssl-mode=REQUIRED\n')
+            '\nhost=' + quote(request['sql_host']) + '\nport=' + str(request['sql_port']) + '\nprotocol=tcp\n' +
+            ''.join(key+'='+quote(value)+'\n' for key,value in settings.items()))
     return path
+
+
+def clean_client_options(directory):
+    for name in ('client.cnf','client-ssl_ca.pem','client-ssl_cert.pem','client-ssl_key.pem'):
+        (directory/name).unlink(missing_ok=True)
 
 
 def identity(request, observed, option_file, directory):
@@ -383,7 +425,7 @@ def execute(directory):
         # Invocation secrets are never part of a public receipt or retained
         # executable. A later observer can distinguish an incomplete cleanup.
         try:
-            if option_file is not None: option_file.unlink(missing_ok=True)
+            clean_client_options(directory)
             if staged_increment is not None and staged_increment.exists() and (child is None or child.poll() is not None):shutil.rmtree(staged_increment)
             request['database_credentials'] = None
             host.save(directory / 'request.json', request)

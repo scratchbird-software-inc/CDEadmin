@@ -2,13 +2,15 @@ Native MySQL physical backups and recovery instances
 =====================================================
 
 The server **Backup → MySQL physical backups** workspace manages native
-XtraBackup full backups, preparation of a separate copy, and copy-back into a
+XtraBackup full and incremental backups, preparation of a separate copy, and copy-back into a
 new isolated data directory on the authenticated database host. It uses the
 existing owner-scoped provider API, private application operation storage and
 source archive protection. A separately reviewed managed recovery operation
-starts and supervises a private data copy. Selected log recovery, independent post-replay acceptance,
-dependency-aware physical retention and production cutover remain separate
-``CMP-MY-01`` requirements.
+starts and supervises a private data copy. Selected log recovery, independent
+exported-data/definition acceptance, dependency-aware retention and scheduling
+have separate reviewed workflows. Encryption/external-path admission,
+unexported/system-state acceptance and production cutover remain open under
+``CMP-MY-01``.
 
 Admitted native backend
 ------------------------
@@ -22,6 +24,26 @@ to that status; this does not relabel it as a generally available release.
 See `the release source <https://github.com/percona/percona-xtrabackup/tree/b1c9c34183de95316d8889ea3d4cb31e31ffddc5>`_
 and `upstream physical restore instructions <https://docs.percona.com/percona-xtrabackup/9.7/restore-a-backup.html>`_.
 
+Certificate-authenticated recovery
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For a certificate-authenticated profile, enable **Provision recovery server TLS
+from reviewed host files**, select a separate loopback TCP port, and provide
+the database-host CA, server certificate and server key paths. The native host
+binds their exact hashes during review, stages private copies, and uses them
+with the native server. Readiness authentication uses native TLS through that
+listener; the process-bound SSH editor connection preserves native TLS too.
+Client files are removed after readiness; staged server TLS files remain
+private until the native process ends, then are removed. Interrupted server
+copies remain within reviewed retention until their original process is proven
+ended. Original host files and immutable recovery inputs are preserved.
+
+Recurring backup startup drills and expected-checkpoint checks also admit this
+explicit server TLS configuration. Enabling a policy encrypts its scoped TLS
+material together with SQL and SSH delegation; expiry/revocation still suspends
+future work. Interactive credential erasure does not replace this explicit
+worker authorization.
+
 The database host needs the matching native utility and its dependencies,
 MySQL 9.7.0's native ``mysql`` client, Python and an explicitly pinned SSH peer.
 Native database privileges and OS file access remain required. Desktop clients
@@ -29,13 +51,16 @@ can use the SSH host independently of their operating system. This backend
 requires a native Linux database host; Windows/macOS native acceptance belongs
 to the platform teams.
 
-This first artifact workflow admits full, uncompressed, self-contained native
-backups of admitted InnoDB, MyISAM and CSV tables and their prepared copies.
-Source inspection refuses other persistent engines and encrypted tablespaces.
-It refuses external tablespace mappings and
-unadmitted archive formats rather than writing original external paths during
-restore. Native encryption-key provisioning, incremental chains, other utility
-versions and broader physical recovery remain beta implementation gaps. They
+The artifact workflow admits full/incremental, uncompressed, self-contained
+backups of InnoDB, MyISAM, CSV, ARCHIVE, BLACKHOLE and MRG_MYISAM tables. Native
+MERGE members must resolve inside the private artifact. MEMORY definitions are
+preserved with native empty-after-restart semantics; their currently observed
+volatile rows are disclosed in the review. Use the logical backup workflow
+when retaining those rows is required.
+Source inspection refuses unadmitted engines and encrypted tablespaces.
+External tablespace/MERGE mappings and other archive formats remain refused
+until their native path/key handling is implemented. Native encryption-key
+provisioning, other utility versions and broader physical recovery remain gaps. They
 are not closed-source Enterprise deferrals or declared inapplicable features.
 
 Review, execution and observation
@@ -47,16 +72,20 @@ directory and its ancestors. The public-key inspection is unauthenticated;
 explicitly choose the key before authenticating. SSH secrets travel separately
 from saved review facts and never enter public receipts.
 
-For **Full backup**, select the source's loopback TCP address as reachable on
+For **Full backup**, select the source's SQL hostname or address as reachable on
 that host. The native client independently checks the source UUID, data path,
 authenticated account and active roles before backup. The application's native
 MySQL connection and the host's source ``auto.cnf`` provide separate binding
-checks. Registered TLS verification is never lowered: profiles requiring
-separately mapped verification files are refused by this initial host adapter.
-Host SQL authentication uses required TLS and a private native option file.
-Database credential delegation needs a separate explicit confirmation.
-This host adapter admits single-factor database authentication; multifactor
-delegation needs separate native provisioning.
+checks. Database credential delegation also privately transfers the registered
+CA, client certificate and private key. Native ``REQUIRED``, ``VERIFY_CA`` or
+``VERIFY_IDENTITY`` policy, selected TLS versions and ciphers are preserved.
+Public reviews bind only policy and exact file fingerprints. Private client
+files are removed after native utility completion, including refused and
+interrupted paths; changed delegation refuses before dispatch.
+The pinned XtraBackup utility exposes one password option. It cannot consume
+native MFA password slots; MySQL's existing MFA client support is separate.
+Use a separately authorized registered backup account for this utility rather
+than changing the authentication requirements of an MFA account.
 
 Choose **Review native physical job**, inspect its facts and warnings, then
 confirm and start that exact review. Stale registration, host, utility and
@@ -137,8 +166,9 @@ Native server error output is available through the same bounded output viewer.
 
 Opening, observing or retrying an already claimed job never launches another
 server. A new review from the preserved immutable base creates a new instance.
-Production service installation, replay integration, full data/definition
-and post-replay acceptance, physical retention and cutover remain open.
+Production service installation, unexported/system-state acceptance and cutover
+remain open. Replay, exported expected-checkpoint acceptance and physical
+retention have their own reviewed workflows below.
 
 Native editor connection
 ------------------------
@@ -263,7 +293,7 @@ covers fresh target UUIDs, private-socket SQL/data/definition observations,
 native write refusal, explicit shutdown, original-supervisor loss and process
 descriptor control, all four exposed native GTID modes and reviewed lifetime
 expiry. These receipts qualify the selected cases. Broader recovery,
-incremental, lifecycle, retention and cutover requirements remain open.
+host lifecycle and cutover requirements remain open.
 ScratchBird history tests remain owner-deferred.
 
 Reviewed physical artifact retention
@@ -360,8 +390,9 @@ the remaining reviews again. Cancellation never starts the next item.
 Unused previews expire after ten minutes. Invalidate an expired batch and review
 a fresh fixed set; there is no silent extension or added deletion intent.
 Original physical results, unknown database outcomes, native output and archive
-protection remain separate. Full data/definition recovery-drill acceptance,
-full independent post-replay acceptance and production cutover remain open.
+protection remain separate. Exported data/definition acceptance is available
+through the independent workflows below; unexported/system state and production
+cutover remain open.
 
 Scheduled physical retention
 -----------------------------
@@ -519,9 +550,10 @@ unchanged and interrupted checks are never repeated automatically.
 ``tools/cdeadmin_mysql_physical_replay_qualification.py --acceptance-only``
 qualifies native pure/C physical-base and post-replay data/definition acceptance,
 actual differences, interrupted replies and the built desktop. This is separate
-from unattended startup-drill automation. Automatically selecting/capturing an
-expected snapshot for scheduled data checks, unexported/system-state coverage,
-wider physical backend admission and production cutover remain open.
+from unattended startup-drill automation. Expected snapshots are never selected
+implicitly. Scheduled checks use the separately reviewed
+explicit checkpoint policy below. Unexported/system-state coverage, wider
+physical backend admission and production cutover remain open.
 
 Recurring expected-checkpoint recovery drills
 ---------------------------------------------

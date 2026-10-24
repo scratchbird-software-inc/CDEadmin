@@ -10,9 +10,9 @@ const initial = {connection: {host: '', port: 22, username: '', host_key: '', au
   sql_host: '127.0.0.1', sql_port: 3306, input_job_id: null, parallel: 2, memory_bytes: 268435456,
   timeout_seconds: 3600, accept_release_candidate: false};
 const phaseOptions = (current, phase, input_job_id) => {
-  const {mysqld, recovery_gtid_mode, recovery_port, recovery_mode, recovery_server_id, recovery_local_infile, incremental_job_id, ...base} = current;
+  const {mysqld, recovery_gtid_mode, recovery_port, recovery_mode, recovery_server_id, recovery_local_infile, recovery_tls, incremental_job_id, ...base} = current;
   return {...base, phase, input_job_id, ...(phase === 'prepare_redo' ? {incremental_job_id: incremental_job_id || null} : {}), ...(phase === 'recover' ? {mysqld: mysqld || '/usr/sbin/mysqld', recovery_gtid_mode: recovery_gtid_mode || 'ON', recovery_port: recovery_port ?? 3307,
-    recovery_mode: recovery_mode || 'read_only', recovery_local_infile: recovery_local_infile ?? false, ...(recovery_mode === 'replay' ? {recovery_server_id: recovery_server_id || 10001} : {})} : {})};
+    recovery_mode: recovery_mode || 'read_only', recovery_local_infile: recovery_local_infile ?? false, ...(recovery_tls ? {recovery_tls} : {}), ...(recovery_mode === 'replay' ? {recovery_server_id: recovery_server_id || 10001} : {})} : {})};
 };
 export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
   const [options, setOptions] = useState(initial), [credentials, setCredentials] = useState({});
@@ -74,6 +74,7 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
   };
   return <Box component="section" aria-label="Native MySQL physical backups" sx={{p: 1, overflow: 'auto', flex: 1}}>
     <Alert severity="info">XtraBackup 9.7.1-rc1 runs on the pinned Linux database SSH host. Backup, prepare and copy-back retain separate files. Managed recovery starts another data copy using native MySQL 9.7.0. Choose read-only inspection or explicitly writable replay with binary logging. It stops on request or its reviewed lifetime. Recovered-data acceptance and cutover have separate gates. Closing this viewer leaves admitted remote work running.</Alert>
+    <Alert severity="info">Database credential delegation also transfers the registered TLS CA, client certificate and private key to private job files on the pinned host. Native certificate and hostname verification stay enabled as registered. These files are removed after authentication or utility completion; public receipts contain only the policy and fingerprints.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap', my: 1}}>
       <TextField size="small" label="Physical SSH host" value={options.connection.host} disabled={busy} onChange={event => connection('host', event.target.value)} />
@@ -97,7 +98,7 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
       <TextField size="small" label="XtraBackup executable" value={options.executable} disabled={busy} onChange={event => change('executable', event.target.value)} />
       <TextField size="small" label="Native host mysql client" value={options.mysql} disabled={busy} onChange={event => change('mysql', event.target.value)} />
       <TextField size="small" label="Private physical workspace" value={options.workspace} disabled={busy} sx={{minWidth: 320}} onChange={event => change('workspace', event.target.value)} />
-      <TextField size="small" label="Backup source host loopback address" value={options.sql_host} disabled={busy} onChange={event => change('sql_host', event.target.value)} />
+      <TextField size="small" label="Backup source SQL hostname or address" value={options.sql_host} disabled={busy} onChange={event => change('sql_host', event.target.value)} />
       <TextField size="small" type="number" label="Backup source native TCP port" value={options.sql_port} disabled={busy} onChange={event => change('sql_port', Number(event.target.value))} />
       <TextField select size="small" label="Physical operation" value={options.phase} disabled={busy} onChange={event => {
         const phase = event.target.value;
@@ -107,6 +108,12 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
         <MenuItem value="backup">Full backup</MenuItem><MenuItem value="incremental">Incremental from retained backup</MenuItem><MenuItem value="prepare_redo">Prepare separate redo-only copy / apply incremental</MenuItem><MenuItem value="prepare">Prepare immutable copy</MenuItem><MenuItem value="copy_back">Copy back to new isolated directory</MenuItem><MenuItem value="recover">Start managed recovery instance</MenuItem>
       </TextField>
       {options.phase === 'recover' && <>
+        <FormControlLabel label="Provision recovery server TLS from reviewed host files" control={<Checkbox checked={!!options.recovery_tls} disabled={busy} onChange={event => {
+          const {recovery_tls: _recovery_tls, ...base} = options;
+          setOptions({...base, ...(event.target.checked ? {recovery_tls: {ssl_ca: '', ssl_cert: '', ssl_key: ''}} : {})});
+          setReview(null); setConfirmed(false); setDelegate(false);
+        }} />} />
+        {options.recovery_tls && ['ssl_ca', 'ssl_cert', 'ssl_key'].map(name => <TextField key={name} size="small" label={{ssl_ca: 'Recovery host TLS CA', ssl_cert: 'Recovery host server certificate', ssl_key: 'Recovery host server key'}[name]} value={options.recovery_tls[name]} disabled={busy} onChange={event => change('recovery_tls', {...options.recovery_tls, [name]: event.target.value})} />)}
         <TextField select size="small" label="Recovery startup mode" value={options.recovery_mode || 'read_only'} disabled={busy} onChange={event => {
           const {recovery_server_id, ...base} = options;
           setOptions({...base, recovery_mode: event.target.value, ...(event.target.value === 'replay' ? {recovery_server_id: recovery_server_id || 10001} : {})});
@@ -143,7 +150,8 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
       <Button disabled={busy} onClick={() => run('connection_info', {}, inspect)}>Load this registration’s recovery instance</Button>
     </Box>
     {review && <Box>
-      <Box component="pre" aria-label="Native physical review" sx={{whiteSpace: 'pre-wrap', maxHeight: 280, overflow: 'auto'}}>{JSON.stringify({job_id: review.job_id, source: review.source, remote_review: review.remote_review, warnings: review.warnings}, null, 2)}</Box>
+      <Box component="pre" aria-label="Native physical review" sx={{whiteSpace: 'pre-wrap', maxHeight: 280, overflow: 'auto'}}>{JSON.stringify({job_id: review.job_id, source: review.source, sql_tls_policy: review.sql_tls_policy,
+        storage_engine_counts: review.storage_engine_counts, volatile_memory_tables: review.volatile_memory_tables, remote_review: review.remote_review, warnings: review.warnings}, null, 2)}</Box>
       <FormControlLabel label="I confirm this exact reviewed physical operation." control={<Checkbox checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} />} />
       {['backup', 'incremental', 'recover'].includes(review.options.phase) && <FormControlLabel label="Delegate the registered database password privately to the pinned SSH host." control={<Checkbox checked={delegate} disabled={busy} onChange={event => setDelegate(event.target.checked)} />} />}
       <Button disabled={busy || !confirmed || review.state !== 'reviewed' || ['backup', 'incremental', 'recover'].includes(review.options.phase) && !delegate} onClick={() => run('start',

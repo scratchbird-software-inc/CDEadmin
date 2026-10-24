@@ -11,6 +11,32 @@ const review = {job_id: 'physical-job', review_digest: 'exact', state: 'reviewed
     workspace: '/private', executable: '/usr/bin/xtrabackup', mysql: '/usr/bin/mysql', sql_host: '127.0.0.1', sql_port: 3306,
     input_job_id: null, parallel: 2, memory_bytes: 268435456, timeout_seconds: 3600, accept_release_candidate: true}};
 
+it('reviews recovery server TLS paths and invalidates approval when a certificate changes', async () => {
+  const copied = {...review, state: 'native_returned', options: {...review.options, phase: 'copy_back'}, file_verification_confirmed: true, remote_observation: {restored_files: {database_started: false}}};
+  const post = jest.fn().mockResolvedValueOnce({jobs: [copied], offset: 0, limit: 25, more: false}).mockResolvedValueOnce(copied)
+    .mockImplementation(({request}) => Promise.resolve({...review, options: request.options, sql_tls_policy: {options: {'ssl-mode': 'VERIFY_IDENTITY'}, files: {ssl_ca: 'original-ca-fingerprint'}},
+      volatile_memory_tables: [{schema_name: 'native', table_name: 'volatile_rows', current_rows: 2}]}));
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button', {name: 'Load physical jobs'}));
+  await screen.findByRole('table', {name: 'Native physical jobs'});
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect physical job physical-job'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Use copy-back for managed recovery'}));
+  fireEvent.click(screen.getByLabelText('Provision recovery server TLS from reviewed host files'));
+  for(const [label, value] of [['Recovery host TLS CA', '/host/ca.pem'], ['Recovery host server certificate', '/host/server.pem'], ['Recovery host server key', '/host/server.key']]) {
+    fireEvent.change(screen.getByLabelText(label), {target: {value}});
+  }
+  fireEvent.click(screen.getByRole('button', {name: 'Review native physical job'}));
+  await screen.findByLabelText('Native physical review');
+  expect(screen.getByLabelText('Native physical review')).toHaveTextContent('VERIFY_IDENTITY');
+  expect(screen.getByLabelText('Native physical review')).toHaveTextContent('original-ca-fingerprint');
+  expect(screen.getByLabelText('Native physical review')).toHaveTextContent('volatile_rows');
+  expect(post.mock.calls[2][0].request.options.recovery_tls).toEqual({ssl_ca: '/host/ca.pem', ssl_cert: '/host/server.pem', ssl_key: '/host/server.key'});
+  expect(screen.getByText(/delegation also transfers the registered TLS CA/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Recovery host TLS CA'), {target: {value: '/host/replaced-ca.pem'}});
+  expect(screen.queryByLabelText('Native physical review')).not.toBeInTheDocument();
+  expect(post.mock.calls.some(([request]) => request.action === 'mysql_physical_start')).toBe(false);
+});
+
 it('requires release and execution confirmations and keeps SSH secrets out of public review', async () => {
   const post = jest.fn().mockResolvedValue(review); render(<Component post={post} />);
   expect(post).not.toHaveBeenCalled();

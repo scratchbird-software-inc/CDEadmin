@@ -143,6 +143,14 @@ incremental capture and private redo-only apply/final preparation now preserve
 exact full-backup lineage, contiguous LSNs and both immutable input dependencies.
 Raw deltas cannot be restored alone; finalized chains use the existing recovery
 and expected-dump acceptance workflows.
+Registered TLS policy and exact CA/client certificate/private-key files now
+delegate privately to native host utilities. Certificate-authenticated recovery
+admits separately reviewed host server TLS files and an isolated loopback port,
+including recurring startup drills. Native ARCHIVE, BLACKHOLE, self-contained
+MRG_MYISAM and MEMORY definition/restart behavior join InnoDB/MyISAM/CSV
+admission. MEMORY volatile-row loss is disclosed; external MERGE member paths
+remain refused. The pinned utility's single password option is an upstream
+backend restriction; it does not remove existing MySQL MFA client support.
 Managed physical targets now support separately reviewed expected-dump acceptance
 through private-socket or TCP connections, with full counts, native checksums and
 exported-definition comparisons, including after native replay. Each receipt
