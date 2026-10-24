@@ -79,6 +79,38 @@ def test_missing_native_namespace_privilege_does_not_start_recovery(monkeypatch)
     assert len(observed)==1 and all('mysqld' not in part for part in observed[0])
 
 
+def test_missing_alias_review_selects_private_projection_without_creating_original_paths(tmp_path,monkeypatch):
+    workspace=tmp_path/'private';workspace.mkdir();source=tmp_path/'lost-data';external=tmp_path/'lost-external'
+    probes=[]
+    monkeypatch.setattr(paths,'capability',lambda **options:probes.append(options) or {'backend':'native-probe'})
+    request={'phase':'recover','workspace':str(workspace),'binding':{'datadir':str(source)},'isolate_external_paths':True}
+    entry={'file_name':str(external/'schema/table.ibd'),'tablespace_name':'schema/table','tablespace_type':'TABLESPACE'}
+    value=paths.admission(request,[entry])
+    assert set(value['missing_alias_directories'])=={str(source),str(external)}
+    assert probes==[{'projection':True,'root_projection':False}]
+    assert not source.exists() and not external.exists()
+
+
+def test_missing_top_level_alias_review_checks_private_root_switch_capability(tmp_path,monkeypatch):
+    import uuid
+    source='/native-missing-'+str(uuid.uuid4());external='/external-missing-'+str(uuid.uuid4());probes=[]
+    monkeypatch.setattr(paths,'capability',lambda **options:probes.append(options) or {'backend':'native-probe'})
+    request={'phase':'recover','workspace':str(tmp_path),'binding':{'datadir':source},'isolate_external_paths':True}
+    value=paths.admission(request,[{'file_name':external+'/schema/table.ibd','tablespace_name':'schema/table','tablespace_type':'TABLESPACE'}])
+    assert probes==[{'projection':True,'root_projection':True}]
+    assert set(value['missing_alias_directories'])=={source,external}
+    assert not Path(source).exists() and not Path(external).exists()
+
+
+def test_cancelled_projection_creates_no_placeholders_or_mounts(tmp_path):
+    from unittest.mock import Mock
+    job=tmp_path/'job';job.mkdir();cancel=job/'cancel';cancel.write_text('requested')
+    native=Mock()
+    with pytest.raises(InterruptedError):paths.project_parent(native,tmp_path,tmp_path,0,cancel,directory=job)
+    native.mount.assert_not_called();native.syscall.assert_not_called()
+    assert not (job/'namespace-projections').exists()
+
+
 def test_independent_observer_requires_private_namespace_exact_directory_and_readonly_host(tmp_path,monkeypatch):
     proc=tmp_path/'proc-root'/'123';ns=proc/'ns';ns.mkdir(parents=True);(ns/'mnt').symlink_to('mnt:[private]')
     root=proc/'root';root.mkdir();private=tmp_path/'private';private.mkdir();(root/'alias').symlink_to(private,target_is_directory=True)

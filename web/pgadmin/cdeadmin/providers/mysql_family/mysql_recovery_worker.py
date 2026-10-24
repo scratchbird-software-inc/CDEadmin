@@ -164,10 +164,20 @@ def inspection(request):
 def birth(pid, program):
     path = Path('/proc') / str(pid)
     fields = (path / 'stat').read_text().rpartition(')')[2].split()
-    if str((path / 'exe').resolve(strict=True)) != program['path'] or host.file_hash(path / 'exe') != program['sha256']:
+    with host.regular_stream(path/'exe') as stream:
+        info=os.fstat(stream.fileno());checksum=physical.hashlib.sha256()
+        while data:=stream.read(1024*1024):checksum.update(data)
+    if checksum.hexdigest() != program['sha256']:
         raise Refused('The native recovery process executable differs from its review')
+    current=(path/'stat').read_text().rpartition(')')[2].split()
+    if current[19]!=fields[19] or current[0]=='Z':
+        raise FileNotFoundError('Original native process ended during observation')
+    image=(path/'exe').stat()
+    if (image.st_dev,image.st_ino)!=(info.st_dev,info.st_ino):
+        raise Refused('The native recovery process changed its executing image during observation')
     return {'pid': pid, 'start_ticks': fields[19], 'boot_id': Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
-        'executable': program, 'uid': path.stat().st_uid}
+        'executable': program, 'uid': path.stat().st_uid,
+        'executable_file':{'device':str(info.st_dev),'inode':str(info.st_ino)}}
 
 
 def present(value):
@@ -177,7 +187,9 @@ def present(value):
     try:
         fields = (path / 'stat').read_text().rpartition(')')[2].split()
         if fields[19] != value['start_ticks'] or fields[0] == 'Z': return False
-        if birth(value['pid'], value['executable']) != value:
+        current=birth(value['pid'],value['executable'])
+        if (any(current[key]!=value[key] for key in ('pid','start_ticks','boot_id','executable','uid')) or
+                'executable_file' in value and current['executable_file']!=value['executable_file']):
             raise Refused('Original recovery process association is uncertain')
         return True
     except FileNotFoundError: return False
@@ -335,7 +347,7 @@ def execute(directory):
         if (directory/'cancel').exists(): raise InterruptedError('Recovery cancelled before native dispatch')
         option_file = physical.client_options(request,directory)
         if aliases is not None:
-            value['filesystem_isolation']=physical.paths_module().activate(Path(observed['workspace']),aliases)
+            value['filesystem_isolation']=physical.paths_module().activate(Path(observed['workspace']),aliases,directory=directory)
             save()
         value['native_may_have_dispatched'] = True; save()
         with (directory/'stdout').open('xb') as stdout, (directory/'stderr').open('xb') as stderr:

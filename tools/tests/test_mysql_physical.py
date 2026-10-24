@@ -175,3 +175,25 @@ def test_reused_process_birth_cannot_receive_a_recovery_stop_signal(tmp_path):
         assert not recovery.present(process)
     finally:
         if child.poll() is None:child.kill();child.wait(timeout=10)
+
+
+def test_original_running_image_remains_observable_and_stoppable_after_its_path_is_replaced(tmp_path):
+    import os,shutil,subprocess,sys
+    if not sys.platform.startswith('linux'):pytest.skip('Native Linux executable descriptors')
+    from pgadmin.cdeadmin.providers.mysql_family import mysql_recovery_worker as recovery
+    executable=tmp_path/'owned-native-sleep';shutil.copy2(shutil.which('sleep'),executable)
+    program={'path':str(executable),'sha256':worker.host.file_hash(executable)}
+    child=subprocess.Popen([str(executable),'60'])
+    try:
+        original=recovery.birth(child.pid,program)
+        assert recovery.present(original)
+        executable.unlink();executable.write_bytes(b'new host path; original running image is retained by the kernel')
+        assert child.poll() is None
+        assert recovery.present(original)
+        legacy={key:value for key,value in original.items() if key!='executable_file'}
+        assert recovery.present(legacy)
+        assert recovery.stop(original)
+        child.wait(timeout=10)
+        assert not recovery.present(original)
+    finally:
+        if child.poll() is None:child.kill();child.wait(timeout=10)

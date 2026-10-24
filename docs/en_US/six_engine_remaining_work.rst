@@ -769,5 +769,10 @@ process sees a read-only host and writable private data/workspace. Independent
 namespace, directory and mount observations protect editor admission while
 preserving original-process cancellation. Encrypted incremental recovery,
 external DDL, literal child paths and recurring drills share that admission.
-External system/undo geometry, MERGE members, missing original aliases and the
+Missing original alias directories now use complete private parent projections,
+including a separately probed private root switch for missing top-level paths.
+The source SQL server can be offline; original directories remain absent in the
+base namespace. Executing-file identity survives replacement of its pathname,
+preserving independent original-process observation and cancellation.
+External system/undo geometry, MERGE members and the
 remaining inventory/system-state/guardian/cutover work still precede handoff.

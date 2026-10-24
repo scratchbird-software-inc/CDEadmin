@@ -14,13 +14,14 @@ sys.path[:0] = [str(ROOT), str(ROOT/'web'), str(ROOT/'tools')]
 BACKEND = 'percona/percona-xtrabackup@sha256:580747a61714d1884040794fc8a144179f5e3fe6ae839701d8958fe73a4e5e2b'
 
 
-def prepare_fixture(output, image, *, keyring=False, external=False):
+def prepare_fixture(output, image, *, keyring=False, external=False, missing_paths=None):
     build = output/'fixture-build'; build.mkdir()
     key = build/'private-key'
     subprocess.run(['ssh-keygen','-q','-t','ed25519','-N','','-f',str(key)],check=True)
     context = build/'context'; context.mkdir()
     (context/'authorized_keys').write_bytes(key.with_suffix('.pub').read_bytes())
-    (context/'start.sh').write_text('#!/bin/bash\nset -e\n/usr/sbin/sshd -D >/tmp/physical-sshd.log 2>&1 &\nexec /usr/local/bin/docker-entrypoint.sh "$@"\n')
+    (context/'start.sh').write_text('#!/bin/bash\nset -e\n/usr/sbin/sshd -D >/tmp/physical-sshd.log 2>&1 &\n'+
+        ('/usr/local/bin/docker-entrypoint.sh "$@" &\ndatabase=$!\nwait "$database" || true\nexec /bin/sleep infinity\n' if missing_paths else 'exec /usr/local/bin/docker-entrypoint.sh "$@"\n'))
     (context/'Dockerfile').write_text('FROM '+BACKEND+' AS pxb\nFROM mysql:9.7.0\nUSER root\n'
         'RUN microdnf install -y python3 openssh-server procps-ng && microdnf clean all && ssh-keygen -A && mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh\n'
         'COPY --from=pxb /usr/bin/xtrabackup /usr/bin/xtrabackup\nCOPY --from=pxb /usr/lib/private /usr/lib/private\n'
@@ -29,6 +30,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False):
          "printf '%s' '{\"components\":\"file://component_keyring_file\"}' > /usr/sbin/mysqld.my && "
          "printf '%s' '{\"path\":\"/var/lib/mysql-keyring/keyring\",\"read_only\":false}' > /usr/lib64/mysql/plugin/component_keyring_file.cnf\n" if keyring else '')+
         ('RUN mkdir -p /var/lib/mysql-external && chown mysql:mysql /var/lib/mysql-external\n' if external else '')+
+        ('RUN mkdir -p /sr-source225/mysql /sr-external225 && chown -R mysql:mysql /sr-source225 /sr-external225\n' if missing_paths=='root' else '')+
         'COPY authorized_keys /root/.ssh/authorized_keys\n'
         'RUN chmod 600 /root/.ssh/authorized_keys && printf "%s\\n" "PermitRootLogin prohibit-password" "PasswordAuthentication no" "UsePAM no" "PrintMotd no" > /etc/ssh/sshd_config.d/physical-fixture.conf && xtrabackup --version\n'
         'COPY start.sh /opt/physical-start.sh\nENTRYPOINT ["/bin/bash","/opt/physical-start.sh"]\nCMD ["mysqld"]\n')
@@ -37,7 +39,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False):
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -72,17 +74,27 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
     names = []; volume = 'sr-physical-'+secrets.token_hex(8); root = None; app = None
     data_volumes = []
     try:
-        key = prepare_fixture(output,image,keyring=keyring_only or external_only,external=external_only) if prepare else Path(key).resolve(strict=True)
+        if missing_paths not in {None,'parent','root'}:raise ValueError('Select parent or root missing paths')
+        encrypted=keyring_only or external_only or bool(missing_paths)
+        external_root='/sr-external225' if missing_paths=='root' else '/var/lib/mysql-external'
+        datadir='/sr-source225/mysql' if missing_paths=='root' else '/var/lib/mysql'
+        key = prepare_fixture(output,image,keyring=encrypted,external=external_only or bool(missing_paths),missing_paths=missing_paths) if prepare else Path(key).resolve(strict=True)
         proof['fixture_image'] = _image_identity(image)
         _run(['docker','volume','create',volume])
+        source_mounts=[]
+        if missing_paths:
+            for suffix,destination in (('data','/sr-source225' if missing_paths=='root' else datadir),('external',external_root),('keyring','/var/lib/mysql-keyring')):
+                owned_volume=volume+'-'+suffix;_run(['docker','volume','create',owned_volume]);data_volumes.append(owned_volume)
+                source_mounts+=['-v',owned_volume+':'+destination]
         name = volume+'-source'; names.append(name)
-        _run(['docker','run','--rm','-d',*(['--cap-add=SYS_ADMIN'] if external_only else []),'--name',name,'--hostname',name,'-v',volume+':/var/backups/scratchrobin',
+        _run(['docker','run','--rm','-d',*(['--cap-add=SYS_ADMIN'] if external_only or missing_paths else []),'--name',name,'--hostname',name,'-v',volume+':/var/backups/scratchrobin',*source_mounts,
             '-e','MYSQL_ALLOW_EMPTY_PASSWORD=yes','-p','127.0.0.1::3306','-p','127.0.0.1::22',image,
             'mysqld','--server-id=101','--gtid-mode=ON','--enforce-gtid-consistency=ON','--log-bin=physical']+
-            (['--innodb-redo-log-encrypt=ON','--innodb-undo-log-encrypt=ON','--binlog-encryption=ON'] if keyring_only or external_only else [])+
-            (['--innodb-directories=/var/lib/mysql-external'] if external_only else []))
+            (['--innodb-redo-log-encrypt=ON','--innodb-undo-log-encrypt=ON','--binlog-encryption=ON'] if encrypted else [])+
+            (['--innodb-directories='+external_root] if external_only or missing_paths else [])+
+            (['--datadir='+datadir] if missing_paths else []))
         mounts=json.loads(_run(['docker','inspect','--format','{{json .Mounts}}',name]).stdout)
-        data_volumes=[m['Name'] for m in mounts if m['Type']=='volume' and m['Destination']=='/var/lib/mysql']
+        data_volumes=list(dict.fromkeys(data_volumes+[m['Name'] for m in mounts if m['Type']=='volume' and m['Destination']!='/var/backups/scratchrobin']))
         proof['owned_source_data_volumes']=data_volumes
         port = _wait_until_ready('mysql',name,300); ssh = _published_port(_run(['docker','port',name,'22/tcp']).stdout)
         host_key = _run(['docker','exec',name,'cat','/etc/ssh/ssh_host_ed25519_key.pub']).stdout.strip()
@@ -107,11 +119,14 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             config.CDEADMIN_MYSQL_PHYSICAL_WORKER_ACTIVE_KEY_ID='owned-fixture'
             config.CDEADMIN_MYSQL_RETENTION_POLL_SECONDS=.1
         app = setup_application(output)
-        if incremental_only or tls_only or keyring_only or external_only:
+        if incremental_only or tls_only or keyring_only or external_only or missing_paths:
             selected={'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
                 'workspace':'/var/backups/scratchrobin/jobs','executable':'/usr/bin/xtrabackup','mysql':'/usr/bin/mysql',
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
-            if keyring_only or external_only:
+            if missing_paths:
+                from cdeadmin_mysql_physical_missing_qualification import qualify_missing
+                proof['physical_missing_paths']=qualify_missing(app,output,root,name,port,password,selected,{'private_key':key.read_text()},missing_paths,datadir,external_root)
+            elif keyring_only or external_only:
                 from cdeadmin_mysql_physical_keyring_qualification import qualify_keyring
                 proof['physical_keyring']=qualify_keyring(app,output,root,name,port,password,selected,{'private_key':key.read_text()},browser_binary,driver_binary,external=external_only,desktop_only=keyring_desktop_only)
             elif tls_only:
@@ -362,6 +377,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
         remaining=_run(['docker','ps','-aq','--filter','name='+volume],check=False)
         proof['owned_servers_stopped']=remaining.returncode==0 and not remaining.stdout.strip()
         _run(['docker','volume','rm',volume],check=False)
+        for owned_volume in data_volumes:_run(['docker','volume','rm',owned_volume],check=False)
         volumes=_run(['docker','volume','ls','-q','--filter','name='+volume],check=False)
         proof['owned_physical_volume_removed']=volumes.returncode==0 and volume not in volumes.stdout.splitlines()
         known=_run(['docker','volume','ls','-q'],check=False)

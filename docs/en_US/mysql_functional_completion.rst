@@ -2090,7 +2090,13 @@ literal child path names preserve source bytes. Actual process namespace and
 directory/mount facts gate editor admission; uncertain facts retain independent
 original-process cancellation and unknown database outcomes. Recurring drills
 and physical retention cover the same private external files. The backend
-requires admitted Linux64 mount privileges and existing original alias
-directories. External system/undo geometry, MERGE members, missing aliases and
+requires admitted Linux64 mount privileges. Missing original alias directories
+now use complete private parent projections; absent top-level paths additionally
+require a separately probed private root switch. No original host directories
+are created. Native encrypted SQL recovery with the source server offline uses
+the same directory aliases and private keyrings. The original process remains
+observable and stoppable after executable pathname replacement because its
+actual executing image and birth identify it. External system/undo geometry,
+MERGE members and
 the broader recovery/inventory gates remain open; absolute system geometry is
 refused before native copy-back. See :doc:`mysql_physical_backups`.

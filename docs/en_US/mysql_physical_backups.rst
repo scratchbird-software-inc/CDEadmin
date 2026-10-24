@@ -730,8 +730,13 @@ recovered instance. No network fallback is permitted.
 The selected Linux64 SSH account must possess mount-namespace and
 ``mount_setattr`` privileges. Recovery admission tests that capability in a
 separate process; a refusal starts no recovery server. Original alias directories
-must exist and remain separate from the private workspace. The independent
-observer verifies the native process's actual namespace, directory identities
+remain separate from the private workspace. Missing original directories are
+reconstructed inside the recovery process's private mount namespace. A complete
+private parent projection preserves existing siblings and runtime paths before
+the missing directory is created; no placeholder is created on the source host.
+Top-level missing paths use a private root switch and require its separately
+probed OS privilege. The independent observer verifies the native process's
+actual namespace, directory identities
 and host/workspace mount permissions before admitting an editor connection.
 Uncertain filesystem evidence blocks connections while preserving cancellation
 of the independently identified original native process. Lost native replies
@@ -746,10 +751,33 @@ immutable backup inputs remain unchanged. Manual, batch and scheduled retention
 include private external runtime files and interrupted copy-back input copies.
 
 This admission covers InnoDB per-table external data and general tablespaces.
-External system/undo geometry, external MERGE members, missing original alias
-directories, broader engine inventory, system-state acceptance, legacy/guardian
+External system/undo geometry, external MERGE members,
+broader engine inventory, system-state acceptance, legacy/guardian
 resolution and production cutover remain tracked recovery work. Unsupported
 absolute system geometry refuses before native copy-back. It is not treated as
 an ordinary table path or as a successful restore. Native qualification is
 ``tools/cdeadmin_mysql_physical_keyring_qualification.py --external``; use
 ``--desktop-only`` with browser/driver paths for the built desktop workflow.
+
+Missing original directories
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The native recovery worker can start from a retained copy-back after the source
+SQL server has stopped and its original datadir, external directories and
+keyring path have disappeared. A private parent projection preserves existing
+sibling entries and makes only the reviewed original aliases writable. Both
+the directory projection and the native process namespace are independently
+observed before an editor connection is admitted. The actual executing file's
+device, inode and hash supplement its boot/start identity, so replacing the
+executable pathname cannot falsely prove that the original process ended.
+Legacy process receipts still use their pinned executing image and birth facts.
+
+``tools/cdeadmin_mysql_physical_missing_qualification.py --missing-paths parent``
+and ``--missing-paths root`` exercise actual native encrypted recovery through
+both connector interfaces with the source SQL server offline. Owned source
+volumes remain mounted at separate hold paths for exact byte comparisons;
+original base-namespace aliases remain absent through native editor reads,
+writable external DDL, key rotation and independent process stop. The separate
+``tools/cdeadmin_mysql_namespace_qualification.py`` checks existing, missing
+parent, missing root and mixed missing roots using actual OS/process operations;
+its receipts alone do not constitute SQL recovery evidence.
