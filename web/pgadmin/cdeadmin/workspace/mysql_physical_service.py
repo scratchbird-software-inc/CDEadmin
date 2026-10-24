@@ -162,7 +162,7 @@ class PhysicalJobs(MySQLBinlogJobs):
         'The admitted backend is upstream XtraBackup9.7.1-rc1, a release candidate. Its original native replies, verified files and recovery acceptance are separate facts.',
         'Full backups take native backup/read locks and copy complete supported instance files. Prepare mutates a separate private copy. Copy-back creates only a new isolated job data directory; it never overwrites the live data directory or starts a database.',
         'Native processes run under an independent supervisor on the authenticated database SSH host. Closing the viewer or losing a reply does not cancel or roll back native work. An original unknown dispatch is never automatically repeated.',
-        'This workflow requires complete, uncompressed native backup files. Encrypted data/log recovery requires explicitly retained native file-keyring material and matching components. Incrementals require exact base lineage and contiguous LSNs; apply to separate redo-only copies, then finalize. Native system/undo and external tablespace paths require retained source metadata and reviewed Linux filesystem isolation. Relative homes/scan roots resolve from the native datadir and recovery uses the retained effective paths. Circular paths require retained filesystem resolution observed on the database host. Raw-device files, unmapped legacy layouts and external MERGE members require additional admission. Production cutover remains separate.',
+        'This workflow requires complete, uncompressed native backup files. Encrypted data/log recovery requires explicitly retained native file-keyring material and matching components. Incrementals require exact base lineage and contiguous LSNs; apply to separate redo-only copies, then finalize. Native system/undo and external tablespace paths require retained source metadata and reviewed Linux filesystem isolation. Relative homes/scan roots resolve from the native datadir and recovery uses the retained effective paths. Circular paths require retained filesystem resolution observed on the database host. Native MERGE children require complete MyISAM payload and retain original member metadata. Raw-device files and unmapped legacy storage layouts require additional admission. Production cutover remains separate.',
         'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account with a fresh UUID, private Unix socket and selected loopback TCP listener. Read-only inspection is the default. Explicit replay startup is writable with private ROW binary logging and the selected server ID. Both disable events/replication autostart and automatic upgrades, and end on stop or reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
         'Physical files and native output are private to the selected host OS account. Broad source archive protection is acquired before backup dispatch and is retired only by its separate reviewed protection workflow.',
         'Physical recovery preserves MEMORY table definitions; native MySQL discards their volatile rows on restart. Inspect the listed MEMORY tables and use the logical backup workflow when their current rows must be retained.',
@@ -171,7 +171,11 @@ class PhysicalJobs(MySQLBinlogJobs):
     def public(self, record):
         result = super().public(record)
         result['remote_review'] = deepcopy(record['source_state']['remote_review'])
-        result['host_binding'] = deepcopy(record['source_state']['host_binding'])
+        try:
+            result['host_binding']=original_binding(record)
+            result['host_binding_source']='source_capture' if record['source_state'].get('host_binding') else 'retained_original_host_review'
+        except native.HostError:
+            result['host_binding']=None;result['host_binding_unavailable']=True
         if 'sql_tls_policy' in record['source_state']:
             result['sql_tls_policy'] = deepcopy(record['source_state']['sql_tls_policy'])
         if 'storage_engine_counts' in record['source_state']:
@@ -213,12 +217,31 @@ def manager(service, server):
     return jobs, owner, endpoint
 
 
+def original_binding(record):
+    """Recover a missing duplicate from original facts, without contacting SQL."""
+    value=record['source_state'].get('host_binding')
+    if value is None:
+        observed=record['source_state'].get('remote_review',{}).get('host',{})
+        if not isinstance(observed,dict) or not {'server_uuid','hostname','datadir'}<=set(observed):
+            raise native.HostError('Original physical host binding is unavailable; preserve this receipt without guessing a replacement source')
+        value={key:observed[key] for key in ('server_uuid','hostname','datadir')}
+        if value['server_uuid']!=record['source'].get('server_uuid'):
+            raise native.HostError('Retained original physical host review differs from its source UUID')
+    if (not isinstance(value,dict) or set(value)!={'server_uuid','hostname','datadir'} or
+            any(not isinstance(item,str) or not item or '\0' in item or len(item)>32768 for item in value.values()) or
+            not PurePosixPath(value['datadir']).is_absolute()):
+        raise native.HostError('Original physical host binding is incompatible')
+    try:identity(value['server_uuid'])
+    except BinlogArchiveError:raise native.HostError('Original physical source UUID is incompatible') from None
+    return deepcopy(value)
+
+
 def remote_request(record, action):
     selected = record['options']
     return {'schema': 'cdeadmin.mysql-physical.v1', 'action': action,
         **{key: deepcopy(selected[key]) for key in ('workspace', 'executable', 'mysql', 'phase', 'sql_host', 'sql_port',
             'input_job_id', 'parallel', 'memory_bytes', 'timeout_seconds')},
-        'binding': deepcopy(record['source_state']['host_binding']), 'source_identity': deepcopy(record['source']),
+        'binding': original_binding(record), 'source_identity': deepcopy(record['source']),
         'reviewed': deepcopy(record['source_state']['remote_review']),
         'job_id': record['job_id'], 'input_digest': record['review_digest'],
         **({'sql_tls_policy': deepcopy(record['source_state']['sql_tls_policy'])} if 'sql_tls_policy' in record['source_state'] else {}),
@@ -342,7 +365,7 @@ def _action(service, server, operation, request, *, source_capture=None,database
     else:
         raise native.HostError('Native physical action is unavailable')
     configuration = digest(MySQLMonitoringHost._configuration(server))
-    if record and (record['configuration'] != configuration or
+    if record and operation=='start' and (record['configuration'] != configuration or
             any(record['program'].get(key) != value for key, value in native.program().items())):
         raise native.HostError('Physical registration or host adapter changed; preserve the original receipt and review new work separately')
     transport = native.Transport(selected['connection'], host.credentials(request['credentials']))
@@ -375,16 +398,17 @@ def _action(service, server, operation, request, *, source_capture=None,database
                     not (prior.get('remote_observation') or {}).get('restored_files' if selected['phase'] == 'recover' else 'artifact')):
                 raise native.HostError('Select an observed physical input in this owner/registration and pinned host workspace')
             if selected['phase']=='incremental':
-                if captured['identity']!=prior['source'] or captured['state']['host_binding']!=prior['source_state']['host_binding']:
+                if captured['identity']!=prior['source'] or captured['state']['host_binding']!=original_binding(prior):
                     raise native.HostError('The incremental source differs from its original base and principal')
             else:
                 captured = {'identity': deepcopy(prior['source']), 'state': {key: deepcopy(prior['source_state'][key])
                     for key in ('host_binding', 'source_connection_class') if key in prior['source_state']}}
+                captured['state']['host_binding']=original_binding(prior)
             if selected.get('incremental_job_id') is not None:
                 delta=jobs.load(selected['incremental_job_id'],owner,endpoint.id)
                 if (delta['options']['phase']!='incremental' or delta.get('artifact_removed') or delta.get('artifact_removal') or delta.get('retention_batch_id') or
                         delta.get('backup_workflow_protected') or not jobs.public(delta)['file_verification_confirmed'] or
-                        delta['source']!=prior['source'] or delta['source_state']['host_binding']!=prior['source_state']['host_binding'] or
+                        delta['source']!=prior['source'] or original_binding(delta)!=original_binding(prior) or
                         delta['options']['connection']!=selected['connection'] or delta['options']['workspace']!=selected['workspace']):
                     raise native.HostError('Select a verified incremental in this exact original source and host workspace')
         if selected['phase'] == 'recover':

@@ -2051,8 +2051,9 @@ and native startup drills after interactive credentials are erased.
 
 ARCHIVE, BLACKHOLE and self-contained MRG_MYISAM physical recovery join
 InnoDB/MyISAM/CSV. Native MEMORY definitions survive with empty-after-restart
-semantics; volatile source rows are disclosed. MERGE members escaping the
-private artifact remain refused until path mapping is implemented. The native
+semantics; volatile source rows are disclosed. MERGE member metadata now uses
+native final database/table identities, including absolute/escaping prefixes,
+with complete MyISAM child payload and original metadata bytes retained. The native
 qualification exercises both drivers, real hostname mismatch, policy tampering,
 incremental recovery, live/restored MERGE separation, recurring worker restart
 and the built desktop. The pinned XtraBackup backend exposes one password slot;
@@ -2113,6 +2114,22 @@ catalog spellings, including symbolic links followed by parent traversal.
 Private runtime paths and offline audit use the sealed canonical mapping;
 encrypted incrementals, recurring drills and missing parent/root recovery are
 qualified through both connectors. Raw-device files, duplicate flattened undo basenames, unmapped legacy
-layouts, external MERGE members and the broader recovery/inventory gates remain
+layouts and the broader recovery/inventory gates remain
 open. Unmapped geometry refuses before native preparation or copy-back.
 See :doc:`mysql_physical_backups`.
+
+Original physical recovery reconciliation and MERGE identities
+---------------------------------------------------------------
+
+Native MERGE absolute/escaping metadata prefixes now retain MySQL dictionary
+and table-cache child identities, with complete data/index payload. Full backup,
+preparation, copy-back and recovered reads/inserts preserve original metadata
+and keep the live source separate through both connectors.
+
+Physical reconciliation/output/original-process stop use the original pinned
+host after adapter or registration changes. A missing duplicated binding can
+use matching retained original host facts without rewriting the review. Actual
+preceding-adapter supervisors, supervisor loss, source SQL shutdown, changed
+registration generations and rejected conflicting source UUIDs are exercised.
+Original unknown outcomes remain unknown after independent process-end evidence.
+Wider utility/guardian recovery, inventory/system-state and cutover remain open.

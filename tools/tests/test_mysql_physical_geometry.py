@@ -250,3 +250,25 @@ def test_runtime_uses_retained_system_identities_after_original_traversal_dirs_d
     assert '--innodb-undo-directory='+value['undo_home'] in args
     assert '--innodb-data-file-path='+str(tmp_path/'system/deep/leaf/first')+':12M;'+str(tmp_path/'system/deep/leaf/second')+':12M:autoextend' in args
     assert all('..' not in Path(row['source_root']).parts for row in aliases)
+
+
+def test_native_null_default_homes_and_scan_roots_do_not_require_a_synthetic_mapping():
+    request=source();request['source_storage']['variables'].update(innodb_data_home_dir=None,
+        innodb_data_file_path='ibdata1:12M:autoextend',innodb_undo_directory=None,innodb_directories=None)
+    request['source_storage']['files']=[{'file_name':'./ibdata1','tablespace_name':'innodb_system','file_type':'TABLESPACE'},
+        {'file_name':'./undo_001','tablespace_name':'innodb_undo_001','file_type':'UNDO LOG'},
+        {'file_name':'./undo_002','tablespace_name':'innodb_undo_002','file_type':'UNDO LOG'}]
+    assert geometry.from_source(request) is None
+    assert request['source_storage']['variables']['innodb_directories'] is None
+
+
+def test_retained_external_storage_preserves_null_defaults_and_native_effective_undo_home(tmp_path):
+    request=source();request['source_storage']['variables'].update(innodb_data_home_dir=None,
+        innodb_undo_directory=None,innodb_directories=None)
+    directory=tmp_path/'artifact';directory.mkdir()
+    (directory/'backup-my.cnf').write_text('[mysqld]\ninnodb_data_file_path=/system/first:12M;/system/second:12M:autoextend\ninnodb_undo_directory=./\n')
+    value=geometry.capture(request,directory)
+    assert value['variables']['innodb_data_home_dir'] is None and value['variables']['innodb_undo_directory'] is None
+    assert value['undo_home']=='/original/data' and value['scan_directories']==[]
+    assert geometry.audit(directory)==value
+    assert recovery.configuration(directory/'backup-my.cnf',mapped_storage=value)['innodb_data_file_path']==value['variables']['innodb_data_file_path']

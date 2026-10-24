@@ -40,8 +40,21 @@ def absolute(value,base=None,*,resolve=None):
 
 
 def home(value,datadir,*,resolve=None):
-    if value in {'','.', './'}:return datadir
+    if value in {None,'','.', './'}:return datadir
     return absolute(value,datadir,resolve=resolve)
+
+
+def observed_resolution(raw,paths):
+    effective=paths.get(raw)
+    if not isinstance(effective,str) or not PurePosixPath(effective).is_absolute() or absolute(effective)!=effective:
+        raise Refused('Retained native filesystem resolution is missing or incompatible')
+    return effective
+
+
+def configuration_matches(native,value):
+    return (native.get('innodb_data_file_path')==value['variables']['innodb_data_file_path'] and
+        home(native.get('innodb_undo_directory','./'),value['original_datadir'],
+            resolve=lambda raw:observed_resolution(raw,value.get('resolved_paths',{})))==value['undo_home'])
 
 
 def configuration(directory):
@@ -71,7 +84,9 @@ def from_source(request,*,filesystem=False,observed_paths=None):
     if not isinstance(source,dict) or set(source)!={'variables','files'}:
         raise Refused('Select exact native storage variables and file identities')
     values=source['variables'];files=source['files'];datadir=absolute(request['binding']['datadir'])
-    if not isinstance(values,dict) or set(values)!=VARIABLES or any(not isinstance(v,str) or len(v)>65536 for v in values.values()):
+    if not isinstance(values,dict) or set(values)!=VARIABLES or any(
+            v is None and key=='innodb_data_file_path' or v is not None and (not isinstance(v,str) or len(v)>65536)
+            for key,v in values.items()):
         raise Refused('Native storage variables are unavailable')
     if not isinstance(files,list) or len(files)>4096:raise Refused('Native storage file inventory exceeds its bound')
     resolved={}
@@ -82,9 +97,7 @@ def from_source(request,*,filesystem=False,observed_paths=None):
             try:effective=str(Path(raw).resolve(strict=True))
             except (OSError,RuntimeError):raise Refused('Native storage filesystem resolution is unavailable') from None
         elif observed_paths is not None:
-            effective=observed_paths.get(raw)
-            if not isinstance(effective,str) or not PurePosixPath(effective).is_absolute() or absolute(effective)!=effective:
-                raise Refused('Retained native filesystem resolution is missing or incompatible')
+            effective=observed_resolution(raw,observed_paths)
         else:raise ResolutionRequired('Circular native storage paths require separately observed filesystem resolution')
         resolved[raw]=effective
         return effective
@@ -109,7 +122,7 @@ def from_source(request,*,filesystem=False,observed_paths=None):
         raise Refused('Native system-file specification differs from its observed catalog')
     if len({row['backup_name'] for row in undo})!=len(undo):raise Refused('Native flattened undo-file identities are ambiguous')
     directories=[]
-    for value in values['innodb_directories'].split(';'):
+    for value in (values['innodb_directories'] or '').split(';'):
         if not value:continue
         directory=absolute(value,datadir,resolve=resolve)
         if directory not in directories:directories.append(directory)
@@ -132,7 +145,7 @@ def capture(request,directory,*,reviewed=None):
         raise Refused('Native filesystem storage paths changed after their reviewed capture')
     if value is None:return None
     native=configuration(directory)
-    if native.get('innodb_data_file_path')!=value['variables']['innodb_data_file_path'] or native.get('innodb_undo_directory','./')!=value['variables']['innodb_undo_directory']:
+    if not configuration_matches(native,value):
         raise Refused('Native checkpoint storage geometry changed after its reviewed source capture')
     physical.host.save(directory/FILE,value)
     return audit(directory)
@@ -154,7 +167,7 @@ def audit(directory):
     expected=from_source({'binding':{'datadir':value['original_datadir']},'source_storage':{'variables':value['variables'],'files':files},'isolate_external_paths':True},observed_paths=value.get('resolved_paths'))
     if expected!=value:raise Refused('Retained native storage paths differ from their original catalog/specification')
     native=configuration(directory)
-    if native.get('innodb_data_file_path')!=value['variables']['innodb_data_file_path'] or native.get('innodb_undo_directory','./')!=value['variables']['innodb_undo_directory']:
+    if not configuration_matches(native,value):
         raise Refused('Retained native storage differs from its backup configuration')
     expected={row['backup_name'] for row in value['undo_files']}
     observed=set()

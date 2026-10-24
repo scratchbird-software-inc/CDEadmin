@@ -42,7 +42,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False,circular_storage=False):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False,circular_storage=False,reconciliation_only=False,legacy_sources=None):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -102,7 +102,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             storage['data_file_spec']=('system one 雪:12M;system.two:12M:autoextend' if storage['data_home'] else
                 storage['system_files'][0]+':12M;'+storage['system_files'][1]+':12M:autoextend')
         if storage:storage['runtime_data_file_spec']=';'.join(path+suffix for path,suffix in zip(storage['system_files'],(':12M',':12M:autoextend'))) if circular_storage else storage['data_file_spec']
-        key = prepare_fixture(output,image,keyring=encrypted,external=external_only or bool(missing_paths),missing_paths=missing_paths,storage=storage) if prepare else Path(key).resolve(strict=True)
+        key = prepare_fixture(output,image,keyring=encrypted,external=external_only or bool(missing_paths),missing_paths=missing_paths or ('parent' if reconciliation_only else None),storage=storage) if prepare else Path(key).resolve(strict=True)
         proof['fixture_image'] = _image_identity(image)
         _run(['docker','volume','create',volume])
         source_mounts=[]
@@ -147,11 +147,14 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             config.CDEADMIN_MYSQL_PHYSICAL_WORKER_ACTIVE_KEY_ID='owned-fixture'
             config.CDEADMIN_MYSQL_RETENTION_POLL_SECONDS=.1
         app = setup_application(output)
-        if incremental_only or tls_only or keyring_only or external_only or missing_paths:
+        if incremental_only or tls_only or keyring_only or external_only or missing_paths or reconciliation_only:
             selected={'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
                 'workspace':'/var/backups/scratchrobin/jobs','executable':'/usr/bin/xtrabackup','mysql':'/usr/bin/mysql',
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
-            if missing_paths:
+            if reconciliation_only:
+                from cdeadmin_mysql_physical_reconciliation_qualification import qualify_reconciliation
+                proof['physical_reconciliation']=qualify_reconciliation(app,output,root,name,port,password,selected,{'private_key':key.read_text()},legacy_sources)
+            elif missing_paths:
                 from cdeadmin_mysql_physical_missing_qualification import qualify_missing
                 proof['physical_missing_paths']=qualify_missing(app,output,root,name,port,password,selected,{'private_key':key.read_text()},missing_paths,datadir,external_root,storage=storage)
             elif keyring_only or external_only:

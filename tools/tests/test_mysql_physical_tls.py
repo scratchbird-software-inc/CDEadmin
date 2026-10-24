@@ -32,7 +32,7 @@ def test_registered_tls_policy_binds_exact_bytes_without_exposing_private_materi
         assert encoded not in json.dumps(tls['policy']) and route[name] not in json.dumps(tls['policy'])
     record={'options':dict(workspace='/jobs',executable='/xb',mysql='/mysql',phase='backup',sql_host='db.example',sql_port=3306,
         input_job_id=None,parallel=1,memory_bytes=67108864,timeout_seconds=60),'source':{},
-        'source_state':{'host_binding':{},'remote_review':{},'sql_tls_policy':tls['policy']},'job_id':'job','review_digest':'review'}
+        'source_state':{'host_binding':{'server_uuid':'00000000-0000-4000-8000-000000000230','hostname':'db.example','datadir':'/mysql'},'remote_review':{},'sql_tls_policy':tls['policy']},'job_id':'job','review_digest':'review'}
     request=physical.remote_request(record,'inspect')
     assert request['sql_tls_policy']==tls['policy'] and 'private original' not in json.dumps(request)
 
@@ -101,11 +101,30 @@ def test_scheduled_tls_delegation_preserves_private_copy_and_excludes_unscoped_c
     with pytest.raises(physical.native.HostError):host.validate_credentials({**secret,'database':{**secret['database'],'unscoped':'secret'}})
 
 
-@pytest.mark.parametrize('member',['m','../other/m','/live/source/m','../../live/m','C:\\live\\m'])
-def test_merge_member_paths_cannot_escape_the_private_native_artifact(tmp_path,member):
+@pytest.mark.parametrize('member,identity',[
+    ('m','schema/m'),('./m','schema/m'),('../other/m','other/m'),('./other/m','other/m'),
+    ('/live/source/m','source/m'),('../../live/m','live/m'),('/old/root/other/m','other/m')])
+def test_merge_children_use_native_final_database_table_identity_and_preserve_metadata(tmp_path,member,identity):
     from test_mysql_physical import artifact
     directory=tmp_path/'base';artifact(directory);schema=directory/'schema';schema.mkdir()
+    body=member+'\n#INSERT_METHOD=LAST\n';(schema/'combined.MRG').write_text(body)
+    child=directory/identity;child.parent.mkdir(exist_ok=True)
+    for suffix in ('.MYD','.MYI'):child.with_name(child.name+suffix).write_bytes(b'owned native MyISAM payload')
+    result=worker.artifact(directory)
+    expected=[{'metadata_file':'schema/combined.MRG','native_member':member,'table_file_identity':identity}]
+    assert worker.merge_members(directory,worker.manifest(directory))==expected
+    if member.startswith(('/','../../')):assert result['merge_members']==expected
+    else:assert 'merge_members' not in result  # Preserve sealed pre-upgrade receipt shape.
+    assert (schema/'combined.MRG').read_text()==body
+
+
+@pytest.mark.parametrize('fault',['missing-data','missing-index','backslash','nul','missing-database','oversized'])
+def test_unusable_merge_child_metadata_or_missing_payload_cannot_be_verified(tmp_path,fault):
+    from test_mysql_physical import artifact
+    directory=tmp_path/'base';artifact(directory);schema=directory/'schema';schema.mkdir()
+    member={'backslash':'C:\\live\\m','nul':'m\0','missing-database':'/m','oversized':'x'*511}.get(fault,'m')
     (schema/'combined.MRG').write_text(member+'\n#INSERT_METHOD=LAST\n')
-    if member in {'m','../other/m'}:assert worker.artifact(directory)['format']=='xtrabackup-9.7-full'
-    else:
-        with pytest.raises(worker.Refused,match='External MERGE'):worker.artifact(directory)
+    for suffix in ('.MYD','.MYI'):
+        if suffix==('.MYD' if fault=='missing-data' else '.MYI' if fault=='missing-index' else ''):continue
+        (schema/('m'+suffix)).write_bytes(b'owned native payload')
+    with pytest.raises(worker.Refused,match='MERGE'):worker.artifact(directory)

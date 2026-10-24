@@ -167,7 +167,7 @@ def action(service,server,operation,request):
                 if binding['server_uuid']!=current['server_uuid']:raise physical.native.HostError('Recovery registration refers to another native instance')
             connections.update(ticket,target_server_id=target.id,target_endpoint_id=target.endpoint_profile.id)
             stream={'schema':'cdeadmin.mysql-recovery-stream.v1','workspace':job['options']['workspace'],
-                'job_id':job['job_id'],'input_digest':job['review_digest'],'binding':deepcopy(job['source_state']['host_binding']),
+                'job_id':job['job_id'],'input_digest':job['review_digest'],'binding':physical.original_binding(job),
                 'expected':{key:deepcopy(current[key]) for key in ('server_uuid','datadir','runtime_process')}}
             def attach():
                 nonlocal retained,installed

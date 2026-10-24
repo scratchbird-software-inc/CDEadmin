@@ -136,8 +136,11 @@ inheritance remains with the platform team. Original utility inspection and
 cancellation no longer require the SQL relay; confirmed termination can release
 the exact recorded owner/endpoint/recovery reservation before reviewed
 reattachment. Unknown database outcomes/fences persist until fresh SQL facts and
-explicit acknowledgement. Legacy missing-binding receipts, missing/failed
-guardians and wider lifecycle reconciliation remain open, alongside
+explicit acknowledgement. Original physical recovery control now survives
+adapter/registration changes and missing duplicated bindings when retained
+original host/source facts match. Native supervisor loss and source-offline
+original-process stop preserve unknown outcomes. Other missing/failed guardians
+and wider lifecycle reconciliation remain open, alongside
 external-table-space support and production cutover. Native
 incremental capture and private redo-only apply/final preparation now preserve
 exact full-backup lineage, contiguous LSNs and both immutable input dependencies.
@@ -148,8 +151,9 @@ delegate privately to native host utilities. Certificate-authenticated recovery
 admits separately reviewed host server TLS files and an isolated loopback port,
 including recurring startup drills. Native ARCHIVE, BLACKHOLE, self-contained
 MRG_MYISAM and MEMORY definition/restart behavior join InnoDB/MyISAM/CSV
-admission. MEMORY volatile-row loss is disclosed; external MERGE member paths
-remain refused. The pinned utility's single password option is an upstream
+admission. MEMORY volatile-row loss is disclosed. MERGE member paths now follow
+the native final database/table identity, including absolute/escaping prefixes,
+with original metadata and complete MyISAM child payload retained. The pinned utility's single password option is an upstream
 backend restriction; it does not remove existing MySQL MFA client support.
 Explicit GPL file-keyring retention now supports native encrypted full and
 incremental chains, stable private transition keys and source master-key
@@ -182,7 +186,7 @@ links followed by parent traversal. Original catalog spellings survive offline
 audit; private runtime options use canonical identities. Native encrypted
 incrementals, recurring drills and source-offline recovery qualify this mapping
 through both connectors. Raw-device files, unmapped legacy layouts,
-duplicate flattened undo basenames and external MERGE members remain open alongside system-state,
+duplicate flattened undo basenames remain open alongside system-state,
 guardian, cutover and broader inventory requirements.
 Managed physical targets now support separately reviewed expected-dump acceptance
 through private-socket or TCP connections, with full counts, native checksums and

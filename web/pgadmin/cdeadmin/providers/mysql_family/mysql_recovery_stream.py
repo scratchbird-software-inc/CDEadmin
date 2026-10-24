@@ -65,8 +65,9 @@ def open_socket(request):
     directory = root/physical.job_id(request['job_id'])
     record = physical.read_json(directory/'result.json')
     original = physical.read_json(directory/'request.json')
-    if (record.get('input_digest') != request['input_digest'] or original.get('binding') != request['binding'] or
-            original.get('phase') != 'recover' or original.get('workspace') != str(root)):
+    original_binding=physical.host_scope(original)
+    if (record.get('input_digest') != request['input_digest'] or original_binding != binding or
+            original.get('phase') != 'recover' or physical.root_directory(original['workspace'],original_binding) != root):
         raise Refused('Native recovery stream belongs to another reviewed instance')
     observed = recovery.observe(directory,record,'status')
     expected = request['expected']

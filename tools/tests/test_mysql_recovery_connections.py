@@ -216,6 +216,39 @@ def test_private_socket_identity_uses_original_kernel_listener_and_refuses_symli
         assert not stream.unix_listener_owned(os.getpid(),path)
 
 
+@pytest.mark.parametrize('fault',[None,'source-uuid','hostname','datadir'])
+def test_stream_uses_original_native_identity_with_equivalent_retained_path_spellings(fault):
+    import os,sys,tempfile,uuid
+    from pathlib import Path
+    if not sys.platform.startswith('linux'):pytest.skip('Native Linux process and Unix socket identity')
+    with tempfile.TemporaryDirectory(prefix='cde-stream-',dir='/tmp') as private:
+        root=Path(private)/'jobs';root.mkdir(mode=0o700);job=str(uuid.uuid4());directory=root/job;directory.mkdir(mode=0o700)
+        path=directory/'runtime.sock';source=str(uuid.uuid4());data=Path(private)/'source'
+        binding={'server_uuid':source,'hostname':socket.gethostname(),'datadir':str(data)}
+        process=recovery.birth(os.getpid(),{'path':str(Path(sys.executable).resolve()),'sha256':stream.physical.host.file_hash(Path(sys.executable))})
+        record={'input_digest':'original-reviewed-digest','runtime_process':process,'sql_ready_observed':True,
+            'credential_cleanup_confirmed':True,'data_directory':str(directory/'runtime-data'),
+            'sql_identity':{'server_uuid':source,'socket':str(path),'skip_networking':1}}
+        stream.physical.host.save(directory/'result.json',record)
+        stream.physical.host.save(directory/'request.json',{'phase':'recover','binding':{**binding,'datadir':str(data)+'/'},'workspace':str(root)+'/'})
+        request={'schema':'cdeadmin.mysql-recovery-stream.v1','workspace':str(root),'job_id':job,
+            'input_digest':record['input_digest'],'binding':dict(binding),'expected':{
+                'runtime_process':process,'server_uuid':source,'datadir':record['data_directory']}}
+        if fault=='source-uuid':request['binding']['server_uuid']=str(uuid.uuid4())
+        elif fault=='hostname':request['binding']['hostname']='unrelated-host'
+        elif fault=='datadir':request['binding']['datadir']=str(Path(private)/'different-source')
+        with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as listener:
+            listener.bind(str(path));listener.listen()
+            if fault:
+                with pytest.raises(stream.Refused):stream.open_socket(request)
+                listener.settimeout(.05)
+                with pytest.raises(socket.timeout):listener.accept()
+            else:
+                client,observed=stream.open_socket(request)
+                try:assert observed['runtime_process']==process and observed['server_uuid']==source
+                finally:client.close()
+
+
 def test_read_only_acceptance_lease_cannot_authorize_replay_and_retains_unknown_original(monkeypatch):
     registry=bridge.Bridges();monkeypatch.setattr(bridge,'bridges',registry)
     binding={'id':'read-only','recovery_mode':'read_only'}

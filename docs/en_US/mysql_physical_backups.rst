@@ -11,7 +11,7 @@ exported-data/definition acceptance, dependency-aware retention and scheduling
 have separate reviewed workflows. Native GPL file-keyring recovery is described
 below. Native system/undo geometry and external InnoDB table/tablespace isolation
 are also described below. Raw-device files,
-unmapped legacy layouts and external MERGE-path admission,
+unmapped legacy storage layouts,
 unexported/system-state acceptance and production cutover remain open under
 ``CMP-MY-01``.
 
@@ -54,17 +54,18 @@ can use the SSH host independently of their operating system. This backend
 requires a native Linux database host; Windows/macOS native acceptance belongs
 to the platform teams.
 
-The artifact workflow admits full/incremental, uncompressed, self-contained
-backups of InnoDB, MyISAM, CSV, ARCHIVE, BLACKHOLE and MRG_MYISAM tables. Native
-MERGE members must resolve inside the private artifact. MEMORY definitions are
-preserved with native empty-after-restart semantics; their currently observed
-volatile rows are disclosed in the review. Use the logical backup workflow
-when retaining those rows is required.
-Source inspection refuses unadmitted engines and encrypted tablespaces.
-External tablespace/MERGE mappings and other archive formats remain refused
-until their native path/key handling is implemented. Native encryption-key
-provisioning, other utility versions and broader physical recovery remain gaps. They
-are not closed-source Enterprise deferrals or declared inapplicable features.
+The artifact workflow admits complete, uncompressed full/incremental backups
+of InnoDB, MyISAM, CSV, ARCHIVE, BLACKHOLE and MRG_MYISAM tables. MERGE member
+identities follow the native table-cache interpretation described below.
+MEMORY definitions survive with native empty-after-restart semantics; observed
+volatile rows are disclosed. Use logical backup when retaining them is required.
+Source inspection refuses unadmitted engines. Encrypted data/logs require
+explicit GPL file-keyring retention; external InnoDB/system/undo paths require
+retained geometry and private filesystem admission as described below.
+Native ``NULL`` default homes/scan roots retain their original values and use
+MySQL's effective datadir defaults; they do not require a synthetic path map.
+Other utility versions, archive formats and broader recovery remain gaps,
+separate from closed-source Enterprise deferrals.
 
 Review, execution and observation
 --------------------------------
@@ -753,7 +754,7 @@ include private external runtime files and interrupted copy-back input copies.
 
 This admission covers InnoDB per-table external data and general tablespaces,
 with retained native system/undo geometry as described below.
-Raw-device files, unmapped legacy layouts and external MERGE members,
+Raw-device files, unmapped legacy storage layouts,
 broader engine inventory, system-state acceptance, legacy/guardian
 resolution and production cutover remain tracked recovery work. Unsupported
 unmapped absolute system geometry and external undo storage refuse before
@@ -858,3 +859,34 @@ the pinned XtraBackup raw specification refuses. Removing that marker reports
 success while copying zero system pages; native preparation fails. Native
 Clone also reports completion with a zero-byte system file. Neither result
 establishes usable recovery, and neither is admitted as a physical backup.
+
+Native MERGE member names
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+MySQL 9.7 opens MERGE children through its native dictionary and table cache.
+For a path-bearing member, the final database/table components identify the
+child. Absolute and escaping prefixes in legacy metadata do not select an
+external filesystem payload. ScratchRobin preserves original ``.MRG`` bytes
+and verifies that each child has its MyISAM data/index pair in the complete
+backup. It does not rewrite those metadata files or copy an unrelated file
+named by their prefix. Native recovery checks reads and inserts through both
+connectors while the live source contains different data.
+
+Recovery control after upgrades
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Observation, native log retrieval and original-process cancellation continue
+through the original owner/endpoint and pinned SSH route after application
+adapter or registration changes. New dispatch still requires a current review.
+If an older receipt lacks the duplicated source binding, control can use the
+retained original host review only when it matches the recorded source UUID.
+Missing or conflicting evidence remains unavailable; no live replacement is
+inferred. The original review digest and unknown operation outcome are retained.
+
+Native qualification launches the preceding adapter's actual supervisor source,
+loses that supervisor, shuts down source SQL, changes the registration generation,
+and independently observes/stops the original native process through a pidfd.
+This does not establish resolution of every legacy utility/guardian receipt or
+production cutover. Run
+``tools/cdeadmin_mysql_physical_reconciliation_qualification.py`` with an explicit
+preceding native source fixture to reproduce this workflow.

@@ -751,7 +751,9 @@ client certificate material privately to the pinned host, with explicit server
 TLS provisioning for certificate-authenticated isolated recovery and recurring
 startup drills. ARCHIVE, BLACKHOLE, self-contained MRG_MYISAM and native MEMORY
 definition/restart behavior are admitted alongside InnoDB/MyISAM/CSV. MEMORY
-volatile-row loss is disclosed and external MERGE members remain refused.
+volatile-row loss is disclosed. Native MERGE absolute/escaping prefixes now
+resolve by final database/table identity, retaining complete MyISAM child payload
+and original metadata; recovered reads/writes remain separate from the source.
 Native GPL file-keyring provisioning now supports encrypted full/incremental
 chains, source key rotation, private native preparation and isolated native
 read-only/replay recovery with its own plugin/dependency/keyring copies.
@@ -785,5 +787,8 @@ paths now retain observed filesystem identities and original catalog spellings,
 including symbolic links followed by parent traversal. Encrypted incremental
 and source-offline recovery use the same sealed mapping through both connectors.
 Raw devices, duplicate flattened undo names, unmapped legacy layouts,
-external MERGE members and the
-remaining inventory/system-state/guardian/cutover work still precede handoff.
+and the remaining inventory/system-state/guardian/cutover work still precede
+handoff. Physical control now survives adapter/registration changes, missing
+duplicated bindings with matching original host facts, and native supervisor
+loss while source SQL is offline. Original unknown outcomes remain unknown;
+wider legacy utility/guardian coverage still requires its own evidence.

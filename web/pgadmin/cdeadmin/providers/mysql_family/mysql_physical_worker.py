@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import posixpath
 import re
 import shutil
 import signal
@@ -156,6 +157,34 @@ def manifest(directory):
     return sorted(files, key=lambda item: item['path'])
 
 
+def merge_members(directory,files):
+    """Use MySQL9.7's DD child-name interpretation, not filesystem traversal.
+
+    myisammrg_parent_open_callback extracts the final db/table components and
+    the server opens those children through its own table cache. Preserve the
+    native metadata bytes, including old absolute/relative path prefixes.
+    """
+    available={item['path'] for item in files};result=[]
+    for item in files:
+        selected=Path(item['path'])
+        if selected.suffix.casefold()!='.mrg':continue
+        if len(selected.parts)!=2:raise Refused('Native MERGE metadata requires a database/table identity')
+        for member in metadata(directory/selected).splitlines():
+            if not member or member.startswith('#'):continue
+            if ('\0' in member or '\\' in member or member.endswith('/') or len(member.encode('utf8'))>510):
+                raise Refused('Native MERGE child identity is incompatible')
+            parts=Path(member).parts
+            child=selected.parent/member if len(parts)==1 else Path(*parts[-2:])
+            if len(child.parts)!=2 or any(part in {'/','.', '..'} for part in child.parts):
+                raise Refused('Native MERGE child database/table identity is unavailable')
+            name=str(child)
+            if not {name+'.MYD',name+'.MYI'}<=available:
+                raise Refused('Native MERGE member MyISAM payload is missing from this complete backup')
+            result.append({'metadata_file':item['path'],'native_member':member,'table_file_identity':name})
+            if len(result)>MAX_FILES:raise Refused('Native MERGE member inventory exceeds its bound')
+    return result
+
+
 def artifact(directory, *, prepared=None):
     checkpoint = properties(directory / 'xtrabackup_checkpoints')
     info = properties(directory / 'xtrabackup_info')
@@ -174,14 +203,12 @@ def artifact(directory, *, prepared=None):
     if not 0 <= low <= high <= last <= 18446744073709551615 or checkpoint['backup_type'] != 'incremental' and low != 0:
         raise Refused('Native physical checkpoint LSN range is invalid')
     files = manifest(directory)
-    for item in files:
-        if Path(item['path']).suffix.casefold() != '.mrg':continue
-        path=directory/item['path']
-        for member in metadata(path).splitlines():
-            if not member or member.startswith('#'):continue
-            if (Path(member).is_absolute() or '\0' in member or '\\' in member or
-                    not (path.parent/member).resolve().is_relative_to(directory.resolve())):
-                raise Refused('External MERGE members require a separately reviewed native path mapping')
+    members=merge_members(directory,files)
+    # Existing receipts already seal ordinary relative member metadata. Add
+    # derived identities for the newly admitted forms without invalidating
+    # immutable receipts produced by previous adapters for the ordinary forms.
+    special_members=any(Path(row['native_member']).is_absolute() or
+        posixpath.normpath(str(Path(row['metadata_file']).parent/row['native_member'])).split('/')[0]=='..' for row in members)
     keyring=keyring_module().audit(directory)
     storage=geometry_module().audit(directory)
     return {'format': 'xtrabackup-9.7-incremental' if checkpoint['backup_type'] == 'incremental' else 'xtrabackup-9.7-full', 'checkpoint': checkpoint,
@@ -193,6 +220,7 @@ def artifact(directory, *, prepared=None):
         **({'native_incremental_info':True} if info['incremental']=='Y' and checkpoint['backup_type']!='incremental' else {}),
         **({'keyring':keyring} if keyring is not None else {}),
         **({'storage_geometry':storage} if storage is not None else {}),
+        **({'merge_members':members} if special_members else {}),
         **({'external_tablespaces':tablespaces['external_tablespaces']} if tablespaces['external_tablespaces'] else {})}
 
 
