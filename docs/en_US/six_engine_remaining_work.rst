@@ -774,5 +774,11 @@ including a separately probed private root switch for missing top-level paths.
 The source SQL server can be offline; original directories remain absent in the
 base namespace. Executing-file identity survives replacement of its pathname,
 preserving independent original-process observation and cancellation.
-External system/undo geometry, MERGE members and the
+Retained native storage metadata now supports private preparation/copy-back and
+recovery of system files, default/user undo and empty configured scan roots.
+Encrypted incremental chains, literal system filenames, key rotation, recurring
+startup drills and source-offline recovery with missing parent/root directories
+have native evidence through both connectors. Relative storage-home/scan-root
+resolution, raw devices, duplicate flattened undo names, unmapped legacy layouts,
+external MERGE members and the
 remaining inventory/system-state/guardian/cutover work still precede handoff.

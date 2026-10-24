@@ -37,7 +37,7 @@ print(json.dumps({'held_source_roots':roots,'base_aliases_absent':True}))
 '''
 
 
-def qualify_missing(app,output,oracle,container,port,password,selected,credentials,variant,datadir,external_root):
+def qualify_missing(app,output,oracle,container,port,password,selected,credentials,variant,datadir,external_root,*,storage=None):
     from cdeadmin_mysql_online_ddl_qualification import registration
     from cdeadmin_mysql_recovery_connection_qualification import endpoint,query_post,execute
     from cdeadmin_mysql_family_object_live_orchestrator import _root_connection,_run
@@ -46,17 +46,20 @@ def qualify_missing(app,output,oracle,container,port,password,selected,credentia
     root=Path(__file__).resolve().parents[1]
     paths=['tools/cdeadmin_mysql_physical_missing_qualification.py','tools/cdeadmin_mysql_physical_qualification.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_physical_paths.py',
+        'web/pgadmin/cdeadmin/providers/mysql_family/mysql_physical_geometry.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_recovery_worker.py',
         'web/pgadmin/cdeadmin/workspace/mysql_physical_service.py']
     proof={'complete':False,'variant':variant,'interfaces':[],'history_testing':'not run',
         'source_sha256':{p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in paths}}
     def host(*args):return _run(['docker','exec',container,*args]).stdout
     def absent():
-        return json.loads(host('/usr/bin/python3','-c','import json,pathlib,sys;print(json.dumps([pathlib.Path(p).exists() for p in sys.argv[1:]]))',datadir,external_root,'/var/lib/mysql-keyring'))==[False]*3
+        aliases=[datadir,external_root,'/var/lib/mysql-keyring',*([storage[key] for key in ('system_root','undo_root','empty_root')] if storage else [])]
+        return json.loads(host('/usr/bin/python3','-c','import json,pathlib,sys;print(json.dumps([pathlib.Path(p).exists() for p in sys.argv[1:]]))',*aliases))==[False]*len(aliases)
     def source_hashes():
         return host('/usr/bin/python3','-c',
             "import pathlib,hashlib,json;p=pathlib.Path('/var/backups/scratchrobin/source-held');print(json.dumps({str(f.relative_to(p)):hashlib.sha256(f.read_bytes()).hexdigest() for f in sorted(p.rglob('*')) if f.is_file()},sort_keys=True))")
     with oracle.cursor() as cursor:
+        if storage:cursor.execute('CREATE UNDO TABLESPACE sr_missing_undo ADD DATAFILE %s',(storage['undo_root']+'/extra.ibu',))
         cursor.execute("CREATE TABLE sr_osc.encrypted_missing(id INT PRIMARY KEY,note VARCHAR(80),b LONGBLOB) ENCRYPTION='Y'")
         cursor.execute("INSERT INTO sr_osc.encrypted_missing VALUES(1,'native missing 雪',X'00FF01')")
         cursor.execute("CREATE TABLE sr_osc.external_missing(id INT PRIMARY KEY,note VARCHAR(80)) ENGINE=InnoDB ENCRYPTION='Y' DATA DIRECTORY=%s",(external_root,))
@@ -115,13 +118,20 @@ def qualify_missing(app,output,oracle,container,port,password,selected,credentia
                 with guard.cursor() as cursor:
                     cursor.execute('INSERT INTO sr_osc.pending VALUES(%s)',(22500+int(use_c),));cursor.execute('SAVEPOINT missing_guard')
                 base=case.phase('backup');prepared=case.phase('prepare',base['job_id']);case.copied=case.phase('copy_back',prepared['job_id'])
-                assert len(base['native_external_files'])==2
+                assert len(base['native_external_files'])==(7 if storage else 2)
+                if storage:
+                    retained=base['remote_observation']['artifact']['storage_geometry']
+                    assert retained['data_home']==(storage['system_root'] if storage['data_home'] else datadir)
+                    assert retained['variables']['innodb_data_file_path']==storage['data_file_spec']
+                    assert [row['source_file'] for row in retained['system_files']]==storage['system_files']
+                    assert storage['empty_root'] in retained['scan_directories']
                 with guard.cursor() as cursor:
                     cursor.execute('ROLLBACK TO SAVEPOINT missing_guard');cursor.execute('SELECT COUNT(*) FROM sr_osc.pending');assert cursor.fetchone()[0]==1
                 case.checks.append('native-encrypted-checkpoint-and-copy-back-preserve-independent-source-savepoint-before-intentional-shutdown')
             finally:guard.rollback();guard.close()
         host('/usr/bin/mysqladmin','--user=root','--socket=/var/run/mysqld/mysqld.sock','shutdown')
         source_roots=['/sr-source225' if variant=='root' else datadir,external_root,'/var/lib/mysql-keyring']
+        if storage:source_roots.extend(storage[key] for key in ('system_root','undo_root','empty_root'))
         proof['source_shutdown_and_paths_removed']=json.loads(host('/usr/bin/python3','-c',HOLD_SOURCE,json.dumps(source_roots)))
         assert absent();original=source_hashes()
         for case in interfaces:
@@ -148,12 +158,20 @@ def qualify_missing(app,output,oracle,container,port,password,selected,credentia
                         execute(post,session,'INSERT INTO external_new VALUES(1)');execute(post,session,'DROP TABLE external_new')
                         execute(post,session,"UPDATE external_missing SET note='private replay' WHERE id=1")
                         execute(post,session,"UPDATE general_missing SET note='private replay' WHERE id=1");execute(post,session,'COMMIT')
+                        if storage:
+                            execute(post,session,"CREATE TABLE empty_directory_new(id INT PRIMARY KEY) DATA DIRECTORY='"+storage['empty_root']+"'")
+                            execute(post,session,'INSERT INTO empty_directory_new VALUES(1)');execute(post,session,'DROP TABLE empty_directory_new')
+                            execute(post,session,"CREATE UNDO TABLESPACE sr_private_undo ADD DATAFILE '"+storage['undo_root']+"/private.ibu'")
+                    if storage:
+                        assert execute(post,session,'SELECT @@innodb_data_file_path,@@innodb_undo_directory')['rows']==[
+                            [storage['data_file_spec'],storage['undo_root']]]
                 finally:post('close_session',session_id=session)
                 assert absent() and source_hashes()==original
                 case.close()
                 assert absent() and source_hashes()==original
                 case.checks.append('source-offline-'+mode+'-native-SQL-editor-and-external-DDL-with-private-keyring-and-original-directory-aliases-absent-in-base-namespace')
                 case.checks.append('source-offline-'+mode+'-native-original-process-observed-and-stopped-with-source-volume-and-key-bytes-unchanged')
+                if storage:case.checks.append('source-offline-'+mode+'-two-literal-system-files-encrypted-default-and-user-undo-and-retained-empty-scan-root-with-all-original-aliases-missing')
             proof['interfaces'].append({'use_c':case.use_c,'complete':True,'checks':case.checks})
             (output/'missing-api-progress.json').write_text(json.dumps(proof,indent=2)+'\n')
         proof['complete']=True
@@ -168,6 +186,7 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--output',required=True)
     parser.add_argument('--fixture-image',required=True);parser.add_argument('--prepare-fixture',action='store_true')
     parser.add_argument('--private-key');parser.add_argument('--missing-paths',choices=('parent','root'),required=True)
+    parser.add_argument('--geometry',action='store_true')
     args=parser.parse_args()
     from cdeadmin_mysql_physical_qualification import qualify
-    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,missing_paths=args.missing_paths)
+    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,missing_paths=args.missing_paths,storage_geometry=args.geometry)

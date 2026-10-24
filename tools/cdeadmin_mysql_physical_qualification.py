@@ -14,7 +14,7 @@ sys.path[:0] = [str(ROOT), str(ROOT/'web'), str(ROOT/'tools')]
 BACKEND = 'percona/percona-xtrabackup@sha256:580747a61714d1884040794fc8a144179f5e3fe6ae839701d8958fe73a4e5e2b'
 
 
-def prepare_fixture(output, image, *, keyring=False, external=False, missing_paths=None):
+def prepare_fixture(output, image, *, keyring=False, external=False, missing_paths=None, storage=None):
     build = output/'fixture-build'; build.mkdir()
     key = build/'private-key'
     subprocess.run(['ssh-keygen','-q','-t','ed25519','-N','','-f',str(key)],check=True)
@@ -31,6 +31,8 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
          "printf '%s' '{\"path\":\"/var/lib/mysql-keyring/keyring\",\"read_only\":false}' > /usr/lib64/mysql/plugin/component_keyring_file.cnf\n" if keyring else '')+
         ('RUN mkdir -p /var/lib/mysql-external && chown mysql:mysql /var/lib/mysql-external\n' if external else '')+
         ('RUN mkdir -p /sr-source225/mysql /sr-external225 && chown -R mysql:mysql /sr-source225 /sr-external225\n' if missing_paths=='root' else '')+
+        ('RUN mkdir -p '+ ' '.join(storage[key] for key in ('system_root','undo_root','empty_root'))+
+         ' && chown mysql:mysql '+ ' '.join(storage[key] for key in ('system_root','undo_root','empty_root'))+'\n' if storage else '')+
         'COPY authorized_keys /root/.ssh/authorized_keys\n'
         'RUN chmod 600 /root/.ssh/authorized_keys && printf "%s\\n" "PermitRootLogin prohibit-password" "PasswordAuthentication no" "UsePAM no" "PrintMotd no" > /etc/ssh/sshd_config.d/physical-fixture.conf && xtrabackup --version\n'
         'COPY start.sh /opt/physical-start.sh\nENTRYPOINT ["/bin/bash","/opt/physical-start.sh"]\nCMD ["mysqld"]\n')
@@ -39,7 +41,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -52,6 +54,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
     proof = {'complete':False,'interfaces':[],'history_testing':'not run','source_sha256':{},'owned_servers_stopped':False,'owned_physical_volume_removed':False}
     paths = ['web/pgadmin/cdeadmin/providers/mysql_family/mysql_physical_worker.py','web/pgadmin/cdeadmin/providers/mysql_family/mysql_physical_transport.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_recovery_worker.py',
+        'web/pgadmin/cdeadmin/providers/mysql_family/mysql_physical_geometry.py',
         'web/pgadmin/cdeadmin/workspace/mysql_physical_service.py','web/pgadmin/cdeadmin/workspace/service.py','web/pgadmin/static/js/Dialogs/MySQLPhysical.jsx',
         'web/pgadmin/static/js/Dialogs/index.jsx','web/pgadmin/cdeadmin/context_menu.py','web/pgadmin/browser/server_groups/servers/__init__.py',
         'web/pgadmin/static/vendor/ddn/current/resource-manifest.json',str(Path(__file__).relative_to(ROOT))]
@@ -75,15 +78,24 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
     data_volumes = []
     try:
         if missing_paths not in {None,'parent','root'}:raise ValueError('Select parent or root missing paths')
-        encrypted=keyring_only or external_only or bool(missing_paths)
+        encrypted=keyring_only or external_only or bool(missing_paths) or storage_geometry
         external_root='/sr-external225' if missing_paths=='root' else '/var/lib/mysql-external'
         datadir='/sr-source225/mysql' if missing_paths=='root' else '/var/lib/mysql'
-        key = prepare_fixture(output,image,keyring=encrypted,external=external_only or bool(missing_paths),missing_paths=missing_paths) if prepare else Path(key).resolve(strict=True)
+        prefix='/sr-geometry227' if missing_paths=='root' else '/var/lib/mysql'
+        storage={key:prefix+'-'+suffix for key,suffix in [('system_root','system'),('undo_root','undo'),('empty_root','empty')]} if storage_geometry else None
+        if storage:
+            storage['system_files']=[storage['system_root']+'/system one 雪',storage['system_root']+'/system.two']
+            storage['data_home']=storage['system_root'] if missing_paths=='root' else ''
+            storage['data_file_spec']=('system one 雪:12M;system.two:12M:autoextend' if storage['data_home'] else
+                storage['system_files'][0]+':12M;'+storage['system_files'][1]+':12M:autoextend')
+        key = prepare_fixture(output,image,keyring=encrypted,external=external_only or bool(missing_paths),missing_paths=missing_paths,storage=storage) if prepare else Path(key).resolve(strict=True)
         proof['fixture_image'] = _image_identity(image)
         _run(['docker','volume','create',volume])
         source_mounts=[]
         if missing_paths:
-            for suffix,destination in (('data','/sr-source225' if missing_paths=='root' else datadir),('external',external_root),('keyring','/var/lib/mysql-keyring')):
+            roots=[('data','/sr-source225' if missing_paths=='root' else datadir),('external',external_root),('keyring','/var/lib/mysql-keyring')]
+            if storage:roots.extend((suffix,storage[suffix+'_root']) for suffix in ('system','undo','empty'))
+            for suffix,destination in roots:
                 owned_volume=volume+'-'+suffix;_run(['docker','volume','create',owned_volume]);data_volumes.append(owned_volume)
                 source_mounts+=['-v',owned_volume+':'+destination]
         name = volume+'-source'; names.append(name)
@@ -91,7 +103,9 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             '-e','MYSQL_ALLOW_EMPTY_PASSWORD=yes','-p','127.0.0.1::3306','-p','127.0.0.1::22',image,
             'mysqld','--server-id=101','--gtid-mode=ON','--enforce-gtid-consistency=ON','--log-bin=physical']+
             (['--innodb-redo-log-encrypt=ON','--innodb-undo-log-encrypt=ON','--binlog-encryption=ON'] if encrypted else [])+
-            (['--innodb-directories='+external_root] if external_only or missing_paths else [])+
+            (['--innodb-directories='+';'.join([external_root,*([storage['undo_root'],storage['empty_root']] if storage else [])])] if external_only or missing_paths else [])+
+            (['--innodb-data-home-dir='+storage['data_home'],'--innodb-data-file-path='+storage['data_file_spec'],
+                '--innodb-undo-directory='+storage['undo_root']] if storage else [])+
             (['--datadir='+datadir] if missing_paths else []))
         mounts=json.loads(_run(['docker','inspect','--format','{{json .Mounts}}',name]).stdout)
         data_volumes=list(dict.fromkeys(data_volumes+[m['Name'] for m in mounts if m['Type']=='volume' and m['Destination']!='/var/backups/scratchrobin']))
@@ -125,10 +139,10 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
             if missing_paths:
                 from cdeadmin_mysql_physical_missing_qualification import qualify_missing
-                proof['physical_missing_paths']=qualify_missing(app,output,root,name,port,password,selected,{'private_key':key.read_text()},missing_paths,datadir,external_root)
+                proof['physical_missing_paths']=qualify_missing(app,output,root,name,port,password,selected,{'private_key':key.read_text()},missing_paths,datadir,external_root,storage=storage)
             elif keyring_only or external_only:
                 from cdeadmin_mysql_physical_keyring_qualification import qualify_keyring
-                proof['physical_keyring']=qualify_keyring(app,output,root,name,port,password,selected,{'private_key':key.read_text()},browser_binary,driver_binary,external=external_only,desktop_only=keyring_desktop_only)
+                proof['physical_keyring']=qualify_keyring(app,output,root,name,port,password,selected,{'private_key':key.read_text()},browser_binary,driver_binary,external=external_only,desktop_only=keyring_desktop_only,storage=storage)
             elif tls_only:
                 from cdeadmin_mysql_physical_tls_qualification import qualify_tls
                 proof['physical_tls']=qualify_tls(app,output,root,name,port,password,selected,{'private_key':key.read_text()},browser_binary,driver_binary,desktop_only=tls_desktop_only)

@@ -26,7 +26,7 @@ def successful(value):
         value.get('process_termination_confirmed') is True)
 
 
-def configuration(path, *, keyring=False, original_datadir=None):
+def configuration(path, *, keyring=False, original_datadir=None, mapped_storage=None):
     """Consume only admitted native geometry, never arbitrary server options."""
     text = physical.metadata(path)
     # XtraBackup can emit an observed option after its original command-line
@@ -61,13 +61,17 @@ def configuration(path, *, keyring=False, original_datadir=None):
     for key in enumerated & values.keys():
         if not re.fullmatch(r'[A-Za-z0-9_]+', values[key]):
             raise Refused('Native recovery geometry is not an admitted enumeration')
-    if 'innodb_data_file_path' in values:
+    if mapped_storage is not None:
+        if (values.get('innodb_data_file_path')!=mapped_storage['variables']['innodb_data_file_path'] or
+                physical.geometry_module().home(values.get('innodb_undo_directory','./'),mapped_storage['original_datadir'])!=mapped_storage['undo_home']):
+            raise Refused('Native backup geometry differs from its retained private mapping')
+    if 'innodb_data_file_path' in values and mapped_storage is None:
         # Native basename/size/autoextend syntax; absolute/external system-file
         # paths need their own mapping and cannot escape the new data directory.
         for item in values['innodb_data_file_path'].split(';'):
             if not re.fullmatch(r'[A-Za-z0-9_.-]+:[0-9]+[KMG]?(?::autoextend(?::max:[0-9]+[KMG]?)?)?', item) or item.split(':')[0] in {'.', '..'}:
                 raise Refused('Native system tablespaces need separately admitted recovery path mapping')
-    if original_datadir is not None:
+    if original_datadir is not None and mapped_storage is None:
         undo=values.get('innodb_undo_directory','./')
         if undo not in {'','.', './'} and (not Path(undo).is_absolute() or physical.absolute(undo)!=physical.absolute(original_datadir)):
             raise Refused('Native undo storage needs separately admitted recovery path mapping')
@@ -144,7 +148,8 @@ def inspection(request):
         raise Refused('The native backup configuration changed after preparation')
     material=physical.keyring_module().audit(source/'artifact')
     keyring=physical.keyring_module().inspect(request,material)
-    external=physical.paths_module().admission(request,base['artifact'].get('external_tablespaces',[]))
+    storage=physical.geometry_module().retained(prepared/'artifact',base['artifact'],source/'artifact')
+    external=physical.paths_module().admission(request,base['artifact'].get('external_tablespaces',[]),storage=storage)
     # The UUID is assigned after review. All accepted job identities have the
     # same length, so the socket pathname bound is known before dispatch.
     if len(os.fsencode(str(root / ('0' * 36) / 'runtime.sock'))) > 100:
@@ -154,7 +159,7 @@ def inspection(request):
         'mysqld': physical.executable(request['mysqld'], 'mysqld'),
         'os_account': {'uid': os.geteuid(), 'gid': os.getegid(), 'name': account.pw_name},
         'input': {'job_id': request['input_job_id'], 'manifest_sha256': host.digest(files), 'file_count': len(files)},
-        'configuration': configuration(config,keyring=keyring is not None,original_datadir=request['binding']['datadir']), 'configuration_sha256': config_hash,
+        'configuration': configuration(config,keyring=keyring is not None,original_datadir=request['binding']['datadir'],mapped_storage=storage), 'configuration_sha256': config_hash,
         **({'keyring':keyring} if keyring is not None else {}),
         **({'external_paths':external} if external is not None else {}),
         'transport': 'loopback-tcp-and-private-unix-socket' if port else 'private-unix-socket-only', 'recovery_port':port, 'automatic_upgrade': False,

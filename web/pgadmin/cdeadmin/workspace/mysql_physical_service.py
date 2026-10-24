@@ -51,9 +51,24 @@ def source(service, server, *, admitted=None, keyring=None, isolate_external_pat
             captured['state']['native_keyring_source']={'component':'component_keyring_file','data_file':status['data_file'],
                 'server_plugin_directory':plugin,'encryption':flags}
         captured['state']['source_encryption']=flags
+        storage_variables=rows(connection,
+            'SELECT CAST(@@innodb_data_home_dir AS CHAR CHARACTER SET utf8mb4) AS innodb_data_home_dir,'
+            'CAST(@@innodb_data_file_path AS CHAR CHARACTER SET utf8mb4) AS innodb_data_file_path,'
+            'CAST(@@innodb_undo_directory AS CHAR CHARACTER SET utf8mb4) AS innodb_undo_directory,'
+            'CAST(@@innodb_directories AS CHAR CHARACTER SET utf8mb4) AS innodb_directories')[0]
+        storage_files=rows(connection,"SELECT FILE_NAME AS file_name,TABLESPACE_NAME AS tablespace_name,FILE_TYPE AS file_type "
+            "FROM information_schema.FILES WHERE ENGINE='InnoDB' AND (TABLESPACE_NAME='innodb_system' OR FILE_TYPE='UNDO LOG') ORDER BY FILE_NAME")
+        captured['state']['native_storage_source']={'variables':storage_variables,'files':storage_files}
         data=PurePosixPath(captured['state']['host_binding']['datadir'])
         files=rows(connection,'SELECT CAST(PATH AS CHAR CHARACTER SET utf8mb4) AS file_name FROM information_schema.INNODB_DATAFILES ORDER BY PATH')
         external=[row for row in files if PurePosixPath(row['file_name']).is_absolute() and not PurePosixPath(row['file_name']).is_relative_to(data)]
+        try:
+            storage=native.worker.geometry_module().from_source({'source_storage':captured['state']['native_storage_source'],
+                'binding':captured['state']['host_binding'],'isolate_external_paths':isolate_external_paths})
+        except native.worker.Refused as error:raise native.HostError(str(error)) from None
+        if storage is not None:
+            modeled,_directories=native.worker.geometry_module().external_entries(storage)
+            external=[{'file_name':name} for name in sorted({row['file_name'] for row in external}|{row['file_name'] for row in modeled})]
         if external and isolate_external_paths is not True:
             raise native.HostError('Review native external-path isolation before backing up external InnoDB files')
         if external:captured['state']['native_external_files']=external
@@ -137,7 +152,7 @@ class PhysicalJobs(MySQLBinlogJobs):
         'The admitted backend is upstream XtraBackup9.7.1-rc1, a release candidate. Its original native replies, verified files and recovery acceptance are separate facts.',
         'Full backups take native backup/read locks and copy complete supported instance files. Prepare mutates a separate private copy. Copy-back creates only a new isolated job data directory; it never overwrites the live data directory or starts a database.',
         'Native processes run under an independent supervisor on the authenticated database SSH host. Closing the viewer or losing a reply does not cancel or roll back native work. An original unknown dispatch is never automatically repeated.',
-        'This workflow requires complete, uncompressed native backup files. Encrypted data/log recovery requires explicitly retained native file-keyring material and matching components. Incrementals require exact base lineage and contiguous LSNs; apply to separate redo-only copies, then finalize. External InnoDB table/tablespace recovery requires separately reviewed Linux filesystem isolation. External system/undo/MERGE paths and production cutover remain separate.',
+        'This workflow requires complete, uncompressed native backup files. Encrypted data/log recovery requires explicitly retained native file-keyring material and matching components. Incrementals require exact base lineage and contiguous LSNs; apply to separate redo-only copies, then finalize. Native system/undo and external tablespace paths require retained source metadata and reviewed Linux filesystem isolation. Relative storage homes/scan roots, raw-device files, unmapped legacy layouts and external MERGE members require additional admission. Production cutover remains separate.',
         'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account with a fresh UUID, private Unix socket and selected loopback TCP listener. Read-only inspection is the default. Explicit replay startup is writable with private ROW binary logging and the selected server ID. Both disable events/replication autostart and automatic upgrades, and end on stop or reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
         'Physical files and native output are private to the selected host OS account. Broad source archive protection is acquired before backup dispatch and is retired only by its separate reviewed protection workflow.',
         'Physical recovery preserves MEMORY table definitions; native MySQL discards their volatile rows on restart. Inspect the listed MEMORY tables and use the logical backup workflow when their current rows must be retained.',
@@ -198,6 +213,7 @@ def remote_request(record, action):
         'job_id': record['job_id'], 'input_digest': record['review_digest'],
         **({'sql_tls_policy': deepcopy(record['source_state']['sql_tls_policy'])} if 'sql_tls_policy' in record['source_state'] else {}),
         **({'source_keyring':deepcopy(record['source_state']['native_keyring_source'])} if 'native_keyring_source' in record['source_state'] else {}),
+        **({'source_storage':deepcopy(record['source_state']['native_storage_source'])} if 'native_storage_source' in record['source_state'] else {}),
         **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','incremental_job_id','keyring','isolate_external_paths') if key in selected}}
 
 

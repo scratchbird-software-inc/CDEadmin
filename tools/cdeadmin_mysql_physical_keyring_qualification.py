@@ -7,7 +7,7 @@ import time
 from unittest.mock import patch
 
 
-def qualify_keyring(app,output,oracle,container,port,password,selected,credentials,binary=None,driver_binary=None,*,external=False,desktop_only=False):
+def qualify_keyring(app,output,oracle,container,port,password,selected,credentials,binary=None,driver_binary=None,*,external=False,desktop_only=False,storage=None):
     from cdeadmin_mysql_online_ddl_qualification import registration
     from cdeadmin_mysql_recovery_connection_qualification import endpoint,query_post,execute
     from cdeadmin_mysql_family_object_live_orchestrator import _root_connection,_run
@@ -17,10 +17,12 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
     external_tables=('external_single','external_general','external_named')
     external_files=('/var/lib/mysql-external/general.ibd','/var/lib/mysql-external/sr_osc/external_single.ibd',
         '/var/lib/mysql-external/with; space 雪/sr_osc/external_named.ibd')
+    storage_files=([*storage['system_files'],*[storage['undo_root']+'/'+name for name in ('undo_001','undo_002','extra.ibu')]] if storage else [])
     if external:
         _run(['docker','exec',container,'mkdir','-p','/var/lib/mysql-external/with; space 雪'])
         _run(['docker','exec',container,'chown','mysql:mysql','/var/lib/mysql-external/with; space 雪'])
     with oracle.cursor() as cursor:
+        if storage:cursor.execute('CREATE UNDO TABLESPACE sr_geometry_undo ADD DATAFILE %s',(storage['undo_root']+'/extra.ibu',))
         cursor.execute("CREATE TABLE sr_osc.encrypted_data(id INT PRIMARY KEY,note VARCHAR(80),b LONGBLOB) ENCRYPTION='Y'")
         cursor.execute("INSERT INTO sr_osc.encrypted_data VALUES(1,'encrypted base 雪',X'00FF')")
         if external:
@@ -34,6 +36,7 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
             cursor.execute('SET GLOBAL innodb_max_dirty_pages_pct=0')
     paths=['tools/cdeadmin_mysql_physical_keyring_qualification.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_physical_keyring.py',
+        'web/pgadmin/cdeadmin/providers/mysql_family/mysql_physical_geometry.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_physical_paths.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_physical_worker.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_recovery_worker.py',
@@ -88,7 +91,11 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
             base=phase('backup');material=base['remote_observation']['artifact']['keyring']
             assert material['private_key_material_retained'] and material['encryption']=={'redo':True,'undo':True,'binlog':True}
             if external:
-                assert {row['file_name'] for row in base['native_external_files']}==set(external_files)
+                assert {row['file_name'] for row in base['native_external_files']}==set(external_files)|set(storage_files)
+                if storage:
+                    retained=base['remote_observation']['artifact']['storage_geometry']
+                    assert [row['source_file'] for row in retained['system_files']]==storage['system_files']
+                    assert storage['empty_root'] in retained['scan_directories']
             with oracle.cursor() as cursor:
                 cursor.execute('ALTER INSTANCE ROTATE INNODB MASTER KEY')
                 cursor.execute('INSERT INTO sr_osc.encrypted_data VALUES(%s,%s,%s)',(2+int(use_c),'encrypted delta 雪',b'\x00\xff\x01'))
@@ -138,6 +145,9 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
                 session=post('open_session',language_profile='mysql-sql',history_sensitive=True)['session_id']
                 try:
                     assert execute(post,session,'SELECT note,HEX(b) FROM encrypted_data WHERE id='+str(2+int(use_c)))['rows']==[['encrypted delta 雪','00FF01']]
+                    if storage:
+                        assert execute(post,session,'SELECT @@innodb_data_file_path,@@innodb_undo_directory')['rows']==[
+                            [storage['data_file_spec'],storage['undo_root']]]
                     if external:
                         for table in external_tables:
                             assert execute(post,session,'SELECT note FROM '+table+' WHERE id='+str(2+int(use_c)))['rows']==[['native external delta']]
@@ -153,6 +163,10 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
                             execute(post,session,"UPDATE external_single SET note='private external recovered write' WHERE id=1")
                             execute(post,session,"UPDATE external_general SET note='private external recovered write' WHERE id=1")
                             execute(post,session,'COMMIT')
+                            if storage:
+                                execute(post,session,"CREATE TABLE empty_directory_new(id INT PRIMARY KEY) DATA DIRECTORY='"+storage['empty_root']+"'")
+                                execute(post,session,'INSERT INTO empty_directory_new VALUES(1)');execute(post,session,'DROP TABLE empty_directory_new')
+                                execute(post,session,"CREATE UNDO TABLESPACE sr_private_undo ADD DATAFILE '"+storage['undo_root']+"/private.ibu'")
                 finally:post('close_session',session_id=session)
                 assert keyhash()==before
                 if external:
@@ -162,6 +176,7 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
                 physical('connection_detach',{'server_id':attached['server_id']});attached=None
                 physical('cancel',{'job_id':runtime['job_id'],'credentials':credentials});wait(runtime,stopped=True);runtime=None
                 checks.append('native-'+mode+'-recovery-and-editor-use-private-keyring-plugin-dependencies-and-original-encryption-policy-with-source-keys-unchanged')
+                if storage:checks.append('native-'+mode+'-encrypted-incremental-two-system-files-default-and-user-undo-and-retained-empty-directory-DDL')
             for retained in (base,delta,final):
                 observed=physical('reconcile',{'job_id':retained['job_id'],'credentials':credentials})
                 assert observed['remote_observation']['artifact']['manifest_sha256']==retained['remote_observation']['artifact']['manifest_sha256']
@@ -194,6 +209,7 @@ if __name__=='__main__':
     parser.add_argument('--private-key');parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
     parser.add_argument('--external',action='store_true')
     parser.add_argument('--desktop-only',action='store_true')
+    parser.add_argument('--geometry',action='store_true')
     args=parser.parse_args()
     from cdeadmin_mysql_physical_qualification import qualify
-    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,keyring_only=not args.external,external_only=args.external,keyring_desktop_only=args.desktop_only)
+    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,keyring_only=not args.external,external_only=args.external,keyring_desktop_only=args.desktop_only,storage_geometry=args.geometry)

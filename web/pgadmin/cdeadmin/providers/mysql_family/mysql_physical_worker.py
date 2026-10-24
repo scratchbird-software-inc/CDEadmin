@@ -51,6 +51,14 @@ def paths_module():
     return paths
 
 
+def geometry_module():
+    try:
+        import _cdeadmin_physical_geometry as geometry
+    except ModuleNotFoundError:
+        from . import mysql_physical_geometry as geometry
+    return geometry
+
+
 def public(value):
     if isinstance(value, list): return [public(item) for item in value]
     if isinstance(value, dict):
@@ -175,6 +183,7 @@ def artifact(directory, *, prepared=None):
                     not (path.parent/member).resolve().is_relative_to(directory.resolve())):
                 raise Refused('External MERGE members require a separately reviewed native path mapping')
     keyring=keyring_module().audit(directory)
+    storage=geometry_module().audit(directory)
     return {'format': 'xtrabackup-9.7-incremental' if checkpoint['backup_type'] == 'incremental' else 'xtrabackup-9.7-full', 'checkpoint': checkpoint,
         'backup_uuid': info['uuid'], 'server_version': info['server_version'],
         'tool_version': info['tool_version'], 'binlog_info': metadata(directory / 'xtrabackup_binlog_info'),
@@ -183,6 +192,7 @@ def artifact(directory, *, prepared=None):
         **({'redo_only':True} if checkpoint['backup_type']=='log-applied' else {}),
         **({'native_incremental_info':True} if info['incremental']=='Y' and checkpoint['backup_type']!='incremental' else {}),
         **({'keyring':keyring} if keyring is not None else {}),
+        **({'storage_geometry':storage} if storage is not None else {}),
         **({'external_tablespaces':tablespaces['external_tablespaces']} if tablespaces['external_tablespaces'] else {})}
 
 
@@ -268,13 +278,16 @@ def inspection(request):
     keyring=keyring_module().inspect(request,snapshot)
     if keyring is not None:observed['keyring']=keyring
     entries=observed.get('incremental_input',observed.get('input',{})).get('artifact',{}).get('external_tablespaces',[])
-    external=paths_module().admission(request,entries)
+    storage=observed.get('incremental_input',observed.get('input',{})).get('artifact',{}).get('storage_geometry')
+    if phase in {'backup','incremental'}:storage=geometry_module().from_source(request)
+    external=paths_module().admission(request,entries,storage=storage)
     if external is not None:
         observed['external_paths']=external
     if phase in {'prepare','prepare_redo','copy_back'}:
         for selected in [request['input_job_id'],*([request['incremental_job_id']] if request.get('incremental_job_id') else [])]:
-            recovery_module().configuration(root/selected/'artifact'/'backup-my.cnf',keyring=keyring is not None,
-                original_datadir=request['binding']['datadir'])
+            selected_directory=root/selected/'artifact'
+            recovery_module().configuration(selected_directory/'backup-my.cnf',keyring=keyring is not None,
+                original_datadir=request['binding']['datadir'],mapped_storage=geometry_module().audit(selected_directory))
     return observed
 
 
@@ -398,6 +411,8 @@ def execute(directory):
                     shutil.copytree(Path(observed['workspace'])/request['incremental_job_id']/'artifact',staged_increment)
                     if public(artifact(staged_increment))!=observed['incremental_input']['artifact']:raise Refused('Staged incremental differs from its immutable input')
                     args.append('--incremental-dir='+str(staged_increment))
+                storage=geometry_module().stage_prepare(directory,target,staged_increment)
+                args+=geometry_module().prepare_arguments(target,storage)
                 if observed.get('keyring'):
                     material=keyring_module().apply_snapshot(target,staged_increment)
                     keys=(staged_increment if staged_increment is not None else target)/'xtrabackup_keys'
@@ -410,11 +425,12 @@ def execute(directory):
                 target.mkdir(mode=0o700)
                 copy_input=original
                 if observed.get('external_paths'):
-                    staged_copy_back,_plan=paths_module().stage_copy_back(directory,original,target,observed['input']['artifact'])
+                    staged_copy_back,_plan=paths_module().stage_copy_back(directory,original,target,observed['input']['artifact'],observed['external_paths'])
                     copy_input=staged_copy_back
                 args = ['--no-defaults', '--copy-back', '--target-dir=' + str(copy_input), '--datadir=' + str(target),
                     '--innodb-data-home-dir=' + str(target), '--innodb-undo-directory=' + str(target),
                     '--innodb-log-group-home-dir=' + str(target)]
+                args+=geometry_module().copy_back_arguments(directory,target,observed['input']['artifact'].get('storage_geometry'),observed.get('external_paths'))
         if observed.get('keyring'):args.append('--xtrabackup-plugin-dir='+observed['keyring']['xtrabackup_plugin_dir'])
         if (directory / 'cancel').exists():
             raise InterruptedError('Cancelled before native dispatch')
@@ -443,11 +459,15 @@ def execute(directory):
         finish(directory, value)
         if native_config is not None:
             keyring_module().restore_prepare_options(target,native_config);native_config=None
-        if phase in {'prepare','prepare_redo'}:keyring_module().restore_prepare_material(directory,target)
+        if phase in {'prepare','prepare_redo'}:
+            keyring_module().restore_prepare_material(directory,target)
+            geometry_module().restore_prepare(directory,target)
         if child.returncode == 0:
+            if phase in {'backup','incremental'}:geometry_module().capture(request,target)
             if phase in {'backup','incremental'} and observed.get('keyring'):
                 keyring_module().capture(directory,target,observed['keyring'])
             if phase == 'copy_back':
+                geometry_module().finish_copy_back(directory,original,target,observed['input']['artifact'].get('storage_geometry'),observed.get('external_paths'))
                 keyring_module().copied_snapshot(original,target)
                 copied = manifest(target)
                 value['restored_files'] = {'files': copied, 'manifest_sha256': host.digest(copied),
@@ -478,6 +498,9 @@ def execute(directory):
     finally:
         # Invocation secrets are never part of a public receipt or retained
         # executable. A later observer can distinguish an incomplete cleanup.
+        if request['phase'] in {'prepare','prepare_redo'} and (child is None or child.poll() is not None):
+            try:geometry_module().restore_prepare(directory,directory/'artifact')
+            except Exception as error:value['storage_restore_error_type']=type(error).__name__
         try:
             if native_config is not None:keyring_module().restore_prepare_options(target,native_config)
             if request['phase'] in {'prepare','prepare_redo'}:keyring_module().restore_prepare_material(directory,directory/'artifact')

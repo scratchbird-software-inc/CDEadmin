@@ -82,15 +82,19 @@ def capability(*,projection=False,root_projection=False):
     return value
 
 
-def admission(request,entries):
-    if not entries:return None
+def admission(request,entries,*,storage=None):
+    if not entries and storage is None:return None
     if request.get('isolate_external_paths') is not True:
         raise Refused('Review native external-path isolation explicitly before using this physical artifact')
-    if any(entry['tablespace_type']=='UNDO_LOG' for entry in entries):
+    if storage is None and any(entry['tablespace_type']=='UNDO_LOG' for entry in entries):
         raise Refused('External undo files require separate native system/undo geometry admission')
-    selected=plan(entries)
+    additional,directories=physical.geometry_module().external_entries(storage)
+    combined={row['file_name']:row for row in additional}
+    combined.update({row['file_name']:row for row in entries})
+    selected=plan(list(combined.values()),directories)
     result={'plan':selected,'original_datadir':request['binding']['datadir'],
         'host_root_readonly':True,'native_datadir_uses_private_alias':True}
+    if storage is not None:result['storage']=storage
     if request['phase']=='recover':
         workspace=physical.absolute(request['workspace']);missing=[];root_projection=False
         for row in [{'source_root':result['original_datadir']},*selected]:
@@ -111,10 +115,16 @@ def runtime(directory,data,context):
     (data/'external-data').rename(external)
     selected=[{'source_root':context['original_datadir'],'private_root':str(data)}]
     selected.extend({'source_root':row['source_root'],'private_root':str(external/Path(row['relative_root']).name)} for row in context['plan'])
+    storage=context.get('storage')
+    scan=[row['source_root'] for row in context['plan']]
+    if storage is not None:
+        entries=[{'file_name':file['source_file'],'tablespace_name':file['tablespace_name'],'tablespace_type':file['tablespace_type']}
+            for row in context['plan'] for file in row['files'] if file['tablespace_type']!='SYSTEM']
+        scan=sorted(set(storage['scan_directories'])|{str(path) for path in roots(entries)})
     return selected,['--datadir='+context['original_datadir'],
-        '--innodb-data-home-dir='+context['original_datadir'],
-        '--innodb-undo-directory='+context['original_datadir'],
-        '--innodb-directories='+';'.join(row['source_root'] for row in context['plan'])]
+        '--innodb-data-home-dir='+(context['original_datadir'] if storage is None else storage['variables']['innodb_data_home_dir']),
+        '--innodb-undo-directory='+(context['original_datadir'] if storage is None else storage['undo_home']),
+        '--innodb-directories='+';'.join(scan)]
 
 
 def roots(entries):
@@ -132,8 +142,9 @@ def roots(entries):
     return sorted((path for path in selected if not any(path!=other and path.is_relative_to(other) for other in selected)),key=str)
 
 
-def plan(entries):
-    selected=roots(entries)
+def plan(entries,directories=()):
+    candidates=set(roots(entries))|{Path(root) for root in directories}
+    selected=sorted((path for path in candidates if not any(path!=other and path.is_relative_to(other) for other in candidates)),key=str)
     result=[]
     for index,root in enumerate(selected):
         members=[entry for entry in entries if Path(entry['file_name']).is_relative_to(root)]
@@ -144,12 +155,12 @@ def plan(entries):
     return result
 
 
-def stage_copy_back(directory,original,target,expected):
+def stage_copy_back(directory,original,target,expected,context=None):
     """Remap only a verified private native copy-back input."""
     staged=directory/'copy-back-input';shutil.copytree(original,staged)
     if physical.public(physical.artifact(staged))!=expected:
         raise Refused('Staged copy-back bytes differ from the immutable prepared input')
-    value=tablespaces(staged);selected=plan(value['external_tablespaces'])
+    value=tablespaces(staged);selected=plan(value['external_tablespaces']) if context is None else context['plan']
     destinations={item['source_file']:str(target/row['relative_root']/item['relative_file'])
         for row in selected for item in row['files']}
     host.save(staged/'xtrabackup_tablespaces',{'version':3,'external_tablespaces':[

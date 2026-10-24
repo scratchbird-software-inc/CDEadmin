@@ -9,8 +9,9 @@ source archive protection. A separately reviewed managed recovery operation
 starts and supervises a private data copy. Selected log recovery, independent
 exported-data/definition acceptance, dependency-aware retention and scheduling
 have separate reviewed workflows. Native GPL file-keyring recovery is described
-below. External InnoDB table/tablespace isolation is also described below.
-External system/undo/MERGE-path admission,
+below. Native system/undo geometry and external InnoDB table/tablespace isolation
+are also described below. Relative storage homes/scan roots, raw-device files,
+unmapped legacy layouts and external MERGE-path admission,
 unexported/system-state acceptance and production cutover remain open under
 ``CMP-MY-01``.
 
@@ -750,11 +751,12 @@ a literal semicolon as a directory-list separator. Source data/key files and
 immutable backup inputs remain unchanged. Manual, batch and scheduled retention
 include private external runtime files and interrupted copy-back input copies.
 
-This admission covers InnoDB per-table external data and general tablespaces.
-External system/undo geometry, external MERGE members,
+This admission covers InnoDB per-table external data and general tablespaces,
+with retained native system/undo geometry as described below.
+Relative storage homes/scan roots, raw-device files, unmapped legacy layouts and external MERGE members,
 broader engine inventory, system-state acceptance, legacy/guardian
 resolution and production cutover remain tracked recovery work. Unsupported
-absolute system geometry and unmapped external undo storage refuse before
+unmapped absolute system geometry and external undo storage refuse before
 native preparation or copy-back. They are not treated as
 an ordinary table path or as a successful restore. Native qualification is
 ``tools/cdeadmin_mysql_physical_keyring_qualification.py --external``; use
@@ -782,3 +784,38 @@ writable external DDL, key rotation and independent process stop. The separate
 ``tools/cdeadmin_mysql_namespace_qualification.py`` checks existing, missing
 parent, missing root and mixed missing roots using actual OS/process operations;
 its receipts alone do not constitute SQL recovery evidence.
+
+Retained native system and undo geometry
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+New backups capture native storage variables and the system/undo file catalog
+on the source's private SQL connection. A retained metadata file binds the
+original system-file specifications, undo-file locations and configured scan
+directories to the sealed native backup. A changed native specification or a
+new undo file absent from that source capture withholds verified publication.
+Original file bytes and dictionary pages are not rewritten.
+
+Native preparation receives private flattened system/undo destinations. Its
+retained layout metadata remains outside native incremental cleanup and is
+restored before artifact verification. Copy-back uses private system-file paths
+and an independent undo pool, then places the observed undo files into their
+reviewed private directory layout. The datadir is empty when native copy-back
+starts. External runtime payloads move outside the datadir before startup to
+avoid duplicate native space discovery. Empty configured directories are
+retained for later native ``DATA DIRECTORY`` operations. The existing private
+namespace presents the original system/data/undo directory names to MySQL.
+
+Native encrypted full/incremental chains, key rotation, literal system-file
+names, default/user undo and recurring startup drills use this layout. Source-
+offline qualification also removes the original data, system, undo, external,
+empty-directory and keyring mount paths; both connectors still support native
+read-only/replay recovery, editor queries, new undo tablespaces and external
+DDL. All held original source files remain unchanged through recovery and stop.
+
+Use ``tools/cdeadmin_mysql_physical_keyring_qualification.py --external --geometry``
+for the native encrypted incremental workflow. Add ``--geometry`` to either
+missing-path qualification variant above for source-offline recovery. Native
+relative storage-home/scan-root resolution, raw-device specifications and
+duplicate flattened undo basenames require further backend admission. Legacy
+artifacts without the required retained mapping remain refused before native
+preparation or copy-back. These boundaries remain recovery implementation work.

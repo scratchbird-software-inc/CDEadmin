@@ -20,6 +20,7 @@ def captured_sources():
     sources={'fileio':(ROOT/'web/pgadmin/cdeadmin/operations/fileio.py').read_text()}
     for key,name in {'services':'mysql_host_services.py','host':'mysql_host_worker.py','physical':'mysql_physical_worker.py',
             'keyring':'mysql_physical_keyring.py','paths':'mysql_physical_paths.py','recovery':'mysql_recovery_worker.py',
+            'geometry':'mysql_physical_geometry.py',
             'stream':'mysql_recovery_stream.py','retention':'mysql_physical_retention_worker.py'}.items():
         sources[key]=(PROVIDER/name).read_text()
     tree=ast.parse((PROVIDER/'mysql_physical_transport.py').read_text())

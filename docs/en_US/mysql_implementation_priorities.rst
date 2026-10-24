@@ -169,8 +169,13 @@ private root switch for absent top-level paths. Recovery does not create host
 placeholders or require the source SQL server to remain available. Original
 process identity follows the executing file descriptor across pathname
 replacement; it does not mistake a running executable for an ended process.
-External system/undo geometry and MERGE
-members remain open alongside system-state,
+Retained native storage metadata now supports external system files, default
+and user undo, and configured empty scan roots. Native preparation/copy-back use
+private destinations; original names are presented only inside the isolated
+process. Encrypted incremental chains, literal system-file names, recurring
+drills and source-offline recovery through both connectors are qualified.
+Relative storage homes/scan roots, raw-device files, unmapped legacy layouts,
+duplicate flattened undo basenames and external MERGE members remain open alongside system-state,
 guardian, cutover and broader inventory requirements.
 Managed physical targets now support separately reviewed expected-dump acceptance
 through private-socket or TCP connections, with full counts, native checksums and

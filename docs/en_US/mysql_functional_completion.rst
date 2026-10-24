@@ -2096,8 +2096,16 @@ require a separately probed private root switch. No original host directories
 are created. Native encrypted SQL recovery with the source server offline uses
 the same directory aliases and private keyrings. The original process remains
 observable and stoppable after executable pathname replacement because its
-actual executing image and birth identify it. External system/undo geometry,
-MERGE members and
-the broader recovery/inventory gates remain open; absolute system geometry and
-unmapped external undo storage are refused before native preparation or
-copy-back. See :doc:`mysql_physical_backups`.
+actual executing image and birth identify it.
+
+Retained native storage metadata now binds system-file specifications, default
+and user undo locations and configured empty scan directories to native backup
+artifacts. Private prepare/copy-back destinations and separate runtime payloads
+preserve original native path semantics without rewriting pages or dictionary
+contents. Native encrypted incrementals, key rotation, literal system-file names,
+recurring startup drills and source-offline recovery with missing parent/root
+directories are qualified through both connectors. Relative storage homes/scan
+roots, raw-device files, duplicate flattened undo basenames, unmapped legacy
+layouts, external MERGE members and the broader recovery/inventory gates remain
+open. Unmapped geometry refuses before native preparation or copy-back.
+See :doc:`mysql_physical_backups`.
