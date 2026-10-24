@@ -360,3 +360,60 @@ def test_application_review_requires_the_specific_pending_host_observation(kind)
         service.resolve_storage(captured,observed)
         assert {'file_name':'/undo/same.ibu'} in captured['state']['native_external_files']
         assert {'file_name':'/other/same.ibu'} in captured['state']['native_external_files']
+
+
+def system_collision_source():
+    request=source()
+    request['source_storage']['variables']['innodb_data_file_path']='/system-b/same:12M;/system-a/same:12M:autoextend'
+    system=[row for row in request['source_storage']['files'] if row['file_type']=='TABLESPACE']
+    for row,name in zip(system,('/system-a/same','/system-b/same')):row['file_name']=name
+    return request
+
+
+def test_duplicate_system_names_keep_native_file_order_independent_of_catalog_order(tmp_path):
+    request=system_collision_source()
+    with pytest.raises(geometry.SystemNamingRequired):geometry.from_source(request)
+    value=geometry.from_source(request,system_naming=geometry.SYSTEM_NAMING)
+    assert [row['source_file'] for row in value['system_files']]==['/system-b/same','/system-a/same']
+    assert [row['backup_name'] for row in value['system_files']]==['sr-system-0.ibdata','sr-system-1.ibdata']
+    assert geometry.backup_arguments(value)==['--scratchrobin-system-file-numbers']
+    assert geometry.prepare_arguments(tmp_path,value)[0]=='--innodb-data-file-path=sr-system-0.ibdata:12M;sr-system-1.ibdata:12M:autoextend'
+    context=paths.admission({**request,'phase':'copy_back'},[],storage=value)
+    args=geometry.copy_back_arguments(tmp_path,tmp_path,value,context)
+    assert args[-1]=='--scratchrobin-system-file-numbers'
+    assert '/system-b/same' not in args[0] and '/system-a/same' not in args[0]
+    artifact=tmp_path/'artifact';artifact.mkdir();(artifact/'backup-my.cnf').write_text('[mysqld]\ninnodb_data_file_path='+request['source_storage']['variables']['innodb_data_file_path']+'\ninnodb_undo_directory=/undo\n')
+    assert geometry.capture(request,artifact,reviewed=value)==geometry.audit(artifact)==value
+
+
+def test_system_file_can_share_a_basename_with_native_default_undo_without_overwriting_it():
+    request=source();request['source_storage']['variables']['innodb_data_file_path']='/system/undo_001:12M;/system/second:12M:autoextend'
+    request['source_storage']['files'][0]['file_name']='/system/undo_001'
+    with pytest.raises(geometry.SystemNamingRequired):geometry.from_source(request)
+    value=geometry.from_source(request,system_naming=geometry.SYSTEM_NAMING)
+    assert value['system_files'][0]['backup_name']=='sr-system-0.ibdata'
+    assert value['undo_files'][0]['backup_name']=='undo_001'
+    assert len({row['backup_name'] for row in [*value['system_files'],*value['undo_files']]})==5
+
+
+@pytest.mark.parametrize('fault',['no-consent','unknown-profile','unqualified-host','different-original-path'])
+def test_system_numbering_never_guesses_or_weakens_the_original_storage_review(tmp_path,fault):
+    from pgadmin.cdeadmin.workspace import mysql_physical_service as service
+    request=system_collision_source();value=geometry.from_source(request,system_naming=geometry.SYSTEM_NAMING)
+    if fault=='no-consent':
+        request['isolate_external_paths']=False
+        with pytest.raises(worker.Refused):geometry.from_source(request,system_naming=geometry.SYSTEM_NAMING)
+    elif fault=='unknown-profile':
+        with pytest.raises(worker.Refused):geometry.from_source(request,system_naming='guessed-index')
+    elif fault=='unqualified-host':
+        value.pop('system_naming')
+        with pytest.raises(service.native.HostError):service.resolve_storage({'state':{'native_system_naming_pending':True}},{'external_paths':{'storage':value}})
+    else:
+        request['source_storage']['files'][0]['file_name']='/changed/same'
+        with pytest.raises(worker.Refused):geometry.capture(request,tmp_path,reviewed=value)
+
+
+def test_ordinal_capability_does_not_rename_unambiguous_existing_native_layouts():
+    request=source();old=geometry.from_source(request)
+    assert geometry.from_source(request,system_naming=geometry.SYSTEM_NAMING)==old
+    assert geometry.backup_arguments(old)==[]

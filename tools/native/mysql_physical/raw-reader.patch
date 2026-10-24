@@ -37,21 +37,35 @@ index 58882f39..69e47a40 100644
        [[fallthrough]];
  
 diff --git a/storage/innobase/xtrabackup/src/backup_copy.cc b/storage/innobase/xtrabackup/src/backup_copy.cc
-index d5c84258..44279d1e 100644
+index d5c84258..59d80625 100644
 --- a/storage/innobase/xtrabackup/src/backup_copy.cc
 +++ b/storage/innobase/xtrabackup/src/backup_copy.cc
-@@ -2118,7 +2118,7 @@ bool should_skip_file_on_copy_back(const char *filepath) {
+@@ -2118,7 +2118,13 @@ bool should_skip_file_on_copy_back(const char *filepath) {
    /* skip innodb data files */
    for (auto iter(srv_sys_space.files_begin()), end(srv_sys_space.files_end());
         iter != end; ++iter) {
 -    if (strcmp(iter->name(), filename) == 0) {
-+    if (strcmp(base_name(iter->name()), filename) == 0) {
++    char numbered_name[64];
++    if (xb_system_file_numbers) {
++      unsigned index = 0;
++      for (auto entry = srv_sys_space.files_begin(); entry != iter; ++entry) ++index;
++      snprintf(numbered_name, sizeof(numbered_name), "sr-system-%u.ibdata", index);
++    }
++    if (strcmp(xb_system_file_numbers ? numbered_name : base_name(iter->name()), filename) == 0) {
        return true;
      }
    }
-@@ -2405,8 +2405,12 @@ bool copy_back(int argc, char **argv) {
+@@ -2403,10 +2409,20 @@ bool copy_back(int argc, char **argv) {
+ 
+   for (auto iter(srv_sys_space.files_begin()), end(srv_sys_space.files_end());
         iter != end; ++iter) {
++    char numbered_name[64];
      const char *filename = base_name(iter->name());
++    if (xb_system_file_numbers) {
++      snprintf(numbered_name, sizeof(numbered_name), "sr-system-%u.ibdata",
++               static_cast<unsigned>(std::distance(srv_sys_space.files_begin(), iter)));
++      filename = numbered_name;
++    }
  
 +    /* Only the first system file starts with an FSP header. Later files
 +    start at a nonzero logical page, so their payload must not be parsed
@@ -64,7 +78,7 @@ index d5c84258..44279d1e 100644
      }
    }
 diff --git a/storage/innobase/xtrabackup/src/fil_cur.cc b/storage/innobase/xtrabackup/src/fil_cur.cc
-index db04712e..da753452 100644
+index db04712e..cf73134a 100644
 --- a/storage/innobase/xtrabackup/src/fil_cur.cc
 +++ b/storage/innobase/xtrabackup/src/fil_cur.cc
 @@ -23,11 +23,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
@@ -81,10 +95,20 @@ index db04712e..da753452 100644
  #include <univ.i>
  
  #include "common.h"
-@@ -139,6 +141,14 @@ xb_fil_cur_result_t xb_fil_cur_open(
+@@ -139,6 +141,24 @@ xb_fil_cur_result_t xb_fil_cur_open(
    strncpy(cursor->rel_path, xb_get_relative_path(node->space, cursor->abs_path),
            sizeof(cursor->rel_path) - 1);
  
++  if (srv_backup_mode && cursor->is_system && xb_system_file_numbers) {
++    unsigned index = 0;
++    for (const auto &file : node->space->files) {
++      if (&file == node) break;
++      ++index;
++    }
++    snprintf(cursor->rel_path, sizeof(cursor->rel_path),
++             "sr-system-%u.ibdata", index);
++  }
++
 +  if (srv_backup_mode && fsp_is_undo_tablespace(node->space->id) &&
 +      undo::id2num(node->space->id) > FSP_IMPLICIT_UNDO_TABLESPACES) {
 +    /* Explicit undo files can share a basename in different directories.
@@ -96,7 +120,7 @@ index db04712e..da753452 100644
    /* In the backup mode we should already have a tablespace handle created
    by fil_load_single_table_tablespace() unless it is a system
    tablespace or srv_close_files is true. Otherwise we open the file here.
-@@ -170,6 +180,48 @@ xb_fil_cur_result_t xb_fil_cur_open(
+@@ -170,6 +190,48 @@ xb_fil_cur_result_t xb_fil_cur_open(
      return (XB_FIL_CUR_ERROR);
    }
  
@@ -145,3 +169,47 @@ index db04712e..da753452 100644
    if (srv_unix_file_flush_method == SRV_UNIX_O_DIRECT ||
        srv_unix_file_flush_method == SRV_UNIX_O_DIRECT_NO_FSYNC) {
      os_file_set_nocache(cursor->file.m_file, node->name, "OPEN");
+diff --git a/storage/innobase/xtrabackup/src/xtrabackup.cc b/storage/innobase/xtrabackup/src/xtrabackup.cc
+index 2daf0093..eea38682 100644
+--- a/storage/innobase/xtrabackup/src/xtrabackup.cc
++++ b/storage/innobase/xtrabackup/src/xtrabackup.cc
+@@ -156,6 +156,7 @@ char xtrabackup_real_target_dir[FN_REFLEN] = "./xtrabackup_backupfiles/";
+ char *xtrabackup_target_dir = xtrabackup_real_target_dir;
+ bool xtrabackup_version = false;
+ bool xtrabackup_backup = false;
++bool xb_system_file_numbers = false;
+ bool xtrabackup_prepare = false;
+ bool xtrabackup_copy_back = false;
+ bool xtrabackup_move_back = false;
+@@ -746,6 +747,7 @@ enum options_xtrabackup {
+   OPT_DEFAULTS_GROUP,
+   OPT_OPEN_FILES_LIMIT,
+   OPT_CLOSE_FILES,
++  OPT_SR_SYSTEM_FILE_NUMBERS,
+   OPT_CORE_FILE,
+ 
+   OPT_ROCKSDB_DATADIR,
+@@ -1033,6 +1035,11 @@ struct my_option xb_client_options[] = {
+      (G_PTR *)&xtrabackup_incremental_force_scan, 0, GET_BOOL, NO_ARG, 0, 0, 0,
+      0, 0, 0},
+ 
++    {"scratchrobin-system-file-numbers", OPT_SR_SYSTEM_FILE_NUMBERS,
++     "Use native system-file ordinals for private backup names.",
++     (G_PTR *)&xb_system_file_numbers, (G_PTR *)&xb_system_file_numbers,
++     0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
++
+     {"close_files", OPT_CLOSE_FILES,
+      "do not keep files opened. Use at your own "
+      "risk.",
+diff --git a/storage/innobase/xtrabackup/src/xtrabackup.h b/storage/innobase/xtrabackup/src/xtrabackup.h
+index d2ae0a23..05e5d746 100644
+--- a/storage/innobase/xtrabackup/src/xtrabackup.h
++++ b/storage/innobase/xtrabackup/src/xtrabackup.h
+@@ -141,6 +141,7 @@ inline xb_uncomp_bytes *xb_global_track_uncomp_bytes() {
+ }
+ 
+ extern bool xtrabackup_backup;
++extern bool xb_system_file_numbers;
+ extern bool xtrabackup_prepare;
+ extern bool xtrabackup_apply_log_only;
+ extern bool xtrabackup_copy_back;

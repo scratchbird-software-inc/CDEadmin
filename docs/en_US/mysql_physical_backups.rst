@@ -26,8 +26,8 @@ to that status; this does not relabel it as a generally available release.
 See `the release source <https://github.com/percona/percona-xtrabackup/tree/b1c9c34183de95316d8889ea3d4cb31e31ffddc5>`_
 and `upstream physical restore instructions <https://docs.percona.com/percona-xtrabackup/9.7/restore-a-backup.html>`_.
 
-Raw, multiple-system-file and numbered-undo reader
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Raw and numbered system/undo file reader
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Raw system tablespaces and multiple system-file workflows require the separately qualified native reader built by
 ``tools/build_mysql_raw_backend.py``. The stock pinned utility rejects raw files
@@ -59,8 +59,8 @@ work area::
 
 The builder fetches the exact upstream revision/submodule, applies the pinned
 patch, builds in a container with a read-only source mount, collects complete
-compiler failures, packages private dependencies, and runs fixed, autoextended, multiple-device and duplicate-undo native
-qualification before admitting the package. It requires Linux x86-64, Docker
+compiler failures, packages private dependencies, and runs fixed, autoextended, multiple-device, duplicate-undo and combined
+system/undo native qualification before admitting the package. It requires Linux x86-64, Docker
 and permission for the disposable fixture's loop-device and mount operations.
 It allocates its own autocleared loop device atomically; it never selects an
 existing host device. Default owned source/build/fixture artifacts are removed
@@ -99,7 +99,24 @@ qualifies encrypted incremental recovery after source shutdown and removal of
 all original mount paths, including native read-only/replay editor connections
 and private writes with the held source files unchanged. Both application gates
 also need the usual output/fixture creation or existing fixture/key arguments.
-Duplicate system-file basenames remain separate work.
+System files can also share a basename with one another or with undo files.
+For colliding names, the current package exposes the reviewed native
+``--scratchrobin-system-file-numbers`` option. Native backup uses
+``sr-system-<ordinal>.ibdata`` in the configured system-file order; prepare uses
+that exact private layout, and native copy-back selects each numbered input for
+its separately mapped original destination. The option is bound to sealed
+``native-ordinal-v1`` metadata and to a package qualified for combined system/undo
+collisions. Unambiguous layouts retain their existing native names. Older
+qualified packages remain usable for their admitted retained layouts; they do
+not gain the new ordinal capability.
+
+``tools/cdeadmin_mysql_system_storage_qualification.py`` is the separate native
+combined-collision gate. Add ``--duplicate-system`` to the encrypted/desktop and
+source-offline application commands above to qualify combined system/undo
+collisions through both connectors. The native gate forces a 30 MiB system-space
+payload into the later file and checks recovery, original catalog paths, private
+writes and unchanged source files. The builder requires all five current native
+gates before admitting this package.
 
 Original ``raw``/``newraw`` declarations stay in retained source/backup metadata.
 Preparation, private copy-back and recovery startup use regular private files

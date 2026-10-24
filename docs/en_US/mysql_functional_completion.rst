@@ -2116,8 +2116,8 @@ encrypted incrementals, recurring drills and missing parent/root recovery are
 qualified through both connectors. Native fixed/autoextended raw system files
 and multiple system-file copy-back now use a source-qualified reader and private
 file aliases. Qualification includes system-space payloads, native incremental
-recovery and source-offline editors with missing device nodes. Duplicate system-file basenames, unmapped legacy
-layouts and the broader recovery/inventory gates remain
+recovery and source-offline editors with missing device nodes. Remaining native version/layout
+inventory and the broader recovery/inventory gates remain
 open. Unmapped geometry refuses before native preparation or copy-back.
 See :doc:`mysql_physical_backups`.
 

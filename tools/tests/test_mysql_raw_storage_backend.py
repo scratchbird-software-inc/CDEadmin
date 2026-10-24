@@ -67,3 +67,20 @@ def test_stock_native_backup_utility_remains_usable_for_unambiguous_legacy_undo(
     executable={'path':str(tmp_path/'bin/xtrabackup'),'sha256':'0'*64}
     assert worker.raw_storage_backend(executable,optional=True) is None
     with pytest.raises(worker.Refused):worker.raw_storage_backend(executable)
+
+
+@pytest.mark.parametrize('fault',[None,'missing-system-proof','missing-undo-proof','old-capabilities'])
+def test_system_number_profile_requires_both_native_collision_gates(tmp_path,monkeypatch,fault):
+    value,executable=package(tmp_path,monkeypatch)
+    monkeypatch.setattr(worker,'SYSTEM_READER_PATCH',value['patch_sha256'])
+    value['capabilities']+=['undo-numbers-v1','system-file-numbers-v1']
+    value['qualification'].update(duplicate_undo_paths=True,duplicate_system_paths=True)
+    if fault=='missing-system-proof':value['qualification'].pop('duplicate_system_paths')
+    elif fault=='missing-undo-proof':value['qualification'].pop('duplicate_undo_paths')
+    elif fault=='old-capabilities':value['capabilities'].pop()
+    (tmp_path/'PROVENANCE.json').write_text(json.dumps(value))
+    if fault:
+        with pytest.raises(worker.Refused):worker.raw_storage_backend(executable)
+    else:
+        admitted=worker.raw_storage_backend(executable)
+        assert admitted['system_naming']=='native-ordinal-v1' and admitted['undo_naming']=='native-number-v1'

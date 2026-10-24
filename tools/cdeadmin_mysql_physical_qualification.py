@@ -21,6 +21,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
     subprocess.run(['ssh-keygen','-q','-t','ed25519','-N','','-f',str(key)],check=True)
     context = build/'context'; context.mkdir()
     (context/'authorized_keys').write_bytes(key.with_suffix('.pub').read_bytes())
+    storage_roots=sorted({storage[key] for key in ('system_root','undo_root','empty_root')}|{str(Path(name).parent) for name in storage['system_files']}) if storage else []
     if native_backend:shutil.copytree(Path(native_backend).resolve(strict=True),context/'native-backend')
     (context/'start.sh').write_text('#!/bin/bash\nset -e\n/usr/sbin/sshd -D >/tmp/physical-sshd.log 2>&1 &\n'+
         ('/usr/local/bin/docker-entrypoint.sh "$@" &\ndatabase=$!\nwait "$database" || true\nexec /bin/sleep infinity\n' if missing_paths else 'exec /usr/local/bin/docker-entrypoint.sh "$@"\n'))
@@ -33,8 +34,8 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
          "printf '%s' '{\"path\":\"/var/lib/mysql-keyring/keyring\",\"read_only\":false}' > /usr/lib64/mysql/plugin/component_keyring_file.cnf\n" if keyring else '')+
         ('RUN mkdir -p /var/lib/mysql-external && chown mysql:mysql /var/lib/mysql-external\n' if external else '')+
         ('RUN mkdir -p /sr-source225/mysql /sr-external225 && chown -R mysql:mysql /sr-source225 /sr-external225\n' if missing_paths=='root' else '')+
-        ('RUN mkdir -p '+ ' '.join(storage[key] for key in ('system_root','undo_root','empty_root'))+
-         ' && chown mysql:mysql '+ ' '.join(storage[key] for key in ('system_root','undo_root','empty_root'))+'\n' if storage else '')+
+        ('RUN mkdir -p '+ ' '.join(storage_roots)+
+         ' && chown mysql:mysql '+ ' '.join(storage_roots)+'\n' if storage else '')+
         ('RUN '+ ' && '.join('mkdir -p '+target+' && ln -s '+target+' '+link for link,target in storage.get('filesystem_links',[]))+'\n' if storage and storage.get('filesystem_links') else '')+
         ('COPY native-backend /opt/sr-native-backend\n' if native_backend else '')+
         'COPY authorized_keys /root/.ssh/authorized_keys\n'
@@ -45,7 +46,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False,circular_storage=False,reconciliation_only=False,legacy_sources=None,native_backend=None,duplicate_undo=False):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False,circular_storage=False,reconciliation_only=False,legacy_sources=None,native_backend=None,duplicate_undo=False,duplicate_system=False):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -95,7 +96,8 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             if circular_storage:
                 storage={key:value+'/leaf' for key,value in storage.items()}
                 storage['filesystem_links']=[(str(Path(storage[key]).parent.parent/'link'),str(Path(storage[key]).parent/'nested')) for key in ('system_root','undo_root','empty_root')]
-            storage['system_files']=[storage['system_root']+'/system one 雪',storage['system_root']+'/system.two']
+            storage['system_files']=([storage['system_root']+'/first/same',storage['system_root']+'/second/same'] if duplicate_system else [storage['system_root']+'/system one 雪',storage['system_root']+'/system.two'])
+            if duplicate_system:storage['duplicate_system_names']=True
             import posixpath
             storage['data_home']=posixpath.relpath(storage['system_root'],datadir) if relative_storage else storage['system_root'] if missing_paths=='root' else ''
             storage['undo_setting']=posixpath.relpath(storage['undo_root'],datadir) if relative_storage else storage['undo_root']
@@ -103,8 +105,8 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
                 def setting(root):return posixpath.relpath(str(Path(root).parent.parent/'link'),datadir)+'/../leaf'
                 storage['data_home']=setting(storage['system_root']);storage['undo_setting']=setting(storage['undo_root'])
             storage['scan_settings']=';'.join(setting(root) if circular_storage and root!=external_root else posixpath.relpath(root,datadir) if relative_storage else root for root in (external_root,storage['undo_root'],storage['empty_root']))
-            storage['data_file_spec']=('system one 雪:12M;system.two:12M:autoextend' if storage['data_home'] else
-                storage['system_files'][0]+':12M;'+storage['system_files'][1]+':12M:autoextend')
+            storage['data_file_spec']=';'.join((posixpath.relpath(path,storage['system_root']) if storage['data_home'] else path)+suffix for path,suffix in zip(storage['system_files'],(':12M',':12M:autoextend')))
+        if duplicate_system and not storage:raise ValueError('Select native storage geometry for system-file collision qualification')
         if duplicate_undo:
             if not storage:raise ValueError('Select native storage geometry for duplicate undo qualification')
             storage['duplicate_undo_files']=[storage['undo_root']+'/a/same.ibu',storage['undo_root']+'/b/same.ibu']

@@ -17,12 +17,14 @@ from .mysql_monitoring_host import MySQLMonitoringHost
 
 def resolve_storage(captured,observed):
     """Resolve each pending native layout using its own authenticated-host facts."""
-    if captured['state'].get('native_storage_resolution_pending') or captured['state'].get('native_undo_naming_pending'):
+    if captured['state'].get('native_storage_resolution_pending') or captured['state'].get('native_undo_naming_pending') or captured['state'].get('native_system_naming_pending'):
         resolved=observed.get('external_paths',{}).get('storage')
         if not resolved or captured['state'].get('native_storage_resolution_pending') and not resolved.get('resolved_paths'):
             raise native.HostError('Native source filesystem resolution was not observed on its authenticated host')
         if captured['state'].get('native_undo_naming_pending') and resolved.get('undo_naming')!=native.worker.geometry_module().UNDO_NAMING:
             raise native.HostError('Qualified native undo naming was not observed on its authenticated host')
+        if captured['state'].get('native_system_naming_pending') and resolved.get('system_naming')!=native.worker.geometry_module().SYSTEM_NAMING:
+            raise native.HostError('Qualified native system-file naming was not observed on its authenticated host')
         modeled,_directories=native.worker.geometry_module().external_entries(resolved)
         captured['state']['native_external_files']=[{'file_name':name} for name in sorted(
             {row['file_name'] for row in captured['state'].get('native_external_files',[])}|{row['file_name'] for row in modeled})]
@@ -90,6 +92,9 @@ def source(service, server, *, admitted=None, keyring=None, isolate_external_pat
             try:
                 storage=geometry.from_source({'source_storage':captured['state']['native_storage_source'],
                     'binding':captured['state']['host_binding'],'isolate_external_paths':isolate_external_paths})
+            except geometry.SystemNamingRequired:
+                if isolate_external_paths is not True:raise native.HostError('Review native system-path isolation before backing up colliding filenames') from None
+                captured['state']['native_system_naming_pending']=True;storage=None
             except geometry.UndoNamingRequired:
                 if isolate_external_paths is not True:raise native.HostError('Review native undo-path isolation before backing up duplicate filenames') from None
                 captured['state']['native_undo_naming_pending']=True;storage=None

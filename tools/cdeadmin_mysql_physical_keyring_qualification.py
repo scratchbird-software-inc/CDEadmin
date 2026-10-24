@@ -104,6 +104,9 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
                 if storage:
                     retained=base['remote_observation']['artifact']['storage_geometry']
                     assert [row['source_file'] for row in retained['system_files']]==storage['system_files']
+                    if storage.get('duplicate_system_names'):
+                        assert retained['system_naming']=='native-ordinal-v1'
+                        assert [row['backup_name'] for row in retained['system_files']]==['sr-system-0.ibdata','sr-system-1.ibdata']
                     if duplicate_files:
                         assert retained['undo_naming']=='native-number-v1'
                         assert len({row['backup_name'] for row in retained['undo_files']})==len(retained['undo_files'])
@@ -163,6 +166,8 @@ def qualify_keyring(app,output,oracle,container,port,password,selected,credentia
                 try:
                     assert execute(post,session,'SELECT note,HEX(b) FROM encrypted_data WHERE id='+str(2+int(use_c)))['rows']==[['encrypted delta 雪','00FF01']]
                     if duplicate_files:assert execute(post,session,"SELECT FILE_NAME,TABLESPACE_NAME FROM information_schema.FILES WHERE FILE_TYPE='UNDO LOG' ORDER BY FILE_NAME")['rows']==undo_catalog
+                    if storage and storage.get('duplicate_system_names'):
+                        assert execute(post,session,"SELECT FILE_NAME FROM information_schema.FILES WHERE TABLESPACE_NAME='innodb_system' ORDER BY FILE_NAME")['rows']==[[name] for name in sorted(storage['system_files'])]
                     if storage:
                         assert execute(post,session,'SELECT @@innodb_data_file_path,@@innodb_undo_directory')['rows']==[
                             [storage['runtime_data_file_spec'],storage['undo_root']]]
@@ -231,7 +236,8 @@ if __name__=='__main__':
     parser.add_argument('--relative-storage',action='store_true')
     parser.add_argument('--circular-storage',action='store_true')
     parser.add_argument('--duplicate-undo',action='store_true')
+    parser.add_argument('--duplicate-system',action='store_true')
     parser.add_argument('--native-backend',type=Path)
     args=parser.parse_args()
     from cdeadmin_mysql_physical_qualification import qualify
-    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,keyring_only=not args.external,external_only=args.external,keyring_desktop_only=args.desktop_only,storage_geometry=args.geometry,relative_storage=args.relative_storage,circular_storage=args.circular_storage,native_backend=args.native_backend,duplicate_undo=args.duplicate_undo)
+    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,keyring_only=not args.external,external_only=args.external,keyring_desktop_only=args.desktop_only,storage_geometry=args.geometry,relative_storage=args.relative_storage,circular_storage=args.circular_storage,native_backend=args.native_backend,duplicate_undo=args.duplicate_undo,duplicate_system=args.duplicate_system)
