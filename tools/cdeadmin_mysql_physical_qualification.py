@@ -41,7 +41,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -78,14 +78,19 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
     data_volumes = []
     try:
         if missing_paths not in {None,'parent','root'}:raise ValueError('Select parent or root missing paths')
+        if relative_storage and not storage_geometry:raise ValueError('Select native storage geometry for relative-path qualification')
         encrypted=keyring_only or external_only or bool(missing_paths) or storage_geometry
         external_root='/sr-external225' if missing_paths=='root' else '/var/lib/mysql-external'
         datadir='/sr-source225/mysql' if missing_paths=='root' else '/var/lib/mysql'
         prefix='/sr-geometry227' if missing_paths=='root' else '/var/lib/mysql'
         storage={key:prefix+'-'+suffix for key,suffix in [('system_root','system'),('undo_root','undo'),('empty_root','empty')]} if storage_geometry else None
         if storage:
+            if relative_storage:storage={key:value+'/deep' for key,value in storage.items()}
             storage['system_files']=[storage['system_root']+'/system one 雪',storage['system_root']+'/system.two']
-            storage['data_home']=storage['system_root'] if missing_paths=='root' else ''
+            import posixpath
+            storage['data_home']=posixpath.relpath(storage['system_root'],datadir) if relative_storage else storage['system_root'] if missing_paths=='root' else ''
+            storage['undo_setting']=posixpath.relpath(storage['undo_root'],datadir) if relative_storage else storage['undo_root']
+            storage['scan_settings']=';'.join(posixpath.relpath(root,datadir) if relative_storage else root for root in (external_root,storage['undo_root'],storage['empty_root']))
             storage['data_file_spec']=('system one 雪:12M;system.two:12M:autoextend' if storage['data_home'] else
                 storage['system_files'][0]+':12M;'+storage['system_files'][1]+':12M:autoextend')
         key = prepare_fixture(output,image,keyring=encrypted,external=external_only or bool(missing_paths),missing_paths=missing_paths,storage=storage) if prepare else Path(key).resolve(strict=True)
@@ -103,9 +108,9 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             '-e','MYSQL_ALLOW_EMPTY_PASSWORD=yes','-p','127.0.0.1::3306','-p','127.0.0.1::22',image,
             'mysqld','--server-id=101','--gtid-mode=ON','--enforce-gtid-consistency=ON','--log-bin=physical']+
             (['--innodb-redo-log-encrypt=ON','--innodb-undo-log-encrypt=ON','--binlog-encryption=ON'] if encrypted else [])+
-            (['--innodb-directories='+';'.join([external_root,*([storage['undo_root'],storage['empty_root']] if storage else [])])] if external_only or missing_paths else [])+
+            (['--innodb-directories='+(storage['scan_settings'] if storage else external_root)] if external_only or missing_paths else [])+
             (['--innodb-data-home-dir='+storage['data_home'],'--innodb-data-file-path='+storage['data_file_spec'],
-                '--innodb-undo-directory='+storage['undo_root']] if storage else [])+
+                '--innodb-undo-directory='+storage['undo_setting']] if storage else [])+
             (['--datadir='+datadir] if missing_paths else []))
         mounts=json.loads(_run(['docker','inspect','--format','{{json .Mounts}}',name]).stdout)
         data_volumes=list(dict.fromkeys(data_volumes+[m['Name'] for m in mounts if m['Type']=='volume' and m['Destination']!='/var/backups/scratchrobin']))

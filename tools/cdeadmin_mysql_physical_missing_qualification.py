@@ -187,6 +187,7 @@ if __name__=='__main__':
     parser.add_argument('--fixture-image',required=True);parser.add_argument('--prepare-fixture',action='store_true')
     parser.add_argument('--private-key');parser.add_argument('--missing-paths',choices=('parent','root'),required=True)
     parser.add_argument('--geometry',action='store_true')
+    parser.add_argument('--relative-storage',action='store_true')
     args=parser.parse_args()
     from cdeadmin_mysql_physical_qualification import qualify
-    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,missing_paths=args.missing_paths,storage_geometry=args.geometry)
+    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,missing_paths=args.missing_paths,storage_geometry=args.geometry,relative_storage=args.relative_storage)

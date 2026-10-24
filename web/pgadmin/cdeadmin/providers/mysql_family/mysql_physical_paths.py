@@ -121,8 +121,10 @@ def runtime(directory,data,context):
         entries=[{'file_name':file['source_file'],'tablespace_name':file['tablespace_name'],'tablespace_type':file['tablespace_type']}
             for row in context['plan'] for file in row['files'] if file['tablespace_type']!='SYSTEM']
         scan=sorted(set(storage['scan_directories'])|{str(path) for path in roots(entries)})
+    data_home=context['original_datadir'] if storage is None else storage['variables']['innodb_data_home_dir']
+    if storage is not None and data_home not in {'','.', './'}:data_home=storage['data_home']
     return selected,['--datadir='+context['original_datadir'],
-        '--innodb-data-home-dir='+(context['original_datadir'] if storage is None else storage['variables']['innodb_data_home_dir']),
+        '--innodb-data-home-dir='+data_home,
         '--innodb-undo-directory='+(context['original_datadir'] if storage is None else storage['undo_home']),
         '--innodb-directories='+';'.join(scan)]
 

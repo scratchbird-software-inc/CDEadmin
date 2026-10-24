@@ -210,6 +210,7 @@ if __name__=='__main__':
     parser.add_argument('--external',action='store_true')
     parser.add_argument('--desktop-only',action='store_true')
     parser.add_argument('--geometry',action='store_true')
+    parser.add_argument('--relative-storage',action='store_true')
     args=parser.parse_args()
     from cdeadmin_mysql_physical_qualification import qualify
-    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,keyring_only=not args.external,external_only=args.external,keyring_desktop_only=args.desktop_only,storage_geometry=args.geometry)
+    qualify(args.output,args.fixture_image,args.private_key,args.prepare_fixture,args.browser_binary,args.driver_binary,keyring_only=not args.external,external_only=args.external,keyring_desktop_only=args.desktop_only,storage_geometry=args.geometry,relative_storage=args.relative_storage)

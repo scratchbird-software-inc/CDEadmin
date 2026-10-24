@@ -174,7 +174,10 @@ and user undo, and configured empty scan roots. Native preparation/copy-back use
 private destinations; original names are presented only inside the isolated
 process. Encrypted incremental chains, literal system-file names, recurring
 drills and source-offline recovery through both connectors are qualified.
-Relative storage homes/scan roots, raw-device files, unmapped legacy layouts,
+Native relative homes/scan roots, nested directories and leading parent
+references now retain their effective paths without discarding original
+settings. System and undo catalog paths use their distinct native bases.
+Circular filesystem references, raw-device files, unmapped legacy layouts,
 duplicate flattened undo basenames and external MERGE members remain open alongside system-state,
 guardian, cutover and broader inventory requirements.
 Managed physical targets now support separately reviewed expected-dump acceptance

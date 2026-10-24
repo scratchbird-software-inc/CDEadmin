@@ -778,7 +778,9 @@ Retained native storage metadata now supports private preparation/copy-back and
 recovery of system files, default/user undo and empty configured scan roots.
 Encrypted incremental chains, literal system filenames, key rotation, recurring
 startup drills and source-offline recovery with missing parent/root directories
-have native evidence through both connectors. Relative storage-home/scan-root
-resolution, raw devices, duplicate flattened undo names, unmapped legacy layouts,
+have native evidence through both connectors. Relative homes/scan roots, nested
+directories and leading parent references now use native data-home/datadir
+resolution and retain original settings alongside effective paths. Circular
+filesystem resolution, raw devices, duplicate flattened undo names, unmapped legacy layouts,
 external MERGE members and the
 remaining inventory/system-state/guardian/cutover work still precede handoff.

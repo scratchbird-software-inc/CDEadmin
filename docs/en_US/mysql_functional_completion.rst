@@ -2104,8 +2104,11 @@ artifacts. Private prepare/copy-back destinations and separate runtime payloads
 preserve original native path semantics without rewriting pages or dictionary
 contents. Native encrypted incrementals, key rotation, literal system-file names,
 recurring startup drills and source-offline recovery with missing parent/root
-directories are qualified through both connectors. Relative storage homes/scan
-roots, raw-device files, duplicate flattened undo basenames, unmapped legacy
+directories are qualified through both connectors. Native relative homes and
+scan roots retain original settings and effective paths; system and undo
+catalog names use their native data-home/datadir bases. Nested homes and leading
+parent references feed the same encrypted recovery and source-offline workflows.
+Circular filesystem references, raw-device files, duplicate flattened undo basenames, unmapped legacy
 layouts, external MERGE members and the broader recovery/inventory gates remain
 open. Unmapped geometry refuses before native preparation or copy-back.
 See :doc:`mysql_physical_backups`.

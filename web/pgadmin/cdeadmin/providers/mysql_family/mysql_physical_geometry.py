@@ -6,6 +6,7 @@ Opaque InnoDB pages and dictionary contents are never rewritten.
 """
 import configparser
 from pathlib import Path, PurePosixPath
+import posixpath
 import re
 
 try:
@@ -21,18 +22,19 @@ VARIABLES={'innodb_data_home_dir','innodb_data_file_path','innodb_undo_directory
 
 def absolute(value,base=None):
     value=physical.host.text(value);path=PurePosixPath(value)
-    if '..' in path.parts or '\0' in value:raise Refused('Native storage path is ambiguous')
+    descended=False
+    for part in path.parts:
+        if part=='..' and (path.is_absolute() or descended):raise Refused('Circular native storage paths require separately observed filesystem resolution')
+        if part not in {'/','.', '..'}:descended=True
     if not path.is_absolute():
         if base is None:raise Refused('Native storage requires an observed absolute directory')
         path=PurePosixPath(base)/path
-    return str(path)
+    return posixpath.normpath(str(path))
 
 
 def home(value,datadir):
     if value in {'','.', './'}:return datadir
-    if not isinstance(value,str) or not value.startswith('/'):
-        raise Refused('Relative native storage homes need separately observed path resolution')
-    return absolute(value)
+    return absolute(value,datadir)
 
 
 def configuration(directory):
@@ -49,7 +51,8 @@ def system_spec(value):
         match=re.fullmatch(r'([^:;\x00\r\n]+):([0-9]+[KkMmGg]?(?::autoextend(?::max:[0-9]+[KkMmGg]?)?)?)',item)
         if not match:raise Refused('Native system-file geometry needs additional admission')
         name,suffix=match.groups();path=PurePosixPath(name)
-        if '..' in path.parts or path.name in {'','.', '..'}:raise Refused('Native system-file identity is ambiguous')
+        if path.name in {'','.', '..'}:raise Refused('Native system-file identity is ambiguous')
+        absolute(name,'/')  # Validate parent placement; native homes supply the real base below.
         result.append({'native_name':name,'backup_name':path.name,'suffix':suffix})
     if len(result)>256 or len({row['backup_name'] for row in result})!=len(result):
         raise Refused('Native flattened system-file identities are ambiguous')
@@ -70,9 +73,9 @@ def from_source(request):
     for row in files:
         if not isinstance(row,dict) or set(row)!={'file_name','tablespace_name','file_type'}:
             raise Refused('Native storage file identity is unavailable')
-        # Native FILES reports relative system names against data-home even
-        # when that home is outside datadir. Undo names use their own home.
-        name=absolute(row['file_name'],undo_home if row['file_type']=='UNDO LOG' else data_home)
+        # System FILES names use data-home. Relative undo FILES names already
+        # contain their configured undo-directory prefix and use datadir.
+        name=absolute(row['file_name'],datadir if row['file_type']=='UNDO LOG' else data_home)
         if name in seen:raise Refused('Native storage file identity is duplicated')
         seen.add(name)
         if row['file_type']=='UNDO LOG':
@@ -88,13 +91,13 @@ def from_source(request):
     directories=[]
     for value in values['innodb_directories'].split(';'):
         if not value:continue
-        directory=absolute(value)  # Relative scan roots need their native resolution observed.
+        directory=absolute(value,datadir)
         if directory not in directories:directories.append(directory)
     if len(directories)>256:raise Refused('Native storage directory inventory exceeds its bound')
     result={'format':'mysql-9.7-storage-v1','original_datadir':datadir,'variables':values,
         'data_home':data_home,'undo_home':undo_home,'system_files':specifications,'undo_files':undo,'scan_directories':directories}
     external=any(not PurePosixPath(row['source_file']).is_relative_to(PurePosixPath(datadir)) for row in [*specifications,*undo])
-    needed=external or bool(directories) or any('/' in row['native_name'] for row in specifications)
+    needed=external or bool(directories) or data_home!=datadir or undo_home!=datadir or any('/' in row['native_name'] for row in specifications)
     if needed and request.get('isolate_external_paths') is not True:
         raise Refused('Review native storage-path isolation before using external system/undo files or retained scan roots')
     return result if needed else None
@@ -157,7 +160,8 @@ def external_entries(value):
         for row in rows:
             if not PurePosixPath(row['source_file']).is_relative_to(datadir):
                 entries.append({'file_name':row['source_file'],'tablespace_name':row.get('tablespace_name',row['backup_name']),'tablespace_type':kind})
-    return entries,[root for root in value['scan_directories'] if not PurePosixPath(root).is_relative_to(datadir)]
+    directories=sorted(set(value['scan_directories'])|{value['data_home'],value['undo_home']})
+    return entries,[root for root in directories if not PurePosixPath(root).is_relative_to(datadir)]
 
 
 def prepare_arguments(directory,value):
@@ -224,6 +228,6 @@ def finish_copy_back(directory,original,target,value,context):
     pool.rmdir()
     for row in context['plan']:(target/row['relative_root']).mkdir(mode=0o700,parents=True,exist_ok=True)
     (target/'external-data').mkdir(mode=0o700,exist_ok=True)
-    for root in value['scan_directories']:
+    for root in sorted(set(value['scan_directories'])|{value['data_home'],value['undo_home']}):
         path=destination(root,target,context);path.mkdir(mode=0o700,parents=True,exist_ok=True)
     copied_metadata(original,target)

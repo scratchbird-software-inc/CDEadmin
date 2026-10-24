@@ -61,9 +61,11 @@ def source(service, server, *, admitted=None, keyring=None, isolate_external_pat
         captured['state']['native_storage_source']={'variables':storage_variables,'files':storage_files}
         data=PurePosixPath(captured['state']['host_binding']['datadir'])
         files=rows(connection,'SELECT CAST(PATH AS CHAR CHARACTER SET utf8mb4) AS file_name FROM information_schema.INNODB_DATAFILES ORDER BY PATH')
-        external=[row for row in files if PurePosixPath(row['file_name']).is_absolute() and not PurePosixPath(row['file_name']).is_relative_to(data)]
         try:
-            storage=native.worker.geometry_module().from_source({'source_storage':captured['state']['native_storage_source'],
+            geometry=native.worker.geometry_module()
+            effective=[geometry.absolute(row['file_name'],str(data)) for row in files]
+            external=[{'file_name':name} for name in sorted(set(effective)) if not PurePosixPath(name).is_relative_to(data)]
+            storage=geometry.from_source({'source_storage':captured['state']['native_storage_source'],
                 'binding':captured['state']['host_binding'],'isolate_external_paths':isolate_external_paths})
         except native.worker.Refused as error:raise native.HostError(str(error)) from None
         if storage is not None:
@@ -152,7 +154,7 @@ class PhysicalJobs(MySQLBinlogJobs):
         'The admitted backend is upstream XtraBackup9.7.1-rc1, a release candidate. Its original native replies, verified files and recovery acceptance are separate facts.',
         'Full backups take native backup/read locks and copy complete supported instance files. Prepare mutates a separate private copy. Copy-back creates only a new isolated job data directory; it never overwrites the live data directory or starts a database.',
         'Native processes run under an independent supervisor on the authenticated database SSH host. Closing the viewer or losing a reply does not cancel or roll back native work. An original unknown dispatch is never automatically repeated.',
-        'This workflow requires complete, uncompressed native backup files. Encrypted data/log recovery requires explicitly retained native file-keyring material and matching components. Incrementals require exact base lineage and contiguous LSNs; apply to separate redo-only copies, then finalize. Native system/undo and external tablespace paths require retained source metadata and reviewed Linux filesystem isolation. Relative storage homes/scan roots, raw-device files, unmapped legacy layouts and external MERGE members require additional admission. Production cutover remains separate.',
+        'This workflow requires complete, uncompressed native backup files. Encrypted data/log recovery requires explicitly retained native file-keyring material and matching components. Incrementals require exact base lineage and contiguous LSNs; apply to separate redo-only copies, then finalize. Native system/undo and external tablespace paths require retained source metadata and reviewed Linux filesystem isolation. Relative homes/scan roots resolve from the native datadir and recovery uses the retained effective paths. Circular filesystem references, raw-device files, unmapped legacy layouts and external MERGE members require additional admission. Production cutover remains separate.',
         'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account with a fresh UUID, private Unix socket and selected loopback TCP listener. Read-only inspection is the default. Explicit replay startup is writable with private ROW binary logging and the selected server ID. Both disable events/replication autostart and automatic upgrades, and end on stop or reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
         'Physical files and native output are private to the selected host OS account. Broad source archive protection is acquired before backup dispatch and is retired only by its separate reviewed protection workflow.',
         'Physical recovery preserves MEMORY table definitions; native MySQL discards their volatile rows on restart. Inspect the listed MEMORY tables and use the logical backup workflow when their current rows must be retained.',

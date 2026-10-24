@@ -10,7 +10,7 @@ starts and supervises a private data copy. Selected log recovery, independent
 exported-data/definition acceptance, dependency-aware retention and scheduling
 have separate reviewed workflows. Native GPL file-keyring recovery is described
 below. Native system/undo geometry and external InnoDB table/tablespace isolation
-are also described below. Relative storage homes/scan roots, raw-device files,
+are also described below. Circular filesystem references, raw-device files,
 unmapped legacy layouts and external MERGE-path admission,
 unexported/system-state acceptance and production cutover remain open under
 ``CMP-MY-01``.
@@ -753,7 +753,7 @@ include private external runtime files and interrupted copy-back input copies.
 
 This admission covers InnoDB per-table external data and general tablespaces,
 with retained native system/undo geometry as described below.
-Relative storage homes/scan roots, raw-device files, unmapped legacy layouts and external MERGE members,
+Circular filesystem references, raw-device files, unmapped legacy layouts and external MERGE members,
 broader engine inventory, system-state acceptance, legacy/guardian
 resolution and production cutover remain tracked recovery work. Unsupported
 unmapped absolute system geometry and external undo storage refuse before
@@ -815,7 +815,25 @@ DDL. All held original source files remain unchanged through recovery and stop.
 Use ``tools/cdeadmin_mysql_physical_keyring_qualification.py --external --geometry``
 for the native encrypted incremental workflow. Add ``--geometry`` to either
 missing-path qualification variant above for source-offline recovery. Native
-relative storage-home/scan-root resolution, raw-device specifications and
+filesystem resolution for circular path references, raw-device specifications and
 duplicate flattened undo basenames require further backend admission. Legacy
 artifacts without the required retained mapping remain refused before native
 preparation or copy-back. These boundaries remain recovery implementation work.
+
+Relative storage paths
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Native relative storage homes and scan roots resolve against MySQL's datadir.
+System ``FILES`` names resolve against data-home; relative undo catalog names
+already include their configured directory prefix and resolve against datadir.
+The retained metadata preserves the original variable strings alongside their
+effective paths. Recovery uses effective home/scan paths, including nested
+directories and leading parent references. Nondefault internal homes and empty
+configured directories are retained even when no external file requires them.
+
+Add ``--relative-storage`` to the geometry qualification commands to exercise
+native encrypted full/incremental recovery, recurring drills, and source-offline
+missing parent/root directories through both connectors. Circular references
+with parent traversal after a descended path component remain refused until
+their actual filesystem resolution can be retained; they are not normalized by
+guessing across possible symlinks.

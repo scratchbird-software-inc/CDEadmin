@@ -36,13 +36,13 @@ def test_capture_preserves_exact_original_geometry_empty_scan_roots_and_page_byt
     assert (directory/geometry.FILE).stat().st_mode&0o077==0
 
 
-@pytest.mark.parametrize('fault',['no-consent','catalog-mismatch','undo-name-collision','relative-home','raw-device'])
+@pytest.mark.parametrize('fault',['no-consent','catalog-mismatch','undo-name-collision','circular-home','raw-device'])
 def test_unadmitted_source_storage_is_refused_before_sealing_or_native_dispatch(fault):
     request=source()
     if fault=='no-consent':request['isolate_external_paths']=False
     elif fault=='catalog-mismatch':request['source_storage']['files'][0]['file_name']='/different/file'
     elif fault=='undo-name-collision':request['source_storage']['files'].append({'file_name':'/other/extra.ibu','tablespace_name':'different_undo','file_type':'UNDO LOG'})
-    elif fault=='relative-home':request['source_storage']['variables']['innodb_data_home_dir']='relative'
+    elif fault=='circular-home':request['source_storage']['variables']['innodb_data_home_dir']='/system/link/../different'
     else:request['source_storage']['variables']['innodb_data_file_path']='/system/first:12Mraw'
     with pytest.raises(worker.Refused):geometry.from_source(request)
 
@@ -143,3 +143,40 @@ def test_runtime_metadata_is_bound_to_prepared_receipt_and_copy_back_bytes(tmp_p
     if fault:
         with pytest.raises(worker.Refused):geometry.retained(original,artifact,copied)
     else:assert geometry.retained(original,artifact,copied)==value
+
+
+def test_relative_homes_scan_roots_and_prefixed_undo_catalog_use_native_datadir():
+    request=source();request['binding']['datadir']='/server/data'
+    variables=request['source_storage']['variables']
+    variables.update(innodb_data_home_dir='../system/deep',innodb_data_file_path='first:12M;second:12M:autoextend',
+        innodb_undo_directory='../undo/deep',innodb_directories='../tables/deep;../undo/deep;../empty/deep')
+    for row in request['source_storage']['files']:
+        name=Path(row['file_name']).name
+        row['file_name']='./'+name if row['file_type']=='TABLESPACE' else '../undo/deep/'+name
+    value=geometry.from_source(request)
+    assert value['data_home']=='/server/system/deep' and value['undo_home']=='/server/undo/deep'
+    assert value['scan_directories']==['/server/tables/deep','/server/undo/deep','/server/empty/deep']
+    assert [row['source_file'] for row in value['undo_files']]==[
+        '/server/undo/deep/undo_001','/server/undo/deep/undo_002','/server/undo/deep/extra.ibu']
+    assert value['variables']==variables
+
+
+def test_leading_parent_system_specs_keep_source_names_and_resolved_file_identity():
+    request=source();request['binding']['datadir']='/server/data'
+    request['source_storage']['variables'].update(innodb_data_home_dir='',
+        innodb_data_file_path='../system/first:12M;../system/second:12M:autoextend',innodb_undo_directory='../undo',innodb_directories='')
+    for row in request['source_storage']['files']:
+        row['file_name']=('../system/' if row['file_type']=='TABLESPACE' else '../undo/')+Path(row['file_name']).name
+    value=geometry.from_source(request)
+    assert [row['source_file'] for row in value['system_files']]==['/server/system/first','/server/system/second']
+    assert value['system_files'][0]['native_name']=='../system/first'
+
+
+def test_internal_nondefault_homes_are_retained_even_without_external_files():
+    request=source();request['binding']['datadir']='/server/data'
+    request['source_storage']['variables'].update(innodb_data_home_dir='system',innodb_data_file_path='first:12M;second:12M:autoextend',
+        innodb_undo_directory='undo',innodb_directories='')
+    for row in request['source_storage']['files']:
+        row['file_name']='./'+Path(row['file_name']).name if row['file_type']=='TABLESPACE' else 'undo/'+Path(row['file_name']).name
+    value=geometry.from_source(request)
+    assert value and value['data_home']=='/server/data/system' and value['undo_home']=='/server/data/undo'
