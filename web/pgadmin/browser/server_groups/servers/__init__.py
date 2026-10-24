@@ -3192,6 +3192,9 @@ class ServerNode(PGChildNodeView):
                 elif action in {'mysql_host_peer','mysql_host_catalog','mysql_host_review','mysql_host_start','mysql_host_status','mysql_host_list','mysql_host_cancel','mysql_host_reconcile','mysql_host_cancel_initialization','mysql_host_acknowledge_initialization'}:
                     try:payload=service.mysql_host(server,action.removeprefix('mysql_host_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_router_catalog','mysql_router_peer','mysql_router_review','mysql_router_start','mysql_router_status','mysql_router_list','mysql_router_cancel','mysql_router_reconcile','mysql_router_cancel_original','mysql_router_acknowledge'}:
+                    try:payload=service.mysql_router(server,action.removeprefix('mysql_router_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mysql_physical_peer','mysql_physical_review','mysql_physical_start','mysql_physical_status','mysql_physical_list','mysql_physical_cancel','mysql_physical_reconcile','mysql_physical_output',
                                 'mysql_physical_retention_pin','mysql_physical_retention_review','mysql_physical_retention_start','mysql_physical_retention_status','mysql_physical_retention_reconcile','mysql_physical_retention_abandon',
                                 'mysql_physical_retention_batch_review','mysql_physical_retention_batch_list','mysql_physical_retention_batch_status','mysql_physical_retention_batch_advance','mysql_physical_retention_batch_resume','mysql_physical_retention_batch_reconcile','mysql_physical_retention_batch_cancel',

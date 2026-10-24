@@ -1705,6 +1705,20 @@ class ProviderWorkspaceService:
         except RelationalClientError:raise ProviderWorkspaceError('Native host credential or client admission is unavailable') from None
         except OSError:raise ProviderWorkspaceError('Native host receipt storage is unavailable') from None
 
+    def mysql_router(self, server, operation, request):
+        from .mysql_router_service import action
+        from ..providers.mysql_family.mysql_router_transport import HostError
+        from ..providers.mysql_family.mysql_router_worker import Refused
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..sdk.relational import RelationalClientError
+        from mysql.connector import Error as NativeError
+        try:return action(self,server,operation,request)
+        except (HostError,Refused,BinlogArchiveError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:raise ProviderWorkspaceError('Native Router source observation failed ('+str(error.errno)+', '+str(error.sqlstate)+')') from None
+        except RelationalClientError:raise ProviderWorkspaceError('Native Router credential or client admission is unavailable') from None
+        except OSError:raise ProviderWorkspaceError('Native Router receipt storage is unavailable') from None
+        except (ValueError,TypeError,KeyError):raise ProviderWorkspaceError('Native Router input or original receipt is unavailable') from None
+
     def mysql_physical(self, server, operation, request):
         from .mysql_physical_service import action
         from ..providers.mysql_family.mysql_host_transport import HostError

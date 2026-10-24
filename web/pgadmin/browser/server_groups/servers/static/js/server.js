@@ -254,6 +254,11 @@ define('pgadmin.node.server', [
           label: gettext('MySQL database-host administration...'), priority: 9,
           enable: node => node.cde_profile_id === 'mysql-native',
         }, {
+          name: 'mysql_routers', node: 'server', module: this,
+          applies: ['object','context'], callback: 'open_mysql_routers',
+          label: gettext('MySQL Router host and service administration...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mysql-native',
+        }, {
           name: 'mysql_workload', node: 'server', module: this,
           applies: ['object', 'context'], callback: 'open_mysql_workload',
           label: gettext('MySQL workload analysis...'), priority: 9,
@@ -495,6 +500,12 @@ define('pgadmin.node.server', [
           const item=args?.item || pgBrowser.tree.selected();
           const data=pgBrowser.tree.itemData(item);
           showProviderWorkspace(gettext('MySQL database-host administration'),this,data,item,'mysql-host');
+          return false;
+        },
+        open_mysql_routers: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL Router host and service administration'),this,data,item,'mysql-routers');
           return false;
         },
         open_mysql_physical: function(args) {

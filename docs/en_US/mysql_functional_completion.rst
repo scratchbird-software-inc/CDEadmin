@@ -2314,7 +2314,37 @@ supply its return code. Neither installation nor a service request is repeated
 automatically after interruption.
 
 This implements native Linux service creation and boot controls under
-``CMP-MY-02``. Native upgrades, Router deployment/traffic, remaining topology
+``CMP-MY-02``. Native upgrades, remaining topology
 failure/repair, production recovery cutover and inventory reconciliation remain
 separate gates. Windows/macOS implementation and qualification stay with the
 platform teams.
+
+Native Router deployment and service controls
+----------------------------------------------
+
+The owned server's Availability menu now exposes :doc:`mysql_router_hosts`.
+Native Community Router bootstraps on a separately pinned Linux SSH host after
+independent metadata-seed UUID/topology, actor, grants and TLS observations.
+Private credential admission supports the background invocation without
+reacquiring a request Vault principal. The native utility creates the Router
+identity, accounts and private deployment; generated IDs and file hashes are
+observed rather than supplied by the application. Existing directories and
+unit files are preserved.
+
+Separately reviewed systemd installation and start/stop/restart/enable/disable
+use the original deployment/host authority and work without source SQL. Native
+unit validation does not substitute for Router configuration acceptance at
+startup or routed SQL readiness. Original independent guardian receipts and
+native input cleanup survive observer loss; an unknown original reply stays
+unknown after later process/unit observations. Explicit stop/restart requires
+all-client disconnection consent.
+
+Linux native qualification includes pure/C application routes, an independent
+three-member Cluster and separate Router host, TLS-routed exact bigint/Unicode
+data, actual primary crash/election, pending-transaction rollback, committed
+data preservation, read-only secondary routing, SQL-independent service
+controls and crashed-member rejoin. The built desktop qualifies the dedicated
+context menu and native bootstrap/service reviews. This bounds the recorded
+Cluster/deployment scope; other topology failure/repair, live selected-Router
+metadata mutation/removal, upgrades, cutover and inventory remain under their
+owning requirements. History qualification stays owner-deferred.

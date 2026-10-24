@@ -87,6 +87,17 @@ def execute(request,observed,directory,timeout,host):
         'restart_issued':False,'enable_issued':False,'sql_readiness_observed':False,'automatic_retry':False}
     host['save'](directory/'service-installation.json',result)
     if configuration['return_code']!=0 or configuration.get('timed_out'):return result
+    return publish(plan,directory,timeout,host,result,
+        lambda:inspect(request,observed,host),lambda:association(request,observed,directory,host))
+
+
+def publish(plan,directory,timeout,host,result,recheck,associate):
+    """Validate and exclusively publish exact unit bytes for a typed caller.
+
+    The caller owns engine-specific configuration acceptance. Router has no
+    mysqld --validate-config mode; its configuration is accepted at startup.
+    """
+    directory=Path(directory);path=Path(plan['path'])
     candidate=directory/path.name
     with candidate.open('xb') as stream:
         host['private_file'](candidate);stream.write(plan['unit_text'].encode('utf8'));stream.flush();os.fsync(stream.fileno())
@@ -94,7 +105,7 @@ def execute(request,observed,directory,timeout,host):
     result.update(validation=validation,native_result=validation,native_result_scope='systemd_unit_validation')
     host['save'](directory/'service-installation.json',result)
     if validation['return_code']!=0 or validation.get('timed_out'):return result
-    if inspect(request,observed,host)!=plan:raise host['Refused']('Native unit installation inputs changed after validation')
+    if recheck()!=plan:raise host['Refused']('Native unit installation inputs changed after validation')
     parent=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY)
     temporary=None
     try:
@@ -122,7 +133,7 @@ def execute(request,observed,directory,timeout,host):
     result['native_result_scope']='systemd_daemon_reload'
     host['save'](directory/'service-installation.json',result)
     if result['daemon_reload']['return_code']==0:
-        try:result['installed_service_binding']=association(request,observed,directory,host)
+        try:result['installed_service_binding']=associate()
         except Exception as error:result['association_error_type']=type(error).__name__
         host['save'](directory/'service-installation.json',result)
     return result

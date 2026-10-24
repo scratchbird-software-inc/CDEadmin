@@ -33,7 +33,7 @@ _HANDLERS = frozenset({
     'forget_endpoint',
     'open_workspace',
     'open_mysql_fleet', 'open_mysql_dashboard_editor',
-    'open_mysql_host', 'open_mysql_physical', 'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mysql_instance_backups', 'open_mysql_instance_restores', 'open_mysql_topologies', 'open_mysql_sandboxes', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
+    'open_mysql_host', 'open_mysql_routers', 'open_mysql_physical', 'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mysql_instance_backups', 'open_mysql_instance_restores', 'open_mysql_topologies', 'open_mysql_sandboxes', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
     'open_mariadb_fleet', 'open_mariadb_dashboard_editor',
     'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
     'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
@@ -835,6 +835,9 @@ def endpoint_context_actions(
         actions.append(_action('endpoint.mysql.host', 'MySQL database-host administration...', 'open_mysql_host',
             icon='command.default', group='maintenance', mutation='admin', enabled=can_manage,
             disabled_reason='' if can_manage else 'Only the endpoint owner can administer its database SSH host.'))
+        actions.append(_action('endpoint.mysql.routers', 'MySQL Router host and service administration...', 'open_mysql_routers',
+            icon='command.default', group='availability', mutation='admin', enabled=can_manage,
+            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native Router deployments.'))
         actions.append(_action('endpoint.mysql.physical', 'MySQL physical backups...', 'open_mysql_physical',
             icon='action.backup', group='backup', mutation='admin', enabled=can_manage,
             disabled_reason='' if can_manage else 'Only the endpoint owner can administer native physical backup jobs.'))

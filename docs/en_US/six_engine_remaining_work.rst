@@ -225,9 +225,14 @@ one implementation scope and must not be counted as independent completion.
   active selection, editing, copying, renaming, removal and private-file JSON
   import/export now have dedicated native method workflows for Cluster,
   ReplicaSet and ClusterSet. Native document and Router configuration changes
-  invalidate stale reviews. Live selected-Router mutation/removal acceptance,
-  Router deployment/bootstrap and actual traffic/failure tests remain open,
-  alongside host native upgrade acceptance and broader lifecycle acceptance.
+  invalidate stale reviews. Live selected-Router metadata mutation/removal
+  acceptance remains open. Native Router
+  bootstrap/deployment and Linux service installation/control now use
+  independent SSH-host and original guardian authority; see
+  :doc:`mysql_router_hosts`. Actual Cluster primary crash/election, routed
+  transaction/data preservation, read-only routing and member rejoin are
+  qualified separately from the remaining topology families, host native
+  upgrade acceptance and broader lifecycle acceptance.
   Native local sandbox deploy/start/stop/kill/delete now have a separate
   offline-capable execution-host workspace with explicit OS authority,
   private dispatch passwords, native configuration/process identity checks,

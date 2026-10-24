@@ -230,8 +230,16 @@ CMP-MY-02: Complete production topology, Router and host lifecycle
 Status: **open**. Priority: **P0**.
 
 Complete bootstrap/outage/failover/repair with independent unreachable-member,
-replication and application-traffic evidence; deploy/bootstrap/supervise
-Router; complete native upgrades. Native Linux service installation now creates
+replication and application-traffic evidence; complete native upgrades.
+The :doc:`mysql_router_hosts` workspace now bootstraps native Community Router
+on an independent Linux SSH host, installs a new systemd unit and separately
+controls start/stop/restart and boot enablement. Original guardian receipts,
+unknown acknowledgements and later native observations remain separate.
+Three-member Cluster qualification covers TLS-routed exact data, actual primary
+crash, native election, pending rollback, committed-data preservation, secondary
+routing, SQL-independent Router controls and member rejoin. Live selected-Router
+metadata mutation/removal and the other topology families' production
+failure/repair acceptance remain open. Native Linux service installation now creates
 a reviewed systemd unit with separate start and boot controls. Native Linux initialization
 now supports new registrations before SQL is available, with secure/insecure
 native bootstrap, original-writer controls and separate outcome observations. Reviewed
