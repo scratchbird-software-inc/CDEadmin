@@ -112,7 +112,7 @@ def program_identity(client,route,workspace,*,cancel=None,progress=None):
 
 def _grant(executable,route,workspace,timeout,*,durable_name=None):
     return ProviderToolGrant(executable,str(workspace),str(route.get('host') or 'localhost'),int(route.get('port',3306)),
-        timeout_seconds=timeout,allow_unbounded_runtime=timeout is None,durable_name=durable_name)
+        timeout_seconds=timeout,allow_unbounded_runtime=timeout is None,durable_name=durable_name,guard_parent_death=durable_name is not None)
 
 
 def previous_gtids(client,route,directory,observed,workspace,expected,*,cancel=None,progress=None):

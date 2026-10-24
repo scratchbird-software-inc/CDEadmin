@@ -29,7 +29,7 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
     paths+=['web/pgadmin/cdeadmin/workspace/'+name for name in ('mysql_instance_restore_jobs.py','mysql_instance_restore_service.py','mysql_binlog_replay_jobs.py','service.py')]
     paths+=['web/pgadmin/browser/server_groups/servers/__init__.py','web/pgadmin/cdeadmin/context_menu.py',
         'web/pgadmin/static/js/Dialogs/MySQLInstanceRestores.jsx','tools/cdeadmin_mysql_instance_restore_qualification.py']
-    paths+=['web/pgadmin/cdeadmin/sdk/'+name for name in ('tooling.py','durable_tool.py','tool_guardian.py','tool_process.py')]
+    paths+=['web/pgadmin/cdeadmin/sdk/'+name for name in ('tooling.py','durable_tool.py','tool_guardian.py','tool_process.py','tool_reconcile.py')]
     paths+=['web/pgadmin/cdeadmin/workspace/mysql_binlog_jobs.py','tools/mysql_interruption_qualification.py']
     if acceptance:
         paths+=['web/pgadmin/cdeadmin/providers/mysql_family/mysql_instance_acceptance.py',
@@ -355,10 +355,10 @@ def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary,acceptance
                 checks+=['retained-unlock-reply-loss-receipt-reachable-after-later-native-session-cleanup','native-session-cleanup-keeps-original-comparison-outcome-visible']
         if interrupted_restore_id:
             click('Load instance restore jobs');click('Inspect instance restore '+interrupted_restore_id)
-            click('Observe instance restore target')
+            click('Observe original restore utility without SQL connection')
             wait.until(lambda b:any('Interrupted utility cleanup: confirmed.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
             assert any('Original native load outcome: unknown' in node.get_attribute('textContent') for node in driver.find_elements(By.CSS_SELECTOR,'[role="alert"]'))
-            checks+=['interrupted-native-utility-receipt-reachable-in-built-desktop','independent-cleanup-observation-keeps-original-load-outcome-unknown']
+            checks+=['interrupted-native-utility-receipt-reachable-in-built-desktop','independent-cleanup-observation-without-SQL-keeps-original-load-outcome-unknown']
         driver.save_screenshot(str(output/'native-instance-restore.png'))
         errors=[entry for entry in driver.get_log('browser') if entry['level']=='SEVERE'];assert not errors,errors
         return {'complete':True,'version':driver.capabilities['browserVersion'],'console_errors':errors,

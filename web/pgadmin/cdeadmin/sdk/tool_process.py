@@ -42,8 +42,22 @@ def _stop_owned_process(process, identity):
         return False
 
 
+def guardian_death_signal(parent):
+    """Run only in the single-threaded detached guardian, before native exec."""
+    import ctypes
+    native=ctypes.CDLL(None,use_errno=True)
+    native.prctl.argtypes=[ctypes.c_int,ctypes.c_ulong,ctypes.c_ulong,ctypes.c_ulong,ctypes.c_ulong]
+    native.prctl.restype=ctypes.c_int
+    def arm():
+        if native.prctl(1,9,0,0,0)!=0:raise OSError(ctypes.get_errno(),'Native parent-death signal unavailable')
+        # Close the fork/prctl race: no native client may execute after its
+        # original guardian has already disappeared.
+        if os.getppid()!=parent:os.kill(os.getpid(),9)
+    return arm
+
+
 def observe_process(command, *, workspace, environment, input_bytes, input_stream,
-                    timeout, capture_limit, cancel_signal=None, progress=None,inherited_fds=()):
+                    timeout, capture_limit, cancel_signal=None, progress=None,inherited_fds=(),guardian_parent=None):
     """Drain both streams with bounded memory and report numeric live progress."""
     if cancel_signal is not None and cancel_signal.is_set():
         return {'started':False, 'return_code':None, 'stdout':b'', 'stderr':b'',
@@ -51,6 +65,10 @@ def observe_process(command, *, workspace, environment, input_bytes, input_strea
                 'timed_out':False, 'cleanup_confirmed':True, 'elapsed_seconds':0}
     started = time.monotonic()
     options={}
+    if guardian_parent is not None:
+        if not __import__('sys').platform.startswith('linux') or type(guardian_parent) is not int or guardian_parent<1:
+            raise ValueError('Native guardian-death policy requires its Linux parent')
+        options['preexec_fn']=guardian_death_signal(guardian_parent)
     if inherited_fds:
         if os.name!='posix':raise ValueError('Native endpoint descriptor inheritance requires POSIX')
         options['pass_fds']=tuple(inherited_fds)

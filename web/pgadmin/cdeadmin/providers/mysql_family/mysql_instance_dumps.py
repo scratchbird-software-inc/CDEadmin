@@ -136,7 +136,7 @@ def run_dump(client, route, credentials, source, selected, directory, workspace,
     grant = ProviderToolGrant('mysql-shell', str(workspace), str(route.get('host') or 'localhost'),
         int(route.get('port', 3306)), timeout_seconds=selected['timeout_seconds'],
         allow_unbounded_runtime=selected['timeout_seconds'] is None, secret_environment_names=(CREDENTIAL_FILE,),
-        durable_name='mysql-instance-backup')
+        durable_name='mysql-instance-backup',guard_parent_death=True)
     result = None; control = None; reply = failure = None
     try:
         def invoke(view):

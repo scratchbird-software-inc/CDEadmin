@@ -60,8 +60,13 @@ def action(service, server, operation, request):
         source = source_server(owner, request['source_server_id'])
         backups, _owner, source_endpoint, _context = backup_manager(service, source)
         return backups.list(owner, source_endpoint.id, request.get('offset', 0), request.get('limit', 25))
-    if operation in {'status', 'cancel'} and set(request) == {'job_id'}:
-        return (jobs.get if operation == 'status' else jobs.cancel)(request['job_id'], owner, endpoint.id)
+    if operation in {'status', 'cancel', 'observe_utilities'} and set(request) == {'job_id'}:
+        if operation=='status':return jobs.get(request['job_id'],owner,endpoint.id)
+        record=jobs.load(request['job_id'],owner,endpoint.id)
+        if operation=='cancel':jobs.cancel(request['job_id'],owner,endpoint.id)
+        else:jobs.inspect_utilities(record)
+        from .mysql_binlog_replay_service import release_observed_reservation
+        return release_observed_reservation(jobs,jobs.load(record['job_id'],owner,endpoint.id))
     if operation == 'review' and set(request) == {'source_server_id', 'backup_job_id', 'options'}:
         reference, directory, source_identity = input_reference(service, owner, request)
         selected = None

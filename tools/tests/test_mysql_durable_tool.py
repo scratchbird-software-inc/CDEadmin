@@ -68,10 +68,11 @@ def test_durable_receipt_keeps_private_output_separate_and_scrubs_credentials(tm
             ProviderToolGrant('python',str(tmp_path),'127.0.0.1',3306,durable_name='owned-native'),['-c','raise RuntimeError("must never replay")'])
 
 
+@pytest.mark.parametrize('guarded',[False,True])
 @pytest.mark.parametrize('cancel',[False,True])
 @pytest.mark.parametrize('with_input',[False,True])
 @pytest.mark.parametrize('with_reservation',[False,True])
-def test_lost_application_process_never_loses_guardian_outcome_or_replays(tmp_path,cancel,with_input,with_reservation):
+def test_lost_application_process_never_loses_guardian_outcome_or_replays(tmp_path,cancel,with_input,with_reservation,guarded):
     if with_reservation and os.name!='posix':pytest.skip('POSIX endpoint descriptor inheritance')
     web=Path(__file__).resolve().parents[2]/'web'
     fixture=tmp_path/'native_fixture.py'
@@ -105,11 +106,11 @@ if sys.argv[5]=='1':
  (root/'listener.json').write_text(json.dumps(listener.getsockname()))
 def progress(event):
  if 'durable_tool' in event:(root/'reference.json').write_text(json.dumps(event['durable_tool']))
-ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str(root),'127.0.0.1',listener.getsockname()[1] if listener else 3306,timeout_seconds=12,durable_name='owned-native',secret_environment_names=('OWNED_CREDENTIAL_FILE',)),
+ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str(root),'127.0.0.1',listener.getsockname()[1] if listener else 3306,timeout_seconds=12,durable_name='owned-native',guard_parent_death=sys.argv[6]=='1',secret_environment_names=('OWNED_CREDENTIAL_FILE',)),
  [sys.argv[3]],input_path=root/'stdin.data' if sys.argv[4]=='1' else None,
  secret_config=b'owned-private',secret_argument=None,secret_environment_name='OWNED_CREDENTIAL_FILE',progress=progress,reservation_socket=listener)
 '''
-    owner=subprocess.Popen([sys.executable,'-c',owner_code,str(tmp_path),str(web),str(fixture),'1' if with_input else '0','1' if with_reservation else '0'],
+    owner=subprocess.Popen([sys.executable,'-c',owner_code,str(tmp_path),str(web),str(fixture),'1' if with_input else '0','1' if with_reservation else '0','1' if guarded else '0'],
         stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     reference=None
     try:
@@ -170,3 +171,144 @@ def test_guardian_refuses_changed_stdin_before_native_dispatch(tmp_path):
     observed=durable_tool.observe(tmp_path,references[0],durable_tool.sha(sys.executable))
     assert observed['native_may_have_dispatched'] is False and observed['cleanup_confirmed']
     assert observed['input_file_cleanup_confirmed'] and observed['credential_file_cleanup_confirmed']
+
+
+@pytest.mark.skipif(not sys.platform.startswith('linux'),reason='Linux native parent-death and kernel session qualification')
+@pytest.mark.parametrize('fault',[None,'credential-link','input-changed','namespace'])
+def test_original_guardian_loss_stops_its_native_client_and_retains_unknown_reply(tmp_path,monkeypatch,fault):
+    import psutil
+    web=Path(__file__).resolve().parents[2]/'web';root=durable_tool.directory(tmp_path,'owned-guardian-loss')
+    original=b'private native input\x00\xff';(tmp_path/'input.sql').write_bytes(original)
+    code='''import json,os,sys,types
+from pathlib import Path
+package=types.ModuleType('pgadmin');package.__path__=[sys.argv[2]+'/pgadmin'];sys.modules['pgadmin']=package
+sys.path.insert(0,sys.argv[2])
+from pgadmin.cdeadmin.sdk.tooling import ProviderToolGrant,ProviderToolRunner
+root=Path(sys.argv[1])
+def progress(value):
+ if value.get('durable_tool'):(root/'reference.json').write_text(json.dumps(value['durable_tool']))
+ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str(root),'127.0.0.1',3306,
+ timeout_seconds=60,durable_name='owned-guardian-loss',guard_parent_death=True,secret_environment_names=('OWNED_CREDENTIAL_FILE',)),
+ ['-c',"import os,time,json;from pathlib import Path;p=Path.cwd()/'native-started.json';p.write_text(json.dumps({'pid':os.getpid()}));assert Path(os.environ['OWNED_CREDENTIAL_FILE']).read_text()=='owned-private-secret';time.sleep(45)"],
+ input_path=root/'input.sql',secret_config=b'owned-private-secret',secret_argument=None,secret_environment_name='OWNED_CREDENTIAL_FILE',progress=progress)
+'''
+    owner=subprocess.Popen([sys.executable,'-c',code,str(tmp_path),str(web)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    native=None;guardian=None;reference=None
+    try:
+        wait_until(lambda:(tmp_path/'native-started.json').exists())
+        native=psutil.Process(json.loads((tmp_path/'native-started.json').read_text())['pid'])
+        reference=json.loads((tmp_path/'reference.json').read_text());intent=json.loads((root/'request.json').read_text())
+        guardian=psutil.Process(json.loads((root/'started.json').read_text())['guardian_pid'])
+        assert native.ppid()==guardian.pid and intent['kernel_policy']=='linux-parent-death-kill-v1'
+        credential=Path(intent['credential_file']);canary=tmp_path/'foreign-credential';canary.write_bytes(b'foreign must remain')
+        guardian.kill();owner.wait(timeout=10)
+        wait_until(lambda:not native.is_running() or native.status()==psutil.STATUS_ZOMBIE)
+        if fault=='credential-link':credential.unlink(missing_ok=True);credential.symlink_to(canary)
+        elif fault=='input-changed':(root/'stdin.bin').write_bytes(b'changed private input')
+        elif fault=='namespace':
+            previous=durable_tool.host
+            monkeypatch.setattr(durable_tool,'host',lambda:{**previous(),'pid_namespace':'pid:[another]'})
+        observed=durable_tool.observe(tmp_path,reference,durable_tool.sha(sys.executable))
+        assert observed['complete'] is False and observed['native_outcome_inferred'] is False
+        assert 'return_code' not in observed and not (root/'result.json').exists()
+        assert 'owned-private-secret' not in json.dumps(observed) and canary.read_bytes()==b'foreign must remain'
+        if fault=='namespace':
+            assert not durable_tool.terminated(observed)
+            assert observed['independent_reconciliation']['reason']=='original_process_namespace_unavailable'
+        else:
+            assert durable_tool.terminated(observed)
+            assert observed['credential_file_cleanup_confirmed'] is (fault!='credential-link')
+            assert observed['input_file_cleanup_confirmed'] is (fault!='input-changed')
+            assert observed['independent_reconciliation']['guardian_lock_independently_free']
+        with pytest.raises(FileExistsError):
+            ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str(tmp_path),'127.0.0.1',3306,
+                durable_name='owned-guardian-loss',guard_parent_death=True),['-c','raise RuntimeError("never replay")'])
+    finally:
+        if owner.poll() is None:owner.kill();owner.wait(timeout=5)
+        for process in (native,guardian):
+            if process is not None:
+                try:
+                    if process.is_running() and process.status()!=psutil.STATUS_ZOMBIE:process.kill()
+                except psutil.NoSuchProcess:pass
+
+
+@pytest.mark.skipif(not sys.platform.startswith('linux'),reason='Linux native guardian admission qualification')
+@pytest.mark.parametrize('cancel',[False,True])
+def test_observation_cannot_revoke_a_delayed_launch_but_explicit_cancellation_can(tmp_path,cancel):
+    events=[];observations=[]
+    def progress(value):
+        events.append(value)
+        if value.get('durable_tool'):
+            operation=durable_tool.cancel if cancel else durable_tool.observe
+            observations.append(operation(tmp_path,value['durable_tool'],durable_tool.sha(sys.executable)))
+            if not cancel:assert not (durable_tool.directory(tmp_path,value['durable_tool']['name'])/'guardian.lock').exists()
+    def run():
+        return ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str(tmp_path),'127.0.0.1',3306,
+            durable_name='owned-delayed-launch',guard_parent_death=True),
+            ['-c','from pathlib import Path;Path("native-executed").write_text("once")'],progress=progress)
+    if cancel:
+        with pytest.raises(RuntimeError,match='without a final receipt'):run()
+        assert not (tmp_path/'native-executed').exists() and durable_tool.terminated(observations[0])
+        assert observations[0]['independent_reconciliation']['native_start_revoked']
+    else:
+        assert run()['return_code']==0 and (tmp_path/'native-executed').read_text()=='once'
+        assert not durable_tool.terminated(observations[0])
+        assert observations[0]['independent_reconciliation']['reason']=='original_guardian_admission_unconfirmed'
+
+
+@pytest.mark.skipif(not sys.platform.startswith('linux'),reason='Linux original legacy-client kernel handle qualification')
+@pytest.mark.parametrize('changed_birth',[False,True])
+def test_legacy_managed_orphan_requires_its_original_live_identity_before_stop(tmp_path,changed_birth):
+    import psutil
+    web=Path(__file__).resolve().parents[2]/'web';root=durable_tool.directory(tmp_path,'mysql-instance-restore')
+    code='''import json,sys,types
+from pathlib import Path
+package=types.ModuleType('pgadmin');package.__path__=[sys.argv[2]+'/pgadmin'];sys.modules['pgadmin']=package
+sys.path.insert(0,sys.argv[2])
+from pgadmin.cdeadmin.sdk.tooling import ProviderToolGrant,ProviderToolRunner
+from pgadmin.cdeadmin.sdk import durable_tool
+root=Path(sys.argv[1])
+def progress(value):
+ if value.get('durable_tool'):
+  reference=value['durable_tool'];reference['host'].pop('linux_boot_id',None);reference['host'].pop('pid_namespace',None)
+  directory=durable_tool.directory(root,reference['name']);intent=json.loads((directory/'request.json').read_text())
+  intent['host']=reference['host'];intent.pop('kernel_policy',None);intent.pop('credential_file_identity',None)
+  durable_tool.write(directory/'request.json',intent);reference['request_sha256']=durable_tool.sha(directory/'request.json')
+  (root/'reference.json').write_text(json.dumps(reference))
+ProviderToolRunner({'python':sys.executable}).run(ProviderToolGrant('python',str(root),'127.0.0.1',3306,
+ timeout_seconds=60,durable_name='mysql-instance-restore',secret_environment_names=('OWNED_CREDENTIAL_FILE',)),
+ ['-c',"import os,time,json;from pathlib import Path;assert Path(os.environ['OWNED_CREDENTIAL_FILE']).read_text()=='legacy-private';Path('native-started.json').write_text(json.dumps({'pid':os.getpid()}));time.sleep(45)"],
+ secret_config=b'legacy-private',secret_argument=None,secret_environment_name='OWNED_CREDENTIAL_FILE',progress=progress)
+'''
+    owner=subprocess.Popen([sys.executable,'-c',code,str(tmp_path),str(web)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    native=guardian=None
+    try:
+        wait_until(lambda:(tmp_path/'native-started.json').exists() and (root/'progress.json').exists())
+        native=psutil.Process(json.loads((tmp_path/'native-started.json').read_text())['pid'])
+        reference=json.loads((tmp_path/'reference.json').read_text());intent=json.loads((root/'request.json').read_text())
+        assert 'kernel_policy' not in intent and 'linux_boot_id' not in intent['host']
+        guardian=psutil.Process(json.loads((root/'started.json').read_text())['guardian_pid'])
+        guardian.kill();owner.wait(timeout=10)
+        assert native.is_running() and native.status()!=psutil.STATUS_ZOMBIE
+        if changed_birth:
+            progress=json.loads((root/'progress.json').read_text());progress['observation']['process_create_time']+=1
+            durable_tool.write(root/'progress.json',progress)
+            observed=durable_tool.cancel(tmp_path,reference,durable_tool.sha(sys.executable))
+            assert not durable_tool.terminated(observed) and native.status()!=psutil.STATUS_ZOMBIE
+            assert observed['independent_reconciliation']['reason']=='original_legacy_native_identity_unavailable'
+        else:
+            observed=durable_tool.observe(tmp_path,reference,durable_tool.sha(sys.executable))
+            assert observed['independent_reconciliation']['legacy_session_independently_anchored']
+            durable_tool.cancel(tmp_path,reference,durable_tool.sha(sys.executable))
+            observed=wait_until(lambda:(value if durable_tool.terminated(value:=durable_tool.observe(tmp_path,reference,durable_tool.sha(sys.executable))) else None))
+            assert not observed['complete'] and 'return_code' not in observed and not observed['native_outcome_inferred']
+            assert observed['credential_file_cleanup_confirmed'] and observed['input_file_cleanup_confirmed']
+            assert not Path(intent['credential_file']).exists() and not (root/'result.json').exists()
+            assert 'legacy-private' not in json.dumps(observed)
+    finally:
+        if owner.poll() is None:owner.kill();owner.wait(timeout=5)
+        for process in (native,guardian):
+            if process is not None:
+                try:
+                    if process.is_running() and process.status()!=psutil.STATUS_ZOMBIE:process.kill()
+                except psutil.NoSuchProcess:pass

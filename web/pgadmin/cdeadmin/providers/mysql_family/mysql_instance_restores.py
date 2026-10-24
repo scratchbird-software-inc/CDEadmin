@@ -98,7 +98,7 @@ def run_load(client, route, credentials, directory, target, before, selected, wo
         grant = ProviderToolGrant('mysql-shell', str(workspace), str(route.get('host') or 'localhost'),
             int(route.get('port', 3306)), timeout_seconds=selected['timeout_seconds'],
             allow_unbounded_runtime=selected['timeout_seconds'] is None, secret_environment_names=(CREDENTIAL_FILE,),
-            durable_name='mysql-instance-restore')
+            durable_name='mysql-instance-restore',guard_parent_death=True)
     except BaseException as error:
         error.native_preparation_refused = True
         raise

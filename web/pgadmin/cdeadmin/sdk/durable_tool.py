@@ -18,7 +18,10 @@ from ..operations.fileio import durable_replace, private_directory, private_file
 
 
 def sha(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    digest=hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        while chunk:=stream.read(1048576):digest.update(chunk)
+    return digest.hexdigest()
 
 
 def write(path, value):
@@ -38,7 +41,10 @@ def directory(workspace, name):
 
 
 def host():
-    return {'hostname': socket.gethostname(), 'platform': sys.platform, 'boot_time': psutil.boot_time()}
+    value={'hostname': socket.gethostname(), 'platform': sys.platform, 'boot_time': psutil.boot_time()}
+    if sys.platform.startswith('linux'):
+        value.update(linux_boot_id=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),pid_namespace=os.readlink('/proc/self/ns/pid'))
+    return value
 
 
 def stage_input(path,workspace,root):
@@ -60,7 +66,7 @@ def stage_input(path,workspace,root):
     return {'path':str(target),'bytes':str(size),'sha256':digest.hexdigest()}
 
 
-def observe(workspace, reference, expected_executable_sha256):
+def observe(workspace, reference, expected_executable_sha256,*,cancel=False):
     """Return sanitized facts; never dispatch, retry or infer database finality."""
     if not isinstance(reference, dict) or set(reference) != {'name', 'nonce', 'request_sha256', 'host'}:
         raise ValueError('The durable native utility reference is unavailable')
@@ -77,14 +83,14 @@ def observe(workspace, reference, expected_executable_sha256):
         raise ValueError('Durable native utility identity or execution host changed')
     path = root / 'result.json'
     if not path.exists():
-        return {'complete': False, 'cleanup_confirmed': None, 'native_outcome_inferred': False}
+        return independent(root,intent,reference,{'complete':False,'cleanup_confirmed':None,'native_outcome_inferred':False},cancel=cancel)
     if path.is_symlink() or path.stat().st_size > 8 * 1024 * 1024:
         raise ValueError('The durable native utility receipt is unsafe')
     result = json.loads(path.read_text())
     if result.get('nonce') != reference['nonce'] or result.get('request_sha256') != reference['request_sha256']:
         raise ValueError('The durable native utility receipt belongs to another invocation')
     native = result.get('observation')
-    return {'complete': True, 'cleanup_confirmed': native.get('cleanup_confirmed') is True if isinstance(native, dict) else True if result.get('native_may_have_dispatched') is False else None,
+    observed={'complete': True, 'cleanup_confirmed': native.get('cleanup_confirmed') is True if isinstance(native, dict) else True if result.get('native_may_have_dispatched') is False else None,
             'return_code': native.get('return_code') if isinstance(native, dict) else None,
             'native_outcome_inferred': False, 'receipt_sha256': sha(path),
             'credential_file_cleanup_confirmed': result.get('credential_file_cleanup_confirmed') is True,
@@ -94,18 +100,35 @@ def observe(workspace, reference, expected_executable_sha256):
             'native_process_identity': {'pid': native.get('pid'), 'process_create_time': native.get('process_create_time')}
                 if isinstance(native, dict) else None,
             'supervision_error_type': result.get('error_type')}
+    return independent(root,intent,reference,observed,cancel=cancel)
+
+
+def independent(root,intent,reference,observed,*,cancel=False):
+    if observed.get('cleanup_confirmed') is True:return observed
+    from .tool_reconcile import reconcile
+    facts=reconcile(root,intent,reference,host(),write,cancel=cancel)
+    value={**observed,'independent_reconciliation':facts}
+    if facts.get('native_process_termination_confirmed') is True:
+        value.update(original_cleanup_confirmed=observed.get('cleanup_confirmed'),cleanup_confirmed=True)
+        for key in ('credential_file_cleanup_confirmed','input_file_cleanup_confirmed'):value[key]=observed.get(key) is True or facts.get(key) is True
+    return value
+
+
+def terminated(observed):
+    return observed.get('cleanup_confirmed') is True and (observed.get('complete') is True or (observed.get('independent_reconciliation') or {}).get('native_process_termination_confirmed') is True)
 
 
 def cancel(workspace, reference, expected_executable_sha256):
-    result = observe(workspace, reference, expected_executable_sha256)
+    result = observe(workspace, reference, expected_executable_sha256,cancel=True)
     if not result['complete']:
         write(directory(workspace, reference['name']) / 'cancel.json', {'nonce': reference['nonce']})
     return {**result, 'cancellation_requested': not result['complete']}
 
 
 def run(command, *, workspace, environment, timeout, capture_limit, name,
-        credential_file=None, input_path=None, cancel_signal=None, progress=None, handoff=None,reservation_socket=None):
+        credential_file=None, input_path=None, cancel_signal=None, progress=None, handoff=None,reservation_socket=None,guard_parent_death=False):
     """A detached guardian owns one invocation, its pipes and credential cleanup."""
+    if type(guard_parent_death) is not bool:raise ValueError('Select an explicit native guardian-death policy')
     root = directory(workspace, name)
     root.mkdir(mode=0o700, exist_ok=False); private_directory(root)
     helper = Path(__file__).with_name('tool_guardian.py')
@@ -119,8 +142,21 @@ def run(command, *, workspace, environment, timeout, capture_limit, name,
         facts=os.fstat(reservation_socket.fileno());address=reservation_socket.getsockname()
         if address[0]!='127.0.0.1':raise ValueError('Native endpoint reservation is not loopback')
         reservation={'fd':reservation_socket.fileno(),'device':facts.st_dev,'inode':facts.st_ino,'address':list(address)}
+    kernel_policy=None
+    if guard_parent_death and sys.platform.startswith('linux'):
+        mode=Path(command[0]).stat().st_mode
+        if mode&(stat.S_ISUID|stat.S_ISGID):raise ValueError('Native guardian-death policy does not admit privileged exec transitions')
+        try:capabilities=os.getxattr(command[0],'security.capability')
+        except OSError as error:
+            if error.errno not in {61,95}:raise
+            capabilities=b''
+        if capabilities:raise ValueError('Native guardian-death policy does not admit executable file capabilities')
+        kernel_policy='linux-parent-death-kill-v1'
+    credential_identity=None
+    if credential_file is not None:
+        info=Path(credential_file).stat();credential_identity={'device':info.st_dev,'inode':info.st_ino,'bytes':str(info.st_size),'sha256':sha(credential_file)}
     intent = {'nonce': str(uuid.uuid4()), 'command': command, 'workspace': str(workspace),
-        'input_file':input_file,'endpoint_reservation':reservation,
+        'input_file':input_file,'endpoint_reservation':reservation,'kernel_policy':kernel_policy,'credential_file_identity':credential_identity,
         'environment': environment, 'timeout': timeout, 'capture_limit': capture_limit,
         'credential_file': str(credential_file) if credential_file is not None else None,
         'host': host(), 'executable_sha256': sha(command[0]),

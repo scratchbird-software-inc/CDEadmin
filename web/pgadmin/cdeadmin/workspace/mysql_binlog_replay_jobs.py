@@ -62,7 +62,7 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
             if name not in expected or reference.get('name')!=name:raise BinlogArchiveError('Original native replay utility association changed')
             observed[name]=operation(self.directory(record),reference,expected[name])
         required=({'raw-replay-decoder','raw-replay-client'} if record.get('native_load_may_have_dispatched') else {'raw-replay-decoder'}) if raw else {'shell-replay-client'}
-        stopped=required.issubset(observed) and all(observed[name].get('complete') is True and observed[name].get('cleanup_confirmed') is True for name in required)
+        stopped=required.issubset(observed) and all(durable_tool.terminated(observed[name]) for name in required)
         result={'tools':observed,'native_process_termination_confirmed':stopped,'original_native_load_outcome_unchanged':True,
             'automatic_retry':False,'observed_at':time.time()}
         values={'interrupted_utility_observation':result,'native_process_termination_confirmed':stopped}

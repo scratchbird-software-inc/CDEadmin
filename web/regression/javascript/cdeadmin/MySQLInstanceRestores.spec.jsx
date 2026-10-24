@@ -48,3 +48,14 @@ it('can cancel an interrupted durable utility and observes cleanup separately fr
   expect(screen.getByText(/Original native load outcome: unknown/)).toBeInTheDocument();
   expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_restore_start')).toBe(false);
 });
+it('observes a missing guardian receipt without connecting to SQL or replaying the unknown restore',async()=> {
+  const receipt={job_id:'lost-guardian',state:'unknown',native_load_outcome:'unknown',target:{server_uuid:'target'},durable_tool:{name:'native'}};
+  const post=jest.fn(({action})=>Promise.resolve(action==='mysql_instance_restore_list' ? {jobs:[receipt],total:1,offset:0} : action==='mysql_instance_restore_observe_utilities' ? {...receipt,native_process_termination_confirmed:true,interrupted_utility_observation:{complete:false,cleanup_confirmed:true}} : receipt));
+  render(<Component post={post} />);fireEvent.click(screen.getByRole('button',{name:'Load instance restore jobs'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Inspect instance restore lost-guardian'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Observe original restore utility without SQL connection'}));
+  await screen.findByText(/Interrupted utility cleanup: confirmed/);
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_instance_restore_observe_utilities',request:{job_id:'lost-guardian'}});
+  expect(screen.getByText(/Original native load outcome: unknown/)).toBeInTheDocument();
+  expect(post.mock.calls.some(([value])=>['mysql_instance_restore_reconcile','mysql_instance_restore_start','mysql_instance_restore_acknowledge'].includes(value.action))).toBe(false);
+});

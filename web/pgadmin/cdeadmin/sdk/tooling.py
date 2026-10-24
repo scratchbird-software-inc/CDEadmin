@@ -82,6 +82,7 @@ class ProviderToolGrant:
     secret_environment_names: tuple[str, ...] = ()
     allow_unbounded_runtime: bool = False
     durable_name: str | None = None
+    guard_parent_death: bool = False
 
     def __post_init__(self):
         if not isinstance(self.executable_id, str) or not self.executable_id:
@@ -93,6 +94,8 @@ class ProviderToolGrant:
             self.endpoint_port, int
         ) or not 1 <= self.endpoint_port <= 65535:
             raise ProviderToolError('tool endpoint port is invalid')
+        if type(self.guard_parent_death) is not bool or self.guard_parent_death and self.durable_name is None:
+            raise ProviderToolError('Native guardian death policy requires an explicit durable invocation')
         if type(self.allow_unbounded_runtime) is not bool:
             raise ProviderToolError('tool runtime authority is invalid')
         if self.durable_name is not None and (not isinstance(self.durable_name, str) or
@@ -298,7 +301,7 @@ class ProviderToolRunner:
                     observed = durable_run(command, workspace=workspace, environment=environment,
                         timeout=grant.timeout_seconds, capture_limit=capture_limit, name=grant.durable_name,
                         credential_file=config_path, input_path=candidate if input_stream is not None else None,
-                        cancel_signal=cancel_signal, progress=progress, handoff=handoff,reservation_socket=reservation_socket)
+                        cancel_signal=cancel_signal, progress=progress, handoff=handoff,reservation_socket=reservation_socket,guard_parent_death=grant.guard_parent_death)
                 else:
                     observed = observe_process(command, workspace=workspace, environment=environment,
                         input_bytes=bytes(input_bytes), input_stream=input_stream, timeout=grant.timeout_seconds,

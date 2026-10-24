@@ -3207,7 +3207,7 @@ class ServerNode(PGChildNodeView):
                     try: payload = service.mysql_instance_backup(server, action.removeprefix('mysql_instance_backup_'), data.get('request'))
                     except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
                 elif action in {'mysql_instance_restore_review','mysql_instance_restore_start','mysql_instance_restore_status',
-                                'mysql_instance_restore_list','mysql_instance_restore_cancel','mysql_instance_restore_sources',
+                                'mysql_instance_restore_list','mysql_instance_restore_cancel', 'mysql_instance_restore_observe_utilities','mysql_instance_restore_sources',
                                 'mysql_instance_restore_backups','mysql_instance_restore_inspect','mysql_instance_restore_reconcile','mysql_instance_restore_acknowledge'}:
                     try: payload = service.mysql_instance_restore(server, action.removeprefix('mysql_instance_restore_'), data.get('request'))
                     except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))

@@ -176,7 +176,7 @@ def run_checks(client, route, credentials, directory, destination, target, selec
     grant = ProviderToolGrant('mysql-shell', str(workspace), str(route.get('host') or 'localhost'),
         int(route.get('port', 3306)), timeout_seconds=options['timeout_seconds'],
         allow_unbounded_runtime=options['timeout_seconds'] is None, secret_environment_names=(CREDENTIAL_FILE,),
-        durable_name='mysql-instance-acceptance')
+        durable_name='mysql-instance-acceptance',guard_parent_death=True)
     def invoke(view):
         if boundary is not None: boundary()
         observed = client._tool_runner.run(grant,

@@ -31,9 +31,10 @@ class InstanceAcceptanceJobs(MySQLBinlogReplayJobs):
         return value
 
     def observe_utility(self, record, *, cancel=False):
+        from ..sdk import durable_tool
         result = super().observe_utility(record, cancel=cancel)
         if result is not None:
-            result = {**result, 'native_process_termination_confirmed': result.get('complete') is True and result.get('cleanup_confirmed') is True,
+            result = {**result, 'native_process_termination_confirmed': durable_tool.terminated(result),
                 'original_acceptance_outcome_unchanged': True, 'automatic_retry': False}
             self.update(record, interrupted_utility_observation=result)
         return result

@@ -139,9 +139,10 @@ reattachment. Unknown database outcomes/fences persist until fresh SQL facts and
 explicit acknowledgement. Original physical recovery control now survives
 adapter/registration changes and missing duplicated bindings when retained
 original host/source facts match. Native supervisor loss and source-offline
-original-process stop preserve unknown outcomes. Other missing/failed guardians
-and wider lifecycle reconciliation remain open, alongside
-external-table-space support and production cutover. Native
+original-process stop preserve unknown outcomes. Newly guarded native clients and verified older managed clients now support
+independent guardian-loss cleanup; missing original receipts keep their unknown
+outcomes. Untracked jobs without original process identity and wider lifecycle
+reconciliation remain open alongside production cutover. Native
 incremental capture and private redo-only apply/final preparation now preserve
 exact full-backup lineage, contiguous LSNs and both immutable input dependencies.
 Raw deltas cannot be restored alone; finalized chains use the existing recovery

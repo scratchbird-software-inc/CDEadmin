@@ -83,3 +83,20 @@ def test_partial_native_error_keeps_shared_target_fence_until_explicit_observed_
     assert accepted['native_load_outcome']=='unknown' and accepted['state']=='unknown'
     replays.claim_fence(replays.load(replay['job_id'],1,endpoint));replays.release_fence(replays.load(replay['job_id'],1,endpoint))
     jobs.close();replays.close()
+
+
+def test_original_restore_utility_observation_uses_owned_scope_without_target_sql(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from pgadmin.cdeadmin.workspace import mysql_instance_restore_service as service
+    from pgadmin.cdeadmin.workspace import mysql_binlog_replay_service as replay
+    record={'job_id':'original','owner':7,'endpoint_id':'owned-endpoint'}
+    jobs=Mock();jobs.load.return_value=record
+    monkeypatch.setattr(service,'manager',lambda *_args:(jobs,7,SimpleNamespace(id='owned-endpoint')))
+    monkeypatch.setattr(replay,'release_observed_reservation',lambda original,retained:{'original':retained['job_id']})
+    endpoint_service=SimpleNamespace(workspace=Mock(side_effect=AssertionError('SQL route must not be used')))
+    result=service.action(SimpleNamespace(endpoint_service=endpoint_service),object(),'observe_utilities',{'job_id':'original'})
+    assert result=={'original':'original'}
+    jobs.inspect_utilities.assert_called_once_with(record)
+    assert all(call.args==('original',7,'owned-endpoint') for call in jobs.load.call_args_list)
+    endpoint_service.workspace.assert_not_called()

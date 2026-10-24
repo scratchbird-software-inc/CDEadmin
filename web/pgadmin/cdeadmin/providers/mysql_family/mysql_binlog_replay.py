@@ -118,7 +118,7 @@ def run_load(client,route,credentials,artifact_directory,target,before_gtids,sel
             private_file(path);stream.write(source);stream.flush();os.fsync(stream.fileno())
         grant=ProviderToolGrant('mysql-shell',str(workspace),str(route.get('host') or 'localhost'),int(route.get('port',3306)),
             timeout_seconds=selected['timeout_seconds'],allow_unbounded_runtime=selected['timeout_seconds'] is None,
-            secret_environment_names=(CREDENTIAL_FILE,),durable_name='shell-replay-client')
+            secret_environment_names=(CREDENTIAL_FILE,),durable_name='shell-replay-client',guard_parent_death=True)
     except BaseException as error:
         error.control={'native_load_invoked':False,'native_load_returned':False,'stage':'native_client_preparation'}
         error.native_preparation_refused=True;raise

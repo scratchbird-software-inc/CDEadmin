@@ -2136,3 +2136,32 @@ preceding-adapter supervisors, supervisor loss, source SQL shutdown, changed
 registration generations and rejected conflicting source UUIDs are exercised.
 Original unknown outcomes remain unknown after independent process-end evidence.
 Wider utility/guardian recovery, inventory/system-state and cutover remain open.
+
+
+Independent original native utility cleanup
+------------------------------------------
+
+Linux instance dumps, loads, acceptance checks and Shell/raw replay clients now
+request a kernel parent-death policy from their isolated guardian. A lost
+guardian cannot leave those newly dispatched clients running indefinitely.
+Independent observation checks the original boot, process namespace, admission
+marker, guardian lock and original native session before confirming termination.
+It removes only identity-checked private credentials and staged input. A missing
+completion receipt remains missing: process cleanup never supplies a return code,
+changes the original database outcome or retries a load/replay.
+
+Older managed client references can be reconciled after guardian loss when the
+original living client can still be identified. Original command, executable,
+process birth, user and session must match before a separate witness is saved.
+Explicit cancellation uses that client's kernel process handle. Missing original
+identity, changed files, extra session members or unavailable host facts retain
+an unconfirmed result. Untracked jobs without those facts require separate
+handling; there is no general force-release action.
+
+Instance restore receipts expose original utility observation without a SQL
+connection. Releasing a matching process reservation remains separate from fresh
+SQL observations and explicit acknowledgement of an unknown target outcome.
+Both native drivers qualify worker loss, guardian loss, a missing completion
+receipt and a legacy managed orphan. The built desktop qualifies the independent
+observation control. These receipts do not close inventory/system-state recovery,
+production cutover, ``CMP-MY-02`` or ``INV-MYSQL``.

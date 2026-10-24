@@ -84,6 +84,7 @@ def main(root, expected):
                     environment=intent['environment'], input_bytes=b'', input_stream=input_stream,
                     timeout=intent['timeout'], capture_limit=intent['capture_limit'], cancel_signal=Cancellation(),
                     inherited_fds=() if reservation is None else (reservation.fileno(),),
+                    guardian_parent=os.getpid() if intent.get('kernel_policy')=='linux-parent-death-kill-v1' else None,
                     progress=lambda event: write(root / 'progress.json', {'nonce': intent['nonce'], 'observation': event}))
                 observed['endpoint_reservation_inherited']=reservation is not None and observed.get('started') is True
                 observed['stdout'] = base64.b64encode(observed['stdout']).decode('ascii')
