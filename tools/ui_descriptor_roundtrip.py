@@ -232,4 +232,28 @@ def form_field_ids(form: dict) -> set:
     return {f["field_id"] for tab in form.get("tabs", []) for f in tab.get("fields", [])}
 
 
-__all__ = ("backend_draft", "diff_columns", "resolved_form", "active_fields", "field_visible", "form_field_ids", "record_draft", "record_value", "record_from_resource", "is_child_of")
+__all__ = ("backend_draft", "diff_columns", "resolved_form", "active_fields", "field_visible", "form_field_ids", "record_draft", "record_value", "record_from_resource", "is_child_of", "operation_draft", "engine_operations")
+
+
+def operation_draft(operation: dict, values: dict | None = None, confirmation: str | None = None) -> dict:
+    """The OperationDialog's draft: field defaults plus the user's values (twin
+    of initialValues); a typed-name confirmation travels as ``confirmation``."""
+    draft = {}
+    if operation.get("confirmation") == "typed_name" and confirmation:
+        draft["confirmation"] = confirmation
+    for field in operation.get("fields", []):
+        if field.get("default") is not None:
+            draft[field["field_id"]] = field["default"]
+        elif field.get("control") == "boolean":
+            draft[field["field_id"]] = False
+        elif field.get("control") == "grid":
+            draft[field["field_id"]] = []
+    for key, value in (values or {}).items():
+        if value is not None:
+            draft[key] = value
+    return draft
+
+
+def engine_operations(engine: str) -> dict:
+    return {op["operation_id"] + "@" + op["resource_kind"]: op
+            for op in _SERVICE.engine(engine)["operations"]}

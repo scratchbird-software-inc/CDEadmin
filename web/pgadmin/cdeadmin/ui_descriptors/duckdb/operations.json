@@ -10,9 +10,10 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "force_checkpoint",
@@ -22,9 +23,10 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "vacuum",
@@ -34,9 +36,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "analyze",
@@ -46,9 +49,10 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "export_database",
@@ -58,7 +62,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -86,7 +90,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "import_database",
@@ -96,7 +101,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -108,7 +113,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "update_extensions",

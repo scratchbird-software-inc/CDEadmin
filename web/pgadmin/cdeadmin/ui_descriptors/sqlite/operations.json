@@ -10,7 +10,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -35,7 +35,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "restore",
@@ -45,7 +46,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -63,7 +64,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "integrity_check",
@@ -73,7 +75,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -83,7 +85,8 @@
           "required": false,
           "default": 100
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "quick_check",
@@ -93,7 +96,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -103,7 +106,8 @@
           "required": false,
           "default": 100
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "foreign_key_check",
@@ -113,7 +117,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -122,7 +126,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "vacuum",
@@ -132,9 +137,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "incremental_vacuum",
@@ -144,7 +150,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -154,7 +160,8 @@
           "required": false,
           "default": 0
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "optimize",
@@ -164,9 +171,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "analyze",
@@ -176,7 +184,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -185,7 +193,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "reindex",
@@ -195,7 +204,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -204,7 +213,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "wal_checkpoint",
@@ -214,7 +224,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -242,7 +252,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
     },
     {
       "operation_id": "fts_optimize",

@@ -38,7 +38,7 @@ Phase status
    * - 4
      - Operations, panels, menus
      - in progress
-     - ``tools.json`` per engine declares the tool/dashboard/registration openers; ``context_menu.py`` appends them through ``declared_tool_actions`` instead of ``engine_id`` branches (Firebird, DuckDB, SQLite migrated with a 480-scenario output snapshot unchanged; MySQL/MariaDB branches left to the MySQL stream). Branch count gated: 35 -> 16 (``engine_branches_in_context_menu``). Panel count below
+     - ``tools.json`` per engine declares the tool/dashboard/registration openers; ``context_menu.py`` appends them through ``declared_tool_actions`` instead of ``engine_id`` branches (Firebird, DuckDB, SQLite migrated with a 480-scenario output snapshot unchanged; MySQL/MariaDB branches left to the MySQL stream). SQLite and DuckDB database operations (17) are ``complete`` by dialog-draft round trips (``tools/tests/test_ui_descriptor_operations_{sqlite,duckdb}.py``) and their legacy menu task lists are deleted; the tree serves them from ``operations.json`` through the OperationDialog, which now resolves database-node targets and sends typed confirmations as the draft's ``confirmation``. Branch count gated: 35 -> 14 (``engine_branches_in_context_menu``). Panel count below
    * - 5
      - PostgreSQL convergence, beta acceptance
      - not started

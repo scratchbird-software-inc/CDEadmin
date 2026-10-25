@@ -60,15 +60,23 @@ export default function OperationDialog({open, operation, targetName, context={}
   const groups = operation.groups?.length ? operation.groups : [...new Set(visible.map((field) => field.group || ''))];
   const needsTypedName = operation.confirmation === 'typed_name';
   const confirmed = !needsTypedName || (targetName && confirmText.trim() === targetName);
+  // Providers validate a typed confirmation as the draft's `confirmation`
+  // field (the route database for database-level tasks, the object name
+  // otherwise); the dialog's own match hint never replaces that check.
+  const draft = needsTypedName && confirmText.trim() ? {...values, confirmation: confirmText.trim()} : values;
 
   const setValue = (fieldId, value) => {
     setValues((current) => ({...current, [fieldId]: value}));
     setPlanState({status: 'idle', plan: null, error: null});
   };
+  const setConfirm = (text) => {
+    setConfirmText(text);
+    if(needsTypedName) setPlanState({status: 'idle', plan: null, error: null});
+  };
   const doPlan = async () => {
     setPlanState({status: 'loading', plan: null, error: null});
     try {
-      const result = await plan({draft: values, execution_host: operation.execution_host ? host : undefined});
+      const result = await plan({draft, execution_host: operation.execution_host ? host : undefined});
       setPlanState({status: 'ready', plan: result, error: null});
     } catch(error) {
       setPlanState({status: 'error', plan: null, error: error?.message || String(error)});
@@ -78,7 +86,7 @@ export default function OperationDialog({open, operation, targetName, context={}
     if(!planState.plan) { await doPlan(); return; }
     setApplyState({status: 'loading', result: null, error: null});
     try {
-      const result = await apply({plan: planState.plan, draft: values});
+      const result = await apply({plan: planState.plan, draft});
       setApplyState({status: 'done', result, error: null});
       onApplied?.(result);
     } catch(error) {
@@ -125,7 +133,7 @@ export default function OperationDialog({open, operation, targetName, context={}
         This operation takes no options.
       </Box>}
       {needsTypedName && <TextField label={`Type ${targetName || 'the object name'} to confirm`} size="small" fullWidth
-        value={confirmText} onChange={(event) => setConfirmText(event.target.value)}
+        value={confirmText} onChange={(event) => setConfirm(event.target.value)}
         validationMessage={confirmText && !confirmed ? 'Name does not match.' : undefined} />}
       {planState.status === 'error' && <ValidationMessage status="error">{planState.error}</ValidationMessage>}
       {planState.plan && <Box data-cdeadmin-qa-key="operation-dialog.plan">

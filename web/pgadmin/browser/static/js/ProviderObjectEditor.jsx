@@ -135,7 +135,11 @@ export function openDescriptorOperation(itemData, item, operation) {
   const run = async () => {
     const target = await operationTarget(post, itemData);
     const calls = visualAdminCalls(post, {resourceKind: itemData.cde_resource_kind, operationId: operation.operation_id, target});
-    root.render(<Theme><OperationDialog open operation={operation} targetName={itemData.label || itemData._label}
+    // Typed confirmations compare against the route database for database
+    // nodes and the object name otherwise (what the providers validate).
+    const targetName = itemData._type === 'cde_database_target' ?
+      (itemData.cde_database || itemData.label || itemData._label) : (itemData.label || itemData._label);
+    root.render(<Theme><OperationDialog open operation={operation} targetName={targetName}
       plan={({draft}) => calls.plan({draft})} apply={({plan}) => calls.apply({plan})}
       onClose={close} onApplied={() => refreshNode(item)} /></Theme>);
   };
