@@ -22,6 +22,8 @@ upstream attribution.
    cdeadmin_architecture
    six_engine_completion
    six_engine_remaining_work
+   ui_unified_design
+   ui_unification_status
    firebird_driver_development
    mysql_driver_development
    mariadb_driver_development

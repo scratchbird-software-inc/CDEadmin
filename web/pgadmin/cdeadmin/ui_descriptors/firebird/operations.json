@@ -1,0 +1,5 @@
+{
+  "schema": "cdeadmin.ui-operations.v1",
+  "engine": "firebird",
+  "operations": []
+}

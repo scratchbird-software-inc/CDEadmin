@@ -1,0 +1,272 @@
+{
+  "schema": "cdeadmin.ui-family.v1",
+  "family": "type",
+  "title": "Type",
+  "tabs": [
+    {
+      "tab": "General",
+      "primitive": "group",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "parent",
+          "label": "Schema / database",
+          "control": "reference",
+          "reference_kind": "schema"
+        },
+        {
+          "field_id": "type_kind",
+          "label": "Kind",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "domain",
+              "label": "Domain"
+            },
+            {
+              "value": "enum",
+              "label": "Enum"
+            },
+            {
+              "value": "composite",
+              "label": "Composite / struct"
+            },
+            {
+              "value": "range",
+              "label": "Range"
+            },
+            {
+              "value": "alias",
+              "label": "Alias"
+            },
+            {
+              "value": "union",
+              "label": "Union"
+            },
+            {
+              "value": "external",
+              "label": "External"
+            }
+          ]
+        },
+        {
+          "field_id": "base_type",
+          "label": "Base type",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "column_types"
+          ],
+          "visible_when": {
+            "field": "type_kind",
+            "in": [
+              "domain",
+              "alias",
+              "range"
+            ]
+          }
+        },
+        {
+          "field_id": "length",
+          "label": "Length",
+          "control": "number"
+        },
+        {
+          "field_id": "precision",
+          "label": "Precision",
+          "control": "number"
+        },
+        {
+          "field_id": "scale",
+          "label": "Scale",
+          "control": "number"
+        },
+        {
+          "field_id": "default",
+          "label": "Default",
+          "control": "text",
+          "visible_when": {
+            "field": "type_kind",
+            "equals": "domain"
+          }
+        },
+        {
+          "field_id": "not_null",
+          "label": "Not null",
+          "control": "boolean",
+          "visible_when": {
+            "field": "type_kind",
+            "equals": "domain"
+          }
+        },
+        {
+          "field_id": "collation",
+          "label": "Collation",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "collations"
+          ]
+        },
+        {
+          "field_id": "members",
+          "label": "Members",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Name / label",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "type",
+              "label": "Type",
+              "control": "select",
+              "option_values_path": [
+                "dialect",
+                "column_types"
+              ]
+            }
+          ],
+          "visible_when": {
+            "field": "type_kind",
+            "in": [
+              "enum",
+              "composite",
+              "union"
+            ]
+          }
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "tab": "Constraints",
+      "primitive": "grid",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "expression",
+          "label": "Expression",
+          "control": "code",
+          "language": "sql",
+          "required": true
+        },
+        {
+          "field_id": "validated",
+          "label": "Validated",
+          "control": "boolean",
+          "default": true
+        }
+      ]
+    },
+    {
+      "tab": "Engine",
+      "primitive": "group",
+      "required": false
+    },
+    {
+      "tab": "Security",
+      "primitive": "privileges",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "$resource_kind"
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "Dependencies",
+      "primitive": "readonly_grid",
+      "required": false,
+      "nested": [
+        {
+          "name": "Depends on",
+          "grid_columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "text",
+              "readonly": true
+            },
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        },
+        {
+          "name": "Dependents",
+          "grid_columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "text",
+              "readonly": true
+            },
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "SQL",
+      "primitive": "sql_preview",
+      "required": true,
+      "notes": "Read-only. Create mode: full native DDL from the provider plan. Alter mode: the ALTER set. Replaces the confirm-step preview."
+    }
+  ]
+}

@@ -1,0 +1,249 @@
+{
+  "schema": "cdeadmin.ui-family.v1",
+  "family": "role",
+  "title": "Role",
+  "tabs": [
+    {
+      "tab": "General",
+      "primitive": "group",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "host",
+          "label": "Host",
+          "control": "text",
+          "help": "MySQL / MariaDB account host part"
+        },
+        {
+          "field_id": "role_kind",
+          "label": "Kind",
+          "control": "select",
+          "options": [
+            {
+              "value": "user",
+              "label": "Login user"
+            },
+            {
+              "value": "role",
+              "label": "Role (no login)"
+            }
+          ]
+        },
+        {
+          "field_id": "password",
+          "label": "Password",
+          "control": "password"
+        },
+        {
+          "field_id": "auth_method",
+          "label": "Authentication",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "auth_plugins"
+          ]
+        },
+        {
+          "field_id": "valid_until",
+          "label": "Password / account expiry",
+          "control": "text"
+        },
+        {
+          "field_id": "active",
+          "label": "Active",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "locked",
+          "label": "Locked",
+          "control": "boolean"
+        },
+        {
+          "field_id": "connection_limit",
+          "label": "Connection limit",
+          "control": "number"
+        },
+        {
+          "field_id": "max_queries_per_hour",
+          "label": "Max queries per hour",
+          "control": "number",
+          "group": "Limits"
+        },
+        {
+          "field_id": "max_updates_per_hour",
+          "label": "Max updates per hour",
+          "control": "number",
+          "group": "Limits"
+        },
+        {
+          "field_id": "max_connections_per_hour",
+          "label": "Max connections per hour",
+          "control": "number",
+          "group": "Limits"
+        },
+        {
+          "field_id": "max_user_connections",
+          "label": "Max concurrent connections",
+          "control": "number",
+          "group": "Limits"
+        },
+        {
+          "field_id": "max_statement_time",
+          "label": "Max statement time",
+          "control": "number",
+          "group": "Limits"
+        },
+        {
+          "field_id": "tls_requirement",
+          "label": "TLS requirement",
+          "control": "select",
+          "group": "TLS",
+          "options": [
+            {
+              "value": "none",
+              "label": "None"
+            },
+            {
+              "value": "ssl",
+              "label": "SSL"
+            },
+            {
+              "value": "x509",
+              "label": "X509"
+            },
+            {
+              "value": "specified",
+              "label": "Specified"
+            }
+          ]
+        },
+        {
+          "field_id": "tls_cipher",
+          "label": "Cipher",
+          "control": "text",
+          "group": "TLS"
+        },
+        {
+          "field_id": "x509_issuer",
+          "label": "X509 issuer",
+          "control": "text",
+          "group": "TLS"
+        },
+        {
+          "field_id": "x509_subject",
+          "label": "X509 subject",
+          "control": "text",
+          "group": "TLS"
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "tab": "Membership",
+      "primitive": "grid",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "role",
+          "label": "Member of",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "admin_option",
+          "label": "Admin option",
+          "control": "boolean"
+        },
+        {
+          "field_id": "is_default",
+          "label": "Default",
+          "control": "boolean"
+        }
+      ],
+      "notes": "Grant / revoke are row add / remove; the diff shows on the SQL tab."
+    },
+    {
+      "tab": "Privileges",
+      "primitive": "privileges",
+      "required": false,
+      "fields": [
+        {
+          "field_id": "system_privileges",
+          "label": "System privileges",
+          "control": "multiselect",
+          "option_values_path": [
+            "dialect",
+            "system_privileges"
+          ]
+        },
+        {
+          "field_id": "administrator",
+          "label": "Administrator",
+          "control": "boolean"
+        }
+      ],
+      "grid_columns": [
+        {
+          "field_id": "object_type",
+          "label": "Object type",
+          "control": "select",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "grantable_kinds"
+          ]
+        },
+        {
+          "field_id": "object",
+          "label": "Object",
+          "control": "reference",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "$object_type"
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect"
+        }
+      ]
+    },
+    {
+      "tab": "Engine",
+      "primitive": "group",
+      "required": false
+    },
+    {
+      "tab": "SQL",
+      "primitive": "sql_preview",
+      "required": true,
+      "notes": "Read-only. Create mode: full native DDL from the provider plan. Alter mode: the ALTER set. Replaces the confirm-step preview."
+    }
+  ]
+}

@@ -1,0 +1,879 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "table",
+  "resource_kinds": [
+    "table"
+  ],
+  "status": "draft",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [
+    {
+      "tab": "Triggers",
+      "reason": "rendered from catalog; no engine fields"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "CHECK constraint ENFORCED flag on the Constraints grid",
+      "reason": "mysql_constraints exposes enforcement as a separate operation; fold into the Check grid",
+      "tracking": "INV-MYSQL"
+    }
+  ],
+  "notes": "Worked example of the target form. Every field below already exists in the backend: columns/constraints via _structured_record_controls, options via mysql_table_options.KEYS (TEXT/NUMBERS/CHOICES). backend_field_id maps typed fields back onto the mysql_table_options object until the provider accepts them flat.",
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "control": "text",
+      "tab": "General",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Database",
+      "control": "reference",
+      "tab": "General",
+      "reference_kind": "database",
+      "required": true
+    },
+    {
+      "field_id": "table_type",
+      "label": "Table type",
+      "control": "select",
+      "tab": "General",
+      "options": [
+        {
+          "value": "ordinary",
+          "label": "Ordinary"
+        },
+        {
+          "value": "temporary",
+          "label": "Temporary"
+        }
+      ],
+      "default": "ordinary"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "control": "text",
+      "tab": "General",
+      "native_keyword": "COMMENT",
+      "backend_field_id": "mysql_table_options.comment"
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns",
+      "control": "grid",
+      "tab": "Columns",
+      "required": true,
+      "reorderable": true,
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Type",
+          "control": "select",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "column_types"
+          ]
+        },
+        {
+          "field_id": "length",
+          "label": "Length",
+          "control": "number"
+        },
+        {
+          "field_id": "precision",
+          "label": "Precision",
+          "control": "number"
+        },
+        {
+          "field_id": "scale",
+          "label": "Scale",
+          "control": "number"
+        },
+        {
+          "field_id": "unsigned",
+          "label": "Unsigned",
+          "control": "boolean"
+        },
+        {
+          "field_id": "nullable",
+          "label": "Nullable",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "default",
+          "label": "Default",
+          "control": "text"
+        },
+        {
+          "field_id": "identity",
+          "label": "Auto increment",
+          "control": "boolean",
+          "native_keyword": "AUTO_INCREMENT",
+          "backend_field_id": "auto_increment"
+        },
+        {
+          "field_id": "character_set",
+          "label": "Character set",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "character_sets"
+          ]
+        },
+        {
+          "field_id": "collation",
+          "label": "Collation",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "collations"
+          ]
+        },
+        {
+          "field_id": "computed",
+          "label": "Generated expression",
+          "control": "code",
+          "language": "sql",
+          "native_keyword": "GENERATED ALWAYS AS"
+        },
+        {
+          "field_id": "computed_stored",
+          "label": "Stored",
+          "control": "boolean",
+          "visible_when": {
+            "field": "computed",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "field_id": "primary_key",
+      "label": "Primary key",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Primary key",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ],
+      "backend_field_id": "constraints[kind=primary_key]"
+    },
+    {
+      "field_id": "unique_constraints",
+      "label": "Unique",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Unique",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ],
+      "backend_field_id": "constraints[kind=unique]"
+    },
+    {
+      "field_id": "foreign_keys",
+      "label": "Foreign keys",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Foreign keys",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        },
+        {
+          "field_id": "references",
+          "label": "Referenced table",
+          "control": "reference",
+          "reference_kind": "table",
+          "required": true
+        },
+        {
+          "field_id": "referenced_columns",
+          "label": "Referenced columns",
+          "control": "multiselect",
+          "required": true
+        },
+        {
+          "field_id": "on_update",
+          "label": "On update",
+          "control": "select",
+          "options": [
+            {
+              "value": "RESTRICT",
+              "label": "Restrict"
+            },
+            {
+              "value": "CASCADE",
+              "label": "Cascade"
+            },
+            {
+              "value": "SET NULL",
+              "label": "Set null"
+            },
+            {
+              "value": "NO ACTION",
+              "label": "No action"
+            },
+            {
+              "value": "SET DEFAULT",
+              "label": "Set default"
+            }
+          ]
+        },
+        {
+          "field_id": "on_delete",
+          "label": "On delete",
+          "control": "select",
+          "options": [
+            {
+              "value": "RESTRICT",
+              "label": "Restrict"
+            },
+            {
+              "value": "CASCADE",
+              "label": "Cascade"
+            },
+            {
+              "value": "SET NULL",
+              "label": "Set null"
+            },
+            {
+              "value": "NO ACTION",
+              "label": "No action"
+            },
+            {
+              "value": "SET DEFAULT",
+              "label": "Set default"
+            }
+          ]
+        }
+      ],
+      "backend_field_id": "constraints[kind=foreign_key]"
+    },
+    {
+      "field_id": "check_constraints",
+      "label": "Check",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Check",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "expression",
+          "label": "Expression",
+          "control": "code",
+          "language": "sql",
+          "required": true
+        },
+        {
+          "field_id": "enforced",
+          "label": "Enforced",
+          "control": "boolean",
+          "default": true,
+          "version": {
+            "minimum": "8.0.16"
+          }
+        }
+      ],
+      "backend_field_id": "constraints[kind=check]"
+    },
+    {
+      "field_id": "is_partitioned",
+      "label": "Partitioned",
+      "control": "boolean",
+      "tab": "Partitions"
+    },
+    {
+      "field_id": "partition_type",
+      "label": "Strategy",
+      "control": "select",
+      "tab": "Partitions",
+      "options": [
+        {
+          "value": "RANGE",
+          "label": "Range"
+        },
+        {
+          "value": "LIST",
+          "label": "List"
+        },
+        {
+          "value": "HASH",
+          "label": "Hash"
+        },
+        {
+          "value": "KEY",
+          "label": "Key"
+        },
+        {
+          "value": "RANGE COLUMNS",
+          "label": "Range columns"
+        },
+        {
+          "value": "LIST COLUMNS",
+          "label": "List columns"
+        }
+      ],
+      "visible_when": {
+        "field": "is_partitioned",
+        "truthy": true
+      },
+      "backend_field_id": "partition_by.strategy"
+    },
+    {
+      "field_id": "partition_expression",
+      "label": "Partition expression / columns",
+      "control": "code",
+      "tab": "Partitions",
+      "language": "sql",
+      "visible_when": {
+        "field": "is_partitioned",
+        "truthy": true
+      },
+      "backend_field_id": "partition_by.expression"
+    },
+    {
+      "field_id": "partitions",
+      "label": "Partitions",
+      "control": "grid",
+      "tab": "Partitions",
+      "visible_when": {
+        "field": "is_partitioned",
+        "truthy": true
+      },
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "bound",
+          "label": "VALUES LESS THAN / IN",
+          "control": "text"
+        },
+        {
+          "field_id": "engine",
+          "label": "Engine",
+          "control": "text"
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text"
+        }
+      ],
+      "backend_field_id": "add_partitions"
+    },
+    {
+      "field_id": "engine",
+      "label": "Storage engine",
+      "control": "select",
+      "tab": "Options",
+      "option_values_path": [
+        "catalog",
+        "storage_engines"
+      ],
+      "native_keyword": "ENGINE",
+      "backend_field_id": "mysql_table_options.engine"
+    },
+    {
+      "field_id": "character_set",
+      "label": "Character set",
+      "control": "select",
+      "tab": "Options",
+      "option_values_path": [
+        "dialect",
+        "character_sets"
+      ],
+      "native_keyword": "DEFAULT CHARACTER SET",
+      "backend_field_id": "mysql_table_options.character_set"
+    },
+    {
+      "field_id": "collation",
+      "label": "Collation",
+      "control": "select",
+      "tab": "Options",
+      "option_values_path": [
+        "dialect",
+        "collations"
+      ],
+      "native_keyword": "DEFAULT COLLATE",
+      "backend_field_id": "mysql_table_options.collation"
+    },
+    {
+      "field_id": "tablespace",
+      "label": "Tablespace",
+      "control": "select",
+      "tab": "Options",
+      "option_values_path": [
+        "catalog",
+        "tablespaces"
+      ],
+      "backend_field_id": "mysql_table_options.tablespace"
+    },
+    {
+      "field_id": "row_format",
+      "label": "Row format",
+      "control": "select",
+      "tab": "Engine",
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "DYNAMIC",
+          "label": "Dynamic"
+        },
+        {
+          "value": "FIXED",
+          "label": "Fixed"
+        },
+        {
+          "value": "COMPRESSED",
+          "label": "Compressed"
+        },
+        {
+          "value": "REDUNDANT",
+          "label": "Redundant"
+        },
+        {
+          "value": "COMPACT",
+          "label": "Compact"
+        }
+      ],
+      "backend_field_id": "mysql_table_options.row_format"
+    },
+    {
+      "field_id": "auto_increment",
+      "label": "Auto-increment start",
+      "control": "number",
+      "tab": "Engine",
+      "backend_field_id": "mysql_table_options.auto_increment"
+    },
+    {
+      "field_id": "key_block_size",
+      "label": "Key block size",
+      "control": "number",
+      "tab": "Engine",
+      "backend_field_id": "mysql_table_options.key_block_size"
+    },
+    {
+      "field_id": "compression",
+      "label": "Compression",
+      "control": "select",
+      "tab": "Engine",
+      "options": [
+        {
+          "value": "NONE",
+          "label": "None"
+        },
+        {
+          "value": "ZLIB",
+          "label": "Zlib"
+        },
+        {
+          "value": "LZ4",
+          "label": "Lz4"
+        }
+      ],
+      "backend_field_id": "mysql_table_options.compression"
+    },
+    {
+      "field_id": "encryption",
+      "label": "Encryption",
+      "control": "select",
+      "tab": "Engine",
+      "options": [
+        {
+          "value": "Y",
+          "label": "Yes"
+        },
+        {
+          "value": "N",
+          "label": "No"
+        }
+      ],
+      "backend_field_id": "mysql_table_options.encryption"
+    },
+    {
+      "field_id": "stats_persistent",
+      "label": "Persistent statistics",
+      "control": "select",
+      "tab": "Engine",
+      "group": "Statistics",
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "0",
+          "label": "0"
+        },
+        {
+          "value": "1",
+          "label": "1"
+        }
+      ],
+      "backend_field_id": "mysql_table_options.stats_persistent"
+    },
+    {
+      "field_id": "stats_auto_recalc",
+      "label": "Auto recalculate statistics",
+      "control": "select",
+      "tab": "Engine",
+      "group": "Statistics",
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "0",
+          "label": "0"
+        },
+        {
+          "value": "1",
+          "label": "1"
+        }
+      ],
+      "backend_field_id": "mysql_table_options.stats_auto_recalc"
+    },
+    {
+      "field_id": "stats_sample_pages",
+      "label": "Statistics sample pages",
+      "control": "number",
+      "tab": "Engine",
+      "group": "Statistics",
+      "backend_field_id": "mysql_table_options.stats_sample_pages"
+    },
+    {
+      "field_id": "max_rows",
+      "label": "Max rows",
+      "control": "number",
+      "tab": "Engine",
+      "group": "Storage hints",
+      "backend_field_id": "mysql_table_options.max_rows"
+    },
+    {
+      "field_id": "min_rows",
+      "label": "Min rows",
+      "control": "number",
+      "tab": "Engine",
+      "group": "Storage hints",
+      "backend_field_id": "mysql_table_options.min_rows"
+    },
+    {
+      "field_id": "avg_row_length",
+      "label": "Average row length",
+      "control": "number",
+      "tab": "Engine",
+      "group": "Storage hints",
+      "backend_field_id": "mysql_table_options.avg_row_length"
+    },
+    {
+      "field_id": "pack_keys",
+      "label": "Pack keys",
+      "control": "select",
+      "tab": "Engine",
+      "group": "Storage hints",
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "0",
+          "label": "0"
+        },
+        {
+          "value": "1",
+          "label": "1"
+        }
+      ],
+      "backend_field_id": "mysql_table_options.pack_keys"
+    },
+    {
+      "field_id": "checksum",
+      "label": "Live checksum",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Storage hints",
+      "backend_field_id": "mysql_table_options.checksum"
+    },
+    {
+      "field_id": "delay_key_write",
+      "label": "Delay key write",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Storage hints",
+      "backend_field_id": "mysql_table_options.delay_key_write"
+    },
+    {
+      "field_id": "autoextend_size",
+      "label": "Autoextend size",
+      "control": "number",
+      "tab": "Engine",
+      "group": "Storage hints",
+      "version": {
+        "minimum": "8.0.23"
+      },
+      "backend_field_id": "mysql_table_options.autoextend_size"
+    },
+    {
+      "field_id": "data_directory",
+      "label": "Data directory",
+      "control": "text",
+      "tab": "Engine",
+      "group": "Files",
+      "backend_field_id": "mysql_table_options.data_directory"
+    },
+    {
+      "field_id": "index_directory",
+      "label": "Index directory",
+      "control": "text",
+      "tab": "Engine",
+      "group": "Files",
+      "backend_field_id": "mysql_table_options.index_directory"
+    },
+    {
+      "field_id": "secondary_engine",
+      "label": "Secondary engine",
+      "control": "text",
+      "tab": "Engine",
+      "group": "HeatWave / secondary",
+      "backend_field_id": "mysql_table_options.secondary_engine"
+    },
+    {
+      "field_id": "engine_attribute",
+      "label": "Engine attribute",
+      "control": "keyvalue",
+      "tab": "Engine",
+      "group": "HeatWave / secondary",
+      "backend_field_id": "mysql_table_options.engine_attribute"
+    },
+    {
+      "field_id": "secondary_engine_attribute",
+      "label": "Secondary engine attribute",
+      "control": "keyvalue",
+      "tab": "Engine",
+      "group": "HeatWave / secondary",
+      "backend_field_id": "mysql_table_options.secondary_engine_attribute"
+    },
+    {
+      "field_id": "union",
+      "label": "MERGE member tables",
+      "control": "multiselect",
+      "tab": "Engine",
+      "group": "MERGE / FEDERATED",
+      "option_values_path": [
+        "catalog",
+        "tables"
+      ],
+      "visible_when": {
+        "field": "engine",
+        "equals": "MRG_MYISAM"
+      },
+      "backend_field_id": "mysql_table_options.union"
+    },
+    {
+      "field_id": "insert_method",
+      "label": "Insert method",
+      "control": "select",
+      "tab": "Engine",
+      "group": "MERGE / FEDERATED",
+      "options": [
+        {
+          "value": "NO",
+          "label": "No"
+        },
+        {
+          "value": "FIRST",
+          "label": "First"
+        },
+        {
+          "value": "LAST",
+          "label": "Last"
+        }
+      ],
+      "visible_when": {
+        "field": "engine",
+        "equals": "MRG_MYISAM"
+      },
+      "backend_field_id": "mysql_table_options.insert_method"
+    },
+    {
+      "field_id": "mysql_connection",
+      "label": "FEDERATED connection or server reference",
+      "control": "password",
+      "tab": "Engine",
+      "group": "MERGE / FEDERATED",
+      "visible_when": {
+        "field": "engine",
+        "equals": "FEDERATED"
+      }
+    },
+    {
+      "field_id": "alter_algorithm",
+      "label": "ALTER algorithm",
+      "control": "select",
+      "tab": "Options",
+      "group": "Online change",
+      "modes": [
+        "alter"
+      ],
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "INSTANT",
+          "label": "Instant"
+        },
+        {
+          "value": "INPLACE",
+          "label": "Inplace"
+        },
+        {
+          "value": "COPY",
+          "label": "Copy"
+        }
+      ],
+      "help": "Was MySQLControlledChange panel"
+    },
+    {
+      "field_id": "alter_lock",
+      "label": "ALTER lock",
+      "control": "select",
+      "tab": "Options",
+      "group": "Online change",
+      "modes": [
+        "alter"
+      ],
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "NONE",
+          "label": "None"
+        },
+        {
+          "value": "SHARED",
+          "label": "Shared"
+        },
+        {
+          "value": "EXCLUSIVE",
+          "label": "Exclusive"
+        }
+      ]
+    },
+    {
+      "field_id": "privileges",
+      "label": "Privileges",
+      "control": "privileges",
+      "tab": "Security",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "user",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "table"
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ],
+      "backend_field_id": "privilege.grant"
+    }
+  ]
+}

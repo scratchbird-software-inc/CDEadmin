@@ -1,0 +1,601 @@
+{
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "firebird",
+  "profiles": [
+    "firebird-native",
+    "firebird-embedded"
+  ],
+  "beta_tier": "full",
+  "version_range": {
+    "minimum": "3.0.0",
+    "tested": [
+      "5.0.4"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "table",
+      "family": "table",
+      "form": "forms/table.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1
+        },
+        {
+          "operation_id": "reorder_columns",
+          "tier": 1
+        },
+        {
+          "operation_id": "insert",
+          "tier": 1
+        },
+        {
+          "operation_id": "update",
+          "tier": 1
+        },
+        {
+          "operation_id": "delete",
+          "tier": 1
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "view",
+      "family": "view",
+      "form": "forms/view.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "index",
+      "family": "index",
+      "form": "forms/index.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "procedure",
+      "family": "routine",
+      "variant": "procedure",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "function",
+      "family": "routine",
+      "variant": "function",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "package",
+      "family": "routine",
+      "variant": "package",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "create_body",
+          "tier": 1
+        },
+        {
+          "operation_id": "replace_body",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop_body",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "external-function",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "exception",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "trigger",
+      "family": "trigger",
+      "form": "forms/trigger.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "sequence",
+      "family": "sequence",
+      "variant": "generator",
+      "form": "forms/sequence.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1
+        },
+        {
+          "operation_id": "set_current",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "domain",
+      "family": "type",
+      "variant": "domain",
+      "form": "forms/type.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "character-set",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "collation",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "blob-filter",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "user",
+      "family": "role",
+      "variant": "user",
+      "form": "forms/role.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "role",
+      "family": "role",
+      "variant": "role",
+      "form": "forms/role.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1
+        },
+        {
+          "operation_id": "configure_admin_mapping",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "privilege",
+      "family": "role",
+      "variant": "grant",
+      "form": "forms/role.form.json",
+      "operations": [
+        {
+          "operation_id": "grant",
+          "tier": 1
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "authentication-mapping",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "global-authentication-mapping",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "database",
+      "family": "database",
+      "form": "forms/database.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "shadow",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "publication",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "alter",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "server",
+      "family": "server",
+      "form": "forms/server.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    }
+  ]
+}

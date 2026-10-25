@@ -1,0 +1,14 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "sqlite",
+  "family": "trigger",
+  "resource_kinds": [
+    "trigger"
+  ],
+  "status": "pending",
+  "engine_tab_title": "SQLite",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [],
+  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+}

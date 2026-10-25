@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cdeadmin.ui-family.v1",
+  "title": "Canonical object-family skeleton",
+  "type": "object",
+  "required": [
+    "schema",
+    "family",
+    "title",
+    "tabs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "cdeadmin.ui-family.v1"
+    },
+    "family": {
+      "type": "string",
+      "pattern": "^[a-z][a-z_]*$"
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "variants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tabs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "tab",
+          "primitive"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "tab": {
+            "enum": [
+              "General",
+              "Definition",
+              "Columns",
+              "Constraints",
+              "Indexes",
+              "Triggers",
+              "Parameters",
+              "Partitions",
+              "Options",
+              "Engine",
+              "Security",
+              "Dependencies",
+              "Statistics",
+              "Data",
+              "SQL",
+              "Membership",
+              "Privileges",
+              "Connection",
+              "Authentication",
+              "SSL/TLS",
+              "Advanced",
+              "Tags"
+            ]
+          },
+          "primitive": {
+            "enum": [
+              "group",
+              "code",
+              "grid",
+              "nested_grids",
+              "keyvalue",
+              "privileges",
+              "readonly_grid",
+              "readonly_groups",
+              "data_grid",
+              "sql_preview"
+            ]
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Every beta engine that has the family must render this tab"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "form.schema.json#/$defs/field"
+            }
+          },
+          "grid_columns": {
+            "type": "array",
+            "items": {
+              "$ref": "form.schema.json#/$defs/field"
+            }
+          },
+          "nested": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "grid_columns"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "grid_columns": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "form.schema.json#/$defs/field"
+                  }
+                }
+              }
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

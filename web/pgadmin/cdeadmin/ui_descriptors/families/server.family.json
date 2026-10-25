@@ -1,0 +1,230 @@
+{
+  "schema": "cdeadmin.ui-family.v1",
+  "family": "server",
+  "title": "Server",
+  "description": "Endpoint registration and connection. Not a DDL object: no SQL tab.",
+  "tabs": [
+    {
+      "tab": "Connection",
+      "primitive": "group",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "group",
+          "label": "Server group",
+          "control": "select"
+        },
+        {
+          "field_id": "host",
+          "label": "Host",
+          "control": "text"
+        },
+        {
+          "field_id": "port",
+          "label": "Port",
+          "control": "number"
+        },
+        {
+          "field_id": "database",
+          "label": "Database / file",
+          "control": "text",
+          "help": "File picker on the execution host for embedded engines"
+        },
+        {
+          "field_id": "read_only",
+          "label": "Read only",
+          "control": "boolean"
+        },
+        {
+          "field_id": "connect_now",
+          "label": "Connect now",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "colour",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "tab": "Authentication",
+      "primitive": "group",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "username",
+          "label": "Username",
+          "control": "text"
+        },
+        {
+          "field_id": "password",
+          "label": "Password",
+          "control": "password"
+        },
+        {
+          "field_id": "save_password",
+          "label": "Save password",
+          "control": "boolean"
+        },
+        {
+          "field_id": "auth_method",
+          "label": "Authentication method",
+          "control": "select",
+          "option_values_path": [
+            "profile",
+            "auth_methods"
+          ]
+        },
+        {
+          "field_id": "role",
+          "label": "Role",
+          "control": "text"
+        },
+        {
+          "field_id": "use_ssh_tunnel",
+          "label": "Use SSH tunnel",
+          "control": "boolean"
+        },
+        {
+          "field_id": "tunnel_host",
+          "label": "Tunnel host",
+          "control": "text",
+          "visible_when": {
+            "field": "use_ssh_tunnel",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "tunnel_port",
+          "label": "Tunnel port",
+          "control": "number",
+          "visible_when": {
+            "field": "use_ssh_tunnel",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "tunnel_username",
+          "label": "Tunnel username",
+          "control": "text",
+          "visible_when": {
+            "field": "use_ssh_tunnel",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "tunnel_auth",
+          "label": "Tunnel authentication",
+          "control": "select",
+          "visible_when": {
+            "field": "use_ssh_tunnel",
+            "truthy": true
+          }
+        }
+      ]
+    },
+    {
+      "tab": "SSL/TLS",
+      "primitive": "group",
+      "required": false,
+      "fields": [
+        {
+          "field_id": "ssl_mode",
+          "label": "Mode",
+          "control": "select",
+          "option_values_path": [
+            "profile",
+            "ssl_modes"
+          ]
+        },
+        {
+          "field_id": "ssl_cert",
+          "label": "Client certificate",
+          "control": "file"
+        },
+        {
+          "field_id": "ssl_key",
+          "label": "Client key",
+          "control": "file"
+        },
+        {
+          "field_id": "ssl_ca",
+          "label": "CA certificate",
+          "control": "file"
+        },
+        {
+          "field_id": "tls_cipher",
+          "label": "Cipher",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "tab": "Advanced",
+      "primitive": "group",
+      "required": false,
+      "fields": [
+        {
+          "field_id": "connect_timeout",
+          "label": "Connect timeout (s)",
+          "control": "number"
+        },
+        {
+          "field_id": "statement_timeout",
+          "label": "Statement timeout",
+          "control": "number"
+        },
+        {
+          "field_id": "post_connection_sql",
+          "label": "Post-connection SQL",
+          "control": "code",
+          "language": "sql"
+        },
+        {
+          "field_id": "execution_host",
+          "label": "Execution host",
+          "control": "select",
+          "group": "Execution host",
+          "help": "Where native utilities run (local, SSH host)"
+        },
+        {
+          "field_id": "tool_workspace",
+          "label": "Utility workspace",
+          "control": "text",
+          "group": "Execution host"
+        },
+        {
+          "field_id": "tool_timeout",
+          "label": "Utility timeout (s)",
+          "control": "number",
+          "group": "Execution host"
+        }
+      ]
+    },
+    {
+      "tab": "Engine",
+      "primitive": "group",
+      "required": false
+    },
+    {
+      "tab": "Tags",
+      "primitive": "group",
+      "required": false,
+      "fields": [
+        {
+          "field_id": "tags",
+          "label": "Tags",
+          "control": "multiselect"
+        }
+      ]
+    }
+  ]
+}

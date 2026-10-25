@@ -1,0 +1,162 @@
+{
+  "schema": "cdeadmin.ui-family.v1",
+  "family": "sequence",
+  "title": "Sequence",
+  "tabs": [
+    {
+      "tab": "General",
+      "primitive": "group",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "parent",
+          "label": "Schema / database",
+          "control": "reference",
+          "reference_kind": "schema"
+        },
+        {
+          "field_id": "start",
+          "label": "Start",
+          "control": "number"
+        },
+        {
+          "field_id": "increment",
+          "label": "Increment",
+          "control": "number",
+          "default": 1
+        },
+        {
+          "field_id": "minimum",
+          "label": "Minimum",
+          "control": "number"
+        },
+        {
+          "field_id": "maximum",
+          "label": "Maximum",
+          "control": "number"
+        },
+        {
+          "field_id": "cycle",
+          "label": "Cycle",
+          "control": "boolean"
+        },
+        {
+          "field_id": "cache",
+          "label": "Cache",
+          "control": "number"
+        },
+        {
+          "field_id": "current_value",
+          "label": "Current value",
+          "control": "number",
+          "modes": [
+            "alter"
+          ],
+          "help": "Changing this restarts the sequence (RESTART WITH / SET GENERATOR)."
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "tab": "Engine",
+      "primitive": "group",
+      "required": false
+    },
+    {
+      "tab": "Security",
+      "primitive": "privileges",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "$resource_kind"
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "Dependencies",
+      "primitive": "readonly_grid",
+      "required": false,
+      "nested": [
+        {
+          "name": "Depends on",
+          "grid_columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "text",
+              "readonly": true
+            },
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        },
+        {
+          "name": "Dependents",
+          "grid_columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "text",
+              "readonly": true
+            },
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "SQL",
+      "primitive": "sql_preview",
+      "required": true,
+      "notes": "Read-only. Create mode: full native DDL from the provider plan. Alter mode: the ALTER set. Replaces the confirm-step preview."
+    }
+  ]
+}

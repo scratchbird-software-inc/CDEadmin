@@ -1,0 +1,349 @@
+{
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "mariadb",
+  "profiles": [
+    "mariadb-native"
+  ],
+  "beta_tier": "full",
+  "version_range": {
+    "minimum": "10.6.0",
+    "tested": [
+      "12.2.2"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "table",
+      "family": "table",
+      "form": "forms/table.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1
+        },
+        {
+          "operation_id": "insert",
+          "tier": 1
+        },
+        {
+          "operation_id": "update",
+          "tier": 1
+        },
+        {
+          "operation_id": "delete",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "view",
+      "family": "view",
+      "form": "forms/view.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "index",
+      "family": "index",
+      "form": "forms/index.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "procedure",
+      "family": "routine",
+      "variant": "procedure",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "function",
+      "family": "routine",
+      "variant": "function",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "package",
+      "family": "routine",
+      "variant": "package",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "event",
+      "family": "routine",
+      "variant": "scheduled",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "loadable-function",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "trigger",
+      "family": "trigger",
+      "form": "forms/trigger.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "sequence",
+      "family": "sequence",
+      "form": "forms/sequence.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "user",
+      "family": "role",
+      "variant": "user",
+      "form": "forms/role.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "role",
+      "family": "role",
+      "variant": "role",
+      "form": "forms/role.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "privilege",
+      "family": "role",
+      "variant": "grant",
+      "form": "forms/role.form.json",
+      "operations": [
+        {
+          "operation_id": "grant",
+          "tier": 1
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "database",
+      "family": "database",
+      "form": "forms/database.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "plugin",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "replication-channel",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "server-link",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "server",
+      "family": "server",
+      "form": "forms/server.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    }
+  ]
+}

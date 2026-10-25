@@ -1,0 +1,13 @@
+{
+  "engine": "mysql",
+  "omitted": [
+    {
+      "family": "sequence",
+      "reason": "MySQL has no sequence objects; AUTO_INCREMENT is a column property"
+    },
+    {
+      "family": "type",
+      "reason": "No user-defined types or domains"
+    }
+  ]
+}

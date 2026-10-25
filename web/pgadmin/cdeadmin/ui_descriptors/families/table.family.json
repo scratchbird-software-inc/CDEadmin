@@ -1,0 +1,599 @@
+{
+  "schema": "cdeadmin.ui-family.v1",
+  "family": "table",
+  "title": "Table",
+  "variants": [
+    "ordinary",
+    "temporary",
+    "unlogged",
+    "global_temporary",
+    "external",
+    "virtual",
+    "materialized_view"
+  ],
+  "tabs": [
+    {
+      "tab": "General",
+      "primitive": "group",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "parent",
+          "label": "Schema / database",
+          "control": "reference",
+          "reference_kind": "schema"
+        },
+        {
+          "field_id": "table_type",
+          "label": "Table type",
+          "control": "select",
+          "options": [
+            {
+              "value": "ordinary",
+              "label": "Ordinary"
+            },
+            {
+              "value": "temporary",
+              "label": "Temporary"
+            }
+          ]
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "tab": "Columns",
+      "primitive": "grid",
+      "required": true,
+      "grid_columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Type",
+          "control": "select",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "column_types"
+          ]
+        },
+        {
+          "field_id": "length",
+          "label": "Length",
+          "control": "number"
+        },
+        {
+          "field_id": "precision",
+          "label": "Precision",
+          "control": "number"
+        },
+        {
+          "field_id": "scale",
+          "label": "Scale",
+          "control": "number"
+        },
+        {
+          "field_id": "nullable",
+          "label": "Nullable",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "default",
+          "label": "Default",
+          "control": "text"
+        },
+        {
+          "field_id": "identity",
+          "label": "Identity / auto-increment",
+          "control": "select",
+          "options": [
+            {
+              "value": "none",
+              "label": "None"
+            },
+            {
+              "value": "always",
+              "label": "Always"
+            },
+            {
+              "value": "by_default",
+              "label": "By default"
+            }
+          ]
+        },
+        {
+          "field_id": "collation",
+          "label": "Collation",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "collations"
+          ]
+        },
+        {
+          "field_id": "computed",
+          "label": "Computed expression",
+          "control": "code",
+          "language": "sql"
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text"
+        }
+      ],
+      "notes": "Reorderable. Engine descriptors may add columns (Firebird domain, dimensions, blob subtype) and narrow the type picker."
+    },
+    {
+      "tab": "Constraints",
+      "primitive": "nested_grids",
+      "required": true,
+      "nested": [
+        {
+          "name": "Primary key",
+          "grid_columns": [
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text"
+            },
+            {
+              "field_id": "columns",
+              "label": "Columns",
+              "control": "multiselect",
+              "required": true,
+              "option_values_path": [
+                "draft",
+                "columns"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Unique",
+          "grid_columns": [
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text"
+            },
+            {
+              "field_id": "columns",
+              "label": "Columns",
+              "control": "multiselect",
+              "required": true,
+              "option_values_path": [
+                "draft",
+                "columns"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Foreign keys",
+          "grid_columns": [
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text"
+            },
+            {
+              "field_id": "columns",
+              "label": "Columns",
+              "control": "multiselect",
+              "required": true,
+              "option_values_path": [
+                "draft",
+                "columns"
+              ]
+            },
+            {
+              "field_id": "references",
+              "label": "Referenced table",
+              "control": "reference",
+              "required": true,
+              "reference_kind": "table"
+            },
+            {
+              "field_id": "referenced_columns",
+              "label": "Referenced columns",
+              "control": "multiselect",
+              "required": true
+            },
+            {
+              "field_id": "on_update",
+              "label": "On update",
+              "control": "select",
+              "options": [
+                {
+                  "value": "no_action",
+                  "label": "No action"
+                },
+                {
+                  "value": "restrict",
+                  "label": "Restrict"
+                },
+                {
+                  "value": "cascade",
+                  "label": "Cascade"
+                },
+                {
+                  "value": "set_null",
+                  "label": "Set null"
+                },
+                {
+                  "value": "set_default",
+                  "label": "Set default"
+                }
+              ]
+            },
+            {
+              "field_id": "on_delete",
+              "label": "On delete",
+              "control": "select",
+              "options": [
+                {
+                  "value": "no_action",
+                  "label": "No action"
+                },
+                {
+                  "value": "restrict",
+                  "label": "Restrict"
+                },
+                {
+                  "value": "cascade",
+                  "label": "Cascade"
+                },
+                {
+                  "value": "set_null",
+                  "label": "Set null"
+                },
+                {
+                  "value": "set_default",
+                  "label": "Set default"
+                }
+              ]
+            },
+            {
+              "field_id": "deferrable",
+              "label": "Deferrable",
+              "control": "boolean"
+            },
+            {
+              "field_id": "initially_deferred",
+              "label": "Initially deferred",
+              "control": "boolean"
+            }
+          ]
+        },
+        {
+          "name": "Check",
+          "grid_columns": [
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text"
+            },
+            {
+              "field_id": "expression",
+              "label": "Expression",
+              "control": "code",
+              "language": "sql",
+              "required": true
+            },
+            {
+              "field_id": "validated",
+              "label": "Validated",
+              "control": "boolean",
+              "default": true
+            }
+          ]
+        },
+        {
+          "name": "Exclude",
+          "grid_columns": [
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text"
+            },
+            {
+              "field_id": "expression",
+              "label": "Definition",
+              "control": "code",
+              "language": "sql"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "Indexes",
+      "primitive": "readonly_grid",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "readonly": true
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "text",
+          "readonly": true
+        },
+        {
+          "field_id": "unique",
+          "label": "Unique",
+          "control": "boolean",
+          "readonly": true
+        }
+      ],
+      "notes": "Open row -> Index editor"
+    },
+    {
+      "tab": "Triggers",
+      "primitive": "readonly_grid",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "readonly": true
+        },
+        {
+          "field_id": "timing",
+          "label": "Timing",
+          "control": "text",
+          "readonly": true
+        },
+        {
+          "field_id": "events",
+          "label": "Events",
+          "control": "text",
+          "readonly": true
+        },
+        {
+          "field_id": "active",
+          "label": "Active",
+          "control": "boolean",
+          "readonly": true
+        }
+      ]
+    },
+    {
+      "tab": "Partitions",
+      "primitive": "group",
+      "required": false,
+      "fields": [
+        {
+          "field_id": "is_partitioned",
+          "label": "Partitioned",
+          "control": "boolean"
+        },
+        {
+          "field_id": "partition_type",
+          "label": "Strategy",
+          "control": "select",
+          "visible_when": {
+            "field": "is_partitioned",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "partition_keys",
+          "label": "Partition keys",
+          "control": "multiselect",
+          "option_values_path": [
+            "draft",
+            "columns"
+          ],
+          "visible_when": {
+            "field": "is_partitioned",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "partitions",
+          "label": "Partitions",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "bound",
+              "label": "Bound / values",
+              "control": "text"
+            }
+          ],
+          "visible_when": {
+            "field": "is_partitioned",
+            "truthy": true
+          }
+        }
+      ]
+    },
+    {
+      "tab": "Options",
+      "primitive": "group",
+      "required": false,
+      "fields": [
+        {
+          "field_id": "tablespace",
+          "label": "Tablespace",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "tablespaces"
+          ]
+        },
+        {
+          "field_id": "fillfactor",
+          "label": "Fill factor",
+          "control": "number",
+          "min": 10,
+          "max": 100
+        },
+        {
+          "field_id": "character_set",
+          "label": "Character set",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "character_sets"
+          ]
+        },
+        {
+          "field_id": "collation",
+          "label": "Collation",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "collations"
+          ]
+        },
+        {
+          "field_id": "sql_security",
+          "label": "SQL security",
+          "control": "select",
+          "options": [
+            {
+              "value": "definer",
+              "label": "Definer"
+            },
+            {
+              "value": "invoker",
+              "label": "Invoker"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "Engine",
+      "primitive": "group",
+      "required": false,
+      "notes": "Engine-only options. Title is the engine name."
+    },
+    {
+      "tab": "Security",
+      "primitive": "privileges",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "$resource_kind"
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "Dependencies",
+      "primitive": "readonly_grid",
+      "required": false,
+      "nested": [
+        {
+          "name": "Depends on",
+          "grid_columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "text",
+              "readonly": true
+            },
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        },
+        {
+          "name": "Dependents",
+          "grid_columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "text",
+              "readonly": true
+            },
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "Statistics",
+      "primitive": "readonly_groups",
+      "required": false
+    },
+    {
+      "tab": "Data",
+      "primitive": "data_grid",
+      "required": false,
+      "notes": "Existing paged grid; compact_forms.rst session rules."
+    },
+    {
+      "tab": "SQL",
+      "primitive": "sql_preview",
+      "required": true,
+      "notes": "Read-only. Create mode: full native DDL from the provider plan. Alter mode: the ALTER set. Replaces the confirm-step preview."
+    }
+  ]
+}

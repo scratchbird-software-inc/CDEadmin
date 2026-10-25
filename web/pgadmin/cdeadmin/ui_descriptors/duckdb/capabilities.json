@@ -1,0 +1,251 @@
+{
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "duckdb",
+  "profiles": [
+    "duckdb-native"
+  ],
+  "beta_tier": "full",
+  "version_range": {
+    "minimum": "1.1.0",
+    "tested": [
+      "1.5.2"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "table",
+      "family": "table",
+      "form": "forms/table.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1
+        },
+        {
+          "operation_id": "insert",
+          "tier": 1
+        },
+        {
+          "operation_id": "update",
+          "tier": 1
+        },
+        {
+          "operation_id": "delete",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "view",
+      "family": "view",
+      "form": "forms/view.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "index",
+      "family": "index",
+      "form": "forms/index.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "macro",
+      "family": "routine",
+      "variant": "macro",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "sequence",
+      "family": "sequence",
+      "form": "forms/sequence.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "type",
+      "family": "type",
+      "form": "forms/type.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "secret",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "database",
+      "family": "database",
+      "form": "forms/database.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "attached-database",
+      "family": "database",
+      "variant": "attached",
+      "form": "forms/database.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "schema",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "extension",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "execute",
+          "tier": 1
+        },
+        {
+          "operation_id": "update",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "server",
+      "family": "server",
+      "form": "forms/server.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    }
+  ]
+}
