@@ -1,6 +1,6 @@
 """Same-server native syntax checking without querying the user's session."""
 from ...sdk.relational import RelationalClientError
-from .mysql_session_variables import SessionVariables, SourceIdentityUnavailable, prepare
+from .mysql_session_variables import SourceIdentityUnavailable, prepare, editor_observer
 
 
 class ModeCanonicalizer:
@@ -35,13 +35,7 @@ class ModeCanonicalizer:
 
 def validate(client, handle, source, script=False):
     from ..native_editor import validate_mysql
-    observer = getattr(handle, '_cdeadmin_session_variable_observer', None)
-    if not isinstance(observer, SessionVariables):
-        result = validate_mysql(client, handle, source, 'mysql', script)
-        profile = getattr(handle, '_cdeadmin_session_variable_observer_status', None)
-        result.update(original_diagnostics_preservation_qualified=False,
-            observation_profile=profile if isinstance(profile, dict) else {'admitted': False})
-        return result
+    observer = editor_observer(client, handle)
     peer = None
     try:
         prepare(handle)  # Authenticated request path, including credential renewal.

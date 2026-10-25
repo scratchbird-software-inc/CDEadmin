@@ -2590,3 +2590,23 @@ foreign-server workflow manages the native server definition. Named references
 avoid embedding account passwords in table definitions. Reads and writes use
 the native remote handler; creating a definition does not copy remote data.
 NDB Cluster remains a separate engine scope under the owner's clarification.
+
+Editor observation admission
+----------------------------
+
+MySQL completion and native syntax checks use an independent authenticated
+observer. If observer admission is denied or Performance Schema is disabled,
+the editor reports the unavailable native dependency and sends no substitute
+metadata or PREPARE commands on the user's SQL session. The API returns
+``MYSQL_EDITOR_OBSERVER_UNAVAILABLE`` with fixed operator guidance and a
+numeric native error when available. It does not return native exception text.
+
+For denied admission, restore the registered account's native SELECT access
+to ``performance_schema.variables_by_thread``,
+``performance_schema.session_account_connect_attrs`` and
+``performance_schema.threads``, then retry completion or syntax checking.
+The private observer can be readmitted while the original connection and its
+pending work remain in place. A disabled Performance Schema needs a reviewed
+native configuration/restart and a fresh SQL session. These editor guarantees
+are separate from qualification of unadmitted execution/conversion paths and
+from the explicitly unconfirmed source active-role/temporary-object overlays.

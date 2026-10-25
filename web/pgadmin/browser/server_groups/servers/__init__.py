@@ -100,6 +100,7 @@ from pgadmin.cdeadmin.visual_admin.execution_errors import (
     execution_failure_response,
 )
 from pgadmin.cdeadmin.sdk import RelationalCredentialError
+from pgadmin.cdeadmin.providers.mysql_family.mysql_session_variables import EditorObservationUnavailable
 from pgadmin.cdeadmin.workspace import (
     ProviderWorkspaceError,
     service_for_app as provider_workspace_for_app,
@@ -3427,6 +3428,14 @@ class ServerNode(PGChildNodeView):
                 ),
                 info='CREDENTIAL_REQUIRED',
             )
+        except EditorObservationUnavailable as exc:
+            response = make_json_response(status=409, success=0, errormsg=str(exc),
+                info='MYSQL_EDITOR_OBSERVER_UNAVAILABLE', data={
+                    'original_session_commands_sent': 0,
+                    'original_diagnostics_preserved': True,
+                    'native_errno': exc.native_observer_errno})
+            response.headers['Cache-Control'] = 'no-store'
+            return response
         except VisualAdminExecutionError as exc:
             return make_json_response(**execution_failure_response(
                 exc, gettext))

@@ -1,9 +1,8 @@
 """Read retained MySQL session variables on a separately authenticated peer.
 
-Admission occurs before user execution. Once admitted, loss or denial never
-falls back to an intrusive query on the original session. Unavailable admission
-is recorded separately; the pre-existing unqualified observation path remains
-available for those profiles until its own workflow is completed.
+Admission occurs before user execution. Loss, denial and disabled observation
+never authorize an editor query on the original session. A denied candidate can
+be readmitted on the authenticated editor path without reconnecting the source.
 """
 from copy import deepcopy
 from contextlib import contextmanager
@@ -34,6 +33,23 @@ class ObserverUnavailable(RelationalClientError):
 
 class SourceIdentityUnavailable(ObserverUnavailable):
     pass
+
+
+class EditorObservationUnavailable(ObserverUnavailable):
+    """Only fixed operator guidance and a numeric native errno are public."""
+    def __init__(self, reason, errno=None):
+        guidance = {
+            'disabled': 'Enable native Performance Schema in the server configuration and reconnect after its reviewed restart.',
+            'denied': ('The registered account needs native access to performance_schema.variables_by_thread, '
+                'performance_schema.session_account_connect_attrs and performance_schema.threads. '
+                'After restoring access, retry the editor request on this same session.'),
+        }.get(reason, 'Open a fresh native editor session with independent observation enabled.')
+        self.native_observer_errno = errno if type(errno) is int else None
+        super().__init__('Private MySQL editor observation is unavailable. '+guidance+
+            (' Native errno '+str(self.native_observer_errno)+'.' if self.native_observer_errno is not None else '')+
+            ' No original-session metadata command was substituted.')
+        self.original_diagnostics_preserved = True
+        self.original_session_commands_sent = 0
 
 
 class SessionVariables:
@@ -264,6 +280,7 @@ def install(client, handle, request):
             'admission_observation_only': True,
             'original_observation_path_qualified': False, 'reason': 'native-observer-admission-denied',
             'native_errno': getattr(error, 'errno', None), 'native_sqlstate': getattr(error, 'sqlstate', None)}
+        handle._cdeadmin_session_variable_observer_candidate = observer
         return
     handle._cdeadmin_session_variable_observer = observer
     handle._cdeadmin_session_variable_observer_status = {'admitted': True,
@@ -271,6 +288,42 @@ def install(client, handle, request):
         'observation_source': 'native-performance-schema-independent-connection',
         'original_session_commands_sent': 0, 'thread_id': str(thread_id), 'connection_id': str(connection_id),
         'private_observer_connection_retained': True}
+
+
+def editor_observer(client, handle):
+    """Acquire an independent editor observer; never inspect source SQL state."""
+    observer = getattr(handle, '_cdeadmin_session_variable_observer', None)
+    if isinstance(observer, SessionVariables):
+        return observer
+    candidate = getattr(handle, '_cdeadmin_session_variable_observer_candidate', None)
+    if isinstance(candidate, SessionVariables):
+        try:
+            candidate.renew()
+        except SourceIdentityUnavailable:
+            client._uncertain_sessions.add(id(handle))
+            raise RelationalClientError('The original MySQL session identity is unconfirmed; close this session') from None
+        except Exception as error:
+            handle._cdeadmin_session_variable_observer_status = {
+                **getattr(handle, '_cdeadmin_session_variable_observer_status', {}),
+                'native_errno': getattr(error, 'errno', None),
+                'native_sqlstate': getattr(error, 'sqlstate', None)}
+        else:
+            handle._cdeadmin_session_variable_observer = candidate
+            delattr(handle, '_cdeadmin_session_variable_observer_candidate')
+            handle._cdeadmin_session_variable_observer_status = {'admitted': True,
+                'admission_observation_only': True,
+                'observation_source': 'native-performance-schema-independent-connection',
+                'original_session_commands_sent': 0,
+                'thread_id': str(candidate.identity['thread_id']),
+                'connection_id': str(candidate.identity['connection_id']),
+                'private_observer_connection_retained': True,
+                'readmitted_without_source_commands': True}
+            return candidate
+    profile = getattr(handle, '_cdeadmin_session_variable_observer_status', None)
+    profile = profile if isinstance(profile, dict) else {}
+    reason = ('disabled' if profile.get('reason') == 'performance-schema-disabled' else
+        'denied' if isinstance(candidate, SessionVariables) else 'unadmitted')
+    raise EditorObservationUnavailable(reason, profile.get('native_errno'))
 
 
 def observe(handle):
@@ -318,9 +371,10 @@ def uninstall(handle):
     native = getattr(handle, '_native', handle)
     if native is None:
         return
-    observer = getattr(native, '_cdeadmin_session_variable_observer', None)
-    if isinstance(observer, SessionVariables):
-        observer.close()
-    for name in ('_cdeadmin_session_variable_observer', '_cdeadmin_session_variable_observer_status'):
+    for name in ('_cdeadmin_session_variable_observer', '_cdeadmin_session_variable_observer_candidate'):
+        observer = getattr(native, name, None)
+        if isinstance(observer, SessionVariables):
+            observer.close()
+    for name in ('_cdeadmin_session_variable_observer', '_cdeadmin_session_variable_observer_candidate', '_cdeadmin_session_variable_observer_status'):
         if hasattr(native, name):
             delattr(native, name)

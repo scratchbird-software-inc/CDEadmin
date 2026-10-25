@@ -413,9 +413,29 @@ one implementation scope and must not be counted as independent completion.
   source-observed database, mode and charset, preserving original diagnostic
   areas and pending work. It marks source role/temporary-object overlays
   incomplete and never substitutes an original read after private failure.
-  Unadmitted profiles and wider retained catalog consumers remain open.
+  Denied-admission and disabled-Performance-Schema editor completion and syntax
+  checks now refuse without querying the original session. Their authenticated
+  API response gives fixed recovery guidance and the numeric native error,
+  without exposing SQL or native exception text. Restoring native SELECT access
+  to ``performance_schema.variables_by_thread``,
+  ``performance_schema.session_account_connect_attrs`` and
+  ``performance_schema.threads`` allows a denied candidate to be readmitted on
+  the same original connection. Disabled Performance Schema requires native
+  server configuration/restart and a new session. Candidate connections are
+  released with their owning session. These editor paths do not qualify
+  unadmitted parameter conversion, native C charset observations, source role
+  or temporary-object overlays, or every retained catalog consumer; those
+  remain separate reconciliation work.
   See :doc:`mysql_driver_development` for the execution scope;
   these execution receipts do not close browser coverage or INV-MYSQL.
+
+The native inventory also confirms the GPL implementation of MySQL
+``keyring_udf`` and its shipped native library. Existing keyring reload,
+master-key rotation and encrypted physical recovery receipts do not qualify
+user key storage/generation, metadata inspection, retrieval or removal.
+Dedicated management and native tests for those operations remain beta work;
+this implementation is source available and must not be deferred as closed
+Enterprise functionality.
 
 Native spatial-reference catalog, typed management and bounded selected-SRID
 server DDN exchange/migration are implemented. Captured SRID scope is explicit;

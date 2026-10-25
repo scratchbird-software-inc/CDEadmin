@@ -51,11 +51,15 @@ def test_private_completion_failure_never_queries_or_reconnects_source(monkeypat
         peer.close.assert_called_once();assert connect.call_count==1
 
 
-def test_unadmitted_legacy_profile_does_not_claim_diagnostic_preservation(monkeypatch):
+@pytest.mark.parametrize('reason',['native-observation-denied','performance-schema-disabled',None])
+def test_unadmitted_profile_never_substitutes_original_metadata_or_parser_queries(monkeypatch,reason):
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_native_validation import validate
     source=Mock();source._cdeadmin_session_variable_observer=None
-    source._cdeadmin_session_variable_observer_status={'admitted':False,'reason':'native-observation-denied'}
+    source._cdeadmin_session_variable_observer_status={'admitted':False,'reason':reason}
     metadata=Mock(return_value=catalog());monkeypatch.setattr(native_editor,'metadata',metadata)
-    result=complete(Mock(),source)
-    metadata.assert_called_once_with(source,'mysql')
-    assert result['original_diagnostics_preservation_qualified'] is False
-    assert result['observation_profile']['reason']=='native-observation-denied'
+    parser=Mock();monkeypatch.setattr(native_editor,'validate_mysql',parser)
+    for operation in (lambda:complete(Mock(),source),lambda:validate(Mock(),source,'SELECT secret')):
+        with pytest.raises(RelationalClientError,match='No original-session metadata command') as failure:operation()
+        assert failure.value.original_session_commands_sent==0 and failure.value.original_diagnostics_preserved
+        assert 'secret' not in str(failure.value)
+    metadata.assert_not_called();parser.assert_not_called();source.cursor.assert_not_called()

@@ -3,17 +3,12 @@ import hashlib
 import json
 
 from ...sdk.relational import RelationalClientError
-from .mysql_session_variables import SessionVariables, SourceIdentityUnavailable, prepare
+from .mysql_session_variables import SourceIdentityUnavailable, prepare, editor_observer
 
 
 def complete(client, handle):
     from ..native_editor import metadata
-    observer = getattr(handle, '_cdeadmin_session_variable_observer', None)
-    if not isinstance(observer, SessionVariables):
-        result = metadata(handle, 'mysql')
-        result.update(original_diagnostics_preservation_qualified=False,
-            observation_profile=getattr(handle, '_cdeadmin_session_variable_observer_status', {'admitted': False}))
-        return result
+    observer = editor_observer(client, handle)
     try:
         prepare(handle)
         with observer.parser_session() as (peer, observation):

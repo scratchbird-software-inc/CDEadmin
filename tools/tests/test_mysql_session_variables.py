@@ -209,3 +209,37 @@ def test_disabled_or_denied_observer_admission_remains_explicitly_unqualified(en
     assert not hasattr(source, '_cdeadmin_session_variable_observer')
     if errno:
         assert status['native_errno'] == errno
+
+
+def test_denied_editor_candidate_is_readmitted_without_any_source_command_and_released():
+    from types import SimpleNamespace
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_session_variables import editor_observer
+    source,observer,connect,peer,_query=setup()
+    del source._cdeadmin_session_variable_observer
+    source._cdeadmin_session_variable_observer_candidate=observer
+    source._cdeadmin_session_variable_observer_status={'admitted':False,'native_errno':1142}
+    observer.close()
+    selected=editor_observer(SimpleNamespace(_uncertain_sessions=set()),source)
+    assert selected is observer and source._cdeadmin_session_variable_observer is observer
+    assert not hasattr(source,'_cdeadmin_session_variable_observer_candidate')
+    assert source._cdeadmin_session_variable_observer_status['readmitted_without_source_commands']
+    assert source._cdeadmin_session_variable_observer_status['connection_id']=='12'
+    source.cursor.assert_not_called();connect.assert_called_once()
+    uninstall(source);peer.close.assert_called_once()
+
+
+def test_failed_editor_readmission_preserves_denial_and_pool_release_forgets_candidate():
+    from types import SimpleNamespace
+    from mysql.connector.errors import ProgrammingError
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_session_variables import editor_observer
+    source,observer,connect,_peer,_query=setup()
+    del source._cdeadmin_session_variable_observer
+    source._cdeadmin_session_variable_observer_candidate=observer
+    source._cdeadmin_session_variable_observer_status={'admitted':False}
+    connect.side_effect=ProgrammingError('private source-bearing detail',errno=1142,sqlstate='42000')
+    with pytest.raises(RelationalClientError) as failure:editor_observer(SimpleNamespace(_uncertain_sessions=set()),source)
+    assert failure.value.native_observer_errno==1142 and 'private source-bearing detail' not in str(failure.value)
+    assert source._cdeadmin_session_variable_observer_status['native_errno']==1142
+    assert not hasattr(source,'_cdeadmin_session_variable_observer')
+    source.cursor.assert_not_called()
+    uninstall(source);assert not hasattr(source,'_cdeadmin_session_variable_observer_candidate')
