@@ -253,8 +253,12 @@ one implementation scope and must not be counted as independent completion.
   permits the older source without admitting it to the normal 9.7 SQL profile.
   Actual dispatcher loss preserves the unknown outcome and pending-stop
   protection; independent completion allows acknowledgement and a new reviewed
-  original-service restart. Native metadata/rolling-deployment acceptance,
-  cutover and the broader inventory remain open.
+  original-service restart. Native three-member rolling upgrades now also cover
+  genuine 8.4 Shell metadata 2.2-to-2.4 migration, secondary-first service upgrades,
+  election during the last old primary's stop and reviewed promotion after all
+  members run 9.7. Independent checks preserve every original UUID and exact data,
+  and verify fresh-write replication after each step. Certificate-login and
+  secondary-seed account routing, cutover and the broader inventory remain open.
   Native local sandbox deploy/start/stop/kill/delete now have a separate
   offline-capable execution-host workspace with explicit OS authority,
   private dispatch passwords, native configuration/process identity checks,

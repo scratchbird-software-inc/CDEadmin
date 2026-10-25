@@ -261,8 +261,13 @@ native AUTO upgrade through a reviewed unit drop-in. Older sources use explicit
 SSH/process/filesystem authority before normal 9.7 SQL admission. Native 8.4.8
 upgrade, exact data preservation and original-dispatcher loss/recovery have
 separate acceptance; manager replies, current processes, upgrade history and
-SQL/data checks retain distinct meanings. Native metadata/rolling-deployment
-acceptance and inventory remain separate from this installed-host scope.
+SQL/data checks retain distinct meanings. Native three-member Cluster rolling
+qualification also covers genuine 8.4 Shell metadata migration from 2.2 to 2.4,
+secondary-first 8.4.8-to-9.7 upgrades, election when the old primary stops, and
+reviewed promotion after every member runs 9.7. Original UUIDs, exact data and
+fresh-write replication are checked independently after each step. Mixed-version
+primary selection follows the native version restriction. Certificate-login,
+secondary-seed account routing and inventory retain their separate gates.
 Native Linux service installation now creates
 a reviewed systemd unit with separate start and boot controls. Native Linux initialization
 now supports new registrations before SQL is available, with secure/insecure

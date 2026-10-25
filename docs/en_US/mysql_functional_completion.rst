@@ -2443,5 +2443,33 @@ actual dispatcher and stopped native client during a delayed stop, verifies
 pending-work protection and explicitly restarts the original service before a
 new upgrade. Desktop invocation adds ``--browser-binary`` and
 ``--driver-binary``. These receipts qualify their recorded Linux scenarios;
-metadata/rolling-deployment acceptance, cutover and wider inventory remain
+certificate-login/secondary-seed account routing, cutover and wider inventory remain
 separate gates.
+
+Native Cluster rolling and metadata upgrades
+--------------------------------------------
+
+The host upgrade workflow and native topology workspace also support a
+secondary-first Cluster upgrade. Review each member's host upgrade separately.
+MySQL owns mixed-version admission, replication recovery and primary eligibility.
+During the qualified 8.4.8-to-9.7 sequence, both secondaries upgrade and rejoin
+before the old primary stops. Native Group Replication then elects an upgraded
+member. Deliberate primary promotion follows after every member runs 9.7;
+attempting to promote a newer member while the old primary remains is refused
+by native MySQL.
+
+Select ``instance.upgrade_metadata`` in the topology workspace to review native
+Shell metadata migration. Qualification starts with a real three-member Cluster
+created by native Shell 8.4.8, rather than synthesized metadata tables. The native
+operation migrates schema version 2.2 to 2.4 and preserves the original Cluster
+and instance identities. Separate native Cluster status, UUID, exact bigint,
+Unicode and binary comparisons, and fresh writes replicated to every member
+check each rolling step. Method replies do not establish workload readiness.
+
+Run ``tools/cdeadmin_mysql_rolling_upgrade_qualification.py`` against an explicitly
+owned three-member fixture. The application/native Shell execution host must
+reach the members' advertised addresses. ``--use-c`` selects the native C driver;
+the default uses the pure driver. These Linux scenarios supplement the existing
+installed-host and desktop upgrade evidence. Certificate-login/secondary-seed
+account routing, production recovery cutover and wider inventory remain separate
+completion gates.

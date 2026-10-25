@@ -10,7 +10,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output,fixture,use_c=False,browser_binary=None,driver_binary=None,interrupt=False):
+def qualify(output,fixture,use_c=False,browser_binary=None,driver_binary=None,interrupt=False,*,checkpoint=None,after_upgrade=None):
     from cdeadmin_mysql_dump_verification_qualification import setup_application
     import mysql.connector
     from flask import url_for
@@ -22,7 +22,8 @@ def qualify(output,fixture,use_c=False,browser_binary=None,driver_binary=None,in
         raise ValueError('Select the explicitly owned native upgrade fixture')
     app=setup_application(output);client=app.test_client()
     proof={'complete':False,'use_c':use_c,'checks':[],'history_testing':'not run'}
-    def connect():return mysql.connector.connect(host='127.0.0.1',port=owned['sql_port'],user='sr_upgrade',
+    application_host=owned.get('application_host','127.0.0.1')
+    def connect():return mysql.connector.connect(host=application_host,port=owned['sql_port'],user='sr_upgrade',
         password='owned-upgrade-private',use_pure=not use_c,autocommit=True,connection_timeout=3,read_timeout=5)
     def sql(source,parameters=()):
         connection=connect();cursor=connection.cursor(dictionary=True)
@@ -32,16 +33,17 @@ def qualify(output,fixture,use_c=False,browser_binary=None,driver_binary=None,in
         finally:cursor.close();connection.close()
     before=sql('SELECT @@server_uuid AS uuid,VERSION() AS version')[0]
     assert before['version'].split('-')[0]=='8.4.8'
-    schema='sr_native_upgrade_'+secrets.token_hex(5)
-    sql('CREATE DATABASE '+schema+' CHARACTER SET utf8mb4')
-    sql('CREATE TABLE '+schema+'.t(id BIGINT PRIMARY KEY,body TEXT,payload LONGBLOB)')
-    sql('INSERT INTO '+schema+'.t VALUES(%s,%s,%s)',(9007199254740993,'native upgrade 雪',b'\x00\xff'))
+    schema=checkpoint or 'sr_native_upgrade_'+secrets.token_hex(5)
+    if not checkpoint:
+        sql('CREATE DATABASE '+schema+' CHARACTER SET utf8mb4')
+        sql('CREATE TABLE '+schema+'.t(id BIGINT PRIMARY KEY,body TEXT,payload LONGBLOB)')
+        sql('INSERT INTO '+schema+'.t VALUES(%s,%s,%s)',(9007199254740993,'native upgrade 雪',b'\x00\xff'))
     with app.test_request_context('/'):
         uid=User.query.first().id;group=ServerGroup.query.filter_by(user_id=uid).first()
         app.blueprints['NODE-engine_type'].connector_visibility['mysql'].set(True,user_id=uid)
-        item=Server(user_id=uid,servergroup_id=group.id,name='Owned native upgrade',host='127.0.0.1',port=owned['sql_port'],username='sr_upgrade',maintenance_db=None,save_password=0)
+        item=Server(user_id=uid,servergroup_id=group.id,name='Owned native upgrade',host=application_host,port=owned['sql_port'],username='sr_upgrade',maintenance_db=None,save_password=0)
         item._cde_endpoint_registration=registration_profile('mysql-native')
-        item._cde_endpoint_route_configuration={'host':'127.0.0.1','port':owned['sql_port'],'user':'sr_upgrade',
+        item._cde_endpoint_route_configuration={'host':application_host,'port':owned['sql_port'],'user':'sr_upgrade',
             'use_pure':not use_c,'credential_kinds':['database_password']}
         db.session.add(item);db.session.commit()
         verify=url_for('NODE-server.verify_endpoint_id',gid=group.id,sid=item.id)
@@ -57,7 +59,7 @@ def qualify(output,fixture,use_c=False,browser_binary=None,driver_binary=None,in
             raise AssertionError('Native upgrade application action failed: '+action)
         return value['data']
     credentials={'private_key':Path(owned['private_key']).read_text()}
-    selected={'connection':{'host':'127.0.0.1','port':owned['ssh_port'],'username':'root','host_key':owned['host_key'],
+    selected={'connection':{'host':application_host,'port':owned['ssh_port'],'username':'root','host_key':owned['host_key'],
         'authentication':'private_key','platform':'posix','python':'python3'},'executable':owned['legacy'],
         'configuration_file':owned['configuration'],'workspace':'/tmp/sr-native-upgrade-jobs','timeout_seconds':120,
         'operation':'upgrade_service','service':{'manager':'systemd','name':owned['service']},
@@ -114,11 +116,15 @@ def qualify(output,fixture,use_c=False,browser_binary=None,driver_binary=None,in
         assert acknowledged['reconciliation']['remote_receipt']['upgrade_reconciliation']['data_directory_claim_released']
         assert post('start',request)['remote_receipt']==value['remote_receipt']
         proof['checks'].append('separate-original-manager-result-current-native-process-and-native-upgrade-history-observations-explicit-claim-release-and-no-replay')
+        if after_upgrade:
+            proof['topology']=after_upgrade(app,client,url,item.id,before['uuid'],sql,output)
         proof.update(complete=True,job_id=review['job_id'],server_id=item.id)
     finally:
         from pgadmin.cdeadmin.workspace import service_for_app
         jobs=getattr(service_for_app(app),'mysql_host_jobs',None)
         proof['owned_jobs_stopped']=jobs.close() if jobs is not None else True
+        topology=getattr(service_for_app(app),'mysql_topology_jobs',None)
+        if topology is not None:proof['owned_jobs_stopped']=topology.close() and proof['owned_jobs_stopped']
         (output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n')
     return proof
 
