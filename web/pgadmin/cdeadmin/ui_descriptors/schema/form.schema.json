@@ -316,6 +316,25 @@
         },
         "placeholder": {
           "type": "string"
+        },
+        "record_key": {
+          "type": "string",
+          "description": "Key in the inspected record (or grid row) that pre-fills this field when it differs from field_id, e.g. data_type for type"
+        },
+        "record_truthy": {
+          "type": "boolean",
+          "description": "Pre-fill as true when the record value is non-zero/non-empty (e.g. primary_key_position)"
+        },
+        "item_kind": {
+          "enum": [
+            "record",
+            "string"
+          ],
+          "description": "for control=grid: 'string' means the provider takes a plain list of the single column's values, not records"
+        },
+        "wrap_list": {
+          "type": "boolean",
+          "description": "send the single selected value as a one-item list (provider takes a list but the engine admits one value)"
         }
       }
     }

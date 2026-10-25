@@ -10,11 +10,6 @@
   "omitted_tabs": [],
   "gaps": [
     {
-      "concept": "trigger.create.events",
-      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
-      "tracking": "ui-unification"
-    },
-    {
       "concept": "FOLLOWS / PRECEDES ordering",
       "reason": "position is exposed but not as the native FOLLOWS/PRECEDES trigger reference"
     }
@@ -29,18 +24,20 @@
     },
     {
       "field_id": "parent",
-      "label": "Parent database/schema",
+      "label": "Database",
       "tab": "General",
-      "control": "text",
+      "control": "reference",
       "required": false,
-      "help": "Use a qualified database or schema name where needed."
+      "help": "Use a qualified database or schema name where needed.",
+      "reference_kind": "database"
     },
     {
       "field_id": "table",
       "label": "Table",
       "tab": "General",
-      "control": "text",
-      "required": true
+      "control": "reference",
+      "required": true,
+      "reference_kind": "table"
     },
     {
       "field_id": "timing",
@@ -67,10 +64,15 @@
       "field_id": "events",
       "label": "Events",
       "tab": "General",
-      "control": "keyvalue",
+      "control": "multiselect",
       "required": true,
       "default": [
         "INSERT"
+      ],
+      "option_values_path": [
+        "dialect",
+        "trigger_events",
+        "table"
       ]
     },
     {
@@ -99,5 +101,5 @@
       "help": "Enter only the trigger body, not CREATE TRIGGER."
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database); table picker; trigger events typed as a multiselect from dialect.trigger_events."
 }

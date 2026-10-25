@@ -5,7 +5,7 @@
   "resource_kinds": [
     "index"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "SQLite",
   "omitted_tabs": [],
   "gaps": [
@@ -24,18 +24,20 @@
     },
     {
       "field_id": "parent",
-      "label": "Parent database/schema",
+      "label": "Database",
       "tab": "General",
-      "control": "text",
+      "control": "reference",
       "required": false,
-      "help": "Use a qualified database or schema name where needed."
+      "help": "Use a qualified database or schema name where needed.",
+      "reference_kind": "database"
     },
     {
       "field_id": "table",
       "label": "Table",
       "tab": "General",
-      "control": "text",
-      "required": true
+      "control": "reference",
+      "required": true,
+      "reference_kind": "table"
     },
     {
       "field_id": "columns",
@@ -45,12 +47,14 @@
       "columns": [
         {
           "field_id": "value",
-          "label": "Indexed columns",
-          "control": "text",
-          "required": true
+          "label": "Column",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "column"
         }
       ],
-      "required": true
+      "required": true,
+      "item_kind": "string"
     },
     {
       "field_id": "unique",
@@ -61,5 +65,5 @@
       "default": false
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: index columns select from target columns; parent picker (database); table picker. Reviewed by tools/review_ui_descriptors.py: index columns as an ordered column list. Round trip verified in-process (create, re-inspect) on SQLite 3.53.1 (profile pins 3.53.0) by tools/tests/test_ui_descriptor_roundtrip_sqlite.py. Native qualification on the pinned version remains with the platform teams."
 }

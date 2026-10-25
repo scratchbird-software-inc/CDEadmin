@@ -7,7 +7,16 @@
   ],
   "status": "draft",
   "engine_tab_title": "SQLite",
-  "omitted_tabs": [],
+  "omitted_tabs": [
+    {
+      "tab": "Authentication",
+      "reason": "embedded file engine: no credentials"
+    },
+    {
+      "tab": "SSL/TLS",
+      "reason": "embedded file engine: no network transport"
+    }
+  ],
   "gaps": [
     {
       "concept": "server.attached_databases",

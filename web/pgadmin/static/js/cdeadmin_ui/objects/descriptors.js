@@ -183,14 +183,37 @@ export function initialDraft(form, {mode='create', record={}}={}) {
     for(const field of tab.fields) {
       if(field.modes && !field.modes.includes(mode)) continue;
       const backendId = field.backend_field_id || field.field_id;
-      const existing = record[field.field_id] ?? readDotted(record, backendId);
-      if(existing !== undefined) draft[field.field_id] = existing;
+      const existing = record[field.record_key || field.field_id] ?? record[field.field_id] ?? readDotted(record, backendId);
+      if(existing !== undefined) {
+        draft[field.field_id] = field.control === 'grid' && Array.isArray(existing) ?
+          existing.map((row, index) => gridRowFromRecord(field, row, index)) : recordValue(field, existing);
+      }
       else if(field.default !== undefined) draft[field.field_id] = field.default;
       else if(field.control === 'grid') draft[field.field_id] = [];
       else if(field.control === 'boolean') draft[field.field_id] = false;
     }
   }
   return draft;
+}
+
+function recordValue(field, value) {
+  if(field.record_truthy) return Boolean(value);
+  return value;
+}
+
+/** A grid row pre-filled from an inspected record row, keyed by column record_key. */
+export function gridRowFromRecord(field, row, index) {
+  if(field.item_kind === 'string' && (typeof row !== 'object' || row === null)) {
+    return {[field.columns?.[0]?.field_id || 'value']: row, _id: `${index}`};
+  }
+  if(!row || typeof row !== 'object') return row;
+  const out = {...row};
+  for(const column of field.columns || []) {
+    const source = column.record_key && column.record_key in row ? column.record_key : column.field_id;
+    if(source in row) out[column.field_id] = recordValue(column, row[source]);
+  }
+  if(!out._id) out._id = `${index}`;
+  return out;
 }
 
 function readDotted(record, path) {
@@ -229,25 +252,73 @@ export function validateDraft(form, draft, {mode='create', baseline=null}={}) {
   return errors;
 }
 
+/**
+ * Diff two column grids into the add/drop/rename lists an ALTER path takes.
+ * Rows are matched by a stable `_id` the editor assigns when it loads a
+ * record (falling back to name); a changed name on a matched row is a rename.
+ */
+export function diffColumns(before=[], after=[]) {
+  const key = (row, index) => row?._id ?? `${row?.name ?? ''}#${index}`;
+  const beforeByKey = new Map(before.map((row, index) => [key(row, index), row]));
+  const afterKeys = new Set(after.map((row, index) => key(row, index)));
+  const add_columns = [], rename_columns = [];
+  for(const [index, row] of after.entries()) {
+    const previous = beforeByKey.get(key(row, index));
+    if(!previous) {
+      add_columns.push(stripMeta(row));
+    } else if(previous.name !== row.name && row.name) {
+      rename_columns.push({from: previous.name, to: row.name});
+    }
+  }
+  const drop_columns = before.filter((row, index) => !afterKeys.has(key(row, index))).map((row) => row.name);
+  return {add_columns, drop_columns, rename_columns};
+}
+
+function stripMeta(row) {
+  const copy = {};
+  for(const [key, value] of Object.entries(row)) {
+    if(key === '_id' || value === undefined || value === null || value === '') continue;
+    copy[key] = value;
+  }
+  return copy;
+}
+
 /** Map a UI draft onto the provider's field ids (backend_field_id) for plan/apply. */
-export function toBackendDraft(form, draft, {mode='create'}={}) {
+export function toBackendDraft(form, draft, {mode='create', baseline=null}={}) {
   const out = {};
   for(const tab of form.tabs || []) {
     for(const field of activeFields(tab.fields, {mode, draft})) {
       if(!Object.hasOwn(draft, field.field_id)) continue;
-      const value = draft[field.field_id];
+      let value = draft[field.field_id];
+      if(field.wrap_list && !Array.isArray(value)) value = (value === undefined || value === null || value === '') ? [] : [value];
+      if(mode === 'alter' && field.control === 'grid' && field.field_id === 'columns' && baseline) {
+        // The Columns grid diff is what ALTER paths consume (design 6.1).
+        const diff = diffColumns(baseline.columns || [], value || []);
+        if(diff.add_columns.length) out.add_columns = diff.add_columns;
+        if(diff.drop_columns.length) out.drop_columns = diff.drop_columns;
+        if(diff.rename_columns.length) out.rename_columns = diff.rename_columns;
+        continue;
+      }
+      if(mode === 'alter' && baseline && JSON.stringify(value ?? null) === JSON.stringify(baseline[field.field_id] ?? null) &&
+         !field.required) {
+        continue; // unchanged fields are not part of the ALTER set
+      }
       const target = field.backend_field_id || field.field_id;
       const bracket = target.match(/^([a-z0-9_]+)\[([a-z0-9_]+)=([a-z0-9_]+)\]$/i);
       if(bracket) {
         const [, list, key, discriminator] = bracket;
-        out[list] = (out[list] || []).concat((Array.isArray(value) ? value : []).map((row) => ({[key]: discriminator, ...row})));
+        out[list] = (out[list] || []).concat((Array.isArray(value) ? value : []).map((row) => ({[key]: discriminator, ...stripMeta(row)})));
       } else if(target.includes('.')) {
         const parts = target.split('.');
         let node = out;
         for(const part of parts.slice(0, -1)) node = (node[part] = node[part] || {});
         node[parts.at(-1)] = value;
+      } else if(field.control === 'grid' && field.item_kind === 'string') {
+        const column = field.columns?.[0]?.field_id || 'value';
+        out[target] = (Array.isArray(value) ? value : []).map((row) => (row && typeof row === 'object') ? row[column] : row)
+          .filter((item) => item !== undefined && item !== null && item !== '');
       } else {
-        out[target] = value;
+        out[target] = Array.isArray(value) ? value.map((row) => (row && typeof row === 'object' && '_id' in row) ? stripMeta(row) : row) : value;
       }
     }
   }

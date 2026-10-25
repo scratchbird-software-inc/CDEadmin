@@ -96,7 +96,7 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
   const planRequest = useRef(0);
   const errors = useMemo(() => validateDraft(form, draft, {mode, baseline}), [form, draft, mode, baseline]);
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(baseline), [draft, baseline]);
-  const backendDraft = useMemo(() => toBackendDraft(form, draft, {mode}), [form, draft, mode]);
+  const backendDraft = useMemo(() => toBackendDraft(form, draft, {mode, baseline}), [form, draft, mode, baseline]);
   const canPlan = Object.keys(errors).length === 0 && (mode === 'create' || dirty) && !readOnly;
 
   const refreshPlan = useCallback(async () => {

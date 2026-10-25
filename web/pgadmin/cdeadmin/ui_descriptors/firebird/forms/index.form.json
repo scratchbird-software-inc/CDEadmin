@@ -21,8 +21,9 @@
       "field_id": "table",
       "label": "Table",
       "tab": "General",
-      "control": "text",
-      "required": true
+      "control": "reference",
+      "required": true,
+      "reference_kind": "table"
     },
     {
       "field_id": "columns",
@@ -32,16 +33,18 @@
       "columns": [
         {
           "field_id": "value",
-          "label": "Indexed columns",
-          "control": "text",
-          "required": true
+          "label": "Column",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "column"
         }
       ],
       "required": true,
       "visible_when": {
         "field": "index_kind",
         "equals": "columns"
-      }
+      },
+      "item_kind": "string"
     },
     {
       "field_id": "unique",
@@ -128,5 +131,5 @@
       ]
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: index columns select from target columns; table picker. Reviewed by tools/review_ui_descriptors.py: index columns as an ordered column list."
 }

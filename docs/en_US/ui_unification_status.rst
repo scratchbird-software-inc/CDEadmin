@@ -64,55 +64,55 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
    * - Table
      - draft (54f, 6g)
      - draft (33f, 9g)
-     - draft (4f, 4g)
-     - draft (8f, 2g)
-     - draft (4f, 2g)
-     - draft (11f, 7g)
+     - draft (7f, 4g)
+     - draft (11f, 2g)
+     - complete (7f, 2g)
+     - complete (11f, 5g)
    * - View
      - draft (27f, 2g)
      - draft (8f, 3g)
      - draft (3f, 2g)
      - draft (2f, 1g)
-     - draft (5f, 0g)
-     - draft (3f, 1g)
+     - complete (5f, 0g)
+     - complete (3f, 1g)
    * - Index
      - draft (24f, 2g)
      - draft (14f, 4g)
      - draft (5f, 1g)
      - draft (10f, 0g)
-     - draft (5f, 0g)
-     - draft (5f, 1g)
+     - complete (5f, 0g)
+     - complete (5f, 1g)
    * - Routine
      - draft (57f, 4g)
-     - draft (48f, 8g)
+     - draft (15f, 3g)
      - draft (11f, 3g)
      - draft (9f, 0g)
-     - draft (7f, 1g)
+     - complete (7f, 0g)
      - n/a
    * - Trigger
      - draft (30f, 3g)
      - draft (11f, 1g)
-     - draft (8f, 2g)
-     - draft (7f, 2g)
+     - draft (8f, 1g)
+     - draft (7f, 0g)
      - n/a
-     - draft (8f, 2g)
+     - complete (8f, 1g)
    * - Sequence
      - draft (19f, 0g)
      - n/a
      - draft (8f, 0g)
      - draft (7f, 0g)
-     - draft (7f, 1g)
+     - complete (7f, 1g)
      - n/a
    * - Type
      - draft (47f, 4g)
      - n/a
      - n/a
      - draft (7f, 0g)
-     - draft (5f, 0g)
+     - complete (5f, 0g)
      - n/a
    * - Role
      - draft (18f, 2g)
-     - draft (55f, 5g)
+     - draft (4f, 1g)
      - draft (22f, 2g)
      - draft (11f, 1g)
      - n/a
@@ -192,6 +192,16 @@ Current lint counts for this change: JSON controls **305 → 304**, direct MUI
 imports **244 → 244**, engine-literal UI branches **111 → 111**, engine panels
 **113 → 113**. The tracked family statuses have not advanced to ``complete``.
 
+* 2026-10-25 (phase 3, review pass): ``tools/review_ui_descriptors.py`` applies the canonical shapes to the
+  generated drafts (constraint grid split into Primary key / Unique / Foreign keys / Check bound to
+  ``constraints[kind=...]``, trigger events as a multiselect, table/parent reference pickers, string-list grids,
+  column-grid ``record_key`` pre-fill, SQLite virtual/FTS variants, DuckDB replace acknowledgements).
+  ``tools/ui_descriptor_roundtrip.py`` is the Python twin of the shell's draft mapping; in-process round trips
+  (create, re-inspect, alter via the Columns grid diff) pass for SQLite table/view/index/trigger and DuckDB
+  table/view/index/sequence/type/routine, which are now ``complete`` (verified on SQLite 3.53.1 and DuckDB 2.0.0;
+  the pinned 3.53.0 / 1.5.2 qualification stays with the platform teams). Provider fix: SQLite triggers wrap the
+  body in BEGIN ... END and admit one event. Firebird, MariaDB and PostgreSQL drafts are reviewed structurally
+  but stay ``draft``: no engine is reachable from this environment for their round trips.
 * 2026-10-25 (phase 2, second increment): per-engine ``options.json`` (schema + validator check that every
   ``option_values_path`` has a source); host builds the option context from the bundle and one resource page;
   tree context menu gains Edit / Create / descriptor operations from the cached bundle (``familyEditorContextActions``),

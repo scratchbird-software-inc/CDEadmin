@@ -30,13 +30,27 @@ ui_descriptors/
 
 ## Regenerating a first draft
 
-Two tools turn the provider's live form contracts into draft descriptors so
-no field id, option list or visibility rule has to be retyped:
+Three tools turn the provider's live form contracts into reviewed draft
+descriptors so no field id, option list or visibility rule has to be retyped:
 
 ```text
 python3 tools/dump_provider_forms.py --out /tmp/forms          # effective forms per engine
 python3 tools/draft_ui_descriptors.py --forms /tmp/forms --engine firebird --write
+python3 tools/review_ui_descriptors.py --engine firebird --write      # canonical shapes
 ```
+
+The review pass splits a combined constraints grid into the four canonical
+grids (bound back to `constraints[kind=...]`), types trigger events, turns
+table/parent fields into reference pickers, marks one-column grids as string
+lists (`item_kind: string`), and sets `record_key` on the column grid so an
+existing object pre-fills the editor from the provider's native record.
+
+The acceptance step for `complete` is a round trip through the form's own
+fields: `tools/ui_descriptor_roundtrip.py` maps a UI draft onto the provider
+draft exactly as the shell does (`backend_draft`, `record_draft`), and
+`tools/tests/test_ui_descriptor_roundtrip_<engine>.py` plans, applies and
+re-inspects on a real database. Copy the SQLite or DuckDB test for an engine
+you can reach.
 
 The drafter places fields on canonical tabs by id, turns array/object editors
 into grids, downgrades bare JSON boxes to `keyvalue` and lists each one under

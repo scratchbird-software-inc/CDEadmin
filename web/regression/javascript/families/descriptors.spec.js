@@ -155,3 +155,49 @@ describe('real engine descriptors', () => {
       ['database', 'index', 'role', 'routine', 'sequence', 'server', 'table', 'trigger', 'type', 'view']);
   });
 });
+
+describe('alter-mode column diff', () => {
+  const {diffColumns} = require('../../../pgadmin/static/js/cdeadmin_ui/objects/descriptors');
+  it('produces add, drop and rename lists from grid rows', () => {
+    const before = [{_id: '0', name: 'id', type: 'INTEGER'}, {_id: '1', name: 'note', type: 'TEXT'}, {_id: '2', name: 'old', type: 'TEXT'}];
+    const after = [{_id: '0', name: 'id', type: 'INTEGER'}, {_id: '1', name: 'remark', type: 'TEXT'}, {name: 'added', type: 'REAL'}];
+    expect(diffColumns(before, after)).toEqual({
+      add_columns: [{name: 'added', type: 'REAL'}], drop_columns: ['old'], rename_columns: [{from: 'note', to: 'remark'}]});
+  });
+  it('sends only the ALTER set through toBackendDraft', () => {
+    const resolved = resolveForm(family, form);
+    const record = {name: 'w', columns: [{name: 'id', type: 'int'}], widget_options: {engine: 'a'}};
+    const baseline = initialDraft(resolved, {mode: 'alter', record});
+    const draft = {...baseline, columns: [...baseline.columns, {name: 'extra', type: 'text'}], engine: 'b'};
+    expect(toBackendDraft(resolved, draft, {mode: 'alter', baseline})).toEqual({
+      name: 'w', add_columns: [{name: 'extra', type: 'text'}], widget_options: {engine: 'b'}});
+  });
+});
+
+describe('record pre-fill and list projections (kept in step with tools/ui_descriptor_roundtrip.py)', () => {
+  const {gridRowFromRecord} = require('../../../pgadmin/static/js/cdeadmin_ui/objects/descriptors');
+  const listFamily = {family: 'thing', title: 'Thing', tabs: [{tab: 'General', primitive: 'group', required: true}, {tab: 'SQL', primitive: 'sql_preview', required: true}]};
+  const listForm = {schema: 'cdeadmin.ui-form.v1', engine: 'acme', family: 'thing', resource_kinds: ['thing'], status: 'draft', fields: [
+    {field_id: 'name', label: 'Name', tab: 'General', control: 'text', required: true},
+    {field_id: 'columns', label: 'Columns', tab: 'General', control: 'grid', item_kind: 'string',
+      columns: [{field_id: 'value', label: 'Column', control: 'reference', reference_kind: 'column'}]},
+    {field_id: 'events', label: 'Event', tab: 'General', control: 'select', wrap_list: true, options: [{value: 'INSERT', label: 'Insert'}]},
+    {field_id: 'cols', label: 'Cols', tab: 'General', control: 'grid', columns: [
+      {field_id: 'name', label: 'Name', control: 'text'}, {field_id: 'type', label: 'Type', control: 'text', record_key: 'data_type'},
+      {field_id: 'primary_key', label: 'PK', control: 'boolean', record_key: 'primary_key_position', record_truthy: true}]},
+  ]};
+  const resolved = resolveForm(listFamily, listForm);
+  it('flattens string grids and wraps single selects into lists', () => {
+    expect(toBackendDraft(resolved, {name: 'ix', columns: [{value: 'label'}, {value: ''}], events: 'INSERT', cols: []}))
+      .toEqual({name: 'ix', columns: ['label'], events: ['INSERT'], cols: []});
+  });
+  it('pre-fills grids from inspected record keys', () => {
+    const draft = initialDraft(resolved, {mode: 'alter', record: {name: 'orders', columns: ['a', 'b'],
+      cols: [{name: 'id', data_type: 'INTEGER', primary_key_position: 1}, {name: 'note', data_type: 'TEXT', primary_key_position: 0}]}});
+    expect(draft.columns).toEqual([{value: 'a', _id: '0'}, {value: 'b', _id: '1'}]);
+    expect(draft.cols).toEqual([
+      {name: 'id', data_type: 'INTEGER', primary_key_position: 1, type: 'INTEGER', primary_key: true, _id: '0'},
+      {name: 'note', data_type: 'TEXT', primary_key_position: 0, type: 'TEXT', primary_key: false, _id: '1'}]);
+    expect(gridRowFromRecord({item_kind: 'string', columns: [{field_id: 'value'}]}, 'x', 3)).toEqual({value: 'x', _id: '3'});
+  });
+});

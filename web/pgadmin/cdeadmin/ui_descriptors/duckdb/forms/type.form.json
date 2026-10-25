@@ -5,7 +5,7 @@
   "resource_kinds": [
     "type"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "DuckDB",
   "omitted_tabs": [
     {
@@ -76,7 +76,8 @@
       "visible_when": {
         "field": "type_kind",
         "equals": "ENUM"
-      }
+      },
+      "item_kind": "string"
     },
     {
       "field_id": "fields",
@@ -107,5 +108,5 @@
       }
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: enum_values as a string list. Round trip verified in-process (create, re-inspect) on DuckDB 2.0.0 (profile pins 1.5.2) by tools/tests/test_ui_descriptor_roundtrip_duckdb.py. Native qualification on the pinned version remains with the platform teams."
 }

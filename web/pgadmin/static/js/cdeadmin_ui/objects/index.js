@@ -29,6 +29,7 @@ export {
   SHELL_PRIMITIVES,
   activeFields,
   buildOptionContext,
+  diffColumns,
   editorAvailable,
   fieldOptions,
   fieldVisible,

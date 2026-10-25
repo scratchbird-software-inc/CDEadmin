@@ -29,11 +29,12 @@
     },
     {
       "field_id": "parent",
-      "label": "Parent database/schema",
+      "label": "Database",
       "tab": "General",
-      "control": "text",
+      "control": "reference",
       "required": false,
-      "help": "Use a qualified database or schema name where needed."
+      "help": "Use a qualified database or schema name where needed.",
+      "reference_kind": "database"
     },
     {
       "field_id": "query",
@@ -45,5 +46,5 @@
       "help": "One SELECT or WITH query; do not include the CREATE command."
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database)."
 }

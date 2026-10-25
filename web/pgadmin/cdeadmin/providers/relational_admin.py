@@ -8256,6 +8256,17 @@ class RelationalAdministration:
                     f'CREATE TRIGGER {name} {timing} {event_sql} ON {table} '
                     f'FOR EACH ROW {body}'
                 )
+            if self.dialect.engine_id == 'sqlite':
+                # SQLite triggers fire on exactly one event and require a
+                # BEGIN ... END block; the form supplies the statements only.
+                if len(list(events)) != 1:
+                    raise RelationalClientError(
+                        'SQLite triggers fire on exactly one event'
+                    )
+                stripped = body.strip()
+                if not re.match(r'(?is)^BEGIN\b', stripped):
+                    stripped = stripped.rstrip(';')
+                    body = f'BEGIN {stripped}; END'
             return (
                 f'CREATE TRIGGER {name} {timing} {event_sql} ON {table} '
                 f'{body}'
