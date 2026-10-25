@@ -113,6 +113,14 @@ initial-grant failures. Named-account role aliases are action views, never
 attested creation origin. User listing preserves accounts used as roles.
 
 The old MySQL role field factory and dispatch are deleted. The separate privilege
-variant remains pending; Decision9 grids and Decision10 protected outputs are
+variant is draft with15fields and two typed Security operations; Decision9 grids and Decision10 protected outputs are
 explicit gaps. No shared schema, family renderer or shell was changed. All
 variants remain draft pending shared rendering and round trips.
+
+
+The native privilege compiler preserves scoped column lists, dynamic privileges,
+multiple exact account identities, proxy grants, global GRANT AS role modes and
+native REVOKE options. The private review binds observed grants and the runtime
+partial_revokes setting. Per-field tests reach the compiler, native pure/C tests
+verify real allow/deny behavior, and authenticated APIs verify typed grant/revoke.
+Decision9 still owns applying a privilege diff from another family editor.

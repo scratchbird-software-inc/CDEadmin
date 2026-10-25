@@ -978,6 +978,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     """MySQL DB-API plus a constrained MySQL Shell administration port."""
 
     def admin_operation_field_contract(self, request):
+        if request['resource_kind'] == 'privilege' and request['operation_id'] in {'grant', 'revoke'}:
+            from .descriptor_contracts import privilege_contract
+            return privilege_contract(request['operation_id'])
         if request['resource_kind'] == 'role':
             from .descriptor_contracts import role_contract
             return role_contract(request['operation_id'], request['legacy_fields'])
@@ -1001,6 +1004,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
         compiled = planned.get('provider_payload', {}).get('compiled', {})
+        if 'mysql_privilege_change' in compiled:
+            from .mysql_privileges import bind_review
+            return bind_review(self, planned)
         if 'mysql_account_change' in compiled:
             from .mysql_accounts import bind_review
             return bind_review(self, planned)

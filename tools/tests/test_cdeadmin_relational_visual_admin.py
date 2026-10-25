@@ -1973,7 +1973,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         privilege_source = privilege['command_preview']['statements'][0][
             'source'
         ]
-        self.assertIn("TO 'operator'@'localhost'", privilege_source)
+        self.assertIn("TO `operator`@`localhost`", privilege_source)
         plugin = MYSQL_ADMINISTRATION.plan({
             'resource_kind': 'plugin', 'operation_id': 'create',
             'target_resource': None,

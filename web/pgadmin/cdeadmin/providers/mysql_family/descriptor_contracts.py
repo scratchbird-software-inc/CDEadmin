@@ -115,3 +115,14 @@ def role_contract(operation, legacy_fields):
         return {'fields': [field_contract(field) for field in descriptor['fields']],
                 'authority': 'ui_descriptors/mysql/operations.json'}
     return None
+
+
+def privilege_contract(operation):
+    descriptor = next(row for row in document('operations.json')['operations']
+                      if row['resource_kind'] == 'privilege' and row['operation_id'] == operation)
+    fields = [field_contract(field) for field in descriptor['fields']]
+    next(field for field in fields if field['field_id'] == 'grantees')['required'] = False
+    # Preserve the former scalar account/list API without exposing a second UI.
+    fields += [{'field_id':'principal','label':'Principal','control':'text','required':False},
+               {'field_id':'object_name','label':'Object name','control':'text','required':False}]
+    return {'fields':fields,'authority':'ui_descriptors/mysql/forms/role-privilege.form.json'}

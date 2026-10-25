@@ -5595,8 +5595,6 @@ class RelationalAdministration:
             if self.dialect.engine_id == 'firebird':
                 return firebird_privileges.form(operation, self._field)
             object_types = (
-                ('GLOBAL', 'DATABASE', 'TABLE', 'VIEW', 'PROCEDURE', 'FUNCTION', 'LIBRARY')
-                if self.dialect.engine_id == 'mysql' else
                 ('TABLE', 'VIEW', 'PROCEDURE', 'FUNCTION', 'SEQUENCE',
                  'DATABASE')
                 if self.dialect.sql_family == 'mysql'
@@ -5608,7 +5606,7 @@ class RelationalAdministration:
                     'object_type', 'Object type', 'select', True,
                     options=object_types,
                 ),
-                self._field('object_name', 'Object name', 'text', self.dialect.engine_id != 'mysql'),
+                self._field('object_name', 'Object name', 'text', True),
                 self._field('privileges', 'Privileges', 'json', True),
             ]
             if operation == 'grant':

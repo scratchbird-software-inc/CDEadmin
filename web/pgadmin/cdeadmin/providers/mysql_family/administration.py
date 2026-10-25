@@ -14,6 +14,7 @@ from . import mysql_indexes
 from . import mysql_routines
 from . import mysql_triggers
 from . import mysql_accounts
+from . import mysql_privileges
 from . import mysql_user_keys
 from . import mysql_xa
 from . import mysql_page_tracking
@@ -112,6 +113,7 @@ class MySQLAdministration(RelationalAdministration):
         return super()._form(kind, operation)
 
     def _normalize_draft(self, kind, operation, draft):
+        if kind == 'privilege' and operation in {'grant', 'revoke'}:return deepcopy(draft)
         if kind == 'user' and operation in {'rename', 'drop'} or kind == 'role' and operation == 'drop':return deepcopy(draft)
         if kind == 'role' and operation == 'create':return deepcopy(draft)
         if kind == 'user' and operation in {'create', 'alter'}:return deepcopy(draft)
@@ -141,6 +143,12 @@ class MySQLAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def validate(self, request):
+        if request.get('resource_kind') == 'privilege' and request.get('operation_id') in {'grant', 'revoke'}:
+            try:
+                mysql_privileges.compile_operation(request['operation_id'], request.get('draft'))
+                return {'errors': []}
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_privilege', 'message': str(error)}]}
         kind, operation = request.get('resource_kind'), request.get('operation_id')
         if kind == 'user' and operation in {'rename', 'drop'} or kind == 'role' and operation == 'drop':
             try:
@@ -253,6 +261,8 @@ class MySQLAdministration(RelationalAdministration):
         return super().validate(request)
 
     def _compile(self, request):
+        if request.get('resource_kind') == 'privilege' and request.get('operation_id') in {'grant', 'revoke'}:
+            return mysql_privileges.compile_operation(request['operation_id'], request['draft'])
         kind, operation = request.get('resource_kind'), request.get('operation_id')
         if kind == 'user' and operation in {'rename', 'drop'} or kind == 'role' and operation == 'drop':
             return mysql_accounts.compile_operation(operation+'_'+kind, request['draft'], request.get('target_resource'))
@@ -298,6 +308,8 @@ class MySQLAdministration(RelationalAdministration):
         return super()._compile(request)
 
     def apply(self, client, request, connection=None):
+        if 'mysql_privilege_change' in (request.get('provider_payload') or {}).get('compiled', {}):
+            return mysql_privileges.apply(client, request, connection)
         if 'mysql_account_change' in (request.get('provider_payload') or {}).get('compiled', {}):
             return mysql_accounts.apply(client, request, connection)
         if 'mysql_trigger_create' in (request.get('provider_payload') or {}).get('compiled', {}):

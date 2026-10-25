@@ -946,19 +946,19 @@
       "operations": [
         {
           "operation_id": "inspect",
-          "tier": 1,
+          "tier": 2,
           "mutation_class": "read",
           "support_state": "implemented"
         },
         {
           "operation_id": "grant",
-          "tier": 1,
+          "tier": 2,
           "mutation_class": "admin",
           "support_state": "implemented"
         },
         {
           "operation_id": "revoke",
-          "tier": 1,
+          "tier": 2,
           "mutation_class": "admin",
           "support_state": "implemented"
         }

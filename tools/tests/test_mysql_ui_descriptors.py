@@ -221,3 +221,28 @@ def test_every_user_and_role_binding_reaches_the_native_account_compiler():
         original=compiled('role','create',draft)
         bind(draft,field,value)
         assert compiled('role','create',draft)!=original,field['field_id']
+
+
+def test_every_privilege_operation_field_binds_an_accepted_native_option():
+    samples={'grantees':[{'user':'changed@literal','host':'localhost'}], 'object_type':'VIEW',
+        'database':'changed_db','object':'changed_object','privileges':[{'name':'UPDATE','columns':['id']}],
+        'grant_option':True,'if_exists':True,'ignore_unknown_user':True,'proxy_user':'proxied',
+        'proxy_host':'localhost','grant_as_user':'owner','grant_as_host':'localhost',
+        'grant_as_roles_mode':'ALL','grant_as_roles':[{'user':'r','host':'%'}]}
+    for operation in load('operations.json')['operations']:
+        if operation['resource_kind']!='privilege':continue
+        for field in operation['fields']:
+            name=field['field_id']
+            if name=='confirmation':continue
+            base={'grantees':[{'user':'u','host':'%'}],'object_type':'TABLE','database':'db','object':'t','privileges':[{'name':'SELECT'}]}
+            if name.startswith('proxy_'):
+                base={'grantees':base['grantees'],'object_type':'PROXY','proxy_user':'before','proxy_host':'%'}
+            if name.startswith('grant_as_'):
+                base={'grantees':base['grantees'],'object_type':'GLOBAL','privileges':[{'name':'UPDATE'}],'grant_as_user':'before'}
+                if name=='grant_as_roles':base['grant_as_roles_mode']='SELECTED'
+            bind(base,field,samples[name])
+            request={'resource_kind':'privilege','operation_id':operation['operation_id'],'draft':base}
+            assert not MYSQL_ADMINISTRATION.validate(request)['errors'],name
+            result=MYSQL_ADMINISTRATION._compile(request)
+            assert result['statements'][0]['source'].startswith(operation['operation_id'].upper()+' '),name
+    assert all(field['control']!='json' for field in load('forms/role-privilege.form.json')['fields'])

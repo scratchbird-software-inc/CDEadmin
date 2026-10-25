@@ -2799,3 +2799,33 @@ Role/User descriptors and Security operation entries accompany this backend
 work. They remain draft pending shared rendering and round trips; the privilege
 variant and Decision9 projections are recorded separately. This qualification
 does not close the entire native inventory or cross-platform acceptance.
+
+Native privilege scope and delegation
+-------------------------------------
+
+Typed native grant/revoke workflows now preserve separate user/host records,
+multiple grantees, literal database/object/column identities, ordered column
+privilege lists, static and installed dynamic privilege names, routine/library
+scopes and proxy accounts. Library privilege metadata does not establish an
+available closed execution runtime. Global GRANT AS supports NONE, DEFAULT,
+ALL, selected and excluded native role sets. MySQL permits GRANT AS only for
+global privileges; the compiler refuses it on narrower scopes.
+
+REVOKE supports IF EXISTS, IGNORE UNKNOWN USER, explicit GRANT OPTION removal
+and ALL PRIVILEGES, GRANT OPTION at account scope. Database-level revocation
+under native partial_revokes preserves MySQL's restriction behavior rather than
+emulating another engine's DENY. Scope validity, dynamic privilege availability,
+wildcards, warnings and errors remain native. The runtime partial_revokes policy
+and observed native grants are rechecked before an independently owned dispatch;
+external writers are not fenced. Original query-session diagnostics and pending
+savepoints are preserved. A successful acknowledgement followed by observation
+loss is never automatically replayed.
+
+The two Security operation descriptors and the privilege family variant ship
+with this backend input contract. ``tools/cdeadmin_mysql_privileges_qualification.py``
+checks native column allow/deny, dynamic/routine/proxy/delegated grants, partial
+revokes, missing-user warnings, native errors, changed reviews, observation loss
+and authenticated typed grant/revoke through both connectors. Legacy scalar
+privilege lists and simple account strings remain accepted; literal identities
+use the structured fields. Shared rendering and family privilege-diff dispatch
+remain pending under Decision9; the descriptor is draft.

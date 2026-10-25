@@ -112,7 +112,7 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - n/a
    * - Role
      - draft (18f, 2g)
-     - draft (40f, 5g; privilege variant pending)
+     - draft (55f, 5g)
      - draft (22f, 2g)
      - draft (11f, 1g)
      - n/a
@@ -260,10 +260,24 @@ account rename/drop. Native registration hooks are not proof of an available
 registration plugin. Generated passwords and protected key results remain
 Decision10; family membership/privilege dispatch remains Decision9.
 
-The privilege variant remains pending (0fields/1gap); the Role family is partial.
+The privilege variant is now draft (15fields/1gap); all three Role variants have typed inputs.
 Named-account role aliases expose native membership actions without inventing
 persisted CREATE ROLE origin. All accounts remain visible under Users for policy
 editing. Initial role grants have separately acknowledged native statements; a
 later grant failure does not undo creation. The legacy MySQL role field factory
 and create-role dispatch were removed. Shared rendering/round trips remain
 pending. Lint before/after: JSON303/303, MUI244/244, branches111/111, panels113/113.
+
+MySQL native privilege inputs (2026-10-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The privilege variant moves to draft with15fields/1gap. Dedicated Security
+operations declare typed grantees, column privileges, native dynamic names,
+proxy accounts, global GRANT AS role modes and REVOKE options. Native MySQL9.7
+pure/C and authenticated plan/apply qualify real permission effects and denials,
+partial revokes, native warnings/errors, changed-state refusal and no replay
+after observation loss. The runtime partial_revokes policy is bound to review.
+The old MySQL-specific privilege scope field branch was deleted; the generic
+factory remains for other engines. Family diff dispatch remains Decision9.
+Shared rendering/round trips remain pending. Lint before/after: JSON303/303,
+MUI244/244, branches111/111, panels113/113.

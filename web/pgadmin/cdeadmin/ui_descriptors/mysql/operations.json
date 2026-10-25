@@ -494,6 +494,29 @@
           "help": "Replaces the native default-role set; does not grant missing membership."
         },
         {
+          "field_id": "roles",
+          "label": "Default roles",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "user",
+              "label": "User",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "host",
+              "label": "Host",
+              "control": "text"
+            }
+          ],
+          "visible_when": {
+            "field": "mode",
+            "equals": "SELECTED"
+          },
+          "help": "Optional complete replacement list. Omit it to use the selected role; a supplied list must contain every default role to retain."
+        },
+        {
           "field_id": "confirmation",
           "label": "Role name",
           "control": "text",
@@ -542,6 +565,421 @@
         }
       ],
       "notes": "Native user and host are separate identities; no splitting of displayed names is used for catalog targets. MySQL decides whether a role-used or system account may be renamed. Draft pending shared rendering acceptance."
+    },
+    {
+      "operation_id": "grant",
+      "resource_kind": "privilege",
+      "title": "Grant privileges",
+      "menu": {
+        "category": "security",
+        "order": 130
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "grantees",
+          "label": "Grantees",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "user",
+              "label": "User",
+              "control": "text",
+              "required": false,
+              "help": "Empty user text denotes a native anonymous account; supply its host separately."
+            },
+            {
+              "field_id": "host",
+              "label": "Host",
+              "control": "text",
+              "default": "%"
+            }
+          ],
+          "help": "Separate native account components preserve literal quotes, dots and @ characters."
+        },
+        {
+          "field_id": "object_type",
+          "label": "Scope",
+          "control": "select",
+          "options": [
+            {
+              "value": "GLOBAL",
+              "label": "Global"
+            },
+            {
+              "value": "DATABASE",
+              "label": "Database"
+            },
+            {
+              "value": "TABLE",
+              "label": "Table"
+            },
+            {
+              "value": "VIEW",
+              "label": "View"
+            },
+            {
+              "value": "PROCEDURE",
+              "label": "Procedure"
+            },
+            {
+              "value": "FUNCTION",
+              "label": "Function"
+            },
+            {
+              "value": "LIBRARY",
+              "label": "Library"
+            },
+            {
+              "value": "PROXY",
+              "label": "Proxy account"
+            },
+            {
+              "value": "ACCOUNT",
+              "label": "All account privileges"
+            }
+          ],
+          "required": true,
+          "help": "All account privileges is REVOKE ALL PRIVILEGES, GRANT OPTION. Library grants do not imply an available closed execution runtime."
+        },
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "text",
+          "visible_when": {
+            "field": "object_type",
+            "in": [
+              "DATABASE",
+              "TABLE",
+              "VIEW",
+              "FUNCTION",
+              "PROCEDURE",
+              "LIBRARY"
+            ]
+          }
+        },
+        {
+          "field_id": "object",
+          "label": "Object",
+          "control": "text",
+          "visible_when": {
+            "field": "object_type",
+            "in": [
+              "TABLE",
+              "VIEW",
+              "FUNCTION",
+              "PROCEDURE",
+              "LIBRARY"
+            ]
+          }
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Privilege",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "columns",
+              "label": "Columns",
+              "control": "multiselect",
+              "option_values_path": [
+                "target",
+                "columns"
+              ]
+            }
+          ],
+          "help": "Native keyword or installed dynamic privilege per row. Column lists apply to table/view SELECT, INSERT, UPDATE or REFERENCES; MySQL validates scope and availability."
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean",
+          "default": false,
+          "help": "GRANT only. To revoke delegation, select the GRANT OPTION privilege."
+        },
+        {
+          "field_id": "proxy_user",
+          "label": "Proxy user",
+          "control": "text",
+          "visible_when": {
+            "field": "object_type",
+            "equals": "PROXY"
+          }
+        },
+        {
+          "field_id": "proxy_host",
+          "label": "Proxy host",
+          "control": "text",
+          "visible_when": {
+            "field": "object_type",
+            "equals": "PROXY"
+          }
+        },
+        {
+          "field_id": "grant_as_user",
+          "label": "Grant as user",
+          "control": "text",
+          "visible_when": {
+            "field": "object_type",
+            "equals": "GLOBAL"
+          },
+          "help": "GRANT AS is native global-privilege delegation only."
+        },
+        {
+          "field_id": "grant_as_host",
+          "label": "Grant as host",
+          "control": "text",
+          "visible_when": {
+            "field": "grant_as_user",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "grant_as_roles_mode",
+          "label": "Grantor roles",
+          "control": "select",
+          "options": [
+            {
+              "value": "NONE",
+              "label": "None"
+            },
+            {
+              "value": "DEFAULT",
+              "label": "Default"
+            },
+            {
+              "value": "ALL",
+              "label": "All"
+            },
+            {
+              "value": "SELECTED",
+              "label": "Selected"
+            },
+            {
+              "value": "ALL_EXCEPT",
+              "label": "All Except"
+            }
+          ],
+          "help": "GRANT AS only. A selected/excluded role set uses the separate native account grid.",
+          "visible_when": {
+            "field": "grant_as_user",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "grant_as_roles",
+          "label": "Grantor role accounts",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "user",
+              "label": "User",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "host",
+              "label": "Host",
+              "control": "text",
+              "default": "%"
+            }
+          ],
+          "visible_when": {
+            "field": "grant_as_user",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirmation",
+          "control": "text",
+          "help": "Type the selected target display name when required."
+        }
+      ],
+      "notes": "Native plan/validate/apply with a provider SQL preview. Draft pending shared operation-dialog rendering and round trips."
+    },
+    {
+      "operation_id": "revoke",
+      "resource_kind": "privilege",
+      "title": "Revoke privileges",
+      "menu": {
+        "category": "security",
+        "order": 131
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "grantees",
+          "label": "Grantees",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "user",
+              "label": "User",
+              "control": "text",
+              "required": false,
+              "help": "Empty user text denotes a native anonymous account; supply its host separately."
+            },
+            {
+              "field_id": "host",
+              "label": "Host",
+              "control": "text",
+              "default": "%"
+            }
+          ],
+          "help": "Separate native account components preserve literal quotes, dots and @ characters."
+        },
+        {
+          "field_id": "object_type",
+          "label": "Scope",
+          "control": "select",
+          "options": [
+            {
+              "value": "GLOBAL",
+              "label": "Global"
+            },
+            {
+              "value": "DATABASE",
+              "label": "Database"
+            },
+            {
+              "value": "TABLE",
+              "label": "Table"
+            },
+            {
+              "value": "VIEW",
+              "label": "View"
+            },
+            {
+              "value": "PROCEDURE",
+              "label": "Procedure"
+            },
+            {
+              "value": "FUNCTION",
+              "label": "Function"
+            },
+            {
+              "value": "LIBRARY",
+              "label": "Library"
+            },
+            {
+              "value": "PROXY",
+              "label": "Proxy account"
+            },
+            {
+              "value": "ACCOUNT",
+              "label": "All account privileges"
+            }
+          ],
+          "required": true,
+          "help": "All account privileges is REVOKE ALL PRIVILEGES, GRANT OPTION. Library grants do not imply an available closed execution runtime."
+        },
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "text",
+          "visible_when": {
+            "field": "object_type",
+            "in": [
+              "DATABASE",
+              "TABLE",
+              "VIEW",
+              "FUNCTION",
+              "PROCEDURE",
+              "LIBRARY"
+            ]
+          }
+        },
+        {
+          "field_id": "object",
+          "label": "Object",
+          "control": "text",
+          "visible_when": {
+            "field": "object_type",
+            "in": [
+              "TABLE",
+              "VIEW",
+              "FUNCTION",
+              "PROCEDURE",
+              "LIBRARY"
+            ]
+          }
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Privilege",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "columns",
+              "label": "Columns",
+              "control": "multiselect",
+              "option_values_path": [
+                "target",
+                "columns"
+              ]
+            }
+          ],
+          "help": "Native keyword or installed dynamic privilege per row. Column lists apply to table/view SELECT, INSERT, UPDATE or REFERENCES; MySQL validates scope and availability."
+        },
+        {
+          "field_id": "if_exists",
+          "label": "If it exists",
+          "control": "boolean",
+          "default": false,
+          "help": "REVOKE only; retain native warnings for absent grants."
+        },
+        {
+          "field_id": "ignore_unknown_user",
+          "label": "Ignore unknown users",
+          "control": "boolean",
+          "default": false,
+          "help": "REVOKE only; the native statement determines partial results and warnings."
+        },
+        {
+          "field_id": "proxy_user",
+          "label": "Proxy user",
+          "control": "text",
+          "visible_when": {
+            "field": "object_type",
+            "equals": "PROXY"
+          }
+        },
+        {
+          "field_id": "proxy_host",
+          "label": "Proxy host",
+          "control": "text",
+          "visible_when": {
+            "field": "object_type",
+            "equals": "PROXY"
+          }
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirmation",
+          "control": "text",
+          "help": "Type the selected target display name when required."
+        }
+      ],
+      "notes": "Native plan/validate/apply with a provider SQL preview. Draft pending shared operation-dialog rendering and round trips."
     }
   ]
 }

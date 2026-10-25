@@ -44,3 +44,11 @@ def test_engine_catalog_uses_separate_host_and_only_mysql_native_choices():
  maria=MARIADB_ADMINISTRATION.catalog(catalog_for_engine('mariadb'))
  role=next(row for row in maria['objects'] if row['resource_kind']=='role')
  assert next(row for row in role['operations'] if row['operation_id']=='grant')['form']['form_id']=='mariadb.role.grant'
+
+
+def test_default_roles_can_replace_the_native_full_selected_set():
+    from pgadmin.cdeadmin.providers.mysql_roles import compile_operation
+    selected={'native':{'user':'selected','host':'%'}}
+    result=compile_operation('set_default',{'member_user':'u','member_host':'localhost','roles':[
+        {'user':'first@literal','host':'%'},{'user':'second','host':'localhost'}]},selected)
+    assert result['source']=='SET DEFAULT ROLE `first@literal`@`%`,`second`@`localhost` TO `u`@`localhost`'

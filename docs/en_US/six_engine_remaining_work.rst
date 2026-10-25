@@ -449,7 +449,7 @@ functionality.
 Native User/Role policies, exact identity rename/drop, role grants/defaults and
 available GPL socket second/third authentication factors are now implemented and
 qualified through both connectors and authenticated APIs. Their typed descriptors
-remain draft; the privilege variant still needs its native input audit. Generated
+remain draft; the privilege variant now has typed native scopes and dedicated grant/revoke operations. Generated
 password delivery shares Decision10 with raw key export. Registration-dependent
 plugins have no production implementor in the acquired Community source and are
 not emulated. These scoped receipts do not close the independent inventory.

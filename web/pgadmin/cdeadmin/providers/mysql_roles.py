@@ -20,7 +20,7 @@ def compile_operation(operation, draft, target):
     if operation not in OPERATIONS or not isinstance(draft, dict):
         raise RelationalClientError('MySQL role operation is unavailable')
     allowed = {'member_user', 'member_host', 'confirmation'} | (
-        {'admin_option'} if operation == 'grant' else {'mode'} if operation == 'set_default' else set())
+        {'admin_option'} if operation == 'grant' else {'mode','roles'} if operation == 'set_default' else set())
     if set(draft) - allowed:
         raise RelationalClientError('Unknown MySQL role membership option')
     native = (target or {}).get('native', {})
@@ -37,7 +37,18 @@ def compile_operation(operation, draft, target):
     else:
         mode = draft.get('mode', 'SELECTED')
         if mode not in {'SELECTED', 'ALL', 'NONE'}:raise RelationalClientError('Default role mode is invalid')
-        source = f'SET DEFAULT ROLE {role if mode == "SELECTED" else mode} TO {member}'
+        selected = role
+        if 'roles' in draft:
+            rows = draft['roles']
+            if mode != 'SELECTED' or not isinstance(rows, list) or not rows or len(rows) > 4096:
+                raise RelationalClientError('Default roles require a bounded selected account list')
+            values = []
+            for row in rows:
+                if not isinstance(row, dict) or set(row) - {'user','host'}:
+                    raise RelationalClientError('Default roles require separate user and host values')
+                values.append(account(row.get('user'), row.get('host','%')))
+            selected = ','.join(values)
+        source = f'SET DEFAULT ROLE {selected if mode == "SELECTED" else mode} TO {member}'
     return {'source': source, 'parameters': ()}
 
 
