@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cdeadmin.ui-tools.v1",
+  "title": "Engine tool and panel openers for the Object Explorer context menu",
+  "description": "Declares the engine-specific entries context_menu.py used to add with engine_id branches: tool panels, dashboards, registration helpers. Tier 1 lifecycle lives in forms, tier 2/3 operations in operations.json; this file is for everything that opens a tool rather than running an operation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "engine",
+    "tools"
+  ],
+  "properties": {
+    "schema": {
+      "const": "cdeadmin.ui-tools.v1"
+    },
+    "engine": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tool"
+      }
+    }
+  },
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command_id",
+        "scope",
+        "label",
+        "handler"
+      ],
+      "properties": {
+        "command_id": {
+          "type": "string",
+          "description": "stable command id; may use {engine_id}"
+        },
+        "scope": {
+          "enum": [
+            "connector",
+            "endpoint",
+            "database",
+            "resource_group",
+            "resource"
+          ]
+        },
+        "slot": {
+          "type": "string",
+          "description": "insertion point inside the scope's menu builder (keeps legacy ordering); default 'default'. connector: 'profile' (inside the per-profile loop, base = profile registration arguments) or 'default' (after it)"
+        },
+        "label": {
+          "type": "string",
+          "description": "may use {display}, {engine_id}, {noun}"
+        },
+        "handler": {
+          "type": "string",
+          "description": "front-end handler id (open_workspace, open_<engine>_fleet, ...)"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string",
+          "description": "menu category (register, connection, database, availability, information, object, ...)"
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "mutation": {
+          "enum": [
+            "read",
+            "write",
+            "admin",
+            "destructive"
+          ]
+        },
+        "macro": {
+          "type": "boolean"
+        },
+        "confirmation": {
+          "type": "boolean"
+        },
+        "arguments": {
+          "type": "object",
+          "description": "merged over the scope's base arguments; string values may use {display}, {engine_id}"
+        },
+        "when": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "route_kind": {
+              "enum": [
+                "network",
+                "embedded_file"
+              ]
+            },
+            "localhost_placeholder": {
+              "type": "boolean"
+            },
+            "resource_kinds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "requires_database_target": {
+              "type": "boolean"
+            },
+            "not_system_object": {
+              "type": "boolean"
+            },
+            "not_temporary": {
+              "type": "boolean"
+            }
+          }
+        },
+        "enabled_when": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "verified",
+              "owner",
+              "available"
+            ]
+          },
+          "description": "all must hold; the first failing one supplies the disabled reason"
+        },
+        "disabled_reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "per condition; defaults: verified -> the scope's standard verification message, owner -> 'Only the endpoint owner can use this.', available -> the detection message"
+        },
+        "inherit_base": {
+          "type": "boolean",
+          "description": "merge the scope's base arguments (resource/database target ids) into arguments; default true. false for collection tasks that keep only the database route"
+        },
+        "base_keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "with inherit_base=false: the base keys to keep (e.g. database_target_id)"
+        }
+      }
+    }
+  }
+}

@@ -37,8 +37,8 @@ Phase status
      - Firebird: 9/10 forms ``complete`` by live round trip (server form stays draft). MariaDB: 6/8 ``complete`` (trigger, routine draft: inventory reports no body/parameters). DuckDB: 7/8, SQLite: 5/6 (server forms draft). MySQL: owned by the MySQL stream. PostgreSQL: drafts pass the ui.js schema-id gate; routing is phase 5. Family table below
    * - 4
      - Operations, panels, menus
-     - not started
-     - Panel count below
+     - in progress
+     - ``tools.json`` per engine declares the tool/dashboard/registration openers; ``context_menu.py`` appends them through ``declared_tool_actions`` instead of ``engine_id`` branches (Firebird, DuckDB, SQLite migrated with a 480-scenario output snapshot unchanged; MySQL/MariaDB branches left to the MySQL stream). Branch count gated: 35 -> 16 (``engine_branches_in_context_menu``). Panel count below
    * - 5
      - PostgreSQL convergence, beta acceptance
      - not started

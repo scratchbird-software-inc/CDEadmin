@@ -1,0 +1,448 @@
+{
+  "schema": "cdeadmin.ui-tools.v1",
+  "engine": "firebird",
+  "notes": "Tool, dashboard and registration openers that context_menu.py used to add with engine_id branches. Lifecycle entries come from the family forms, tier 2/3 operations from operations.json; keep only openers here.",
+  "tools": [
+    {
+      "command_id": "connector.firebird.create_database",
+      "scope": "connector",
+      "label": "Create a Firebird database through this listener...",
+      "handler": "register_endpoint",
+      "slot": "profile",
+      "icon": "action.create_database",
+      "group": "register",
+      "priority": 20,
+      "mutation": "write",
+      "arguments": {
+        "registration_intent": "create_database"
+      },
+      "when": {
+        "route_kind": "network"
+      },
+      "enabled_when": [
+        "available"
+      ]
+    },
+    {
+      "command_id": "connector.firebird.register_database",
+      "scope": "connector",
+      "label": "Register an existing Firebird database...",
+      "handler": "register_endpoint",
+      "slot": "profile",
+      "icon": "action.attach",
+      "group": "register",
+      "priority": 21,
+      "mutation": "admin",
+      "arguments": {
+        "registration_intent": "register_existing"
+      },
+      "when": {
+        "route_kind": "network"
+      },
+      "enabled_when": [
+        "available"
+      ]
+    },
+    {
+      "command_id": "connector.firebird.docker",
+      "scope": "connector",
+      "label": "Provision Firebird in Docker...",
+      "handler": "open_firebird_docker",
+      "icon": "action.create_database",
+      "group": "register",
+      "priority": 30,
+      "mutation": "admin",
+      "macro": false,
+      "when": {
+        "localhost_placeholder": false
+      }
+    },
+    {
+      "command_id": "connector.firebird.monitoring",
+      "scope": "connector",
+      "label": "Firebird engine dashboard...",
+      "handler": "open_firebird_fleet",
+      "icon": "tool.dashboard",
+      "group": "information",
+      "priority": 70,
+      "when": {
+        "localhost_placeholder": false
+      }
+    },
+    {
+      "command_id": "connector.firebird.dashboard_editor",
+      "scope": "connector",
+      "label": "Edit dashboard...",
+      "handler": "open_firebird_dashboard_editor",
+      "icon": "action.edit",
+      "group": "information",
+      "priority": 71,
+      "mutation": "write",
+      "when": {
+        "localhost_placeholder": false
+      }
+    },
+    {
+      "command_id": "endpoint.{engine_id}.disconnect",
+      "scope": "endpoint",
+      "label": "Disconnect {display} endpoint...",
+      "handler": "disconnect_endpoint",
+      "slot": "after_verify",
+      "icon": "action.disconnect",
+      "group": "connection",
+      "priority": 11,
+      "mutation": "admin",
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "verified": "Endpoint is not verified.",
+        "owner": "Only the endpoint owner can disconnect it."
+      },
+      "description": ""
+    },
+    {
+      "command_id": "endpoint.firebird.catalogs",
+      "scope": "endpoint",
+      "label": "Capture registered database catalogs...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.view",
+      "group": "database",
+      "arguments": {
+        "tab": "firebird-server-catalog"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "endpoint.firebird.dashboard_editor",
+      "scope": "endpoint",
+      "label": "Edit dashboard...",
+      "handler": "open_firebird_dashboard_editor",
+      "slot": "after_verify",
+      "icon": "action.edit",
+      "group": "availability",
+      "mutation": "write",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can edit its dashboard."
+      }
+    },
+    {
+      "command_id": "endpoint.firebird.monitoring",
+      "scope": "endpoint",
+      "label": "Firebird server dashboard...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.view",
+      "group": "availability",
+      "mutation": "read",
+      "arguments": {
+        "tab": "monitoring"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can monitor it."
+      }
+    },
+    {
+      "command_id": "endpoint.firebird.monitoring_policy",
+      "scope": "endpoint",
+      "label": "Configure monitoring collection...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.view",
+      "group": "availability",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "monitoring_policy"
+      },
+      "when": {
+        "route_kind": "network"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can monitor it."
+      }
+    },
+    {
+      "command_id": "endpoint.firebird.restore_logical",
+      "scope": "endpoint",
+      "label": "Restore database (gbak)...",
+      "handler": "open_workspace",
+      "slot": "after_lifecycle",
+      "icon": "action.restore",
+      "group": "database",
+      "priority": 22,
+      "mutation": "destructive",
+      "confirmation": true,
+      "macro": false,
+      "arguments": {
+        "tab": "administration",
+        "resource_kind": "database",
+        "operation_id": "restore_logical",
+        "database_target_id": null
+      },
+      "when": {
+        "route_kind": "network"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Endpoint management permission is required."
+      }
+    },
+    {
+      "command_id": "endpoint.firebird.restore_physical",
+      "scope": "endpoint",
+      "label": "Restore physical backup (nbackup)...",
+      "handler": "open_workspace",
+      "slot": "after_lifecycle",
+      "icon": "action.restore",
+      "group": "database",
+      "priority": 23,
+      "mutation": "destructive",
+      "confirmation": true,
+      "macro": false,
+      "arguments": {
+        "tab": "administration",
+        "resource_kind": "database",
+        "operation_id": "restore_physical",
+        "database_target_id": null
+      },
+      "when": {
+        "route_kind": "network"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Endpoint management permission is required."
+      }
+    },
+    {
+      "command_id": "endpoint.firebird.activate_shadow",
+      "scope": "endpoint",
+      "label": "Recover a Firebird shadow...",
+      "handler": "open_workspace",
+      "slot": "after_lifecycle",
+      "icon": "action.restore",
+      "group": "availability",
+      "priority": 72,
+      "mutation": "destructive",
+      "confirmation": true,
+      "macro": false,
+      "arguments": {
+        "tab": "administration",
+        "resource_kind": "database",
+        "operation_id": "activate_shadow",
+        "database_target_id": null
+      },
+      "when": {
+        "route_kind": "network"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Endpoint management permission is required."
+      }
+    },
+    {
+      "command_id": "database.firebird.registration_clone",
+      "scope": "database",
+      "label": "Clone Firebird registration...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.edit",
+      "group": "register",
+      "mutation": "admin",
+      "macro": false,
+      "arguments": {
+        "tab": "firebird-registration",
+        "registration_operation": "clone"
+      }
+    },
+    {
+      "command_id": "database.firebird.registration_move",
+      "scope": "database",
+      "label": "Move Firebird registration...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.edit",
+      "group": "register",
+      "mutation": "admin",
+      "macro": false,
+      "arguments": {
+        "tab": "firebird-registration",
+        "registration_operation": "move"
+      }
+    },
+    {
+      "command_id": "database.firebird.test_data",
+      "scope": "database",
+      "label": "Generate Firebird test data...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.edit",
+      "group": "database",
+      "arguments": {
+        "tab": "firebird-test-data"
+      }
+    },
+    {
+      "command_id": "database.firebird.dashboard_editor",
+      "scope": "database",
+      "label": "Edit dashboard...",
+      "handler": "open_firebird_dashboard_editor",
+      "slot": "pre_lifecycle",
+      "icon": "action.edit",
+      "group": "availability",
+      "mutation": "write"
+    },
+    {
+      "command_id": "database.firebird.monitoring",
+      "scope": "database",
+      "label": "Firebird database dashboard...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.view",
+      "group": "availability",
+      "mutation": "read",
+      "arguments": {
+        "tab": "monitoring"
+      }
+    },
+    {
+      "command_id": "database.firebird.monitoring_policy",
+      "scope": "database",
+      "label": "Configure monitoring collection...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.view",
+      "group": "availability",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "monitoring_policy"
+      }
+    },
+    {
+      "command_id": "database.firebird.isql",
+      "scope": "database",
+      "label": "Open external Firebird ISQL...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.script",
+      "group": "database",
+      "arguments": {
+        "tab": "firebird-isql"
+      },
+      "when": {
+        "route_kind": "network"
+      }
+    },
+    {
+      "command_id": "database.firebird.backup",
+      "scope": "database",
+      "label": "Backup...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.backup",
+      "group": "database",
+      "priority": 13,
+      "mutation": "admin",
+      "arguments": {
+        "tab": "administration",
+        "resource_kind": "database",
+        "operation_id": "backup_logical"
+      },
+      "when": {
+        "route_kind": "network"
+      }
+    },
+    {
+      "command_id": "database.firebird.disconnect",
+      "scope": "database",
+      "label": "Disconnect server (all databases)...",
+      "handler": "disconnect_endpoint",
+      "slot": "post_connect",
+      "icon": "action.disconnect",
+      "group": "connection",
+      "priority": 11,
+      "mutation": "admin"
+    },
+    {
+      "command_id": "database.firebird.security.user",
+      "scope": "database",
+      "label": "Manage Firebird users...",
+      "handler": "open_workspace",
+      "slot": "post_lifecycle",
+      "icon": "action.security",
+      "group": "security",
+      "priority": 45,
+      "mutation": "admin",
+      "inherit_base": false,
+      "base_keys": [
+        "database_target_id"
+      ],
+      "arguments": {
+        "tab": "administration",
+        "resource_kind": "user"
+      }
+    },
+    {
+      "command_id": "database.firebird.security.role",
+      "scope": "database",
+      "label": "Manage Firebird roles...",
+      "handler": "open_workspace",
+      "slot": "post_lifecycle",
+      "icon": "action.security",
+      "group": "security",
+      "priority": 46,
+      "mutation": "admin",
+      "inherit_base": false,
+      "base_keys": [
+        "database_target_id"
+      ],
+      "arguments": {
+        "tab": "administration",
+        "resource_kind": "role"
+      }
+    },
+    {
+      "command_id": "database.firebird.security.privilege",
+      "scope": "database",
+      "label": "Manage Firebird grants and privileges...",
+      "handler": "open_workspace",
+      "slot": "post_lifecycle",
+      "icon": "action.security",
+      "group": "security",
+      "priority": 47,
+      "mutation": "admin",
+      "inherit_base": false,
+      "base_keys": [
+        "database_target_id"
+      ],
+      "arguments": {
+        "tab": "administration",
+        "resource_kind": "privilege",
+        "operation_id": "grant"
+      }
+    }
+  ]
+}

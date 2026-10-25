@@ -18,8 +18,11 @@ The browser only dispatches the finite handler names declared here.
 from __future__ import annotations
 
 import copy
+import json
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
@@ -144,6 +147,106 @@ def _action(command_id, label, handler, *, icon='command.default',
     ).to_dict()
 
 
+# ---------------------------------------------------------------------------
+# Declared tool openers (ui_descriptors/<engine>/tools.json)
+#
+# Engine-specific menu entries that open a tool, dashboard or registration
+# helper are declared per engine instead of branching on engine_id here.
+# Each menu builder calls declared_tool_actions() at the slot where the
+# legacy branch used to append, so category ordering is unchanged.
+# ---------------------------------------------------------------------------
+
+_TOOLS_ROOT = Path(__file__).resolve().parent / 'ui_descriptors'
+_DEFAULT_OWNER_REASON = 'Only the endpoint owner can use this.'
+
+
+@lru_cache(maxsize=None)
+def _declared_tools(engine_id: str) -> tuple:
+    path = _TOOLS_ROOT / engine_id / 'tools.json'
+    if not path.is_file():
+        return ()
+    document = json.loads(path.read_text(encoding='utf-8'))
+    return tuple(document.get('tools', ()))
+
+
+def _format(value, state):
+    if isinstance(value, str) and '{' in value:
+        try:
+            return value.format(**state)
+        except (KeyError, IndexError, ValueError):
+            return value
+    return value
+
+
+def declared_tool_actions(
+        engine_id: str, scope: str, slot: str = 'default', *,
+        state: Mapping[str, Any],
+        base: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Context actions declared in tools.json for one scope/slot.
+
+    ``state`` carries the facts the legacy branches tested: ``display``,
+    ``route_kind``, ``localhost_placeholder``, ``verified`` (and
+    ``verified_reason``), ``owner``, ``available`` (and ``available_reason``),
+    ``resource_kind``, ``database_target_id``, ``system_object``,
+    ``temporary``.
+    """
+    actions = []
+    for tool in _declared_tools(engine_id):
+        if (tool.get('scope') != scope or
+                tool.get('slot', 'default') != slot):
+            continue
+        when = tool.get('when', {})
+        if ('route_kind' in when and
+                state.get('route_kind') != when['route_kind']):
+            continue
+        if ('localhost_placeholder' in when and
+                bool(state.get('localhost_placeholder')) !=
+                when['localhost_placeholder']):
+            continue
+        if (when.get('resource_kinds') and
+                state.get('resource_kind') not in when['resource_kinds']):
+            continue
+        if (when.get('requires_database_target') and
+                not state.get('database_target_id')):
+            continue
+        if (when.get('not_system_object') and
+                state.get('system_object') is True):
+            continue
+        if when.get('not_temporary') and state.get('temporary') is True:
+            continue
+        enabled, reason = True, ''
+        reasons = tool.get('disabled_reasons', {})
+        for condition in tool.get('enabled_when', ()):
+            if state.get(condition):
+                continue
+            enabled = False
+            reason = (reasons.get(condition) or
+                      state.get(f'{condition}_reason') or
+                      (_DEFAULT_OWNER_REASON if condition == 'owner'
+                       else ''))
+            break
+        if tool.get('inherit_base', True):
+            arguments = {**(base or {})}
+        else:
+            arguments = {key: (base or {})[key]
+                         for key in tool.get('base_keys', ())
+                         if key in (base or {})}
+        for key, value in tool.get('arguments', {}).items():
+            arguments[key] = _format(value, state)
+        actions.append(_action(
+            _format(tool['command_id'], state), _format(tool['label'], state),
+            tool['handler'], icon=tool.get('icon', 'command.default'),
+            description=tool.get('description', ''),
+            group=tool.get('group', 'common'),
+            priority=tool.get('priority', 100),
+            mutation=tool.get('mutation', 'read'), arguments=arguments,
+            enabled=enabled, disabled_reason=reason,
+            confirmation=tool.get('confirmation', False),
+            macro=tool.get('macro', True),
+        ))
+    return actions
+
+
 def _engine_profiles(profiles: Sequence[Mapping[str, Any]]):
     return sorted(
         profiles,
@@ -219,50 +322,19 @@ def connector_context_actions(
                 }, enabled=available,
                 disabled_reason=unavailable_reason,
             ))
-            if engine_id == 'firebird':
-                actions.extend([
-                    _action(
-                        'connector.firebird.create_database',
-                        'Create a Firebird database through this listener...',
-                        'register_endpoint', icon='action.create_database',
-                        group='register', priority=20,
-                        mutation='write', arguments={
-                            **base_arguments,
-                            'registration_intent': 'create_database',
-                        }, enabled=available,
-                        disabled_reason=unavailable_reason,
-                    ),
-                    _action(
-                        'connector.firebird.register_database',
-                        'Register an existing Firebird database...',
-                        'register_endpoint', icon='action.attach',
-                        group='register', priority=21,
-                        mutation='admin', arguments={
-                            **base_arguments,
-                            'registration_intent': 'register_existing',
-                        }, enabled=available,
-                        disabled_reason=unavailable_reason,
-                    ),
-                ])
+            actions.extend(declared_tool_actions(
+                engine_id, 'connector', 'profile', state={
+                    'engine_id': engine_id, 'display': display,
+                    'route_kind': profile['route_kind'],
+                    'localhost_placeholder': localhost_placeholder,
+                    'available': available,
+                    'available_reason': unavailable_reason,
+                }, base=base_arguments))
     if engine_id == 'mariadb' and not localhost_placeholder:
         actions.extend([
             _action('connector.mariadb.monitoring', 'MariaDB engine dashboard...', 'open_mariadb_fleet',
                 icon='tool.dashboard', group='information', priority=5),
             _action('connector.mariadb.dashboard_editor', 'Edit MariaDB engine dashboard...', 'open_mariadb_dashboard_editor',
-                icon='action.edit', group='information', priority=6, mutation='write'),
-        ])
-    if engine_id == 'duckdb' and not localhost_placeholder:
-        actions.extend([
-            _action('connector.duckdb.monitoring', 'DuckDB engine dashboard...', 'open_duckdb_fleet',
-                icon='tool.dashboard', group='information', priority=5),
-            _action('connector.duckdb.dashboard_editor', 'Edit DuckDB engine dashboard...', 'open_duckdb_dashboard_editor',
-                icon='action.edit', group='information', priority=6, mutation='write'),
-        ])
-    if engine_id == 'sqlite' and not localhost_placeholder:
-        actions.extend([
-            _action('connector.sqlite.monitoring', 'SQLite engine dashboard...', 'open_sqlite_fleet',
-                icon='tool.dashboard', group='information', priority=5),
-            _action('connector.sqlite.dashboard_editor', 'Edit SQLite engine dashboard...', 'open_sqlite_dashboard_editor',
                 icon='action.edit', group='information', priority=6, mutation='write'),
         ])
     if engine_id == 'mysql' and not localhost_placeholder:
@@ -283,24 +355,12 @@ def connector_context_actions(
             'open_postgresql_fleet', icon='tool.dashboard', group='information',
             priority=70,
         ))
-    if engine_id == 'firebird' and not localhost_placeholder:
-        actions.append(_action(
-            'connector.firebird.docker', 'Provision Firebird in Docker...',
-            'open_firebird_docker', icon='action.create_database', group='register',
-            priority=30, mutation='admin', macro=False,
-        ))
-    if engine_id == 'firebird' and not localhost_placeholder:
-        actions.append(_action(
-            'connector.firebird.monitoring', 'Firebird engine dashboard...',
-            'open_firebird_fleet', icon='tool.dashboard', group='information',
-            priority=70,
-        ))
-    if engine_id == 'firebird' and not localhost_placeholder:
-        actions.append(_action(
-            'connector.firebird.dashboard_editor', 'Edit dashboard...',
-            'open_firebird_dashboard_editor', icon='action.edit',
-            group='information', priority=71, mutation='write',
-        ))
+    actions.extend(declared_tool_actions(engine_id, 'connector', state={
+        'engine_id': engine_id,
+        'localhost_placeholder': localhost_placeholder,
+        'display': (ordered[0].get('interface_display_name') or
+                    ordered[0]['display_name']) if ordered else engine_id,
+    }))
     info = {
         'engine_id': engine_id,
         'profile_ids': [item['profile_id'] for item in ordered],
@@ -725,33 +785,13 @@ def endpoint_context_actions(
         icon='action.connect', group='connection', priority=10,
         arguments={'profile_id': profile['profile_id']},
     )]
-    if engine_id == 'duckdb':
-        actions.append(_action('endpoint.duckdb.monitoring', 'DuckDB registered-file dashboard...',
-            'open_workspace', icon='tool.dashboard', group='availability', arguments={'tab': 'monitoring'},
-            enabled=ready and can_manage, disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can monitor it.'))
-        actions.append(_action('endpoint.duckdb.catalog_ddn', 'Registered DuckDB files and DDN...',
-            'open_workspace', icon='action.export', group='database',
-            arguments={'tab': 'export', 'server_catalog': True},
-            enabled=ready and can_manage,
-            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can inspect it.'))
-        actions.append(_action('endpoint.duckdb.dashboard_editor', 'Edit DuckDB dashboard...',
-            'open_duckdb_dashboard_editor', icon='action.edit', group='availability', mutation='write',
-            enabled=can_manage, disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
-    if engine_id == 'sqlite':
-        actions.append(_action('endpoint.sqlite.recovery', 'Recover SQLite file...',
-            'open_workspace', icon='action.restore', group='database', arguments={'tab':'sqlite-recovery'},
-            mutation='admin', enabled=can_manage, disabled_reason='' if can_manage else 'Only the endpoint owner can recover its files.'))
-        actions.append(_action('endpoint.sqlite.monitoring', 'SQLite registered-file dashboard...',
-            'open_workspace', icon='tool.dashboard', group='availability', arguments={'tab': 'monitoring'},
-            enabled=ready and can_manage, disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can monitor it.'))
-        actions.append(_action('endpoint.sqlite.catalog_ddn', 'Registered SQLite files and DDN...',
-            'open_workspace', icon='action.export', group='database',
-            arguments={'tab': 'export', 'server_catalog': True},
-            enabled=ready and can_manage,
-            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can inspect it.'))
-        actions.append(_action('endpoint.sqlite.dashboard_editor', 'Edit SQLite dashboard...',
-            'open_sqlite_dashboard_editor', icon='action.edit', group='availability', mutation='write',
-            enabled=can_manage, disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
+    tool_state = {
+        'engine_id': engine_id, 'display': display,
+        'route_kind': profile.get('route_kind'),
+        'verified': ready, 'verified_reason': blocked, 'owner': can_manage,
+    }
+    actions.extend(declared_tool_actions(
+        engine_id, 'endpoint', 'after_verify', state=tool_state))
     if engine_id == 'mariadb':
         actions.append(_action('endpoint.mariadb.binlog_replay', 'MariaDB binary-log replay...', 'open_mariadb_binlog_replay',
             icon='action.restore', group='restore', mutation='admin', enabled=can_manage,
@@ -877,43 +917,6 @@ def endpoint_context_actions(
         actions.append(_action('endpoint.mysql.server_catalog', 'MySQL server metadata and DDN...', 'open_workspace',
             icon='action.export', group='database', arguments={'tab': 'export', 'server_catalog': True}, enabled=ready and can_manage,
             disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can inspect it.'))
-    if engine_id == 'firebird':
-        # Firebird implements guarded native release; do not advertise this
-        # lifecycle action for providers without that release contract.
-        actions.append(_action(
-            f'endpoint.{engine_id}.disconnect',
-            f'Disconnect {display} endpoint...', 'disconnect_endpoint',
-            icon='action.disconnect', group='connection', priority=11,
-            mutation='admin', enabled=ready and can_manage,
-            disabled_reason=('Endpoint is not verified.' if not ready else
-                             '' if can_manage else
-                             'Only the endpoint owner can disconnect it.'),
-        ))
-        actions.append(_action(
-            'endpoint.firebird.catalogs', 'Capture registered database catalogs...',
-            'open_workspace', icon='action.view', group='database',
-            arguments={'tab': 'firebird-server-catalog'}, enabled=ready,
-            disabled_reason='' if ready else blocked,
-        ))
-        actions.append(_action(
-            'endpoint.firebird.dashboard_editor', 'Edit dashboard...',
-            'open_firebird_dashboard_editor', icon='action.edit',
-            group='availability', mutation='write', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can edit its dashboard.',
-        ))
-        for tab, label in (
-                ('monitoring', 'Firebird server dashboard...'),
-                ('monitoring_policy', 'Configure monitoring collection...')):
-            if tab == 'monitoring_policy' and profile.get('route_kind') != 'network':
-                continue
-            actions.append(_action(
-                f'endpoint.firebird.{tab}', label, 'open_workspace',
-                icon='action.view', group='availability',
-                mutation='admin' if tab == 'monitoring_policy' else 'read',
-                arguments={'tab': tab}, enabled=ready and can_manage,
-                disabled_reason=blocked if not ready else
-                '' if can_manage else 'Only the endpoint owner can monitor it.',
-            ))
     actions.extend([
         _action(
             f'endpoint.{engine_id}.create_database',
@@ -944,6 +947,8 @@ def endpoint_context_actions(
             priority=70, arguments={'tab': 'connections'}, enabled=ready,
             disabled_reason=blocked,
         ))
+    actions.extend(declared_tool_actions(
+        engine_id, 'endpoint', 'after_lifecycle', state=tool_state))
     if engine_id == 'mariadb':
         actions.append(_action(
             'endpoint.mariadb.check_upgrade_required',
@@ -953,33 +958,6 @@ def endpoint_context_actions(
                 'tab': 'administration', 'resource_kind': 'server',
                 'operation_id': 'check_upgrade_required',
             }, enabled=ready, disabled_reason=blocked,
-        ))
-    if engine_id == 'firebird' and profile.get('route_kind') == 'network':
-        for priority, operation, label in (
-                (22, 'restore_logical', 'Restore database (gbak)...'),
-                (23, 'restore_physical', 'Restore physical backup (nbackup)...')):
-            actions.append(_action(
-                f'endpoint.firebird.{operation}', label, 'open_workspace',
-                icon='action.restore', group='database', priority=priority,
-                mutation='destructive', confirmation=True, macro=False,
-                arguments={'tab': 'administration', 'resource_kind': 'database',
-                           'operation_id': operation,
-                           'database_target_id': None},
-                enabled=ready and can_manage,
-                disabled_reason=(blocked if not ready else '' if can_manage else
-                                 'Endpoint management permission is required.'),
-            ))
-        actions.append(_action(
-            'endpoint.firebird.activate_shadow',
-            'Recover a Firebird shadow...', 'open_workspace',
-            icon='action.restore', group='availability', priority=72,
-            mutation='destructive', confirmation=True, macro=False,
-            arguments={'tab': 'administration', 'resource_kind': 'database',
-                       'operation_id': 'activate_shadow',
-                       'database_target_id': None},
-            enabled=ready and can_manage,
-            disabled_reason=(blocked if not ready else '' if can_manage else
-                             'Endpoint management permission is required.'),
         ))
     if can_manage:
         server_forms = profile['form_contract']['server']['forms']
@@ -1074,70 +1052,12 @@ def database_target_context_actions(
         icon=icon, group='database', priority=10 + index,
         arguments={**base, 'tab': tab},
     ) for index, (tab, label, icon) in enumerate(rows)]
-    if engine_id == 'sqlite':
-        actions.append(_action('database.sqlite.recovery', 'Recover SQLite file...',
-            'open_workspace', icon='action.restore', group='database', mutation='admin',
-            arguments={**base,'tab':'sqlite-recovery'}))
-        actions.append(_action(
-            'database.sqlite.catalog_ddn', 'SQLite metadata and DDN diagrams...',
-            'open_workspace', icon='action.export', group='database',
-            arguments={**base, 'tab': 'export'},
-        ))
-        actions.append(_action(
-            'database.sqlite.test_data', 'Generate SQLite test data...',
-            'open_workspace', icon='action.edit', group='database',
-            arguments={**base, 'tab': 'sqlite-test-data'},
-        ))
-    if engine_id == 'duckdb':
-        actions.append(_action(
-            'database.duckdb.catalog_ddn', 'DuckDB metadata and DDN diagrams...',
-            'open_workspace', icon='action.export', group='database',
-            arguments={**base, 'tab': 'export'},
-        ))
-    if engine_id == 'firebird':
-        for operation in ('clone', 'move'):
-            actions.append(_action(
-                f'database.firebird.registration_{operation}',
-                f'{operation.capitalize()} Firebird registration...',
-                'open_workspace', icon='action.edit', group='register',
-                mutation='admin', macro=False,
-                arguments={**base, 'tab': 'firebird-registration',
-                           'registration_operation': operation},
-            ))
-        actions.append(_action(
-            'database.firebird.test_data', 'Generate Firebird test data...',
-            'open_workspace', icon='action.edit', group='database',
-            arguments={**base, 'tab': 'firebird-test-data'},
-        ))
-    if engine_id == 'firebird':
-        actions.append(_action(
-            'database.firebird.dashboard_editor', 'Edit dashboard...',
-            'open_firebird_dashboard_editor', icon='action.edit',
-            group='availability', mutation='write', arguments=base,
-        ))
-        for tab, label in (
-                ('monitoring', 'Firebird database dashboard...'),
-                ('monitoring_policy', 'Configure monitoring collection...')):
-            actions.append(_action(
-                f'database.firebird.{tab}', label, 'open_workspace',
-                icon='action.view', group='availability',
-                mutation='admin' if tab == 'monitoring_policy' else 'read',
-                arguments={**base, 'tab': tab},
-            ))
-    if engine_id == 'firebird' and profile.get('route_kind') == 'network':
-        actions.append(_action(
-            'database.firebird.isql', 'Open external Firebird ISQL...',
-            'open_workspace', icon='action.script', group='database',
-            arguments={**base, 'tab': 'firebird-isql'},
-        ))
-        actions.append(_action(
-            'database.firebird.backup', 'Backup...', 'open_workspace',
-            icon='action.backup', group='database', priority=13,
-            mutation='admin', arguments={
-                **base, 'tab': 'administration', 'resource_kind': 'database',
-                'operation_id': 'backup_logical',
-            },
-        ))
+    tool_state = {
+        'engine_id': engine_id, 'route_kind': profile.get('route_kind'),
+        'database_target_id': target_id,
+    }
+    actions.extend(declared_tool_actions(
+        engine_id, 'database', 'pre_lifecycle', state=tool_state, base=base))
     action_specs = (
         ('connect', f'Connect to {noun}...', 'action.connect', 'admin'),
         ('edit', f'Edit {noun} connection...', 'action.properties', 'admin'),
@@ -1201,13 +1121,9 @@ def database_target_context_actions(
             icon='action.disconnect', group='connection', priority=11,
             mutation='admin', arguments=base,
         ))
+    actions.extend(declared_tool_actions(
+        engine_id, 'database', 'post_connect', state=tool_state, base=base))
     if engine_id == 'firebird':
-        actions.append(_action(
-            'database.firebird.disconnect',
-            'Disconnect server (all databases)...', 'disconnect_endpoint',
-            icon='action.disconnect', group='connection', priority=11,
-            mutation='admin', arguments=base,
-        ))
         if contract['forms'].get('drop', {}).get('supported') and contract['forms'].get(
                 'create', {}).get('supported'):
             actions.append(_action(
@@ -1218,25 +1134,6 @@ def database_target_context_actions(
                     **base, 'tab': 'connections',
                     'database_mode': 'recreate_empty',
                 }, confirmation=False,
-            ))
-        security_tasks = (
-            ('user', 'Manage Firebird users...', 'action.security'),
-            ('role', 'Manage Firebird roles...', 'action.security'),
-            ('privilege', 'Manage Firebird grants and privileges...',
-             'action.security'),
-        )
-        for offset, (resource_kind, label, icon) in enumerate(
-                security_tasks):
-            actions.append(_action(
-                f'database.firebird.security.{resource_kind}', label,
-                'open_workspace', icon=icon, group='security',
-                priority=45 + offset, mutation='admin', arguments={
-                    # A collection task retains its database route, but
-                    # does not identify a native user/role/privilege object.
-                    'database_target_id': target_id, 'tab': 'administration',
-                    'resource_kind': resource_kind,
-                    **({'operation_id': 'grant'} if resource_kind == 'privilege' else {}),
-                },
             ))
         tasks = (
             ('backup_logical', 'Logical backup (gbak)...',
@@ -1315,6 +1212,8 @@ def database_target_context_actions(
                 }, confirmation=mutation == 'destructive',
                 macro=mutation != 'destructive',
             ))
+    actions.extend(declared_tool_actions(
+        engine_id, 'database', 'post_lifecycle', state=tool_state, base=base))
     if engine_id == 'sqlite':
         tasks = (
             ('backup', 'Online backup...', 'action.backup', 'admin',
@@ -1380,41 +1279,8 @@ def database_target_context_actions(
                     'operation_id': operation_id,
                 }, confirmation=False, macro=True,
             ))
-    if engine_id == 'duckdb':
-        for tab, label in (('monitoring', 'DuckDB database dashboard...'),
-                           ('monitoring_policy', 'Configure DuckDB monitoring collection...')):
-            actions.append(_action(f'database.duckdb.{tab}', label, 'open_workspace',
-                icon='tool.dashboard', group='availability',
-                mutation='admin' if tab == 'monitoring_policy' else 'read',
-                arguments={**base, 'tab': tab}))
-        actions.append(_action('database.duckdb.dashboard_editor', 'Edit DuckDB dashboard...',
-            'open_duckdb_dashboard_editor', icon='action.edit', group='availability',
-            mutation='write', arguments=base))
-        actions.append(_action('database.duckdb.test_data', 'Generate DuckDB test data...',
-            'open_workspace', icon='action.insert', group='database', priority=45,
-            arguments={**base, 'tab': 'duckdb-test-data'}))
-        actions.append(_action('database.duckdb.copy', 'Native DuckDB COPY...',
-            'open_workspace', icon='action.export', group='database', priority=46,
-            arguments={**base, 'tab': 'duckdb-copy'}))
-        actions.append(_action('database.duckdb.attachment', 'Plan native DuckDB attachment...',
-            'open_workspace', icon='action.connect', group='database', priority=47,
-            arguments={**base, 'tab': 'duckdb-attachment'}))
-        actions.append(_action('database.duckdb.receipts','Saved DuckDB operation receipts...',
-            'open_workspace',icon='action.view',group='database',priority=48,
-            arguments={**base,'tab':'duckdb-session-receipts'}))
-        actions.append(_action('database.duckdb.extension_sources','Install or load DuckDB extensions...',
-            'open_workspace',icon='action.settings',group='database',priority=49,
-            arguments={**base,'tab':'duckdb-extensions'}))
-    if engine_id == 'sqlite':
-        for tab, label in (('monitoring', 'SQLite database dashboard...'),
-                           ('monitoring_policy', 'Configure SQLite monitoring collection...')):
-            actions.append(_action(f'database.sqlite.{tab}', label, 'open_workspace',
-                icon='tool.dashboard', group='availability',
-                mutation='admin' if tab == 'monitoring_policy' else 'read',
-                arguments={**base, 'tab': tab}))
-        actions.append(_action('database.sqlite.dashboard_editor', 'Edit SQLite dashboard...',
-            'open_sqlite_dashboard_editor', icon='action.edit', group='availability',
-            mutation='write', arguments=base))
+    actions.extend(declared_tool_actions(
+        engine_id, 'database', 'post_tasks', state=tool_state, base=base))
     if engine_id == 'mariadb':
         for tab, label in (('monitoring', 'MariaDB database dashboard...'),
                            ('monitoring_policy', 'Configure monitoring collection...')):
@@ -1713,17 +1579,13 @@ def resource_context_actions(
             group='object', priority=11,
             arguments={**base, 'tab': 'data'},
         ))
-    if (engine_id == 'duckdb' and resource_kind == 'table' and database_target_id and
-            resource_native(resource).get('system_object') is not True and
-            resource_native(resource).get('catalog_metadata', {}).get('temporary') is not True):
-        actions.append(_action('resource.duckdb.table.copy', 'Native DuckDB COPY...',
-            'open_workspace', icon='action.export', group='object', priority=12,
-            arguments={**base, 'tab': 'duckdb-copy'}))
-    if (engine_id == 'sqlite' and resource_kind == 'table' and database_target_id and
-            resource_native(resource).get('system_object') is not True):
-        actions.append(_action('resource.sqlite.table.export_sql', 'Export SQLite table as native SQL...',
-            'open_workspace', icon='action.export', group='object', priority=12,
-            arguments={**base, 'tab': 'export'}))
+    actions.extend(declared_tool_actions(engine_id, 'resource', 'after_data', state={
+        'engine_id': engine_id, 'resource_kind': resource_kind,
+        'database_target_id': database_target_id,
+        'system_object': resource_native(resource).get('system_object'),
+        'temporary': (resource_native(resource).get('catalog_metadata') or
+                      {}).get('temporary'),
+    }, base=base))
     for index, operation in enumerate(operations):
         operation_id = operation.get('operation_id')
         if (

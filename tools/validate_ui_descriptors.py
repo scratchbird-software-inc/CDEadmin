@@ -42,7 +42,7 @@ FAMILIES = ("table", "view", "index", "routine", "trigger", "sequence", "type",
             "role", "database", "server")
 FORBIDDEN_LABEL = re.compile(r"\bexact native\b|\bnative .* reference\b", re.I)
 ENGINE_FILES = {"capabilities.json", "operations.json", "navigator.json",
-                "omitted_families.json", "options.json", "README.md"}
+                "omitted_families.json", "options.json", "tools.json", "README.md"}
 IGNORED_FOLDERS = {"forms", "__pycache__"}
 
 
@@ -206,6 +206,15 @@ def validate_descriptors(strict_pending: bool) -> tuple[list[str], dict]:
                         errors.append(f"{engine}/forms/{form_path.name}: {fid} reads dialect.{path[1]} which options.json does not define")
                     if len(path) >= 2 and path[0] == "catalog" and path[1] not in catalog_keys:
                         errors.append(f"{engine}/forms/{form_path.name}: {fid} reads catalog.{path[1]} which options.json does not define")
+        if (engine_dir / "tools.json").exists():
+            tools_doc = load(engine_dir / "tools.json")
+            schemas.check(tools_doc, schemas.schemas["tools.schema.json"], schemas.schemas["tools.schema.json"],
+                          f"{engine}/tools.json", errors)
+            seen_commands = set()
+            for tool in tools_doc.get("tools", []):
+                if tool["command_id"] in seen_commands:
+                    errors.append(f"{engine}/tools.json: duplicate command_id {tool['command_id']!r}")
+                seen_commands.add(tool["command_id"])
         nav = load(engine_dir / "navigator.json")
         schemas.check(nav, schemas.schemas["navigator.schema.json"], schemas.schemas["navigator.schema.json"],
                       f"{engine}/navigator.json", errors)
@@ -290,6 +299,9 @@ def lint_counts() -> dict:
     mui_imports, mui_files = count_matches(ui_files, re.compile(r"from\s+['\"]@mui/"))
     engine_branches, branch_files = count_matches(
         ui_files, re.compile(r"(?:engine_id|profile_id|languageProfile|cde_engine_id|cde_profile_id)\s*===?\s*['\"]"))
+    context_menu = web / "cdeadmin" / "context_menu.py"
+    menu_branches, _menu_files = count_matches(
+        [context_menu], re.compile(r"\bengine_id\s*(?:==|in)\s*[\('\"]")) if context_menu.exists() else (0, Counter())
     dialogs = web / "static" / "js" / "Dialogs"
     panels = sorted(p.name for p in dialogs.glob("*.jsx")
                     if re.match(r"(Firebird|MySQL|MariaDB|DuckDB|SQLite|Postgresql)", p.name))
@@ -307,6 +319,7 @@ def lint_counts() -> dict:
         "engine_literal_branches_in_ui_code": engine_branches,
         "engine_branch_top_files": branch_files.most_common(8),
         "engine_panels_in_dialogs": len(panels),
+        "engine_branches_in_context_menu": menu_branches,
         "shared_monolith_lines": shared,
     }
 
@@ -338,7 +351,8 @@ def main() -> int:
         if counts:
             print("\nlint counts (recorded in docs/en_US/ui_unification_status.rst):")
             for key in ("json_controls_in_provider_forms", "mui_imports_in_ui_code",
-                        "engine_literal_branches_in_ui_code", "engine_panels_in_dialogs"):
+                        "engine_literal_branches_in_ui_code", "engine_panels_in_dialogs",
+                        "engine_branches_in_context_menu"):
                 print(f"  {key:40s} {counts[key]}")
             for key, lines in counts["shared_monolith_lines"].items():
                 print(f"  {key:40s} {lines} lines")

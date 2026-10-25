@@ -25,8 +25,34 @@ ui_descriptors/
     omitted_families.json families the engine has no concept for (with reasons)
     options.json         option sources: static dialect lists (types, privileges, auth plugins) and
                          catalog lists resolved from the endpoint's resources by kind
+    tools.json           tool, dashboard and registration openers for the Object Explorer menu
+                         (what context_menu.py used to add with engine_id branches)
     forms/<family>.form.json   the fields this engine shows on each canonical tab
 ```
+
+### tools.json (phase 4: menus from descriptors)
+
+`context_menu.py` builds the provider context menus and used to append
+engine-specific entries behind `if engine_id == '...'` branches. Those entries
+are now declared per engine in `tools.json` and appended by
+`declared_tool_actions(engine_id, scope, slot, state=..., base=...)` at the
+slot where the branch used to be, so category ordering is unchanged. An entry
+names its `scope` (connector / endpoint / database / resource_group /
+resource), optional `slot`, `handler`, `icon`, `group`, `priority`,
+`mutation`, `arguments` (merged over the scope's base ids; `inherit_base:
+false` + `base_keys` keeps only the listed ids), `when` filters (route kind,
+localhost placeholder, resource kinds, database target, system/temporary
+objects) and `enabled_when` conditions (`verified`, `owner`, `available`) with
+optional per-condition `disabled_reasons`. Labels and ids may use `{display}`
+and `{engine_id}`.
+
+Only openers belong here. Tier 1 lifecycle comes from the family forms and
+tier 2/3 operations from `operations.json` (the tree already retires a legacy
+entry whose operation id a descriptor operation covers). The validator counts
+the remaining `engine_id` branches in `context_menu.py`
+(`engine_branches_in_context_menu`, maximum in `tools/ui_lint_maximums.json`);
+lower the maximum as an engine's branches move into its `tools.json`. The
+MySQL and MariaDB branches are the MySQL stream's to migrate.
 
 ## Regenerating a first draft
 
