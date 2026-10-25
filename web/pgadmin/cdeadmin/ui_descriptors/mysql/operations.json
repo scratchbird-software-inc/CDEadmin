@@ -308,6 +308,45 @@
         }
       ],
       "notes": "Binds the existing native visibility operation. Native primary keys cannot be made invisible. Draft pending shared operation-dialog rendering and acceptance."
+    },
+    {
+      "operation_id": "rename",
+      "resource_kind": "event",
+      "tier": 2,
+      "menu": {
+        "category": "maintenance"
+      },
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "new_name",
+          "label": "Name",
+          "control": "text",
+          "required": true,
+          "group": "Event"
+        },
+        {
+          "field_id": "new_database",
+          "label": "Database",
+          "control": "reference",
+          "reference_kind": "database",
+          "help": "Leave absent to keep the existing database.",
+          "group": "Event"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirmation",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation"
+        }
+      ],
+      "title": "Rename event",
+      "status": "draft",
+      "groups": [
+        "Event",
+        "Confirmation"
+      ]
     }
   ]
 }

@@ -73,19 +73,3 @@ def compile_operation(operation,draft,target,definition):
         if not text(zone,'Event time zone',64):raise RelationalClientError('Event time zone must not be empty')
         statement['mysql_event_time_zone']=zone
     return statement
-
-
-def form(operation,field):
-    if operation=='drop':fields=[]
-    elif operation=='rename':fields=[field('new_name','New event name','text',True),field('new_database','New database (blank keeps current)','text')]
-    else:
-        fields=([field('database','Database','text',True),field('name','Event name','text',True),field('if_not_exists','IF NOT EXISTS','boolean',default=False)] if operation=='create' else [])
-        fields += [field('schedule','Native schedule expression','text',operation=='create'),
-            field('completion','After completion','select',True,default='NOT PRESERVE' if operation=='create' else 'UNCHANGED',options=COMPLETION[1:] if operation=='create' else COMPLETION),
-            field('status','Event status','select',True,default='ENABLE' if operation=='create' else 'UNCHANGED',options=STATES[1:] if operation=='create' else STATES),
-            field('time_zone','Event time zone (blank uses connection setting)','text'),
-            field('comment','Comment (optional)','text'),field('clear_comment','Clear comment','boolean',default=False),
-            field('definer_user','Definer user (optional exact account)','text'),field('definer_host','Definer host (required with user)','text'),
-            field('body','Native event body','code',operation=='create')]
-    if operation!='create':fields.append(field('confirmation','Confirmation','text',True))
-    return {'form_id':'mysql.event.'+operation,'title':operation.title()+' native MySQL event','fields':fields}

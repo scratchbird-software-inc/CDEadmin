@@ -11,6 +11,7 @@ from . import mysql_key_cache
 from . import mysql_instance
 from . import mysql_table_options
 from . import mysql_indexes
+from . import mysql_routines
 from . import mysql_user_keys
 from . import mysql_xa
 from . import mysql_page_tracking
@@ -109,6 +110,7 @@ class MySQLAdministration(RelationalAdministration):
         return super()._form(kind, operation)
 
     def _normalize_draft(self, kind, operation, draft):
+        if kind in mysql_routines.KINDS and operation == 'create':return deepcopy(draft)
         if kind == 'index' and operation == 'create':return deepcopy(draft)
         if kind=='server' and operation in mysql_user_keys.OPERATIONS:return deepcopy(draft)
         if kind=='table' and operation=='create':
@@ -133,6 +135,12 @@ class MySQLAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def validate(self, request):
+        if request.get('resource_kind') in mysql_routines.KINDS and request.get('operation_id') == 'create':
+            try:
+                mysql_routines.compile_create(request['resource_kind'], request.get('draft'))
+                return {'errors': []}
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_routine', 'message': str(error)}]}
         if request.get('resource_kind') == 'index' and request.get('operation_id') == 'create':
             try:
                 mysql_indexes.compile_create(request.get('draft'))
@@ -214,6 +222,8 @@ class MySQLAdministration(RelationalAdministration):
         return super().validate(request)
 
     def _compile(self, request):
+        if request.get('resource_kind') in mysql_routines.KINDS and request.get('operation_id') == 'create':
+            return mysql_routines.compile_create(request['resource_kind'], request['draft'])
         if request.get('resource_kind') == 'index' and request.get('operation_id') == 'create':
             return mysql_indexes.compile_create(request['draft'])
         if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_user_keys.OPERATIONS:
@@ -248,6 +258,8 @@ class MySQLAdministration(RelationalAdministration):
         return super()._compile(request)
 
     def apply(self, client, request, connection=None):
+        if 'mysql_routine_create' in (request.get('provider_payload') or {}).get('compiled', {}):
+            return mysql_routines.apply(client, request, connection)
         if 'mysql_index_create' in (request.get('provider_payload') or {}).get('compiled', {}):
             return mysql_indexes.apply(client, request, connection)
         if 'mysql_user_keys' in (request.get('provider_payload') or {}).get('compiled',{}):

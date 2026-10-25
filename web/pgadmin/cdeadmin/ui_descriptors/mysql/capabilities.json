@@ -604,7 +604,7 @@
       "resource_kind": "event",
       "family": "routine",
       "variant": "scheduled",
-      "form": "forms/routine.form.json",
+      "form": "forms/routine-scheduled.form.json",
       "operations": [
         {
           "operation_id": "inspect",
@@ -632,7 +632,7 @@
         },
         {
           "operation_id": "rename",
-          "tier": 1,
+          "tier": 2,
           "mutation_class": "admin",
           "support_state": "implemented"
         }
@@ -674,7 +674,7 @@
       "resource_kind": "function",
       "family": "routine",
       "variant": "function",
-      "form": "forms/routine.form.json",
+      "form": "forms/routine-function.form.json",
       "operations": [
         {
           "operation_id": "inspect",

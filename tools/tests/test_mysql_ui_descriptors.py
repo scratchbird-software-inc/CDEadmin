@@ -24,6 +24,32 @@ def test_capabilities_match_current_admin_catalog_including_read_only_and_post_b
     assert all(op['support_state']=='post_beta_closed_source' for op in column['operations'] if 'masking_policy' in op['operation_id'])
 
 
+def test_every_stored_routine_field_binding_reaches_its_native_create_or_alter_path():
+    for kind, filename in [('procedure','routine'),('function','routine-function')]:
+        form=load('forms/'+filename+'.form.json')
+        for mode in ('create','alter'):
+            base=({'name':'owned','database':'db','body':'BEGIN SELECT 1; END' if kind=='procedure' else 'RETURN 1',
+                   'definer_user':'owner','definer_host':'localhost',**({'returns':'INT'} if kind=='function' else {})}
+                  if mode=='create' else {})
+            target={'display_path':['db','owned'],'display_name':'owned'}
+            def compiled(draft):
+                request={'resource_kind':kind,'operation_id':mode,'draft':draft,'target_resource':target}
+                assert not MYSQL_ADMINISTRATION.validate(request)['errors']
+                return MYSQL_ADMINISTRATION._compile(request)['statements']
+            samples={'name':'changed','parent':'changed_db','body':'BEGIN SELECT 2; END' if kind=='procedure' else 'RETURN 2',
+                'comment':'changed','returns':'BIGINT','if_not_exists':True,'parameters':[{'name':'arg','type':'INT','mode':'IN'}],
+                'security_create':'INVOKER','security_alter':'INVOKER','data_access_create':'NO SQL','data_access_alter':'NO SQL',
+                'deterministic':True,'language':'SQL','definer_user':'changed_owner','definer_host':'changed_host'}
+            for field in form['fields']:
+                if mode not in field.get('modes',['create','alter']) or field['field_id']=='confirmation':continue
+                draft=json.loads(json.dumps(base))
+                if field['field_id']=='parent':draft.pop('database')
+                bind(draft,field,samples[field['field_id']])
+                actual=compiled(draft)
+                if mode=='create':assert actual!=compiled(base),field['field_id']
+                else:assert actual[0]['source'].startswith('ALTER '+kind.upper()),field['field_id']
+
+
 def bind(draft,field,value):
     path=field.get('backend_field_id',field['field_id'])
     match=re.fullmatch(r'constraints\[kind=(.+)\]',path)

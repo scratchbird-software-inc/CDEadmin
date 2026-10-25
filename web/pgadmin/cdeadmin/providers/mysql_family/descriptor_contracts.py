@@ -47,3 +47,18 @@ def index_contract(operation, legacy_fields):
         return {'fields': [field_contract(field) for field in descriptor['fields']],
             'authority': 'ui_descriptors/mysql/operations.json'}
     return None
+
+
+def routine_contract(kind, operation):
+    if operation in {'create', 'alter'}:
+        suffix = {'procedure': 'routine', 'function': 'routine-function',
+                  'event': 'routine-scheduled'}[kind]
+        descriptor = document('forms/'+suffix+'.form.json')
+        fields = [field_contract(field) for field in descriptor['fields']
+                  if operation in field.get('modes', ['create', 'alter'])]
+        return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/'+suffix+'.form.json'}
+    if kind == 'event' and operation == 'rename':
+        selected = next(value for value in document('operations.json')['operations']
+                        if value['resource_kind'] == kind and value['operation_id'] == operation)
+        return {'fields': [field_contract(field) for field in selected['fields']]}
+    return None

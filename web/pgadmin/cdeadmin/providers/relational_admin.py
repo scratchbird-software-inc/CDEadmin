@@ -292,7 +292,7 @@ class RelationalAdministration:
                 } for operation in sorted(mariadb_packages.OPERATIONS)]
             if self.dialect.engine_id=='mysql' and kind=='event':
                 resource['operations']=[{'operation_id':'inspect','title':'Inspect native event','mutation_class':'read','target_required':True,'confirmation_required':False}]+[{
-                    'operation_id':operation,'title':mysql_events.form(operation,self._field)['title'],
+                    'operation_id':operation,'title':operation.replace('_',' ').title()+' event',
                     'mutation_class':'admin','target_required':operation!='create','confirmation_required':operation!='create',
                 } for operation in sorted(mysql_events.OPERATIONS)]
             if self.dialect.engine_id=='mysql' and kind in mysql_program_objects.OPERATIONS:
@@ -5349,8 +5349,6 @@ class RelationalAdministration:
     def _form(self, kind, operation):
         if self.dialect.engine_id == 'mariadb' and operation in mariadb_server_objects.OPERATIONS.get(kind, ()):
             return mariadb_server_objects.form(kind, operation, self._field)
-        if self.dialect.engine_id=='mysql' and kind=='event' and operation in mysql_events.OPERATIONS:
-            return mysql_events.form(operation,self._field)
         if self.dialect.engine_id == 'mariadb' and kind == 'package' and operation in mariadb_packages.OPERATIONS:
             return mariadb_packages.form(operation, self._field)
         if self.dialect.engine_id=='mysql' and operation in mysql_program_objects.OPERATIONS.get(kind,()):
@@ -5361,8 +5359,6 @@ class RelationalAdministration:
             return mysql_components.form(operation,self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'constraint' and operation in mysql_constraints.OPERATIONS:
             return mysql_constraints.form(operation, self._field)
-        if self.dialect.engine_id == 'mysql' and kind in {'procedure', 'function'} and operation in mysql_object_changes.OPERATIONS.get(kind, ()):
-            return mysql_object_changes.form(kind, operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'replication-channel' and operation in mysql_replication.OPERATIONS:
             return mysql_replication.form(operation, self._field)
         if self.dialect.engine_id == 'mysql' and operation in mysql_partitions.OPERATIONS.get(kind, ()):

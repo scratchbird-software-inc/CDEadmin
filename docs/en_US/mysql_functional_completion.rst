@@ -2697,3 +2697,35 @@ Secondary-engine attribute metadata uses a distinct available core path and is
 qualified independently. Its metadata support does not establish execution of a
 closed secondary engine. Tablespace attribute APIs are a separate native command
 contract and are not reclassified by the table/index flag check.
+
+Typed stored routines and scheduled variants
+--------------------------------------------
+
+Procedure creation now preserves ordered IN, OUT and INOUT parameter modes.
+Stored functions use native input-only parameters and scalar return types.
+Types retain native precision, length, unsignedness, ENUM/SET literals and
+character-set/collation modifiers. Native MySQL9.7 has no stored-routine
+parameter defaults. Create-time determinism, data access, SQL security,
+LANGUAGE SQL, definer, comments and IF NOT EXISTS have typed inputs; available
+Community SQL execution is not replaced with a simulated non-SQL runtime.
+
+The independently owned review binds server/principal/roles, SQL mode, default
+database and the selected routine's observed definition. It uses the registered
+MySQL9.7 Shell grammar library in an isolated process to validate the whole
+CREATE command, including compound bodies, without executing submitted SQL.
+That native dependency must be available before review. Apply rechecks the
+review, parser identity and native state, and never retries a mutation after a
+missing reply. Native acknowledgement remains separate from later observation.
+External DDL is not fenced. Catalog parameter records preserve native order,
+mode, type and character settings; unavailable bodies/parameter catalogs remain
+explicitly unavailable.
+
+The Routine family has separate Procedure, Function and Scheduled Event
+variant descriptors, selected by capability references. Native characteristic
+ALTER never recreates a body or signature. Separate create/alter defaults keep
+comment-only edits from resetting security, data access, event completion or
+scheduler status. Event rename has a typed Maintenance entry. The migrated
+legacy field factories were deleted. All variants remain draft until the shared
+front-end renderer and round trips are accepted. Native qualification command:
+``tools/cdeadmin_mysql_routines_qualification.py``. Protected key results remain
+under Decision10; this routine work does not close that unrelated gap.

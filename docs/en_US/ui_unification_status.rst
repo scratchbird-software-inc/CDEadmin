@@ -84,7 +84,7 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - draft (5f, 1g)
    * - Routine
      - draft (57f, 4g)
-     - pending (0f, 0g)
+     - draft (48f, 8g)
      - draft (11f, 3g)
      - draft (9f, 0g)
      - draft (7f, 1g)
@@ -214,3 +214,25 @@ family is promoted to ``complete``. Lint counts: JSON controls **304 → 303**, 
 imports **244 → 244**, engine-literal UI branches **111 → 111**, panels
 **113 → 113**. Shared skeletons, schemas, shell and family render tests were not
 changed.
+
+MySQL Index and Routine migrations (2026-10-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Index is draft with14fields/4gaps. Native ordered expressions, prefixes,
+FULLTEXT/SPATIAL/HASH, visibility and online clauses are qualified through both
+connectors and authenticated plan/apply. Primary engine-attribute hooks are
+excluded from beta controls: the audited Community source has no implementing
+primary engine, and release InnoDB/MyISAM/MEMORY reject them.
+
+Routine is draft with48fields/8gaps across Procedure, Function and Scheduled
+variants. Each capability routes directly to its variant descriptor. Native
+procedure OUT/INOUT modes and create characteristics have typed backend inputs;
+functions retain their native input-only parameter contract. Create and alter
+characteristic defaults are separate, so comment-only edits preserve native
+security/data-access or event schedule/status/completion. Legacy routine-change
+and event field factories and dispatch branches were removed. A typed event
+rename operation accompanies the existing backend action. Decision9 gaps and
+post-beta non-SQL runtime dependencies remain explicit; no implicit body
+replacement is introduced. Lint counts before/after: JSON303/303, MUI244/244,
+engine branches111/111, panels113/113. Shared render and round-trip acceptance
+remain pending; no family is marked complete.

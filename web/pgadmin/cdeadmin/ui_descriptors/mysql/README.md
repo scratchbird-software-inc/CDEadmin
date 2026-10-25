@@ -83,3 +83,14 @@ both Table and Index and recorded outside beta. Secondary metadata uses a
 different core path. Syntax/hooks and a debug simulation never qualify an
 available primary engine implementation. The source/release limits are recorded
 in `mysql_functional_completion.rst`. No shared schema or renderer was changed.
+
+The Routine family is split into native capability-selected variants:
+`routine.form.json` (Procedure), `routine-function.form.json` (Function) and
+`routine-scheduled.form.json` (Event). No kind/operation picker is required.
+Every field binds the existing native property or an explicit
+`backend_field_id`; create/alter characteristic defaults remain separate.
+Procedure parameters include native IN/OUT/INOUT modes; functions accept input
+parameters. Native ALTER cannot replace the body/signature/determinism/definer.
+The parser, native owned-connection execution and catalog observations are
+backend contracts, not new UI branches. All three descriptors are draft;
+Decision9 value/privilege dispatch and front-end render acceptance remain open.

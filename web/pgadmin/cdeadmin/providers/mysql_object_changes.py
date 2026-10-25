@@ -57,17 +57,3 @@ def compile_operation(kind, operation, draft, target):
     source = 'ALTER ' + kind.upper() + ' ' + qualified + ' ' + ' '.join(clauses)
     return {'source': source, 'preview_source': source.replace('%s', '<bound-comment>'),
             'parameters': tuple(parameters)}
-
-
-def form(kind, operation, field):
-    if kind not in {'procedure', 'function'}:
-        raise RelationalClientError('Index fields are owned by the unified descriptor')
-    fields = [field('sql_security', 'SQL security', 'select', True,
-                    default='UNCHANGED', options=SECURITY),
-              field('data_access', 'SQL data access', 'select', True,
-                    default='UNCHANGED', options=DATA_ACCESS),
-              field('comment', 'Comment (nonempty; blank preserves it)', 'multiline', False)]
-    fields.append(field('confirmation', 'Confirmation', 'text', True))
-    return {'form_id': 'mysql.' + kind + '.' + operation,
-            'title': operation.title() + ' native MySQL ' + kind,
-            'fields': fields}

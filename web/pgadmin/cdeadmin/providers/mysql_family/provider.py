@@ -978,6 +978,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     """MySQL DB-API plus a constrained MySQL Shell administration port."""
 
     def admin_operation_field_contract(self, request):
+        if request['resource_kind'] in {'procedure', 'function', 'event'}:
+            from .descriptor_contracts import routine_contract
+            return routine_contract(request['resource_kind'], request['operation_id'])
         if request['resource_kind'] == 'index':
             from .descriptor_contracts import index_contract
             return index_contract(request['operation_id'], request['legacy_fields'])
@@ -989,6 +992,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
         compiled = planned.get('provider_payload', {}).get('compiled', {})
+        if 'mysql_routine_create' in compiled:
+            from .mysql_routines import bind_review
+            return bind_review(self, planned)
         if 'mysql_index_create' in compiled:
             from .mysql_indexes import bind_review
             return bind_review(self, planned)
@@ -2323,13 +2329,33 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 } for row in parts]
                 native['administration'] = {'allowed_operations': ['inspect', 'drop'] if name.upper() == 'PRIMARY' else ['inspect', 'drop', 'rename', 'visibility']}
                 add('index', [database, table], name, native)
+            parameter_failures = len(catalog_failures)
+            parameter_rows = optional_records(
+                'SELECT * FROM information_schema.PARAMETERS WHERE SPECIFIC_SCHEMA NOT IN '
+                "('information_schema','mysql','performance_schema','sys') ORDER BY SPECIFIC_SCHEMA,SPECIFIC_NAME,ORDINAL_POSITION")
+            parameters_observed = len(catalog_failures) == parameter_failures
+            routine_parameters = {}
+            for row in parameter_rows:
+                routine_parameters.setdefault((row['specific_schema'], row['specific_name'], row['routine_type']), []).append(row)
             for record in optional_records(
-                'SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, SECURITY_TYPE, SQL_DATA_ACCESS, ROUTINE_COMMENT, IS_DETERMINISTIC '
+                'SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, SECURITY_TYPE, SQL_DATA_ACCESS, ROUTINE_COMMENT, IS_DETERMINISTIC,ROUTINE_DEFINITION,DEFINER,DTD_IDENTIFIER,CAST(SQL_MODE AS CHAR) AS SQL_MODE,CHARACTER_SET_CLIENT,COLLATION_CONNECTION,DATABASE_COLLATION '
                 'FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA NOT IN '
                 "('information_schema','mysql','performance_schema','sys') ORDER BY 1,2"
             ):
-                add(record['routine_type'].lower(), [record['routine_schema']], record['routine_name'], {
-                    key: value for key, value in record.items() if key not in {'routine_schema', 'routine_name', 'routine_type'}})
+                native = {key: value for key, value in record.items() if key not in {'routine_schema', 'routine_name', 'routine_type'}}
+                native['routine_definition_state'] = 'visible' if record.get('routine_definition') is not None else 'unavailable'
+                native['parameter_catalog_state'] = 'observed' if parameters_observed else 'unavailable'
+                if parameters_observed:
+                    rows = routine_parameters.get((record['routine_schema'], record['routine_name'], record['routine_type']), [])
+                    native['parameters'] = rows
+                    native['parameter_records'] = [{'name': row['parameter_name'], 'mode': row['parameter_mode'] or 'IN',
+                        'type': row['dtd_identifier'],
+                        **({'character_set': row['character_set_name']} if row.get('character_set_name') else {}),
+                        **({'collation': row['collation_name']} if row.get('collation_name') else {})}
+                        for row in rows if row['ordinal_position'] != 0]
+                    if record['routine_type'] == 'FUNCTION':
+                        native['returns'] = next((row['dtd_identifier'] for row in rows if row['ordinal_position'] == 0), None)
+                add(record['routine_type'].lower(), [record['routine_schema']], record['routine_name'], native)
             for record in optional_records(
                 'SELECT TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME,CONSTRAINT_TYPE,ENFORCED '
                 'FROM information_schema.TABLE_CONSTRAINTS '
