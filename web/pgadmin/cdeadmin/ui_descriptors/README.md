@@ -57,6 +57,7 @@ optional and all handled identically by the shell and the Python twin:
 | `record_pluck` | grid column: take one key from each item of a list of objects (`backing_index.segments` → `field_name`) |
 | `record_pattern` | regular expression whose first group is the value (strip `DEFAULT `, `CHECK (...)`, outer parentheses) |
 | `ui_only` | never sent to the provider (variant switches) |
+| `record_children` (form level) | `{field_id: {resource_kind}}` — fill a grid from the object's child resources when the inventory lists columns/constraints separately (MySQL family); each child is `{name, ...native}` |
 
 When a native record lacks a usable shape (catalog type codes instead of a
 type expression, an undecoded event mask), add the decoded value to the
@@ -74,6 +75,7 @@ engines skip unless an environment variable points at a live server:
 | engine | environment |
 | --- | --- |
 | Firebird | `CDEADMIN_ROUNDTRIP_FIREBIRD='{"host","port","user","password","database_root"}'` plus `CDEADMIN_FIREBIRD_CLIENT_LIBRARY` (a Firebird 5 `libfbclient`) |
+| MariaDB | `CDEADMIN_ROUNDTRIP_MARIADB='{"host","port","user","password"}'` (an account that may create databases and accounts; needs the patched connector from `tools/cdeadmin_build_mariadb_driver.py`) |
 
 Each test creates and drops its own database/objects under a unique name.
 

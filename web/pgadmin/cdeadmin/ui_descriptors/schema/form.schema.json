@@ -123,6 +123,21 @@
     },
     "notes": {
       "type": "string"
+    },
+    "record_children": {
+      "type": "object",
+      "description": "Pre-fill a grid field from child resources of the inspected object (engines whose catalog lists columns/indexes as separate resources): {field_id: {resource_kind}}. Each child becomes a row {name: display_name, ...native}.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "resource_kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "resource_kind"
+        ]
+      }
     }
   },
   "$defs": {
@@ -356,7 +371,11 @@
                     "type": "boolean"
                   },
                   "equals": {},
-                  "value": {}
+                  "value": {},
+                  "matches": {
+                    "type": "string",
+                    "description": "regular expression (case-insensitive) the record text must match"
+                  }
                 },
                 "required": [
                   "key",

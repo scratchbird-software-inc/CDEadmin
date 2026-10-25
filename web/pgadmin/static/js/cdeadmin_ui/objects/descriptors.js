@@ -215,6 +215,8 @@ export function recordValue(field, record) {
       const found = readPath(record, rule.key.split('.'));
       if('equals' in rule) {
         if(found !== undefined && found === rule.equals) return rule.value;
+      } else if('matches' in rule) {
+        if(typeof found === 'string' && new RegExp(rule.matches, 'si').test(found)) return rule.value;
       } else if(!EMPTYISH.has(found) === (rule.truthy ?? true)) {
         return rule.value;
       }
@@ -232,9 +234,10 @@ export function recordValue(field, record) {
     value = value.map((row) => (row && typeof row === 'object') ? row[field.record_pluck] : row);
   }
   if(field.record_pattern && typeof value === 'string') {
-    const match = new RegExp(field.record_pattern, 's').exec(value);
+    const match = new RegExp(field.record_pattern, 'si').exec(value);
     if(match) value = match[1];
   }
+  if(field.control === 'multiselect' && typeof value === 'string') value = value ? [value] : [];
   return field.record_truthy ? !EMPTYISH.has(value) : value;
 }
 

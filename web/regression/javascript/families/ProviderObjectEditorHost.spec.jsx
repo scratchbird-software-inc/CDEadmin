@@ -137,3 +137,25 @@ describe('OperationDialog', () => {
     expect(screen.getByRole('button', {name: 'Preview and run'})).toBeEnabled();
   });
 });
+
+describe('recordFromResource with record_children', () => {
+  const {recordFromResource, isChildOf} = require('../../../pgadmin/static/js/cdeadmin_ui/objects/ProviderObjectEditorHost');
+  it('folds child resources into the declared grid fields', () => {
+    const table = {resource_id: 'table:db:t', resource_kind: 'table', display_name: 't', display_path: ['db', 't'], native: {table_type: 'BASE TABLE'}};
+    const resources = [
+      table,
+      {resource_id: 'column:db:t:id', resource_kind: 'column', display_name: 'id', display_path: ['db', 't', 'id'],
+        native: {details: ['int', 'NO', null], navigator_parent_resource_id: 'table:db:t'}},
+      {resource_id: 'column:db:u:id', resource_kind: 'column', display_name: 'id', display_path: ['db', 'u', 'id'],
+        native: {details: ['int', 'NO', null], navigator_parent_resource_id: 'table:db:u'}},
+      {resource_id: 'constraint:db:t:pk', resource_kind: 'constraint', display_name: 'PRIMARY', display_path: ['db', 't', 'PRIMARY'],
+        native: {details: ['PRIMARY KEY'], navigator_parent_resource_id: 'table:db:t'}},
+    ];
+    const form = {record_children: {columns: {resource_kind: 'column'}, primary_key: {resource_kind: 'constraint'}}};
+    const record = recordFromResource(table, {form, resources});
+    expect(record.columns).toEqual([{name: 'id', details: ['int', 'NO', null], navigator_parent_resource_id: 'table:db:t'}]);
+    expect(record.primary_key.map((row) => row.name)).toEqual(['PRIMARY']);
+    expect(record.parent).toBe('db');
+    expect(isChildOf(resources[2], table)).toBe(false);
+  });
+});

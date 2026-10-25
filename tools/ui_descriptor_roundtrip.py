@@ -125,10 +125,31 @@ _MISSING = object()
 def _read_path(record, path):
     node = record
     for part in path.split("."):
-        if not isinstance(node, dict) or part not in node:
+        if isinstance(node, list) and part.isdigit() and int(part) < len(node):
+            node = node[int(part)]
+        elif isinstance(node, dict) and part in node:
+            node = node[part]
+        else:
             return _MISSING
-        node = node[part]
     return node
+
+
+def is_child_of(row, resource):
+    return (row.get("parent_resource_id") == resource.get("resource_id") or
+            (row.get("native") or {}).get("navigator_parent_resource_id") == resource.get("resource_id") or
+            list(row.get("display_path") or [])[:-1] == list(resource.get("display_path") or []))
+
+
+def record_from_resource(form: dict, resource: dict, resources=()) -> dict:
+    """The editor record: native facts plus record_children rows (twin of the host)."""
+    native = resource.get("native") or {}
+    record = {**native, "name": native.get("name", resource.get("display_name")),
+              "display_name": resource.get("display_name"), "resource_id": resource.get("resource_id"),
+              "resource_kind": resource.get("resource_kind")}
+    for field_id, rule in (form.get("record_children") or {}).items():
+        record[field_id] = [{"name": row.get("display_name"), **(row.get("native") or {})} for row in resources
+                            if row.get("resource_kind") == rule["resource_kind"] and is_child_of(row, resource)]
+    return record
 
 
 def record_value(field: dict, record: dict):
@@ -142,6 +163,9 @@ def record_value(field: dict, record: dict):
             found = _read_path(record, case["key"])
             if "equals" in case:
                 if found is not _MISSING and found == case["equals"]:
+                    return case["value"]
+            elif "matches" in case:
+                if isinstance(found, str) and re.search(case["matches"], found, re.S | re.I):
                     return case["value"]
             elif bool(found is not _MISSING and _truthy(found)) == bool(case.get("truthy", True)):
                 return case["value"]
@@ -159,8 +183,10 @@ def record_value(field: dict, record: dict):
     if field.get("record_pluck") and isinstance(value, list):
         value = [row.get(field["record_pluck"]) if isinstance(row, dict) else row for row in value]
     if field.get("record_pattern") and isinstance(value, str):
-        match = re.search(field["record_pattern"], value, re.S)
+        match = re.search(field["record_pattern"], value, re.S | re.I)
         value = match.group(1) if match else value
+    if field.get("control") == "multiselect" and isinstance(value, str):
+        value = [value] if value else []
     return _truthy(value) if field.get("record_truthy") else value
 
 
@@ -206,4 +232,4 @@ def form_field_ids(form: dict) -> set:
     return {f["field_id"] for tab in form.get("tabs", []) for f in tab.get("fields", [])}
 
 
-__all__ = ("backend_draft", "diff_columns", "resolved_form", "active_fields", "field_visible", "form_field_ids", "record_draft", "record_value")
+__all__ = ("backend_draft", "diff_columns", "resolved_form", "active_fields", "field_visible", "form_field_ids", "record_draft", "record_value", "record_from_resource", "is_child_of")

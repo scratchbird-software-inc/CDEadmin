@@ -40,10 +40,22 @@ export function resourceNative(resource) {
 }
 
 /** Flatten a resource into the record the editor pre-fills from. */
-export function recordFromResource(resource) {
+export function isChildOf(row, resource) {
+  if(!row || !resource) return false;
+  return row.parent_resource_id === resource.resource_id ||
+    row.native?.navigator_parent_resource_id === resource.resource_id ||
+    (row.display_path || []).slice(0, -1).join('.') === (resource.display_path || []).join('.');
+}
+
+/**
+ * The editor record for an inspected resource: its native facts plus, for a
+ * form that declares record_children, one row per child resource of the
+ * declared kind (engines that list columns/indexes as separate resources).
+ */
+export function recordFromResource(resource, {form=null, resources=[]}={}) {
   if(!resource) return {};
   const native = resourceNative(resource);
-  return {
+  const record = {
     ...native,
     name: native.name ?? resource.display_name,
     display_name: resource.display_name,
@@ -51,6 +63,11 @@ export function recordFromResource(resource) {
     resource_kind: resource.resource_kind,
     parent: native.parent ?? ((resource.display_path || []).slice(0, -1).join('.') || undefined),
   };
+  for(const [fieldId, rule] of Object.entries(form?.record_children || {})) {
+    record[fieldId] = (resources || []).filter((row) => row.resource_kind === rule.resource_kind && isChildOf(row, resource))
+      .map((row) => ({name: row.display_name, ...resourceNative(row)}));
+  }
+  return record;
 }
 
 export function makePost(api, endpointUrl, databaseTargetId) {
@@ -110,9 +127,7 @@ function NativeDependencies({resource}) {
 NativeDependencies.propTypes = {resource: PropTypes.object};
 
 function NativeChildList({resource, resources, kind}) {
-  const children = (resources || []).filter((row) => row.resource_kind === kind &&
-    (row.parent_resource_id === resource?.resource_id ||
-      (row.display_path || []).slice(0, -1).join('.') === (resource?.display_path || []).join('.')));
+  const children = (resources || []).filter((row) => row.resource_kind === kind && isChildOf(row, resource));
   if(!children.length) return <EmptyState message={`No ${kind}s on this object.`} />;
   return <Box component="ul" sx={{m: 0, pl: 2, fontSize: '0.8125rem'}} data-cdeadmin-qa-key={`object-editor.children.${kind}`}>
     {children.map((row) => <li key={row.resource_id}>{row.display_name}</li>)}
@@ -176,7 +191,7 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
     ...tabRenderersProp,
   };
   const variant = bundle.kinds[resourceKind]?.variant;
-  const record = {...recordFromResource(resource), ...(variant ? {variant} : {})};
+  const record = {...recordFromResource(resource, {form, resources}), ...(variant ? {variant} : {})};
   return <ObjectEditor form={form} mode={mode} resourceKind={resourceKind}
     record={record} context={{...context, ...optionContext, target}}
     tabRenderers={tabRenderers}

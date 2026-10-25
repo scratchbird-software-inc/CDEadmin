@@ -5,7 +5,7 @@
   "resource_kinds": [
     "table"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "MariaDB",
   "omitted_tabs": [],
   "gaps": [
@@ -27,6 +27,10 @@
     {
       "concept": "Column grid depth",
       "reason": "column records carry only name/type/nullable/default/unique/primary_key; add length/precision/scale, unsigned, charset/collation, auto_increment, generated expression, comment"
+    },
+    {
+      "concept": "Constraint columns / column keys on re-open",
+      "reason": "MariaDB inventory (mysql_family provider) lists this as a separate resource with positional details only; constraint columns, column uniqueness and primary-key membership are not reported, so re-opened grids show names and types only. Backend ask for the mysql_family inventory owner."
     }
   ],
   "fields": [
@@ -63,20 +67,32 @@
           "label": "Native data type",
           "control": "text",
           "required": true,
-          "record_key": "data_type"
+          "record_key": "details.0"
         },
         {
           "field_id": "nullable",
           "label": "Nullable",
           "control": "boolean",
           "required": false,
-          "default": true
+          "default": true,
+          "record_derive": {
+            "cases": [
+              {
+                "key": "details.1",
+                "equals": "YES",
+                "value": true
+              }
+            ],
+            "default": false
+          }
         },
         {
           "field_id": "default",
           "label": "Default expression",
           "control": "text",
-          "required": false
+          "required": false,
+          "record_key": "details.2",
+          "record_pattern": "^(?!NULL$)(.*)$"
         },
         {
           "field_id": "unique",
@@ -121,7 +137,11 @@
             "columns"
           ]
         }
-      ]
+      ],
+      "record_filter": {
+        "key": "details.0",
+        "equals": "PRIMARY KEY"
+      }
     },
     {
       "field_id": "unique_constraints",
@@ -146,7 +166,11 @@
             "columns"
           ]
         }
-      ]
+      ],
+      "record_filter": {
+        "key": "details.0",
+        "equals": "UNIQUE"
+      }
     },
     {
       "field_id": "foreign_keys",
@@ -185,7 +209,11 @@
           "required": true,
           "help": "Columns of the referenced table, in key order."
         }
-      ]
+      ],
+      "record_filter": {
+        "key": "details.0",
+        "equals": "FOREIGN KEY"
+      }
     },
     {
       "field_id": "check_constraints",
@@ -207,8 +235,29 @@
           "required": true,
           "language": "sql"
         }
-      ]
+      ],
+      "record_filter": {
+        "key": "details.0",
+        "equals": "CHECK"
+      }
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: constraints grid split into Primary key / Unique / Foreign keys / Check; parent picker (database). Reviewed by tools/review_ui_descriptors.py: column grid record keys."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: constraints grid split into Primary key / Unique / Foreign keys / Check; parent picker (database). Reviewed by tools/review_ui_descriptors.py: column grid record keys. Round-tripped against MariaDB 10.11 by tools/tests/test_ui_descriptor_roundtrip_mariadb.py (create, re-inspect pre-fill, alter where the engine supports it).",
+  "record_children": {
+    "columns": {
+      "resource_kind": "column"
+    },
+    "primary_key": {
+      "resource_kind": "constraint"
+    },
+    "unique_constraints": {
+      "resource_kind": "constraint"
+    },
+    "foreign_keys": {
+      "resource_kind": "constraint"
+    },
+    "check_constraints": {
+      "resource_kind": "constraint"
+    }
+  }
 }

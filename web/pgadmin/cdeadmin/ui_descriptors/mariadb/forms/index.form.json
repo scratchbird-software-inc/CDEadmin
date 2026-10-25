@@ -5,13 +5,17 @@
   "resource_kinds": [
     "index"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "MariaDB",
   "omitted_tabs": [],
   "gaps": [
     {
       "concept": "Index kind (BTREE/HASH/FULLTEXT/SPATIAL), comment, visibility",
       "reason": "index.create is name/parent/table/columns/unique only"
+    },
+    {
+      "concept": "Index columns on re-open",
+      "reason": "MariaDB inventory (mysql_family provider) lists this as a separate resource with positional details only (non_unique, index type); key columns are not reported. Backend ask for the mysql_family inventory owner."
     }
   ],
   "fields": [
@@ -37,7 +41,9 @@
       "tab": "General",
       "control": "reference",
       "required": true,
-      "reference_kind": "table"
+      "reference_kind": "table",
+      "record_key": "navigator_parent_resource_id",
+      "record_pattern": "^[a-z-]+:(?:[^:]+:)?(.*)$"
     },
     {
       "field_id": "columns",
@@ -62,8 +68,18 @@
       "tab": "General",
       "control": "boolean",
       "required": false,
-      "default": false
+      "default": false,
+      "record_derive": {
+        "cases": [
+          {
+            "key": "details.0",
+            "equals": "0",
+            "value": true
+          }
+        ],
+        "default": false
+      }
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: index columns select from target columns; parent picker (database); table picker. Reviewed by tools/review_ui_descriptors.py: index columns as an ordered column list."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: index columns select from target columns; parent picker (database); table picker. Reviewed by tools/review_ui_descriptors.py: index columns as an ordered column list. Round-tripped against MariaDB 10.11 by tools/tests/test_ui_descriptor_roundtrip_mariadb.py (create, re-inspect pre-fill, alter where the engine supports it)."
 }

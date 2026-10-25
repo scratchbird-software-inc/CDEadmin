@@ -25,6 +25,10 @@
     {
       "concept": "Routine options (SQL SECURITY, DETERMINISTIC, data access, COMMENT, DEFINER)",
       "reason": "procedure/function expose create/drop only; MySQL has an alter form with these"
+    },
+    {
+      "concept": "Routine parameters and body on re-open",
+      "reason": "MariaDB inventory (mysql_family provider) reports only the return data type; parameters and the body are not reported. Backend ask for the mysql_family inventory owner."
     }
   ],
   "fields": [
@@ -74,7 +78,8 @@
       "label": "Return type",
       "tab": "General",
       "control": "text",
-      "required": false
+      "required": false,
+      "record_key": "data_type"
     },
     {
       "field_id": "schedule",
@@ -167,5 +172,5 @@
       }
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database)."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database). Create path round-tripped against MariaDB 10.11 (tools/tests/test_ui_descriptor_roundtrip_mariadb.py); stays draft until the inventory reports the body/parameters so a re-opened object shows its definition."
 }
