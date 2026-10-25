@@ -34,6 +34,15 @@ from pgadmin.cdeadmin.context_menu import (  # noqa: E402
 )
 
 
+def declared_database_operations(engine_id):
+    """operation_id -> menu category from ui_descriptors/<engine>/operations.json."""
+    import json
+    path = WEB / 'pgadmin' / 'cdeadmin' / 'ui_descriptors' / engine_id / 'operations.json'
+    document = json.loads(path.read_text(encoding='utf-8'))
+    return {item['operation_id']: item['menu']['category'] for item in document['operations']
+            if item['resource_kind'] == 'database'}
+
+
 def profile(engine_id, *, route_kind='network', multiple=False):
     database_forms = {
         operation_id: {
@@ -562,44 +571,13 @@ class ContextMenuTests(unittest.TestCase):
             'destructive',
             by_id['database.sqlite.drop']['mutation_class'],
         )
-        expected_tasks = {
-            'backup': ('Online backup...', 'backup', 'admin'),
-            'restore': ('Restore from backup...', 'restore', 'destructive'),
-            'integrity_check': (
-                'Integrity check...', 'diagnostics', 'read'
-            ),
-            'quick_check': (
-                'Quick integrity check...', 'diagnostics', 'read'
-            ),
-            'foreign_key_check': (
-                'Foreign-key check...', 'diagnostics', 'read'
-            ),
-            'vacuum': ('Vacuum database...', 'maintenance', 'admin'),
-            'incremental_vacuum': (
-                'Incremental vacuum...', 'maintenance', 'admin'
-            ),
-            'optimize': (
-                'Optimize query planner...', 'maintenance', 'admin'
-            ),
-            'analyze': (
-                'Analyze statistics...', 'maintenance', 'admin'
-            ),
-            'reindex': ('Rebuild indexes...', 'maintenance', 'admin'),
-            'wal_checkpoint': (
-                'WAL checkpoint...', 'maintenance', 'admin'
-            ),
-        }
-        for operation, (label, group, mutation) in expected_tasks.items():
-            action = by_id[f'database.sqlite.{operation}']
-            self.assertEqual(label, action['label'])
-            self.assertEqual(group, action['menu_group'])
-            self.assertEqual(mutation, action['mutation_class'])
-            self.assertEqual('administration', action['arguments']['tab'])
-            self.assertEqual('database', action['arguments']['resource_kind'])
-            self.assertEqual(operation, action['arguments']['operation_id'])
-            self.assertEqual(
-                operation == 'restore', action['requires_confirmation']
-            )
+        # Database tasks are served from ui_descriptors/sqlite/operations.json
+        # through the OperationDialog; the legacy menu list is gone.
+        declared = declared_database_operations('sqlite')
+        self.assertTrue({'backup', 'restore', 'integrity_check', 'vacuum', 'wal_checkpoint'} <= set(declared))
+        for operation, category in declared.items():
+            self.assertNotIn(f'database.sqlite.{operation}', by_id)
+            self.assertIn(category, {'backup_restore', 'diagnostics', 'maintenance'})
 
     def test_duckdb_database_actions_expose_native_file_operations(self):
         duckdb = profile('duckdb', route_kind='embedded_file', multiple=True)
@@ -616,20 +594,10 @@ class ContextMenuTests(unittest.TestCase):
         catalog = by_id['database.duckdb.catalog_ddn']
         self.assertEqual('export', catalog['arguments']['tab'])
         self.assertEqual('duckdb-one', catalog['arguments']['database_target_id'])
-        expected = {
-            'checkpoint': ('Checkpoint database...', 'maintenance'),
-            'force_checkpoint': ('Force checkpoint...', 'maintenance'),
-            'vacuum': ('Vacuum database...', 'maintenance'),
-            'analyze': ('Analyze statistics...', 'maintenance'),
-            'export_database': ('Export database...', 'backup'),
-            'import_database': ('Import database...', 'restore'),
-        }
-        for operation, (label, group) in expected.items():
-            action = by_id[f'database.duckdb.{operation}']
-            self.assertEqual(label, action['label'])
-            self.assertEqual(group, action['menu_group'])
-            self.assertEqual(operation, action['arguments']['operation_id'])
-            self.assertEqual('database', action['arguments']['resource_kind'])
+        declared = declared_database_operations('duckdb')
+        self.assertTrue({'checkpoint', 'force_checkpoint', 'vacuum', 'analyze', 'export_database', 'import_database'} <= set(declared))
+        for operation in declared:
+            self.assertNotIn(f'database.duckdb.{operation}', by_id)
 
 
 def test_postgresql_engine_dashboard_is_native_and_read_only():

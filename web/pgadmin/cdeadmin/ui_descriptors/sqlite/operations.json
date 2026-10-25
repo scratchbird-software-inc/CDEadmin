@@ -181,7 +181,7 @@
       "resource_kind": "database",
       "title": "Analyze",
       "menu": {
-        "category": "diagnostics"
+        "category": "maintenance"
       },
       "tier": 2,
       "status": "complete",
@@ -221,7 +221,7 @@
       "resource_kind": "database",
       "title": "Checkpoint write-ahead log",
       "menu": {
-        "category": "diagnostics"
+        "category": "maintenance"
       },
       "tier": 2,
       "status": "complete",

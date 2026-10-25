@@ -7,7 +7,7 @@
       "resource_kind": "database",
       "title": "Checkpoint",
       "menu": {
-        "category": "diagnostics"
+        "category": "maintenance"
       },
       "tier": 2,
       "status": "complete",
@@ -20,7 +20,7 @@
       "resource_kind": "database",
       "title": "Force checkpoint",
       "menu": {
-        "category": "diagnostics"
+        "category": "maintenance"
       },
       "tier": 2,
       "status": "complete",
@@ -46,7 +46,7 @@
       "resource_kind": "database",
       "title": "Analyze",
       "menu": {
-        "category": "diagnostics"
+        "category": "maintenance"
       },
       "tier": 2,
       "status": "complete",
