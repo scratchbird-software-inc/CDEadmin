@@ -15,7 +15,8 @@ TARGET={'resource_kind':'server','resource_id':'server:MySQL','display_path':['M
 
 def test_all_key_operations_have_descriptor_fields_matching_the_real_backend_contract():
     root=Path(__file__).resolve().parents[2]/'web/pgadmin/cdeadmin/ui_descriptors/mysql'
-    operations=json.loads((root/'operations.json').read_text())['operations']
+    operations=[op for op in json.loads((root/'operations.json').read_text())['operations']
+        if op['resource_kind']=='server' and op['operation_id'] in keys.OPERATIONS]
     actual=next(row for row in MYSQL_ADMINISTRATION.catalog(catalog_for_engine('mysql'))['objects'] if row['resource_kind']=='server')
     declared={row['operation_id']:row for row in actual['operations'] if row['operation_id'] in keys.OPERATIONS}
     assert set(declared)==keys.OPERATIONS

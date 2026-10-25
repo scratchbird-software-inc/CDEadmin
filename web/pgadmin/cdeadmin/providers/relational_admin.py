@@ -323,7 +323,7 @@ class RelationalAdministration:
             if self.dialect.engine_id == 'mysql' and kind in mysql_object_changes.OPERATIONS:
                 additions = mysql_object_changes.OPERATIONS[kind]
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
-                    'operation_id': operation, 'title': mysql_object_changes.form(kind, operation, self._field)['title'],
+                    'operation_id': operation, 'title': mysql_object_changes.TITLES[operation],
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(additions)]
             if self.dialect.engine_id == 'mysql' and kind == 'replication-channel':
@@ -5361,7 +5361,7 @@ class RelationalAdministration:
             return mysql_components.form(operation,self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'constraint' and operation in mysql_constraints.OPERATIONS:
             return mysql_constraints.form(operation, self._field)
-        if self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(kind, ()):
+        if self.dialect.engine_id == 'mysql' and kind in {'procedure', 'function'} and operation in mysql_object_changes.OPERATIONS.get(kind, ()):
             return mysql_object_changes.form(kind, operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'replication-channel' and operation in mysql_replication.OPERATIONS:
             return mysql_replication.form(operation, self._field)

@@ -63,7 +63,7 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - SQLite
    * - Table
      - draft (54f, 6g)
-     - draft (34f, 8g)
+     - draft (33f, 9g)
      - draft (4f, 4g)
      - draft (8f, 2g)
      - draft (4f, 2g)
@@ -77,7 +77,7 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - draft (3f, 1g)
    * - Index
      - draft (24f, 2g)
-     - pending (0f, 0g)
+     - draft (14f, 4g)
      - draft (5f, 1g)
      - draft (10f, 0g)
      - draft (5f, 0g)

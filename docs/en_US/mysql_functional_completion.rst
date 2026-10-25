@@ -2644,3 +2644,56 @@ factory and dispatch branch were removed. It remains draft until the front-end
 stream verifies rendering and round trips. Ordered scalar aliases and
 cross-operation privilege edits remain Decision 9 gaps; raw user-key retrieval
 remains Decision 10. Native/API evidence does not establish unified UI acceptance.
+
+Typed native index definitions
+------------------------------
+
+Index creation now accepts ordered typed column/expression records while
+retaining the existing column-name list contract. Native prefix lengths, ASC/DESC
+order, unique, FULLTEXT/SPATIAL kinds, BTREE/HASH methods, FULLTEXT parser choice,
+comments, visibility, key block size, secondary-engine attribute metadata and
+ALGORITHM/LOCK clauses have dedicated backend fields. Native MySQL/storage-engine
+restrictions, warnings and errors remain authoritative; no PostgreSQL-style
+CONCURRENTLY or partial-index predicate is introduced.
+
+Review binds the native server/principal/roles, SQL mode, database and owning
+table structure. Ordinary AUTO_INCREMENT advancement is excluded from structural
+comparison; quoted literals and engine attributes are preserved. Changed schema
+refuses the original review. Execution owns a separate connection, preserves
+query-session transactions and never retries a missing reply or observation.
+Native acknowledgement remains separate from later catalog reads. Public index
+receipts carry scoped key facts and a structure hash, rather than unrelated
+column defaults or table connection strings. External DDL is not fenced.
+
+Navigation retains every ordered STATISTICS row, including expressions, prefixes
+and sort direction. MySQL9.7 reports ``SPATIAL`` as INDEX_TYPE; the kind projection
+uses that native value. The Index descriptor is draft and its legacy index-change
+field branches are removed; visibility also has a typed Maintenance operation
+descriptor. Shared rendering/round-trip acceptance and recorded value projections
+remain pending. The native qualification command is
+``tools/cdeadmin_mysql_indexes_qualification.py``.
+
+The authenticated validation path admits these typed inputs from the descriptor,
+without changing the frozen legacy UI catalog. It retains scalar column-name
+lists for existing clients; the native compiler checks record identities and
+incompatible clauses. Unknown options and malformed structured inputs are
+refused before planning. Both connector classes qualify authenticated typed
+plan/apply, independent native catalog effects and refusal of a consumed plan.
+
+Primary engine attributes outside the beta profile
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Primary table/column/index ENGINE_ATTRIBUTE hooks require the handlerton flag
+``HTON_SUPPORTS_ENGINE_ATTRIBUTE``. The audited Community9.7 implementation
+contains its declaration and admission checks but no primary-engine source
+advertises it; the engine-attribute test explicitly simulates support in a debug
+build. Release InnoDB, MyISAM and MEMORY refusals are checked separately. Core SQL
+syntax and dictionary hooks are not evidence of a working engine implementation.
+The primary-attribute controls were therefore removed from the Table/Index beta
+descriptors. A separately available implementation and native qualification are
+required before exposing them; closed-engine integration is post beta.
+
+Secondary-engine attribute metadata uses a distinct available core path and is
+qualified independently. Its metadata support does not establish execution of a
+closed secondary engine. Tablespace attribute APIs are a separate native command
+contract and are not reclassified by the table/index flag check.

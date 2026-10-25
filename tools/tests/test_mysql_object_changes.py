@@ -47,7 +47,10 @@ def test_catalog_forms_route_to_native_compiler_only_for_mysql():
             assert MYSQL_ADMINISTRATION.supports(kind, operation)
             assert not MARIADB_ADMINISTRATION.supports(kind, operation)
             assert nodes[operation]['target_required'] and nodes[operation]['confirmation_required']
-            assert nodes[operation]['form']['form_id'] == 'mysql.' + kind + '.' + operation
+            if kind != 'index':
+                assert nodes[operation]['form']['form_id'] == 'mysql.' + kind + '.' + operation
+            else:
+                with pytest.raises(RelationalClientError):changes.form(kind,operation,MYSQL_ADMINISTRATION._field)
     request = {'resource_kind': 'function', 'operation_id': 'alter', 'target_resource': ROUTINE,
                'draft': {'comment': 'updated'}, '_provider_route': {'host': 'trusted'}}
     assert not MYSQL_ADMINISTRATION.validate(request)['errors']

@@ -237,7 +237,7 @@ class ProviderVisualAdministration:
                 'the selected operation requires a target resource'
             )
         draft = _mapping(payload.get('draft', {}), 'draft')
-        fields = operation['form']['fields']
+        fields = self._operation_fields(resource, operation)
         known = {field['field_id'] for field in fields}
         unknown = sorted(set(draft).difference(known))
         errors = []
@@ -361,7 +361,7 @@ class ProviderVisualAdministration:
             ),
             'target_resource': copy.deepcopy(payload.get('target_resource')),
             'draft': self._redact_sensitive(
-                operation['form']['fields'], admitted_draft
+                self._operation_fields(resource, operation), admitted_draft
             ),
         }
         session_id = payload.get('session_id')
@@ -1071,6 +1071,27 @@ class ProviderVisualAdministration:
                     ),
                 }
             return copy.deepcopy(value), None
+        if control in {'grid', 'keyvalue', 'reference'}:
+            if control == 'grid' and isinstance(value, str):
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError:
+                    value = None
+            if control == 'grid':
+                valid = isinstance(value, list)
+            elif control == 'keyvalue':
+                valid = isinstance(value, Mapping)
+            else:
+                valid = isinstance(value, str) or (
+                    isinstance(value, list) and
+                    all(isinstance(part, str) for part in value))
+            if not valid:
+                return None, {'field_id': field_id, 'code': 'type',
+                    'message': f'{label} has an invalid structured value.'}
+            # The provider validates native record identities and semantics.
+            # A grid may retain a provider's existing scalar-list API while
+            # its descriptor introduces typed records for the shared UI.
+            return copy.deepcopy(value), None
         if control == 'json':
             if isinstance(value, str):
                 try:
@@ -1222,6 +1243,32 @@ class ProviderVisualAdministration:
 
     def _validation_callback(self):
         return self._callback('validate_admin_operation')
+
+    def _operation_fields(self, resource, operation):
+        """Admit provider fields without rebuilding the frozen UI catalog."""
+        fields = operation['form']['fields']
+        callback = self._callback('admin_operation_field_contract')
+        if callback is None:
+            return fields
+        provided = callback({
+            'resource_kind': resource['resource_kind'],
+            'operation_id': operation['operation_id'],
+            'legacy_fields': copy.deepcopy(fields),
+        })
+        if provided is None:
+            return fields
+        if not isinstance(provided, Mapping) or not isinstance(
+                provided.get('fields'), list):
+            raise VisualAdminValidationError('Provider field contract is invalid')
+        fields = provided['fields']
+        if any(not isinstance(field, Mapping) or
+               not isinstance(field.get('field_id'), str) or
+               not isinstance(field.get('label'), str) or
+               not isinstance(field.get('control'), str) or
+               not isinstance(field.get('required'), bool)
+               for field in fields) or len({field['field_id'] for field in fields}) != len(fields):
+            raise VisualAdminValidationError('Provider field contract is invalid')
+        return copy.deepcopy(fields)
 
     def _planner_callback(self):
         return self._planner or self._callback('plan_admin_operation')

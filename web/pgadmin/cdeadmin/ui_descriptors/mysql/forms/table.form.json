@@ -48,6 +48,11 @@
       "concept": "SECONDARY_ENGINE explicit NULL and JSON-attribute scalar variants",
       "reason": "The backend accepts None for SECONDARY_ENGINE and arbitrary JSON for engine attributes. This draft exposes named text and key/value objects only; the schema has no explicit nullable/text or nested typed JSON value projection.",
       "tracking": "INV-MYSQL"
+    },
+    {
+      "concept": "Primary engine attributes outside beta profile",
+      "reason": "Core SQL hooks require HTON_SUPPORTS_ENGINE_ATTRIBUTE. No implementation in the audited MySQL9.7 Community engine sources advertises it; release InnoDB/MyISAM/MEMORY reject index use with native error3981. Debug simulation is not product support. A separately available implementation and native qualification are required before surfacing this field. Secondary-engine attribute metadata is separate.",
+      "tracking": "MY-POST-BETA-PRIMARY-ENGINE-ATTRIBUTES"
     }
   ],
   "notes": "Audited against MySQLAdministration plan/validate/apply at master815c9cb4b. Every retained binding is a create-draft field; unsupported controls are listed in gaps, not silently passed to the compiler. Constraint discriminators use backend uppercase SQL kind values. Integer native options use decimal text. Canonical read-only tabs and SQL come from the shared shell; draft is not a renderer/round-trip acceptance claim.",
@@ -597,17 +602,6 @@
       "tab": "Engine",
       "group": "HeatWave / secondary",
       "backend_field_id": "mysql_table_options.secondary_engine",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "engine_attribute",
-      "label": "Engine attribute",
-      "control": "keyvalue",
-      "tab": "Engine",
-      "group": "Engine attributes",
-      "backend_field_id": "mysql_table_options.engine_attribute",
       "modes": [
         "create"
       ]

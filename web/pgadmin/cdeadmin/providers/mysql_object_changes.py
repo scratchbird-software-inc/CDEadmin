@@ -7,6 +7,7 @@ OPERATIONS = {
     'function': frozenset({'alter'}),
     'index': frozenset({'rename', 'visibility'}),
 }
+TITLES = {'rename': 'Rename index', 'visibility': 'Change index visibility', 'alter': 'Alter routine'}
 DATA_ACCESS = ('UNCHANGED', 'CONTAINS SQL', 'NO SQL', 'READS SQL DATA',
                'MODIFIES SQL DATA')
 SECURITY = ('UNCHANGED', 'DEFINER', 'INVOKER')
@@ -59,17 +60,13 @@ def compile_operation(kind, operation, draft, target):
 
 
 def form(kind, operation, field):
-    if operation == 'rename':
-        fields = [field('new_name', 'New index name', 'text', True)]
-    elif kind == 'index':
-        fields = [field('visibility', 'Optimizer visibility', 'select', True,
-                        options=('VISIBLE', 'INVISIBLE'))]
-    else:
-        fields = [field('sql_security', 'SQL security', 'select', True,
-                        default='UNCHANGED', options=SECURITY),
-                  field('data_access', 'SQL data access', 'select', True,
-                        default='UNCHANGED', options=DATA_ACCESS),
-                  field('comment', 'Comment (nonempty; blank preserves it)', 'multiline', False)]
+    if kind not in {'procedure', 'function'}:
+        raise RelationalClientError('Index fields are owned by the unified descriptor')
+    fields = [field('sql_security', 'SQL security', 'select', True,
+                    default='UNCHANGED', options=SECURITY),
+              field('data_access', 'SQL data access', 'select', True,
+                    default='UNCHANGED', options=DATA_ACCESS),
+              field('comment', 'Comment (nonempty; blank preserves it)', 'multiline', False)]
     fields.append(field('confirmation', 'Confirmation', 'text', True))
     return {'form_id': 'mysql.' + kind + '.' + operation,
             'title': operation.title() + ' native MySQL ' + kind,

@@ -34,7 +34,7 @@ Corrections to the worked example:
 | Omitted Triggers tab | MySQL has triggers. Removed the false omission; catalog-backed/read-only tabs belong to the shared shell. |
 
 Native option aliases are not duplicate controls: `table_checksum` is represented
-by the `checksum` concept. Attribute key/value objects are accepted; scalar/nested
+by the `checksum` concept. Secondary attribute key/value objects are accepted; scalar/nested
 attribute editing and explicit secondary-engine NULL need declared projections.
 Every retained `backend_field_id` is exercised against the real plan compiler by
 `tools/tests/test_mysql_ui_descriptors.py`; no field is declared merely because
@@ -66,3 +66,20 @@ projection exists; it must never silently erase an alias list. Privilege edits
 remain separate operations pending the same cross-operation dispatch contract.
 Backend binding tests exercise every declared field in both applicable modes.
 No rendered round trip or unified shell acceptance is claimed.
+
+## Index migration
+
+The Index family is draft. Typed key-part records map `column` to backend `name`
+and preserve native expressions, prefix lengths and order; legacy scalar lists
+still work. Creation also exposes native kind/method, uniqueness, comments,
+visibility, parser, key block size, algorithm/lock and secondary attributes.
+Name editing binds the existing rename action. Visibility has a typed
+Maintenance descriptor; the old index-change field branches are deleted.
+
+The original Table draft also exposed primary `engine_attribute`. Source and
+release qualification show that the required primary-engine capability flag has
+no implementation in the audited Community profile; the field is removed from
+both Table and Index and recorded outside beta. Secondary metadata uses a
+different core path. Syntax/hooks and a debug simulation never qualify an
+available primary engine implementation. The source/release limits are recorded
+in `mysql_functional_completion.rst`. No shared schema or renderer was changed.

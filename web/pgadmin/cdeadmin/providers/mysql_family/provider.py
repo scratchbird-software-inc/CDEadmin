@@ -977,12 +977,21 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
 class MySQLDBAPIClient(RelationalDBAPIClient):
     """MySQL DB-API plus a constrained MySQL Shell administration port."""
 
+    def admin_operation_field_contract(self, request):
+        if request['resource_kind'] == 'index':
+            from .descriptor_contracts import index_contract
+            return index_contract(request['operation_id'], request['legacy_fields'])
+        return None
+
     transaction_actions = ('commit', 'rollback', 'autocommit_on',
                            'autocommit_off')
 
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
         compiled = planned.get('provider_payload', {}).get('compiled', {})
+        if 'mysql_index_create' in compiled:
+            from .mysql_indexes import bind_review
+            return bind_review(self, planned)
         if 'mysql_server_control' in compiled:
             from .mysql_server_control import bind_review
             return bind_review(self,planned)
@@ -2292,14 +2301,28 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 except (ValueError, KeyError):
                     value['masking_policy'] = {'name': None, 'available': False,
                         'reason': 'Exact native column declaration unavailable'}
+            indexes = {}
             for record in optional_records(
-                'SELECT DISTINCT TABLE_SCHEMA, TABLE_NAME, INDEX_NAME, NON_UNIQUE, INDEX_TYPE, IS_VISIBLE, INDEX_COMMENT '
-                'FROM information_schema.STATISTICS WHERE TABLE_SCHEMA NOT IN '
-                "('information_schema','mysql','performance_schema','sys') ORDER BY 1,2,3"
+                'SELECT * FROM information_schema.STATISTICS WHERE TABLE_SCHEMA NOT IN '
+                "('information_schema','mysql','performance_schema','sys') ORDER BY TABLE_SCHEMA,TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX"
             ):
-                native = {key: value for key, value in record.items() if key not in {'table_schema', 'table_name', 'index_name'}}
-                native['administration'] = {'allowed_operations': ['inspect', 'drop'] if record['index_name'].upper() == 'PRIMARY' else ['inspect', 'drop', 'rename', 'visibility']}
-                add('index', [record['table_schema'], record['table_name']], record['index_name'], native)
+                key = (record['table_schema'], record['table_name'], record['index_name'])
+                indexes.setdefault(key, []).append(record)
+            for (database, table, name), parts in indexes.items():
+                native = {key: value for key, value in parts[0].items() if key not in {'table_schema', 'table_name'}}
+                native['key_parts'] = parts
+                native['visible'] = None if parts[0].get('is_visible') is None else parts[0]['is_visible'] == 'YES'
+                native['visibility'] = None if native['visible'] is None else 'VISIBLE' if native['visible'] else 'INVISIBLE'
+                native['unique'] = parts[0]['non_unique'] == 0
+                native['index_kind'] = {'FULLTEXT': 'FULLTEXT', 'SPATIAL': 'SPATIAL', 'RTREE': 'SPATIAL'}.get(parts[0]['index_type'], 'NORMAL')
+                native['method'] = parts[0]['index_type'] if parts[0]['index_type'] in {'BTREE', 'HASH'} else 'DEFAULT'
+                native['definition_parts'] = [{
+                    **({'name': row['column_name']} if row.get('column_name') is not None else {'expression': row.get('expression')}),
+                    **({'prefix_length': row['sub_part']} if row.get('sub_part') is not None else {}),
+                    'direction': {'A': 'ASC', 'D': 'DESC'}.get(row.get('collation'), 'DEFAULT'),
+                } for row in parts]
+                native['administration'] = {'allowed_operations': ['inspect', 'drop'] if name.upper() == 'PRIMARY' else ['inspect', 'drop', 'rename', 'visibility']}
+                add('index', [database, table], name, native)
             for record in optional_records(
                 'SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, SECURITY_TYPE, SQL_DATA_ACCESS, ROUTINE_COMMENT, IS_DETERMINISTIC '
                 'FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA NOT IN '

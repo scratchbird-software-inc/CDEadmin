@@ -262,6 +262,52 @@
         }
       ],
       "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner."
+    },
+    {
+      "operation_id": "visibility",
+      "resource_kind": "index",
+      "title": "Change index visibility",
+      "menu": {
+        "category": "maintenance",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "groups": [
+        "Index",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "visibility",
+          "label": "Visibility",
+          "control": "select",
+          "options": [
+            {
+              "value": "VISIBLE",
+              "label": "Visible"
+            },
+            {
+              "value": "INVISIBLE",
+              "label": "Invisible"
+            }
+          ],
+          "required": true,
+          "default_path": [
+            "visibility"
+          ],
+          "group": "Index"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Index name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation"
+        }
+      ],
+      "notes": "Binds the existing native visibility operation. Native primary keys cannot be made invisible. Draft pending shared operation-dialog rendering and acceptance."
     }
   ]
 }

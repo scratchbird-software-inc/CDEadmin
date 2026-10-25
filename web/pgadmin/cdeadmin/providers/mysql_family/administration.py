@@ -10,6 +10,7 @@ from . import column_masking
 from . import mysql_key_cache
 from . import mysql_instance
 from . import mysql_table_options
+from . import mysql_indexes
 from . import mysql_user_keys
 from . import mysql_xa
 from . import mysql_page_tracking
@@ -108,6 +109,7 @@ class MySQLAdministration(RelationalAdministration):
         return super()._form(kind, operation)
 
     def _normalize_draft(self, kind, operation, draft):
+        if kind == 'index' and operation == 'create':return deepcopy(draft)
         if kind=='server' and operation in mysql_user_keys.OPERATIONS:return deepcopy(draft)
         if kind=='table' and operation=='create':
             if not isinstance(draft,Mapping):raise RelationalClientError('Select structured native MySQL table properties')
@@ -131,6 +133,12 @@ class MySQLAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def validate(self, request):
+        if request.get('resource_kind') == 'index' and request.get('operation_id') == 'create':
+            try:
+                mysql_indexes.compile_create(request.get('draft'))
+                return {'errors': []}
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_index', 'message': str(error)}]}
         if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_user_keys.OPERATIONS:
             try:
                 mysql_user_keys.compile_operation(request['operation_id'],request.get('draft'),request.get('target_resource'))
@@ -206,6 +214,8 @@ class MySQLAdministration(RelationalAdministration):
         return super().validate(request)
 
     def _compile(self, request):
+        if request.get('resource_kind') == 'index' and request.get('operation_id') == 'create':
+            return mysql_indexes.compile_create(request['draft'])
         if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_user_keys.OPERATIONS:
             return mysql_user_keys.compile_operation(request['operation_id'],request['draft'],request.get('target_resource'))
         if request.get('resource_kind')=='table' and request.get('operation_id')=='create':
@@ -238,6 +248,8 @@ class MySQLAdministration(RelationalAdministration):
         return super()._compile(request)
 
     def apply(self, client, request, connection=None):
+        if 'mysql_index_create' in (request.get('provider_payload') or {}).get('compiled', {}):
+            return mysql_indexes.apply(client, request, connection)
         if 'mysql_user_keys' in (request.get('provider_payload') or {}).get('compiled',{}):
             return mysql_user_keys.apply(client,request,connection)
         if 'mysql_page_tracking' in (request.get('provider_payload') or {}).get('compiled', {}):

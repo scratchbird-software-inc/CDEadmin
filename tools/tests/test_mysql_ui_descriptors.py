@@ -33,6 +33,9 @@ def bind(draft,field,value):
             draft.setdefault('constraints',[]).append({'kind':match[1],**{names[k]:v for k,v in row.items()}})
     elif '.' in path:
         parent,key=path.split('.');draft.setdefault(parent,{})[key]=value
+    elif field['control']=='grid':
+        names={c['field_id']:c.get('backend_field_id',c['field_id']) for c in field['columns']}
+        draft[path]=[{names[key]:item for key,item in row.items()} for row in value]
     else:draft[path]=value
 
 
@@ -100,3 +103,30 @@ def test_every_view_binding_reaches_the_real_create_and_alter_compiler():
     assert form['status']=='draft'
     assert any(row['concept']=='Ordered output aliases' for row in form['gaps'])
     assert any(row['tab']=='Triggers' for row in form['omitted_tabs'])
+
+
+def test_every_index_binding_reaches_its_native_create_or_rename_path():
+    form=load('forms/index.form.json')
+    samples={'name':'changed_index','table':['db','changed_table'],'index_kind':'FULLTEXT','unique':True,
+        'columns':[{'column':'other','direction':'DESC','prefix_length':4}], 'comment':"quote' 雪",'method':'HASH',
+        'visible':False,'algorithm':'INPLACE','lock':'NONE','key_block_size':'8','parser':'ngram',
+        'engine_attribute':{'native':True},'secondary_engine_attribute':{'native':True}}
+    base={'name':'owned','table':['db','t'],'columns':['word']}
+    def compiled(draft):
+        request={'resource_kind':'index','operation_id':'create','draft':draft}
+        assert not MYSQL_ADMINISTRATION.validate(request)['errors']
+        return MYSQL_ADMINISTRATION._compile(request)['statements']
+    for field in form['fields']:
+        if field['field_id']=='new_name':
+            request={'resource_kind':'index','operation_id':'rename','draft':{'new_name':'changed'},
+                'target_resource':{'display_name':'owned','display_path':['db','t','owned']}}
+            assert 'TO `changed`' in MYSQL_ADMINISTRATION._compile(request)['statements'][0]['source']
+            continue
+        draft=dict(base)
+        if field['field_id']=='parser':draft['index_kind']='FULLTEXT'
+        original=compiled(draft)
+        bind(draft,field,samples[field['field_id']])
+        assert compiled(draft)!=original,field['field_id']
+    assert form['status']=='draft' and not form['omitted_tabs']
+    visibility=next(op for op in load('operations.json')['operations'] if op['resource_kind']=='index' and op['operation_id']=='visibility')
+    assert visibility['menu']['category']=='maintenance'

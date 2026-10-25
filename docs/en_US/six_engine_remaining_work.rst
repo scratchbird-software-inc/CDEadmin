@@ -901,3 +901,15 @@ capability/diagnostic reconciliation remain separate. See
 :doc:`mysql_physical_backups` for the admitted version/layout, acceptance and
 cutover scope. Platform-team acceptance and owner-deferred ScratchBird history
 remain separately owned.
+
+Primary-engine attribute runtime scope
+=====================================
+
+* MY-POST-BETA-PRIMARY-ENGINE-ATTRIBUTES: the MySQL9.7 Community packet provides
+  SQL/dictionary hooks but no audited primary handlerton advertises
+  HTON_SUPPORTS_ENGINE_ATTRIBUTE. Debug simulation does not qualify a product
+  implementation. Primary table/index controls are excluded from this beta
+  profile; expose them only after obtaining the applicable implementation source
+  and native evidence. Closed-engine integration remains post beta. Secondary
+  attribute metadata and native tablespace attribute APIs retain their separate
+  qualified contracts. See :doc:`mysql_functional_completion`.
