@@ -65,10 +65,3 @@ def compile_options(value,connection=None):
             raise RelationalClientError('Select bounded native FEDERATED connection text or a named server reference')
         clauses.append('CONNECTION=%s');parameters.append(connection)
     return (' '+ ' '.join(clauses) if clauses else ''),tuple(parameters)
-
-
-def fields(field):
-    return [field('mysql_table_options','Native MySQL table options','json',False,
-        'Exact native options: engine, character_set, collation, auto_increment, row_format, comment, tablespace, encryption, compression, engine_attribute, secondary_engine and native storage/statistics/MERGE options. Integer values use exact decimal strings.',{}),
-        field('mysql_connection','Native FEDERATED connection or server reference','password',False,
-            'A named CREATE SERVER reference avoids embedding credentials in a table definition. Native MySQL owns remote connections and their errors.',sensitive=True)]

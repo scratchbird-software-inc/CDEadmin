@@ -1,5 +1,267 @@
 {
   "schema": "cdeadmin.ui-operations.v1",
   "engine": "mysql",
-  "operations": []
+  "operations": [
+    {
+      "operation_id": "install_user_key_functions",
+      "resource_kind": "server",
+      "title": "Install key functions",
+      "menu": {
+        "category": "security",
+        "order": 100
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "groups": [
+        "Native library",
+        "Key",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "library",
+          "label": "Library",
+          "control": "text",
+          "required": true,
+          "group": "Native library",
+          "default": "keyring_udf.so",
+          "help": "Library basename installed in the database server plugin directory. A keyring service must already be active."
+        },
+        {
+          "field_id": "trusted_library",
+          "label": "Trust this server library",
+          "control": "boolean",
+          "required": true,
+          "group": "Native library",
+          "default": false,
+          "help": "Authorizes the native plugin and six function definitions. Existing matching definitions are preserved."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation",
+          "help": "Type the selected server display name."
+        }
+      ],
+      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner."
+    },
+    {
+      "operation_id": "inspect_user_key",
+      "resource_kind": "server",
+      "title": "Inspect user key",
+      "menu": {
+        "category": "security",
+        "order": 101
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "groups": [
+        "Native library",
+        "Key",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "key_id",
+          "label": "Key identifier",
+          "control": "text",
+          "required": true,
+          "group": "Key",
+          "help": "Native ownership uses CURRENT_USER(), including its host part."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation",
+          "help": "Type the selected server display name."
+        }
+      ],
+      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner."
+    },
+    {
+      "operation_id": "store_user_key",
+      "resource_kind": "server",
+      "title": "Store user key",
+      "menu": {
+        "category": "security",
+        "order": 102
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "groups": [
+        "Native library",
+        "Key",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "key_id",
+          "label": "Key identifier",
+          "control": "text",
+          "required": true,
+          "group": "Key",
+          "help": "Native ownership uses CURRENT_USER(), including its host part."
+        },
+        {
+          "field_id": "key_type",
+          "label": "Key type",
+          "control": "select",
+          "required": true,
+          "group": "Key",
+          "default": "AES",
+          "options": [
+            {
+              "value": "AES",
+              "label": "AES"
+            },
+            {
+              "value": "RSA",
+              "label": "RSA"
+            },
+            {
+              "value": "DSA",
+              "label": "DSA"
+            },
+            {
+              "value": "SECRET",
+              "label": "SECRET"
+            }
+          ]
+        },
+        {
+          "field_id": "password",
+          "label": "Key value",
+          "control": "password",
+          "required": true,
+          "group": "Key",
+          "help": "Native store accepts nonempty UTF-8 text without NUL, at most 16384 bytes. Key material is not returned in receipts."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation",
+          "help": "Type the selected server display name."
+        }
+      ],
+      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner."
+    },
+    {
+      "operation_id": "generate_user_key",
+      "resource_kind": "server",
+      "title": "Generate user key",
+      "menu": {
+        "category": "security",
+        "order": 103
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "groups": [
+        "Native library",
+        "Key",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "key_id",
+          "label": "Key identifier",
+          "control": "text",
+          "required": true,
+          "group": "Key",
+          "help": "Native ownership uses CURRENT_USER(), including its host part."
+        },
+        {
+          "field_id": "key_type",
+          "label": "Key type",
+          "control": "select",
+          "required": true,
+          "group": "Key",
+          "default": "AES",
+          "options": [
+            {
+              "value": "AES",
+              "label": "AES"
+            },
+            {
+              "value": "RSA",
+              "label": "RSA"
+            },
+            {
+              "value": "DSA",
+              "label": "DSA"
+            },
+            {
+              "value": "SECRET",
+              "label": "SECRET"
+            }
+          ]
+        },
+        {
+          "field_id": "key_length",
+          "label": "Length in bytes",
+          "control": "number",
+          "required": true,
+          "group": "Key",
+          "default": 32,
+          "min": 1,
+          "max": 16384,
+          "help": "The active native keyring service decides which key types and lengths it can generate."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation",
+          "help": "Type the selected server display name."
+        }
+      ],
+      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner."
+    },
+    {
+      "operation_id": "remove_user_key",
+      "resource_kind": "server",
+      "title": "Remove user key",
+      "menu": {
+        "category": "security",
+        "order": 104
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "groups": [
+        "Native library",
+        "Key",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "key_id",
+          "label": "Key identifier",
+          "control": "text",
+          "required": true,
+          "group": "Key",
+          "help": "Native ownership uses CURRENT_USER(), including its host part."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation",
+          "help": "Type the selected server display name."
+        }
+      ],
+      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner."
+    }
+  ]
 }

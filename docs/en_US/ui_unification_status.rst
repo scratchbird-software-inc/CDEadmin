@@ -167,6 +167,31 @@ count sets its maximum to zero in the enforcement file.
 Change log
 ----------
 
+MySQL audit and native user-key work (2026-10-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The MySQL capability seed has been reconciled against its complete administration
+catalog and read-only profile kinds. Unsupported seeded server/replication DDL
+entries were removed; missing kinds and operations were added. Closed masking
+and execution-runtime limits remain explicit. The table family stays ``draft``:
+every retained create binding reaches the actual compiler; ignored properties,
+incorrect constraint discriminators and value-shape mismatches were corrected or
+recorded under ``gaps``. Details are in ``ui_descriptors/mysql/README.md``.
+The MySQL-specific legacy table field branch and field factory were deleted.
+
+Five user-key operation descriptors now accompany their backend implementation,
+with typed fields and Security menu placement. Stable form-reference allocation
+remains with the front-end registry owner.
+They are ``draft`` and remain **unsurfaced by the unified shell** pending the
+front-end stream's shared operation-dialog/family-render acceptance; native/API
+qualification is not a substitute for that gate. Protected key retrieval/export
+is Decision 10. No shared schema, family skeleton, renderer or family-render test
+was changed by the backend stream.
+
+Current lint counts for this change: JSON controls **305 → 304**, direct MUI
+imports **244 → 244**, engine-literal UI branches **111 → 111**, engine panels
+**113 → 113**. The tracked family statuses have not advanced to ``complete``.
+
 * 2026-10-25: design adopted; descriptor schemas, ten family skeletons, engine
   stubs for the six beta engines, MySQL table worked example and the validator
   added. All other forms ``pending``.

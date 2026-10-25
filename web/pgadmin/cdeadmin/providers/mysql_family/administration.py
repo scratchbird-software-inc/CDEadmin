@@ -10,6 +10,7 @@ from . import column_masking
 from . import mysql_key_cache
 from . import mysql_instance
 from . import mysql_table_options
+from . import mysql_user_keys
 from . import mysql_xa
 from . import mysql_page_tracking
 from . import mysql_rewriter
@@ -77,11 +78,12 @@ class MySQLAdministration(RelationalAdministration):
                 'mutation_class': 'read' if operation == 'inspect' else 'destructive' if operation == 'drop' else 'admin',
                 'target_required': operation != 'create', 'confirmation_required': operation != 'inspect',
             } for operation in ['inspect', 'create', 'alter', 'drop']]})
-        return super().catalog(value)
+        value=super().catalog(value)
+        server=next(row for row in value['objects'] if row['resource_kind']=='server')
+        server['operations'] += deepcopy(mysql_user_keys.catalog_entries())
+        return value
 
     def _form(self, kind, operation):
-        if kind=='table' and operation=='create':
-            value=super()._form(kind,operation);value['fields']+=mysql_table_options.fields(self._field);return value
         if kind == 'server' and operation in mysql_page_tracking.OPERATIONS:
             return mysql_page_tracking.form(operation, self._field)
         if kind == 'server' and operation in mysql_rewriter.OPERATIONS:
@@ -106,6 +108,7 @@ class MySQLAdministration(RelationalAdministration):
         return super()._form(kind, operation)
 
     def _normalize_draft(self, kind, operation, draft):
+        if kind=='server' and operation in mysql_user_keys.OPERATIONS:return deepcopy(draft)
         if kind=='table' and operation=='create':
             if not isinstance(draft,Mapping):raise RelationalClientError('Select structured native MySQL table properties')
             value=deepcopy(dict(draft));native={key:value.pop(key) for key in ('mysql_table_options','mysql_connection') if key in value}
@@ -128,6 +131,11 @@ class MySQLAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def validate(self, request):
+        if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_user_keys.OPERATIONS:
+            try:
+                mysql_user_keys.compile_operation(request['operation_id'],request.get('draft'),request.get('target_resource'))
+                return {'errors':[]}
+            except RelationalClientError as error:return {'errors':[{'field_id':None,'code':'invalid_user_key','message':str(error)}]}
         if request.get('resource_kind')=='table' and request.get('operation_id')=='create':
             value=super().validate(request)
             try:
@@ -198,6 +206,8 @@ class MySQLAdministration(RelationalAdministration):
         return super().validate(request)
 
     def _compile(self, request):
+        if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_user_keys.OPERATIONS:
+            return mysql_user_keys.compile_operation(request['operation_id'],request['draft'],request.get('target_resource'))
         if request.get('resource_kind')=='table' and request.get('operation_id')=='create':
             compiled=super()._compile(request);options=request['draft'].get('options') or {}
             suffix,parameters=mysql_table_options.compile_options(mysql_table_options.selected(options),options.get('mysql_connection'))
@@ -228,6 +238,8 @@ class MySQLAdministration(RelationalAdministration):
         return super()._compile(request)
 
     def apply(self, client, request, connection=None):
+        if 'mysql_user_keys' in (request.get('provider_payload') or {}).get('compiled',{}):
+            return mysql_user_keys.apply(client,request,connection)
         if 'mysql_page_tracking' in (request.get('provider_payload') or {}).get('compiled', {}):
             return mysql_page_tracking.apply(client, request, connection)
         if 'mysql_rewriter' in (request.get('provider_payload') or {}).get('compiled', {}):

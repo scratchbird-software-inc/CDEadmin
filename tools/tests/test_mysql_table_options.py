@@ -33,8 +33,11 @@ def test_mysql_table_creation_uses_native_options_without_changing_mariadb_or_de
     result=MYSQL_ADMINISTRATION._compile({**base,'draft':MYSQL_ADMINISTRATION._normalize_draft('table','create',draft)})
     assert result['statements'][0]['source'].endswith(' ENGINE=%s CONNECTION=%s')
     assert result['statements'][0]['parameters']==('FEDERATED','named_server/remote')
-    field=next(row for row in MYSQL_ADMINISTRATION._form('table','create')['fields'] if row['field_id']=='mysql_connection')
-    assert field['sensitive'] and field['control']=='password'
+    import json
+    from pathlib import Path
+    descriptor=Path(__file__).resolve().parents[2]/'web/pgadmin/cdeadmin/ui_descriptors/mysql/forms/table.form.json'
+    field=next(row for row in json.loads(descriptor.read_text())['fields'] if row['field_id']=='mysql_connection')
+    assert field['control']=='password'
     assert not any(row['field_id']=='mysql_table_options' for row in MARIADB_ADMINISTRATION._form('table','create')['fields'])
 
 

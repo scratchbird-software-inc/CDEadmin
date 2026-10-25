@@ -653,3 +653,21 @@ These need a ruling before the corresponding phase starts. Each has a default th
 = ============================================================================================================================================================================================ ================================================================================== ===========================================================================================================================================================================
 
 Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 to 2 depends on the others.
+
+9. Descriptor value projections and cross-operation grids (MySQL audit,
+   2026-10-25): ``mysql_table_options.union`` requires a list of identifier-path
+   arrays; a reference multiselect returns identifiers and a grid returns records.
+   The field schema currently has no declared projection between these shapes.
+   Similarly, ``privilege.grant`` and ``partition_by`` are separate operations,
+   not table-create properties. The shell needs a declared projection/dispatch
+   contract before those controls can participate in a table edit. Default:
+   record them under the table descriptor's ``gaps``; retain the existing backend
+   operations; add no JSON control, special renderer branch or fabricated field.
+
+10. Protected operation results (user keys, 2026-10-25): the operation schema
+    declares input fields and ordinary receipts, but no one-time protected
+    result binding for native key retrieval/export. Default: inspection returns
+    key type and byte length; native key bytes may be fetched privately for
+    review binding, but are never placed in the plan preview or receipt. A
+    user-facing key-value export remains an explicit gap until the shared
+    protected-result contract is defined; no provider panel is introduced.
