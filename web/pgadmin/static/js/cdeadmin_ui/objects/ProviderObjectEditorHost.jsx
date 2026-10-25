@@ -36,14 +36,15 @@ export function resourceNative(resource) {
   for(const [key, value] of Object.entries(extensions)) {
     if(key !== 'cdeadmin' && value && typeof value === 'object' && value.native) return value.native;
   }
-  return {};
+  // Providers yield `native` directly; the workspace wraps it under extensions.
+  return resource?.native && typeof resource.native === 'object' ? resource.native : {};
 }
 
 /** Flatten a resource into the record the editor pre-fills from. */
 export function isChildOf(row, resource) {
   if(!row || !resource) return false;
   return row.parent_resource_id === resource.resource_id ||
-    row.native?.navigator_parent_resource_id === resource.resource_id ||
+    resourceNative(row).navigator_parent_resource_id === resource.resource_id ||
     (row.display_path || []).slice(0, -1).join('.') === (resource.display_path || []).join('.');
 }
 
