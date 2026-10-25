@@ -95,6 +95,7 @@ cdeadmin-baseline-test:
 
 ui-descriptors-check:
 	python3 tools/validate_ui_descriptors.py --counts --enforce-counts tools/ui_lint_maximums.json
+	python3 -m pytest -q -p no:cacheprovider tools/tests/test_ui_descriptor_service.py tools/tests/test_ui_descriptor_postgresql_schema_ids.py tools/tests/test_ui_descriptor_roundtrip_sqlite.py tools/tests/test_ui_descriptor_roundtrip_duckdb.py tools/tests/test_ui_descriptor_roundtrip_firebird.py tools/tests/test_ui_descriptor_roundtrip_mariadb.py
 
 cdeadmin-architecture-gate:
 	python3 tools/cdeadmin_architecture_gate.py --source . \
