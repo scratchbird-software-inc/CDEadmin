@@ -367,7 +367,42 @@ def request_binding(request):
         return initialization_module().host_binding(request['binding'])
     if request.get('binding',{}).get('scope')=='mysql-upgrade-host-v1':
         return upgrade_module().host_binding(request['binding'],globals())
-    return binding(request['binding'])
+    try:return binding(request['binding'])
+    except Refused:
+        # A permanent recovered service can retain native absolute names in a
+        # private mount view. Its owned deployment manifest identifies the real
+        # data directory; never bind the original source's host-visible files.
+        if request.get('service') is None:raise
+        pid_file=Path(text(request.get('native_pid_file')))
+        if not pid_file.is_absolute() or pid_file.name!='runtime.pid':raise
+        directory=pid_file.parent.resolve(strict=True)
+        def document(name):
+            with regular_stream(directory/name) as stream:data=stream.read(1048577)
+            if len(data)>1048576:raise Refused('The permanent deployment binding exceeds its observation bound')
+            return json.loads(data)
+        claim=document('claim.json');manifest=document('deployment.json')
+        program=Path(text(request.get('executable'))).resolve(strict=True)
+        if (manifest.get('job_id')!=claim.get('job_id') or manifest.get('input_digest')!=claim.get('input_digest') or
+                manifest.get('recovered_uuid')!=request['binding']['server_uuid'] or not manifest.get('aliases') or
+                manifest.get('selected',{}).get('directory')!=str(directory) or
+                manifest.get('selected',{}).get('service')!=request['service'].get('name') or
+                manifest.get('program',{}).get('path')!=str(program) or
+                manifest.get('program',{}).get('sha256')!=file_hash(program)):
+            raise Refused('The permanent recovered service binding is incompatible')
+        actual=directory/'runtime-data'
+        observed=binding({**request['binding'],'datadir':str(actual)})
+        if pid_file.exists():
+            with regular_stream(pid_file) as stream:pid=stream.read(65).strip()
+            if not pid.isdigit():raise Refused('The permanent native PID is unavailable')
+            process=Path('/proc')/pid.decode('ascii')
+            if file_hash((process/'exe').resolve(strict=True))!=manifest['program']['sha256']:raise Refused('The permanent native executable changed')
+            wanted=(actual/'mysql.ibd').stat();owns=False
+            for descriptor in (process/'fd').iterdir():
+                try:current=descriptor.stat()
+                except FileNotFoundError:continue
+                if (current.st_dev,current.st_ino)==(wanted.st_dev,wanted.st_ino):owns=True;break
+            if not owns:raise Refused('The permanent native process does not own its recovered dictionary')
+        return {**observed,'native_namespace_datadir':request['binding']['datadir'],'permanent_deployment_claim':claim}
 
 
 def inspect(request, expected=None):
@@ -485,6 +520,8 @@ def dispatch(request,launch_source=None):
                 service = native_services.inspect(followup, value['observation'], process, file_hash, regular_stream, Refused)
                 value['service_reconciliation'] = {'observed': True, 'service': service,
                     'observed_at': time.time(), 'original_native_result_unchanged': True}
+                if request.get('observe_dictionary_writers') is True:
+                    value['service_reconciliation']['dictionary_writers']=native_services.dictionary_writers(value['observation']['host']['datadir'])
             except Exception as error:
                 value['service_reconciliation'] = {'observed': False, 'error_type': type(error).__name__,
                     'original_native_result_unchanged': True}

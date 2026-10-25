@@ -6,8 +6,8 @@ Comparison baseline: source ``0c14f90a21c80c32074c574e7914e56dc487661d``;
 MySQL 9.7.0 and Connector/Python 26.7.0.
 
 This is the accepted implementation queue arising from the MySQL management-tool
-comparison. ``CMP-MY-02`` through ``CMP-MY-11`` are implemented and
-Linux-qualified; ``CMP-MY-01`` remains open. They supplement
+comparison. All eleven accepted comparison workflows are implemented and Linux-qualified.
+The independent native inventory remains a separate handoff gate. They supplement
 :doc:`mysql_functional_completion` and :doc:`six_engine_remaining_work`; their
 acceptance must follow :doc:`six_engine_completion`.
 
@@ -19,8 +19,8 @@ MySQL feature development and switch the active implementation focus to MariaDB.
 The accepted spatial, deployment-automation and notebook items remain required
 for this handoff even though they follow operational work in priority.
 
-* **P0:** recovery/recoverability remains the critical comparison completion
-  gate. The accepted production HA/Router/host lifecycle is Linux-qualified. Reconcile ``INV-MYSQL`` and the current
+* **P0:** recovery/recoverability and production HA/Router/host lifecycle are
+  Linux-qualified. Reconcile ``INV-MYSQL`` and the current
   continuity, archive, language/capability and diagnostic gaps against that work.
 * **P1:** implement graphical native plans, workload analysis and database-wide
   content search, followed by controlled online DDL, replica drift verification
@@ -101,124 +101,53 @@ MySQL and MariaDB are qualified separately.
 CMP-MY-01: Complete recovery and recoverability
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Status: **open**. Priority: **P0**.
+Status: **implemented and Linux-qualified**. Priority: **P0**.
 
 Qualify an admitted MySQL 9.7 physical backup backend; prepare and restore to
 an isolated target; apply selected log recovery targets; independently compare
 full data and native definitions after replay; complete dependency-aware
 retention, interruption recovery and reviewed cutover. Add reviewed recurring
 backup/drill scheduling after outcomes and dependencies are reliable.
-The bounded :doc:`mysql_physical_backups` workflow admits native XtraBackup
-9.7.1-rc1 at source revision
-``b1c9c34183de95316d8889ea3d4cb31e31ffddc5`` with explicit release-candidate
-consent. It implements pinned SSH-host full backups, immutable preparation and
-copy-back into a new private directory, independently supervised outcomes,
-exact file manifests, source archive protection and credential cleanup.
-Native pure/C/API and built desktop qualification include independent disposable
-MySQL recovery. A separately reviewed native recovery instance now starts a
-private data copy with a fresh native UUID, private Unix socket, native read-only
-settings and bounded lifetime. Independent SQL startup/process observations,
-credential cleanup and process-descriptor shutdown survive loss of the original
-supervisor; missing exit replies remain unknown. Separate process-bound SSH
-registrations now expose the native recovered editor/catalog connection,
-preserving native driver semantics and refusing network fallback after
-transport/instance loss. Separately reviewed writable startup now provides
-private native binary logging and server-ID admission. Native raw closed-log
-replay uses a leased process-bound SSH route, native before/after/all boundaries
-and retained lost-reply/fence handling. Independent original decoder/client
-guardians now support hash-verified file stdin, cancellation and termination
-observation after observer loss, scoped input/credential cleanup and release of
-only the matching parked lease. Original unknown database outcomes stay unknown.
-Native Shell replay and reconnects now use the original process-bound route on
-POSIX application hosts, with independently inherited listener reservations,
-original guardian references and cancellation/reconciliation. Windows listener
-inheritance remains with the platform team. Original utility inspection and
-cancellation no longer require the SQL relay; confirmed termination can release
-the exact recorded owner/endpoint/recovery reservation before reviewed
-reattachment. Unknown database outcomes/fences persist until fresh SQL facts and
-explicit acknowledgement. Original physical recovery control now survives
-adapter/registration changes and missing duplicated bindings when retained
-original host/source facts match. Native supervisor loss and source-offline
-original-process stop preserve unknown outcomes. Newly guarded native clients and verified older managed clients now support
-independent guardian-loss cleanup; missing original receipts keep their unknown
-outcomes. Untracked jobs without original process identity and wider lifecycle
-reconciliation remain open alongside production cutover. Native
-incremental capture and private redo-only apply/final preparation now preserve
-exact full-backup lineage, contiguous LSNs and both immutable input dependencies.
-Raw deltas cannot be restored alone; finalized chains use the existing recovery
-and expected-dump acceptance workflows.
-Registered TLS policy and exact CA/client certificate/private-key files now
-delegate privately to native host utilities. Certificate-authenticated recovery
-admits separately reviewed host server TLS files and an isolated loopback port,
-including recurring startup drills. Native ARCHIVE, BLACKHOLE, self-contained
-MRG_MYISAM and MEMORY definition/restart behavior join InnoDB/MyISAM/CSV
-admission. MEMORY volatile-row loss is disclosed. MERGE member paths now follow
-the native final database/table identity, including absolute/escaping prefixes,
-with original metadata and complete MyISAM child payload retained. The pinned utility's single password option is an upstream
-backend restriction; it does not remove existing MySQL MFA client support.
-Explicit GPL file-keyring retention now supports native encrypted full and
-incremental chains, stable private transition keys and source master-key
-rotation. Preparation preserves opaque keys outside native incremental cleanup.
-Recovered native read-only/replay instances use private keyrings, plugin and
-dependency copies, with independently observed encryption variables and keyring
-paths. Recurring startup drills retain this admission across worker restart.
-See :doc:`mysql_physical_backups` for native boundaries and durable-key retention.
-External InnoDB per-table/general tablespaces now have separately reviewed
-copy-back path maps and native recovery filesystem isolation. Original directory
-aliases select private data; the host view is read-only. Independent process/
-namespace checks protect editor admission without blocking original-process stop.
-Encrypted incrementals, native external DDL, literal child path names and recurring
-startup drills use the same isolation. Missing original directory names can now
-be reconstructed in private parent projections, including a separately probed
-private root switch for absent top-level paths. Recovery does not create host
-placeholders or require the source SQL server to remain available. Original
-process identity follows the executing file descriptor across pathname
-replacement; it does not mistake a running executable for an ended process.
-Retained native storage metadata now supports external system files, default
-and user undo, and configured empty scan roots. Native preparation/copy-back use
-private destinations; original names are presented only inside the isolated
-process. Encrypted incremental chains, literal system-file names, recurring
-drills and source-offline recovery through both connectors are qualified.
-Native relative homes/scan roots, nested directories and leading parent
-references now retain their effective paths without discarding original
-settings. System and undo catalog paths use their distinct native bases.
-Circular paths now retain actual host filesystem resolution, including symbolic
-links followed by parent traversal. Original catalog spellings survive offline
-audit; private runtime options use canonical identities. Native encrypted
-incrementals, recurring drills and source-offline recovery qualify this mapping
-through both connectors. A source-qualified native reader now supports fixed
-and autoextended raw system files, multiple raw devices, native system-file
-copy-back and private file aliases when original device nodes are absent.
-Native system-space payloads, incremental recovery and the built desktop have
-separate qualification; see :doc:`mysql_physical_backups` for the dependency.
-Native version/layout inventory remains open alongside system-state,
-guardian, cutover and broader inventory requirements.
-Managed physical targets now support separately reviewed expected-dump acceptance
-through private-socket or TCP connections, with full counts, native checksums and
-exported-definition comparisons, including after native replay. Each receipt
-binds the original recovery and explicitly selected source checkpoint. Interrupted
-checks preserve unknown outcomes and original utility reservations; independent
-utility observation works without the SQL relay. Unexported/system-state
-coverage remains open. Recurring checks now bind a selected sealed expected
-dump and retained copy-back, start a fresh private read-only recovery on each
-occurrence, compare native data/definitions, and stop it. Both inputs have durable
-retention holds; interrupted checks require original utility and server-generation
-end evidence before release. This is an explicitly retained checkpoint, with no
-implicit live-source or newest-backup substitution.
-Reviewed individual-artifact pin/removal, dependency admission and interrupted
-cleanup reconciliation/resume are implemented; see ``mysql_physical_backups.rst``. These bounded
-artifact receipts do not close ``CMP-MY-01``. Reviewed age/count batch retention
-now protects a minimum number of full-backup chains, rechecks native retained
-files and removes a fixed set in dependency order. Pausing, restart observation,
-explicit interrupted-item resume and unused-review invalidation are available;
-scheduled retention now uses expiring, encrypted SSH delegation and durable
-occurrences independent of a viewer. Revocation, expiry, changed authority and
-interruption suspend future admissions. Recurring full backups and optional
-isolated native startup/stop drills now use separately scoped encrypted SSH/SQL
-delegation and durable occurrences. Interrupted native work retains workflow
-protection until independently resolved. Scheduled expected-checkpoint data/definition acceptance now has its own
-reviewed policy and independent outcomes. Unexported/system state, wider backend
-admission and production cutover remain open.
+
+The :doc:`mysql_physical_backups` workflow admits source-available XtraBackup
+9.7.1-rc1 at revision ``b1c9c34183de95316d8889ea3d4cb31e31ffddc5`` with
+explicit release-candidate consent. Its qualified native reader extends system,
+undo and raw-file admission. Full/incremental capture, immutable redo-only and
+final preparation, private copy-back, managed read-only or replay recovery,
+process-bound editor connections, native selected log replay and independent
+expected-checkpoint acceptance are implemented. TLS, native GPL file-keyring
+rotation/retention, encrypted logs/data, external tablespaces, relative/circular
+paths, raw system files and the admitted Community storage engines retain their
+native identities. MEMORY row loss on native restart is disclosed.
+
+Individual, age/count and recurring retention protect exact backup/log-chain
+inputs. Reviewed recurring backups, startup drills and expected-checkpoint
+checks use expiring encrypted delegation, independent occurrences and explicit
+interruption release. Original utility/runtime/guardian outcomes, file adoption,
+server-lock cleanup and unknown acknowledgements remain separate. Untracked old
+processes without original identity retain conservative protection.
+
+A stopped recovered instance can now be copied into a self-contained permanent
+read-only systemd service with its UUID, final data, binary logs, private
+keyring/TLS files and external namespace. Normal registration and reviewed host
+controls support inspection/restart. Background activation requires matched
+native data/definition acceptance, explicit scope acknowledgement, an inactive
+and disabled original source service, and independent absence of any process
+holding the original source dictionary. It repeats native acceptance under
+locks, commits a one-time startup policy and sets native writable/event flags.
+Cancellation ends before the policy claim. Missing replies remain unknown and
+never repeat activation; independent observation and a separate reviewed restart
+expose the committed policy.
+
+Native qualification covers both connectors, actual manually started source
+refusal, data/account/25 selected public system-table comparisons, encrypted
+external-table recovery, restart durability and lost-policy replies. The built
+desktop exercises the same review/confirmation and observation workflow.
+``tools/cdeadmin_mysql_recovered_deployment_qualification.py`` supplements the
+existing physical replay/retention/schedule qualifiers. These accepted workflow
+receipts do not certify every optional installation or close ``INV-MYSQL``.
+Windows/macOS qualification remains platform-owned; ScratchBird history testing
+remains owner-deferred.
 
 Comparison evidence: `XtraBackup MySQL 9.7 support and limitations <https://docs.percona.com/percona-xtrabackup/9.7/>`_;
 `XtraBackup 9.7.1-rc1 release status <https://docs.percona.com/percona-xtrabackup/9.7/release-notes/9.7.1-rc1.html>`_;

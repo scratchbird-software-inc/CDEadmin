@@ -119,7 +119,7 @@ class InstanceAcceptanceTransport:
                 utility = getattr(self, 'recovery_utility', None)
                 if utility is not None: utility.close(); self.recovery_utility = None
 
-    def execute(self, record, directory, cancel, progress, boundary):
+    def execute(self, record, directory, cancel, progress, boundary, *, verified=None):
         utility = getattr(self, 'recovery_utility', None); dispatched = False
         if utility is not None: utility.job_id = record['job_id']
         def checking():
@@ -180,6 +180,10 @@ class InstanceAcceptanceTransport:
             result['artifact_unchanged'] = True
             result['selected_dump_surfaces_verified'] = bool(qualified and result['target_unchanged'] and
                 all(result[key]['matched'] is True for key in ('data', 'definitions', 'accounts','system_state') if result.get(key,{}).get('requested')))
+            if verified is not None:
+                if not result['selected_dump_surfaces_verified']:
+                    raise native.BinlogArchiveError('Fresh cutover acceptance did not match the selected expected dump')
+                verified(result)
             return result
         except BaseException as error:
             prior = getattr(error, 'native_check_result', None)

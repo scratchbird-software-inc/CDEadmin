@@ -1,0 +1,30 @@
+import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import MySQLRecoveryCutover from 'sources/Dialogs/MySQLRecoveryCutover';
+import {withTheme} from '../fake_theme';
+const Component = withTheme(MySQLRecoveryCutover);
+
+it('binds acceptance and original-source disablement to an explicit activation and clears approval after edits', async () => {
+  const run = jest.fn(async (action, request, accept) => accept({job_id: 'activation', review_digest: 'exact', state: action === 'cutover_review' ? 'reviewed' : 'native_returned'}));
+  render(<Component run={run} deployment={{job_id: 'stage'}} credentials={{password: 'private SSH'}} busy={false} />);
+  expect(screen.getByRole('button', {name: 'Review recovered service activation'})).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Registered recovered target ID'), {target: {value: '4'}});
+  fireEvent.change(screen.getByLabelText('Matched target acceptance job'), {target: {value: 'accepted'}});
+  fireEvent.change(screen.getByLabelText('Original source disable job'), {target: {value: 'disabled'}});
+  fireEvent.change(screen.getByLabelText('Confirm recovered UUID'), {target: {value: 'recovered-uuid'}});
+  fireEvent.click(screen.getByLabelText('I acknowledge the selected expected-dump scope and its exclusions'));
+  fireEvent.click(screen.getByRole('button', {name: 'Review recovered service activation'}));
+  await screen.findByLabelText('Recovered activation review');
+  expect(run.mock.calls[0][1]).toEqual({deployment_job_id: 'stage', target_server_id: 4, acceptance_job_id: 'accepted', source_fence_job_id: 'disabled', target_confirmation: 'recovered-uuid', event_scheduler: 'OFF', acceptance_scope_acknowledged: true, credentials: {password: 'private SSH'}});
+  expect(screen.getByRole('button', {name: 'Confirm and activate recovered service'})).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('Confirm this exact recovered activation review'));
+  fireEvent.change(screen.getByLabelText('Confirm recovered UUID'), {target: {value: 'another-uuid'}});
+  expect(screen.queryByLabelText('Recovered activation review')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name: 'Review recovered service activation'}));
+  await screen.findByLabelText('Recovered activation review');
+  fireEvent.click(screen.getByLabelText('Confirm this exact recovered activation review'));
+  fireEvent.click(screen.getByRole('button', {name: 'Confirm and activate recovered service'}));
+  await waitFor(() => expect(run).toHaveBeenCalledWith('cutover_start', {job_id: 'activation', review_digest: 'exact', confirmed: true, credentials: {password: 'private SSH'}}, expect.any(Function)));
+  expect(screen.getByRole('button', {name: 'Confirm and activate recovered service'})).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', {name: 'Observe activation without replay'}));
+  await waitFor(() => expect(run.mock.calls.at(-1)[0]).toBe('cutover_reconcile'));
+});

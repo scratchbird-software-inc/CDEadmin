@@ -87,9 +87,11 @@ Known implementation and qualification gaps
 MySQL
 -----
 
-Of the accepted comparison priorities ``CMP-MY-01`` through ``CMP-MY-11``,
-``CMP-MY-02`` through ``CMP-MY-11`` are implemented and Linux-qualified;
-``CMP-MY-01`` remains open. Notebook project assets now support
+All eleven accepted comparison priorities ``CMP-MY-01`` through ``CMP-MY-11``
+are implemented and Linux-qualified. Independent ``INV-MYSQL`` reconciliation
+remains required before the implementation handoff. The chronological evidence
+notes below retain their original qualification limits; current comparison
+status is owned by :doc:`mysql_implementation_priorities`. Notebook project assets now support
 explicit native execution, deliberately retained/redacted results, portable
 inert sharing/import and explicit connection binding; see
 :doc:`mysql_sql_notebooks` for qualification and privacy limits.
@@ -828,3 +830,23 @@ handoff. Physical control now survives adapter/registration changes, missing
 duplicated bindings with matching original host facts, and native supervisor
 loss while source SQL is offline. Original unknown outcomes remain unknown;
 wider legacy utility/guardian coverage still requires its own evidence.
+
+
+Permanent recovered-service activation
+---------------------------------------
+
+The admitted Linux ``CMP-MY-01`` workflow now includes a permanent read-only
+service copied from an independently stopped recovery, followed by separately
+reviewed background writable activation. Native process/dictionary/namespace
+binding, normal registration/restart, independent expected-checkpoint acceptance
+and fresh locked data/account/public-system-table checks are qualified through
+both connectors. Original source-service inactivity/disablement also requires
+absence of an actual original dictionary holder, including a manually started
+server outside the unit. One durable startup claim, a cancellation boundary,
+unknown original replies and independent observations prevent automatic replay.
+The built Linux desktop qualifies the encrypted external-table case. All eleven
+comparison workflows are Linux-qualified; ``INV-MYSQL`` and its current native
+capability/diagnostic reconciliation remain separate. See
+:doc:`mysql_physical_backups` for the admitted version/layout, acceptance and
+cutover scope. Platform-team acceptance and owner-deferred ScratchBird history
+remain separately owned.

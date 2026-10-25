@@ -13,6 +13,28 @@ import sys
 import tempfile
 
 
+def dictionary_writers(datadir,*,process_root=Path('/proc')):
+    """An inactive unit alone does not exclude a manually started original."""
+    wanted=(Path(datadir)/'mysql.ibd').stat();holders=[];count=0
+    try:
+        for process in process_root.iterdir():
+            if not process.name.isdigit():continue
+            try:descriptors=(process/'fd').iterdir()
+            except FileNotFoundError:continue
+            try:
+                for descriptor in descriptors:
+                    count+=1
+                    if count>250000:raise ValueError('Native descriptor inventory exceeds its bound')
+                    try:current=descriptor.stat()
+                    except FileNotFoundError:continue
+                    if (current.st_dev,current.st_ino)==(wanted.st_dev,wanted.st_ino):holders.append(int(process.name));break
+            except FileNotFoundError:continue
+        return {'observed':True,'native_dictionary_writers_absent':not holders,'holder_pids':sorted(holders),
+            'scope':'Processes with this exact original native dictionary inode open; concurrent external administrators are not frozen'}
+    except (OSError,ValueError) as error:
+        return {'observed':False,'native_dictionary_writers_absent':False,'error_type':type(error).__name__}
+
+
 def inspect(request, observed, run, file_hash, regular_stream, refused):
     selected = request.get('service')
     if not isinstance(selected, dict) or set(selected) != {'manager', 'name'} or selected['manager'] != 'systemd':

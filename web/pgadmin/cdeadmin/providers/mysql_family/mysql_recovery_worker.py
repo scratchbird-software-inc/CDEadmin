@@ -305,6 +305,47 @@ def sql_ready(request, observed, directory, option_file, data):
     return value
 
 
+def runtime_arguments(request,observed,directory,data,*,deployment=None):
+    args = ['--no-defaults', '--persisted-globals-load=OFF', '--upgrade=NONE', '--datadir='+str(data),
+        '--socket='+str(directory/'runtime.sock'), '--pid-file='+str(directory/'runtime.pid'),
+        '--log-error='+str(directory/'native-error.log'),
+        '--user='+observed['os_account']['name'], '--mysqlx=OFF', '--skip-replica-start',
+        '--loose-group-replication-start-on-boot=OFF',
+        '--local-infile='+('ON' if request.get('recovery_local_infile',False) else 'OFF'),
+        '--event-scheduler=DISABLED', '--gtid-mode='+request['recovery_gtid_mode'],
+        '--enforce-gtid-consistency=ON', '--innodb-buffer-pool-size='+str(request['memory_bytes']),
+        '--tmpdir='+str(directory), '--innodb-data-home-dir='+str(data), '--innodb-undo-directory='+str(data)]
+    args += ['--'+key.replace('_','-')+'='+val for key,val in sorted(observed['configuration'].items())]
+    for name,selected in observed.get('recovery_tls',{}).items():
+        target=directory/('recovery-'+name+'.pem')
+        with host.regular_stream(Path(selected['path'])) as stream:tls_data=stream.read(131073)
+        if physical.hashlib.sha256(tls_data).hexdigest()!=selected['sha256']:raise Refused('Native recovery TLS files changed after review')
+        with target.open('xb') as stream:host.private_file(target);stream.write(tls_data)
+        args.append('--'+name.replace('_','-')+'='+str(target))
+    args += (['--read-only=OFF','--super-read-only=OFF','--log-bin='+str(directory/'recovery-bin'),
+        '--log-bin-index='+str(directory/'recovery-bin.index'),'--server-id='+str(request['recovery_server_id']),
+        '--log-replica-updates=ON','--binlog-format=ROW','--binlog-encryption=OFF'] if request.get('recovery_mode','read_only')=='replay'
+        else ['--super-read-only=ON','--skip-log-bin'])
+    if observed.get('keyring'):args+=physical.keyring_module().runtime(directory,data,observed['keyring'])
+    aliases=None
+    if observed.get('external_paths'):
+        aliases,native_paths=physical.paths_module().runtime(directory,data,observed['external_paths'])
+        args+=native_paths
+    args += ['--bind-address=127.0.0.1','--port='+str(request['recovery_port'])] if request.get('recovery_port') else ['--skip-networking']
+    if deployment is not None:
+        # A permanent service stages read-only. The separate reviewed native
+        # activation controls writes and the event scheduler.
+        prefixes=('--skip-networking','--bind-address=','--port=','--event-scheduler=',
+            '--read-only=','--super-read-only=','--skip-log-bin','--log-bin=',
+            '--log-bin-index=','--server-id=','--log-replica-updates=','--binlog-format=')
+        args=[arg for arg in args if not arg.startswith(prefixes)]
+        args+=['--bind-address='+deployment['bind_address'],'--port='+str(deployment['port']),
+            '--event-scheduler=OFF','--read-only=ON','--super-read-only=ON',
+            '--log-bin='+str(directory/'recovery-bin'),'--log-bin-index='+str(directory/'recovery-bin.index'),
+            '--server-id='+str(deployment['server_id']),'--log-replica-updates=ON','--binlog-format=ROW']
+    return args,aliases
+
+
 def execute(directory):
     directory = Path(directory); request = physical.read_json(directory/'request.json')
     value = {'job_id':request['job_id'], 'input_digest':request['input_digest'], 'phase':'recover', 'state':'native_dispatch',
@@ -326,32 +367,7 @@ def execute(directory):
         if host.digest(physical.manifest(data)) != observed['input']['manifest_sha256']:
             raise Refused('Staged recovery bytes differ from the immutable copy-back')
         (data/'auto.cnf').unlink(missing_ok=True)  # Native startup assigns a distinct target UUID.
-        args = ['--no-defaults', '--persisted-globals-load=OFF', '--upgrade=NONE', '--datadir='+str(data),
-            '--socket='+str(directory/'runtime.sock'), '--pid-file='+str(directory/'runtime.pid'),
-            '--log-error='+str(directory/'native-error.log'),
-            '--user='+observed['os_account']['name'], '--mysqlx=OFF', '--skip-replica-start',
-            '--loose-group-replication-start-on-boot=OFF',
-            '--local-infile='+('ON' if request.get('recovery_local_infile',False) else 'OFF'),
-            '--event-scheduler=DISABLED', '--gtid-mode='+request['recovery_gtid_mode'],
-            '--enforce-gtid-consistency=ON', '--innodb-buffer-pool-size='+str(request['memory_bytes']),
-            '--tmpdir='+str(directory), '--innodb-data-home-dir='+str(data), '--innodb-undo-directory='+str(data)]
-        args += ['--'+key.replace('_','-')+'='+val for key,val in sorted(observed['configuration'].items())]
-        for name,selected in observed.get('recovery_tls',{}).items():
-            target=directory/('recovery-'+name+'.pem')
-            with host.regular_stream(Path(selected['path'])) as stream:tls_data=stream.read(131073)
-            if physical.hashlib.sha256(tls_data).hexdigest()!=selected['sha256']:raise Refused('Native recovery TLS files changed after review')
-            with target.open('xb') as stream:host.private_file(target);stream.write(tls_data)
-            args.append('--'+name.replace('_','-')+'='+str(target))
-        args += (['--read-only=OFF','--super-read-only=OFF','--log-bin='+str(directory/'recovery-bin'),
-            '--log-bin-index='+str(directory/'recovery-bin.index'),'--server-id='+str(request['recovery_server_id']),
-            '--log-replica-updates=ON','--binlog-format=ROW','--binlog-encryption=OFF'] if request.get('recovery_mode','read_only')=='replay'
-            else ['--super-read-only=ON','--skip-log-bin'])
-        if observed.get('keyring'):args+=physical.keyring_module().runtime(directory,data,observed['keyring'])
-        aliases=None
-        if observed.get('external_paths'):
-            aliases,native_paths=physical.paths_module().runtime(directory,data,observed['external_paths'])
-            args+=native_paths
-        args += ['--bind-address=127.0.0.1','--port='+str(request['recovery_port'])] if request.get('recovery_port') else ['--skip-networking']
+        args,aliases=runtime_arguments(request,observed,directory,data)
         if (directory/'cancel').exists(): raise InterruptedError('Recovery cancelled before native dispatch')
         option_file = physical.client_options(request,directory)
         if aliases is not None:

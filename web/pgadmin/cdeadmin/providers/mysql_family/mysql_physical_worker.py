@@ -39,6 +39,14 @@ def recovery_module():
     return recovery
 
 
+def deployment_module():
+    try:
+        import _cdeadmin_recovery_deployment as deployment
+    except ModuleNotFoundError:
+        from . import mysql_recovery_deployment as deployment
+    return deployment
+
+
 def keyring_module():
     try:
         import _cdeadmin_keyring_worker as keyring
@@ -307,6 +315,7 @@ def input_artifact(request, root, selected):
 
 
 def inspection(request):
+    if request['phase'] == 'deploy': return deployment_module().inspection(request)
     if request['phase'] == 'recover': return recovery_module().inspection(request)
     if not sys.platform.startswith('linux'):
         raise Refused('The admitted XtraBackup backend requires a native Linux database host')
@@ -469,6 +478,7 @@ def execute(directory):
     """Detached supervisor. It survives loss of the web worker or SSH reply."""
     directory = Path(directory)
     request = read_json(directory / 'request.json')
+    if request['phase'] == 'deploy': return deployment_module().execute(directory)
     if request['phase'] == 'recover': return recovery_module().execute(directory)
     value = {'state': 'native_dispatch', 'job_id': request['job_id'], 'input_digest': request['input_digest'],
         'automatic_retry': False, 'native_may_have_dispatched': False, 'process_termination_confirmed': False,
@@ -637,12 +647,16 @@ def _dispatch(request, launch_source=None):
     binding = host_scope(request)
     root = root_directory(request['workspace'], binding)
     selected = job_id(request['job_id']); directory = root / selected
+    if action == 'activate_policy' and request['phase'] == 'deploy':
+        return deployment_module().activate_policy(directory, request['activation'])
     if action in {'status', 'cancel', 'output'}:
         if not directory.is_dir() or directory.is_symlink():
             return {'state': 'unknown', 'remote_receipt_available': False, 'automatic_retry': False}
         record = read_json(directory / 'result.json')
         if record.get('input_digest') != request['input_digest']:
             raise Refused('Physical receipt belongs to another reviewed input')
+        if request['phase']=='deploy' and action=='status':
+            return public(deployment_module().observe(directory,record))
         if request['phase'] == 'recover' and action in {'status', 'cancel'}:
             return public(recovery_module().observe(directory, record, action))
         if action == 'cancel' and not record.get('process_termination_confirmed'):

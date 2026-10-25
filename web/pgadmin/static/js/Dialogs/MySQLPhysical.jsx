@@ -4,15 +4,17 @@ import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBo
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
 import MySQLPhysicalBatchRetention from './MySQLPhysicalBatchRetention';
 import MySQLPhysicalBackupSchedule from './MySQLPhysicalBackupSchedule';
+import MySQLRecoveryCutover from './MySQLRecoveryCutover';
 
 const initial = {connection: {host: '', port: 22, username: '', host_key: '', authentication: 'private_key', platform: 'posix', python: '/usr/bin/python3'},
   workspace: '/var/backups/scratchrobin/physical', executable: '/usr/bin/xtrabackup', mysql: '/usr/bin/mysql', phase: 'backup',
   sql_host: '127.0.0.1', sql_port: 3306, input_job_id: null, parallel: 2, memory_bytes: 268435456,
   timeout_seconds: 3600, accept_release_candidate: false};
 const phaseOptions = (current, phase, input_job_id) => {
-  const {mysqld, recovery_gtid_mode, recovery_port, recovery_mode, recovery_server_id, recovery_local_infile, recovery_tls, incremental_job_id, ...base} = current;
+  const {mysqld, recovery_gtid_mode, recovery_port, recovery_mode, recovery_server_id, recovery_local_infile, recovery_tls, incremental_job_id, deployment, ...base} = current;
   return {...base, phase, input_job_id, ...(phase === 'prepare_redo' ? {incremental_job_id: incremental_job_id || null} : {}), ...(phase === 'recover' ? {mysqld: mysqld || '/usr/sbin/mysqld', recovery_gtid_mode: recovery_gtid_mode || 'ON', recovery_port: recovery_port ?? 3307,
-    recovery_mode: recovery_mode || 'read_only', recovery_local_infile: recovery_local_infile ?? false, ...(recovery_tls ? {recovery_tls} : {}), ...(recovery_mode === 'replay' ? {recovery_server_id: recovery_server_id || 10001} : {})} : {})};
+    recovery_mode: recovery_mode || 'read_only', recovery_local_infile: recovery_local_infile ?? false, ...(recovery_tls ? {recovery_tls} : {}), ...(recovery_mode === 'replay' ? {recovery_server_id: recovery_server_id || 10001} : {})} : {}),
+    ...(phase === 'deploy' ? {deployment: deployment || {directory: '/var/lib/scratchrobin-recovered', service: 'scratchrobin-recovered.service', bind_address: '127.0.0.1', port: 3307, server_id: 10002}} : {})};
 };
 export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
   const [options, setOptions] = useState(initial), [credentials, setCredentials] = useState({});
@@ -112,8 +114,14 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
         setOptions(current => phaseOptions(current, phase, phase === 'backup' ? null : current.input_job_id));
         setReview(null); setConfirmed(false); setDelegate(false); clearConnectionReview();
       }}>
-        <MenuItem value="backup">Full backup</MenuItem><MenuItem value="incremental">Incremental from retained backup</MenuItem><MenuItem value="prepare_redo">Prepare separate redo-only copy / apply incremental</MenuItem><MenuItem value="prepare">Prepare immutable copy</MenuItem><MenuItem value="copy_back">Copy back to new isolated directory</MenuItem><MenuItem value="recover">Start managed recovery instance</MenuItem>
+        <MenuItem value="backup">Full backup</MenuItem><MenuItem value="incremental">Incremental from retained backup</MenuItem><MenuItem value="prepare_redo">Prepare separate redo-only copy / apply incremental</MenuItem><MenuItem value="prepare">Prepare immutable copy</MenuItem><MenuItem value="copy_back">Copy back to new isolated directory</MenuItem><MenuItem value="recover">Start managed recovery instance</MenuItem><MenuItem value="deploy">Stage permanent recovered service</MenuItem>
       </TextField>
+      {options.phase === 'deploy' && <>
+        <Alert severity="info">Stop the original managed recovery and observe both original processes ending. Staging copies its current data and binary logs to a new permanent directory and starts a new read-only systemd unit. Independent acceptance and writable cutover follow separately.</Alert>
+        {['directory', 'service', 'bind_address', 'port', 'server_id'].map(key => <TextField key={key} size="small" label={{directory: 'Permanent recovered directory', service: 'New permanent systemd unit', bind_address: 'Permanent listener address', port: 'Permanent listener port', server_id: 'Permanent native server ID'}[key]}
+          type={['port', 'server_id'].includes(key) ? 'number' : 'text'} value={options.deployment[key]} disabled={busy}
+          onChange={event => change('deployment', {...options.deployment, [key]: ['port', 'server_id'].includes(key) ? Number(event.target.value) : event.target.value})} />)}
+      </>}
       {options.phase === 'recover' && <>
         <FormControlLabel label="Provision recovery server TLS from reviewed host files" control={<Checkbox checked={!!options.recovery_tls} disabled={busy} onChange={event => {
           const {recovery_tls: _recovery_tls, ...base} = options;
@@ -180,6 +188,9 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
         {!receipt.remote_observation.artifact.prepared && receipt.remote_observation.artifact.format !== 'xtrabackup-9.7-incremental' && <Button disabled={busy} onClick={() => {setIncrementals(null); derived('prepare_redo');}}>Use separate redo-only copy for incrementals</Button>}
       </>}
       {receipt.file_verification_confirmed && receipt.remote_observation?.restored_files && <Button disabled={busy} onClick={() => derived('recover')}>Use copy-back for managed recovery</Button>}
+      {receipt.options.phase === 'recover' && receipt.remote_observation?.runtime_process_live === false && receipt.remote_observation?.supervisor_process_live === false && <Button disabled={busy} onClick={() => derived('deploy')}>Use stopped recovery for permanent service staging</Button>}
+      {receipt.permanent_deployment && <Box component="pre" aria-label="Permanent recovered service receipt" sx={{whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto'}}>{JSON.stringify(receipt.permanent_deployment, null, 2)}</Box>}
+      {receipt.permanent_deployment && <MySQLRecoveryCutover key={receipt.job_id} run={run} deployment={receipt} credentials={credentials} busy={busy} />}
       <Box component="pre" aria-label="Native physical receipt" sx={{whiteSpace: 'pre-wrap', maxHeight: 400, overflow: 'auto'}}>{JSON.stringify(receipt, null, 2)}</Box>
       <Box component="section" aria-label="Physical artifact retention" sx={{my: 1}}>
         <Alert severity="warning">Physical retention removes the reviewed backup files, recovered data copy and private replay logs on the pinned SSH host. Remove dependent artifacts first, stop recovery and remove its registrations. Original receipts and native outcomes are preserved. Binary-log protection is managed separately.</Alert>

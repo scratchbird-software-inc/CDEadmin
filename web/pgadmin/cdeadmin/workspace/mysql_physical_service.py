@@ -122,8 +122,9 @@ def source(service, server, *, admitted=None, keyring=None, isolate_external_pat
 def options(value):
     fields = {'connection', 'workspace', 'executable', 'mysql', 'phase', 'sql_host', 'sql_port',
         'input_job_id', 'parallel', 'memory_bytes', 'timeout_seconds', 'accept_release_candidate'}
-    extra = {'mysqld', 'recovery_gtid_mode'} if isinstance(value,dict) and value.get('phase') == 'recover' else set()
-    optional = ({'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls'} if extra else ({'incremental_job_id'} if isinstance(value,dict) and value.get('phase')=='prepare_redo' else set()))|{'keyring','isolate_external_paths'}
+    extra = ({'mysqld', 'recovery_gtid_mode'} if isinstance(value,dict) and value.get('phase') == 'recover' else
+        {'deployment'} if isinstance(value,dict) and value.get('phase') == 'deploy' else set())
+    optional = ({'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls'} if isinstance(value,dict) and value.get('phase')=='recover' else ({'incremental_job_id'} if isinstance(value,dict) and value.get('phase')=='prepare_redo' else set()))|{'keyring','isolate_external_paths'}
     if not isinstance(value, dict) or not fields | extra <= set(value) or set(value)-fields-extra-optional:
         raise native.HostError('Select the complete native physical host and operation options')
     selected = deepcopy(value); selected['connection'] = native.ssh.public_route(value['connection'])
@@ -137,7 +138,7 @@ def options(value):
             raise native.HostError('Select the absolute native XtraBackup file-keyring component directory')
     if selected['connection']['platform'] != 'posix' or value['accept_release_candidate'] is not True:
         raise native.HostError('Confirm the admitted Linux XtraBackup9.7.1-rc1 release candidate explicitly')
-    for key in ('workspace', 'executable', 'mysql', *(['mysqld'] if extra else [])):
+    for key in ('workspace', 'executable', 'mysql', *(['mysqld'] if value['phase']=='recover' else [])):
         if not isinstance(value[key], str) or not value[key] or '\x00' in value[key] or len(value[key]) > 4096:
             raise native.HostError('Select bounded absolute paths on the authenticated database host')
     if (not isinstance(value['sql_host'],str) or not value['sql_host'] or len(value['sql_host'])>253 or
@@ -147,11 +148,14 @@ def options(value):
     for key, low, high in [('parallel', 1, 64), ('memory_bytes', 64 * 1024 * 1024, 16 * 1024**3), ('timeout_seconds', 1, 604800)]:
         if type(value[key]) is not int or not low <= value[key] <= high:
             raise native.HostError('Select bounded native physical ' + key)
-    if value['phase'] not in {'backup','incremental','prepare','prepare_redo','copy_back','recover'}:
+    if value['phase'] not in {'backup','incremental','prepare','prepare_redo','copy_back','recover','deploy'}:
         raise native.HostError('Select full/incremental backup, redo-only/final preparation, isolated copy-back or managed recovery')
-    if extra and value['recovery_gtid_mode'] not in {'OFF','OFF_PERMISSIVE','ON_PERMISSIVE','ON'}:
+    if value['phase']=='deploy':
+        try:selected['deployment']=native.worker.deployment_module().options(value['deployment'],host_paths=False)
+        except native.worker.Refused as error:raise native.HostError(str(error)) from None
+    if value['phase']=='recover' and value['recovery_gtid_mode'] not in {'OFF','OFF_PERMISSIVE','ON_PERMISSIVE','ON'}:
         raise native.HostError('Select the native recovery GTID mode explicitly')
-    if extra:
+    if value['phase']=='recover':
         port = value.get('recovery_port',0)
         if type(port) is not int or port != 0 and not 1024 <= port <= 65535:
             raise native.HostError('Select no recovery TCP listener or a native loopback port from 1024 through 65535')
@@ -224,6 +228,14 @@ class PhysicalJobs(MySQLBinlogJobs):
         result['recovery_running'] = not record.get('artifact_removed') and remote.get('recovery_running_verified') is True
         result['recovery_sql_startup_observed'] = remote.get('sql_ready_observed') is True
         result['production_cutover_verified'] = False
+        if record['options']['phase']=='deploy':
+            result['permanent_deployment']={'directory':record['options']['deployment']['directory'],
+                'service':record['options']['deployment']['service'],
+                'unit_installation_observed':remote.get('installation',{}).get('installed') is True,
+                'native_start_returned':remote.get('service_start',{}).get('return_code')==0,
+                'initial_super_read_only_requested':True,'database_acceptance_verified':False,
+                'observation':remote.get('deployment_observation'),
+                'production_cutover_verified':False}
         result['backup_schedule_id']=record['source_state'].get('backup_schedule_id')
         return result
 
@@ -273,7 +285,7 @@ def remote_request(record, action):
         **({'sql_tls_policy': deepcopy(record['source_state']['sql_tls_policy'])} if 'sql_tls_policy' in record['source_state'] else {}),
         **({'source_keyring':deepcopy(record['source_state']['native_keyring_source'])} if 'native_keyring_source' in record['source_state'] else {}),
         **({'source_storage':deepcopy(record['source_state']['native_storage_source'])} if 'native_storage_source' in record['source_state'] else {}),
-        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','incremental_job_id','keyring','isolate_external_paths') if key in selected}}
+        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','incremental_job_id','keyring','isolate_external_paths','deployment') if key in selected}}
 
 
 def sql_tls(service, server):
@@ -359,6 +371,9 @@ def _action(service, server, operation, request, *, source_capture=None,database
         from .mysql_recovery_connections import action as connection_action
         return connection_action(service, server, operation[11:], request)
     jobs, owner, endpoint = manager(service, server)
+    if operation.startswith('cutover_'):
+        from .mysql_recovery_cutover import action as cutover_action
+        return cutover_action(service,server,jobs,owner,endpoint,operation[8:],request)
     if operation.startswith('retention_batch_'):
         from .mysql_physical_batch_retention import action as batch_action
         return batch_action(service,server,jobs,owner,endpoint,operation,request)
@@ -420,8 +435,9 @@ def _action(service, server, operation, request, *, source_capture=None,database
             if (prior.get('artifact_removed') or prior.get('artifact_removal') or prior.get('retention_batch_id') or
                     prior.get('backup_workflow_protected') and prior['source_state'].get('backup_schedule_id')!=scheduled_policy_id or
                     prior['options']['connection'] != selected['connection'] or prior['options']['workspace'] != selected['workspace'] or
-                    not jobs.public(prior)['file_verification_confirmed'] or
-                    not (prior.get('remote_observation') or {}).get('restored_files' if selected['phase'] == 'recover' else 'artifact')):
+                    (selected['phase']!='deploy' and not jobs.public(prior)['file_verification_confirmed']) or
+                    (selected['phase']=='deploy' and prior['options']['phase']!='recover') or
+                    (selected['phase']!='deploy' and not (prior.get('remote_observation') or {}).get('restored_files' if selected['phase'] == 'recover' else 'artifact'))):
                 raise native.HostError('Select an observed physical input in this owner/registration and pinned host workspace')
             if selected['phase']=='incremental':
                 if captured['identity']!=prior['source'] or captured['state']['host_binding']!=original_binding(prior):

@@ -22,7 +22,9 @@ def sources():
         'retention': Path(worker.__file__).with_name('mysql_physical_retention_worker.py').read_text(encoding='utf8'),
         'keyring': Path(worker.__file__).with_name('mysql_physical_keyring.py').read_text(encoding='utf8'),
         'geometry': Path(worker.__file__).with_name('mysql_physical_geometry.py').read_text(encoding='utf8'),
-        'paths': Path(worker.__file__).with_name('mysql_physical_paths.py').read_text(encoding='utf8')}
+        'paths': Path(worker.__file__).with_name('mysql_physical_paths.py').read_text(encoding='utf8'),
+        'installation': Path(worker.__file__).with_name('mysql_host_installation.py').read_text(encoding='utf8'),
+        'deployment': Path(worker.__file__).with_name('mysql_recovery_deployment.py').read_text(encoding='utf8')}
 
 
 BOOTSTRAP = '''import json,sys,types
@@ -31,12 +33,14 @@ def install(name,source):
 def load(p):
  install('_cdeadmin_native_fileio',p['fileio'])
  install('_cdeadmin_native_services',p['services'])
+ install('_cdeadmin_native_installation',p['installation'])
  install('_cdeadmin_native_worker',p['host'])
  m=install('_cdeadmin_physical_worker',p['physical'])
  install('_cdeadmin_keyring_worker',p['keyring'])
  install('_cdeadmin_physical_paths',p['paths'])
  install('_cdeadmin_physical_geometry',p['geometry'])
  install('_cdeadmin_recovery_worker',p['recovery'])
+ install('_cdeadmin_recovery_deployment',p['deployment'])
  install('_cdeadmin_recovery_stream',p['stream'])
  install('_cdeadmin_physical_retention_worker',p['retention'])
  return m

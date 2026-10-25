@@ -10,9 +10,63 @@ starts and supervises a private data copy. Selected log recovery, independent
 exported-data/definition acceptance, dependency-aware retention and scheduling
 have separate reviewed workflows. Native GPL file-keyring recovery is described
 below. Native system/undo geometry and external InnoDB table/tablespace isolation
-are also described below. Unmapped legacy storage layouts,
-unexported/system-state acceptance and production cutover remain open under
-``CMP-MY-01``.
+are also described below. Permanent recovered-service staging and reviewed
+writable activation complete the admitted Linux ``CMP-MY-01`` workflow.
+Native version/layout and wider installation coverage remain under ``INV-MYSQL``.
+
+Permanent recovered service and reviewed activation
+----------------------------------------------------
+
+After managed recovery ends, select **Use stopped recovery for permanent service
+staging**. Both original process births must be independently absent. Review a
+new permanent directory, systemd unit, listener address/port and server ID.
+Staging copies the current recovered data, external files, native keyring/TLS
+material and binary-log bytes. It preserves the recovered UUID and rebases the
+native log index to the new copies. The permanent launcher and its dependencies
+live outside the backup job directory. Existing directories or units are never
+overwritten. Native configuration and unit validation precede publication.
+
+The service starts read-only with events and replication autostart off. Unit
+installation, the manager's original reply, current native process/filesystem
+association and SQL/data acceptance are separate observations. A missing reply
+does not trigger another installation or start. Register the permanent listener
+through the normal MySQL connection workflow. Its host controls provide reviewed
+restart and separate boot enable/disable operations.
+
+Run **Independent dump acceptance** on that registration against the explicitly
+selected expected source checkpoint. Acceptance requires native counts,
+checksums and definitions; exported accounts and selected system tables retain
+their recorded scope. Unexported state and volatile MEMORY rows are not inferred
+to match. Checksum acceptance requires trusted LOCAL INFILE on this target.
+
+In the original source's physical workspace, inspect the deployment and supply
+the target registration, matched acceptance receipt, source-service disable
+receipt and recovered UUID. Stop and disable the original service through the
+host controls first. The activation review independently checks that service is
+still inactive/disabled, independently excludes any process holding its original
+native dictionary inode, and binds the recovered process, unit, directory,
+listener, UUID and acceptance scope. Concurrent external administrators remain
+outside the application's fence.
+
+Confirmation repeats the native acceptance under instance/read locks, then
+rechecks the source fence. Only matching data permit a single durable writable
+startup-policy claim, followed by native live read-only/event settings. An
+activation runs as a background job with durable progress, independently of its
+viewer. Cancellation is admitted before the startup-policy claim; after that
+boundary, inspect the original transition without implying rollback. An
+interruption can leave the committed startup policy with the live server still
+read-only. **Observe activation without replay** reports current facts while
+preserving the unknown original outcome. Another confirmation never repeats the
+transition. A separate reviewed restart applies the committed startup policy.
+Application routing and boot enablement remain explicit separate operations.
+
+``tools/cdeadmin_mysql_recovered_deployment_qualification.py`` exercises owned
+native Linux systemd/SSH hosts through the application API. It covers original
+writer refusal, UUID/post-backup data/log preservation, normal registration and
+restart, independent and fresh locked acceptance, source shutdown/disablement,
+writable activation and restart durability. ``--interrupt`` loses the original
+startup-policy reply; optional browser arguments exercise the built desktop.
+This qualification does not run ScratchBird history tests.
 
 Admitted native backend
 ------------------------

@@ -18,6 +18,16 @@ the current MySQL beta backlog. That document defines their ordering, native
 acceptance and the completion checkpoint for switching development to MariaDB.
 Recording these requirements does not qualify or complete their implementation.
 
+Current comparison checkpoint
+------------------------------
+
+All eleven accepted comparison workflows are implemented and Linux-qualified.
+Permanent recovered-service staging and reviewed background activation now close
+``CMP-MY-01`` alongside the previously qualified production topology/host scope.
+``INV-MYSQL`` remains an independent gate; comparison completion does not declare
+full native product or cross-platform acceptance. Later evidence sections retain
+the qualification limits recorded at their original checkpoint.
+
 Acceptance requirements
 -----------------------
 
@@ -2507,3 +2517,33 @@ login and original-job listing. This completes the accepted Linux
 ``CMP-MY-02`` scope alongside the existing host/Router/outage/repair and upgrade
 receipts. Recovery/recoverability (``CMP-MY-01``) and the independent native
 inventory remain open before the MariaDB implementation handoff.
+
+
+Permanent recovered-service and cutover acceptance
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A stopped native recovery now stages a new permanent read-only systemd service
+with independent unit/process/dictionary/namespace observations and its retained
+UUID, data, logs, native file-keyring and TLS material. Its embedded launcher and
+private copies survive ordinary registered host restarts. Namespace-aware host
+binding identifies the permanent dictionary through its owned deployment claim
+instead of confusing original source paths with the recovered files.
+
+Background writable activation binds a registered target to matched independent
+expected-checkpoint acceptance and explicit coverage acknowledgement. Current
+source-service inactivity/disablement plus original dictionary-holder absence
+exclude a manually started original writer. Fresh native checks run under
+instance/read locks before the one-time writable startup policy and native live
+read-only/event changes. Cancellation is admitted before the durable policy
+claim. Missing replies keep their unknown outcomes, never trigger replay and
+remain independently observable across an explicit restart.
+
+``tools/cdeadmin_mysql_recovered_deployment_qualification.py`` qualifies both
+connectors with native MySQL9.7/systemd/SSH, original manual-writer refusal, full
+selected data/definition/account and 25 public system-table acceptance, encrypted
+external data, writable restart durability and lost-policy acknowledgement. Its
+built desktop companion verifies owner-scoped review, confirmation and
+observation with no console errors. This closes admitted Linux ``CMP-MY-01``;
+all eleven comparison items are Linux-qualified. Independent inventory, optional
+installation coverage and cross-platform acceptance are separate. ScratchBird
+history qualification remains owner-deferred.

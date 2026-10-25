@@ -11,6 +11,25 @@ const review = {job_id: 'physical-job', review_digest: 'exact', state: 'reviewed
     workspace: '/private', executable: '/usr/bin/xtrabackup', mysql: '/usr/bin/mysql', sql_host: '127.0.0.1', sql_port: 3306,
     input_job_id: null, parallel: 2, memory_bytes: 268435456, timeout_seconds: 3600, accept_release_candidate: true}};
 
+it('derives a permanent read-only service only from an independently stopped recovery and reviews its listener', async () => {
+  const stopped = {...review, state: 'native_returned', options: {...review.options, phase: 'recover', mysqld: '/native/mysqld', recovery_gtid_mode: 'ON'}, remote_observation: {runtime_process_live: false, supervisor_process_live: false}};
+  const post = jest.fn().mockResolvedValueOnce({jobs: [stopped], offset: 0, limit: 25, more: false}).mockResolvedValueOnce(stopped)
+    .mockImplementation(({request}) => Promise.resolve({...review, options: request.options}));
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button', {name: 'Load physical jobs'}));
+  await screen.findByRole('table', {name: 'Native physical jobs'});
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect physical job physical-job'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Use stopped recovery for permanent service staging'}));
+  fireEvent.change(screen.getByLabelText('Permanent recovered directory'), {target: {value: '/var/lib/recovered'}});
+  fireEvent.change(screen.getByLabelText('New permanent systemd unit'), {target: {value: 'recovered.service'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Review native physical job'}));
+  await screen.findByLabelText('Native physical review');
+  const selected = post.mock.calls[2][0].request.options;
+  expect(selected.phase).toBe('deploy'); expect(selected.input_job_id).toBe('physical-job');
+  expect(selected.deployment).toEqual({directory: '/var/lib/recovered', service: 'recovered.service', bind_address: '127.0.0.1', port: 3307, server_id: 10002});
+  expect(selected).not.toHaveProperty('mysqld');
+});
+
 it('requires explicit external-path isolation and invalidates review when the selection changes', async () => {
   const post = jest.fn(({request}) => Promise.resolve({...review, options: request.options, native_external_files: [{file_name: '/native/external/table.ibd'}]}));
   render(<Component post={post} />);
