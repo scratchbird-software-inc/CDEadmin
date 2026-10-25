@@ -10,6 +10,27 @@ const catalog={operations:[
   {id:'instance.check_configuration',context:'instance',method:'check_instance_configuration',arguments:['options?'],read_only:true},
   {id:'cluster.set_option',context:'cluster',method:'set_option',arguments:['option','value'],read_only:false},
 ]};
+it('binds secondary-seed reviews and original job controls to an explicitly selected execution registration',async()=> {
+  const review={job_id:'primary-job',review_digest:'bound',state:'reviewed',target:{server_uuid:'primary'},warnings:[]};
+  const values={catalog,members:{instances:[{server_id:4,name:'Owned primary'}],total:1,offset:0},
+    inspect:{identity:{server_uuid:'primary'}},review,start:{...review,state:'operation_returned',native_operation_outcome:'returned'}};
+  const post=jest.fn(({action})=>Promise.resolve(values[action.replace('mysql_topology_','')]));
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load registered topology instances'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Use execution registration Owned primary'}));
+  expect(screen.getByText(/Native execution registration: Owned primary/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Load native topology methods'}));await screen.findByLabelText('Native topology method');
+  fireEvent.mouseDown(screen.getByLabelText('Native topology method'));fireEvent.click(await screen.findByRole('option',{name:'cluster.set_option'}));
+  fireEvent.click(screen.getByRole('button',{name:'Inspect topology seed'}));await screen.findByLabelText('Native topology seed');
+  fireEvent.change(screen.getByLabelText('Confirm topology seed UUID'),{target:{value:'primary'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review native topology change'}));await screen.findByLabelText('Native topology review');
+  expect(post.mock.calls.find(([value])=>value.action==='mysql_topology_review')[0].request).toMatchObject({execution_server_id:4,options:{target_confirmation:'primary'}});
+  fireEvent.click(screen.getByRole('button',{name:'Confirm and start native topology change'}));
+  await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'mysql_topology_start',request:{job_id:'primary-job',review_digest:'bound',confirmed:true,execution_server_id:4}}));
+  fireEvent.click(screen.getByRole('button',{name:'Use original topology registration'}));
+  expect(screen.queryByLabelText('Native topology seed')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Native topology review')).not.toBeInTheDocument();
+});
 it('supplies bootstrap administrator credentials separately from native configuration options',async()=> {
   const methods={operations:[{id:'instance.configure_cluster',context:'instance',method:'configure_instance',arguments:['options?'],read_only:false,bootstrap:true}]};
   const review={job_id:'bootstrap',review_digest:'bound',state:'reviewed',target:{server_uuid:'seed'},warnings:[],options:{account_password_mode:'set'}};

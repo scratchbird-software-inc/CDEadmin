@@ -88,8 +88,8 @@ MySQL
 -----
 
 Of the accepted comparison priorities ``CMP-MY-01`` through ``CMP-MY-11``,
-``CMP-MY-03`` through ``CMP-MY-11`` are implemented and Linux-qualified;
-``CMP-MY-01`` and ``CMP-MY-02`` remain open. Notebook project assets now support
+``CMP-MY-02`` through ``CMP-MY-11`` are implemented and Linux-qualified;
+``CMP-MY-01`` remains open. Notebook project assets now support
 explicit native execution, deliberately retained/redacted results, portable
 inert sharing/import and explicit connection binding; see
 :doc:`mysql_sql_notebooks` for qualification and privacy limits.
@@ -128,7 +128,7 @@ one implementation scope and must not be counted as independent completion.
   lifecycle reconciliation, native
   incremental/encrypted/external-path support, physical retention, selected
   replay, post-replay acceptance and cutover remain open; ``CMP-MY-01`` retains
-  its open status and the comparison completion remains nine of eleven.
+  its open status and the comparison completion remains ten of eleven.
   Separate logical-dump data acceptance now integrates native Shell checksums,
   independent full row counts and table inventories under an explicitly
   confirmed server read lock. It requires complete checksum coverage and stable
@@ -258,7 +258,9 @@ one implementation scope and must not be counted as independent completion.
   election during the last old primary's stop and reviewed promotion after all
   members run 9.7. Independent checks preserve every original UUID and exact data,
   and verify fresh-write replication after each step. Certificate-login and
-  secondary-seed account routing, cutover and the broader inventory remain open.
+  explicit owned-primary execution from a secondary seed now have native
+  administrator/Router-account acceptance in all three topology families through
+  both connectors. Cutover and the broader inventory remain open.
   Native local sandbox deploy/start/stop/kill/delete now have a separate
   offline-capable execution-host workspace with explicit OS authority,
   private dispatch passwords, native configuration/process identity checks,
@@ -279,8 +281,11 @@ one implementation scope and must not be counted as independent completion.
   uncertain-outcome fence; explicit observation/acknowledgement is required
   before another mutation. Broader production upgrade and recovery acceptance remain open; reviewed native
   service creation/boot controls, option-file deployment and pre-SQL initialization are described in :doc:`mysql_functional_completion`.
-  Existing extra grants remain. Automatic secondary-seed routing, certificate
-  login acceptance and replication catch-up are separate qualification work.
+  Existing extra grants remain. The topology workspace now selects an owned
+  execution registration from a secondary seed, checks native membership for new
+  work, and binds account reviews to the current writable primary. Native
+  certificate-account login and password-only refusal pass independently in all
+  three topology families through both connectors.
   Native SQL fanout now exposes each topology's ``execute`` method with native
   contextual selectors, registered member arrays, exclusions, dry runs and
   timeouts. Receipts and the desktop retain per-instance SQL errors separately
@@ -722,10 +727,9 @@ routes with Python and C drivers, including transaction/savepoint/temporary-tabl
 and prepared-statement preservation. See the MySQL functional checklist and
 ``tools/cdeadmin_mysql_registration_lifecycle_qualification.py``.
 
-This closes the generic registration follow-up only. Nine of eleven accepted
+This closes the generic registration follow-up only. Ten of eleven accepted
 comparison items are implemented; recovery/recoverability (``CMP-MY-01``),
-production topology/host lifecycle (``CMP-MY-02``), and remaining ``INV-MYSQL``
-reconciliation still precede the MariaDB handoff. Platform-team acceptance,
+and remaining ``INV-MYSQL`` reconciliation still precede the MariaDB handoff. Platform-team acceptance,
 owner-deferred ScratchBird history tests and post-beta Enterprise features
 remain separately owned.
 
@@ -763,7 +767,7 @@ without requiring TCP. Recurring expected-checkpoint acceptance now uses fresh p
 recoveries, a selected sealed native dump, durable retention holds and original
 utility/server-generation end evidence. Unexported/system state, remaining
 backend admission and cutover stay open under
-``CMP-MY-01``. ``CMP-MY-02`` and remaining ``INV-MYSQL`` reconciliation still
+``CMP-MY-01``. Remaining ``INV-MYSQL`` reconciliation still
 precede the MariaDB handoff. Linux evidence does not close platform-team gates;
 ScratchBird history qualification remains owner-deferred.
 
@@ -774,7 +778,7 @@ Both original inputs remain immutable and protected through application and
 host-side retention dependencies. Finalized chains feed the existing private
 recovery and independent expected-dump acceptance workflows. Remaining physical
 backend admission includes external paths and additional engines;
-unexported/system state, cutover and ``CMP-MY-02``/``INV-MYSQL`` stay open.
+unexported/system state, cutover and ``INV-MYSQL`` stay open.
 
 MySQL physical workflows now preserve registered native TLS policy and transfer
 client certificate material privately to the pinned host, with explicit server
@@ -792,7 +796,7 @@ cleaned independently. Native SQL verifies the private keyring path and original
 encryption policy; recurring startup drills retain this admission after restart.
 External mappings, remaining engine
 inventory, unexported/system-state acceptance, legacy/guardian resolution and
-cutover remain implementation work. The comparison count remains nine of
+cutover remain implementation work. The comparison count is ten of
 eleven; Linux evidence does not close platform or owner-deferred history gates.
 
 MySQL external InnoDB per-table/general tablespaces now use separately reviewed

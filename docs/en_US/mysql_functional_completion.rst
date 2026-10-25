@@ -494,8 +494,8 @@ three-way drift, duplicate apply and original receipt retrieval are qualified.
 Abrupt CLI loss after the durable claim retains uncertainty across restart and
 never redispatches the original review. Controlled native INSTANT, an actual
 INPLACE refusal and pinned Percona Toolkit 3.7.2 copy with explicitly approved
-cutover also pass. These scopes close ``CMP-MY-10`` on Linux. Two accepted
-comparison workflows and broader native inventory/recovery/lifecycle gaps remain
+cutover also pass. These scopes close ``CMP-MY-10`` on Linux. One accepted
+comparison workflow and broader native inventory/recovery/lifecycle gaps remain
 open. Platform-team qualification and owner-deferred ScratchBird history stay
 separate.
 
@@ -515,8 +515,8 @@ handled explicitly. See :doc:`mysql_sql_notebooks` for workflow and privacy
 limits, including retained older project revisions.
 
 Native MySQL 9.7.0 pure/C/API and built desktop receipts close ``CMP-MY-11`` on
-Linux. Nine of eleven accepted comparison workflows are now implemented and
-Linux-qualified. ``CMP-MY-01``, ``CMP-MY-02`` and the broader native
+Linux. Ten of eleven accepted comparison workflows are now implemented and
+Linux-qualified. ``CMP-MY-01`` and the broader native
 inventory/recovery/lifecycle work remain open before the MariaDB handoff.
 Platform qualification, human form validation and owner-deferred ScratchBird
 history acceptance remain separately owned.
@@ -1936,8 +1936,8 @@ its guard connection has closed. Legacy missing-binding receipts remain conserva
 Windows listener inheritance, missing/failed guardian reconciliation and wider lifecycle handling,
 incremental/encrypted/external-path admission, physical retention,
 selected replay and independent post-replay acceptance, production cutover and
-the broader native inventory remain open. ``CMP-MY-01`` and ``CMP-MY-02`` stay
-open; nine of eleven comparison items are implemented and Linux-qualified.
+the broader native inventory remain open. ``CMP-MY-01`` stays
+open; ten of eleven comparison items are implemented and Linux-qualified.
 
 Persistent-history integration is wired. The owner correction of October 16
 defers ScratchBird history testing until explicitly resumed. The earlier native
@@ -1980,7 +1980,7 @@ and session closure, stale-client rejection, fresh verification and successful
 idle removal. Regression checks also cover concurrent connection admission,
 native utility callbacks, release failure and independent recovery reservations.
 This closes the recorded generic MySQL registration lifecycle follow-up, not
-the wider host/recovery inventory. ``CMP-MY-01``, ``CMP-MY-02`` and ``INV-MYSQL``
+the wider host/recovery inventory. ``CMP-MY-01`` and ``INV-MYSQL``
 remain open. Windows/macOS native acceptance remains with the platform teams;
 ScratchBird history qualification remains owner-deferred.
 
@@ -2021,9 +2021,8 @@ Recurring expected-checkpoint policies now start fresh private read-only
 recoveries, compare them to a selected sealed native dump and independently stop
 them. Durable input holds, encrypted SSH/SQL delegation and explicit interrupted
 utility/server-generation release preserve original outcomes. Unexported/system
-state, remaining physical backend admission and production cutover stay open. ``CMP-MY-01``, ``CMP-MY-02`` and ``INV-MYSQL`` still precede
-the MariaDB implementation handoff; the comparison denominator remains nine
-implemented items out of eleven.
+state, remaining physical backend admission and production cutover stay open. ``CMP-MY-01`` and ``INV-MYSQL`` still precede
+the MariaDB implementation handoff; the comparison count is ten implemented items out of eleven.
 
 
 Native physical incremental recovery
@@ -2443,8 +2442,7 @@ actual dispatcher and stopped native client during a delayed stop, verifies
 pending-work protection and explicitly restarts the original service before a
 new upgrade. Desktop invocation adds ``--browser-binary`` and
 ``--driver-binary``. These receipts qualify their recorded Linux scenarios;
-certificate-login/secondary-seed account routing, cutover and wider inventory remain
-separate gates.
+Production recovery cutover and wider inventory remain separate gates.
 
 Native Cluster rolling and metadata upgrades
 --------------------------------------------
@@ -2470,6 +2468,42 @@ Run ``tools/cdeadmin_mysql_rolling_upgrade_qualification.py`` against an explici
 owned three-member fixture. The application/native Shell execution host must
 reach the members' advertised addresses. ``--use-c`` selects the native C driver;
 the default uses the pure driver. These Linux scenarios supplement the existing
-installed-host and desktop upgrade evidence. Certificate-login/secondary-seed
-account routing, production recovery cutover and wider inventory remain separate
-completion gates.
+installed-host and desktop upgrade evidence. Production recovery cutover and
+wider inventory remain separate completion gates.
+
+Owned topology execution and certificate accounts
+--------------------------------------------------
+
+The native topology workspace can run from a separately selected owned member.
+From a secondary seed, load registered topology instances and choose **Use
+execution registration** for the current primary. Inspect that seed and review
+its UUID before dispatch. New inspections/reviews and reviewed starts check that
+the selected native UUID belongs to the browsing seed's visible topology.
+The selected registration supplies its own authentication, TLS policy and
+execution host. Account setup independently requires the current writable native
+primary. A different member or primary requires a new review.
+
+Jobs belong to the execution registration. Status, cancellation and previously
+dispatched starts preserve that original scope without reconnecting the browsing
+seed. The original review/outcome is retained. Changing execution registration
+clears the desktop's seed, review and private password.
+
+Native administrator and Router setup accept ``requireCertIssuer`` and
+``requireCertSubject`` in their native options. Supply password factors only in
+the separate dispatch input. Native Cluster, ClusterSet and ReplicaSet
+qualification creates each account through the application from a secondary
+origin with its owned primary selected, then independently authenticates with
+the required X.509 certificate. Password-only login is refused. Public account
+observations contain identities/grants and fingerprints rather than passwords or
+authentication strings.
+
+``tools/cdeadmin_mysql_topology_security_qualification.py`` covers these six
+native account methods through pure/C connectors, unrelated-member refusal and
+native topology transitions. Its standalone fixture-generation resets are
+confined to the explicitly owned disposable servers. The built desktop gate is
+``tools/mysql_topology_security_ui_qualification.py``; it checks secondary-origin
+selection, primary review/confirmation, password clearing, actual certificate
+login and original-job listing. This completes the accepted Linux
+``CMP-MY-02`` scope alongside the existing host/Router/outage/repair and upgrade
+receipts. Recovery/recoverability (``CMP-MY-01``) and the independent native
+inventory remain open before the MariaDB implementation handoff.

@@ -69,6 +69,23 @@ def action(service, server, operation, request):
     from mysql.connector import Error as NativeError
     from pgadmin.model import Server
     if not isinstance(request, dict): raise native.BinlogArchiveError('Select a native topology request')
+    if 'execution_server_id' in request:
+        selected=request['execution_server_id']
+        if type(selected) is not int or selected<=0:
+            raise native.BinlogArchiveError('Select an owned native topology execution registration')
+        admitted_context(service,server)
+        target=source_server(service._principal_id(server),selected)
+        admitted_context(service,target)
+        forwarded={key:value for key,value in request.items() if key!='execution_server_id'}
+        admission=operation in {'inspect','inspect_native','review','start'}
+        if operation=='start':
+            jobs,owner,endpoint=manager(service,target)
+            admission=jobs.load(forwarded.get('job_id'),owner,endpoint.id)['state']=='reviewed'
+        if admission:
+            execution_member(service,server,target)
+        value=action(service,target,operation,forwarded)
+        return {**value,'execution_registration':{'server_id':target.id,'name':target.name,
+            'origin_server_id':server.id}}
     account_secret = None
     if operation == 'start' and 'account_secret' in request:
         request = dict(request)
@@ -192,6 +209,21 @@ def action(service, server, operation, request):
         for lease in leases: lease.close()
         if connection is not None: client._discard_failed_session(connection)
         if transport is not None: transport.close()
+
+
+def execution_member(service, origin, target):
+    """New work binds a selected owned member; original job controls survive
+    loss of the browsing seed and keep their original execution registration.
+    """
+    observed=[]
+    for server in (origin,target):
+        client,route=context(service,server)
+        connection=private_connection(client,{**route,'database':None,'autocommit':True,'read_timeout':15})
+        try:observed.append(native.capture(connection))
+        finally:client._discard_failed_session(connection)
+    source,member=observed
+    if member['identity']['server_uuid'] not in {source['identity']['server_uuid'],*source['metadata']['instance_uuids']}:
+        raise native.BinlogArchiveError('The selected execution registration is not a visible member of this native topology')
 
 
 def recovery_quiescence(service, jobs, record, seed_connection):

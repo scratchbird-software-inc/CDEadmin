@@ -6,8 +6,8 @@ Comparison baseline: source ``0c14f90a21c80c32074c574e7914e56dc487661d``;
 MySQL 9.7.0 and Connector/Python 26.7.0.
 
 This is the accepted implementation queue arising from the MySQL management-tool
-comparison. ``CMP-MY-03`` through ``CMP-MY-11`` are implemented and
-Linux-qualified; ``CMP-MY-01`` and ``CMP-MY-02`` remain open. They supplement
+comparison. ``CMP-MY-02`` through ``CMP-MY-11`` are implemented and
+Linux-qualified; ``CMP-MY-01`` remains open. They supplement
 :doc:`mysql_functional_completion` and :doc:`six_engine_remaining_work`; their
 acceptance must follow :doc:`six_engine_completion`.
 
@@ -19,8 +19,8 @@ MySQL feature development and switch the active implementation focus to MariaDB.
 The accepted spatial, deployment-automation and notebook items remain required
 for this handoff even though they follow operational work in priority.
 
-* **P0:** recovery/recoverability and production HA/Router/host lifecycle remain
-  the critical completion gates. Reconcile ``INV-MYSQL`` and the current
+* **P0:** recovery/recoverability remains the critical comparison completion
+  gate. The accepted production HA/Router/host lifecycle is Linux-qualified. Reconcile ``INV-MYSQL`` and the current
   continuity, archive, language/capability and diagnostic gaps against that work.
 * **P1:** implement graphical native plans, workload analysis and database-wide
   content search, followed by controlled online DDL, replica drift verification
@@ -227,7 +227,7 @@ Comparison evidence: `XtraBackup MySQL 9.7 support and limitations <https://docs
 CMP-MY-02: Complete production topology, Router and host lifecycle
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Status: **open**. Priority: **P0**.
+Status: **implemented and Linux-qualified**. Priority: **P0**.
 
 Complete bootstrap/outage/failover/repair with independent unreachable-member,
 replication and application-traffic evidence; complete native upgrades.
@@ -266,8 +266,11 @@ qualification also covers genuine 8.4 Shell metadata migration from 2.2 to 2.4,
 secondary-first 8.4.8-to-9.7 upgrades, election when the old primary stops, and
 reviewed promotion after every member runs 9.7. Original UUIDs, exact data and
 fresh-write replication are checked independently after each step. Mixed-version
-primary selection follows the native version restriction. Certificate-login,
-secondary-seed account routing and inventory retain their separate gates.
+primary selection follows the native version restriction. Certificate-login and explicit owned-primary execution from a secondary seed
+now have native acceptance for administrator and Router accounts on Cluster,
+ClusterSet and ReplicaSet, through both connectors. Independent TLS login
+succeeds with the selected native certificate and refuses password-only login.
+The broader inventory remains independently tracked.
 Native Linux service installation now creates
 a reviewed systemd unit with separate start and boot controls. Native Linux initialization
 now supports new registrations before SQL is available, with secure/insecure
@@ -275,8 +278,8 @@ native bootstrap, original-writer controls and separate outcome observations. Re
 native Linux option-file deployment now validates the proposed original-filename
 view, binds old/new include graphs and atomically preserves file ownership and
 permissions without a service restart; see :doc:`mysql_functional_completion`. Preserve existing sandbox and administrator account
-workflows. Qualify certificate login and secondary-to-primary routing
-separately.
+workflows. Certificate-login and explicit primary-registration routing retain
+separate native receipts from the earlier host and Router scenarios.
 
 Comparison evidence: `Native MySQL Shell InnoDB Cluster administration <https://dev.mysql.com/doc/mysql-shell/26.7/en/mysql-innodb-cluster.html>`_.
 

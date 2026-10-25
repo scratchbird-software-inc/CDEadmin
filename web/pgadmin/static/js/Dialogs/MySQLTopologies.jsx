@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TablePagination,TableRow,TextField} from '@mui/material';
 
@@ -24,7 +24,10 @@ function example(operation,member) {
   }),null,2);
 }
 
-export default function MySQLTopologies({post}) {
+export default function MySQLTopologies({post:basePost}) {
+  const [execution,setExecution]=useState(null);
+  const post=useCallback(body=>basePost(execution ? {...body,request:{...body.request,execution_server_id:execution.server_id}} : body),[basePost,execution]);
+  useEffect(()=>{setExecution(null);},[basePost]);
   const [catalog,setCatalog]=useState(null),[operationId,setOperationId]=useState('instance.check_configuration');
   const [argumentsText,setArgumentsText]=useState('[{}]'),[contextName,setContextName]=useState(''),[contextOptions,setContextOptions]=useState('{}');
   const [advertised,setAdvertised]=useState(false),[timeout,setTimeout]=useState('3600');
@@ -83,6 +86,8 @@ export default function MySQLTopologies({post}) {
   return <Box sx={{p:2}}>
     <Alert severity="info">Manage native MySQL instance configuration, InnoDB Cluster, ReplicaSet, ClusterSet, Router metadata and routing guidelines. Native utility replies and current topology observations are separate from workload readiness. Closing this view does not cancel a job.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
+    {execution && <Alert severity="info">Native execution registration: {execution.name} (ID {execution.server_id}). Reviews and original job controls use this registration.
+      <Button disabled={busy} onClick={()=>setExecution(null)}>Use original topology registration</Button></Alert>}
     <Button disabled={busy} onClick={()=>run('catalog',{},setCatalog)}>Load native topology methods</Button>
     <Button disabled={busy} onClick={()=>run('inspect',{},value=>{setSeed(value);setReview(null);})}>Inspect topology seed</Button>
     {seed && <Box component="pre" aria-label="Native topology seed" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{JSON.stringify(seed,null,2)}</Box>}
@@ -95,7 +100,7 @@ export default function MySQLTopologies({post}) {
     <Button disabled={busy} onClick={()=>loadMembers(0)}>Load registered topology instances</Button>
     {members && <>
       <Table size="small" aria-label="Registered topology instances"><TableHead><TableRow><TableCell>ID</TableCell><TableCell>Instance</TableCell><TableCell>Use</TableCell><TableCell>Recovery observation</TableCell></TableRow></TableHead><TableBody>
-        {members.instances.map(row=><TableRow key={row.server_id}><TableCell>{row.server_id}</TableCell><TableCell>{row.name}</TableCell><TableCell><Button disabled={busy} onClick={()=>{setMember(row);setReview(null);}}>Select topology instance {row.name}</Button></TableCell><TableCell><Checkbox disabled={busy} inputProps={{'aria-label':'Observe recovery member '+row.name}} checked={witnessIds.includes(row.server_id)} onChange={event=>{setWitnessIds(current=>event.target.checked ? [...current,row.server_id] : current.filter(value=>value!==row.server_id));setReview(null);}} /></TableCell></TableRow>)}
+        {members.instances.map(row=><TableRow key={row.server_id}><TableCell>{row.server_id}</TableCell><TableCell>{row.name}</TableCell><TableCell><Button disabled={busy} onClick={()=>{setMember(row);setReview(null);}}>Select topology instance {row.name}</Button><Button disabled={busy} onClick={()=>setExecution(row)}>Use execution registration {row.name}</Button></TableCell><TableCell><Checkbox disabled={busy} inputProps={{'aria-label':'Observe recovery member '+row.name}} checked={witnessIds.includes(row.server_id)} onChange={event=>{setWitnessIds(current=>event.target.checked ? [...current,row.server_id] : current.filter(value=>value!==row.server_id));setReview(null);}} /></TableCell></TableRow>)}
       </TableBody></Table><TablePagination component="div" count={members.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={members.offset/25} onPageChange={(_event,next)=>loadMembers(next*25)} />
     </>}
     {member && <Button disabled={busy || !operation} onClick={()=>{setArgumentsText(example(operation,member));setReview(null);}}>Reset arguments for {member.name}</Button>}
@@ -104,7 +109,7 @@ export default function MySQLTopologies({post}) {
       helperText={'Native arguments: '+(operation?.arguments.join(', ') || 'none')+'. Optional arguments end in ?. Edit names for the selected native objects; integer digits are preserved.'}
       onChange={event=>{setArgumentsText(event.target.value);invalidate();if(operation?.account || operation?.bootstrap){setAccountPassword('');setAccountSecretReady(false);}}} />
     {(operation?.account || operation?.bootstrap) && <>
-      {operation?.bootstrap ? <Alert severity="info">For a standalone instance, supply clusterAdmin in the native configuration options to create or validate a bootstrap administrator. Native MySQL rejects this option on an existing Cluster or ReplicaSet member. Native clusterAdminPassword is supplied separately at dispatch when creating an account. An existing account retains its password and must already have the required native privileges. Certificate and expiration options retain native behavior.</Alert> : <Alert severity="info">Select the current writable native primary registration. Native account setup creates an account or adds the required native grants to an existing account. Supply native update, dryRun, certificate and expiration options in the argument array. Password values are supplied separately when starting the reviewed job.</Alert>}
+      {operation?.bootstrap ? <Alert severity="info">For a standalone instance, supply clusterAdmin in the native configuration options to create or validate a bootstrap administrator. Native MySQL rejects this option on an existing Cluster or ReplicaSet member. Native clusterAdminPassword is supplied separately at dispatch when creating an account. An existing account retains its password and must already have the required native privileges. Certificate and expiration options retain native behavior.</Alert> : <Alert severity="info">Select the current writable native primary registration. From a secondary seed, load registered topology instances and select the primary as the execution registration, then inspect its seed before review. Native account setup creates an account or adds the required native grants to an existing account. Supply native update, dryRun, certificate and expiration options in the argument array. Password values are supplied separately when starting the reviewed job.</Alert>}
       <FormControlLabel control={<Checkbox disabled={busy} checked={accountPasswordEnabled} onChange={event=> {
         setAccountPasswordEnabled(event.target.checked);setAccountSecretReady(event.target.checked);setAccountPassword('');invalidate();
       }} />} label="Set account password at dispatch" />
