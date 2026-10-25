@@ -30,11 +30,11 @@ Phase status
    * - 2
      - Shell: tree, object editor, operation dialog, menu model
      - in progress
-     - ``cdeadmin_ui/objects``: ObjectEditor (canonical tabs, SQL tab = provider plan), OperationDialog, FieldControl, RecordGrid, KeyValueEditor, menu model; descriptor service ``/cdeadmin/api/ui/descriptors``; tree activation opens the family editor when the engine declares one (legacy workspace fallback). Second increment: ``options.json`` per engine feeds selects and reference pickers (dialect lists + catalog lists from the endpoint's resources); descriptor entries (Edit, Create, tier 2/3 operations in the OperationDialog) merged into the tree context menu with legacy duplicates retired; Statistics / Dependencies / Indexes / Triggers tabs read the inspected resource. Remaining: Data tab bound to the row grid, in-panel Resource Explorer removal, PostgreSQL routing
+     - ``cdeadmin_ui/objects``: ObjectEditor (canonical tabs, SQL tab = provider plan), OperationDialog, FieldControl, RecordGrid, KeyValueEditor, menu model; descriptor service ``/cdeadmin/api/ui/descriptors``; tree activation opens the family editor when the engine declares one (legacy workspace fallback). Second increment: ``options.json`` per engine feeds selects and reference pickers (dialect lists + catalog lists from the endpoint's resources); descriptor entries (Edit, Create, tier 2/3 operations in the OperationDialog) merged into the tree context menu with legacy duplicates retired; Statistics / Dependencies / Indexes / Triggers tabs read the inspected resource. Third increment: Data tab opens the provider row grid; variant switches are ``ui_only`` and default from the kind; record pre-fill primitives (dotted keys, derive/filter/pluck/pattern rules, ``record_children`` for inventories that list columns as separate resources). Remaining: in-panel Resource Explorer removal, PostgreSQL routing
    * - 3
      - Engine descriptors (Firebird, MySQL, MariaDB, DuckDB, SQLite)
      - in progress
-     - Drafts generated for all six engines; review to ``complete`` per engine pending. Family table below
+     - Firebird: 9/10 forms ``complete`` by live round trip (server form stays draft). MariaDB: 6/8 ``complete`` (trigger, routine draft: inventory reports no body/parameters). DuckDB: 7/8, SQLite: 5/6 (server forms draft). MySQL: owned by the MySQL stream. PostgreSQL: drafts pass the ui.js schema-id gate; routing is phase 5. Family table below
    * - 4
      - Operations, panels, menus
      - not started
@@ -64,66 +64,66 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
    * - Table
      - draft (54f, 6g)
      - draft (33f, 9g)
-     - draft (7f, 4g)
-     - draft (11f, 2g)
+     - complete (7f, 5g)
+     - complete (11f, 1g)
      - complete (7f, 2g)
      - complete (11f, 5g)
    * - View
      - draft (27f, 2g)
      - draft (8f, 3g)
-     - draft (3f, 2g)
-     - draft (2f, 1g)
+     - complete (3f, 2g)
+     - complete (2f, 1g)
      - complete (5f, 0g)
      - complete (3f, 1g)
    * - Index
      - draft (24f, 2g)
      - draft (14f, 4g)
-     - draft (5f, 1g)
-     - draft (10f, 0g)
+     - complete (5f, 2g)
+     - complete (10f, 0g)
      - complete (5f, 0g)
      - complete (5f, 1g)
    * - Routine
      - draft (57f, 4g)
      - draft (15f, 3g)
-     - draft (11f, 3g)
-     - draft (9f, 0g)
+     - draft (11f, 4g)
+     - complete (9f, 0g)
      - complete (7f, 0g)
      - n/a
    * - Trigger
      - draft (30f, 3g)
      - draft (11f, 1g)
-     - draft (8f, 1g)
-     - draft (7f, 0g)
+     - draft (8f, 2g)
+     - complete (7f, 0g)
      - n/a
      - complete (8f, 1g)
    * - Sequence
      - draft (19f, 0g)
      - n/a
-     - draft (8f, 0g)
-     - draft (7f, 0g)
+     - complete (8f, 0g)
+     - complete (7f, 0g)
      - complete (7f, 1g)
      - n/a
    * - Type
      - draft (47f, 4g)
      - n/a
      - n/a
-     - draft (7f, 0g)
+     - complete (7f, 0g)
      - complete (5f, 0g)
      - n/a
    * - Role
      - draft (18f, 2g)
      - draft (4f, 1g)
-     - draft (22f, 2g)
-     - draft (11f, 1g)
+     - complete (22f, 2g)
+     - complete (10f, 1g)
      - n/a
      - n/a
    * - Database
      - draft (33f, 2g)
      - pending (0f, 0g)
-     - draft (6f, 0g)
-     - draft (11f, 0g)
-     - draft (2f, 3g)
-     - draft (9f, 0g)
+     - complete (6f, 0g)
+     - complete (11f, 0g)
+     - complete (2f, 3g)
+     - complete (9f, 0g)
    * - Server
      - draft (46f, 5g)
      - pending (0f, 0g)
@@ -166,6 +166,26 @@ count sets its maximum to zero in the enforcement file.
 
 Change log
 ----------
+
+Firebird, MariaDB, SQLite and DuckDB round trips (2026-10-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Live engines were stood up for acceptance (Firebird 5.0.3 from the GitHub
+release tarball, MariaDB 10.11 and PostgreSQL 16 from apt). Firebird
+table/view/index/trigger/sequence/type/routine/role/database and MariaDB
+table/view/index/sequence/role/database are ``complete``: each form was driven
+through its own fields -> provider plan -> apply -> re-inspect, and the
+re-opened object pre-fills every tab the inventory can supply
+(``tools/tests/test_ui_descriptor_roundtrip_{firebird,mariadb}.py``, skipped
+without ``CDEADMIN_ROUNDTRIP_*``). SQLite and DuckDB database forms joined
+their suites. Backend additions for pre-fill, all additive: Firebird domain
+``type_editor``/``type_sql``, routine parameter ``type_sql`` + function
+parameter modes, trigger ``trigger_timing``/``trigger_events``. MariaDB
+trigger and routine stay ``draft`` because the mysql_family inventory reports
+no body or parameters (recorded under ``gaps`` as a backend ask). PostgreSQL
+forms gained a schema-id gate against the pgAdmin ``*.ui.js`` sources and stay
+``draft`` until phase 5 (open decision 1). ``make ui-descriptors-check`` now
+runs the descriptor pytest suites.
 
 MySQL audit and native user-key work (2026-10-25)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

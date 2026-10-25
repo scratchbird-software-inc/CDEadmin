@@ -130,3 +130,26 @@ def test_every_sqlite_form_field_is_accepted_by_the_provider():
             continue
         ids = {f['field_id'] for tab in form['tabs'] for f in tab['fields'] if not f.get('modes') or 'create' in f['modes']}
         assert ids, family
+
+
+def test_database_form_creates_and_alters_a_database_file(live):
+    path, route, client, connection = live
+    form = resolved_form('sqlite', 'database')
+    route = {**route, 'database_create_root': route['filesystem_root']}
+    draft = backend_draft(form, {'name': 'child', 'page_size': '8192', 'encoding': 'UTF-8', 'auto_vacuum': 'FULL',
+                                 'application_id': 7, 'user_version': 3})
+    request = {'resource_kind': 'database', 'operation_id': 'create', 'target_resource': None, '_provider_route': route, 'draft': draft}
+    assert ADMINISTRATION.validate(request)['errors'] == []
+    assert ADMINISTRATION.apply(client, ADMINISTRATION.plan(request))['accepted']
+    child = Path(route['filesystem_root']) / 'child.sqlite'
+    with closing(sqlite3.connect(child)) as observer:
+        assert [observer.execute(f'pragma {name}').fetchone()[0] for name in ('page_size', 'auto_vacuum', 'application_id', 'user_version')] == [8192, 1, 7, 3]
+
+    database = resource(path, route, 'database', 'main')
+    baseline = record_draft(form, {**database['native'], 'name': database['display_name']})
+    assert baseline['journal_mode'] == 'DELETE' and baseline['synchronous'] in ('FULL', 'NORMAL') and baseline['page_size'] == '4096'
+    alter = backend_draft(form, {**baseline, 'journal_mode': 'WAL', 'user_version': 9}, mode='alter', baseline=baseline)
+    assert alter == {'journal_mode': 'WAL', 'user_version': 9}
+    run(client, connection, route, 'database', 'alter', alter, target=database)
+    assert connection.execute('pragma journal_mode').fetchone()[0] == 'wal'
+    assert connection.execute('pragma user_version').fetchone()[0] == 9

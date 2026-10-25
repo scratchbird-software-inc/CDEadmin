@@ -663,6 +663,12 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
    contract before those controls can participate in a table edit. Default:
    record them under the table descriptor's ``gaps``; retain the existing backend
    operations; add no JSON control, special renderer branch or fabricated field.
+   Status 2026-10-25: the value-shape half is covered by declared projections in
+   the field schema (``item_kind: string``, ``wrap_list``, ``backend_field_id``
+   list discriminators, and the ``record_*`` pre-fill rules documented in
+   ``ui_descriptors/README.md``), so a multiselect can feed a list-of-paths field
+   without engine code. The cross-operation half (driving ``privilege.grant`` or
+   ``partition_by`` from a table edit) is still open.
 
 10. Protected operation results (user keys, 2026-10-25): the operation schema
     declares input fields and ordinary receipts, but no one-time protected

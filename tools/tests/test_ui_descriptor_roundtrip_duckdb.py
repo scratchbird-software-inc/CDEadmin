@@ -97,3 +97,19 @@ def test_index_and_macro_forms(live):
         backend_draft(routine_form, {'name': 'double_it', 'parameters': [{'name': 'x', 'default': ''}], 'expression': 'x * 2', 'table_macro': False,
                                      'complete_definition_confirmed': True, 'metadata_reset_acknowledged': True}))
     assert connection.execute('select double_it(21)').fetchone()[0] == 42
+
+
+def test_database_form_creates_a_database_file(live):
+    path, route, client, connection = live
+    form = resolved_form('duckdb', 'database')
+    route = {**route, 'database_create_root': route['filesystem_root']}
+    draft = backend_draft(form, {'name': 'child', 'config': {'threads': '2'}})
+    request = {'resource_kind': 'database', 'operation_id': 'create', 'target_resource': None, '_provider_route': route, 'draft': draft}
+    assert ADMINISTRATION.validate(request)['errors'] == []
+    result = ADMINISTRATION.apply(client, ADMINISTRATION.plan(request))
+    assert result['accepted'], result
+    child = Path(route['filesystem_root']) / 'child.duckdb'
+    assert child.exists()
+    probe = duckdb.connect(str(child))
+    assert probe.execute('select 1').fetchone() == (1,)
+    probe.close()

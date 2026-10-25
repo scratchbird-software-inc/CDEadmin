@@ -6,7 +6,7 @@
     "database",
     "attached-database"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "SQLite",
   "omitted_tabs": [
     {
@@ -21,7 +21,10 @@
       "label": "Database filename",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "modes": [
+        "create"
+      ]
     },
     {
       "field_id": "page_size",
@@ -163,7 +166,42 @@
       ],
       "modes": [
         "alter"
-      ]
+      ],
+      "record_derive": {
+        "cases": [
+          {
+            "key": "journal_mode",
+            "matches": "^delete$",
+            "value": "DELETE"
+          },
+          {
+            "key": "journal_mode",
+            "matches": "^truncate$",
+            "value": "TRUNCATE"
+          },
+          {
+            "key": "journal_mode",
+            "matches": "^persist$",
+            "value": "PERSIST"
+          },
+          {
+            "key": "journal_mode",
+            "matches": "^memory$",
+            "value": "MEMORY"
+          },
+          {
+            "key": "journal_mode",
+            "matches": "^wal$",
+            "value": "WAL"
+          },
+          {
+            "key": "journal_mode",
+            "matches": "^off$",
+            "value": "OFF"
+          }
+        ],
+        "default": "DELETE"
+      }
     },
     {
       "field_id": "synchronous",
@@ -191,7 +229,32 @@
       ],
       "modes": [
         "alter"
-      ]
+      ],
+      "record_derive": {
+        "cases": [
+          {
+            "key": "synchronous_code",
+            "equals": 0,
+            "value": "OFF"
+          },
+          {
+            "key": "synchronous_code",
+            "equals": 1,
+            "value": "NORMAL"
+          },
+          {
+            "key": "synchronous_code",
+            "equals": 2,
+            "value": "FULL"
+          },
+          {
+            "key": "synchronous_code",
+            "equals": 3,
+            "value": "EXTRA"
+          }
+        ],
+        "default": "FULL"
+      }
     },
     {
       "field_id": "run_vacuum",
@@ -206,5 +269,5 @@
       ]
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. attached-database: provider exposes no create form (inspect)"
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. attached-database: provider exposes no create form (inspect) Round-tripped by tools/tests/test_ui_descriptor_roundtrip_sqlite.py (create a file with PRAGMA settings, pre-fill from the inspected database, alter journal mode / user version)."
 }
