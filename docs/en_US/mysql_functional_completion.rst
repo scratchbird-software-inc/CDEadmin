@@ -2729,3 +2729,32 @@ legacy field factories were deleted. All variants remain draft until the shared
 front-end renderer and round trips are accepted. Native qualification command:
 ``tools/cdeadmin_mysql_routines_qualification.py``. Protected key results remain
 under Decision10; this routine work does not close that unrelated gap.
+
+Native trigger definitions and ordering
+---------------------------------------
+
+The Trigger descriptor exposes native BEFORE/AFTER, one INSERT/UPDATE/DELETE
+event, owning table, definer, IF NOT EXISTS and FOLLOWS/PRECEDES ordering.
+Compound bodies are checked as complete definitions by the registered native
+MySQL9.7 grammar before dispatch. MySQL does not acquire another engine's
+INSTEAD OF, statement-level, active/disabled or numeric-position behavior.
+Legacy one-element event lists and the old generic defaults remain accepted;
+non-default unsupported flags are refused explicitly.
+
+Review binds execution identity, SQL mode, table structure and the observed
+native trigger chain. Apply rechecks those observations and owns a separate
+connection. Acknowledgement remains visible if later observation fails, and
+unknown mutations are never replayed automatically. Ordinary AUTO_INCREMENT
+advancement is not a schema change; concurrent external DDL is not fenced.
+The navigator retains full native trigger fields, including body, definer,
+order and stored language context. Native MySQL owns execution, privileges and
+ordering compatibility. Existing explicit DROP/CREATE and DDN workflows remain
+separate from native ALTER, which MySQL does not provide.
+
+The combined ``tools/cdeadmin_mysql_routines_qualification.py`` command covers
+native pure/C row execution and ordering, transaction/savepoint preservation,
+existing-definition preservation, stale reviews, native errors and observation
+loss. Authenticated create and drop are independently checked against native
+row effects. Trigger remains draft (11fields/1gap) until the shared renderer
+and family round trips are accepted; its ordering fields use Engine as required
+by the field matrix.

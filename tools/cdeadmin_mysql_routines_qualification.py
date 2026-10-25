@@ -20,9 +20,9 @@ def qualify(output):
     from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_PROFILE, MYSQL_ADMINISTRATION, _create_client, _resources
     from pgadmin.cdeadmin.providers.mysql_family import mysql_routines as routines
     from pgadmin.cdeadmin.sdk import RelationalClientError
-    paths = ['web/pgadmin/cdeadmin/providers/mysql_family/'+name for name in ('mysql_routines.py','administration.py','provider.py','descriptor_contracts.py')]
+    paths = ['web/pgadmin/cdeadmin/providers/mysql_family/'+name for name in ('mysql_routines.py','administration.py','provider.py','descriptor_contracts.py','mysql_triggers.py')]
     paths += ['web/pgadmin/cdeadmin/providers/'+name for name in ('mysql_events.py','mysql_object_changes.py','relational_admin.py')]
-    paths += ['web/pgadmin/cdeadmin/ui_descriptors/mysql/'+name for name in ('capabilities.json','operations.json','forms/routine.form.json','forms/routine-function.form.json','forms/routine-scheduled.form.json')]
+    paths += ['web/pgadmin/cdeadmin/ui_descriptors/mysql/'+name for name in ('capabilities.json','operations.json','forms/routine.form.json','forms/routine-function.form.json','forms/routine-scheduled.form.json','forms/trigger.form.json')]
     paths += ['web/pgadmin/cdeadmin/visual_admin/provider.py', str(Path(__file__).relative_to(ROOT))]
     proof = {'complete':False,'history_testing':'ScratchBird history not run','interfaces':[],
         'source_sha256':{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in paths}}
@@ -33,7 +33,7 @@ def qualify(output):
                 q.execute('CREATE DATABASE sr_routines CHARACTER SET utf8mb4');q.execute('CREATE TABLE sr_routines.pending(id INT PRIMARY KEY)')
                 # The shared authenticated-registration fixture selects sr_osc.
                 # Explicit routine identities deliberately target another DB.
-                q.execute('CREATE DATABASE sr_osc')
+                q.execute('CREATE DATABASE sr_osc');q.execute('CREATE TABLE sr_routines.t(id INT AUTO_INCREMENT PRIMARY KEY,value INT)');q.execute('CREATE TABLE sr_routines.audit(value INT)')
                 q.execute('SELECT @@GLOBAL.sql_mode');original_mode=q.fetchone()[0]
                 for pure in (True,False):
                     q.execute('SET GLOBAL sql_mode=%s',(original_mode if pure else 'ANSI_QUOTES,NO_BACKSLASH_ESCAPES',))
@@ -121,6 +121,7 @@ def qualify(output):
                             'unsigned64_in_out_inout_execution':True,'native_function_charset_and_literal_markers':True,'enum_type_punctuation':True,
                             'native_create_characteristics':True,'if_not_exists_preserves_existing_body':True,'ordered_catalog_parameters_and_returns':True,
                             'source_row_count_transaction_and_savepoint_preserved':True,'stale_review_refused':True,'native_grammar_rejected_appended_command_without_execution':True,'native_error_preserved':True,'post_ack_observation_loss_not_replayed':True})
+                        proof['interfaces'][-1]['triggers']=trigger_profile(client,selected,q,pure)
                     finally:client.close()
                 q.execute('SET GLOBAL sql_mode=%s',(original_mode,))
                 password=secrets.token_urlsafe(24);q.execute('ALTER USER CURRENT_USER() IDENTIFIED BY %s',(password,))
@@ -129,6 +130,72 @@ def qualify(output):
         proof['owned_server_stopped']=owned['owned_server_stopped']
     finally:(output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n')
     return proof
+
+
+def trigger_profile(client,route,q,pure):
+    from pgadmin.cdeadmin.providers.mysql_family import mysql_triggers as triggers
+    from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_ADMINISTRATION,MYSQL_PROFILE,_resources
+    from pgadmin.cdeadmin.sdk import RelationalClientError
+    prefix='trg_'+str(int(pure))+'_';names=[]
+    def review(suffix,**values):
+        name=prefix+suffix
+        return client.plan_admin_operation({'resource_kind':'trigger','operation_id':'create',
+            'draft':{'name':name,'table':['sr_routines','t'],'body':'SET NEW.value=NEW.value',**values},'_provider_route':route})
+    def create(suffix,**values):
+        planned=review(suffix,**values);result=MYSQL_ADMINISTRATION.apply(client,planned);names.append(prefix+suffix)
+        assert result['accepted'] and result['trigger_observation']['native_acknowledged'];return result
+    try:
+        create('a',body='SET NEW.value=NEW.value*10',definer_user='root',definer_host='%')
+        create('b',order='FOLLOWS',other_trigger=prefix+'a',body='SET NEW.value=NEW.value+3')
+        planned=review('c',order='PRECEDES',other_trigger=prefix+'a',body='BEGIN SET NEW.value=NEW.value+2; END')
+        # A pending writer/savepoint on the original session survives separate DDL.
+        q.execute('SET autocommit=0');q.execute('SAVEPOINT trigger_guard');q.execute('INSERT INTO sr_routines.pending VALUES(%s)',(20+int(pure),))
+        result=MYSQL_ADMINISTRATION.apply(client,planned);names.append(prefix+'c');assert result['accepted']
+        q.execute('SELECT ROW_COUNT()');assert q.fetchone()==(1,)
+        q.execute('ROLLBACK TO SAVEPOINT trigger_guard');q.execute('ROLLBACK');q.execute('SET autocommit=1')
+        duplicate=MYSQL_ADMINISTRATION.apply(client,review('b',if_not_exists=True,body='SET NEW.value=0'));assert duplicate['accepted'] and duplicate['native_warnings']
+        q.execute('INSERT INTO sr_routines.t(value) VALUES(1)');q.execute('SELECT value FROM sr_routines.t WHERE id=LAST_INSERT_ID()');assert q.fetchone()==(33,)
+        create('update',event='UPDATE',body='SET NEW.value=NEW.value+1')
+        q.execute('UPDATE sr_routines.t SET value=5 WHERE id=LAST_INSERT_ID()');q.execute('SELECT value FROM sr_routines.t WHERE id=LAST_INSERT_ID()');assert q.fetchone()==(6,)
+        create('delete',events=['DELETE'],timing='AFTER',body='INSERT INTO sr_routines.audit VALUES(OLD.value)')
+        q.execute('DELETE FROM sr_routines.t WHERE id=LAST_INSERT_ID()');q.execute('SELECT value FROM sr_routines.audit ORDER BY value');assert (6,) in q.fetchall()
+        handle=client._connect({'route':route})
+        try:
+            rows=_resources(handle,{'route':route},MYSQL_PROFILE)
+            row=next(row for row in rows if row['resource_kind']=='trigger' and row['display_name']==prefix+'b')
+            assert row['display_path']==['sr_routines','t',prefix+'b']
+            facts=row['native'];assert facts['action_order']==3 and facts['action_statement']=='SET NEW.value=NEW.value+3'
+            assert facts['event']=='INSERT' and facts['timing']=='BEFORE' and isinstance(facts['sql_mode'],str)
+        finally:client._forget_and_close(handle)
+        planned=review('stale',order='FOLLOWS',other_trigger=prefix+'a')
+        q.execute('CREATE TRIGGER sr_routines.`'+prefix+'external` BEFORE INSERT ON sr_routines.t FOR EACH ROW SET NEW.value=NEW.value');names.append(prefix+'external')
+        try:MYSQL_ADMINISTRATION.apply(client,planned)
+        except RelationalClientError as error:assert not error.native_dispatched
+        else:raise AssertionError('Stale trigger order admitted')
+        try:create('missing',order='FOLLOWS',other_trigger=prefix+'missing_anchor')
+        except RelationalClientError as error:assert error.native_dispatched and not error.native_acknowledged and error.errno>=1000
+        else:raise AssertionError('Native ordering error hidden')
+        try:review('injected',body='BEGIN SET NEW.value=1; END; DROP TABLE sr_routines.pending')
+        except RelationalClientError:pass
+        else:raise AssertionError('Native grammar admitted appended trigger command')
+        planned=review('lost');original=triggers.observe;calls=0
+        def lost(*args):
+            nonlocal calls
+            calls+=1
+            if calls==2:raise OSError('Owned observation loss')
+            return original(*args)
+        with patch.object(triggers,'observe',lost):
+            try:MYSQL_ADMINISTRATION.apply(client,planned)
+            except RelationalClientError as error:assert error.native_dispatched and error.native_acknowledged and error.automatic_retry is False
+            else:raise AssertionError('Trigger ACK disappeared')
+        names.append(prefix+'lost')
+        q.execute('SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=%s AND TRIGGER_NAME=%s',('sr_routines',prefix+'lost'));assert q.fetchone()==(1,)
+        return {'complete':True,'native_insert_update_delete_execution':True,'follows_precedes_order_verified':True,
+            'native_definer_and_if_not_exists':True,'pending_writer_and_savepoint_preserved':True,
+            'full_committed_catalog_fields':True,'stale_order_refused':True,'native_missing_anchor_error_preserved':True,
+            'appended_command_refused_without_execution':True,'post_ack_loss_never_replayed':True}
+    finally:
+        for name in names:q.execute('DROP TRIGGER IF EXISTS sr_routines.`'+name+'`')
 
 
 def workspace(app,route,password,oracle):
@@ -158,7 +225,13 @@ def workspace(app,route,password,oracle):
         oracle.execute('SELECT STATUS,ON_COMPLETION,EVENT_COMMENT,TIME_ZONE FROM information_schema.EVENTS WHERE EVENT_SCHEMA=%s AND EVENT_NAME=%s',('sr_routines',name));assert oracle.fetchone()==('DISABLED','PRESERVE','changed','+00:00')
         run('event','rename',{'new_name':name+'_renamed','confirmation':name},target('event',name))
         oracle.execute('SELECT COUNT(*) FROM information_schema.EVENTS WHERE EVENT_SCHEMA=%s AND EVENT_NAME=%s',('sr_routines',name+'_renamed'));assert oracle.fetchone()==(1,)
-        results.append({'use_pure':pure,'typed_create_alter_routine_bindings':True,'comment_only_preserves_security_and_data_access':True,'scheduled_event_preservation_and_rename':True})
+        name=prefix+'trigger';anchor=name+'_anchor'
+        oracle.execute('CREATE TRIGGER sr_routines.`'+anchor+'` BEFORE INSERT ON sr_routines.t FOR EACH ROW SET NEW.value=NEW.value*2')
+        run('trigger','create',{'name':name,'table':['sr_routines','t'],'event':'INSERT','timing':'BEFORE','order':'PRECEDES','other_trigger':anchor,'body':'SET NEW.value=NEW.value+1'})
+        oracle.execute('INSERT INTO sr_routines.t(value) VALUES(3)');oracle.execute('SELECT value FROM sr_routines.t WHERE id=LAST_INSERT_ID()');assert oracle.fetchone()==(8,)
+        trigger_target={'resource_kind':'trigger','resource_id':'trigger:sr_routines:t:'+name,'display_path':['sr_routines','t',name],'display_name':name,'generation':'current'}
+        run('trigger','drop',{'confirmation':name},trigger_target);oracle.execute('DROP TRIGGER sr_routines.`'+anchor+'`')
+        results.append({'typed_trigger_order_execution_and_drop':True,'use_pure':pure,'typed_create_alter_routine_bindings':True,'comment_only_preserves_security_and_data_access':True,'scheduled_event_preservation_and_rename':True})
     return {'complete':True,'interfaces':results}
 
 

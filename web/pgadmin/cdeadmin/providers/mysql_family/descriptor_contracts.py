@@ -62,3 +62,18 @@ def routine_contract(kind, operation):
                         if value['resource_kind'] == kind and value['operation_id'] == operation)
         return {'fields': [field_contract(field) for field in selected['fields']]}
     return None
+
+
+def trigger_contract(legacy_fields):
+    descriptor = document('forms/trigger.form.json')
+    fields = [field_contract(field) for field in descriptor['fields']]
+    names = {field['field_id'] for field in fields}
+    fields += [deepcopy(field) for field in legacy_fields
+               if field['field_id'] not in names and field['field_id'] in {'active', 'position', 'options', 'events'}]
+    # A legacy event list must not acquire a default beside the descriptor's
+    # single native event; the compiler refuses ambiguous explicit inputs.
+    for field in fields:
+        if field['field_id'] in {'event', 'events'}:
+            field.pop('default', None)
+            field['required'] = False
+    return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/trigger.form.json'}

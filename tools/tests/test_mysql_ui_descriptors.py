@@ -50,6 +50,26 @@ def test_every_stored_routine_field_binding_reaches_its_native_create_or_alter_p
                 else:assert actual[0]['source'].startswith('ALTER '+kind.upper()),field['field_id']
 
 
+def test_every_trigger_field_reaches_the_native_compiler_without_invented_flags():
+    form=load('forms/trigger.form.json')
+    base={'name':'owned','table':['db','t'],'body':'SET NEW.id=NEW.id','definer_user':'owner','definer_host':'localhost'}
+    samples={'name':'changed','parent':'db','table':['db','other'],'timing':'AFTER','event':'UPDATE',
+        'if_not_exists':True,'body':'BEGIN SET NEW.id=2; END','order':'FOLLOWS','other_trigger':'anchor',
+        'definer_user':'changed_owner','definer_host':'changed_host'}
+    def compiled(draft):
+        request={'resource_kind':'trigger','operation_id':'create','draft':draft}
+        assert not MYSQL_ADMINISTRATION.validate(request)['errors']
+        return MYSQL_ADMINISTRATION._compile(request)['statements']
+    for field in form['fields']:
+        draft=json.loads(json.dumps(base));name=field['field_id']
+        if name=='order':draft['other_trigger']='anchor'
+        if name=='other_trigger':draft['order']='FOLLOWS'
+        bind(draft,field,samples[name]);result=compiled(draft)
+        if name=='parent':assert result==compiled(base)  # Confirms the table's native schema.
+        else:assert result!=compiled(base),name
+    assert not {'active','position','when','columns_of'} & {field['field_id'] for field in form['fields']}
+
+
 def bind(draft,field,value):
     path=field.get('backend_field_id',field['field_id'])
     match=re.fullmatch(r'constraints\[kind=(.+)\]',path)

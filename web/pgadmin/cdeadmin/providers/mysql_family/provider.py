@@ -978,6 +978,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     """MySQL DB-API plus a constrained MySQL Shell administration port."""
 
     def admin_operation_field_contract(self, request):
+        if request['resource_kind'] == 'trigger' and request['operation_id'] == 'create':
+            from .descriptor_contracts import trigger_contract
+            return trigger_contract(request['legacy_fields'])
         if request['resource_kind'] in {'procedure', 'function', 'event'}:
             from .descriptor_contracts import routine_contract
             return routine_contract(request['resource_kind'], request['operation_id'])
@@ -992,6 +995,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
         compiled = planned.get('provider_payload', {}).get('compiled', {})
+        if 'mysql_trigger_create' in compiled:
+            from .mysql_triggers import bind_review
+            return bind_review(self, planned)
         if 'mysql_routine_create' in compiled:
             from .mysql_routines import bind_review
             return bind_review(self, planned)
@@ -2281,6 +2287,13 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             from .mysql_catalog import _value as column_value
             mode = resources.get('server:MySQL', {}).get('native', {}).get('sql_mode')
             column_policy_cache = {}
+            for record in optional_records(
+                    'SELECT *,CAST(SQL_MODE AS CHAR) AS SQL_MODE FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA NOT IN '
+                    "('information_schema','mysql','performance_schema','sys') ORDER BY TRIGGER_SCHEMA,EVENT_OBJECT_TABLE,ACTION_ORDER,TRIGGER_NAME"):
+                add('trigger', [record['trigger_schema'], record['event_object_table']], record['trigger_name'], {
+                    **record, 'timing': record['action_timing'], 'event': record['event_manipulation'],
+                    'table': [record['event_object_schema'], record['event_object_table']],
+                    'administration': {'allowed_operations': ['inspect', 'create', 'drop']}})
             for record in optional_records('SELECT * FROM information_schema.COLUMNS WHERE TABLE_SCHEMA NOT IN '
                     "('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION"):
                 schema, table, column = (record.get(key) for key in ('table_schema', 'table_name', 'column_name'))

@@ -91,7 +91,7 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - n/a
    * - Trigger
      - draft (30f, 3g)
-     - pending (0f, 0g)
+     - draft (11f, 1g)
      - draft (8f, 2g)
      - draft (7f, 2g)
      - n/a
@@ -236,3 +236,16 @@ post-beta non-SQL runtime dependencies remain explicit; no implicit body
 replacement is introduced. Lint counts before/after: JSON303/303, MUI244/244,
 engine branches111/111, panels113/113. Shared render and round-trip acceptance
 remain pending; no family is marked complete.
+
+MySQL Trigger migration (2026-10-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Trigger moves to draft (11fields/1gap). Native timing, single event, definer,
+IF NOT EXISTS and relative ordering are typed; unsupported active/position
+controls are absent. Ordering is on Engine; Options is omitted because native
+row triggers have no deferrability/transition-table options. Native pure/C and
+authenticated plan/apply qualify row effects, ordering and drop, while shared
+rendering/round-trip acceptance remains pending. There was no MySQL-specific
+legacy trigger field factory to delete; the frozen generic branch remains for
+other engines. Lint counts before/after: JSON303/303, MUI244/244, engine
+branches111/111, panels113/113.

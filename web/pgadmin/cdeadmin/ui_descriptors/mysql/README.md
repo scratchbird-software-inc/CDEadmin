@@ -94,3 +94,10 @@ parameters. Native ALTER cannot replace the body/signature/determinism/definer.
 The parser, native owned-connection execution and catalog observations are
 backend contracts, not new UI branches. All three descriptors are draft;
 Decision9 value/privilege dispatch and front-end render acceptance remain open.
+
+The Trigger descriptor is draft (11fields/1gap). Native event selection is
+single-valued; backend compatibility retains the old one-element events list.
+Relative ordering belongs on Engine. Native MySQL has no enable/disable flag,
+numeric position, INSTEAD OF or statement-level trigger. Native compiled review
+and catalog facts cover the supported concepts without a new legacy form.
+The remaining family replacement dispatch is Decision9, not an invented ALTER.

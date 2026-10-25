@@ -5,10 +5,177 @@
   "resource_kinds": [
     "trigger"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "MySQL",
-  "omitted_tabs": [],
-  "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "omitted_tabs": [
+    {
+      "tab": "Options",
+      "reason": "MySQL row triggers have no deferrability, constraint-trigger or transition-table options. Native relative ordering is on Engine."
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Reviewed trigger replacement in the family editor",
+      "reason": "Explicit native DROP/CREATE and DDN replacement workflows exist. Composed family-editor dispatch remains Decision9; the editor must not invent ALTER TRIGGER or silently recreate the trigger."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "control": "text",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Database",
+      "control": "reference",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "reference_kind": "database",
+      "help": "The trigger and owning table belong to the same native database; a qualified table supplies it."
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "control": "reference",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "reference_kind": "table",
+      "required": true
+    },
+    {
+      "field_id": "timing",
+      "label": "Timing",
+      "control": "select",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "options": [
+        {
+          "value": "BEFORE",
+          "label": "BEFORE"
+        },
+        {
+          "value": "AFTER",
+          "label": "AFTER"
+        }
+      ],
+      "default": "BEFORE",
+      "required": true
+    },
+    {
+      "field_id": "event",
+      "label": "Event",
+      "control": "select",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "options": [
+        {
+          "value": "INSERT",
+          "label": "INSERT"
+        },
+        {
+          "value": "UPDATE",
+          "label": "UPDATE"
+        },
+        {
+          "value": "DELETE",
+          "label": "DELETE"
+        }
+      ],
+      "required": true,
+      "default": "INSERT"
+    },
+    {
+      "field_id": "if_not_exists",
+      "label": "If not exists",
+      "control": "boolean",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "default": false
+    },
+    {
+      "field_id": "body",
+      "label": "Body",
+      "control": "code",
+      "tab": "Definition",
+      "modes": [
+        "create"
+      ],
+      "language": "sql",
+      "required": true,
+      "default_path": [
+        "action_statement"
+      ]
+    },
+    {
+      "field_id": "order",
+      "label": "Order",
+      "control": "select",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "options": [
+        {
+          "value": "NONE",
+          "label": "None"
+        },
+        {
+          "value": "FOLLOWS",
+          "label": "FOLLOWS"
+        },
+        {
+          "value": "PRECEDES",
+          "label": "PRECEDES"
+        }
+      ],
+      "default": "NONE",
+      "group": "Ordering"
+    },
+    {
+      "field_id": "other_trigger",
+      "label": "Ordering trigger",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "help": "Native trigger name for FOLLOWS or PRECEDES. It must have compatible table, timing and event; MySQL checks that constraint.",
+      "group": "Ordering"
+    },
+    {
+      "field_id": "definer_user",
+      "label": "Definer user",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "definer_host",
+      "label": "Definer host",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ]
+    }
+  ],
+  "notes": "All declared create bindings reach the native trigger compiler. Existing one-element events lists remain compatible. Native MySQL9.7 owns row execution, privileges and order restrictions; no INSTEAD OF or statement-level trigger is invented. Draft pending shared rendering/round-trip acceptance."
 }
