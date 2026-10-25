@@ -5,7 +5,7 @@
   "resource_kinds": [
     "trigger"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "Firebird",
   "omitted_tabs": [],
   "gaps": [],
@@ -23,7 +23,8 @@
       "tab": "General",
       "control": "reference",
       "required": true,
-      "reference_kind": "table"
+      "reference_kind": "table",
+      "record_key": "relation"
     },
     {
       "field_id": "timing",
@@ -44,7 +45,8 @@
           "value": "INSTEAD OF",
           "label": "Instead Of"
         }
-      ]
+      ],
+      "record_key": "trigger_timing"
     },
     {
       "field_id": "events",
@@ -59,7 +61,8 @@
         "dialect",
         "trigger_events",
         "table"
-      ]
+      ],
+      "record_key": "trigger_events"
     },
     {
       "field_id": "active",
@@ -67,7 +70,17 @@
       "tab": "General",
       "control": "boolean",
       "required": false,
-      "default": true
+      "default": true,
+      "record_derive": {
+        "cases": [
+          {
+            "key": "inactive",
+            "equals": "1",
+            "value": false
+          }
+        ],
+        "default": true
+      }
     },
     {
       "field_id": "position",
@@ -84,8 +97,10 @@
       "control": "code",
       "language": "sql",
       "required": true,
-      "help": "Enter only the trigger body, not CREATE TRIGGER."
+      "help": "Enter only the trigger body, not CREATE TRIGGER.",
+      "record_key": "metadata_source",
+      "record_pattern": "^\\s*AS\\s+(.*)$"
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: table picker; trigger events typed as a multiselect from dialect.trigger_events."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: table picker; trigger events typed as a multiselect from dialect.trigger_events. Round-tripped against Firebird 5.0.3 by tools/tests/test_ui_descriptor_roundtrip_firebird.py (create, re-inspect pre-fill, alter)."
 }

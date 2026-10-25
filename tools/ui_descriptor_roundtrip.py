@@ -119,6 +119,56 @@ def backend_draft(form: dict, draft: dict, mode: str = "create", baseline: dict 
     return out
 
 
+_MISSING = object()
+
+
+def _read_path(record, path):
+    node = record
+    for part in path.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return _MISSING
+        node = node[part]
+    return node
+
+
+def record_value(field: dict, record: dict):
+    """The record value that pre-fills a field/grid column, or _MISSING.
+
+    Order: record_derive rule, record_key (dotted allowed), field_id.
+    """
+    derive = field.get("record_derive")
+    if derive:
+        for case in derive.get("cases", []):
+            found = _read_path(record, case["key"])
+            if "equals" in case:
+                if found is not _MISSING and found == case["equals"]:
+                    return case["value"]
+            elif bool(found is not _MISSING and _truthy(found)) == bool(case.get("truthy", True)):
+                return case["value"]
+        return derive.get("default", _MISSING)
+    value = _MISSING
+    if field.get("record_key"):
+        value = _read_path(record, field["record_key"])
+    if value is _MISSING:
+        value = _read_path(record, field["field_id"]) if field["field_id"] in record else _MISSING
+    if value is _MISSING:
+        return value
+    if field.get("record_filter") and isinstance(value, list):
+        rule = field["record_filter"]
+        value = [row for row in value if isinstance(row, dict) and _read_path(row, rule["key"]) == rule["equals"]]
+    if field.get("record_pluck") and isinstance(value, list):
+        value = [row.get(field["record_pluck"]) if isinstance(row, dict) else row for row in value]
+    if field.get("record_pattern") and isinstance(value, str):
+        match = re.search(field["record_pattern"], value, re.S)
+        value = match.group(1) if match else value
+    return _truthy(value) if field.get("record_truthy") else value
+
+
+def _truthy(value):
+    """Record truthiness: catalog flags arrive as "0"/"1" strings too."""
+    return value not in (None, "", 0, "0", False, "false", "FALSE")
+
+
 def record_draft(form: dict, record: dict, mode: str = "alter") -> dict:
     """Pre-fill a draft from an inspected native record (the editor's initialDraft)."""
     draft = {}
@@ -126,14 +176,13 @@ def record_draft(form: dict, record: dict, mode: str = "alter") -> dict:
         for field in tab.get("fields", []):
             if field.get("modes") and mode not in field["modes"]:
                 continue
-            key = field.get("record_key") if field.get("record_key") in record else field["field_id"]
-            if key not in record:
+            value = record_value(field, record)
+            if value is _MISSING:
                 if field.get("default") is not None:
                     draft[field["field_id"]] = field["default"]
                 elif field.get("control") == "grid":
                     draft[field["field_id"]] = []
                 continue
-            value = record[key]
             if field.get("control") == "grid" and isinstance(value, list):
                 rows = []
                 for index, row in enumerate(value):
@@ -143,14 +192,12 @@ def record_draft(form: dict, record: dict, mode: str = "alter") -> dict:
                         continue
                     out = dict(row)
                     for column in field.get("columns", []):
-                        source = column.get("record_key") if column.get("record_key") in row else column["field_id"]
-                        if source in row:
-                            out[column["field_id"]] = bool(row[source]) if column.get("record_truthy") else row[source]
+                        found = record_value(column, row)
+                        if found is not _MISSING:
+                            out[column["field_id"]] = found
                     out.setdefault("_id", str(index))
                     rows.append(out)
                 value = rows
-            elif field.get("record_truthy"):
-                value = bool(value)
             draft[field["field_id"]] = value
     return draft
 
@@ -159,4 +206,4 @@ def form_field_ids(form: dict) -> set:
     return {f["field_id"] for tab in form.get("tabs", []) for f in tab.get("fields", [])}
 
 
-__all__ = ("backend_draft", "diff_columns", "resolved_form", "active_fields", "field_visible", "form_field_ids", "record_draft")
+__all__ = ("backend_draft", "diff_columns", "resolved_form", "active_fields", "field_visible", "form_field_ids", "record_draft", "record_value")

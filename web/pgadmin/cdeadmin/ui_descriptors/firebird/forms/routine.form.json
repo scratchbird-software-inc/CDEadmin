@@ -7,7 +7,7 @@
     "function",
     "package"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "Firebird",
   "omitted_tabs": [],
   "gaps": [],
@@ -50,7 +50,8 @@
       "visible_when": {
         "field": "variant",
         "equals": "function"
-      }
+      },
+      "record_key": "return_type_sql"
     },
     {
       "field_id": "description",
@@ -81,10 +82,16 @@
           "field_id": "type",
           "label": "Native data type",
           "control": "text",
-          "required": true
+          "required": true,
+          "record_key": "type_sql"
         }
       ],
-      "required": false
+      "required": false,
+      "record_key": "parameters",
+      "record_filter": {
+        "key": "mode",
+        "equals": "input"
+      }
     },
     {
       "field_id": "return_parameters",
@@ -102,10 +109,16 @@
           "field_id": "type",
           "label": "Native data type",
           "control": "text",
-          "required": true
+          "required": true,
+          "record_key": "type_sql"
         }
       ],
-      "required": false
+      "required": false,
+      "record_key": "parameters",
+      "record_filter": {
+        "key": "mode",
+        "equals": "output"
+      }
     },
     {
       "field_id": "body",
@@ -114,7 +127,9 @@
       "control": "code",
       "language": "sql",
       "required": true,
-      "help": "Enter only the procedure body, not a CREATE command."
+      "help": "Enter only the procedure body, not a CREATE command.",
+      "record_key": "metadata_source",
+      "record_pattern": "^\\s*(?:AS\\s+)?(.*)$"
     },
     {
       "field_id": "header",
@@ -159,5 +174,5 @@
       }
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Round-tripped against Firebird 5.0.3 by tools/tests/test_ui_descriptor_roundtrip_firebird.py (create, re-inspect pre-fill, alter)."
 }

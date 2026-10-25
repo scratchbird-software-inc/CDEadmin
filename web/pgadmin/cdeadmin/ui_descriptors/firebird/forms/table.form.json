@@ -5,7 +5,7 @@
   "resource_kinds": [
     "table"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "Firebird",
   "omitted_tabs": [
     {
@@ -17,10 +17,6 @@
     {
       "concept": "Partitions tab",
       "reason": "omit: Firebird has no partitioning; list under omitted_tabs when completed"
-    },
-    {
-      "concept": "Constraints grid split",
-      "reason": "single constraints grid with a kind column; split into Primary key / Unique / Foreign keys / Check per the skeleton"
     }
   ],
   "fields": [
@@ -51,7 +47,27 @@
           "value": "EXTERNAL",
           "label": "External"
         }
-      ]
+      ],
+      "record_derive": {
+        "cases": [
+          {
+            "key": "external_file",
+            "truthy": true,
+            "value": "EXTERNAL"
+          },
+          {
+            "key": "relation_type",
+            "equals": 4,
+            "value": "GLOBAL TEMPORARY"
+          },
+          {
+            "key": "relation_type",
+            "equals": 5,
+            "value": "GLOBAL TEMPORARY"
+          }
+        ],
+        "default": "PERSISTENT"
+      }
     },
     {
       "field_id": "on_commit",
@@ -73,6 +89,16 @@
       "visible_when": {
         "field": "table_type",
         "equals": "GLOBAL TEMPORARY"
+      },
+      "record_derive": {
+        "cases": [
+          {
+            "key": "relation_type",
+            "equals": 4,
+            "value": "PRESERVE ROWS"
+          }
+        ],
+        "default": "DELETE ROWS"
       }
     },
     {
@@ -122,7 +148,22 @@
               "value": "COMPUTED INFERRED",
               "label": "Computed Inferred"
             }
-          ]
+          ],
+          "record_derive": {
+            "cases": [
+              {
+                "key": "computed_source",
+                "truthy": true,
+                "value": "COMPUTED"
+              },
+              {
+                "key": "identity_type",
+                "truthy": true,
+                "value": "IDENTITY"
+              }
+            ],
+            "default": "STORED"
+          }
         },
         {
           "field_id": "has_default",
@@ -133,7 +174,9 @@
           "visible_when": {
             "field": "column_mode",
             "equals": "STORED"
-          }
+          },
+          "record_key": "default_source",
+          "record_truthy": true
         },
         {
           "field_id": "default_kind",
@@ -220,7 +263,9 @@
           "field_id": "default_value",
           "label": "Default value",
           "control": "text",
-          "required": false
+          "required": false,
+          "record_key": "default_source",
+          "record_pattern": "^\\s*DEFAULT\\s+(.*)$"
         },
         {
           "field_id": "time_precision",
@@ -433,14 +478,16 @@
               "IDENTITY",
               "COMPUTED"
             ]
-          }
+          },
+          "record_key": "type_editor.data_type"
         },
         {
           "field_id": "domain",
           "label": "Domain name",
           "control": "text",
           "required": true,
-          "help": "For DOMAIN only."
+          "help": "For DOMAIN only.",
+          "record_key": "type_editor.domain"
         },
         {
           "field_id": "length",
@@ -448,14 +495,16 @@
           "control": "number",
           "required": true,
           "default": 1,
-          "help": "Character/binary types only."
+          "help": "Character/binary types only.",
+          "record_key": "type_editor.length"
         },
         {
           "field_id": "precision",
           "label": "Precision",
           "control": "number",
           "required": false,
-          "help": "NUMERIC/DECIMAL: 1–38; FLOAT: 1–53; DECFLOAT: 16 or 34."
+          "help": "NUMERIC/DECIMAL: 1–38; FLOAT: 1–53; DECFLOAT: 16 or 34.",
+          "record_key": "type_editor.precision"
         },
         {
           "field_id": "scale",
@@ -463,7 +512,8 @@
           "control": "number",
           "required": false,
           "default": 0,
-          "help": "NUMERIC/DECIMAL only."
+          "help": "NUMERIC/DECIMAL only.",
+          "record_key": "type_editor.scale"
         },
         {
           "field_id": "blob_subtype",
@@ -471,21 +521,24 @@
           "control": "number",
           "required": false,
           "default": 0,
-          "help": "0 binary, 1 text, or a native custom subtype."
+          "help": "0 binary, 1 text, or a native custom subtype.",
+          "record_key": "type_editor.blob_subtype"
         },
         {
           "field_id": "segment_size",
           "label": "BLOB segment size",
           "control": "number",
           "required": false,
-          "help": "Optional segment size, 0–65535."
+          "help": "Optional segment size, 0–65535.",
+          "record_key": "type_editor.segment_size"
         },
         {
           "field_id": "character_set",
           "label": "Character set",
           "control": "text",
           "required": false,
-          "help": "Optional for CHAR, VARCHAR and text BLOB."
+          "help": "Optional for CHAR, VARCHAR and text BLOB.",
+          "record_key": "type_editor.character_set"
         },
         {
           "field_id": "time_zone",
@@ -502,7 +555,8 @@
               "value": "WITH TIME ZONE",
               "label": "With Time Zone"
             }
-          ]
+          ],
+          "record_key": "type_editor.time_zone"
         },
         {
           "field_id": "expression",
@@ -516,7 +570,9 @@
               "COMPUTED",
               "COMPUTED INFERRED"
             ]
-          }
+          },
+          "record_key": "computed_source",
+          "record_pattern": "^\\s*\\((.*?)\\s*\\)\\s*$"
         },
         {
           "field_id": "generation",
@@ -537,6 +593,21 @@
           "visible_when": {
             "field": "column_mode",
             "equals": "IDENTITY"
+          },
+          "record_derive": {
+            "cases": [
+              {
+                "key": "identity_type",
+                "equals": "0",
+                "value": "ALWAYS"
+              },
+              {
+                "key": "identity_type",
+                "equals": "1",
+                "value": "BY DEFAULT"
+              }
+            ],
+            "default": "BY DEFAULT"
           }
         },
         {
@@ -547,7 +618,8 @@
           "visible_when": {
             "field": "column_mode",
             "equals": "IDENTITY"
-          }
+          },
+          "record_key": "identity_initial_value"
         },
         {
           "field_id": "increment",
@@ -557,7 +629,8 @@
           "visible_when": {
             "field": "column_mode",
             "equals": "IDENTITY"
-          }
+          },
+          "record_key": "identity_increment"
         },
         {
           "field_id": "collation",
@@ -592,7 +665,8 @@
               "default": 1
             }
           ],
-          "required": false
+          "required": false,
+          "record_key": "array_dimensions"
         },
         {
           "field_id": "constraints",
@@ -788,6 +862,20 @@
               "STORED",
               "IDENTITY"
             ]
+          },
+          "record_derive": {
+            "cases": [
+              {
+                "key": "not_null",
+                "truthy": true,
+                "value": [
+                  {
+                    "kind": "NOT NULL"
+                  }
+                ]
+              }
+            ],
+            "default": []
           }
         }
       ],
@@ -815,9 +903,16 @@
           "option_values_path": [
             "draft",
             "columns"
-          ]
+          ],
+          "record_key": "backing_index.segments",
+          "record_pluck": "field_name"
         }
-      ]
+      ],
+      "record_key": "constraints",
+      "record_filter": {
+        "key": "constraint_type",
+        "equals": "PRIMARY KEY"
+      }
     },
     {
       "field_id": "unique_constraints",
@@ -840,9 +935,16 @@
           "option_values_path": [
             "draft",
             "columns"
-          ]
+          ],
+          "record_key": "backing_index.segments",
+          "record_pluck": "field_name"
         }
-      ]
+      ],
+      "record_key": "constraints",
+      "record_filter": {
+        "key": "constraint_type",
+        "equals": "UNIQUE"
+      }
     },
     {
       "field_id": "foreign_keys",
@@ -865,14 +967,17 @@
           "option_values_path": [
             "draft",
             "columns"
-          ]
+          ],
+          "record_key": "backing_index.segments",
+          "record_pluck": "field_name"
         },
         {
           "field_id": "references_table",
           "label": "Referenced table",
           "control": "reference",
           "required": true,
-          "reference_kind": "table"
+          "reference_kind": "table",
+          "record_key": "referenced_relation"
         },
         {
           "field_id": "references_columns",
@@ -881,7 +986,12 @@
           "required": true,
           "help": "Columns of the referenced table, in key order."
         }
-      ]
+      ],
+      "record_key": "constraints",
+      "record_filter": {
+        "key": "constraint_type",
+        "equals": "FOREIGN KEY"
+      }
     },
     {
       "field_id": "check_constraints",
@@ -901,9 +1011,16 @@
           "label": "Expression",
           "control": "code",
           "required": true,
-          "language": "sql"
+          "language": "sql",
+          "record_key": "check_source",
+          "record_pattern": "^\\s*CHECK\\s*\\((.*)\\)\\s*$"
         }
-      ]
+      ],
+      "record_key": "constraints",
+      "record_filter": {
+        "key": "constraint_type",
+        "equals": "CHECK"
+      }
     },
     {
       "field_id": "sql_security",
@@ -956,8 +1073,18 @@
           "PERSISTENT",
           "EXTERNAL"
         ]
+      },
+      "record_derive": {
+        "cases": [
+          {
+            "key": "publication_enabled",
+            "truthy": true,
+            "value": "ENABLE"
+          }
+        ],
+        "default": "DEFAULT"
       }
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: constraints grid split into Primary key / Unique / Foreign keys / Check."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: constraints grid split into Primary key / Unique / Foreign keys / Check. Round-tripped against Firebird 5.0.3 by tools/tests/test_ui_descriptor_roundtrip_firebird.py (create, re-inspect pre-fill, alter)."
 }

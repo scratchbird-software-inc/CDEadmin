@@ -2740,6 +2740,26 @@ def _resources(connection, request):
                 rendered
             )
 
+        for item in resources.values():
+            native = item.setdefault('native', {})
+            if item['resource_kind'] == 'domain':
+                # One rendered type expression for editors.
+                native['type_sql'] = data_type(native, include_domain=False)
+            if item['resource_kind'] not in {'procedure', 'function'}:
+                continue
+            # Rendered parameter types for editors (the grid shows one
+            # type expression per parameter rather than catalog codes).
+            for parameter in native.get('parameters', []):
+                parameter['type_sql'] = parameter_definition(
+                    parameter, include_name=False)
+                if item['resource_kind'] == 'function' and not parameter.get('mode'):
+                    parameter['mode'] = 'input' if parameter.get('name') else 'return'
+            if item['resource_kind'] == 'function':
+                returned = [parameter for parameter in native.get('parameters', [])
+                            if not parameter.get('name')]
+                native['return_type_sql'] = (
+                    returned[0].get('type_sql') if len(returned) == 1 else None)
+
         def udf_parameter(parameter):
             # Legacy UDF grammar accepts only bare BLOB, not the table-field
             # SUB_TYPE / SEGMENT SIZE / CHARACTER SET clauses.
@@ -2929,6 +2949,12 @@ def _resources(connection, request):
             elif kind == 'trigger':
                 action = trigger_action(native.get('trigger_type'))
                 body = routine_body(native, trigger=True)
+                if action:
+                    # Decoded event mask for editors: timing + event list.
+                    timing, _, events = action.partition(' ')
+                    native['trigger_timing'] = timing
+                    native['trigger_events'] = [
+                        event.strip() for event in events.split(' OR ')]
                 if action and body:
                     definition = f'CREATE TRIGGER {identifier(name)}'
                     relation = str(native.get('relation') or '').rstrip(' ')
@@ -3118,6 +3144,10 @@ def _resources(connection, request):
                     tuple(candidate['display_path'][:-1]), set()).update(
                         index_segments(detail.get('index_name')))
         for item in resources.values():
+            if item['resource_kind'] == 'domain':
+                # Same scalar type summary the column editor pre-fills from.
+                item.setdefault('native', {})['type_editor'] = (
+                    type_editor_values(item['native']))
             if item['resource_kind'] != 'column':
                 continue
             path = item['display_path']

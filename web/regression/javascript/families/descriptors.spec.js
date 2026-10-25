@@ -73,8 +73,10 @@ describe('visibility, modes and options', () => {
     const pkColumns = form.fields[4].columns[0];
     expect(fieldOptions(pkColumns, {draft: {columns: [{name: 'id'}, {name: 'label'}]}}))
       .toEqual([{value: 'id', label: 'id'}, {value: 'label', label: 'label'}]);
-    expect(fieldOptions({control: 'reference', reference_kind: 'table'}, {context: {resources: {table: [{resource_id: 'r1', display_name: 'T'}]}}}))
-      .toEqual([{value: 'r1', label: 'T'}]);
+    // references are sent as dotted display paths, which is what providers parse
+    expect(fieldOptions({control: 'reference', reference_kind: 'table'}, {context: {resources: {table: [
+      {resource_id: 'r1', display_name: 'T', display_path: ['public', 'T']}, {resource_id: 'r2', display_name: 'U'}]}}}))
+      .toEqual([{value: 'public.T', label: 'T'}, {value: 'U', label: 'U'}]);
     expect(fieldOptions({control: 'text'}, {})).toEqual([]);
   });
 });
@@ -198,6 +200,34 @@ describe('record pre-fill and list projections (kept in step with tools/ui_descr
     expect(draft.cols).toEqual([
       {name: 'id', data_type: 'INTEGER', primary_key_position: 1, type: 'INTEGER', primary_key: true, _id: '0'},
       {name: 'note', data_type: 'TEXT', primary_key_position: 0, type: 'TEXT', primary_key: false, _id: '1'}]);
+  });
+  it('pre-fills through dotted keys, derive rules, list filters, plucks and patterns', () => {
+    const fbFamily = {family: 'fb', title: 'Fb', tabs: [{tab: 'General', primitive: 'group', required: true}, {tab: 'SQL', primitive: 'sql_preview', required: true}]};
+    const fbForm = {schema: 'cdeadmin.ui-form.v1', engine: 'acme', family: 'fb', resource_kinds: ['fb'], status: 'draft', fields: [
+      {field_id: 'name', label: 'Name', tab: 'General', control: 'text', required: true},
+      {field_id: 'unique', label: 'Unique', tab: 'General', control: 'boolean', record_truthy: true},
+      {field_id: 'body', label: 'Body', tab: 'General', control: 'code', record_key: 'metadata_source', record_pattern: '^\\s*AS\\s+(.*)$'},
+      {field_id: 'kind', label: 'Kind', tab: 'General', control: 'select', options: [{value: 'columns', label: 'c'}, {value: 'expression', label: 'e'}],
+        record_derive: {cases: [{key: 'expression_source', truthy: true, value: 'expression'}], default: 'columns'}},
+      {field_id: 'cols', label: 'Cols', tab: 'General', control: 'grid', columns: [
+        {field_id: 'name', label: 'Name', control: 'text'}, {field_id: 'type', label: 'Type', control: 'text', record_key: 'type_editor.data_type'},
+        {field_id: 'mode', label: 'Mode', control: 'select', options: [{value: 'STORED', label: 's'}, {value: 'COMPUTED', label: 'c'}],
+          record_derive: {cases: [{key: 'computed_source', truthy: true, value: 'COMPUTED'}], default: 'STORED'}}]},
+      {field_id: 'pk', label: 'PK', tab: 'General', control: 'grid', backend_field_id: 'constraints[kind=PRIMARY KEY]',
+        record_key: 'constraints', record_filter: {key: 'constraint_type', equals: 'PRIMARY KEY'}, columns: [
+          {field_id: 'name', label: 'Name', control: 'text'},
+          {field_id: 'columns', label: 'Columns', control: 'multiselect', record_key: 'backing_index.segments', record_pluck: 'field_name'}]},
+    ]};
+    const draft = initialDraft(resolveForm(fbFamily, fbForm), {mode: 'alter', record: {
+      name: 'x', unique: '0', metadata_source: 'AS BEGIN END', expression_source: '(UPPER(A))',
+      cols: [{name: 'a', type_editor: {data_type: 'INTEGER'}, computed_source: null}, {name: 'b', type_editor: {}, computed_source: '(a*2)'}],
+      constraints: [{name: 'ck', constraint_type: 'CHECK'}, {name: 'pk', constraint_type: 'PRIMARY KEY', backing_index: {segments: [{field_name: 'a'}]}}],
+    }});
+    expect(draft.unique).toBe(false);
+    expect(draft.body).toBe('BEGIN END');
+    expect(draft.kind).toBe('expression');
+    expect(draft.cols.map((row) => [row.name, row.type, row.mode])).toEqual([['a', 'INTEGER', 'STORED'], ['b', undefined, 'COMPUTED']]);
+    expect(draft.pk).toEqual([{name: 'pk', constraint_type: 'PRIMARY KEY', backing_index: {segments: [{field_name: 'a'}]}, columns: ['a'], _id: '0'}]);
     expect(gridRowFromRecord({item_kind: 'string', columns: [{field_id: 'value'}]}, 'x', 3)).toEqual({value: 'x', _id: '3'});
   });
 });

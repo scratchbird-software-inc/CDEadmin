@@ -5,7 +5,7 @@
   "resource_kinds": [
     "index"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "Firebird",
   "omitted_tabs": [],
   "gaps": [],
@@ -23,7 +23,9 @@
       "tab": "General",
       "control": "reference",
       "required": true,
-      "reference_kind": "table"
+      "reference_kind": "table",
+      "record_key": "navigator_parent_resource_id",
+      "record_pattern": "^[a-z-]+:(.*)$"
     },
     {
       "field_id": "columns",
@@ -44,7 +46,9 @@
         "field": "index_kind",
         "equals": "columns"
       },
-      "item_kind": "string"
+      "item_kind": "string",
+      "record_key": "segments",
+      "record_pluck": "field_name"
     },
     {
       "field_id": "unique",
@@ -52,7 +56,8 @@
       "tab": "General",
       "control": "boolean",
       "required": false,
-      "default": false
+      "default": false,
+      "record_truthy": true
     },
     {
       "field_id": "direction",
@@ -70,7 +75,17 @@
           "value": "DESCENDING",
           "label": "Descending"
         }
-      ]
+      ],
+      "record_derive": {
+        "cases": [
+          {
+            "key": "index_type",
+            "equals": "1",
+            "value": "DESCENDING"
+          }
+        ],
+        "default": "ASCENDING"
+      }
     },
     {
       "field_id": "expression",
@@ -81,7 +96,9 @@
       "visible_when": {
         "field": "index_kind",
         "equals": "expression"
-      }
+      },
+      "record_key": "expression_source",
+      "record_pattern": "^\\s*\\((.*?)\\s*\\)\\s*$"
     },
     {
       "field_id": "condition",
@@ -89,7 +106,8 @@
       "tab": "General",
       "control": "text",
       "required": false,
-      "help": "Optional expression after WHERE."
+      "help": "Optional expression after WHERE.",
+      "record_key": "condition_source"
     },
     {
       "field_id": "active",
@@ -99,7 +117,17 @@
       "required": false,
       "modes": [
         "alter"
-      ]
+      ],
+      "record_derive": {
+        "cases": [
+          {
+            "key": "inactive",
+            "equals": "1",
+            "value": false
+          }
+        ],
+        "default": true
+      }
     },
     {
       "field_id": "index_kind",
@@ -117,7 +145,17 @@
           "value": "expression",
           "label": "Expression"
         }
-      ]
+      ],
+      "record_derive": {
+        "cases": [
+          {
+            "key": "expression_source",
+            "truthy": true,
+            "value": "expression"
+          }
+        ],
+        "default": "columns"
+      }
     },
     {
       "field_id": "refresh_statistics",
@@ -131,5 +169,5 @@
       ]
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: index columns select from target columns; table picker. Reviewed by tools/review_ui_descriptors.py: index columns as an ordered column list."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: index columns select from target columns; table picker. Reviewed by tools/review_ui_descriptors.py: index columns as an ordered column list. Round-tripped against Firebird 5.0.3 by tools/tests/test_ui_descriptor_roundtrip_firebird.py (create, re-inspect pre-fill, alter)."
 }

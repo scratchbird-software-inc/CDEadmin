@@ -319,7 +319,7 @@
         },
         "record_key": {
           "type": "string",
-          "description": "Key in the inspected record (or grid row) that pre-fills this field when it differs from field_id, e.g. data_type for type"
+          "description": "Key (or dotted path, e.g. type_editor.data_type) in the inspected record or grid row that pre-fills this field when it differs from field_id"
         },
         "record_truthy": {
           "type": "boolean",
@@ -339,6 +339,58 @@
         "ui_only": {
           "type": "boolean",
           "description": "never sent to the provider (variant switches, confirmations the shell handles)"
+        },
+        "record_derive": {
+          "type": "object",
+          "description": "Pre-fill from a rule over the record row: first matching case wins, else default",
+          "properties": {
+            "cases": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "truthy": {
+                    "type": "boolean"
+                  },
+                  "equals": {},
+                  "value": {}
+                },
+                "required": [
+                  "key",
+                  "value"
+                ]
+              }
+            },
+            "default": {}
+          },
+          "required": [
+            "cases"
+          ]
+        },
+        "record_filter": {
+          "type": "object",
+          "description": "for control=grid: keep only record rows whose key equals the value (reverse of backend_field_id list[kind=X])",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "equals": {}
+          },
+          "required": [
+            "key",
+            "equals"
+          ]
+        },
+        "record_pluck": {
+          "type": "string",
+          "description": "when the record value is a list of objects, pre-fill with this key of each item"
+        },
+        "record_pattern": {
+          "type": "string",
+          "description": "regular expression applied to the record text; the first group pre-fills the field (e.g. strip a DEFAULT keyword)"
         }
       }
     }

@@ -171,7 +171,11 @@ export function fieldOptions(field, {context={}, draft={}, resourceKind}={}) {
   }
   if(field.control === 'reference' && field.reference_kind) {
     const rows = context.resources?.[field.reference_kind] || [];
-    return rows.map((row) => ({value: row.resource_id ?? row.value ?? row, label: row.display_name ?? row.label ?? String(row)}));
+    // Providers take object references as dotted display paths (schema.name).
+    return rows.map((row) => ({
+      value: Array.isArray(row.display_path) && row.display_path.length ? row.display_path.join('.') :
+        row.display_name ?? row.resource_id ?? row.value ?? row,
+      label: row.display_name ?? row.label ?? String(row)}));
   }
   return [];
 }
@@ -183,10 +187,11 @@ export function initialDraft(form, {mode='create', record={}}={}) {
     for(const field of tab.fields) {
       if(field.modes && !field.modes.includes(mode)) continue;
       const backendId = field.backend_field_id || field.field_id;
-      const existing = record[field.record_key || field.field_id] ?? record[field.field_id] ?? readDotted(record, backendId);
+      let existing = recordValue(field, record);
+      if(existing === undefined) existing = readDotted(record, backendId);
       if(existing !== undefined) {
         draft[field.field_id] = field.control === 'grid' && Array.isArray(existing) ?
-          existing.map((row, index) => gridRowFromRecord(field, row, index)) : recordValue(field, existing);
+          existing.map((row, index) => gridRowFromRecord(field, row, index)) : existing;
       }
       else if(field.default !== undefined) draft[field.field_id] = field.default;
       else if(field.control === 'grid') draft[field.field_id] = [];
@@ -196,9 +201,41 @@ export function initialDraft(form, {mode='create', record={}}={}) {
   return draft;
 }
 
-function recordValue(field, value) {
-  if(field.record_truthy) return Boolean(value);
-  return value;
+// Record truthiness: catalog flags arrive as '0'/'1' strings too.
+const EMPTYISH = new Set([null, undefined, '', 0, '0', false, 'false', 'FALSE']);
+
+/**
+ * The record value that pre-fills a field or grid column, or undefined.
+ * Order: record_derive rule, record_key (dotted path allowed), field_id.
+ */
+export function recordValue(field, record) {
+  if(!record || typeof record !== 'object') return undefined;
+  if(field.record_derive) {
+    for(const rule of field.record_derive.cases || []) {
+      const found = readPath(record, rule.key.split('.'));
+      if('equals' in rule) {
+        if(found !== undefined && found === rule.equals) return rule.value;
+      } else if(!EMPTYISH.has(found) === (rule.truthy ?? true)) {
+        return rule.value;
+      }
+    }
+    return field.record_derive.default;
+  }
+  let value = field.record_key ? readPath(record, field.record_key.split('.')) : undefined;
+  if(value === undefined && Object.hasOwn(record, field.field_id)) value = record[field.field_id];
+  if(value === undefined) return undefined;
+  if(field.record_filter && Array.isArray(value)) {
+    const rule = field.record_filter;
+    value = value.filter((row) => row && typeof row === 'object' && readPath(row, rule.key.split('.')) === rule.equals);
+  }
+  if(field.record_pluck && Array.isArray(value)) {
+    value = value.map((row) => (row && typeof row === 'object') ? row[field.record_pluck] : row);
+  }
+  if(field.record_pattern && typeof value === 'string') {
+    const match = new RegExp(field.record_pattern, 's').exec(value);
+    if(match) value = match[1];
+  }
+  return field.record_truthy ? !EMPTYISH.has(value) : value;
 }
 
 /** A grid row pre-filled from an inspected record row, keyed by column record_key. */
@@ -209,8 +246,8 @@ export function gridRowFromRecord(field, row, index) {
   if(!row || typeof row !== 'object') return row;
   const out = {...row};
   for(const column of field.columns || []) {
-    const source = column.record_key && column.record_key in row ? column.record_key : column.field_id;
-    if(source in row) out[column.field_id] = recordValue(column, row[source]);
+    const found = recordValue(column, row);
+    if(found !== undefined) out[column.field_id] = found;
   }
   if(!out._id) out._id = `${index}`;
   return out;

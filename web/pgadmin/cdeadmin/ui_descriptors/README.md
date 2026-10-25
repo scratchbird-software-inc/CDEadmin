@@ -45,12 +45,37 @@ table/parent fields into reference pickers, marks one-column grids as string
 lists (`item_kind: string`), and sets `record_key` on the column grid so an
 existing object pre-fills the editor from the provider's native record.
 
+Pre-fill is declared per field (and per grid column) with these keys, all
+optional and all handled identically by the shell and the Python twin:
+
+| key | meaning |
+| --- | --- |
+| `record_key` | key or dotted path in the native record/row (`type_editor.data_type`) |
+| `record_truthy` | coerce `"0"`/`"1"`/null style flags to a boolean |
+| `record_derive` | `{cases: [{key, truthy\|equals, value}], default}` — first matching case wins (column mode, timing, direction) |
+| `record_filter` | grid: keep rows whose `key` equals a value — the reverse of `backend_field_id: list[kind=X]` |
+| `record_pluck` | grid column: take one key from each item of a list of objects (`backing_index.segments` → `field_name`) |
+| `record_pattern` | regular expression whose first group is the value (strip `DEFAULT `, `CHECK (...)`, outer parentheses) |
+| `ui_only` | never sent to the provider (variant switches) |
+
+When a native record lacks a usable shape (catalog type codes instead of a
+type expression, an undecoded event mask), add the decoded value to the
+provider's native record rather than teaching the descriptor engine logic;
+the Firebird provider's `type_editor`, `type_sql`, `trigger_timing` /
+`trigger_events` and parameter `type_sql` keys are the pattern.
+
 The acceptance step for `complete` is a round trip through the form's own
 fields: `tools/ui_descriptor_roundtrip.py` maps a UI draft onto the provider
 draft exactly as the shell does (`backend_draft`, `record_draft`), and
 `tools/tests/test_ui_descriptor_roundtrip_<engine>.py` plans, applies and
-re-inspects on a real database. Copy the SQLite or DuckDB test for an engine
-you can reach.
+re-inspects on a real database. SQLite and DuckDB run on a file; the server
+engines skip unless an environment variable points at a live server:
+
+| engine | environment |
+| --- | --- |
+| Firebird | `CDEADMIN_ROUNDTRIP_FIREBIRD='{"host","port","user","password","database_root"}'` plus `CDEADMIN_FIREBIRD_CLIENT_LIBRARY` (a Firebird 5 `libfbclient`) |
+
+Each test creates and drops its own database/objects under a unique name.
 
 The drafter places fields on canonical tabs by id, turns array/object editors
 into grids, downgrades bare JSON boxes to `keyvalue` and lists each one under
