@@ -2453,14 +2453,17 @@ describe('ProviderWorkspaceContent', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('loads provider resources through the workspace endpoint', async () => {
+  it('loads provider resources through the workspace endpoint and hands navigation to the tree', async () => {
     render(<ProviderWorkspaceContent
       closeModal={jest.fn()}
       endpointUrl="/workspace/1"
     />);
-    fireEvent.click(await screen.findByRole('treeitem', {name: /database/i}));
-    expect(await screen.findByText('example')).toBeInTheDocument();
-    expect(screen.getAllByText('database')).toHaveLength(2);
+    // The Object Explorer tree is the navigator; the workspace carries no object list.
+    expect(await screen.findByRole('region', {name: 'Object navigation'}))
+      .toHaveTextContent('listed in the Object Explorer tree');
+    expect(screen.getByText('1 objects in the current catalog page.')).toBeInTheDocument();
+    expect(screen.queryByRole('treeitem')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Filter provider objects')).not.toBeInTheDocument();
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith('/workspace/1');
   });
@@ -2752,8 +2755,7 @@ describe('ProviderWorkspaceContent', () => {
     await act(async () => {
       onCredentialRequired.mock.calls[0][0]();
     });
-    fireEvent.click(await screen.findByRole('treeitem', {name: /database/i}));
-    expect(await screen.findByText('example')).toBeInTheDocument();
+    expect(await screen.findByRole('region', {name: 'Object navigation'})).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledTimes(2);
   });
 
@@ -2936,38 +2938,6 @@ describe('ProviderWorkspaceContent', () => {
     })).toHaveTextContent('MAX_CONNECTIONS'));
   });
 
-  it('navigates the provider tree by keyboard and opens the linked editor', async () => {
-    api.post.mockResolvedValue({data: {data: {
-      ...bootstrap.resource_page.items[0], generation: 'generation-one',
-      extensions: {mysql: {native: {character_set: 'utf8mb4'}}},
-    }}});
-    render(<ProviderWorkspaceContent closeModal={jest.fn()}
-      endpointUrl="/workspace/1" />);
-    const branch = await screen.findByRole('treeitem', {name: /database/i});
-    fireEvent.focus(branch);
-    fireEvent.keyDown(branch, {key: 'ArrowRight'});
-    expect(branch).toHaveAttribute('aria-expanded', 'true');
-    const resource = await screen.findByRole('treeitem', {name: /example/i});
-    fireEvent.keyDown(resource, {key: 'Enter'});
-    expect(await screen.findByRole('navigation', {
-      name: 'Selected object breadcrumb',
-    })).toHaveTextContent('database / example');
-    fireEvent.click(screen.getByText('Open object editor'));
-    expect(await screen.findByRole('textbox', {name: /Name/}))
-      .toBeInTheDocument();
-    expect(await screen.findByRole('combobox', {
-      name: 'Object properties task',
-    })).toHaveTextContent('Summary');
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
-    expect(screen.getByRole('tabpanel', {name: 'properties object section'}))
-      .toHaveTextContent('generation-one');
-    expect(api.post).toHaveBeenCalledWith('/workspace/1', {
-      action: 'resource_inspect', request: {
-        resource_id: 'database:example', generation: undefined,
-      },
-    });
-  });
-
   it.each([false, true])('opens server-only recovery and handles failed response %s without replay', async (failed) => {
     const onCredentialRequired = jest.fn();
     const failureMessage = 'The provider operation outcome is unknown. Inspect native state. The plan will not be automatically retried. Native status codes: 335544788, 335545112';
@@ -3139,7 +3109,7 @@ describe('ProviderWorkspaceContent', () => {
     });
   });
 
-  it('opens provider-owned object actions from the resource context menu', async () => {
+  it('opens provider-owned object actions for a tree-selected resource', async () => {
     const inspectOperation = {
       operation_id: 'inspect', title: 'Inspect MySQL database',
       mutation_class: 'read', target_required: true,
@@ -3162,19 +3132,15 @@ describe('ProviderWorkspaceContent', () => {
         definition: {character_set: 'utf8mb4'},
       }}},
     }}});
+    // The tree's context menu opens the workspace on the administration tab with the resource.
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
-      endpointUrl="/workspace/1" />);
-    fireEvent.click(await screen.findByRole('treeitem', {name: /database/i}));
-    const resource = await screen.findByRole('treeitem', {name: /example/i});
-    fireEvent.contextMenu(resource, {clientX: 120, clientY: 80});
-    fireEvent.click(await screen.findByText('Inspect object'));
+      endpointUrl="/workspace/1" initialTab="administration"
+      initialContext={{resource_id: 'database:example', resource_kind: 'database', operation_id: 'inspect'}} />);
     expect(await screen.findByRole('heading', {
       name: /Inspect MySQL database/,
     })).toBeInTheDocument();
-    expect(await screen.findByRole('table', {
-      name: 'Native provider properties',
-    }))
-      .toHaveTextContent('character set');
+    const tables = await screen.findAllByRole('table', {name: 'Native provider properties'});
+    expect(tables.some((table) => table.textContent.includes('character set'))).toBe(true);
   });
 
   it('surfaces unique native tasks but omits unsupported tasks', async () => {
@@ -3210,17 +3176,11 @@ describe('ProviderWorkspaceContent', () => {
         next_cursor: 'cursor-one', total_count: 2,
       },
     }}});
-    api.post.mockResolvedValue({data: {data: {
-      generation: 'generation-one', next_cursor: null, total_count: 2,
-      items: [{
-        resource_id: 'schema:example:public', resource_kind: 'schema',
-        display_name: 'public', display_path: ['database', 'example', 'public'],
-        authority_path: ['database', 'example', 'schema', 'public'],
-      }],
-    }}});
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" />);
-    fireEvent.click(await screen.findByText('Load more provider objects'));
+    expect(await screen.findByRole('region', {name: 'Object navigation'})).toBeInTheDocument();
+    expect(screen.queryByLabelText('Filter provider objects')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Load more provider objects'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(
       '/workspace/1', {
         action: 'resource_page', request: {
@@ -3228,10 +3188,6 @@ describe('ProviderWorkspaceContent', () => {
         },
       }
     ));
-    fireEvent.change(screen.getByLabelText('Filter provider objects'), {
-      target: {value: 'public'},
-    });
-    expect(await screen.findByText('public')).toBeInTheDocument();
   });
 
   it('refreshes only the active provider generation', async () => {
@@ -3245,6 +3201,8 @@ describe('ProviderWorkspaceContent', () => {
       ...bootstrap.resource_page, generation: 'generation-two',
       items: [{
         ...bootstrap.resource_page.items[0], display_name: 'refreshed',
+      }, {
+        ...bootstrap.resource_page.items[0], resource_id: 'database:other', display_name: 'other',
       }],
     }}});
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
@@ -3257,9 +3215,7 @@ describe('ProviderWorkspaceContent', () => {
         },
       }
     ));
-    fireEvent.click(await screen.findByRole('treeitem', {name: /database/i}));
-    fireEvent.click(await screen.findByRole('treeitem', {name: /example/i}));
-    expect(await screen.findByText('refreshed')).toBeInTheDocument();
+    expect(await screen.findByText('2 objects in the current catalog page.')).toBeInTheDocument();
   });
 
   it('opens a provider session, executes and renders rows', async () => {

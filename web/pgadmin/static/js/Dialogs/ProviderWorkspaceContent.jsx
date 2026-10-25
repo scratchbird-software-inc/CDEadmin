@@ -80,7 +80,6 @@ import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
 import getApiInstance from '../api_instance';
 import BaseChart from '../chartjs';
 import { ModalContent, ModalFooter } from '../components/ModalContent';
-import ContextMenu from '../components/ContextMenu';
 import DataGrid from 'sources/cdeadmin_ui/data/DataGrid';
 import ProviderTransactionObservation from './ProviderTransactionObservation';
 import FirebirdSessionTraps from './FirebirdSessionTraps';
@@ -207,320 +206,34 @@ function deliveryRequestId() {
       value.toString(16).padStart(2, '0')}`).join('');
 }
 
-function resourceHierarchy(groups, expanded, filtering) {
-  const rows = [];
-  groups.forEach((group) => {
-    const groupId = `group:${group.group_id}`;
-    rows.push({
-      id: groupId, parentId: null, level: 1, expandable: true,
-      expanded: filtering || expanded.has(groupId), title: group.title,
-      kind: 'group', group,
-    });
-    if (!filtering && !expanded.has(groupId)) return;
-    const root = {children: new Map(), resources: []};
-    group.items.forEach((resource) => {
-      const sourcePath = resource.display_path?.length ?
-        resource.display_path : resource.authority_path || [];
-      const path = [...sourcePath];
-      if (path[path.length - 1] === resource.display_name) path.pop();
-      let parent = root;
-      let parentId = groupId;
-      path.forEach((segment) => {
-        const title = String(segment);
-        const id = `${parentId}/path:${encodeURIComponent(title)}`;
-        if (!parent.children.has(title)) {
-          parent.children.set(title, {
-            id, parentId, title, children: new Map(), resources: [],
-          });
-        }
-        parent = parent.children.get(title);
-        parentId = id;
-      });
-      parent.resources.push({resource, parentId});
-    });
-    const visit = (node, level) => {
-      [...node.children.values()].sort((left, right) =>
-        left.title.localeCompare(right.title)).forEach((branch) => {
-        const isOpen = filtering || expanded.has(branch.id);
-        rows.push({
-          ...branch, level, kind: 'branch', expandable: true,
-          expanded: isOpen,
-        });
-        if (isOpen) visit(branch, level + 1);
-      });
-      node.resources.sort((left, right) =>
-        left.resource.display_name.localeCompare(
-          right.resource.display_name
-        )).forEach(({resource, parentId}) => rows.push({
-        id: `resource:${resource.resource_id}`, parentId, level,
-        expandable: false, expanded: false, title: resource.display_name,
-        kind: 'resource', resource,
-      }));
-    };
-    visit(root, 2);
-  });
-  return rows;
-}
-
-function ResourceExplorer({catalog, page, selectedResourceId, onSelect,
-  onOpenAdministration, onOpenData, onLoadMore, onRefresh, loadingMore}) {
-  const items = page?.items || [];
-  const [filter, setFilter] = useState('');
-  const [expanded, setExpanded] = useState(new Set());
-  const [activeId, setActiveId] = useState(null);
-  const [context, setContext] = useState(null);
-  const rowRefs = useRef(new Map());
-  const objectDescriptors = useMemo(() => Object.fromEntries(
-    (catalog?.objects || []).map((item) => [item.resource_kind, item])
-  ), [catalog]);
-  const groups = useMemo(() => {
-    const admitted = items.filter((item) => {
-      const needle = filter.trim().toLocaleLowerCase();
-      if (!needle) return true;
-      return [item.display_name, item.resource_kind,
-        ...(item.display_path || []), ...(item.authority_path || [])]
-        .some((value) => String(value || '').toLocaleLowerCase()
-          .includes(needle));
-    });
-    const declared = catalog?.navigator?.groups || [];
-    const result = declared.map((group) => ({...group, items: []}));
-    const byId = Object.fromEntries(result.map((group) =>
-      [group.group_id, group]));
-    admitted.forEach((item) => {
-      const groupId = objectDescriptors[item.resource_kind]?.navigator
-        ?.group_id || 'operations';
-      if (!byId[groupId]) {
-        byId[groupId] = {
-          group_id: groupId,
-          title: gettext('Other provider objects'),
-          order: result.length,
-          items: [],
-        };
-        result.push(byId[groupId]);
-      }
-      byId[groupId].items.push(item);
-    });
-    return result.filter((group) => group.items.length > 0);
-  }, [catalog, filter, items, objectDescriptors]);
-  const filtering = Boolean(filter.trim());
-  const rows = useMemo(
-    () => resourceHierarchy(groups, expanded, filtering),
-    [expanded, filtering, groups]
-  );
-  const selected = items.find((item) =>
-    item.resource_id === selectedResourceId);
-  const selectedDescriptor = selected ?
-    objectDescriptors[selected.resource_kind] : null;
-  const canOpenData = selectedDescriptor?.editor?.sections?.includes('data');
-  const contextDescriptor = context?.resource ?
-    objectDescriptors[context.resource.resource_kind] : null;
-  const contextCanOpenData = contextDescriptor?.editor?.sections
-    ?.includes('data');
-  const contextOperations = (contextDescriptor?.operations || []).filter(
-    (operation) => operation.native_supported !== false
-  );
-  const contextCanInspect = contextOperations.some(
-    (operation) => operation.operation_id === 'inspect'
-  );
-  const contextProviderOperations = contextOperations.filter(
-    (operation) => operation.operation_id !== 'inspect'
-  ).map((operation) => ({
-    id: `${context?.resource?.resource_kind}-${operation.operation_id}`,
-    label: operation.title || operation.operation_id,
-    iconKey: operation.mutation_class === 'destructive' ?
-      'action.delete' : operation.operation_id === 'create' ?
-        'action.create' : 'action.edit',
-    intent: operation.mutation_class || 'admin',
-    enabled: operation.execution_available === true &&
-      operation.graphical_ready !== false,
-    disabledReason: (operation.blockers || []).join(', '),
-    requiresConfirmation: operation.confirmation_required === true,
-    execute: () => {
-      onSelect(context.resource);
-      onOpenAdministration(context.resource, operation.operation_id);
-      setContext(null);
-    },
-  }));
-  const contextMenuItems = context?.resource ? [
-    ...(contextCanInspect ? [{
-      id: 'provider-object-inspect', label: gettext('Inspect object'),
-      iconKey: 'action.view', intent: 'read', enabled: true,
-      execute: () => {
-        onSelect(context.resource);
-        onOpenAdministration(context.resource, 'inspect');
-        setContext(null);
-      },
-    }] : []), ...(contextCanOpenData ? [{
-      id: 'provider-object-data', label: gettext('Open object data'),
-      iconKey: 'action.edit', intent: 'read', enabled: true,
-      execute: () => {
-        onSelect(context.resource);
-        onOpenData(context.resource);
-        setContext(null);
-      },
-    }] : []), ...(contextProviderOperations.length ? [{
-      id: 'provider-object-operations', label: gettext('Provider operations'),
-      iconKey: 'action.settings', intent: 'admin', enabled: true,
-      children: contextProviderOperations,
-    }] : []),
-  ] : [];
-
-  useEffect(() => {
-    setExpanded((current) => {
-      const next = new Set(current);
-      groups.forEach((group) => next.add(`group:${group.group_id}`));
-      return next.size === current.size ? current : next;
-    });
-  }, [groups]);
-
-  useEffect(() => {
-    if (activeId && rows.some((row) => row.id === activeId)) return;
-    setActiveId(rows[0]?.id || null);
-  }, [activeId, rows]);
-
-  const toggle = (id, force) => setExpanded((current) => {
-    const next = new Set(current);
-    const shouldExpand = force ?? !next.has(id);
-    if (shouldExpand) next.add(id);
-    else next.delete(id);
-    return next;
-  });
-  const focusRow = (id) => {
-    if (!id) return;
-    setActiveId(id);
-    setTimeout(() => rowRefs.current.get(id)?.focus(), 0);
-  };
-  const keyDown = (event, row, index) => {
-    let destination = null;
-    if (event.key === 'ArrowDown') destination = rows[index + 1]?.id;
-    if (event.key === 'ArrowUp') destination = rows[index - 1]?.id;
-    if (event.key === 'Home') destination = rows[0]?.id;
-    if (event.key === 'End') destination = rows[rows.length - 1]?.id;
-    if (event.key === 'ArrowRight' && row.expandable) {
-      if (!row.expanded) toggle(row.id, true);
-      else destination = rows.find((item) => item.parentId === row.id)?.id;
-    }
-    if (event.key === 'ArrowLeft') {
-      if (row.expandable && row.expanded) toggle(row.id, false);
-      else destination = row.parentId;
-    }
-    if (event.key === 'Enter' || event.key === ' ') {
-      if (row.kind === 'resource') onSelect(row.resource);
-      else if (row.expandable) toggle(row.id);
-    }
-    if (destination || ['ArrowRight', 'ArrowLeft', 'Enter', ' ']
-      .includes(event.key)) {
-      event.preventDefault();
-      focusRow(destination);
-    }
-  };
+/**
+ * The Object Explorer tree is the navigator (unified design, phase 2): the
+ * workspace no longer carries its own object list. This tab only points at the
+ * tree and offers a catalog refresh.
+ */
+function TreeHandoff({page, onLoadMore, onRefresh, loadingMore}) {
+  const count = page?.items?.length || 0;
   return (
-    <Box sx={{overflow: 'auto', flex: 1, p: 2}}
-      aria-label={gettext('Provider resource explorer')}>
-      <TextField fullWidth size="small" value={filter}
-        label={gettext('Filter provider objects')}
-        onChange={(event) => setFilter(event.target.value)} />
-      {selected && <Box component="nav" aria-label={gettext('Selected object breadcrumb')}
-        sx={{display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 1}}>
-        {(selected.display_path || selected.authority_path || []).map(
-          (part, index) => <Box component="span" key={`${part}:${index}`}>
-            {index > 0 && <Box component="span" aria-hidden="true"> / </Box>}
-            {String(part)}
-          </Box>)}
-        <Box sx={{display: 'flex', gap: 1, width: '100%', mt: 0.5}}>
-          <Button size="small" onClick={() => onOpenAdministration(
-            selected, 'inspect'
-          )}>
-            {gettext('Open object editor')}
-          </Button>
-          <Button size="small" onClick={() => onOpenData(selected)}
-            disabled={!canOpenData}>
-            {gettext('Open object data')}
-          </Button>
+    <Box sx={{p: 2}} role="region" aria-label={gettext('Object navigation')}
+      data-cdeadmin-qa-key="workspace.resources.tree-handoff">
+      <Alert severity="info">
+        {gettext('Objects for this connection are listed in the Object Explorer tree. Expand the server node to browse them; edit, create and run operations from an object\'s context menu.')}
+      </Alert>
+      <Box sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mt: 1}}>
+        <Box component="span" sx={{fontSize: '0.8125rem', color: 'text.secondary'}}>
+          {count ? gettext('%s objects in the current catalog page.', count) : gettext('No catalog page loaded.')}
         </Box>
-      </Box>}
-      <Box role="tree"
-        aria-label={catalog?.navigator?.navigator_id ||
-          gettext('Provider resource navigator')}
-        sx={{mt: 1, border: 1, borderColor: 'divider'}}>
-        {rows.map((row, index) => {
-          const descriptor = row.resource ?
-            objectDescriptors[row.resource.resource_kind] : null;
-          return <Box key={row.id} role="treeitem" aria-level={row.level}
-            aria-expanded={row.expandable ? row.expanded : undefined}
-            aria-selected={row.kind === 'resource' ?
-              selectedResourceId === row.resource.resource_id : undefined}
-            tabIndex={activeId === row.id ? 0 : -1}
-            ref={(element) => {
-              if (element) rowRefs.current.set(row.id, element);
-              else rowRefs.current.delete(row.id);
-            }}
-            onFocus={() => setActiveId(row.id)}
-            onKeyDown={(event) => keyDown(event, row, index)}
-            onContextMenu={(event) => {
-              if (row.kind !== 'resource') return;
-              event.preventDefault();
-              onSelect(row.resource);
-              setContext({
-                x: event.clientX, y: event.clientY,
-                resource: row.resource,
-              });
-            }}
-            onClick={() => row.kind === 'resource' ?
-              onSelect(row.resource) : toggle(row.id)}
-            sx={{
-              display: 'flex', alignItems: 'center', gap: 1, py: 0.5,
-              px: 1, pl: `${8 + (row.level - 1) * 18}px`, cursor: 'pointer',
-              bgcolor: row.kind === 'resource' &&
-                selectedResourceId === row.resource.resource_id ?
-                'action.selected' : undefined,
-              '&:focus-visible': {outline: '2px solid', outlineColor: 'primary.main'},
-            }}>
-            <Box component="span" aria-hidden="true" sx={{width: 14}}>
-              {row.expandable ? (row.expanded ? '▾' : '▸') : '•'}
-            </Box>
-            <Box component="span" aria-hidden="true" title={
-              descriptor?.title || row.kind
-            } data-icon-id={descriptor?.navigator?.icon_id}
-            sx={{fontWeight: 700, minWidth: 18}}>
-              {row.kind === 'resource' ?
-                row.resource.resource_kind.slice(0, 1).toUpperCase() : '◇'}
-            </Box>
-            <Box component="span" sx={{fontWeight:
-              row.kind === 'group' ? 700 : 400}}>{row.title}</Box>
-            {row.kind === 'resource' && <Box component="small"
-              sx={{ml: 'auto', color: 'text.secondary'}}>
-              {row.resource.resource_kind}
-            </Box>}
-          </Box>;
-        })}
-      </Box>
-      {items.length === 0 && <Box sx={{mt: 2}}>
-        {gettext('No resources returned.')}
-      </Box>}
-      {items.length > 0 && groups.length === 0 && <Box sx={{mt: 2}}>
-        {gettext('No provider objects match the filter.')}
-      </Box>}
-      <Box sx={{display: 'flex', gap: 1, mt: 1}}>
-        {page?.next_cursor && <Button disabled={loadingMore}
+        {page?.next_cursor && <Button size="small" disabled={loadingMore}
           onClick={onLoadMore}>{gettext('Load more provider objects')}</Button>}
-        <Button disabled={loadingMore || !page?.generation}
+        <Button size="small" disabled={loadingMore || !page?.generation}
           onClick={onRefresh}>{gettext('Refresh provider objects')}</Button>
       </Box>
-      <ContextMenu menuItems={contextMenuItems} position={context}
-        label={gettext('Provider object actions')}
-        onClose={() => setContext(null)} />
     </Box>
   );
 }
 
-ResourceExplorer.propTypes = {
-  catalog: PropTypes.object,
+TreeHandoff.propTypes = {
   page: PropTypes.object,
-  selectedResourceId: PropTypes.string,
-  onSelect: PropTypes.func.isRequired,
-  onOpenAdministration: PropTypes.func.isRequired,
-  onOpenData: PropTypes.func.isRequired,
   onLoadMore: PropTypes.func.isRequired,
   onRefresh: PropTypes.func.isRequired,
   loadingMore: PropTypes.bool,
@@ -7836,11 +7549,6 @@ export default function ProviderWorkspaceContent({
     setTab('object');
   };
 
-  const openResourceData = (resource) => {
-    if (resource) setSelectedResource(resource);
-    setTab('data');
-  };
-
   const activeLanguage = workspace?.languages?.find((item) =>
     item.language_profile === languageProfile) || workspace?.languages?.[0];
   const activePlanTemplates = queryPlanTemplates(activeLanguage);
@@ -8007,13 +7715,7 @@ export default function ProviderWorkspaceContent({
         onOpen={openNativeObject} onOperation={openResourceAdministration}
         onRefresh={refreshResources} />}
       {workspace && tab === 'resources' &&
-        <ResourceExplorer catalog={workspace.visual_admin}
-          page={resourcePage}
-          selectedResourceId={selectedResource?.resource_id}
-          onSelect={setSelectedResource}
-          onOpenAdministration={openResourceAdministration}
-          onOpenData={openResourceData}
-          onLoadMore={loadMoreResources} onRefresh={refreshResources}
+        <TreeHandoff page={resourcePage} onLoadMore={loadMoreResources} onRefresh={refreshResources}
           loadingMore={loadingMore} />}
       {workspace && tab === 'properties' &&
         <DatabasePropertiesWorkspace endpoint={workspace.endpoint}

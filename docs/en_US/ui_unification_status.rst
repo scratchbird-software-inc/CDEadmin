@@ -30,7 +30,7 @@ Phase status
    * - 2
      - Shell: tree, object editor, operation dialog, menu model
      - in progress
-     - ``cdeadmin_ui/objects``: ObjectEditor (canonical tabs, SQL tab = provider plan), OperationDialog, FieldControl, RecordGrid, KeyValueEditor, menu model; descriptor service ``/cdeadmin/api/ui/descriptors``; tree activation opens the family editor when the engine declares one (legacy workspace fallback). Second increment: ``options.json`` per engine feeds selects and reference pickers (dialect lists + catalog lists from the endpoint's resources); descriptor entries (Edit, Create, tier 2/3 operations in the OperationDialog) merged into the tree context menu with legacy duplicates retired; Statistics / Dependencies / Indexes / Triggers tabs read the inspected resource. Third increment: Data tab opens the provider row grid; variant switches are ``ui_only`` and default from the kind; record pre-fill primitives (dotted keys, derive/filter/pluck/pattern rules, ``record_children`` for inventories that list columns as separate resources). Remaining: in-panel Resource Explorer removal, PostgreSQL routing
+     - ``cdeadmin_ui/objects``: ObjectEditor (canonical tabs, SQL tab = provider plan), OperationDialog, FieldControl, RecordGrid, KeyValueEditor, menu model; descriptor service ``/cdeadmin/api/ui/descriptors``; tree activation opens the family editor when the engine declares one (legacy workspace fallback). Second increment: ``options.json`` per engine feeds selects and reference pickers (dialect lists + catalog lists from the endpoint's resources); descriptor entries (Edit, Create, tier 2/3 operations in the OperationDialog) merged into the tree context menu with legacy duplicates retired; Statistics / Dependencies / Indexes / Triggers tabs read the inspected resource. Third increment: Data tab opens the provider row grid; variant switches are ``ui_only`` and default from the kind; record pre-fill primitives (dotted keys, derive/filter/pluck/pattern rules, ``record_children`` for inventories that list columns as separate resources). Fourth increment: the in-panel Resource Explorer (flat object tree, filter, breadcrumb, context menu) is gone; the Resources tab hands off to the Object Explorer tree and keeps only catalog refresh/paging. Remaining: PostgreSQL routing
    * - 3
      - Engine descriptors (Firebird, MySQL, MariaDB, DuckDB, SQLite)
      - in progress
@@ -158,7 +158,7 @@ count sets its maximum to zero in the enforcement file.
      - 113
      - Phase 4 (target: tool panels only, about 70)
    * - ``ProviderWorkspaceContent.jsx`` lines
-     - 8528
+     - 8528 (8230 after the in-panel Resource Explorer was removed, 2026-10-25)
      - Phase 5 (deleted)
    * - ``relational_admin.py`` lines
      - 8942
