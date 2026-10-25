@@ -2547,3 +2547,29 @@ observation with no console errors. This closes admitted Linux ``CMP-MY-01``;
 all eleven comparison items are Linux-qualified. Independent inventory, optional
 installation coverage and cross-platform acceptance are separate. ScratchBird
 history qualification remains owner-deferred.
+
+Native SDI table import
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The MySQL server maintenance menu now exposes **Import native table definitions
+from SDI files**. It issues Community ``IMPORT TABLE FROM`` through an owned
+connection after reviewing the server UUID/principal, visible native table
+inventory, an explicit default database on the private connection, and trusted
+absolute database-host file patterns. Native
+``FILE`` privileges, ``secure_file_priv``, pattern expansion, dictionary loading
+and storage-engine restrictions remain engine-owned. Source implementation is
+present in MySQL9.7 ``sql/sql_import.cc``; this is beta work.
+
+The selected SDI and corresponding engine files must already be staged on the
+database host. The review records paths and host facts; it does not freeze or
+hash those files, transfer application-host files or attest data recoverability.
+Changed native table inventory refuses dispatch. Original SQL acknowledgement,
+native warnings/errors and later observations remain separate, with no automatic
+retry or application rollback claim.
+
+``tools/cdeadmin_mysql_sdi_import_qualification.py`` imports real MyISAM files
+through both native connector classes, independently verifies full rows and
+definitions and a later write, and preserves missing-file native errors. It
+also checks stale-review refusal and literal Unicode/apostrophe host filenames.
+The qualification closes this dispatch-inventory adapter gap; ``INV-MYSQL``
+continues to reconcile the remaining source/runtime installation boundaries.

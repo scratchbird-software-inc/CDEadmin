@@ -50,6 +50,11 @@ component, language mode, interface or operating system.
 Independent inventory
 =====================
 
+Owner clarification, 2026-10-24: NDB Cluster administration is a separate engine
+scope. It is not part of the current MySQL Server completion group. Record its
+source/runtime availability separately; do not relabel it as closed Enterprise
+functionality or infer NDB support from the MySQL Server receipts.
+
 * INV-MYSQL: Reconcile MySQL 9.7.0 core, installed plugins/components/storage
   engines and native/Shell interfaces against the full product contract.
   Source categories now distinguish 168 dispatch IDs, 144 grammar entries and

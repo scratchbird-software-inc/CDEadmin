@@ -53,6 +53,7 @@ def qualify(output,application=False):
                     try:
                         with patch.object(client,'_connect',tracked):
                             for operation in adapter.OPERATIONS:
+                                if adapter.OPERATIONS[operation][1] is None:continue
                                 draft={'initial_load_only':True} if operation=='disable_innodb_redo' else {}
                                 before=keys();planned=plan(operation,**draft)
                                 templates[operation]=planned['provider_payload']['compiled']['statements'][0]['source']

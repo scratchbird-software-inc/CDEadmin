@@ -29,9 +29,30 @@ def test_exact_native_instance_tasks_have_confirmed_engine_specific_forms(operat
     assert task['confirmation_required'] and task['target_required']
     assert task['form']['form_id']=='mysql.server.'+operation
     assert MYSQL_ADMINISTRATION.supports('server',operation) and not MARIADB_ADMINISTRATION.supports('server',operation)
-    draft={'confirmation':'MySQL',**({'initial_load_only':True} if operation=='disable_innodb_redo' else {})}
+    draft={'confirmation':'MySQL',**({'initial_load_only':True} if operation=='disable_innodb_redo' else {}),
+        **({'files':['/native/quoted\'雪.sdi'],'trusted_host_files':True,'database':'native'} if operation=='import_table_sdi' else {})}
     checked=MYSQL_ADMINISTRATION._compile({'resource_kind':'server','operation_id':operation,'target_resource':target(),'draft':draft})
-    assert checked['statements'][0]['source'].startswith('ALTER INSTANCE ')
+    assert checked['statements'][0]['source'].startswith('IMPORT TABLE FROM ' if operation=='import_table_sdi' else 'ALTER INSTANCE ')
+
+
+@pytest.mark.parametrize('files',[[],['relative'],['/one','/one'],[True],[['unhashable']],['/nul\0file']])
+def test_native_sdi_import_requires_explicit_bounded_host_paths(files):
+    with pytest.raises(RelationalClientError):instance.compile_operation('import_table_sdi',{'confirmation':'MySQL','files':files,'trusted_host_files':True,'database':'native'},target())
+
+
+@pytest.mark.parametrize('path',[r'C:\mysql-files\table.sdi',r'\\native-host\share\*.sdi',"/native/quote'雪.sdi"])
+def test_native_sdi_path_syntax_is_independent_of_the_application_host(path):
+    result=instance.compile_operation('import_table_sdi',{'confirmation':'MySQL','files':[path],'trusted_host_files':True,'database':'native'},target())
+    assert result['statements']==[{'source':'IMPORT TABLE FROM %s','parameters':(path,)}]
+
+
+def test_server_level_sdi_import_selects_an_explicit_database_only_on_its_private_connection():
+    payload={'route':{'host':'owned','database':None}}
+    intent={'operation':'import_table_sdi','draft':{'database':'native_雪'}}
+    assert instance.operation_route(payload,intent)=={'host':'owned','database':'native_雪'}
+    assert payload['route']['database'] is None
+    with pytest.raises(RelationalClientError,match='default database'):
+        instance.compile_operation('import_table_sdi',{'confirmation':'MySQL','files':['/host/data.sdi'],'trusted_host_files':True},target())
 
 
 @pytest.mark.parametrize('change',[{'confirmation':'other'},{'lock_wait_seconds':0},{'lock_wait_seconds':True},{'source':'SHUTDOWN'},{'channel':'mysql_main; SHUTDOWN'},{'rollback_on_error':'false'}])
