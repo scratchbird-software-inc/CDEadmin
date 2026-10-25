@@ -7,10 +7,252 @@
     "role",
     "privilege"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "Firebird",
   "omitted_tabs": [],
-  "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "gaps": [
+    {
+      "concept": "Membership and object privileges as grids",
+      "reason": "grant/revoke are separate operations today (member, member_kind, default_role, admin_option, grantor); the editor should present them as the Membership grid with the diff on the SQL tab"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "user",
+          "label": "User"
+        },
+        {
+          "value": "role",
+          "label": "Role"
+        },
+        {
+          "value": "grant",
+          "label": "Grant"
+        }
+      ]
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Host",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "default": "%"
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "General",
+      "control": "password",
+      "required": true,
+      "help": "The value is redacted from validation and plans.",
+      "group": "Authentication"
+    },
+    {
+      "field_id": "plugin",
+      "label": "Authentication plugin",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "group": "Authentication"
+    },
+    {
+      "field_id": "active",
+      "label": "Account active",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Firebird stores an empty comment as no comment.",
+      "group": "Role",
+      "visible_when": {
+        "field": "variant",
+        "equals": "role"
+      }
+    },
+    {
+      "field_id": "clear_description",
+      "label": "Remove comment",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ],
+      "group": "Role",
+      "visible_when": {
+        "field": "variant",
+        "equals": "role"
+      }
+    },
+    {
+      "field_id": "administrator",
+      "label": "Administrator",
+      "tab": "Privileges",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "system_privileges",
+      "label": "System privileges",
+      "tab": "Privileges",
+      "control": "multiselect",
+      "required": false,
+      "options": [
+        {
+          "value": "USER_MANAGEMENT",
+          "label": "User Management"
+        },
+        {
+          "value": "READ_RAW_PAGES",
+          "label": "Read Raw Pages"
+        },
+        {
+          "value": "CREATE_USER_TYPES",
+          "label": "Create User Types"
+        },
+        {
+          "value": "USE_NBACKUP_UTILITY",
+          "label": "Use Nbackup Utility"
+        },
+        {
+          "value": "CHANGE_SHUTDOWN_MODE",
+          "label": "Change Shutdown Mode"
+        },
+        {
+          "value": "TRACE_ANY_ATTACHMENT",
+          "label": "Trace Any Attachment"
+        },
+        {
+          "value": "MONITOR_ANY_ATTACHMENT",
+          "label": "Monitor Any Attachment"
+        },
+        {
+          "value": "ACCESS_SHUTDOWN_DATABASE",
+          "label": "Access Shutdown Database"
+        },
+        {
+          "value": "CREATE_DATABASE",
+          "label": "Create Database"
+        },
+        {
+          "value": "DROP_DATABASE",
+          "label": "Drop Database"
+        },
+        {
+          "value": "USE_GBAK_UTILITY",
+          "label": "Use Gbak Utility"
+        },
+        {
+          "value": "USE_GSTAT_UTILITY",
+          "label": "Use Gstat Utility"
+        },
+        {
+          "value": "USE_GFIX_UTILITY",
+          "label": "Use Gfix Utility"
+        },
+        {
+          "value": "IGNORE_DB_TRIGGERS",
+          "label": "Ignore Db Triggers"
+        },
+        {
+          "value": "CHANGE_HEADER_SETTINGS",
+          "label": "Change Header Settings"
+        },
+        {
+          "value": "SELECT_ANY_OBJECT_IN_DATABASE",
+          "label": "Select Any Object In Database"
+        },
+        {
+          "value": "ACCESS_ANY_OBJECT_IN_DATABASE",
+          "label": "Access Any Object In Database"
+        },
+        {
+          "value": "MODIFY_ANY_OBJECT_IN_DATABASE",
+          "label": "Modify Any Object In Database"
+        },
+        {
+          "value": "CHANGE_MAPPING_RULES",
+          "label": "Change Mapping Rules"
+        },
+        {
+          "value": "USE_GRANTED_BY_CLAUSE",
+          "label": "Use Granted By Clause"
+        },
+        {
+          "value": "GRANT_REVOKE_ON_ANY_OBJECT",
+          "label": "Grant Revoke On Any Object"
+        },
+        {
+          "value": "GRANT_REVOKE_ANY_DDL_RIGHT",
+          "label": "Grant Revoke Any Ddl Right"
+        },
+        {
+          "value": "CREATE_PRIVILEGED_ROLES",
+          "label": "Create Privileged Roles"
+        },
+        {
+          "value": "GET_DBCRYPT_INFO",
+          "label": "Get Dbcrypt Info"
+        },
+        {
+          "value": "MODIFY_EXT_CONN_POOL",
+          "label": "Modify Ext Conn Pool"
+        },
+        {
+          "value": "REPLICATE_INTO_DATABASE",
+          "label": "Replicate Into Database"
+        },
+        {
+          "value": "PROFILE_ANY_ATTACHMENT",
+          "label": "Profile Any Attachment"
+        }
+      ],
+      "help": "Select Firebird 5.0 system privileges.",
+      "group": "Role",
+      "visible_when": {
+        "field": "variant",
+        "equals": "role"
+      }
+    },
+    {
+      "field_id": "drop_system_privileges",
+      "label": "Drop all system privileges",
+      "tab": "Privileges",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ],
+      "group": "Role",
+      "visible_when": {
+        "field": "variant",
+        "equals": "role"
+      }
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. privilege: provider exposes no create form (grant, inspect, revoke)"
 }

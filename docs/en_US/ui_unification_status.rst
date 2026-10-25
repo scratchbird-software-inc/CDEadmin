@@ -33,8 +33,8 @@ Phase status
      - 
    * - 3
      - Engine descriptors (Firebird, MySQL, MariaDB, DuckDB, SQLite)
-     - not started
-     - Family table below
+     - in progress
+     - Drafts generated for all six engines; review to ``complete`` per engine pending. Family table below
    * - 4
      - Operations, panels, menus
      - not started
@@ -47,8 +47,8 @@ Phase status
 Family descriptor status per engine
 -----------------------------------
 
-Values are the ``status`` field of ``ui_descriptors/<engine>/forms/<family>.form.json``:
-``pending`` (skeleton only), ``draft`` (fields listed), ``complete`` (round trip verified
+Values are the ``status`` of ``ui_descriptors/<engine>/forms/<family>.form.json`` with field count (f) and
+recorded gaps (g): ``pending`` (skeleton only), ``draft`` (fields listed), ``complete`` (round trip verified
 on the tested version). ``n/a`` = family omitted with a reason in ``omitted_families.json``.
 
 .. list-table::
@@ -62,75 +62,75 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - DuckDB
      - SQLite
    * - Table
-     - pending
-     - draft
-     - pending
-     - pending
-     - pending
-     - pending
+     - draft (54f, 6g)
+     - draft (34f, 8g)
+     - draft (4f, 4g)
+     - draft (8f, 2g)
+     - draft (4f, 2g)
+     - draft (11f, 7g)
    * - View
-     - pending
-     - pending
-     - pending
-     - pending
-     - pending
-     - pending
+     - draft (27f, 2g)
+     - pending (0f, 0g)
+     - draft (3f, 2g)
+     - draft (2f, 1g)
+     - draft (5f, 0g)
+     - draft (3f, 1g)
    * - Index
-     - pending
-     - pending
-     - pending
-     - pending
-     - pending
-     - pending
+     - draft (24f, 2g)
+     - pending (0f, 0g)
+     - draft (5f, 1g)
+     - draft (10f, 0g)
+     - draft (5f, 0g)
+     - draft (5f, 1g)
    * - Routine
-     - pending
-     - pending
-     - pending
-     - pending
-     - pending
+     - draft (57f, 4g)
+     - pending (0f, 0g)
+     - draft (11f, 3g)
+     - draft (9f, 0g)
+     - draft (7f, 1g)
      - n/a
    * - Trigger
-     - pending
-     - pending
-     - pending
-     - pending
+     - draft (30f, 3g)
+     - pending (0f, 0g)
+     - draft (8f, 2g)
+     - draft (7f, 2g)
      - n/a
-     - pending
+     - draft (8f, 2g)
    * - Sequence
-     - pending
+     - draft (19f, 0g)
      - n/a
-     - pending
-     - pending
-     - pending
+     - draft (8f, 0g)
+     - draft (7f, 0g)
+     - draft (7f, 1g)
      - n/a
    * - Type
-     - pending
+     - draft (47f, 4g)
      - n/a
-     - pending
-     - pending
-     - pending
+     - n/a
+     - draft (7f, 0g)
+     - draft (5f, 0g)
      - n/a
    * - Role
-     - pending
-     - pending
-     - pending
-     - pending
+     - draft (18f, 2g)
+     - pending (0f, 0g)
+     - draft (22f, 2g)
+     - draft (11f, 1g)
      - n/a
      - n/a
    * - Database
-     - pending
-     - pending
-     - pending
-     - pending
-     - pending
-     - pending
+     - draft (33f, 2g)
+     - pending (0f, 0g)
+     - draft (6f, 0g)
+     - draft (11f, 0g)
+     - draft (2f, 3g)
+     - draft (9f, 0g)
    * - Server
-     - pending
-     - pending
-     - pending
-     - pending
-     - pending
-     - pending
+     - draft (46f, 5g)
+     - pending (0f, 0g)
+     - draft (32f, 0g)
+     - draft (47f, 0g)
+     - draft (4f, 2g)
+     - draft (11f, 1g)
 
 Baseline lint counts (2026-10-25)
 ---------------------------------
@@ -192,6 +192,12 @@ Current lint counts for this change: JSON controls **305 → 304**, direct MUI
 imports **244 → 244**, engine-literal UI branches **111 → 111**, engine panels
 **113 → 113**. The tracked family statuses have not advanced to ``complete``.
 
+* 2026-10-25 (later): drafted descriptors for the five non-MySQL engines from the live provider contracts
+  (``tools/dump_provider_forms.py`` + ``tools/draft_ui_descriptors.py``), Server family from
+  ``form_contracts.py`` (``tools/draft_server_descriptors.py``), PostgreSQL families from the legacy
+  ``*.ui.js`` schemas (``tools/draft_postgresql_descriptors.py``), Firebird virtual tree layout in
+  ``navigator.json``; tier 2/3 operations per engine: PostgreSQL 0, MySQL 5, MariaDB 35, Firebird 35, DuckDB 8, SQLite 17.
+  Recorded provider gaps: PostgreSQL 30, MySQL 8, MariaDB 14, Firebird 6, DuckDB 9, SQLite 12. ``mysql/`` untouched; its stream can run the same tools.
 * 2026-10-25: design adopted; descriptor schemas, ten family skeletons, engine
   stubs for the six beta engines, MySQL table worked example and the validator
   added. All other forms ``pending``.

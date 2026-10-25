@@ -2,6 +2,72 @@
   "schema": "cdeadmin.ui-navigator.v1",
   "engine": "sqlite",
   "sort": "alphabetical",
-  "groups": [],
-  "kind_icons": {}
+  "groups": [
+    {
+      "group_id": "namespaces",
+      "title": "Databases and schemas",
+      "kinds": [
+        "database",
+        "attached-database"
+      ],
+      "order": 1
+    },
+    {
+      "group_id": "relations",
+      "title": "Tables and views",
+      "kinds": [
+        "table",
+        "column",
+        "index",
+        "constraint",
+        "view",
+        "virtual-table",
+        "fts-table"
+      ],
+      "order": 2
+    },
+    {
+      "group_id": "programmable",
+      "title": "Routines and triggers",
+      "kinds": [
+        "trigger"
+      ],
+      "order": 3
+    },
+    {
+      "group_id": "operations",
+      "title": "Administration",
+      "kinds": [
+        "pragma",
+        "extension"
+      ],
+      "order": 4
+    }
+  ],
+  "resource_children": {
+    "table": [
+      "column",
+      "index",
+      "trigger",
+      "constraint"
+    ],
+    "view": [
+      "column",
+      "trigger"
+    ]
+  },
+  "kind_icons": {
+    "database": "object.database",
+    "attached-database": "object.attached-database",
+    "table": "object.table",
+    "column": "object.column",
+    "index": "object.index",
+    "constraint": "object.constraint",
+    "view": "object.view",
+    "trigger": "object.trigger",
+    "virtual-table": "object.virtual-table",
+    "fts-table": "object.fts-table",
+    "pragma": "object.pragma",
+    "extension": "object.extension"
+  }
 }

@@ -5,10 +5,75 @@
   "resource_kinds": [
     "sequence"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "Firebird",
   "omitted_tabs": [],
   "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Sequence name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "start",
+      "label": "Start value",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Signed 64-bit integer. Creation defaults to 1, including negative increments. For an existing sequence, CREATE OR ALTER restarts the next value; the stored initial value is unchanged."
+    },
+    {
+      "field_id": "increment",
+      "label": "Increment by",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "help": "Nonzero integer from -2147483647 to 2147483647. Creation defaults to 1."
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Empty removes the comment."
+    },
+    {
+      "field_id": "restart",
+      "label": "Next generated value",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "64-bit integer. Empty preserves position.",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "restart_initial",
+      "label": "Restart at original start",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "clear_description",
+      "label": "Remove comment",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
 }

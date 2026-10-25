@@ -6,10 +6,489 @@
     "trigger",
     "event-trigger"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "PostgreSQL",
   "omitted_tabs": [],
-  "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "gaps": [
+    {
+      "concept": "Rewrite rules (rule.ui.js)",
+      "reason": "fields name, oid, is_enable_rule (O/R/A/D), event (SELECT/INSERT/UPDATE/DELETE), do_instead, condition (sql), statements (sql), system_rule, comment; capabilities.json maps kind 'rule' to engine_object with no form, so it is not a variant here.",
+      "tracking": "ui_unified_design open decisions"
+    },
+    {
+      "concept": "Transition table enablement",
+      "reason": "disableTransition() depends on fires, is_constraint_trigger, the three events and columns at once; not expressible as a single visible_when."
+    },
+    {
+      "concept": "View-vs-table context",
+      "reason": "fires options (INSTEAD OF), is_constraint_trigger and is_enable_trigger depend on whether the parent is a view; the parent is tree context, not a field."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "control": "select",
+      "tab": "General",
+      "required": true,
+      "default": "trigger",
+      "options": [
+        {
+          "value": "trigger",
+          "label": "Table/view trigger"
+        },
+        {
+          "value": "event",
+          "label": "Event trigger"
+        }
+      ],
+      "help": "trigger uses trigger.ui.js (TriggerSchema + EventSchema); event uses event_trigger.ui.js."
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "control": "text",
+      "tab": "General",
+      "required": true
+    },
+    {
+      "field_id": "oid",
+      "label": "OID",
+      "control": "number",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "eventowner",
+      "label": "Owner",
+      "control": "reference",
+      "tab": "General",
+      "reference_kind": "role",
+      "native_keyword": "OWNER",
+      "visible_when": {
+        "field": "variant",
+        "equals": "event"
+      }
+    },
+    {
+      "field_id": "is_sys_trigger",
+      "label": "System trigger?",
+      "control": "boolean",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      },
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "is_sys_obj",
+      "label": "System event trigger?",
+      "control": "boolean",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "event"
+      },
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "control": "text",
+      "tab": "General",
+      "native_keyword": "COMMENT ON TRIGGER",
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      }
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "control": "text",
+      "tab": "General",
+      "native_keyword": "COMMENT ON EVENT TRIGGER",
+      "visible_when": {
+        "field": "variant",
+        "equals": "event"
+      }
+    },
+    {
+      "field_id": "fires",
+      "label": "Fires",
+      "control": "select",
+      "tab": "General",
+      "group": "Events",
+      "default": "BEFORE",
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      },
+      "options": [
+        {
+          "value": "BEFORE",
+          "label": "BEFORE"
+        },
+        {
+          "value": "AFTER",
+          "label": "AFTER"
+        },
+        {
+          "value": "INSTEAD OF",
+          "label": "INSTEAD OF"
+        }
+      ],
+      "help": "INSTEAD OF is offered for view triggers only. Forced to AFTER for constraint triggers; read-only once the trigger exists."
+    },
+    {
+      "field_id": "evnt_insert",
+      "label": "INSERT",
+      "control": "boolean",
+      "tab": "General",
+      "group": "Events",
+      "default": false,
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      },
+      "help": "At least one event is required. Read-only once the trigger exists."
+    },
+    {
+      "field_id": "evnt_update",
+      "label": "UPDATE",
+      "control": "boolean",
+      "tab": "General",
+      "group": "Events",
+      "default": false,
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      }
+    },
+    {
+      "field_id": "evnt_delete",
+      "label": "DELETE",
+      "control": "boolean",
+      "tab": "General",
+      "group": "Events",
+      "default": false,
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      }
+    },
+    {
+      "field_id": "evnt_truncate",
+      "label": "TRUNCATE",
+      "control": "boolean",
+      "tab": "General",
+      "group": "Events",
+      "default": false,
+      "visible_when": {
+        "field": "is_row_trigger",
+        "equals": false
+      },
+      "help": "Statement-level triggers only."
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns",
+      "control": "multiselect",
+      "tab": "General",
+      "group": "Events",
+      "option_values_path": [
+        "catalog",
+        "columns"
+      ],
+      "native_keyword": "UPDATE OF",
+      "visible_when": {
+        "field": "evnt_update",
+        "truthy": true
+      },
+      "help": "Read-only once the trigger exists."
+    },
+    {
+      "field_id": "whenclause",
+      "label": "When",
+      "control": "code",
+      "tab": "General",
+      "group": "Events",
+      "language": "sql",
+      "native_keyword": "WHEN",
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      },
+      "help": "Read-only once the trigger exists."
+    },
+    {
+      "field_id": "is_enable_trigger",
+      "label": "Trigger enabled?",
+      "control": "select",
+      "tab": "Definition",
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      },
+      "native_keyword": "ENABLE / DISABLE TRIGGER",
+      "options": [
+        {
+          "value": "O",
+          "label": "Enable"
+        },
+        {
+          "value": "R",
+          "label": "Enable Replica"
+        },
+        {
+          "value": "A",
+          "label": "Enable Always"
+        },
+        {
+          "value": "D",
+          "label": "Disable"
+        }
+      ],
+      "help": "Disabled for view triggers and catalogs."
+    },
+    {
+      "field_id": "is_row_trigger",
+      "label": "Row trigger?",
+      "control": "boolean",
+      "tab": "Definition",
+      "default": true,
+      "native_keyword": "FOR EACH ROW",
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      },
+      "help": "Forced on for constraint triggers; off for partitioned tables before PostgreSQL 11; read-only once the trigger exists."
+    },
+    {
+      "field_id": "is_constraint_trigger",
+      "label": "Constraint trigger?",
+      "control": "boolean",
+      "tab": "Definition",
+      "native_keyword": "CONSTRAINT TRIGGER",
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      },
+      "help": "Not available on views or partitioned tables; read-only once the trigger exists."
+    },
+    {
+      "field_id": "tgdeferrable",
+      "label": "Deferrable?",
+      "control": "boolean",
+      "tab": "Definition",
+      "native_keyword": "DEFERRABLE",
+      "visible_when": {
+        "field": "is_constraint_trigger",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "tginitdeferred",
+      "label": "Deferred?",
+      "control": "boolean",
+      "tab": "Definition",
+      "native_keyword": "INITIALLY DEFERRED",
+      "visible_when": {
+        "field": "tgdeferrable",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "tfunction",
+      "label": "Trigger function",
+      "control": "select",
+      "tab": "Definition",
+      "required": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      },
+      "option_values_path": [
+        "catalog",
+        "trigger_functions"
+      ],
+      "native_keyword": "EXECUTE FUNCTION",
+      "help": "pgAdmin loads get_triggerfunctions; read-only once the trigger exists."
+    },
+    {
+      "field_id": "tgargs",
+      "label": "Arguments",
+      "control": "text",
+      "tab": "Definition",
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      },
+      "help": "Read-only once the trigger exists."
+    },
+    {
+      "field_id": "enabled",
+      "label": "Trigger enabled?",
+      "control": "select",
+      "tab": "Definition",
+      "visible_when": {
+        "field": "variant",
+        "equals": "event"
+      },
+      "native_keyword": "ENABLE / DISABLE EVENT TRIGGER",
+      "options": [
+        {
+          "value": "O",
+          "label": "Enable"
+        },
+        {
+          "value": "D",
+          "label": "Disable"
+        },
+        {
+          "value": "R",
+          "label": "Replica"
+        },
+        {
+          "value": "A",
+          "label": "Always"
+        }
+      ]
+    },
+    {
+      "field_id": "eventfunname",
+      "label": "Trigger function",
+      "control": "select",
+      "tab": "Definition",
+      "visible_when": {
+        "field": "variant",
+        "equals": "event"
+      },
+      "option_values_path": [
+        "catalog",
+        "event_trigger_functions"
+      ],
+      "native_keyword": "EXECUTE FUNCTION"
+    },
+    {
+      "field_id": "eventname",
+      "label": "Event",
+      "control": "select",
+      "tab": "Definition",
+      "visible_when": {
+        "field": "variant",
+        "equals": "event"
+      },
+      "native_keyword": "ON",
+      "options": [
+        {
+          "value": "DDL_COMMAND_START",
+          "label": "DDL COMMAND START"
+        },
+        {
+          "value": "DDL_COMMAND_END",
+          "label": "DDL COMMAND END"
+        },
+        {
+          "value": "SQL_DROP",
+          "label": "SQL DROP"
+        }
+      ]
+    },
+    {
+      "field_id": "when",
+      "label": "When TAG in",
+      "control": "code",
+      "tab": "Definition",
+      "language": "sql",
+      "visible_when": {
+        "field": "variant",
+        "equals": "event"
+      },
+      "native_keyword": "WHEN TAG IN"
+    },
+    {
+      "field_id": "prosrc",
+      "label": "Code",
+      "control": "code",
+      "tab": "Definition",
+      "language": "plpgsql",
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      },
+      "help": "Inline body; enabled only on EDB with trigger function 'Inline EDB-SPL' (ppas is out of beta scope)."
+    },
+    {
+      "field_id": "tgoldtable",
+      "label": "Old table",
+      "control": "text",
+      "tab": "Engine",
+      "group": "Transition tables",
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      },
+      "native_keyword": "REFERENCING OLD TABLE AS",
+      "help": "Create only, PostgreSQL 10+, table triggers only: AFTER, not a constraint trigger, exactly one of UPDATE/DELETE and no UPDATE column list."
+    },
+    {
+      "field_id": "tgnewtable",
+      "label": "New table",
+      "control": "text",
+      "tab": "Engine",
+      "group": "Transition tables",
+      "visible_when": {
+        "field": "variant",
+        "equals": "trigger"
+      },
+      "native_keyword": "REFERENCING NEW TABLE AS",
+      "help": "Create only, PostgreSQL 10+, table triggers only: AFTER, not a constraint trigger, exactly one of UPDATE/INSERT and no UPDATE column list."
+    },
+    {
+      "field_id": "seclabels",
+      "label": "Security labels",
+      "control": "grid",
+      "tab": "Engine",
+      "native_keyword": "SECURITY LABEL",
+      "columns": [
+        {
+          "field_id": "provider",
+          "label": "Provider",
+          "control": "text"
+        },
+        {
+          "field_id": "label",
+          "label": "Security label",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "group": "Security",
+      "visible_when": {
+        "field": "variant",
+        "equals": "event"
+      },
+      "version": {
+        "minimum": "9.2"
+      }
+    }
+  ],
+  "notes": "Fields map 1:1 onto the legacy pgAdmin dialog (workflow legacy_preserved): field ids are the BaseUISchema ids and are served by the existing SQL templates. Sources: web/pgadmin/browser/server_groups/servers/databases/schemas/tables/triggers/static/js/trigger.ui.js (TriggerSchema, EventSchema), databases/event_triggers/static/js/event_trigger.ui.js (EventTriggerSchema, variant event), static/js/sec_label.ui.js. Mapping: General->General; Events group->General (matches timing/events/columns/when); Definition->Definition; Code->Definition (prosrc); Transition->Engine; event trigger Security->Engine (no Security tab on the trigger family). Rules (tables/rules/static/js/rule.ui.js) are routed to engine_object in capabilities.json and are listed under gaps, not as a variant."
 }

@@ -7,10 +7,156 @@
     "function",
     "package"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "Firebird",
   "omitted_tabs": [],
   "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "procedure",
+          "label": "Procedure"
+        },
+        {
+          "value": "function",
+          "label": "Function"
+        },
+        {
+          "value": "package",
+          "label": "Package"
+        }
+      ]
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "returns",
+      "label": "Return type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "group": "Function",
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      }
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Empty removes the comment.",
+      "group": "Package",
+      "visible_when": {
+        "field": "variant",
+        "equals": "package"
+      }
+    },
+    {
+      "field_id": "parameters",
+      "label": "Input parameters",
+      "tab": "Parameters",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Parameter name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Native data type",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "field_id": "return_parameters",
+      "label": "Output parameters",
+      "tab": "Parameters",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Parameter name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Native data type",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "field_id": "body",
+      "label": "Procedure body",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "required": true,
+      "help": "Enter only the procedure body, not a CREATE command."
+    },
+    {
+      "field_id": "header",
+      "label": "Public header",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "required": true,
+      "help": "Complete BEGIN ... END public declarations. The body can be created separately.",
+      "group": "Package",
+      "visible_when": {
+        "field": "variant",
+        "equals": "package"
+      }
+    },
+    {
+      "field_id": "sql_security",
+      "label": "SQL SECURITY",
+      "tab": "Options",
+      "control": "select",
+      "required": true,
+      "default": "INHERIT",
+      "options": [
+        {
+          "value": "INHERIT",
+          "label": "Inherit"
+        },
+        {
+          "value": "INVOKER",
+          "label": "Invoker"
+        },
+        {
+          "value": "DEFINER",
+          "label": "Definer"
+        }
+      ],
+      "help": "Inherit uses the database default.",
+      "group": "Package",
+      "visible_when": {
+        "field": "variant",
+        "equals": "package"
+      }
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
 }
