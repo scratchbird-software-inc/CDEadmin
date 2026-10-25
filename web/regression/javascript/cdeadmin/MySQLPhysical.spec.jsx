@@ -150,7 +150,7 @@ it('derives recovery from verified copy-back and separately confirms native star
   fireEvent.click(screen.getByRole('button', {name: 'Inspect physical job physical-job'}));
   fireEvent.click(await screen.findByRole('button', {name: 'Use copy-back for managed recovery'}));
   expect(screen.getByLabelText('Recovery mysqld executable')).toHaveValue('/usr/sbin/mysqld');
-  const recoveryReview = {...review, options: {...review.options, phase: 'recover', input_job_id: 'physical-job', mysqld: '/usr/sbin/mysqld', recovery_gtid_mode: 'ON', recovery_port: 3307, recovery_mode: 'read_only', recovery_local_infile: false}};
+  const recoveryReview = {...review, options: {...review.options, phase: 'recover', input_job_id: 'physical-job', mysqld: '/usr/sbin/mysqld', recovery_gtid_mode: 'ON', recovery_port: 3307, recovery_mode: 'read_only', recovery_local_infile: false, recovery_federated: false}};
   post.mockResolvedValue(recoveryReview);
   fireEvent.click(screen.getByRole('button', {name: 'Review native physical job'}));
   await screen.findByLabelText('Native physical review');

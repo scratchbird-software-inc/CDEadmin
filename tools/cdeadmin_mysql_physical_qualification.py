@@ -46,7 +46,7 @@ def prepare_fixture(output, image, *, keyring=False, external=False, missing_pat
     return key
 
 
-def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False,circular_storage=False,reconciliation_only=False,legacy_sources=None,native_backend=None,duplicate_undo=False,duplicate_system=False):
+def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_binary=None, connections=False,replay=False,retention=False,retention_only=False,batch_only=False,schedule_only=False,backup_only=False,acceptance_only=False,check_only=False,incremental_only=False,tls_only=False,tls_desktop_only=False,keyring_only=False,external_only=False,keyring_desktop_only=False,missing_paths=None,storage_geometry=False,relative_storage=False,circular_storage=False,reconciliation_only=False,legacy_sources=None,native_backend=None,duplicate_undo=False,duplicate_system=False,federated=False):
     import config  # noqa: F401
     from flask import url_for
     from unittest.mock import patch
@@ -129,7 +129,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             (['--innodb-directories='+(storage['scan_settings'] if storage else external_root)] if external_only or missing_paths else [])+
             (['--innodb-data-home-dir='+storage['data_home'],'--innodb-data-file-path='+storage['data_file_spec'],
                 '--innodb-undo-directory='+storage['undo_setting']] if storage else [])+
-            (['--datadir='+datadir] if missing_paths else []))
+            (['--datadir='+datadir] if missing_paths else [])+(['--federated=ON'] if federated else []))
         mounts=json.loads(_run(['docker','inspect','--format','{{json .Mounts}}',name]).stdout)
         data_volumes=list(dict.fromkeys(data_volumes+[m['Name'] for m in mounts if m['Type']=='volume' and m['Destination']!='/var/backups/scratchrobin']))
         proof['owned_source_data_volumes']=data_volumes
@@ -228,10 +228,12 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             selected = {'connection':{'host':'127.0.0.1','port':ssh,'username':'root','host_key':host_key,'authentication':'private_key','platform':'posix','python':'/usr/bin/python3'},
                 'workspace':'/var/backups/scratchrobin/jobs','executable':native_executable,'mysql':'/usr/bin/mysql',
                 'phase':'backup','sql_host':'127.0.0.1','sql_port':3306,'input_job_id':None,'parallel':2,'memory_bytes':268435456,'timeout_seconds':120,'accept_release_candidate':True}
-            def review(phase,input_job=None,gtid_mode='ON',lifetime=None,startup='read_only'):
+            def review(phase,input_job=None,gtid_mode='ON',lifetime=None,startup='read_only',remote_access=False):
                 extra={'mysqld':'/usr/sbin/mysqld','recovery_gtid_mode':gtid_mode} if phase=='recover' else {}
+                if federated and phase=='recover':extra['recovery_federated']=remote_access
                 if connections and phase=='recover':extra['recovery_port']=33447
                 if startup=='replay':extra.update(recovery_mode='replay',recovery_server_id=10001+int(use_c))
+                if federated and startup=='replay':extra['recovery_port']=33447
                 if lifetime is not None:extra['timeout_seconds']=lifetime
                 return post('review',{'options':{**selected,'phase':phase,'input_job_id':input_job,**extra},'credentials':credentials})
             def start(value):
@@ -249,6 +251,9 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
                     time.sleep(.15)
                 raise TimeoutError('Owned native physical process did not finish')
             checks=[]
+            if federated:
+                from cdeadmin_mysql_federated_qualification import seed
+                checks.extend(seed(root,port,use_c))
             root.autocommit=False
             with root.cursor() as pending:
                 pending.execute('INSERT INTO sr_osc.pending VALUES(%s)',(100+int(use_c),))
@@ -303,6 +308,8 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             assert all(password not in value and 'BEGIN OPENSSH PRIVATE KEY' not in value for value in native_output.values())
             assert start(runtime_review)['state']=='unknown'
             socket=runtime['remote_observation']['socket']
+            if federated:
+                assert runtime['remote_observation']['sql_identity']['federated_support']=='NO'
             def recovered_sql(query,check=True):
                 return _run(['docker','exec',name,'mysql','--no-defaults','--protocol=socket','--socket='+socket,'--user=root',
                     '--batch','--raw','--skip-column-names','--default-character-set=utf8mb4','--execute='+query],check=check)
@@ -311,6 +318,9 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             assert json.loads(recovered_sql("SELECT JSON_ARRAY((SELECT COUNT(*) FROM sr_osc.m),(SELECT COUNT(*) FROM sr_osc.c),(SELECT COUNT(*) FROM sr_osc.pending))").stdout)==[1,1,0]
             for what in ('VIEW sr_osc.v','PROCEDURE sr_osc.p'):assert recovered_sql('SHOW CREATE '+what).stdout
             assert recovered_sql('INSERT INTO sr_osc.pending VALUES(999)',False).returncode!=0
+            if federated:
+                assert recovered_sql('SELECT * FROM sr_osc.federated_'+str(int(use_c)),False).returncode!=0
+                checks.append('FEDERATED-disabled-by-default-with-native-table-access-refusal')
             connection_proof=None
             if connections:
                 from cdeadmin_mysql_recovery_connection_qualification import native_connection
@@ -335,6 +345,9 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
             if connection_proof:
                 from cdeadmin_mysql_recovery_connection_qualification import stopped_connection
                 stopped_connection(app,client,connection_proof,post)
+            if federated:
+                from cdeadmin_mysql_federated_qualification import recover_remote
+                checks.extend(recover_remote(root,name,post,credentials,review,start,copied,use_c,output))
             checks.append('managed-native-recovery-new-UUID-private-socket-read-only-SQL-data-and-definitions-explicit-stop-with-unknown-original-reply')
             if use_c:checks.append('owned-process-descriptor-stop-after-original-supervisor-loss-without-invented-native-exit-reply')
             if replay:
@@ -397,7 +410,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
                 cursor.execute("CREATE USER 'sr_physical_ui'@'%' IDENTIFIED BY %s",(ui_password,))
                 cursor.execute("GRANT ALL PRIVILEGES ON *.* TO 'sr_physical_ui'@'%' WITH GRANT OPTION")
             sid,_target,_post=registration(app,{'host':'127.0.0.1','port':port},ui_password,True,username='sr_physical_ui')
-            proof['browser']=browser(app,output,sid,ui_password,selected,credentials,browser_binary,driver_binary,connections=connections,replay=replay,replay_source=root)
+            proof['browser']=browser(app,output,sid,ui_password,selected,credentials,browser_binary,driver_binary,connections=connections,replay=replay,replay_source=root,federated=federated)
         if retention:
             from cdeadmin_mysql_physical_retention_qualification import qualify_retention
             proof['physical_retention']=qualify_retention(app,output,root,name,port,password,selected,credentials,browser_binary,driver_binary)
@@ -428,7 +441,7 @@ def qualify(output, image, key=None, prepare=False, browser_binary=None, driver_
     return proof
 
 
-def browser(app,output,sid,password,selected,credentials,binary,driver_binary,connections=False,replay=False,replay_source=None):
+def browser(app,output,sid,password,selected,credentials,binary,driver_binary,connections=False,replay=False,replay_source=None,federated=False):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -477,6 +490,8 @@ def browser(app,output,sid,password,selected,credentials,binary,driver_binary,co
             check('Isolate external InnoDB paths in a private Linux filesystem view')
         checks=[]
         for index in range(4):
+            if federated and index==3:
+                check('Enable native FEDERATED access to the referenced remote servers on this recovery copy')
             if replay and index==3:
                 field('Recovery startup mode').click()
                 wait.until(lambda b:next(e for e in b.find_elements(By.CSS_SELECTOR,'[role="option"]') if e.text=='Replay (writable, binary logging)')).click()
@@ -496,6 +511,10 @@ def browser(app,output,sid,password,selected,credentials,binary,driver_binary,co
             elif index==2:click('Use copy-back for managed recovery');checks.append('built-isolated-copy-back-with-independent-file-verification-and-no-database-start')
             else:
                 assert final['recovery_sql_startup_observed'] and not final['database_recovery_verified']
+                if federated:
+                    assert final['options']['recovery_federated'] is True
+                    assert final['remote_observation']['sql_identity']['federated_support']=='YES'
+                    checks.append('built-explicit-FEDERATED-remote-access-consent-and-native-startup-observation')
                 if selected.get('isolate_external_paths'):
                     assert final['remote_observation']['filesystem_isolation_observation']['native_filesystem_isolation_observed']
                     checks.append('built-native-external-path-consent-and-independently-observed-private-filesystem-recovery')

@@ -55,6 +55,23 @@ scope. It is not part of the current MySQL Server completion group. Record its
 source/runtime availability separately; do not relabel it as closed Enterprise
 functionality or infer NDB support from the MySQL Server receipts.
 
+The MySQL Server table-creation adapter now accepts native engine, storage,
+statistics, character-set/collation and MERGE options, with exact integer text
+and bound native values. FEDERATED uses the existing native foreign-server
+workflow and its own sensitive table connection field. Native 9.7 qualification
+through both connectors verifies remote reads/writes, unsigned 64-bit, Unicode
+and binary values, catalog/DDN preservation, and native InnoDB table options
+with an auto-increment value beyond JavaScript's exact integer range.
+
+Physical backup admits FEDERATED definitions without asserting remote-row
+backup. Recovery disables the engine by default and requires explicit reviewed
+remote-access opt-in; this choice persists into permanent deployment and is
+available for recurring startup drills. Actual native backup/prepare/copy-back,
+read-only and writable recovery prove the distinction between local recovered
+files and current remote rows. Native unavailable-reference errors and write
+protection remain visible. These receipts close that storage-engine gap, not
+the independent product inventory or the separately scoped NDB engine.
+
 * INV-MYSQL: Reconcile MySQL 9.7.0 core, installed plugins/components/storage
   engines and native/Shell interfaces against the full product contract.
   Source categories now distinguish 168 dispatch IDs, 144 grammar entries and

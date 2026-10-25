@@ -207,10 +207,20 @@ requires a native Linux database host; Windows/macOS native acceptance belongs
 to the platform teams.
 
 The artifact workflow admits complete, uncompressed full/incremental backups
-of InnoDB, MyISAM, CSV, ARCHIVE, BLACKHOLE and MRG_MYISAM tables. MERGE member
+of InnoDB, MyISAM, CSV, ARCHIVE, BLACKHOLE, MRG_MYISAM and FEDERATED tables. MERGE member
 identities follow the native table-cache interpretation described below.
 MEMORY definitions survive with native empty-after-restart semantics; observed
 volatile rows are disclosed. Use logical backup when retaining them is required.
+FEDERATED retains local definitions and native server references, including
+private credentials; its remote rows belong to the referenced server and are
+not backed up or recovered by this physical workflow. Native recovery disables
+FEDERATED by default. Explicitly enable remote access in the recovery options
+to contact those servers. Read-only recovery retains native write protection;
+writable recovery can modify the referenced remote data. A permanent deployment
+retains this reviewed choice. Recurring startup drills have their own explicit
+remote-access selection; full recovery checks retain the selected recovery
+options. Remote access errors remain native errors rather than empty recovered
+tables or successful recovery assertions.
 Source inspection refuses unadmitted engines. Encrypted data/logs require
 explicit GPL file-keyring retention; external InnoDB/system/undo paths require
 retained geometry and private filesystem admission as described below.

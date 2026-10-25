@@ -1,5 +1,6 @@
 """MySQL native administration additions to the shared relational UI."""
 from copy import deepcopy
+from collections.abc import Mapping
 
 from ..relational_admin import RelationalAdministration
 from ...sdk import RelationalClientError
@@ -8,6 +9,7 @@ from . import foreign_servers
 from . import column_masking
 from . import mysql_key_cache
 from . import mysql_instance
+from . import mysql_table_options
 from . import mysql_xa
 from . import mysql_page_tracking
 from . import mysql_rewriter
@@ -78,6 +80,8 @@ class MySQLAdministration(RelationalAdministration):
         return super().catalog(value)
 
     def _form(self, kind, operation):
+        if kind=='table' and operation=='create':
+            value=super()._form(kind,operation);value['fields']+=mysql_table_options.fields(self._field);return value
         if kind == 'server' and operation in mysql_page_tracking.OPERATIONS:
             return mysql_page_tracking.form(operation, self._field)
         if kind == 'server' and operation in mysql_rewriter.OPERATIONS:
@@ -102,6 +106,11 @@ class MySQLAdministration(RelationalAdministration):
         return super()._form(kind, operation)
 
     def _normalize_draft(self, kind, operation, draft):
+        if kind=='table' and operation=='create':
+            if not isinstance(draft,Mapping):raise RelationalClientError('Select structured native MySQL table properties')
+            value=deepcopy(dict(draft));native={key:value.pop(key) for key in ('mysql_table_options','mysql_connection') if key in value}
+            if native.get('mysql_connection')=='':native.pop('mysql_connection')
+            value=super()._normalize_draft(kind,operation,value);value['options'].update(native);return value
         if kind == 'server' and operation in mysql_page_tracking.OPERATIONS:
             return deepcopy(draft)
         if kind == 'server' and operation in mysql_rewriter.OPERATIONS:
@@ -119,6 +128,13 @@ class MySQLAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def validate(self, request):
+        if request.get('resource_kind')=='table' and request.get('operation_id')=='create':
+            value=super().validate(request)
+            try:
+                draft=request.get('draft') or {};options=draft.get('options') or {}
+                mysql_table_options.compile_options(draft.get('mysql_table_options',mysql_table_options.selected(options)),draft.get('mysql_connection',options.get('mysql_connection')) or None)
+            except (RelationalClientError,ValueError) as error:value['errors'].append({'field_id':None,'code':'invalid_mysql_table_options','message':str(error)})
+            return value
         if request.get('resource_kind') == 'server' and request.get('operation_id') in mysql_page_tracking.OPERATIONS:
             try:
                 mysql_page_tracking.compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
@@ -182,6 +198,13 @@ class MySQLAdministration(RelationalAdministration):
         return super().validate(request)
 
     def _compile(self, request):
+        if request.get('resource_kind')=='table' and request.get('operation_id')=='create':
+            compiled=super()._compile(request);options=request['draft'].get('options') or {}
+            suffix,parameters=mysql_table_options.compile_options(mysql_table_options.selected(options),options.get('mysql_connection'))
+            compiled['statements'][0]['source']+=suffix;compiled['statements'][0]['parameters']+=parameters
+            if options.get('mysql_connection') is not None:compiled['warnings']=[*compiled.get('warnings',[]),
+                'FEDERATED stores a native remote reference; it does not copy remote rows or verify their recovery. Native table access can contact that remote server.']
+            return compiled
         if request.get('resource_kind') == 'server' and request.get('operation_id') in mysql_page_tracking.OPERATIONS:
             return mysql_page_tracking.compile_operation(request['operation_id'], request['draft'], request.get('target_resource'))
         if request.get('resource_kind') == 'server' and request.get('operation_id') in mysql_rewriter.OPERATIONS:

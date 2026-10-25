@@ -45,7 +45,7 @@ def source(service, server, *, admitted=None, keyring=None, isolate_external_pat
         engines = rows(connection, "SELECT ENGINE AS engine,COUNT(*) AS objects FROM information_schema.TABLES "
             "WHERE TABLE_SCHEMA NOT IN ('information_schema','performance_schema','sys') AND TABLE_TYPE='BASE TABLE' GROUP BY ENGINE ORDER BY ENGINE")
         unsupported = [row['engine'] for row in engines if (row['engine'] or '').casefold() not in
-            {'innodb','myisam','csv','archive','blackhole','mrg_myisam','memory'}]
+            {'innodb','myisam','csv','archive','blackhole','mrg_myisam','memory','federated'}]
         if unsupported:
             raise native.HostError('This physical backend has not admitted these persistent storage engines: ' + ', '.join(str(item) for item in unsupported))
         encrypted = rows(connection, "SELECT COUNT(*) AS encrypted FROM information_schema.INNODB_TABLESPACES WHERE ENCRYPTION='Y'")[0]['encrypted']
@@ -124,7 +124,7 @@ def options(value):
         'input_job_id', 'parallel', 'memory_bytes', 'timeout_seconds', 'accept_release_candidate'}
     extra = ({'mysqld', 'recovery_gtid_mode'} if isinstance(value,dict) and value.get('phase') == 'recover' else
         {'deployment'} if isinstance(value,dict) and value.get('phase') == 'deploy' else set())
-    optional = ({'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls'} if isinstance(value,dict) and value.get('phase')=='recover' else ({'incremental_job_id'} if isinstance(value,dict) and value.get('phase')=='prepare_redo' else set()))|{'keyring','isolate_external_paths'}
+    optional = ({'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','recovery_federated'} if isinstance(value,dict) and value.get('phase')=='recover' else ({'incremental_job_id'} if isinstance(value,dict) and value.get('phase')=='prepare_redo' else set()))|{'keyring','isolate_external_paths'}
     if not isinstance(value, dict) or not fields | extra <= set(value) or set(value)-fields-extra-optional:
         raise native.HostError('Select the complete native physical host and operation options')
     selected = deepcopy(value); selected['connection'] = native.ssh.public_route(value['connection'])
@@ -168,6 +168,8 @@ def options(value):
         local = value.get('recovery_local_infile', False)
         if type(local) is not bool: raise native.HostError('Explicitly select trusted recovery checksum input')
         selected['recovery_local_infile'] = local
+        if type(value.get('recovery_federated',False)) is not bool:raise native.HostError('Explicitly select native FEDERATED remote access')
+        selected['recovery_federated']=value.get('recovery_federated',False)
         mode=value.get('recovery_mode','read_only')
         if mode not in {'read_only','replay'}:raise native.HostError('Select read-only inspection or writable native replay startup')
         selected['recovery_mode']=mode
@@ -210,6 +212,8 @@ class PhysicalJobs(MySQLBinlogJobs):
             result['sql_tls_policy'] = deepcopy(record['source_state']['sql_tls_policy'])
         if 'storage_engine_counts' in record['source_state']:
             result['storage_engine_counts'] = deepcopy(record['source_state']['storage_engine_counts'])
+            if any(str(row['engine']).lower()=='federated' for row in result['storage_engine_counts']):
+                result['warnings']=[*result['warnings'],'FEDERATED physical backup retains local definitions and server references, including private credentials. Remote rows are owned by the referenced server and are not copied or recovered by this backup. Recovery disables FEDERATED unless remote access is explicitly confirmed.']
         if 'volatile_memory_tables' in record['source_state']:
             result['volatile_memory_tables'] = deepcopy(record['source_state']['volatile_memory_tables'])
         if 'source_encryption' in record['source_state']:result['source_encryption']=deepcopy(record['source_state']['source_encryption'])
@@ -285,7 +289,7 @@ def remote_request(record, action):
         **({'sql_tls_policy': deepcopy(record['source_state']['sql_tls_policy'])} if 'sql_tls_policy' in record['source_state'] else {}),
         **({'source_keyring':deepcopy(record['source_state']['native_keyring_source'])} if 'native_keyring_source' in record['source_state'] else {}),
         **({'source_storage':deepcopy(record['source_state']['native_storage_source'])} if 'native_storage_source' in record['source_state'] else {}),
-        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','incremental_job_id','keyring','isolate_external_paths','deployment') if key in selected}}
+        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','recovery_federated','incremental_job_id','keyring','isolate_external_paths','deployment') if key in selected}}
 
 
 def sql_tls(service, server):
@@ -444,7 +448,7 @@ def _action(service, server, operation, request, *, source_capture=None,database
                     raise native.HostError('The incremental source differs from its original base and principal')
             else:
                 captured = {'identity': deepcopy(prior['source']), 'state': {key: deepcopy(prior['source_state'][key])
-                    for key in ('host_binding', 'source_connection_class') if key in prior['source_state']}}
+                    for key in ('host_binding', 'source_connection_class','storage_engine_counts') if key in prior['source_state']}}
                 captured['state']['host_binding']=original_binding(prior)
             if selected.get('incremental_job_id') is not None:
                 delta=jobs.load(selected['incremental_job_id'],owner,endpoint.id)

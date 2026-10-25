@@ -2573,3 +2573,20 @@ definitions and a later write, and preserves missing-file native errors. It
 also checks stale-review refusal and literal Unicode/apostrophe host filenames.
 The qualification closes this dispatch-inventory adapter gap; ``INV-MYSQL``
 continues to reconcile the remaining source/runtime installation boundaries.
+Native table creation options
+-----------------------------
+
+The MySQL table creation form accepts native engine, character-set/collation,
+storage, statistics and MERGE options in its MySQL table-options object.
+Integer values use decimal strings to preserve unsigned 64-bit values through
+the browser. Text and JSON attributes are native bound parameters; identifier
+paths remain quoted identifiers. Unknown option names are refused rather than
+silently discarded. Native MySQL decides which options a selected engine and
+version accept.
+
+For FEDERATED, select the native engine and supply a named foreign-server/table
+reference or native connection in the sensitive connection field. The existing
+foreign-server workflow manages the native server definition. Named references
+avoid embedding account passwords in table definitions. Reads and writes use
+the native remote handler; creating a definition does not copy remote data.
+NDB Cluster remains a separate engine scope under the owner's clarification.

@@ -32,6 +32,7 @@ export default function MySQLPhysicalBackupSchedule({post, physical, credentials
     {!recovery && drill && <>
       <TextField size="small" label="Startup drill mysqld" value={drillOptions.mysqld} disabled={busy} onChange={event => {setDrillOptions({...drillOptions, mysqld: event.target.value}); reset(null);}} />
       <TextField size="small" type="number" label="Startup drill lifetime seconds" value={drillOptions.timeout_seconds} disabled={busy} onChange={event => {setDrillOptions({...drillOptions, timeout_seconds: Number(event.target.value)}); reset(null);}} />
+      <FormControlLabel label="Enable FEDERATED access to live referenced servers during each startup drill" control={<Checkbox checked={drillOptions.recovery_federated === true} disabled={busy} onChange={event => {setDrillOptions({...drillOptions, recovery_federated: event.target.checked}); reset(null);}} />} />
       <TextField select size="small" label="Startup drill GTID mode" value={drillOptions.gtid_mode} disabled={busy} onChange={event => {setDrillOptions({...drillOptions, gtid_mode: event.target.value}); reset(null);}}>
         {['OFF', 'OFF_PERMISSIVE', 'ON_PERMISSIVE', 'ON'].map(value => <MenuItem value={value} key={value}>{value}</MenuItem>)}
       </TextField>
