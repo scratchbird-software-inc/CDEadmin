@@ -2,15 +2,76 @@
   "schema": "cdeadmin.ui-form.v1",
   "engine": "mysql",
   "family": "role",
+  "variant": "role",
   "resource_kinds": [
-    "user",
-    "role",
-    "privilege"
+    "role"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "MySQL",
   "omitted_tabs": [],
-  "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "gaps": [
+    {
+      "concept": "Existing membership and privilege grids",
+      "reason": "Dedicated native grant/revoke/default-role operations remain available. Existing-family diff dispatch is Decision9. Initial members are already a create contract and use typed account records."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "control": "text",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Host",
+      "control": "text",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "default": "%",
+      "required": true
+    },
+    {
+      "field_id": "members",
+      "label": "Initial members",
+      "control": "grid",
+      "tab": "Membership",
+      "modes": [
+        "create"
+      ],
+      "default": [],
+      "columns": [
+        {
+          "field_id": "user",
+          "label": "User",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "host",
+          "label": "Host",
+          "control": "text",
+          "default": "%"
+        }
+      ],
+      "help": "Creation and optional initial GRANT are separate native statements. Later grant failure does not undo role creation."
+    },
+    {
+      "field_id": "if_not_exists",
+      "label": "If not exists",
+      "control": "boolean",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "default": false
+    }
+  ],
+  "notes": "MySQL roles share native account identities. Users retains every account for policy editing. Roles provides action aliases for all named accounts and reports observed role usage separately; CREATE ROLE origin is not attested by the native catalog. Creation, initial members and partial native failure qualify through both connectors and authenticated APIs. Shared rendering and round trips remain pending."
 }

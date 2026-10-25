@@ -978,6 +978,12 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     """MySQL DB-API plus a constrained MySQL Shell administration port."""
 
     def admin_operation_field_contract(self, request):
+        if request['resource_kind'] == 'role':
+            from .descriptor_contracts import role_contract
+            return role_contract(request['operation_id'], request['legacy_fields'])
+        if request['resource_kind'] == 'user' and request['operation_id'] in {'create', 'alter', 'rename'}:
+            from .descriptor_contracts import account_contract
+            return account_contract(request['operation_id'], request['legacy_fields'])
         if request['resource_kind'] == 'trigger' and request['operation_id'] == 'create':
             from .descriptor_contracts import trigger_contract
             return trigger_contract(request['legacy_fields'])
@@ -995,6 +1001,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
         compiled = planned.get('provider_payload', {}).get('compiled', {})
+        if 'mysql_account_change' in compiled:
+            from .mysql_accounts import bind_review
+            return bind_review(self, planned)
         if 'mysql_trigger_create' in compiled:
             from .mysql_triggers import bind_review
             return bind_review(self, planned)
@@ -2478,9 +2487,21 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     })
         for row in accounts:
             user, host, account_state = row[:3]
-            if (str(user), str(host)) not in roles:
+            if profile is MYSQL_PROFILE and str(user):
+                # MySQL grants roles from ordinary named account identities;
+                # CREATE ROLE is not a persisted origin/type discriminator.
+                # Include unused role-capable accounts so a freshly created
+                # empty role remains available for native membership actions.
+                add('role', [], f'{user}@{host}', {
+                    'user': str(user), 'host': str(host), 'account_locked': str(account_state),
+                    'role_usage_observed': (str(user), str(host)) in roles,
+                    'named_account_role_alias': True, 'create_origin_not_attested': True,
+                }, identity=('mysql-role:'+json.dumps([str(user),str(host)],ensure_ascii=False,separators=(',',':'))
+                             if '@' in str(user) or '@' in str(host) else None))
+            if profile is MYSQL_PROFILE or (str(user), str(host)) not in roles:
                 if profile is MYSQL_PROFILE:
-                    native = {'account_locked': str(account_state), 'user': str(user), 'host': str(host)}
+                    native = {'account_locked': str(account_state), 'user': str(user), 'host': str(host),
+                              'role_usage_observed': (str(user), str(host)) in roles}
                 else:
                     native = {
                         'user': str(user), 'host': str(host),
@@ -2505,6 +2526,45 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 add('user', [], f'{user}@{host}', native, identity=(
                     profile.engine_id + '-account:' + json.dumps([str(user), str(host)], ensure_ascii=False, separators=(',', ':'))
                     if '@' in str(user) or '@' in str(host) else None))
+        if profile is MYSQL_PROFILE:
+            for record in optional_records(
+                    'SELECT User,Host,plugin,account_locked,password_expired,password_last_changed,password_lifetime,'
+                    'password_reuse_history,password_reuse_time,password_require_current,ssl_type,'
+                    'CONVERT(ssl_cipher USING utf8mb4) AS tls_cipher,CONVERT(x509_issuer USING utf8mb4) AS tls_issuer,'
+                    'CONVERT(x509_subject USING utf8mb4) AS tls_subject,max_questions AS max_queries_per_hour,'
+                    'max_updates AS max_updates_per_hour,max_connections AS max_connections_per_hour,max_user_connections,'
+                    "JSON_EXTRACT(User_attributes,'$.metadata') AS metadata_attributes,"
+                    "JSON_EXTRACT(User_attributes,'$.Password_locking.failed_login_attempts') AS failed_login_attempts,"
+                    "JSON_EXTRACT(User_attributes,'$.Password_locking.password_lock_time_days') AS password_lock_time "
+                    'FROM mysql.user ORDER BY User,Host'):
+                user, host = record['user'], record['host']
+                native = {**record, 'authentication_plugin': record['plugin'], 'authentication_secrets_returned': False}
+                attributes = record.get('metadata_attributes')
+                if isinstance(attributes, str):
+                    try: native['metadata_attributes'] = json.loads(attributes)
+                    except ValueError: native['metadata_attributes_state'] = 'unavailable'
+                native.setdefault('metadata_attributes_state', 'absent' if attributes is None else 'observed')
+                add('user', [], user+'@'+host, native, identity=(
+                    'mysql-account:'+json.dumps([user,host],ensure_ascii=False,separators=(',',':'))
+                    if '@' in user or '@' in host else None))
+            before_failures = len(catalog_failures)
+            factor_rows = optional_records(
+                'SELECT u.User,u.Host,f.ordinal_position,f.plugin,f.requires_registration,f.passwordless '
+                'FROM mysql.user u CROSS JOIN JSON_TABLE(COALESCE(u.User_attributes,JSON_OBJECT()),'
+                "'$.multi_factor_authentication[*]' COLUMNS(ordinal_position FOR ORDINALITY,plugin VARCHAR(64) PATH '$.plugin',"
+                "requires_registration INT PATH '$.requires_registration',passwordless INT PATH '$.passwordless')) AS f "
+                'ORDER BY u.User,u.Host,f.ordinal_position')
+            factor_map = {}
+            for row in factor_rows:
+                factor_map.setdefault((row['user'], row['host']), []).append({
+                    'factor': row['ordinal_position']+1, 'plugin': row['plugin'],
+                    'requires_registration': bool(row['requires_registration']), 'passwordless': bool(row['passwordless'])})
+            for resource in resources.values():
+                if resource['resource_kind'] == 'user':
+                    native = resource['native']
+                    native['factor_catalog_state'] = 'observed' if len(catalog_failures) == before_failures else 'unavailable'
+                    if native['factor_catalog_state'] == 'observed':
+                        native['authentication_factors'] = factor_map.get((native['user'], native['host']), [])
         for grantee, privilege in optional(
             'SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.'
             'USER_PRIVILEGES ORDER BY 1, 2'

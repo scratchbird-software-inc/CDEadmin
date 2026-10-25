@@ -77,3 +77,41 @@ def trigger_contract(legacy_fields):
             field.pop('default', None)
             field['required'] = False
     return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/trigger.form.json'}
+
+
+def account_contract(operation, legacy_fields):
+    if operation == 'rename':
+        descriptor = next(value for value in document('operations.json')['operations']
+                          if value['resource_kind'] == 'user' and value['operation_id'] == operation)
+        return {'fields': [field_contract(field) for field in descriptor['fields']]}
+    descriptor = document('forms/role-user.form.json')
+    fields = [field_contract(field) for field in descriptor['fields']
+              if operation in field.get('modes', ['create', 'alter'])]
+    # Factor rows contain password/authentication-string cells. The backend
+    # redacts the entire supplied group from validation and public plans.
+    for field in fields:
+        if field['field_id'] in {'authentication_factors', 'factor_actions'}:
+            field['sensitive'] = True
+    names = {field['field_id'] for field in fields}
+    for field in legacy_fields:
+        if field['field_id'] not in names and field['field_id'] in {'active', 'administrator', 'options'}:
+            value = deepcopy(field)
+            if value['field_id'] == 'active':
+                value.pop('default', None)
+                value['required'] = False
+            fields.append(value)
+    return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/role-user.form.json'}
+
+
+def role_contract(operation, legacy_fields):
+    if operation == 'create':
+        descriptor = document('forms/role.form.json')
+        fields = [field_contract(field) for field in descriptor['fields']]
+        fields.extend(deepcopy(field) for field in legacy_fields if field['field_id'] == 'options')
+        return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/role.form.json'}
+    if operation in {'grant', 'revoke', 'set_default'}:
+        descriptor = next(value for value in document('operations.json')['operations']
+                          if value['resource_kind'] == 'role' and value['operation_id'] == operation)
+        return {'fields': [field_contract(field) for field in descriptor['fields']],
+                'authority': 'ui_descriptors/mysql/operations.json'}
+    return None

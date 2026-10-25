@@ -2758,3 +2758,44 @@ loss. Authenticated create and drop are independently checked against native
 row effects. Trigger remains draft (11fields/1gap) until the shared renderer
 and family round trips are accepted; its ordering fields use Engine as required
 by the field matrix.
+
+Native account policies and role identities
+-------------------------------------------
+
+User creation and alteration now bind native authentication plugins and supplied
+password/authentication strings. Typed clauses cover dual-password retention and
+discard, current-password replacement, expiry/history/reuse requirements,
+failed-login locking, hourly/connection limits, TLS/certificate requirements,
+comments, exact JSON attributes and create-time default roles. Omitted alter
+policies stay unchanged. Authentication and policy enforcement remain native.
+MySQL has no PostgreSQL administrator flag; use native privileges and roles.
+
+The available GPL ``auth_socket`` implementation supports second and third
+factors. Typed create/add/modify/drop inputs and real Unix-socket authentication
+are qualified on MySQL9.7 through both connector classes; no plugin simulation
+is used. The acquired Community production plugins/components contain no
+registration-requiring implementation. Core registration hooks do not establish
+available WebAuthn/Enterprise functionality. Generated passwords remain a beta
+protected-result gap under Decision10, separate from closed implementations.
+
+User and host are separate native identities. Rename/drop preserve literal
+quotes, backticks, backslashes, Unicode and @ characters, independently of SQL
+mode. Named-account role aliases expose membership actions; they do not claim
+persisted CREATE ROLE origin. All accounts remain under Users, including those
+used as roles. Native CREATE USER DEFAULT ROLE can grant the role implicitly.
+CREATE ROLE and optional initial grants are separate native statements: later
+grant failure retains the prior acknowledgement and created account.
+
+Review and apply use an independent server-global connection, privately bind
+credential-bearing state and expose only nonsecret observations. Secrets and
+factor credentials are redacted from public validation/plan receipts. Changed
+state refuses dispatch. Lost replies or post-acknowledgement observations never
+cause automatic replay. ``tools/cdeadmin_mysql_accounts_qualification.py`` checks
+native authentication and policy effects, original-session diagnostics/pending
+savepoints, stale reviews, native errors, partial creation and authenticated
+role/default-role/rename/drop operations for pure/C paths.
+
+Role/User descriptors and Security operation entries accompany this backend
+work. They remain draft pending shared rendering and round trips; the privilege
+variant and Decision9 projections are recorded separately. This qualification
+does not close the entire native inventory or cross-platform acceptance.

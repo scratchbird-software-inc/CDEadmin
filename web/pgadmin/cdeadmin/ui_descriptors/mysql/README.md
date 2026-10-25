@@ -101,3 +101,18 @@ Relative ordering belongs on Engine. Native MySQL has no enable/disable flag,
 numeric position, INSTEAD OF or statement-level trigger. Native compiled review
 and catalog facts cover the supported concepts without a new legacy form.
 The remaining family replacement dispatch is Decision9, not an invented ALTER.
+
+## User and Role migration
+
+The User variant has 36 fields; Role has four. Native authentication/plugin,
+TLS, password policies, limits, attributes, default roles and GPL socket MFA
+bind the actual compiler. Whole secret-bearing factor grids are redacted at the
+backend admission boundary. Native9.7 pure/C and authenticated APIs qualify
+creation, policy editing, exact rename/drop, role membership/defaults and partial
+initial-grant failures. Named-account role aliases are action views, never
+attested creation origin. User listing preserves accounts used as roles.
+
+The old MySQL role field factory and dispatch are deleted. The separate privilege
+variant remains pending; Decision9 grids and Decision10 protected outputs are
+explicit gaps. No shared schema, family renderer or shell was changed. All
+variants remain draft pending shared rendering and round trips.

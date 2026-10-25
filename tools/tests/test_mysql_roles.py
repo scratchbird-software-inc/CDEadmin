@@ -35,7 +35,8 @@ def test_engine_catalog_uses_separate_host_and_only_mysql_native_choices():
  role=next(row for row in catalog['objects'] if row['resource_kind']=='role')
  for operation in mysql_roles.OPERATIONS:
   item=next(row for row in role['operations'] if row['operation_id']==operation)
-  fields={row['field_id']:row for row in item['form']['fields']}
+  from pgadmin.cdeadmin.providers.mysql_family.descriptor_contracts import role_contract
+  fields={row['field_id']:row for row in role_contract(operation,[])['fields']}
   assert {'member_user','member_host'}<=set(fields)
   assert 'admin_option_only' not in fields
   assert item['confirmation_required'] and item['target_required']

@@ -2555,10 +2555,10 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         statements = plan['command_preview']['statements']
         self.assertEqual(2, len(statements))
         self.assertEqual(
-            "CREATE ROLE 'data_reader'@'%'", statements[0]['source']
+            "CREATE ROLE `data_reader`@`%`", statements[0]['source']
         )
         self.assertEqual(
-            "GRANT 'data_reader'@'%' TO 'operator'@'localhost'",
+            "GRANT `data_reader`@`%` TO `operator`@`localhost`",
             statements[1]['source'],
         )
 

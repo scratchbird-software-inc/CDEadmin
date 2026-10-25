@@ -347,6 +347,201 @@
         "Event",
         "Confirmation"
       ]
+    },
+    {
+      "resource_kind": "role",
+      "operation_id": "grant",
+      "title": "Grant role membership",
+      "tier": 2,
+      "status": "draft",
+      "menu": {
+        "category": "security",
+        "order": 30
+      },
+      "confirmation": "typed_name",
+      "groups": [
+        "Membership",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "member_user",
+          "label": "Recipient user",
+          "control": "text",
+          "default": "",
+          "group": "Membership",
+          "help": "An explicit empty user names the native anonymous account; MySQL decides whether it can receive this role."
+        },
+        {
+          "field_id": "member_host",
+          "label": "Recipient host",
+          "control": "text",
+          "default": "%",
+          "required": true,
+          "group": "Membership"
+        },
+        {
+          "field_id": "admin_option",
+          "label": "Allow delegation",
+          "control": "boolean",
+          "default": false,
+          "group": "Membership"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Role name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation"
+        }
+      ],
+      "notes": "Binds the existing native role membership operation with separate user and host identities. Shared family grid dispatch remains Decision9; no new legacy form is generated."
+    },
+    {
+      "resource_kind": "role",
+      "operation_id": "revoke",
+      "title": "Revoke role membership",
+      "tier": 2,
+      "status": "draft",
+      "menu": {
+        "category": "security",
+        "order": 31
+      },
+      "confirmation": "typed_name",
+      "groups": [
+        "Membership",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "member_user",
+          "label": "Recipient user",
+          "control": "text",
+          "default": "",
+          "group": "Membership",
+          "help": "An explicit empty user names the native anonymous account; MySQL decides whether it can receive this role."
+        },
+        {
+          "field_id": "member_host",
+          "label": "Recipient host",
+          "control": "text",
+          "default": "%",
+          "required": true,
+          "group": "Membership"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Role name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation"
+        }
+      ],
+      "notes": "Binds the existing native role membership operation with separate user and host identities. Shared family grid dispatch remains Decision9; no new legacy form is generated."
+    },
+    {
+      "resource_kind": "role",
+      "operation_id": "set_default",
+      "title": "Set default roles",
+      "tier": 2,
+      "status": "draft",
+      "menu": {
+        "category": "security",
+        "order": 32
+      },
+      "confirmation": "typed_name",
+      "groups": [
+        "Membership",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "member_user",
+          "label": "Recipient user",
+          "control": "text",
+          "default": "",
+          "group": "Membership",
+          "help": "An explicit empty user names the native anonymous account; MySQL decides whether it can receive this role."
+        },
+        {
+          "field_id": "member_host",
+          "label": "Recipient host",
+          "control": "text",
+          "default": "%",
+          "required": true,
+          "group": "Membership"
+        },
+        {
+          "field_id": "mode",
+          "label": "Default role set",
+          "control": "select",
+          "default": "SELECTED",
+          "options": [
+            {
+              "value": "SELECTED",
+              "label": "Selected"
+            },
+            {
+              "value": "ALL",
+              "label": "All"
+            },
+            {
+              "value": "NONE",
+              "label": "None"
+            }
+          ],
+          "group": "Membership",
+          "help": "Replaces the native default-role set; does not grant missing membership."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Role name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation"
+        }
+      ],
+      "notes": "Binds the existing native role membership operation with separate user and host identities. Shared family grid dispatch remains Decision9; no new legacy form is generated."
+    },
+    {
+      "resource_kind": "user",
+      "operation_id": "rename",
+      "title": "Rename account",
+      "tier": 2,
+      "status": "draft",
+      "menu": {
+        "category": "security",
+        "order": 33
+      },
+      "confirmation": "typed_name",
+      "groups": [
+        "Identity",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "new_name",
+          "label": "Name",
+          "control": "text",
+          "group": "Identity",
+          "help": "Omit to retain the user name. An explicit empty value names the native anonymous account."
+        },
+        {
+          "field_id": "new_host",
+          "label": "Host",
+          "control": "text",
+          "group": "Identity",
+          "help": "Omit to retain the existing host."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Account name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation"
+        }
+      ],
+      "notes": "Native user and host are separate identities; no splitting of displayed names is used for catalog targets. MySQL decides whether a role-used or system account may be renamed. Draft pending shared rendering acceptance."
     }
   ]
 }

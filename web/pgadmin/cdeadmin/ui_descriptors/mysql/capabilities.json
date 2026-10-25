@@ -860,7 +860,7 @@
       "resource_kind": "user",
       "family": "role",
       "variant": "user",
-      "form": "forms/role.form.json",
+      "form": "forms/role-user.form.json",
       "operations": [
         {
           "operation_id": "inspect",
@@ -882,7 +882,7 @@
         },
         {
           "operation_id": "rename",
-          "tier": 1,
+          "tier": 2,
           "mutation_class": "admin",
           "support_state": "implemented"
         },
@@ -920,19 +920,19 @@
         },
         {
           "operation_id": "grant",
-          "tier": 1,
+          "tier": 2,
           "mutation_class": "admin",
           "support_state": "implemented"
         },
         {
           "operation_id": "revoke",
-          "tier": 1,
+          "tier": 2,
           "mutation_class": "admin",
           "support_state": "implemented"
         },
         {
           "operation_id": "set_default",
-          "tier": 1,
+          "tier": 2,
           "mutation_class": "admin",
           "support_state": "implemented"
         }
@@ -942,7 +942,7 @@
       "resource_kind": "privilege",
       "family": "role",
       "variant": "grant",
-      "form": "forms/role.form.json",
+      "form": "forms/role-privilege.form.json",
       "operations": [
         {
           "operation_id": "inspect",

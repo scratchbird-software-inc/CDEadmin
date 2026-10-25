@@ -1,0 +1,20 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "role",
+  "variant": "grant",
+  "resource_kinds": [
+    "privilege"
+  ],
+  "status": "pending",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Privilege input audit",
+      "reason": "The existing native grant/revoke compiler accepts scalar privilege lists and separate target scopes. Typed grid bindings and advanced native scope/options still need their own audit; no raw JSON control or fabricated grid projection is declared."
+    }
+  ],
+  "fields": [],
+  "notes": "Role/User variants are migrating independently. This existing privilege variant remains pending and unsurfaced by the unified shell."
+}

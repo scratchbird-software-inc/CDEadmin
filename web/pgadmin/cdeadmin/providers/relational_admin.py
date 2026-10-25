@@ -364,7 +364,7 @@ class RelationalAdministration:
             if self.dialect.engine_id == 'mysql' and kind == 'role':
                 resource['operations'] = [item for item in resource.get('operations', [])
                     if item['operation_id'] not in mysql_roles.OPERATIONS] + [{
-                    'operation_id': operation, 'title': mysql_roles.form(operation, self._field)['title'],
+                    'operation_id': operation, 'title': mysql_roles.operation_title(operation),
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(mysql_roles.OPERATIONS)]
             if self.dialect.engine_id == 'firebird' and kind == 'view':
@@ -5371,8 +5371,6 @@ class RelationalAdministration:
             return mysql_server_operations.form(kind, operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'resource-group' and operation in mysql_resource_groups.OPERATIONS:
             return mysql_resource_groups.form(operation, self._field)
-        if self.dialect.engine_id == 'mysql' and kind == 'role' and operation in mysql_roles.OPERATIONS:
-            return mysql_roles.form(operation, self._field)
         title = operation.replace('_', ' ').title()
         if (self.dialect.engine_id == 'firebird' and kind == 'table' and operation == 'reorder_columns'):
             return firebird_column_order.form(self._field)
@@ -5667,9 +5665,7 @@ class RelationalAdministration:
                         default='USER', options=('USER', 'ROLE'),
                     ),
                 ))
-            elif kind == 'role' and self.dialect.engine_id in {
-                'mysql', 'dolt',
-            }:
+            elif kind == 'role' and self.dialect.engine_id == 'dolt':
                 fields.append(self._field(
                     'members', 'Initial members', 'json', False,
                     'Account names that receive this role. MySQL persists '

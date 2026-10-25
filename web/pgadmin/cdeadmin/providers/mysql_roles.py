@@ -7,6 +7,10 @@ OPERATIONS = frozenset({'grant', 'revoke', 'set_default'})
 def account(user, host):
     if not isinstance(user, str) or not isinstance(host, str) or not host or '\x00' in user + host:
         raise RelationalClientError('MySQL account requires separate native user and host values')
+    try:
+        (user+host).encode('utf8')
+    except UnicodeError:
+        raise RelationalClientError('MySQL account identity requires valid UTF-8') from None
     # Account names accept quoted identifiers. Backtick escaping is independent
     # of NO_BACKSLASH_ESCAPES and ANSI_QUOTES; an anonymous user is literal ''.
     return (('`' + user.replace('`', '``') + '`') if user else "''") + '@`' + host.replace('`', '``') + '`'
@@ -37,18 +41,7 @@ def compile_operation(operation, draft, target):
     return {'source': source, 'parameters': ()}
 
 
-def form(operation, field):
-    fields = [field('member_user', 'Recipient user', 'text', False,
-                    'Enter the exact username separately from its host; blank selects the anonymous account.', default=''),
-              field('member_host', 'Recipient host', 'text', True, default='%')]
-    if operation == 'grant':
-        fields.append(field('admin_option', 'Allow role delegation', 'boolean', default=False))
-    if operation == 'set_default':
-        fields.append(field('mode', 'Default role set', 'select', True, default='SELECTED',
-                            options=('SELECTED', 'ALL', 'NONE'),
-                            help_text='Replaces the existing default role set. Does not grant membership.'))
-    if operation in {'revoke', 'set_default'}:
-        fields.append(field('confirmation', 'Confirmation', 'text', True))
-    return {'form_id': 'mysql.role.' + operation,
-            'title': {'grant': 'Grant MySQL role membership', 'revoke': 'Revoke MySQL role membership',
-                      'set_default': 'Replace MySQL default role set'}[operation], 'fields': fields}
+def operation_title(operation):
+    from .mysql_family.descriptor_contracts import document
+    return next(value['title'] for value in document('operations.json')['operations']
+                if value['resource_kind']=='role' and value['operation_id']==operation)

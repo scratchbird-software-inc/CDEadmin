@@ -176,3 +176,48 @@ def test_every_index_binding_reaches_its_native_create_or_rename_path():
     assert form['status']=='draft' and not form['omitted_tabs']
     visibility=next(op for op in load('operations.json')['operations'] if op['resource_kind']=='index' and op['operation_id']=='visibility')
     assert visibility['menu']['category']=='maintenance'
+
+
+def test_every_user_and_role_binding_reaches_the_native_account_compiler():
+    target={'display_name':'owned@localhost','native':{'user':'owned','host':'localhost'}}
+    samples={'name':'changed','host':'127.0.0.1','anonymous':True,
+        'authentication_create':'AUTHENTICATION_STRING','authentication_alter':'PASSWORD',
+        'plugin':'caching_sha2_password','password':'changed secret','authentication_string':'native hash',
+        'replace_password':'previous secret','retain_current_password':True,'discard_old_password':True,
+        'active':False,'account_lock':'LOCK','password_expire':'NEVER','password_expire_days':7,
+        'password_history':'3','password_reuse_days':'5','password_require_current':'OPTIONAL',
+        'failed_login_attempts':3,'password_lock_time':'UNBOUNDED',
+        'max_queries_per_hour':9,'max_updates_per_hour':8,'max_connections_per_hour':7,'max_user_connections':6,
+        'tls_mode':'SSL','tls_cipher':'cipher','tls_issuer':'issuer','tls_subject':'subject',
+        'comment':'changed comment','default_roles':[{'user':'reader','host':'localhost'}],
+        'attributes':{'owned':'value'},'if_not_exists':True,'if_exists':True,
+        'authentication_factors':[{'mode':'AUTHENTICATION_STRING','plugin':'auth_socket','authentication_string':'root'}],
+        'factor_actions':[{'action':'ADD','factor':2,'mode':'AUTHENTICATION_STRING','plugin':'auth_socket','authentication_string':'root'}]}
+    def compiled(kind,mode,draft):
+        request={'resource_kind':kind,'operation_id':mode,'draft':draft,'target_resource':target}
+        validation=MYSQL_ADMINISTRATION.validate(request)
+        assert not validation['errors'],(kind,mode,draft,validation['errors'])
+        return MYSQL_ADMINISTRATION._compile(request)['statements']
+    for mode in ('create','alter'):
+        for field in load('forms/role-user.form.json')['fields']:
+            name=field['field_id']
+            if name=='confirmation' or mode not in field.get('modes',['create','alter']):continue
+            draft={'name':'owned','host':'localhost','password':'initial secret'} if mode=='create' else {'comment':'owned comment'}
+            if name=='anonymous':draft.pop('name')
+            if name in {'authentication_create','authentication_string'}:
+                draft.pop('password',None);draft.update(authentication_mode='AUTHENTICATION_STRING',plugin='caching_sha2_password',authentication_string='native hash')
+            if name=='authentication_alter':draft['password']='new secret'
+            if name in {'retain_current_password','replace_password'}:draft['password']='new secret'
+            if name=='password_expire_days':draft['password_expire']='INTERVAL'
+            if name.startswith('tls_') and name!='tls_mode':draft['tls_mode']='SPECIFIED'
+            if name=='attributes':draft.pop('comment',None)
+            bind(draft,field,samples[name])
+            result=compiled('user',mode,draft)
+            assert result and result[0]['source'].startswith(mode.upper()+' USER '),name
+    for field in load('forms/role.form.json')['fields']:
+        draft={'name':'owned'}
+        value={'name':'changed','host':'localhost','if_not_exists':True,
+               'members':[{'user':'member@literal','host':'localhost'}]}[field['field_id']]
+        original=compiled('role','create',draft)
+        bind(draft,field,value)
+        assert compiled('role','create',draft)!=original,field['field_id']

@@ -112,7 +112,7 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - n/a
    * - Role
      - draft (18f, 2g)
-     - pending (0f, 0g)
+     - draft (40f, 5g; privilege variant pending)
      - draft (22f, 2g)
      - draft (11f, 1g)
      - n/a
@@ -249,3 +249,21 @@ rendering/round-trip acceptance remains pending. There was no MySQL-specific
 legacy trigger field factory to delete; the frozen generic branch remains for
 other engines. Lint counts before/after: JSON303/303, MUI244/244, engine
 branches111/111, panels113/113.
+
+MySQL User and Role variants (2026-10-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+User is draft (36fields/3gaps); Role is draft (4fields/1gap). Native MySQL9.7
+pure/C and authenticated plan/apply qualify plugins, password and TLS policies,
+resource limits, default roles, real GPL socket second/third factors and exact
+account rename/drop. Native registration hooks are not proof of an available
+registration plugin. Generated passwords and protected key results remain
+Decision10; family membership/privilege dispatch remains Decision9.
+
+The privilege variant remains pending (0fields/1gap); the Role family is partial.
+Named-account role aliases expose native membership actions without inventing
+persisted CREATE ROLE origin. All accounts remain visible under Users for policy
+editing. Initial role grants have separately acknowledged native statements; a
+later grant failure does not undo creation. The legacy MySQL role field factory
+and create-role dispatch were removed. Shared rendering/round trips remain
+pending. Lint before/after: JSON303/303, MUI244/244, branches111/111, panels113/113.

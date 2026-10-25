@@ -446,6 +446,14 @@ front-end stream's shared operation-dialog and render acceptance. This native
 implementation is source available and is not deferred as closed Enterprise
 functionality.
 
+Native User/Role policies, exact identity rename/drop, role grants/defaults and
+available GPL socket second/third authentication factors are now implemented and
+qualified through both connectors and authenticated APIs. Their typed descriptors
+remain draft; the privilege variant still needs its native input audit. Generated
+password delivery shares Decision10 with raw key export. Registration-dependent
+plugins have no production implementor in the acquired Community source and are
+not emulated. These scoped receipts do not close the independent inventory.
+
 Native spatial-reference catalog, typed management and bounded selected-SRID
 server DDN exchange/migration are implemented. Captured SRID scope is explicit;
 large catalogs use separate selected batches under the existing byte bounds.
