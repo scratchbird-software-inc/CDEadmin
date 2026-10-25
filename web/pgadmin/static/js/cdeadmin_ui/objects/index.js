@@ -28,6 +28,7 @@ export {
   MENU_CATEGORIES,
   SHELL_PRIMITIVES,
   activeFields,
+  buildOptionContext,
   editorAvailable,
   fieldOptions,
   fieldVisible,

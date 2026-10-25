@@ -42,7 +42,7 @@ FAMILIES = ("table", "view", "index", "routine", "trigger", "sequence", "type",
             "role", "database", "server")
 FORBIDDEN_LABEL = re.compile(r"\bexact native\b|\bnative .* reference\b", re.I)
 ENGINE_FILES = {"capabilities.json", "operations.json", "navigator.json",
-                "omitted_families.json", "README.md"}
+                "omitted_families.json", "options.json", "README.md"}
 IGNORED_FOLDERS = {"forms", "__pycache__"}
 
 
@@ -192,6 +192,20 @@ def validate_descriptors(strict_pending: bool) -> tuple[list[str], dict]:
                 if FORBIDDEN_LABEL.search(field.get("label", "")):
                     errors.append(f"{engine}/operations.json: {op['operation_id']}.{fid} label uses provenance phrasing")
 
+        if (engine_dir / "options.json").exists():
+            options = load(engine_dir / "options.json")
+            schemas.check(options, schemas.schemas["options.schema.json"], schemas.schemas["options.schema.json"],
+                          f"{engine}/options.json", errors)
+            # every option_values_path a form uses must have a source
+            dialect_keys = set(options.get("dialect", {}))
+            catalog_keys = set(options.get("catalog", {}))
+            for form_path in sorted((engine_dir / "forms").glob("*.form.json")):
+                for fid, field in walk_fields(load(form_path).get("fields")):
+                    path = field.get("option_values_path") or []
+                    if len(path) >= 2 and path[0] == "dialect" and path[1] not in dialect_keys:
+                        errors.append(f"{engine}/forms/{form_path.name}: {fid} reads dialect.{path[1]} which options.json does not define")
+                    if len(path) >= 2 and path[0] == "catalog" and path[1] not in catalog_keys:
+                        errors.append(f"{engine}/forms/{form_path.name}: {fid} reads catalog.{path[1]} which options.json does not define")
         nav = load(engine_dir / "navigator.json")
         schemas.check(nav, schemas.schemas["navigator.schema.json"], schemas.schemas["navigator.schema.json"],
                       f"{engine}/navigator.json", errors)

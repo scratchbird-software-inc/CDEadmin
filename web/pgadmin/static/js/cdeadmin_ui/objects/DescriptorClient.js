@@ -34,6 +34,8 @@ export class DescriptorClient {
       const promise = this.api.get(url).then((response) => {
         const envelope = response?.data;
         if(!envelope || envelope.success !== 1) throw new Error(envelope?.errormsg || 'UI descriptors unavailable');
+        this.resolved = this.resolved || new Map();
+        this.resolved.set(key, envelope.data);
         return envelope.data;
       }).catch((error) => {
         this.cache.delete(key);
@@ -44,9 +46,24 @@ export class DescriptorClient {
     return this.cache.get(key);
   }
 
+  /** Resolved bundle if it has already arrived; otherwise null (and a fetch is started). */
+  cached(engine, {version}={}) {
+    const key = this.key(engine, version);
+    const entry = this.resolved?.get(key);
+    if(entry) return entry;
+    this.bundle(engine, {version}).then((bundle) => {
+      this.resolved = this.resolved || new Map();
+      this.resolved.set(key, bundle);
+    }).catch(() => {});
+    return null;
+  }
+
   invalidate(engine) {
     for(const key of [...this.cache.keys()]) {
-      if(!engine || key.startsWith(`${engine}@`)) this.cache.delete(key);
+      if(!engine || key.startsWith(`${engine}@`)) {
+        this.cache.delete(key);
+        this.resolved?.delete(key);
+      }
     }
   }
 }

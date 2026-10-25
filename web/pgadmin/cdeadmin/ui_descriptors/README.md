@@ -23,6 +23,8 @@ ui_descriptors/
     operations.json      tier 2/3 operations: menu category, fields, confirmation
     navigator.json       tree groups, sort order, icon keys
     omitted_families.json families the engine has no concept for (with reasons)
+    options.json         option sources: static dialect lists (types, privileges, auth plugins) and
+                         catalog lists resolved from the endpoint's resources by kind
     forms/<family>.form.json   the fields this engine shows on each canonical tab
 ```
 
@@ -65,17 +67,24 @@ provider gains a field; then do the review steps below.
 5. Record what the engine has but the provider does not expose yet under
    `gaps`, and canonical tabs the engine has no concept for under
    `omitted_tabs`, each with a reason. Never fake a field.
-6. Version-dependent fields get `version: {"minimum": "8.0.16"}`; the shell
+6. A `select`/`multiselect` whose choices are not static lists its source as
+   `option_values_path`: `["dialect", "<key>"]` for a list in `options.json`
+   (`column_types`, `collations`, `privileges` keyed by object type, ...) or
+   `["catalog", "<key>"]` for a list `options.json` maps to a resource kind on
+   the connected endpoint (`tablespaces`, `databases`, `character_sets`).
+   `["draft", "columns"]` reads the names in the form's own Columns grid. The
+   validator rejects a path with no source.
+7. Version-dependent fields get `version: {"minimum": "8.0.16"}`; the shell
    disables them with the reason instead of hiding them.
-7. Move the form from `pending` to `draft` when all fields are listed, and to
+8. Move the form from `pending` to `draft` when all fields are listed, and to
    `complete` when a round trip (open object, change a field on every tab,
    apply, re-inspect) has been verified on the tested version. A `complete`
    form must carry every tab the skeleton marks required or list it in
    `omitted_tabs`.
-8. Tier 2/3 operations (ANALYZE, backup, sweep, binlog replay...) go in
+9. Tier 2/3 operations (ANALYZE, backup, sweep, binlog replay...) go in
    `operations.json` with a `menu.category` from the fixed list and the same
    field rules. Labels name the action, never the engine.
-9. Run `python3 tools/validate_ui_descriptors.py --counts` before committing;
+10. Run `python3 tools/validate_ui_descriptors.py --counts` before committing;
    delete the legacy `_form()` branch or `form()` module for anything you have
    moved here in the same change, and quote the before/after lint counts in
    the commit summary.

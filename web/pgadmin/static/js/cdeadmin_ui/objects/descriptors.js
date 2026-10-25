@@ -76,7 +76,7 @@ export function resolveForm(family, form) {
 }
 
 /** Build the same bundle shape the server serves, from raw descriptor files. */
-export function resolveBundle({engine, families, capabilities, operations=[], navigator={}, forms={}}) {
+export function resolveBundle({engine, families, capabilities, operations=[], navigator={}, forms={}, options={dialect: {}, catalog: {}}}) {
   const resolvedForms = {};
   for(const [familyId, form] of Object.entries(forms)) {
     resolvedForms[familyId] = resolveForm(families[familyId], form);
@@ -96,7 +96,7 @@ export function resolveBundle({engine, families, capabilities, operations=[], na
       operations: opsByKind[kind.resource_kind] || [],
     };
   }
-  return {schema: 'cdeadmin.ui-bundle.v1', engine, capabilities, operations, navigator,
+  return {schema: 'cdeadmin.ui-bundle.v1', engine, capabilities, operations, navigator, options,
     forms: resolvedForms, kinds};
 }
 
@@ -286,4 +286,26 @@ function tier1Label(op) {
 function childLabel(bundle, kind) {
   const entry = bundle?.kinds?.[kind];
   return (entry?.title || kind).replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase()) + '...';
+}
+
+/**
+ * Build the editor option context for an engine from its bundle options and
+ * the endpoint's resources: `dialect` lists come from options.json,
+ * `catalog` lists from resources of the kinds options.json names, and
+ * `resources` (for reference pickers) are grouped by kind.
+ */
+export function buildOptionContext(bundle, resources=[]) {
+  const byKind = {};
+  for(const resource of resources) {
+    (byKind[resource.resource_kind] = byKind[resource.resource_kind] || []).push(resource);
+  }
+  const catalog = {};
+  for(const [key, source] of Object.entries(bundle?.options?.catalog || {})) {
+    const rows = byKind[source.resource_kind] || [];
+    catalog[key] = rows.map((row) => ({
+      value: row[source.value || 'display_name'] ?? row.display_name,
+      label: row[source.label || 'display_name'] ?? row.display_name,
+    }));
+  }
+  return {dialect: bundle?.options?.dialect || {}, catalog, resources: byKind, bundle};
 }

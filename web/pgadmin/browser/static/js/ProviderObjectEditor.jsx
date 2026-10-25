@@ -20,8 +20,11 @@ import gettext from 'sources/gettext';
 import getApiInstance from 'sources/api_instance';
 import ErrorBoundary from 'sources/helpers/ErrorBoundary';
 import {
-  ProviderObjectEditorHost, descriptorClient, editorAvailable,
+  OperationDialog, ProviderObjectEditorHost, descriptorClient, editorAvailable, makePost, menuForKind,
+  visualAdminCalls,
 } from 'sources/cdeadmin_ui/objects';
+import {createRoot} from 'react-dom/client';
+import Theme from 'sources/Theme';
 import {providerEndpointSessionReady} from 'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 import {BROWSER_PANELS} from './constants';
 
@@ -44,49 +47,155 @@ export function providerEndpointUrl(serverNode, serverItem, serverData, database
   return `${generated}${generated.includes('?') ? '&' : '?'}database_target_id=${encodeURIComponent(databaseTargetId)}`;
 }
 
-/**
- * Try to open the family editor for a tree resource. Resolves to the panel
- * id when it opened, or false when the legacy workspace should handle it.
- */
-export async function tryOpenFamilyEditor(itemData, item, {mode='alter'}={}) {
-  if(itemData?._type !== 'cde_resource' || !itemData.cde_resource_kind) return false;
+function treeContext(itemData, item) {
   const endpoint = serverFor(item);
-  if(!endpoint.data || !providerEndpointSessionReady(endpoint.data)) return false;
-  const engine = itemData.cde_engine_id || endpoint.data.cde_engine_id;
-  if(!engine) return false;
-  const api = getApiInstance();
-  let bundle;
-  try {
-    bundle = await descriptorClient(api).bundle(engine, {version: endpoint.data.verified_runtime_version});
-  } catch {
-    // No descriptors served for this engine: the legacy workspace still works.
-    return false;
-  }
-  if(!editorAvailable(bundle, itemData.cde_resource_kind)) return false;
+  if(!endpoint.data || !providerEndpointSessionReady(endpoint.data)) return null;
+  const engine = itemData?.cde_engine_id || endpoint.data.cde_engine_id;
+  if(!engine) return null;
+  return {endpoint, engine, version: endpoint.data.verified_runtime_version, api: getApiInstance()};
+}
 
+function refreshNode(item, {parent=false}={}) {
+  const tree = pgAdmin.Browser.tree;
+  const target = parent && tree.hasParent(item) ? tree.parent(item) : item;
+  const node = target ? pgAdmin.Browser.Nodes[tree.itemData(target)?._type] : null;
+  node?.callbacks?.refresh?.call(node, null, target);
+}
+
+function openEditorPanel({context, itemData, item, resourceKind, resourceId, mode, displayName}) {
   const serverNode = pgAdmin.Browser.Nodes.server;
-  const endpointUrl = providerEndpointUrl(serverNode, endpoint.item, endpoint.data, itemData.cde_database_target_id);
+  const endpointUrl = providerEndpointUrl(serverNode, context.endpoint.item, context.endpoint.data,
+    itemData.cde_database_target_id);
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = `id-object-editor-${++editorSequence}`;
-  const displayName = itemData.label || itemData._label;
   const onClose = () => workspace.close(panelId);
-  const refreshParent = () => {
-    const tree = pgAdmin.Browser.tree;
-    const parent = tree.hasParent(item) ? tree.parent(item) : null;
-    const node = parent ? pgAdmin.Browser.Nodes[tree.itemData(parent)?._type] : null;
-    node?.callbacks?.refresh?.call(node, null, parent);
-  };
   workspace.openTab({
     id: panelId,
     title: gettext('%s — %s', mode === 'create' ? gettext('Create') : gettext('Edit'), displayName),
     closable: true,
     floatable: true,
     content: <ErrorBoundary>
-      <ProviderObjectEditorHost api={api} endpointUrl={endpointUrl} engine={engine}
-        version={endpoint.data.verified_runtime_version} resourceId={itemData.cde_resource_id}
-        resourceKind={itemData.cde_resource_kind} databaseTargetId={itemData.cde_database_target_id}
-        mode={mode} displayName={displayName} onClose={onClose} onApplied={refreshParent} />
+      <ProviderObjectEditorHost api={context.api} endpointUrl={endpointUrl} engine={context.engine}
+        version={context.version} resourceId={resourceId} resourceKind={resourceKind}
+        databaseTargetId={itemData.cde_database_target_id} mode={mode} displayName={displayName}
+        onClose={onClose} onApplied={() => refreshNode(item, {parent: mode === 'alter'})} />
     </ErrorBoundary>,
   }, BROWSER_PANELS.MAIN, 'middle');
   return panelId;
+}
+
+/**
+ * Try to open the family editor for a tree resource. Resolves to the panel
+ * id when it opened, or false when the legacy workspace should handle it.
+ */
+export async function tryOpenFamilyEditor(itemData, item, {mode='alter'}={}) {
+  if(itemData?._type !== 'cde_resource' || !itemData.cde_resource_kind) return false;
+  const context = treeContext(itemData, item);
+  if(!context) return false;
+  let bundle;
+  try {
+    bundle = await descriptorClient(context.api).bundle(context.engine, {version: context.version});
+  } catch {
+    // No descriptors served for this engine: the legacy workspace still works.
+    return false;
+  }
+  if(!editorAvailable(bundle, itemData.cde_resource_kind)) return false;
+  return openEditorPanel({context, itemData, item, resourceKind: itemData.cde_resource_kind,
+    resourceId: itemData.cde_resource_id, mode, displayName: itemData.label || itemData._label});
+}
+
+/** Open the family editor in create mode for a child kind under a tree node. */
+export function openFamilyCreate(itemData, item, resourceKind) {
+  const context = treeContext(itemData, item);
+  if(!context) return false;
+  const bundle = descriptorClient(context.api).cached(context.engine, {version: context.version});
+  if(!bundle || !editorAvailable(bundle, resourceKind)) return false;
+  return openEditorPanel({context, itemData, item, resourceKind, resourceId: null, mode: 'create',
+    displayName: `${itemData.label || itemData._label} / ${kindTitle(bundle, resourceKind)}`});
+}
+
+/** Run a tier 2/3 descriptor operation on a tree resource in the OperationDialog. */
+export function openDescriptorOperation(itemData, item, operation) {
+  const context = treeContext(itemData, item);
+  if(!context) return false;
+  const serverNode = pgAdmin.Browser.Nodes.server;
+  const endpointUrl = providerEndpointUrl(serverNode, context.endpoint.item, context.endpoint.data,
+    itemData.cde_database_target_id);
+  const post = makePost(context.api, endpointUrl, itemData.cde_database_target_id);
+  const mount = document.createElement('div');
+  document.body.appendChild(mount);
+  const root = createRoot(mount);
+  const close = () => {
+    root.unmount();
+    mount.remove();
+  };
+  const run = async () => {
+    const target = itemData.cde_resource_id ?
+      await post({action: 'resource_inspect', request: {resource_id: itemData.cde_resource_id}}).catch(() => null) : null;
+    const calls = visualAdminCalls(post, {resourceKind: itemData.cde_resource_kind, operationId: operation.operation_id, target});
+    root.render(<Theme><OperationDialog open operation={operation} targetName={itemData.label || itemData._label}
+      plan={({draft}) => calls.plan({draft})} apply={({plan}) => calls.apply({plan})}
+      onClose={close} onApplied={() => refreshNode(item)} /></Theme>);
+  };
+  run();
+  return true;
+}
+
+function kindTitle(bundle, kind) {
+  const title = bundle.kinds[kind]?.title || kind.replace(/-/g, ' ');
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
+const CATEGORY_MAP = {
+  create: 'common', open: 'common', lifecycle: 'database-lifecycle', maintenance: 'maintenance',
+  backup_restore: 'backup', replication: 'availability', security: 'security', diagnostics: 'diagnostics',
+  refresh: 'common',
+};
+
+/**
+ * Context-menu entries from the engine's descriptor bundle for a tree node, in
+ * the shape ObjectExplorer consumes. Returns [] until the bundle has arrived
+ * (the first request starts the fetch) or when the kind declares nothing.
+ */
+export function familyEditorContextActions(itemData, item) {
+  if(!['cde_resource', 'cde_resource_group', 'cde_database_target'].includes(itemData?._type)) return [];
+  const context = treeContext(itemData, item);
+  if(!context) return [];
+  const bundle = descriptorClient(context.api).cached(context.engine, {version: context.version});
+  if(!bundle) return [];
+  const entries = [];
+  const resourceKind = itemData._type === 'cde_database_target' ? 'database' : itemData.cde_resource_kind;
+  if(itemData._type === 'cde_resource' && editorAvailable(bundle, resourceKind)) {
+    entries.push({category: 'common', id: 'family-editor-edit', label: gettext('Edit...'), iconKey: 'action.edit',
+      intent: 'default', enabled: true, execute: () => tryOpenFamilyEditor(itemData, item, {mode: 'alter'})});
+  }
+  // Create entries: a group node creates its own kind; a database creates any top-level kind.
+  const childKinds = itemData._type === 'cde_resource_group' ? [itemData.cde_resource_kind] :
+    itemData._type === 'cde_database_target' ?
+      Object.values(bundle.kinds).filter((kind) => kind.family !== 'engine_object' && kind.tier1.includes('create') &&
+        !['database', 'server'].includes(kind.resource_kind)).map((kind) => kind.resource_kind) : [];
+  const creatable = childKinds.filter((kind) => editorAvailable(bundle, kind) && bundle.kinds[kind]?.tier1.includes('create'));
+  if(creatable.length === 1) {
+    entries.push({category: 'common', id: `family-editor-create-${creatable[0]}`,
+      label: gettext('Create %s...', kindTitle(bundle, creatable[0])), iconKey: 'action.create',
+      intent: 'default', enabled: true, execute: () => openFamilyCreate(itemData, item, creatable[0])});
+  } else if(creatable.length > 1) {
+    entries.push({category: 'common', id: 'family-editor-create', label: gettext('Create'), iconKey: 'action.create',
+      intent: 'default', enabled: true, children: creatable.map((kind) => ({
+        id: `family-editor-create-${kind}`, label: `${kindTitle(bundle, kind)}...`, iconKey: 'action.create',
+        intent: 'default', enabled: true, execute: () => openFamilyCreate(itemData, item, kind)}))});
+  }
+  if(itemData._type !== 'cde_resource_group') {
+    for(const group of menuForKind(bundle, resourceKind)) {
+      for(const entry of group.items) {
+        if(!entry.tier || entry.tier === 1) continue; // tier 1 is the editor; legacy items cover the rest for now
+        entries.push({category: CATEGORY_MAP[group.category] || 'operations', id: `descriptor-op-${entry.operation_id}`,
+          label: entry.label, iconKey: 'action.operation', intent: entry.tier === 3 ? 'default' : 'default',
+          enabled: entry.enabled !== false, disabledReason: entry.disabled_reason,
+          execute: () => openDescriptorOperation(itemData, item,
+            bundle.kinds[resourceKind].operations.find((op) => op.operation_id === entry.operation_id))});
+      }
+    }
+  }
+  return entries;
 }

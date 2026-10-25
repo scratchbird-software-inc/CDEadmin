@@ -30,7 +30,7 @@ Phase status
    * - 2
      - Shell: tree, object editor, operation dialog, menu model
      - in progress
-     - ``cdeadmin_ui/objects``: ObjectEditor (canonical tabs, SQL tab = provider plan), OperationDialog, FieldControl, RecordGrid, KeyValueEditor, menu model; descriptor service ``/cdeadmin/api/ui/descriptors``; tree activation opens the family editor when the engine declares one (legacy workspace fallback). Remaining: categorised menus wired to the tree, create-from-tree, shell tabs (Data, Dependencies, Statistics), in-panel tree removal
+     - ``cdeadmin_ui/objects``: ObjectEditor (canonical tabs, SQL tab = provider plan), OperationDialog, FieldControl, RecordGrid, KeyValueEditor, menu model; descriptor service ``/cdeadmin/api/ui/descriptors``; tree activation opens the family editor when the engine declares one (legacy workspace fallback). Second increment: ``options.json`` per engine feeds selects and reference pickers (dialect lists + catalog lists from the endpoint's resources); descriptor entries (Edit, Create, tier 2/3 operations in the OperationDialog) merged into the tree context menu with legacy duplicates retired; Statistics / Dependencies / Indexes / Triggers tabs read the inspected resource. Remaining: Data tab bound to the row grid, in-panel Resource Explorer removal, PostgreSQL routing
    * - 3
      - Engine descriptors (Firebird, MySQL, MariaDB, DuckDB, SQLite)
      - in progress
@@ -192,6 +192,11 @@ Current lint counts for this change: JSON controls **305 → 304**, direct MUI
 imports **244 → 244**, engine-literal UI branches **111 → 111**, engine panels
 **113 → 113**. The tracked family statuses have not advanced to ``complete``.
 
+* 2026-10-25 (phase 2, second increment): per-engine ``options.json`` (schema + validator check that every
+  ``option_values_path`` has a source); host builds the option context from the bundle and one resource page;
+  tree context menu gains Edit / Create / descriptor operations from the cached bundle (``familyEditorContextActions``),
+  legacy entries for the same operation id retired; Statistics, Dependencies, Indexes and Triggers tabs read the
+  inspected resource. 91 family-suite tests green; lint counts unchanged.
 * 2026-10-25 (phase 2, first increment): descriptor service and bundle endpoint; shared ObjectEditor /
   OperationDialog / FieldControl / RecordGrid / KeyValueEditor in ``cdeadmin_ui/objects`` (primitives only,
   zero engine branches); tree activation of a provider resource opens the family editor when the bundle

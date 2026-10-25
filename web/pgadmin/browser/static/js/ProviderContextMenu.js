@@ -10,7 +10,7 @@
 import _ from 'lodash';
 import gettext from 'sources/gettext';
 import pgAdmin from 'sources/pgadmin';
-import {tryOpenFamilyEditor} from './ProviderObjectEditor';
+import {familyEditorContextActions, tryOpenFamilyEditor} from './ProviderObjectEditor';
 
 const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
@@ -268,7 +268,18 @@ export function providerTreeContextActions(itemData, item=null) {
   const menus = providerContextMenuItems(itemData, item);
   if(menus === null) return null;
   const grouped = new Map();
+  // Descriptor-driven entries (family editor, create, tier 2/3 operations)
+  // merge into the same categories; legacy entries with the same operation
+  // id yield to them.
+  const descriptorEntries = familyEditorContextActions(itemData, item);
+  const descriptorOperationIds = new Set(descriptorEntries.map((entry) => entry.id.replace(/^descriptor-op-/, '')));
+  descriptorEntries.forEach((entry) => {
+    if(!grouped.has(entry.category)) grouped.set(entry.category, []);
+    grouped.get(entry.category).push({providerId: itemData?.cde_provider_id || '', objectTypes: [itemData?._type || 'object'],
+      ...entry});
+  });
   menus.forEach((menu)=>{
+    if(descriptorOperationIds.has(String(menu.commandId).split('.').at(-1))) return;
     const category = menu.category || 'object';
     if(!grouped.has(category)) grouped.set(category, []);
     grouped.get(category).push({

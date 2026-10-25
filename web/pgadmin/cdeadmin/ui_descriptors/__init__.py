@@ -100,6 +100,7 @@ class UIDescriptorService:
                 'operations': (_load_json(folder / 'operations.json') or {}).get('operations', []),
                 'navigator': _load_json(folder / 'navigator.json') or {},
                 'omitted_families': (_load_json(folder / 'omitted_families.json') or {}).get('omitted', []),
+                'options': _load_json(folder / 'options.json') or {'dialect': {}, 'catalog': {}},
                 'forms': {},
             }
             for path in sorted((folder / 'forms').glob('*.form.json')):

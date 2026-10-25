@@ -108,6 +108,12 @@ def test_kind_index_points_at_forms_and_operations(service):
     assert any(op['operation_id'] == 'backup_logical' for op in database['operations'])
 
 
+def test_bundle_carries_option_sources(service):
+    bundle = service.engine('mysql')
+    assert 'column_types' in bundle['options']['dialect']
+    assert bundle['options']['catalog']['tablespaces']['resource_kind'] == 'tablespace'
+
+
 def test_unknown_engine_raises(service):
     with pytest.raises(UIDescriptorError):
         service.engine('no-such-engine')

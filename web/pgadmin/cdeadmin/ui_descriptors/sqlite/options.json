@@ -1,0 +1,57 @@
+{
+  "schema": "cdeadmin.ui-options.v1",
+  "engine": "sqlite",
+  "dialect": {
+    "column_types": [
+      "INTEGER",
+      "REAL",
+      "TEXT",
+      "BLOB",
+      "NUMERIC",
+      "BOOLEAN",
+      "DATE",
+      "DATETIME",
+      "VARCHAR",
+      "CHAR",
+      "DECIMAL"
+    ],
+    "index_methods": [],
+    "routine_languages": [],
+    "privileges": {},
+    "trigger_events": {
+      "table": [
+        "INSERT",
+        "UPDATE",
+        "DELETE"
+      ],
+      "view": [
+        "INSERT",
+        "UPDATE",
+        "DELETE"
+      ]
+    },
+    "system_privileges": [],
+    "auth_plugins": [],
+    "grantable_kinds": [],
+    "modules": [
+      "fts5",
+      "fts4",
+      "rtree",
+      "geopoly",
+      "csv",
+      "dbstat"
+    ]
+  },
+  "catalog": {
+    "databases": {
+      "resource_kind": "database"
+    },
+    "tables": {
+      "resource_kind": "table"
+    },
+    "collations": {
+      "resource_kind": "collation"
+    }
+  },
+  "notes": "Static dialect lists are drafts for the tested version; the engine stream verifies them against the dialect contract. catalog entries resolve at runtime from the endpoint's resources of the named kind."
+}

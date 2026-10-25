@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cdeadmin.ui-options.v1",
+  "title": "Option sources for select, multiselect and reference fields",
+  "type": "object",
+  "required": [
+    "schema",
+    "engine",
+    "dialect",
+    "catalog"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "cdeadmin.ui-options.v1"
+    },
+    "engine": {
+      "type": "string"
+    },
+    "dialect": {
+      "type": "object",
+      "description": "Static lists keyed by the last segment of option_values_path [\"dialect\", <key>]; a key may hold a list or a map keyed by a draft field value (privileges by object type, trigger_events by scope).",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "value",
+                    "label"
+                  ],
+                  "properties": {
+                    "value": {},
+                    "label": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "$ref": "form.schema.json#/$defs/version_gate"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array"
+            }
+          }
+        ]
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "description": "Live lists keyed by option_values_path [\"catalog\", <key>], each resolved from the connected endpoint's resources of one kind.",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "resource_kind"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "resource_kind": {
+            "type": "string"
+          },
+          "label": {
+            "enum": [
+              "display_name",
+              "resource_id"
+            ]
+          },
+          "value": {
+            "enum": [
+              "display_name",
+              "resource_id",
+              "authority_path"
+            ]
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}
