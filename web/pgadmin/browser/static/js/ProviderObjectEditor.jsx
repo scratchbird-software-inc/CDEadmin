@@ -133,8 +133,7 @@ export function openDescriptorOperation(itemData, item, operation) {
     mount.remove();
   };
   const run = async () => {
-    const target = itemData.cde_resource_id ?
-      await post({action: 'resource_inspect', request: {resource_id: itemData.cde_resource_id}}).catch(() => null) : null;
+    const target = await operationTarget(post, itemData);
     const calls = visualAdminCalls(post, {resourceKind: itemData.cde_resource_kind, operationId: operation.operation_id, target});
     root.render(<Theme><OperationDialog open operation={operation} targetName={itemData.label || itemData._label}
       plan={({draft}) => calls.plan({draft})} apply={({plan}) => calls.apply({plan})}
@@ -142,6 +141,22 @@ export function openDescriptorOperation(itemData, item, operation) {
   };
   run();
   return true;
+}
+
+/**
+ * The provider resource an operation targets. A tree resource inspects
+ * itself; a database node carries a registration target id, not a provider
+ * resource id, so it resolves to the one database resource of the page
+ * scoped to that target (the legacy workspace resolves it the same way).
+ */
+export async function operationTarget(post, itemData) {
+  if(itemData.cde_resource_id) {
+    return post({action: 'resource_inspect', request: {resource_id: itemData.cde_resource_id}}).catch(() => null);
+  }
+  if(itemData._type !== 'cde_database_target') return null;
+  const page = await post({action: 'resource_page', request: {}}).catch(() => null);
+  const databases = (page?.items || []).filter((row) => row.resource_kind === 'database');
+  return databases.length === 1 ? databases[0] : null;
 }
 
 function kindTitle(bundle, kind) {

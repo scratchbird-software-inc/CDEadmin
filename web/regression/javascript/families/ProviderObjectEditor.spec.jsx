@@ -1,7 +1,7 @@
 import pgAdmin from 'sources/pgadmin';
 import {providerTreeContextActions} from 'pgbrowser/ProviderContextMenu';
 import {
-  familyEditorContextActions, providerEndpointUrl, tryOpenFamilyEditor,
+  familyEditorContextActions, operationTarget, providerEndpointUrl, tryOpenFamilyEditor,
 } from 'pgbrowser/ProviderObjectEditor';
 import {descriptorClient, resetDescriptorClient} from '../../../pgadmin/static/js/cdeadmin_ui/objects';
 import {loadEngineBundle} from './familyFixtures';
@@ -101,5 +101,20 @@ describe('family editor tree glue', () => {
     await primeBundle('firebird');
     expect(familyEditorContextActions(tableData, 'table')).toEqual([]);
     expect(await tryOpenFamilyEditor(tableData, 'table')).toBe(false);
+  });
+});
+
+describe('operation targets', () => {
+  it('inspects a tree resource and resolves a database node to its one database resource', async () => {
+    const calls = [];
+    const post = async (payload) => {
+      calls.push(payload.action);
+      if(payload.action === 'resource_inspect') return {resource_id: payload.request.resource_id, resource_kind: 'table'};
+      return {items: [{resource_id: 'database:main', resource_kind: 'database'}, {resource_id: 'table:t', resource_kind: 'table'}]};
+    };
+    expect(await operationTarget(post, tableData)).toEqual({resource_id: 'tbl-1', resource_kind: 'table'});
+    expect(await operationTarget(post, databaseData)).toEqual({resource_id: 'database:main', resource_kind: 'database'});
+    expect(await operationTarget(post, groupData)).toBeNull();
+    expect(calls).toEqual(['resource_inspect', 'resource_page']);
   });
 });
