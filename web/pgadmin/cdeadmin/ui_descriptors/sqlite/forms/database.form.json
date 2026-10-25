@@ -6,10 +6,205 @@
     "database",
     "attached-database"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "SQLite",
-  "omitted_tabs": [],
+  "omitted_tabs": [
+    {
+      "tab": "Security",
+      "reason": "no users or privileges"
+    }
+  ],
   "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Database filename",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "page_size",
+      "label": "Page size",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "default": "4096",
+      "options": [
+        {
+          "value": "512",
+          "label": "512"
+        },
+        {
+          "value": "1024",
+          "label": "1024"
+        },
+        {
+          "value": "2048",
+          "label": "2048"
+        },
+        {
+          "value": "4096",
+          "label": "4096"
+        },
+        {
+          "value": "8192",
+          "label": "8192"
+        },
+        {
+          "value": "16384",
+          "label": "16384"
+        },
+        {
+          "value": "32768",
+          "label": "32768"
+        },
+        {
+          "value": "65536",
+          "label": "65536"
+        }
+      ]
+    },
+    {
+      "field_id": "encoding",
+      "label": "Text encoding",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "default": "UTF-8",
+      "options": [
+        {
+          "value": "UTF-8",
+          "label": "UTF-8"
+        },
+        {
+          "value": "UTF-16",
+          "label": "UTF-16 (native byte order)"
+        },
+        {
+          "value": "UTF-16le",
+          "label": "UTF-16 little-endian"
+        },
+        {
+          "value": "UTF-16be",
+          "label": "UTF-16 big-endian"
+        }
+      ]
+    },
+    {
+      "field_id": "auto_vacuum",
+      "label": "Auto-vacuum mode",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "default": "NONE",
+      "options": [
+        {
+          "value": "NONE",
+          "label": "None"
+        },
+        {
+          "value": "FULL",
+          "label": "Full"
+        },
+        {
+          "value": "INCREMENTAL",
+          "label": "Incremental"
+        }
+      ]
+    },
+    {
+      "field_id": "application_id",
+      "label": "Application ID",
+      "tab": "Options",
+      "control": "number",
+      "required": false,
+      "default": 0
+    },
+    {
+      "field_id": "user_version",
+      "label": "User version",
+      "tab": "Options",
+      "control": "number",
+      "required": false,
+      "default": 0
+    },
+    {
+      "field_id": "journal_mode",
+      "label": "Journal mode",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "options": [
+        {
+          "value": "DELETE",
+          "label": "Delete"
+        },
+        {
+          "value": "TRUNCATE",
+          "label": "Truncate"
+        },
+        {
+          "value": "PERSIST",
+          "label": "Persist"
+        },
+        {
+          "value": "MEMORY",
+          "label": "Memory"
+        },
+        {
+          "value": "WAL",
+          "label": "Write-ahead log"
+        },
+        {
+          "value": "OFF",
+          "label": "Off"
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "synchronous",
+      "label": "Synchronous mode",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "options": [
+        {
+          "value": "OFF",
+          "label": "Off"
+        },
+        {
+          "value": "NORMAL",
+          "label": "Normal"
+        },
+        {
+          "value": "FULL",
+          "label": "Full"
+        },
+        {
+          "value": "EXTRA",
+          "label": "Extra"
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "run_vacuum",
+      "label": "Rebuild the database with VACUUM",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "help": "Required when changing page size or auto-vacuum mode on an existing database.",
+      "modes": [
+        "alter"
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. attached-database: provider exposes no create form (inspect)"
 }

@@ -19,44 +19,54 @@
       "form": "forms/table.form.json",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "drop",
-          "tier": 1
-        },
-        {
-          "operation_id": "recreate",
-          "tier": 1
-        },
-        {
-          "operation_id": "reorder_columns",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "insert",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "update",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "delete",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1,
+          "mutation_class": "destructive"
         },
         {
           "operation_id": "grant",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "revoke",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -66,32 +76,59 @@
       "form": "forms/view.form.json",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "create_or_alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "recreate",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "insert",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "update",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "delete",
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1,
+          "mutation_class": "destructive"
         },
         {
           "operation_id": "grant",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "revoke",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -101,16 +138,24 @@
       "form": "forms/index.form.json",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "alter",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
         }
       ]
     },
@@ -121,32 +166,44 @@
       "form": "forms/routine.form.json",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "create_or_alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "recreate",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1,
+          "mutation_class": "destructive"
         },
         {
           "operation_id": "grant",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "revoke",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -157,32 +214,44 @@
       "form": "forms/routine.form.json",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "create_or_alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "recreate",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1,
+          "mutation_class": "destructive"
         },
         {
           "operation_id": "grant",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "revoke",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -193,32 +262,49 @@
       "form": "forms/routine.form.json",
       "operations": [
         {
-          "operation_id": "create",
-          "tier": 1
-        },
-        {
           "operation_id": "alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "drop",
-          "tier": 1
-        },
-        {
-          "operation_id": "create_body",
-          "tier": 1
-        },
-        {
-          "operation_id": "replace_body",
-          "tier": 1
-        },
-        {
-          "operation_id": "drop_body",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "comment",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -227,20 +313,39 @@
       "family": "engine_object",
       "operations": [
         {
-          "operation_id": "create",
-          "tier": 1
-        },
-        {
           "operation_id": "alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "comment",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -249,24 +354,44 @@
       "family": "engine_object",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "create_or_alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "recreate",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -276,24 +401,34 @@
       "form": "forms/trigger.form.json",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "create_or_alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "recreate",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1,
+          "mutation_class": "destructive"
         }
       ]
     },
@@ -304,40 +439,49 @@
       "form": "forms/sequence.form.json",
       "operations": [
         {
-          "operation_id": "create",
-          "tier": 1
-        },
-        {
           "operation_id": "alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "create_or_alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "recreate",
-          "tier": 1
-        },
-        {
-          "operation_id": "set_current",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "comment",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1,
+          "mutation_class": "destructive"
         },
         {
           "operation_id": "grant",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "revoke",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -348,20 +492,29 @@
       "form": "forms/type.form.json",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "alter",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "rename",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
         }
       ]
     },
@@ -370,12 +523,19 @@
       "family": "engine_object",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "alter",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "comment",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -384,16 +544,24 @@
       "family": "engine_object",
       "operations": [
         {
-          "operation_id": "create",
-          "tier": 1
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
         },
         {
-          "operation_id": "comment",
-          "tier": 1
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -402,16 +570,24 @@
       "family": "engine_object",
       "operations": [
         {
+          "operation_id": "comment",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
-          "operation_id": "comment",
-          "tier": 1
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
         }
       ]
     },
@@ -422,24 +598,34 @@
       "form": "forms/role.form.json",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "create_or_alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "recreate",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "recreate",
+          "tier": 1,
+          "mutation_class": "destructive"
         }
       ]
     },
@@ -450,28 +636,34 @@
       "form": "forms/role.form.json",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "grant",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "revoke",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
-          "operation_id": "configure_admin_mapping",
-          "tier": 1
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
         }
       ]
     },
@@ -482,12 +674,19 @@
       "form": "forms/role.form.json",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "grant",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "revoke",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -496,24 +695,34 @@
       "family": "engine_object",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "create_or_alter",
-          "tier": 1
-        },
-        {
-          "operation_id": "comment",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -522,16 +731,34 @@
       "family": "engine_object",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "alter",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "create_or_alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -541,16 +768,24 @@
       "form": "forms/database.form.json",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "alter",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
         }
       ]
     },
@@ -560,11 +795,18 @@
       "operations": [
         {
           "operation_id": "create",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "admin"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
         }
       ]
     },
@@ -573,8 +815,14 @@
       "family": "engine_object",
       "operations": [
         {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
           "operation_id": "alter",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "write"
         }
       ]
     },
@@ -584,16 +832,114 @@
       "form": "forms/server.form.json",
       "operations": [
         {
-          "operation_id": "create",
-          "tier": 1
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "column",
+      "family": "engine_object",
+      "title": "Column",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
         },
         {
-          "operation_id": "alter",
-          "tier": 1
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "write"
         },
         {
           "operation_id": "drop",
-          "tier": 1
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "comment",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1,
+          "mutation_class": "admin"
+        }
+      ]
+    },
+    {
+      "resource_kind": "constraint",
+      "family": "engine_object",
+      "title": "Constraint",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "storage-file",
+      "family": "engine_object",
+      "title": "Storage file",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "configuration",
+      "family": "engine_object",
+      "title": "Effective configuration setting",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "service-operation",
+      "family": "engine_object",
+      "title": "Service operation",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
         }
       ]
     }

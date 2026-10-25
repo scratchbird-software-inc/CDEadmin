@@ -5,10 +5,69 @@
   "resource_kinds": [
     "domain"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "Firebird",
   "omitted_tabs": [],
   "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "data_type",
+      "label": "Base data type",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "default",
+      "label": "Default expression",
+      "tab": "General",
+      "control": "text",
+      "required": false
+    },
+    {
+      "field_id": "not_null",
+      "label": "Not null",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "check",
+      "label": "Check expression",
+      "tab": "Constraints",
+      "control": "text",
+      "required": false
+    },
+    {
+      "field_id": "drop_constraint",
+      "label": "Drop check constraint",
+      "tab": "Constraints",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "drop_default",
+      "label": "Drop default",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
 }

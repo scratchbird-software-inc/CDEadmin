@@ -5,10 +5,128 @@
   "resource_kinds": [
     "index"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "Firebird",
   "omitted_tabs": [],
   "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "columns",
+      "label": "Indexed columns",
+      "tab": "General",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Indexed columns",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": true,
+      "visible_when": {
+        "field": "index_kind",
+        "equals": "columns"
+      }
+    },
+    {
+      "field_id": "unique",
+      "label": "Unique index",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "direction",
+      "label": "Index direction",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "default": "ASCENDING",
+      "options": [
+        {
+          "value": "ASCENDING",
+          "label": "Ascending"
+        },
+        {
+          "value": "DESCENDING",
+          "label": "Descending"
+        }
+      ]
+    },
+    {
+      "field_id": "expression",
+      "label": "Computed expression",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "visible_when": {
+        "field": "index_kind",
+        "equals": "expression"
+      }
+    },
+    {
+      "field_id": "condition",
+      "label": "Partial index predicate",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Optional expression after WHERE."
+    },
+    {
+      "field_id": "active",
+      "label": "Active",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "index_kind",
+      "label": "Index definition",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "default": "columns",
+      "options": [
+        {
+          "value": "columns",
+          "label": "Columns"
+        },
+        {
+          "value": "expression",
+          "label": "Expression"
+        }
+      ]
+    },
+    {
+      "field_id": "refresh_statistics",
+      "label": "Recalculate index statistics",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
 }

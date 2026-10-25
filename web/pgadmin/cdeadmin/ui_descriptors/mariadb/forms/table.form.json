@@ -5,10 +5,196 @@
   "resource_kinds": [
     "table"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "MariaDB",
   "omitted_tabs": [],
-  "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "gaps": [
+    {
+      "concept": "Table options (ENGINE, CHARACTER SET, COLLATE, ROW_FORMAT, AUTO_INCREMENT, COMMENT, TRANSACTIONAL, PAGE_CHECKSUM, ENCRYPTED)",
+      "reason": "table.create exposes only name/parent/columns/constraints; MariaDB needs the equivalent of mysql_table_options.py",
+      "tracking": "MA-TABLE-OPTIONS"
+    },
+    {
+      "concept": "System-versioned tables (WITH SYSTEM VERSIONING, period columns)",
+      "reason": "not a resource kind or field today; appears only in schema validation/data application",
+      "tracking": "MA-SYSTEM-VERSIONING"
+    },
+    {
+      "concept": "Partitions tab",
+      "reason": "partition_by/add_partitions/coalesce_partitions/remove_partitioning exist as operations; fold into the Partitions tab per design 6.1",
+      "tracking": "MA-PARTITIONS"
+    },
+    {
+      "concept": "Column grid depth",
+      "reason": "column records carry only name/type/nullable/default/unique/primary_key; add length/precision/scale, unsigned, charset/collation, auto_increment, generated expression, comment"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Parent database/schema",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Use a qualified database or schema name where needed."
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns",
+      "tab": "Columns",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Column name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Native data type",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "nullable",
+          "label": "Nullable",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "default",
+          "label": "Default expression",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "unique",
+          "label": "Unique",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "primary_key",
+          "label": "Primary key",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "required": true,
+      "help": "Array of name, type, nullable, default, unique and primary_key properties."
+    },
+    {
+      "field_id": "constraints",
+      "label": "Table constraints",
+      "tab": "Constraints",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Constraint name",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "kind",
+          "label": "Constraint type",
+          "control": "select",
+          "required": true,
+          "default": "PRIMARY KEY",
+          "options": [
+            {
+              "value": "PRIMARY KEY",
+              "label": "Primary Key"
+            },
+            {
+              "value": "UNIQUE",
+              "label": "Unique"
+            },
+            {
+              "value": "FOREIGN KEY",
+              "label": "Foreign Key"
+            },
+            {
+              "value": "CHECK",
+              "label": "Check"
+            }
+          ]
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Columns",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "required": true,
+          "visible_when": {
+            "field": "kind",
+            "in": [
+              "PRIMARY KEY",
+              "UNIQUE",
+              "FOREIGN KEY"
+            ]
+          }
+        },
+        {
+          "field_id": "references_table",
+          "label": "Referenced table",
+          "control": "text",
+          "required": true,
+          "visible_when": {
+            "field": "kind",
+            "equals": "FOREIGN KEY"
+          }
+        },
+        {
+          "field_id": "references_columns",
+          "label": "Referenced columns",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Referenced columns",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "required": true,
+          "visible_when": {
+            "field": "kind",
+            "equals": "FOREIGN KEY"
+          }
+        },
+        {
+          "field_id": "expression",
+          "label": "Check expression",
+          "control": "text",
+          "required": true,
+          "visible_when": {
+            "field": "kind",
+            "equals": "CHECK"
+          }
+        }
+      ],
+      "required": false,
+      "help": "Structured PRIMARY KEY, UNIQUE, FOREIGN KEY or CHECK constraints."
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields."
 }

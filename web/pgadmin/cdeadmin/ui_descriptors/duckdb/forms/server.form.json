@@ -5,10 +5,50 @@
   "resource_kinds": [
     "server"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "DuckDB",
   "omitted_tabs": [],
-  "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "gaps": [
+    {
+      "concept": "server.config",
+      "reason": "provider control 'json' needs a typed control"
+    },
+    {
+      "concept": "server.attached_databases",
+      "reason": "provider control 'json' needs a typed control"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "read_only",
+      "label": "Open database read-only",
+      "tab": "Connection",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "config",
+      "label": "Connection configuration (JSON object)",
+      "tab": "Engine",
+      "control": "text",
+      "required": false,
+      "default": {}
+    },
+    {
+      "field_id": "attached_databases",
+      "label": "Attached databases",
+      "tab": "Engine",
+      "control": "text",
+      "required": false
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for duckdb-native. Field ids are the registration contract's own. Review tab/group placement."
 }

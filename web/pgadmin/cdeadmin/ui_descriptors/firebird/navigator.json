@@ -1,7 +1,293 @@
 {
   "schema": "cdeadmin.ui-navigator.v1",
   "engine": "firebird",
-  "sort": "alphabetical",
-  "groups": [],
-  "kind_icons": {}
+  "sort": "declared",
+  "direct_children": [
+    "table",
+    "view"
+  ],
+  "groups": [
+    {
+      "group_id": "monitoring",
+      "title": "Monitoring",
+      "icon_key": "folder.monitoring",
+      "kinds": [
+        "metric"
+      ],
+      "order": 1
+    },
+    {
+      "group_id": "programming",
+      "title": "Programming",
+      "icon_key": "folder.programming",
+      "kinds": [],
+      "order": 2
+    },
+    {
+      "group_id": "procedures",
+      "title": "Procedures",
+      "under": "programming",
+      "kinds": [
+        "procedure"
+      ]
+    },
+    {
+      "group_id": "domains",
+      "title": "Domains",
+      "under": "programming",
+      "kinds": [
+        "domain"
+      ]
+    },
+    {
+      "group_id": "filters",
+      "title": "Filters",
+      "under": "programming",
+      "kinds": [
+        "blob-filter"
+      ]
+    },
+    {
+      "group_id": "exceptions",
+      "title": "Exceptions",
+      "under": "programming",
+      "kinds": [
+        "exception"
+      ]
+    },
+    {
+      "group_id": "external-functions",
+      "title": "External functions",
+      "under": "programming",
+      "kinds": [
+        "external-function"
+      ]
+    },
+    {
+      "group_id": "functions",
+      "title": "Functions",
+      "under": "programming",
+      "kinds": [
+        "function"
+      ]
+    },
+    {
+      "group_id": "packages",
+      "title": "Packages",
+      "under": "programming",
+      "kinds": [
+        "package"
+      ]
+    },
+    {
+      "group_id": "sequences",
+      "title": "Sequences",
+      "under": "programming",
+      "kinds": [
+        "sequence"
+      ]
+    },
+    {
+      "group_id": "security",
+      "title": "Security",
+      "icon_key": "folder.security",
+      "kinds": [],
+      "order": 3
+    },
+    {
+      "group_id": "users",
+      "title": "Users",
+      "under": "security",
+      "kinds": [
+        "user"
+      ]
+    },
+    {
+      "group_id": "roles",
+      "title": "Roles",
+      "under": "security",
+      "kinds": [
+        "role"
+      ]
+    },
+    {
+      "group_id": "grants",
+      "title": "Grants",
+      "under": "security",
+      "kinds": [
+        "privilege"
+      ]
+    },
+    {
+      "group_id": "authentication-mappings",
+      "title": "Authentication mappings",
+      "under": "security",
+      "kinds": [
+        "authentication-mapping"
+      ]
+    },
+    {
+      "group_id": "global-authentication-mappings",
+      "title": "Global authentication mappings",
+      "under": "security",
+      "kinds": [
+        "global-authentication-mapping"
+      ]
+    },
+    {
+      "group_id": "system",
+      "title": "System",
+      "icon_key": "folder.system",
+      "kinds": [],
+      "order": 4
+    },
+    {
+      "group_id": "configuration",
+      "title": "Configuration",
+      "under": "system",
+      "kinds": [
+        "configuration"
+      ]
+    },
+    {
+      "group_id": "replication",
+      "title": "Replication",
+      "under": "system",
+      "kinds": [
+        "publication"
+      ]
+    },
+    {
+      "group_id": "database-triggers",
+      "title": "Database triggers",
+      "under": "system",
+      "kinds": [
+        "trigger"
+      ]
+    },
+    {
+      "group_id": "service",
+      "title": "Service",
+      "under": "system",
+      "kinds": [
+        "service-operation"
+      ]
+    },
+    {
+      "group_id": "shadows",
+      "title": "Shadows",
+      "under": "system",
+      "kinds": [
+        "shadow"
+      ]
+    },
+    {
+      "group_id": "storage",
+      "title": "Storage",
+      "under": "system",
+      "kinds": [
+        "storage-file"
+      ]
+    },
+    {
+      "group_id": "character-sets",
+      "title": "Character sets",
+      "under": "system",
+      "kinds": [
+        "character-set"
+      ]
+    },
+    {
+      "group_id": "collations",
+      "title": "Collations",
+      "under": "system",
+      "kinds": [
+        "collation"
+      ]
+    },
+    {
+      "group_id": "system-tables",
+      "title": "System tables",
+      "under": "system",
+      "kinds": []
+    }
+  ],
+  "name_rules": [
+    {
+      "kinds": [
+        "table",
+        "view",
+        "metric"
+      ],
+      "prefix": "MON$",
+      "group_id": "monitoring"
+    },
+    {
+      "kinds": [
+        "table",
+        "view"
+      ],
+      "prefix": "SEC$",
+      "group_id": "security"
+    },
+    {
+      "kinds": [
+        "table",
+        "view"
+      ],
+      "prefix": "RDB$",
+      "group_id": "system-tables"
+    }
+  ],
+  "system_object_group": "system-tables",
+  "resource_children": {
+    "table": [
+      "column",
+      "index",
+      "trigger",
+      "constraint"
+    ],
+    "view": [
+      "column",
+      "trigger"
+    ],
+    "column": [
+      "constraint"
+    ],
+    "package": [
+      "procedure",
+      "function"
+    ]
+  },
+  "kind_icons": {
+    "table": "object.table",
+    "view": "object.view",
+    "column": "object.column",
+    "index": "object.index",
+    "trigger": "object.trigger",
+    "constraint": "object.constraint",
+    "domain": "object.domain",
+    "sequence": "object.sequence",
+    "procedure": "object.procedure",
+    "function": "object.function",
+    "package": "object.package",
+    "exception": "object.exception",
+    "external-function": "object.external-function",
+    "blob-filter": "object.blob-filter",
+    "user": "object.user",
+    "role": "object.role",
+    "privilege": "object.privilege",
+    "shadow": "object.shadow",
+    "storage-file": "object.storage-file",
+    "configuration": "object.configuration",
+    "publication": "object.publication",
+    "character-set": "object.character-set",
+    "collation": "object.collation",
+    "metric": "object.metric",
+    "service-operation": "object.service-operation",
+    "authentication-mapping": "object.authentication-mapping",
+    "global-authentication-mapping": "object.global-authentication-mapping",
+    "database": "object.database",
+    "server": "object.server"
+  }
 }

@@ -5,10 +5,61 @@
   "resource_kinds": [
     "index"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "MariaDB",
   "omitted_tabs": [],
-  "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "gaps": [
+    {
+      "concept": "Index kind (BTREE/HASH/FULLTEXT/SPATIAL), comment, visibility",
+      "reason": "index.create is name/parent/table/columns/unique only"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Parent database/schema",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Use a qualified database or schema name where needed."
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "columns",
+      "label": "Indexed columns",
+      "tab": "General",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Indexed columns",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": true
+    },
+    {
+      "field_id": "unique",
+      "label": "Unique index",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
 }

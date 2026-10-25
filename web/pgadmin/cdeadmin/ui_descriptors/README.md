@@ -26,6 +26,24 @@ ui_descriptors/
     forms/<family>.form.json   the fields this engine shows on each canonical tab
 ```
 
+## Regenerating a first draft
+
+Two tools turn the provider's live form contracts into draft descriptors so
+no field id, option list or visibility rule has to be retyped:
+
+```text
+python3 tools/dump_provider_forms.py --out /tmp/forms          # effective forms per engine
+python3 tools/draft_ui_descriptors.py --forms /tmp/forms --engine firebird --write
+```
+
+The drafter places fields on canonical tabs by id, turns array/object editors
+into grids, downgrades bare JSON boxes to `keyvalue` and lists each one under
+`gaps` as `typed_from_json`, classifies non-lifecycle operations into tiers
+and menu categories, and adds any provider kind the seed list missed as an
+Engine object. It never touches a form whose status is `complete`, and it
+leaves `navigator.json` and `omitted_families.json` alone. Re-run it after a
+provider gains a field; then do the review steps below.
+
 ## How a backend engine stream fills it in
 
 1. Open `families/<family>.family.json` to see the tabs and the primitive each

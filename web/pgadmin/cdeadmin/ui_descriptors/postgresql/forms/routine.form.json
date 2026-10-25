@@ -7,10 +7,982 @@
     "procedure",
     "aggregate"
   ],
-  "status": "pending",
+  "status": "draft",
   "engine_tab_title": "PostgreSQL",
   "omitted_tabs": [],
-  "gaps": [],
-  "fields": [],
-  "notes": "Populate from the provider's existing _form()/form() field ids (keep backend_field_id when renaming). See ui_descriptors/README.md and docs/en_US/ui_unified_design.rst section 6."
+  "gaps": [
+    {
+      "concept": "Parameters tab holds two grids",
+      "reason": "pgAdmin's 'Parameters' group is SET configuration variables while the skeleton's Parameters tab is the argument grid; both are listed on Parameters in separate groups. Decide whether variables move to Options or Engine.",
+      "tracking": "ui_unified_design open decisions"
+    },
+    {
+      "concept": "Aggregate create/alter",
+      "reason": "AggregateSchema is read-only in pgAdmin (no CREATE AGGREGATE dialog); every aggregate field is readonly."
+    },
+    {
+      "concept": "EDB SPL rules",
+      "reason": "isLessThan95ORNonSPL/isLessThan96ORNonSPL disable volatility/strict/cost/leakproof/parallel for procedures unless EDB SPL; ppas is out of beta scope."
+    },
+    {
+      "concept": "Return type control switch",
+      "reason": "prorettypename is a select unless customreturn is on, then free text; typed select."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "control": "select",
+      "tab": "General",
+      "required": true,
+      "default": "function",
+      "options": [
+        {
+          "value": "function",
+          "label": "Function"
+        },
+        {
+          "value": "procedure",
+          "label": "Procedure"
+        },
+        {
+          "value": "aggregate",
+          "label": "Aggregate"
+        }
+      ],
+      "help": "function/procedure share FunctionSchema (procedure.js passes type procedure); aggregate uses the read-only AggregateSchema."
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "control": "text",
+      "tab": "General",
+      "required": true,
+      "help": "Aggregates are read-only in pgAdmin."
+    },
+    {
+      "field_id": "oid",
+      "label": "OID",
+      "control": "text",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "funcowner",
+      "label": "Owner",
+      "control": "reference",
+      "tab": "General",
+      "reference_kind": "role",
+      "required": true,
+      "native_keyword": "OWNER",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
+    },
+    {
+      "field_id": "pronamespace",
+      "label": "Schema",
+      "control": "reference",
+      "tab": "General",
+      "reference_kind": "schema",
+      "required": true,
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
+    },
+    {
+      "field_id": "owner",
+      "label": "Owner",
+      "control": "text",
+      "tab": "General",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      }
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "control": "text",
+      "tab": "General",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      }
+    },
+    {
+      "field_id": "sysfunc",
+      "label": "System function?",
+      "control": "boolean",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "sysproc",
+      "label": "System procedure?",
+      "control": "boolean",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "procedure"
+      },
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "is_sys_obj",
+      "label": "System aggregate?",
+      "control": "boolean",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "control": "text",
+      "tab": "General",
+      "native_keyword": "COMMENT ON"
+    },
+    {
+      "field_id": "arguments",
+      "label": "Arguments",
+      "control": "grid",
+      "tab": "Parameters",
+      "group": "Arguments",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      },
+      "help": "Rows can be added or removed only while the routine is new. Default is disabled for OUT/INOUT arguments.",
+      "columns": [
+        {
+          "field_id": "argid",
+          "label": "Argument id",
+          "control": "text",
+          "help": "Hidden."
+        },
+        {
+          "field_id": "argtype",
+          "label": "Data type",
+          "control": "select",
+          "required": true,
+          "option_values_path": [
+            "catalog",
+            "types"
+          ]
+        },
+        {
+          "field_id": "argmode",
+          "label": "Mode",
+          "control": "select",
+          "default": "IN",
+          "options": [
+            {
+              "value": "IN",
+              "label": "IN"
+            },
+            {
+              "value": "OUT",
+              "label": "OUT"
+            },
+            {
+              "value": "INOUT",
+              "label": "INOUT"
+            },
+            {
+              "value": "VARIADIC",
+              "label": "VARIADIC"
+            }
+          ]
+        },
+        {
+          "field_id": "argname",
+          "label": "Argument name",
+          "control": "text"
+        },
+        {
+          "field_id": "argdefval",
+          "label": "Default",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "field_id": "variables",
+      "label": "Configuration parameters",
+      "control": "grid",
+      "tab": "Parameters",
+      "native_keyword": "ALTER ... SET",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "select",
+          "required": true,
+          "option_values_path": [
+            "catalog",
+            "configuration_parameters"
+          ],
+          "help": "pgAdmin loads the list from the node's vopts endpoint (pg_settings); the value cell type follows the parameter's vartype (bool/enum/integer/real/string)."
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "group": "Configuration (SET)",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
+    },
+    {
+      "field_id": "pronargs",
+      "label": "Argument count",
+      "control": "text",
+      "tab": "Definition",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      },
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "proargs",
+      "label": "Arguments",
+      "control": "text",
+      "tab": "Definition",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      },
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "proargtypenames",
+      "label": "Signature arguments",
+      "control": "text",
+      "tab": "Definition",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      },
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "customreturn",
+      "label": "Custom return type?",
+      "control": "boolean",
+      "tab": "Definition",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "help": "When on, the return type is typed as free text instead of picked from the type list."
+    },
+    {
+      "field_id": "prorettypename",
+      "label": "Return type",
+      "control": "select",
+      "tab": "Definition",
+      "required": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "option_values_path": [
+        "catalog",
+        "types"
+      ],
+      "native_keyword": "RETURNS",
+      "help": "Read-only once the function exists (shown as text in edit/properties). Free text when customreturn is on."
+    },
+    {
+      "field_id": "lanname",
+      "label": "Language",
+      "control": "select",
+      "tab": "Definition",
+      "required": true,
+      "option_values_path": [
+        "catalog",
+        "languages"
+      ],
+      "native_keyword": "LANGUAGE",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      },
+      "help": "Procedures need PostgreSQL 11+."
+    },
+    {
+      "field_id": "dependsonextensions",
+      "label": "Depends on extensions",
+      "control": "multiselect",
+      "tab": "Definition",
+      "version": {
+        "minimum": "13"
+      },
+      "option_values_path": [
+        "catalog",
+        "extensions"
+      ],
+      "native_keyword": "ALTER ... DEPENDS ON EXTENSION",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
+    },
+    {
+      "field_id": "probin",
+      "label": "Object file",
+      "control": "text",
+      "tab": "Definition",
+      "default": "$libdir/",
+      "native_keyword": "AS 'obj_file'",
+      "visible_when": {
+        "field": "lanname",
+        "equals": "c"
+      },
+      "help": "Required for language c."
+    },
+    {
+      "field_id": "prosrc_c",
+      "label": "Link symbol",
+      "control": "text",
+      "tab": "Definition",
+      "native_keyword": "AS 'obj_file', 'link_symbol'",
+      "visible_when": {
+        "field": "lanname",
+        "equals": "c"
+      },
+      "help": "Required for language c."
+    },
+    {
+      "field_id": "prosrc",
+      "label": "Code",
+      "control": "code",
+      "tab": "Definition",
+      "language": "plpgsql",
+      "required": true,
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      },
+      "help": "Hidden for language c (object file + link symbol are used instead)."
+    },
+    {
+      "field_id": "provolatile",
+      "label": "Volatility",
+      "control": "select",
+      "tab": "Options",
+      "native_keyword": "VOLATILE | STABLE | IMMUTABLE",
+      "options": [
+        {
+          "value": "v",
+          "label": "VOLATILE"
+        },
+        {
+          "value": "s",
+          "label": "STABLE"
+        },
+        {
+          "value": "i",
+          "label": "IMMUTABLE"
+        }
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      },
+      "help": "For procedures only on EDB SPL 9.5+."
+    },
+    {
+      "field_id": "proretset",
+      "label": "Returns a set?",
+      "control": "boolean",
+      "tab": "Options",
+      "native_keyword": "RETURNS SETOF",
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "help": "Read-only once the function exists."
+    },
+    {
+      "field_id": "proisstrict",
+      "label": "Strict?",
+      "control": "boolean",
+      "tab": "Options",
+      "native_keyword": "STRICT",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
+    },
+    {
+      "field_id": "prosecdef",
+      "label": "Security of definer?",
+      "control": "boolean",
+      "tab": "Options",
+      "native_keyword": "SECURITY DEFINER",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
+    },
+    {
+      "field_id": "proiswindow",
+      "label": "Window?",
+      "control": "boolean",
+      "tab": "Options",
+      "native_keyword": "WINDOW",
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "help": "Read-only once the function exists."
+    },
+    {
+      "field_id": "proparallel",
+      "label": "Parallel",
+      "control": "select",
+      "tab": "Options",
+      "version": {
+        "minimum": "9.6"
+      },
+      "native_keyword": "PARALLEL",
+      "options": [
+        {
+          "value": "u",
+          "label": "UNSAFE"
+        },
+        {
+          "value": "r",
+          "label": "RESTRICTED"
+        },
+        {
+          "value": "s",
+          "label": "SAFE"
+        }
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
+    },
+    {
+      "field_id": "procost",
+      "label": "Estimated cost",
+      "control": "number",
+      "tab": "Options",
+      "native_keyword": "COST",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
+    },
+    {
+      "field_id": "prorows",
+      "label": "Estimated rows",
+      "control": "number",
+      "tab": "Options",
+      "native_keyword": "ROWS",
+      "default": 0,
+      "visible_when": {
+        "field": "proretset",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "proleakproof",
+      "label": "Leak proof?",
+      "control": "boolean",
+      "tab": "Options",
+      "version": {
+        "minimum": "9.2"
+      },
+      "native_keyword": "LEAKPROOF",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
+    },
+    {
+      "field_id": "prosupportfunc",
+      "label": "Support function",
+      "control": "select",
+      "tab": "Options",
+      "version": {
+        "minimum": "12"
+      },
+      "native_keyword": "SUPPORT",
+      "option_values_path": [
+        "catalog",
+        "support_functions"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "help": "Superuser only."
+    },
+    {
+      "field_id": "input_types",
+      "label": "Input types",
+      "control": "text",
+      "tab": "Options",
+      "group": "Aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      }
+    },
+    {
+      "field_id": "state_type",
+      "label": "State type",
+      "control": "text",
+      "tab": "Options",
+      "group": "Aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "STYPE"
+    },
+    {
+      "field_id": "state_func",
+      "label": "State function",
+      "control": "text",
+      "tab": "Options",
+      "group": "Aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "SFUNC"
+    },
+    {
+      "field_id": "state_data_size",
+      "label": "State data size",
+      "control": "text",
+      "tab": "Options",
+      "group": "Aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "SSPACE"
+    },
+    {
+      "field_id": "final_type",
+      "label": "Final type",
+      "control": "text",
+      "tab": "Options",
+      "group": "Aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      }
+    },
+    {
+      "field_id": "final_func",
+      "label": "Final function",
+      "control": "text",
+      "tab": "Options",
+      "group": "Aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "FINALFUNC"
+    },
+    {
+      "field_id": "final_func_modify",
+      "label": "Final function modify",
+      "control": "text",
+      "tab": "Options",
+      "group": "Aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "version": {
+        "minimum": "11"
+      },
+      "native_keyword": "FINALFUNC_MODIFY"
+    },
+    {
+      "field_id": "final_extra_param",
+      "label": "Pass extra arguments to final function",
+      "control": "boolean",
+      "tab": "Options",
+      "group": "Aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "FINALFUNC_EXTRA"
+    },
+    {
+      "field_id": "initial_val",
+      "label": "Initial condition",
+      "control": "text",
+      "tab": "Options",
+      "group": "Aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "INITCOND"
+    },
+    {
+      "field_id": "moving_state_type",
+      "label": "State type",
+      "control": "text",
+      "tab": "Options",
+      "group": "Moving aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "MSTYPE"
+    },
+    {
+      "field_id": "moving_state_func",
+      "label": "State function",
+      "control": "text",
+      "tab": "Options",
+      "group": "Moving aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "MSFUNC"
+    },
+    {
+      "field_id": "moving_state_data_size",
+      "label": "State data size",
+      "control": "text",
+      "tab": "Options",
+      "group": "Moving aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "MSSPACE"
+    },
+    {
+      "field_id": "moving_final_func",
+      "label": "Final function",
+      "control": "text",
+      "tab": "Options",
+      "group": "Moving aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "MFINALFUNC"
+    },
+    {
+      "field_id": "moving_final_func_modify",
+      "label": "Final function modify",
+      "control": "text",
+      "tab": "Options",
+      "group": "Moving aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "version": {
+        "minimum": "11"
+      },
+      "native_keyword": "MFINALFUNC_MODIFY"
+    },
+    {
+      "field_id": "moving_final_extra_param",
+      "label": "Pass extra arguments to final function",
+      "control": "boolean",
+      "tab": "Options",
+      "group": "Moving aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "MFINALFUNC_EXTRA"
+    },
+    {
+      "field_id": "moving_inverse_func",
+      "label": "Inverse function",
+      "control": "text",
+      "tab": "Options",
+      "group": "Moving aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "MINVFUNC"
+    },
+    {
+      "field_id": "moving_initial_val",
+      "label": "Initial condition",
+      "control": "text",
+      "tab": "Options",
+      "group": "Moving aggregate",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "MINITCOND"
+    },
+    {
+      "field_id": "sort_oper",
+      "label": "Sort operator",
+      "control": "text",
+      "tab": "Engine",
+      "group": "Aggregate functions",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "SORTOP"
+    },
+    {
+      "field_id": "combine_func",
+      "label": "Combine function",
+      "control": "text",
+      "tab": "Engine",
+      "group": "Aggregate functions",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "COMBINEFUNC"
+    },
+    {
+      "field_id": "serialization_func",
+      "label": "Serialization function",
+      "control": "text",
+      "tab": "Engine",
+      "group": "Aggregate functions",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "SERIALFUNC"
+    },
+    {
+      "field_id": "deserialization_func",
+      "label": "Deserialization function",
+      "control": "text",
+      "tab": "Engine",
+      "group": "Aggregate functions",
+      "readonly": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "native_keyword": "DESERIALFUNC"
+    },
+    {
+      "field_id": "proacl",
+      "label": "Privileges",
+      "control": "text",
+      "tab": "Security",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      },
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "acl",
+      "label": "Privileges",
+      "control": "privileges",
+      "tab": "Security",
+      "native_keyword": "GRANT",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "function"
+          ]
+        },
+        {
+          "field_id": "grantor",
+          "label": "Grantor",
+          "control": "reference",
+          "reference_kind": "role",
+          "readonly": true
+        }
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      },
+      "help": "Privilege codes accepted by the backend: X. Grantee list comes from the role catalog plus PUBLIC; grantor is read-only and defaults to the connected user."
+    },
+    {
+      "field_id": "seclabels",
+      "label": "Security labels",
+      "control": "grid",
+      "tab": "Security",
+      "native_keyword": "SECURITY LABEL",
+      "columns": [
+        {
+          "field_id": "provider",
+          "label": "Provider",
+          "control": "text"
+        },
+        {
+          "field_id": "label",
+          "label": "Security label",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "version": {
+        "minimum": "9.1"
+      },
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      }
+    }
+  ],
+  "notes": "Fields map 1:1 onto the legacy pgAdmin dialog (workflow legacy_preserved): field ids are the BaseUISchema ids and are served by the existing SQL templates. Sources: web/pgadmin/browser/server_groups/servers/databases/schemas/functions/static/js/function.ui.js (FunctionSchema, DefaultArgumentSchema; procedure.js reuses it with type procedure), databases/schemas/aggregates/static/js/aggregate.ui.js (AggregateSchema, all read-only), static/js/variable.ui.js (keys name/value), static/js/privilege.ui.js, static/js/sec_label.ui.js. Mapping: General->General; Definition->Definition except the arguments grid, which goes to the family's Parameters tab (the skeleton defines that tab as the argument grid); Code->Definition (prosrc); Options->Options; pgAdmin Parameters (SET variables)->Parameters group 'Configuration (SET)'; Security->Security; aggregate Options/Moving Options->Options groups, Advanced->Engine. Variant-specific fields use visible_when on 'variant'."
 }
