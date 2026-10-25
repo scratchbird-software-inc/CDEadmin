@@ -43,6 +43,7 @@ FAMILIES = ("table", "view", "index", "routine", "trigger", "sequence", "type",
 FORBIDDEN_LABEL = re.compile(r"\bexact native\b|\bnative .* reference\b", re.I)
 ENGINE_FILES = {"capabilities.json", "operations.json", "navigator.json",
                 "omitted_families.json", "README.md"}
+IGNORED_FOLDERS = {"forms", "__pycache__"}
 
 
 # --------------------------------------------------------------------------
@@ -154,14 +155,15 @@ def validate_descriptors(strict_pending: bool) -> tuple[list[str], dict]:
         if family not in families:
             errors.append(f"families/{family}.family.json is missing")
 
-    for engine_dir in sorted(p for p in DESCRIPTORS.iterdir() if p.is_dir() and p.name not in ("schema", "families")):
+    for engine_dir in sorted(p for p in DESCRIPTORS.iterdir() if p.is_dir() and p.name not in ("schema", "families")
+                             and not p.name.startswith("__") and (p / "capabilities.json").exists()):
         engine = engine_dir.name
         report = {"forms": {}, "operations": 0, "kinds": 0, "json_like_fields": 0}
         summary["engines"][engine] = report
         for stray in engine_dir.iterdir():
             if stray.is_file() and stray.name not in ENGINE_FILES:
                 errors.append(f"{engine}: unexpected file {stray.name}")
-            if stray.is_dir() and stray.name != "forms":
+            if stray.is_dir() and stray.name not in IGNORED_FOLDERS:
                 errors.append(f"{engine}: unexpected folder {stray.name}")
 
         caps = load(engine_dir / "capabilities.json")

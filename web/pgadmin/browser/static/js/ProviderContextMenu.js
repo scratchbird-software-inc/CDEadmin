@@ -10,6 +10,7 @@
 import _ from 'lodash';
 import gettext from 'sources/gettext';
 import pgAdmin from 'sources/pgadmin';
+import {tryOpenFamilyEditor} from './ProviderObjectEditor';
 
 const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
@@ -248,7 +249,11 @@ function executeProviderAction(menu, itemData, item) {
   );
 }
 
-export function openProviderObject(itemData, item) {
+export async function openProviderObject(itemData, item) {
+  // Descriptor-driven family editor first (design phase 2); the legacy
+  // provider workspace remains the fallback until every kind has an editor.
+  const opened = await tryOpenFamilyEditor(itemData, item);
+  if (opened) return opened;
   const menu = providerContextMenuItems(itemData, item)?.find(
     (candidate) => candidate.commandId.endsWith('.browse')
   );

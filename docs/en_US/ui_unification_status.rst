@@ -25,12 +25,12 @@ Phase status
      - This page; baseline counts below; panel disposition in design section 6.11
    * - 1
      - Foundations: schemas, family skeletons, validator, lint rules
-     - in progress
-     - ``ui_descriptors/schema``, ``ui_descriptors/families`` (10), validator in ``make check``; ESLint rules pending
+     - done
+     - ``ui_descriptors/schema``, ``ui_descriptors/families`` (10), validator in ``make check``; ESLint import boundary covers ``cdeadmin_ui/objects`` and the tree glue; family render harness in ``regression/javascript/families``
    * - 2
      - Shell: tree, object editor, operation dialog, menu model
-     - not started
-     - 
+     - in progress
+     - ``cdeadmin_ui/objects``: ObjectEditor (canonical tabs, SQL tab = provider plan), OperationDialog, FieldControl, RecordGrid, KeyValueEditor, menu model; descriptor service ``/cdeadmin/api/ui/descriptors``; tree activation opens the family editor when the engine declares one (legacy workspace fallback). Remaining: categorised menus wired to the tree, create-from-tree, shell tabs (Data, Dependencies, Statistics), in-panel tree removal
    * - 3
      - Engine descriptors (Firebird, MySQL, MariaDB, DuckDB, SQLite)
      - in progress
@@ -192,6 +192,11 @@ Current lint counts for this change: JSON controls **305 → 304**, direct MUI
 imports **244 → 244**, engine-literal UI branches **111 → 111**, engine panels
 **113 → 113**. The tracked family statuses have not advanced to ``complete``.
 
+* 2026-10-25 (phase 2, first increment): descriptor service and bundle endpoint; shared ObjectEditor /
+  OperationDialog / FieldControl / RecordGrid / KeyValueEditor in ``cdeadmin_ui/objects`` (primitives only,
+  zero engine branches); tree activation of a provider resource opens the family editor when the bundle
+  declares one; family render gate (61 engine x family cases) and descriptor logic tests green; ESLint
+  boundary extended. Lint counts unchanged: 304 / 244 / 111 / 113.
 * 2026-10-25 (later): drafted descriptors for the five non-MySQL engines from the live provider contracts
   (``tools/dump_provider_forms.py`` + ``tools/draft_ui_descriptors.py``), Server family from
   ``form_contracts.py`` (``tools/draft_server_descriptors.py``), PostgreSQL families from the legacy

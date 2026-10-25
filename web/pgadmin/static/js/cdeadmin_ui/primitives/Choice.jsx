@@ -49,12 +49,14 @@ export function Switch({label, checked=false, onChange, ...props}) {
 
 Switch.propTypes = Checkbox.propTypes;
 
-export function Select({options=[], value='', onChange, ...props}) {
+export function Select({options=[], value='', onChange, validationMessage, ...props}) {
   return <MuiTextField
     select
     value={value}
     onChange={(event) => onChange?.(event.target.value, event)}
     {...props}
+    error={Boolean(validationMessage) || props.error}
+    helperText={validationMessage || props.helperText}
   >
     {options.map((option) => <MenuItem
       key={option.value}
@@ -67,6 +69,9 @@ export function Select({options=[], value='', onChange, ...props}) {
 }
 
 Select.propTypes = {
+  validationMessage: PropTypes.node,
+  error: PropTypes.bool,
+  helperText: PropTypes.node,
   options: PropTypes.arrayOf(PropTypes.shape({
     value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
     label: PropTypes.node.isRequired,
