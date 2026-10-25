@@ -49,3 +49,20 @@ checks do not lock out other keyring writers or implement atomic compare-and-set
 Retrieving/exporting raw key material awaits Decision 10 and remains a beta gap.
 The operation descriptors remain **draft / unsurfaced by the unified shell** until
 the front-end stream's operation-dialog and family-render acceptance is available.
+
+## View migration
+
+The View family is now **draft**. Name/database, query, algorithm, check option,
+SQL security and separate definer user/host fields bind to the actual ordinary
+view create/alter compiler. The engine-specific legacy field factory and its
+shared `_form()` dispatch branch were deleted. MySQL does not allow triggers on
+views, so that tab is omitted with its native reason. The metadata-only
+materialized-view kind does not acquire ordinary-view DDL.
+
+The compiler also accepts an ordered list of scalar column aliases. Decision 9
+currently blocks expressing that list as a grid. The descriptor records the gap
+and requires the shell to preserve existing aliases or withhold ALTER until the
+projection exists; it must never silently erase an alias list. Privilege edits
+remain separate operations pending the same cross-operation dispatch contract.
+Backend binding tests exercise every declared field in both applicable modes.
+No rendered round trip or unified shell acceptance is claimed.

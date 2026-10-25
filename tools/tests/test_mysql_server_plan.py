@@ -217,3 +217,24 @@ def test_null_assignment_is_not_inferred_from_pfs_string_values():
         live={'rows':{'setting':{'native':{'catalog_row':{'global_value':value,'persisted_value':value}}}}}
         assert effect(row,{'operation':'set_global'},live) is False
         assert effect(row,{'operation':'set_persist'},live) is False
+
+
+def test_persisted_empty_text_and_default_never_prove_null_or_empty_value_identity():
+    from pgadmin.cdeadmin.providers.mysql_server_application import effect
+    for draft in ({'value':''},{'value_mode':'DEFAULT'}):
+        row={'resource_id':'setting','kind':'system-variable','native':{'mysql_change':{'draft':draft}}}
+        for extra in ({},{'persisted_value_state':'null_or_empty'},
+                {'persisted_value_state':'unconfirmed'}):
+            live={'rows':{'setting':{'native':{'catalog_row':{
+                'global_value':'','persisted_value':'','persisted_present':1,**extra}}}}}
+            for action in ('set_persist','set_persist_only'):
+                assert not effect(row,{'operation':action},live)
+
+
+def test_missing_persisted_presence_cannot_be_verified_by_a_default_acknowledgement():
+    from pgadmin.cdeadmin.providers.mysql_server_application import effect
+    row={'resource_id':'setting','kind':'system-variable','native':{'mysql_change':{'draft':{'value_mode':'DEFAULT'}}}}
+    live={'rows':{'setting':{'native':{'catalog_row':{
+        'global_value':'value','persisted_value':None,'persisted_present':0,'persisted_value_state':'absent'}}}}}
+    assert not effect(row,{'operation':'set_persist'},live)
+    assert not effect(row,{'operation':'set_persist_only'},live)

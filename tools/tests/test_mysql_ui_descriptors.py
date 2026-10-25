@@ -77,3 +77,26 @@ def test_table_constraint_discriminators_and_foreign_identity_names_match_backen
     children={c['field_id']:c for c in fields['foreign_keys']['columns']}
     assert children['references']['backend_field_id']=='references_table'
     assert children['referenced_columns']['backend_field_id']=='references_columns'
+
+
+def test_every_view_binding_reaches_the_real_create_and_alter_compiler():
+    form=load('forms/view.form.json')
+    samples={'name':'changed_view','parent':'changed_database','query':'SELECT 2 AS changed',
+        'algorithm':'MERGE','check_option':'LOCAL','sql_security':'INVOKER',
+        'definer_user':'changed_user','definer_host':'changed_host'}
+    target={'display_path':['db','owned'],'display_name':'owned'}
+    for mode in ('create','alter'):
+        base={'definition':'SELECT 1 AS id','definer_user':'owner','definer_host':'localhost'}
+        if mode=='create':base.update(name='owned',database='db')
+        def compiled(draft):
+            request={'resource_kind':'view','operation_id':mode,'draft':draft,'target_resource':target}
+            assert not MYSQL_ADMINISTRATION.validate(request)['errors']
+            return MYSQL_ADMINISTRATION._compile(request)['statements']
+        original=compiled(base)
+        for field in form['fields']:
+            if mode not in field.get('modes',['create','alter']):continue
+            draft=dict(base);bind(draft,field,samples[field['field_id']])
+            assert compiled(draft)!=original,(mode,field['field_id'])
+    assert form['status']=='draft'
+    assert any(row['concept']=='Ordered output aliases' for row in form['gaps'])
+    assert any(row['tab']=='Triggers' for row in form['omitted_tabs'])

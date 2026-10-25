@@ -243,3 +243,71 @@ def test_failed_editor_readmission_preserves_denial_and_pool_release_forgets_can
     assert not hasattr(source,'_cdeadmin_session_variable_observer')
     source.cursor.assert_not_called()
     uninstall(source);assert not hasattr(source,'_cdeadmin_session_variable_observer_candidate')
+
+
+@pytest.mark.parametrize('reason', ['performance-schema-disabled', 'native-observer-admission-denied', None])
+def test_unadmitted_language_never_falls_back_to_the_original_diagnostic_area(reason):
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_values import observed_language
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_execution import Executions
+    source=Source();source.cursor=Mock(side_effect=AssertionError('Original-session metadata dispatched'))
+    source._cdeadmin_session_variable_observer_status={'admitted':False,'reason':reason,'native_errno':1142}
+    with pytest.raises(MySQLParameterAdmissionError) as failure:observed_language(source)
+    assert failure.value.commands_dispatched==0
+    assert failure.value.original_diagnostics_preserved and failure.value.original_session_commands_sent==0
+    source.cursor.assert_not_called()
+    result=Executions._error(failure.value)
+    assert result['original_diagnostics_preserved'] and result['commands_dispatched']==0
+    assert result['native_observer_errno']==1142
+    assert 'No original-session metadata command' in result['message_primary']
+    if reason=='performance-schema-disabled':assert 'reviewed restart' in result['message_primary']
+    if reason=='native-observer-admission-denied':assert 'After restoring access' in result['message_primary']
+
+
+def test_authenticated_execution_readmits_a_denied_candidate_without_source_commands():
+    source,observer,connect,_peer,_query=setup()
+    del source._cdeadmin_session_variable_observer
+    source._cdeadmin_session_variable_observer_candidate=observer
+    source._cdeadmin_session_variable_observer_status={'admitted':False,'reason':'native-observer-admission-denied'}
+    observer.close()
+    prepare(source)
+    assert source._cdeadmin_session_variable_observer is observer
+    assert source._cdeadmin_session_variable_observer_status['readmitted_without_source_commands']
+    assert not hasattr(source,'_cdeadmin_session_variable_observer_candidate')
+    source.cursor.assert_not_called();connect.assert_called_once()
+
+
+def test_failed_execution_readmission_does_not_expose_native_text_or_try_from_the_worker():
+    from mysql.connector.errors import ProgrammingError
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_values import observed_language
+    source,observer,connect,_peer,_query=setup()
+    del source._cdeadmin_session_variable_observer
+    source._cdeadmin_session_variable_observer_candidate=observer
+    source._cdeadmin_session_variable_observer_status={'admitted':False,'reason':'native-observer-admission-denied'}
+    connect.side_effect=ProgrammingError('private source-bearing detail',errno=1142,sqlstate='42000')
+    prepare(source)
+    for _ in range(2):
+        with pytest.raises(MySQLParameterAdmissionError) as failure:observed_language(source)
+        assert 'private source-bearing detail' not in str(failure.value)
+    assert connect.call_count==1
+    source.cursor.assert_not_called()
+
+
+def test_retained_runtime_identity_is_bound_to_admitted_native_connection_without_version_queries():
+    from types import SimpleNamespace
+    from pgadmin.cdeadmin.providers.mysql_family.provider import MySQLDBAPIClient
+    from pgadmin.cdeadmin.providers.mysql_family.session_state import SessionIdentities
+    source=Source();source.cursor=Mock(side_effect=AssertionError('Original VERSION query dispatched'))
+    identity={'engine_id':'mysql','version':'9.7.0','build_id':'mysql:9.7.0','protocol_id':'mysql-wire'}
+    source._cdeadmin_admitted_runtime_identity=dict(identity)
+    sessions=SessionIdentities('MySQL');sessions.entries[id(source)]=(source,'native-server',12)
+    client=object.__new__(MySQLDBAPIClient);client._session_requests={id(source):{}}
+    client._executions=SimpleNamespace(sessions=sessions)
+    result=client.runtime_identity({},source)
+    assert result==identity
+    result['version']='caller mutation'
+    assert client.runtime_identity({},source)==identity
+    source.connection_id=13
+    with pytest.raises(RelationalClientError,match='identity changed'):client.runtime_identity({},source)
+    source.cursor.assert_not_called()
+    uninstall(source)
+    assert not hasattr(source,'_cdeadmin_admitted_runtime_identity')

@@ -100,6 +100,38 @@ def qualify(output,library=None,binary=None,driver_binary=None):
                         result=apply_operation(native,{'plan':reviewed,'baseline':baseline,'desired':desired},reviewed['operations'][0])
                         assert result['state']=='acknowledged' and result['rediscovery_verified'] and result['native_runtime_null']
                         checks.append({'scope':'native-ddn-null-rediscovery','explicit_native_is_null':True,'persisted_null_identity_inferred':False})
+                        # Native P_S exposes a persisted NULL as empty text,
+                        # not a nullable typed value. Preserve its presence and
+                        # ACK without claiming that this proves NULL identity.
+                        for name,assignment,initial_value in [('innodb_tmpdir',{'value_mode':'NULL'},'/tmp'),
+                                ('init_connect',{'value':''},'SET @sr_owned_init=1')]:
+                            for action in ('set_persist_only','set_persist'):
+                                execute('set_global',name,value=initial_value,value_type='AUTO')
+                                acquired=capture(native)
+                                baseline=build_export(acquired['resources'],endpoint_id='owned',target_id='server:'+acquired['server_uuid'],generation=acquired['generation'],include_system=True,refreshed=True,engine='mysql',native_model=True)
+                                desired=copy.deepcopy(baseline)
+                                row=next(r for r in desired['rows'].values() if r['kind']=='system-variable' and r['name']==name)
+                                row['native']['mysql_change']={'action':action,'draft':assignment,'confirmation':name}
+                                reviewed=plan(baseline,desired,baseline);reviewed['endpoint_id']='owned'
+                                assert reviewed['ready_for_review'] and len(reviewed['operations'])==1
+                                reply=apply_operation(native,{'plan':reviewed,'baseline':baseline,'desired':desired},reviewed['operations'][0])
+                                assert reply['state']=='acknowledged' and not reply['rediscovery_verified'],reply
+                                q.execute('SELECT @@GLOBAL.`'+name+'` IS NULL,@@GLOBAL.`'+name+'`')
+                                expected_runtime=((0,initial_value) if action=='set_persist_only' else (1,None) if name=='innodb_tmpdir' else (0,''))
+                                assert q.fetchone()==expected_runtime
+                                q.execute('SELECT VARIABLE_VALUE FROM performance_schema.persisted_variables WHERE VARIABLE_NAME=%s',(name,))
+                                assert q.fetchone()==('',)
+                                facts=next(r for r in capture(native)['resources'] if r['resource_kind']=='system-variable' and r['display_name']==name)['native']['catalog_row']
+                                assert facts['persisted_present']==1 and facts['persisted_value']==''
+                                assert facts['persisted_value_state']=='null_or_empty'
+                                assert reply['persisted_value_identity_unconfirmed'] and reply['native_persisted_value_state']=='null_or_empty'
+                                execute('reset_persist',name)
+                                q.execute('SELECT VARIABLE_VALUE FROM performance_schema.persisted_variables WHERE VARIABLE_NAME=%s',(name,))
+                                assert q.fetchone() is None
+                                checks.append({'scope':'native-persisted-'+name+'-'+action,'native_ack_preserved':True,
+                                    'persisted_presence_retained':True,'native_persisted_value_is_empty_text':True,
+                                    'persisted_null_identity_inferred':False,'reset_removes_identity':True})
+                        execute('set_global','init_connect',value='',value_type='AUTO')
                         for mode in ('','ANSI_QUOTES,NO_BACKSLASH_ESCAPES'):
                             q.execute('SET GLOBAL sql_mode=%s',(mode,));q.execute('SET SESSION sql_mode=%s',(mode,))
                             handle=client.open_session({'route':selected});work=handle.cursor()

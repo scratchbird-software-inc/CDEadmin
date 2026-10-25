@@ -210,19 +210,9 @@ class MySQLParameterAdmissionError(RelationalClientError):
 
 def observed_language(connection):
     """Read the retained native language without changing session policy."""
-    from .mysql_session_variables import observe
-    observed = observe(connection)
-    if observed is not None:
-        connection._sql_mode = observed['variables']['sql_mode']
-        return observed['version'], observed['variables']['sql_mode']
-    observation = connection.cursor()
-    try:
-        observation.execute('SELECT VERSION(), @@SESSION.sql_mode')
-        version, mode = observation.fetchone()
-    finally:
-        observation.close()
-    if isinstance(mode, bytes): mode = mode.decode('ascii')
-    if isinstance(version, bytes): version = version.decode('ascii')
+    from .mysql_session_variables import require_observation
+    observed = require_observation(connection)
+    version, mode = observed['version'], observed['variables']['sql_mode']
     # Synchronize the client's cache only. No native language setting changes.
     connection._sql_mode = mode
     return version, mode

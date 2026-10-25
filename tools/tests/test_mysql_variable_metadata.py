@@ -31,3 +31,13 @@ def test_session_only_server_resources_have_inspection_and_explicit_persisted_cl
     assert variables.administration({'variable_scope':'SESSION'}) is None
     assert variables.administration({'variable_scope':'GLOBAL'}) is None
     assert variables.administration({'persisted_present':1}) is None
+
+
+def test_persisted_null_and_empty_are_explicitly_ambiguous_in_current_and_legacy_captures():
+    assert variables.persisted_value_ambiguous({'persisted_value_state':'null_or_empty'})
+    assert variables.persisted_value_ambiguous({'persisted_value_state':'unconfirmed'})
+    assert variables.persisted_value_ambiguous({'persisted_present':1,'persisted_value':''})
+    assert variables.persisted_value_ambiguous({'persisted_value':''})
+    assert not variables.persisted_value_ambiguous({'persisted_present':0,'persisted_value':''})
+    assert not variables.persisted_value_ambiguous({'persisted_value_state':'value','persisted_value':'1'})
+    assert not variables.persisted_value_ambiguous({'persisted_value_state':'absent'})

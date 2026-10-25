@@ -125,19 +125,9 @@ class Scope:
         if not self.active:return
         connection=self.connection;connection.query_attrs_clear()
         if not self.values:return
-        from .mysql_session_variables import observe
-        observation=observe(connection)
-        if observation is not None:
-            charset=observation['variables']['character_set_client']
-        else:
-            # The pre-existing unadmitted observation profile is not qualified
-            # for diagnostic preservation. Do not label its original reads as
-            # an independent observation; admitted failures never use this path.
-            cursor=connection.cursor()
-            try:
-                cursor.execute('SELECT @@SESSION.character_set_client');charset=cursor.fetchone()[0]
-                if isinstance(charset,bytes):charset=charset.decode('ascii')
-            finally:cursor.close()
+        from .mysql_session_variables import require_observation
+        observation=require_observation(connection)
+        charset=observation['variables']['character_set_client']
         try:
             for name,value in self.values.items():
                 native_name=name.encode(codec(charset))

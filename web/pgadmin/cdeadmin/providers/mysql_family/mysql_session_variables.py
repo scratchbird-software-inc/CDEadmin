@@ -290,6 +290,19 @@ def install(client, handle, request):
         'private_observer_connection_retained': True}
 
 
+def _promote(handle, candidate):
+    handle._cdeadmin_session_variable_observer = candidate
+    delattr(handle, '_cdeadmin_session_variable_observer_candidate')
+    handle._cdeadmin_session_variable_observer_status = {'admitted': True,
+        'admission_observation_only': True,
+        'observation_source': 'native-performance-schema-independent-connection',
+        'original_session_commands_sent': 0,
+        'thread_id': str(candidate.identity['thread_id']),
+        'connection_id': str(candidate.identity['connection_id']),
+        'private_observer_connection_retained': True,
+        'readmitted_without_source_commands': True}
+
+
 def editor_observer(client, handle):
     """Acquire an independent editor observer; never inspect source SQL state."""
     observer = getattr(handle, '_cdeadmin_session_variable_observer', None)
@@ -308,16 +321,7 @@ def editor_observer(client, handle):
                 'native_errno': getattr(error, 'errno', None),
                 'native_sqlstate': getattr(error, 'sqlstate', None)}
         else:
-            handle._cdeadmin_session_variable_observer = candidate
-            delattr(handle, '_cdeadmin_session_variable_observer_candidate')
-            handle._cdeadmin_session_variable_observer_status = {'admitted': True,
-                'admission_observation_only': True,
-                'observation_source': 'native-performance-schema-independent-connection',
-                'original_session_commands_sent': 0,
-                'thread_id': str(candidate.identity['thread_id']),
-                'connection_id': str(candidate.identity['connection_id']),
-                'private_observer_connection_retained': True,
-                'readmitted_without_source_commands': True}
+            _promote(handle, candidate)
             return candidate
     profile = getattr(handle, '_cdeadmin_session_variable_observer_status', None)
     profile = profile if isinstance(profile, dict) else {}
@@ -354,6 +358,26 @@ def observe(handle):
         raise result from None
 
 
+def require_observation(handle):
+    """Admission is a dependency, never permission to query the user's session."""
+    observed = observe(handle)
+    if observed is not None:
+        return observed
+    from .mysql_values import MySQLParameterAdmissionError
+    status = getattr(handle, '_cdeadmin_session_variable_observer_status', {})
+    status = status if isinstance(status, dict) else {}
+    reason = ('disabled' if status.get('reason') == 'performance-schema-disabled' else
+        'denied' if status.get('reason') == 'native-observer-admission-denied' else 'unadmitted')
+    guidance = EditorObservationUnavailable(reason, status.get('native_errno'))
+    failure = MySQLParameterAdmissionError(str(guidance))
+    failure.original_diagnostics_preserved = True
+    failure.original_session_commands_sent = 0
+    failure.native_observer_errno = guidance.native_observer_errno
+    failure.native_observer_error_type = 'ObserverUnavailable'
+    failure.observation_guidance = str(guidance)
+    raise failure
+
+
 def invalidate(handle):
     observer = getattr(handle, '_cdeadmin_session_variable_observer', None)
     if isinstance(observer, SessionVariables):
@@ -362,6 +386,22 @@ def invalidate(handle):
 
 
 def prepare(handle):
+    # Execution, like editor assistance, enters here on the authenticated
+    # request thread. Restoring grants can readmit the existing source without
+    # acquiring credentials or reconnecting either peer from the SQL worker.
+    candidate = getattr(handle, '_cdeadmin_session_variable_observer_candidate', None)
+    if isinstance(candidate, SessionVariables):
+        try:
+            candidate.renew()
+        except SourceIdentityUnavailable:
+            raise
+        except Exception as error:
+            handle._cdeadmin_session_variable_observer_status = {
+                **getattr(handle, '_cdeadmin_session_variable_observer_status', {}),
+                'native_errno': getattr(error, 'errno', None),
+                'native_sqlstate': getattr(error, 'sqlstate', None)}
+        else:
+            _promote(handle, candidate)
     observer = getattr(handle, '_cdeadmin_session_variable_observer', None)
     if isinstance(observer, SessionVariables) and observer.needs_connection_refresh:
         observer.renew()
@@ -375,6 +415,7 @@ def uninstall(handle):
         observer = getattr(native, name, None)
         if isinstance(observer, SessionVariables):
             observer.close()
-    for name in ('_cdeadmin_session_variable_observer', '_cdeadmin_session_variable_observer_candidate', '_cdeadmin_session_variable_observer_status'):
+    for name in ('_cdeadmin_session_variable_observer', '_cdeadmin_session_variable_observer_candidate',
+                 '_cdeadmin_session_variable_observer_status', '_cdeadmin_admitted_runtime_identity'):
         if hasattr(native, name):
             delattr(native, name)

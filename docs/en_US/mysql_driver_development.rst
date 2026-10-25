@@ -1428,3 +1428,28 @@ Enterprise policy component. Positive definition/execution qualification and
 the complete policy administration workflow are therefore post beta, excluded
 from beta completion blockers, with the dependency and reason recorded under
 ``MY-POST-BETA-MASKING``. No replacement masking implementation is in scope.
+
+Unadmitted execution observations
+--------------------------------
+
+Retained sessions now also refuse parameter binding, current-mode script
+framing, query-attribute encoding and C-driver text conversion when independent
+session-variable observation was not admitted. They send no substitute metadata
+query on the user's connection. The original native diagnostic area, row count
+and pending work remain available; refusal is not successful execution. Ordinary
+operations that need these facts require the registered account's native
+Performance Schema access. A disabled Performance Schema requires reviewed
+configuration/restart and a new session.
+
+After restoring native access, an authenticated execution or editor request can
+readmit the private candidate on the same original connection. Credential
+acquisition never moves into the SQL worker. Native runtime identity is captured
+during session initialization and subsequently checked against the retained
+connection identity without another VERSION query. Pool release forgets that
+observation. Native pure/C and authenticated API qualification uses denied and
+disabled servers and a server general-log command-count oracle; it checks
+warning/error areas, ROW_COUNT, pending savepoints and access restoration.
+
+This is dependency-aware refusal, not an assertion of executable SQL support
+without the required private observation. Exact source active-role and temporary
+object overlays and other catalog consumers retain their separate scope.

@@ -356,7 +356,9 @@ one implementation scope and must not be counted as independent completion.
   global/session assignment/reference scopes and preserves quoted component
   identities. Explicit DOUBLE/NULL assignments and native runtime NULL DDN
   checks are implemented. Native metadata does not expose sensitivity or
-  mutability, and persisted NULL identity remains unconfirmed. These additions
+  mutability. Persisted NULL and empty values now carry an explicit ambiguous
+  catalog state; native pure/C SET PERSIST/PERSIST_ONLY and DDN qualification
+  preserve ACK and presence without claiming typed identity from P_S text. These additions
   do not close the wider installed-capability/editor inventory.
   Installed native Rewriter rules now have dedicated inspect/create/edit/delete
   and explicit reload actions, with native messages/digests/status, selected-row
@@ -422,20 +424,27 @@ one implementation scope and must not be counted as independent completion.
   ``performance_schema.threads`` allows a denied candidate to be readmitted on
   the same original connection. Disabled Performance Schema requires native
   server configuration/restart and a new session. Candidate connections are
-  released with their owning session. These editor paths do not qualify
-  unadmitted parameter conversion, native C charset observations, source role
-  or temporary-object overlays, or every retained catalog consumer; those
-  remain separate reconciliation work.
+  released with their owning session. Unadmitted parameter conversion, current-mode
+  script framing, query-attribute encoding and native C charset adaptation now
+  also refuse before dispatch, without source metadata queries. Authenticated
+  execution can readmit a denied private candidate after access restoration.
+  Native pure/C and API receipts verify unchanged source command counts,
+  diagnostic areas and pending savepoints. Source role/temporary-object overlays
+  and other retained consumers remain separate reconciliation work. These
+  refusals require the native dependency to be restored before affected SQL can
+  run; they do not claim executable support with Performance Schema disabled.
   See :doc:`mysql_driver_development` for the execution scope;
   these execution receipts do not close browser coverage or INV-MYSQL.
 
 The native inventory also confirms the GPL implementation of MySQL
-``keyring_udf`` and its shipped native library. Existing keyring reload,
-master-key rotation and encrypted physical recovery receipts do not qualify
-user key storage/generation, metadata inspection, retrieval or removal.
-Dedicated management and native tests for those operations remain beta work;
-this implementation is source available and must not be deferred as closed
-Enterprise functionality.
+``keyring_udf`` and its shipped native library. Native plugin/function setup, current-principal key storage and generation,
+metadata inspection and removal are implemented and qualified through both
+connectors and authenticated plan/apply APIs. They ship with five typed Security
+operation descriptors. Protected raw-key retrieval/export remains the beta gap
+under UI design Decision 10. The descriptors remain draft/unsurfaced pending the
+front-end stream's shared operation-dialog and render acceptance. This native
+implementation is source available and is not deferred as closed Enterprise
+functionality.
 
 Native spatial-reference catalog, typed management and bounded selected-SRID
 server DDN exchange/migration are implemented. Captured SRID scope is explicit;

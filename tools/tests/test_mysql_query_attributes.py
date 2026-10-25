@@ -58,6 +58,18 @@ def test_unnegotiated_native_capability_never_silently_drops_attributes():
     assert native.query_attrs==[('previous',17)] and not native.sent
 
 
+def test_unadmitted_attribute_encoding_preserves_diagnostics_and_restores_native_client_state():
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_values import MySQLParameterAdmissionError
+    native=Native();scope=attrs.Scope(native,{'label':'private value'})
+    scope.install()
+    try:
+        with pytest.raises(MySQLParameterAdmissionError) as failure:scope.bind()
+        assert failure.value.commands_dispatched==0 and failure.value.original_diagnostics_preserved
+        assert failure.value.original_session_commands_sent==0 and not native.sent
+    finally:scope.restore()
+    assert native.query_attrs==[('previous',17)] and '_send_cmd' not in native.__dict__
+
+
 def test_c_connector_uses_actual_negotiated_native_flags_instead_of_requested_python_flags(monkeypatch):
     monkeypatch.setattr(attrs,'c_attributes_abi',lambda:1)
     native=Native();native.client_flags=0

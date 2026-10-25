@@ -75,11 +75,13 @@ def effect(row, operation, live):
     if kind == 'privilege':
         return facts.get('is_grantable') == ('YES' if draft.get('grant_option') else 'NO')
     if kind == 'system-variable':
+        from .mysql_family.system_variables import persisted_value_ambiguous, persistence_present
         if draft.get('value_mode') == 'NULL':
             # PFS string values cannot distinguish native NULL from empty text.
             # Runtime NULL has a separate explicit observation after dispatch.
             return False
-        if facts.get('persisted_value_redacted') and action in {'set_persist', 'set_persist_only'}:
+        if action in {'set_persist', 'set_persist_only'} and (
+                not persistence_present(facts) or facts.get('persisted_value_redacted') or persisted_value_ambiguous(facts)):
             return False
         if draft.get('value_mode', 'VALUE') == 'DEFAULT':
             return True  # Native DEFAULT acknowledgement, without guessing its value.
@@ -168,6 +170,10 @@ def apply_operation(connection, record, operation):
         result['rediscovery_verified'] = effect(row, operation, observed)
         result['native_observation'] = state(observed['rows'].get(key))
         draft = row['native'].get('mysql_change', {}).get('draft', {})
+        if row['kind'] == 'system-variable' and operation['operation'] in {'set_persist', 'set_persist_only'}:
+            facts = (observed['rows'].get(key) or {}).get('native', {}).get('catalog_row', {})
+            result['persisted_value_identity_unconfirmed'] = facts.get('persisted_value_state') != 'value'
+            result['native_persisted_value_state'] = facts.get('persisted_value_state', 'unconfirmed')
         if row['kind'] == 'system-variable' and draft.get('value_mode') == 'NULL':
             result['persisted_null_identity_observed'] = False
             if operation['operation'] in {'set_global', 'set_persist'}:

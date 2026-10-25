@@ -1122,13 +1122,24 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             handle = super().open_session(request)
             try:
                 self._executions.sessions.register(handle)
+                runtime = super().runtime_identity(request, handle)
                 from .mysql_session_variables import install
                 install(self, handle, request)
             except BaseException:
                 self._discard_failed_session(handle)
                 raise
+            handle._cdeadmin_admitted_runtime_identity = runtime
             self._session_requests[id(handle)] = copy.deepcopy(dict(request))
             return handle
+
+    def runtime_identity(self, request, handle=None):
+        if handle is not None and id(handle) in self._session_requests:
+            # Native server version cannot change on an existing connection.
+            # Bind the admission observation to its retained native identity;
+            # another VERSION query would overwrite the user's diagnostics.
+            self._executions.sessions.get(handle)
+            return copy.deepcopy(handle._cdeadmin_admitted_runtime_identity)
+        return super().runtime_identity(request, handle)
 
     def execute(self, handle, request):
         session_request = self._session_requests.get(id(handle))

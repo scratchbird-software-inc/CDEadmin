@@ -106,6 +106,9 @@ class Executions:
                 result['native_observer_error_type'] = exc.native_observer_error_type
                 result['message_primary'] = ('Independent MySQL session-variable observation is unavailable. '
                     'This command was not sent; the original session diagnostics are preserved.')
+                guidance = getattr(exc, 'observation_guidance', None)
+                if isinstance(guidance, str):
+                    result['message_primary'] = guidance
                 if type(getattr(exc, 'native_observer_errno', None)) is int:
                     result['native_observer_errno'] = exc.native_observer_errno
             if getattr(exc, 'original_session_identity_unconfirmed', False):

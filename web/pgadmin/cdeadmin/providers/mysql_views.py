@@ -64,26 +64,3 @@ def compile_operation(operation, draft, target):
     if check != 'NONE':
         source += 'WITH ' + check + ' CHECK OPTION'
     return {'source': source, 'parameters': ()}
-
-
-def form(operation, field):
-    fields = []
-    if operation == 'create':
-        fields += [field('database', 'Database', 'text', True), field('name', 'View name', 'text', True)]
-    fields += [field('definition', 'Complete SELECT / WITH query', 'multiline', True),
-               field('columns', 'Ordered output columns (JSON array; optional)', 'json', default=[]),
-               field('algorithm', 'Algorithm', 'select', True, default='UNDEFINED', options=ALGORITHMS),
-               field('sql_security', 'SQL security', 'select', True, default='DEFINER', options=SECURITY),
-               field('definer_user', 'Definer user (optional exact account)', 'text'),
-               field('definer_host', 'Definer host (required with user)', 'text'),
-               field('check_option', 'Check option', 'select', True, default='NONE', options=CHECK)]
-    if operation == 'alter':
-        initial = {'definition': 'view_definition', 'columns': 'view_columns',
-                   'algorithm': 'algorithm', 'sql_security': 'sql_security',
-                   'check_option': 'check_option', 'definer_user': 'definer_user',
-                   'definer_host': 'definer_host'}
-        for item in fields:
-            if item['field_id'] in initial:
-                item['initial_value_path'] = [initial[item['field_id']]]
-        fields.append(field('confirmation', 'Confirmation', 'text', True))
-    return {'form_id': 'mysql.view.' + operation, 'title': operation.title() + ' native MySQL view', 'fields': fields}

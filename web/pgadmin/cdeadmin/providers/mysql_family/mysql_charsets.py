@@ -74,7 +74,13 @@ def install(native):
     def refresh_c_variables():
         owner=reference()
         if owner is None:raise RelationalClientError('MySQL character-set connection is unavailable')
-        from .mysql_session_variables import observe
+        from .mysql_session_variables import observe, require_observation
+        # Initialization precedes observer admission and user execution. Once
+        # admitted (including denied/disabled admission), no command may borrow
+        # the user's diagnostic area for conversion metadata.
+        if hasattr(owner, '_cdeadmin_session_variable_observer_status'):
+            require_observation(owner)
+            return
         observed = observe(owner)
         if observed is not None:
             owner._cdeadmin_charset_variables = {key: observed['variables'][key] for key in owner._cdeadmin_charset_variables}

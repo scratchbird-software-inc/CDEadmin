@@ -317,7 +317,7 @@ class RelationalAdministration:
                 } for operation in sorted(mysql_constraints.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind == 'view':
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_views.OPERATIONS] + [{
-                    'operation_id': operation, 'title': mysql_views.form(operation, self._field)['title'],
+                    'operation_id': operation, 'title': operation.title() + ' view',
                     'mutation_class': 'admin', 'target_required': operation != 'create', 'confirmation_required': operation != 'create',
                 } for operation in sorted(mysql_views.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind in mysql_object_changes.OPERATIONS:
@@ -5361,8 +5361,6 @@ class RelationalAdministration:
             return mysql_components.form(operation,self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'constraint' and operation in mysql_constraints.OPERATIONS:
             return mysql_constraints.form(operation, self._field)
-        if self.dialect.engine_id == 'mysql' and kind == 'view' and operation in mysql_views.OPERATIONS:
-            return mysql_views.form(operation, self._field)
         if self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(kind, ()):
             return mysql_object_changes.form(kind, operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'replication-channel' and operation in mysql_replication.OPERATIONS:

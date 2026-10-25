@@ -70,7 +70,7 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - pending
    * - View
      - pending
-     - pending
+     - draft
      - pending
      - pending
      - pending
@@ -195,3 +195,16 @@ imports **244 → 244**, engine-literal UI branches **111 → 111**, engine pane
 * 2026-10-25: design adopted; descriptor schemas, ten family skeletons, engine
   stubs for the six beta engines, MySQL table worked example and the validator
   added. All other forms ``pending``.
+
+MySQL View descriptor migration (2026-10-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The View family moves from ``pending`` to ``draft``. Every declared create/alter
+field reaches the real provider compiler; the duplicate native view field
+factory and `_form()` branch were removed. Scalar output aliases and privilege
+diffs remain explicit Decision 9 gaps. MySQL's absence of triggers on views is
+recorded under ``omitted_tabs``. Shared render acceptance remains pending; no
+family is promoted to ``complete``. Lint counts: JSON controls **304 → 303**, MUI
+imports **244 → 244**, engine-literal UI branches **111 → 111**, panels
+**113 → 113**. Shared skeletons, schemas, shell and family render tests were not
+changed.

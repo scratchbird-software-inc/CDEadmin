@@ -2610,3 +2610,37 @@ pending work remain in place. A disabled Performance Schema needs a reviewed
 native configuration/restart and a fresh SQL session. These editor guarantees
 are separate from qualification of unadmitted execution/conversion paths and
 from the explicitly unconfirmed source active-role/temporary-object overlays.
+
+Retained observation and persisted value boundaries
+---------------------------------------------------
+
+Denied/disabled private observation no longer authorizes original-session
+metadata queries for parameter binding, client script framing, query attributes
+or C text conversion. These paths refuse affected commands before dispatch,
+retain native diagnostic state and pending work, and explain the required native
+Performance Schema access. Restoring grants permits authenticated readmission
+without replacing the original connection. Native version verification occurs
+during admission; later checks bind that observation to the original connection
+identity. Native pure/C and authenticated API evidence covers both admission
+profiles, server general-log command counts, ROW_COUNT, warning/error areas and
+pending savepoints. This does not claim executable support without the dependency.
+
+The system-variable catalog now distinguishes persisted absence, redaction,
+ordinary text and ambiguous NULL/empty text. MySQL9.7's
+``performance_schema.persisted_variables`` carries string values and no
+NULL-versus-empty discriminator. Native ``SET PERSIST`` / ``SET PERSIST_ONLY``
+receipts retain acknowledgement and persisted presence while exposing
+``persisted_value_identity_unconfirmed`` for that ambiguity. Neither an empty
+string comparison nor DEFAULT acknowledgement proves the value's typed identity.
+Runtime NULL can be observed separately using ``IS NULL``; RESET PERSIST removes
+the persisted identity. Native qualification exercises actual NULL
+(``innodb_tmpdir``) and empty text (``init_connect``), both connectors, both
+persistence operations and server DDN rediscovery. Engine-owned ambiguity is
+reported, not repaired through an application value substitution.
+
+The unified View family descriptor now accompanies the existing native view
+compiler, with every declared create/alter binding verified. Its legacy field
+factory and dispatch branch were removed. It remains draft until the front-end
+stream verifies rendering and round trips. Ordered scalar aliases and
+cross-operation privilege edits remain Decision 9 gaps; raw user-key retrieval
+remains Decision 10. Native/API evidence does not establish unified UI acceptance.
