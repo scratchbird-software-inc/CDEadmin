@@ -51,7 +51,8 @@
           "label": "Aggregate"
         }
       ],
-      "help": "function/procedure share FunctionSchema (procedure.js passes type procedure); aggregate uses the read-only AggregateSchema."
+      "help": "function/procedure share FunctionSchema (procedure.js passes type procedure); aggregate uses the read-only AggregateSchema.",
+      "ui_only": true
     },
     {
       "field_id": "name",

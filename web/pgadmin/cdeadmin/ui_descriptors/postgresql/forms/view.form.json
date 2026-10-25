@@ -42,7 +42,8 @@
           "label": "Materialized view"
         }
       ],
-      "help": "Selects view.ui.js (ordinary) or mview.ui.js (materialized) field set."
+      "help": "Selects view.ui.js (ordinary) or mview.ui.js (materialized) field set.",
+      "ui_only": true
     },
     {
       "field_id": "name",

@@ -63,7 +63,8 @@
           "label": "Full-text search"
         }
       ],
-      "default": "default"
+      "default": "default",
+      "ui_only": true
     },
     {
       "field_id": "name",

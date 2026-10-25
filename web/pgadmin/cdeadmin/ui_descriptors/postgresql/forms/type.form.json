@@ -65,7 +65,8 @@
           "label": "Multirange"
         }
       ],
-      "help": "domain uses domain.ui.js; the others use type.ui.js where typtype carries the same choice (c/e/b/r/p; m is shown for existing types only). Read-only once the type exists."
+      "help": "domain uses domain.ui.js; the others use type.ui.js where typtype carries the same choice (c/e/b/r/p; m is shown for existing types only). Read-only once the type exists.",
+      "ui_only": true
     },
     {
       "field_id": "name",

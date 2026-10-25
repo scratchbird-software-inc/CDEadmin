@@ -41,7 +41,8 @@
           "value": "grant",
           "label": "Grant"
         }
-      ]
+      ],
+      "ui_only": true
     },
     {
       "field_id": "name",

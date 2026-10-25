@@ -42,7 +42,8 @@
           "label": "Event trigger"
         }
       ],
-      "help": "trigger uses trigger.ui.js (TriggerSchema + EventSchema); event uses event_trigger.ui.js."
+      "help": "trigger uses trigger.ui.js (TriggerSchema + EventSchema); event uses event_trigger.ui.js.",
+      "ui_only": true
     },
     {
       "field_id": "name",

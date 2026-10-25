@@ -50,7 +50,8 @@
           "value": "scheduled",
           "label": "Scheduled"
         }
-      ]
+      ],
+      "ui_only": true
     },
     {
       "field_id": "name",

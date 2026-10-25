@@ -335,6 +335,10 @@
         "wrap_list": {
           "type": "boolean",
           "description": "send the single selected value as a one-item list (provider takes a list but the engine admits one value)"
+        },
+        "ui_only": {
+          "type": "boolean",
+          "description": "never sent to the provider (variant switches, confirmations the shell handles)"
         }
       }
     }

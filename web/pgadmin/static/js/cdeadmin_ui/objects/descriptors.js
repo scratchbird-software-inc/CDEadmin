@@ -288,7 +288,7 @@ export function toBackendDraft(form, draft, {mode='create', baseline=null}={}) {
   const out = {};
   for(const tab of form.tabs || []) {
     for(const field of activeFields(tab.fields, {mode, draft})) {
-      if(!Object.hasOwn(draft, field.field_id)) continue;
+      if(!Object.hasOwn(draft, field.field_id) || field.ui_only) continue;
       let value = draft[field.field_id];
       if(field.wrap_list && !Array.isArray(value)) value = (value === undefined || value === null || value === '') ? [] : [value];
       if(mode === 'alter' && field.control === 'grid' && field.field_id === 'columns' && baseline) {

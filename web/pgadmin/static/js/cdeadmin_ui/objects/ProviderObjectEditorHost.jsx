@@ -122,7 +122,7 @@ NativeChildList.propTypes = {resource: PropTypes.object, resources: PropTypes.ar
 
 export default function ProviderObjectEditorHost({api, endpointUrl, engine, version, resourceId, resourceKind,
   databaseTargetId, mode='alter', displayName, context={}, tabRenderers: tabRenderersProp={}, onClose, onApplied,
-  descriptorClient}) {
+  onOpenData, descriptorClient}) {
   const client = useMemo(() => descriptorClient || new DescriptorClient(api), [api, descriptorClient]);
   const post = useMemo(() => makePost(api, endpointUrl, databaseTargetId), [api, endpointUrl, databaseTargetId]);
   const [state, setState] = useState({status: 'loading', bundle: null, resource: null, resources: [], error: null});
@@ -169,13 +169,16 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
   const tabRenderers = {
     Statistics: () => <NativeProperties resource={resource} />,
     Dependencies: () => <NativeDependencies resource={resource} />,
-    Data: () => <EmptyState message="Row data opens in the data grid from the object's menu." />,
+    Data: () => <EmptyState message="Row data opens in the data grid." actionLabel={onOpenData ? 'Open data grid' : undefined}
+      onAction={onOpenData ? () => onOpenData({resourceId, resourceKind, databaseTargetId}) : undefined} />,
     Indexes: () => <NativeChildList resource={resource} resources={resources} kind="index" />,
     Triggers: () => <NativeChildList resource={resource} resources={resources} kind="trigger" />,
     ...tabRenderersProp,
   };
+  const variant = bundle.kinds[resourceKind]?.variant;
+  const record = {...recordFromResource(resource), ...(variant ? {variant} : {})};
   return <ObjectEditor form={form} mode={mode} resourceKind={resourceKind}
-    record={recordFromResource(resource)} context={{...context, ...optionContext, target}}
+    record={record} context={{...context, ...optionContext, target}}
     tabRenderers={tabRenderers}
     title={displayName ? `${mode === 'create' ? 'Create' : 'Edit'} ${form.family_title.toLowerCase()} — ${displayName}` : undefined}
     plan={({draft}) => calls.plan({draft})}
@@ -197,5 +200,6 @@ ProviderObjectEditorHost.propTypes = {
   onClose: PropTypes.func,
   onApplied: PropTypes.func,
   tabRenderers: PropTypes.object,
+  onOpenData: PropTypes.func,
   descriptorClient: PropTypes.object,
 };

@@ -87,7 +87,7 @@ def backend_draft(form: dict, draft: dict, mode: str = "create", baseline: dict 
     for tab in form.get("tabs", []):
         for field in active_fields(tab.get("fields", []), mode, draft):
             fid = field["field_id"]
-            if fid not in draft:
+            if fid not in draft or field.get("ui_only"):
                 continue
             value = draft[fid]
             if mode == "alter" and field.get("control") == "grid" and fid == "columns" and baseline is not None:

@@ -30,7 +30,8 @@
           "value": "package",
           "label": "Package"
         }
-      ]
+      ],
+      "ui_only": true
     },
     {
       "field_id": "name",

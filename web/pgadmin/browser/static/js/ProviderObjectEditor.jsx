@@ -78,7 +78,10 @@ function openEditorPanel({context, itemData, item, resourceKind, resourceId, mod
       <ProviderObjectEditorHost api={context.api} endpointUrl={endpointUrl} engine={context.engine}
         version={context.version} resourceId={resourceId} resourceKind={resourceKind}
         databaseTargetId={itemData.cde_database_target_id} mode={mode} displayName={displayName}
-        onClose={onClose} onApplied={() => refreshNode(item, {parent: mode === 'alter'})} />
+        onClose={onClose} onApplied={() => refreshNode(item, {parent: mode === 'alter'})}
+        onOpenData={() => serverNode.callbacks.open_cde_workspace.call(serverNode, {item: context.endpoint.item}, 'data', {
+          database_target_id: itemData.cde_database_target_id, resource_id: resourceId, resource_kind: resourceKind,
+          display_name: displayName, task_title: gettext('Data')})} />
     </ErrorBoundary>,
   }, BROWSER_PANELS.MAIN, 'middle');
   return panelId;
