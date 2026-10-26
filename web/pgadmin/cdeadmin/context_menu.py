@@ -856,67 +856,6 @@ def endpoint_context_actions(
                     confirmation=True,macro=False,arguments={'tab':'administration','resource_kind':'server',
                         'operation_id':operation,'database_target_id':None},enabled=ready and can_manage,
                     disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can maintain this native instance.'))
-        actions.append(_action('endpoint.mysql.data_drift', 'MySQL full-table data comparison...', 'open_workspace',
-            icon='command.default', group='diagnostics', enabled=ready and can_manage,
-            arguments={'tab':'mysql-data-drift','database_target_id':None},
-            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can compare native table scopes.'))
-        actions.append(_action('endpoint.mysql.spatial', 'MySQL spatial data inspection...', 'open_workspace',
-            icon='command.default', group='diagnostics', enabled=ready and can_manage,
-            arguments={'tab':'mysql-spatial','database_target_id':None},
-            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can inspect native spatial data.'))
-        actions.append(_action('endpoint.mysql.content_search', 'MySQL database content search...', 'open_workspace',
-            icon='command.default', group='diagnostics', enabled=ready and can_manage,
-            arguments={'tab': 'mysql-content-search', 'database_target_id': None},
-            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can search native table values.'))
-        actions.append(_action('endpoint.mysql.workload', 'MySQL workload analysis...', 'open_workspace',
-            icon='command.default', group='diagnostics', enabled=ready and can_manage,
-            arguments={'tab': 'mysql-workload', 'database_target_id': None},
-            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can inspect its native workload.'))
-        actions.append(_action('endpoint.mysql.host', 'MySQL database-host administration...', 'open_mysql_host',
-            icon='command.default', group='maintenance', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its database SSH host.'))
-        actions.append(_action('endpoint.mysql.routers', 'MySQL Router host and service administration...', 'open_mysql_routers',
-            icon='command.default', group='availability', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native Router deployments.'))
-        actions.append(_action('endpoint.mysql.physical', 'MySQL physical backups...', 'open_mysql_physical',
-            icon='action.backup', group='backup', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can administer native physical backup jobs.'))
-        actions.append(_action('endpoint.mysql.raw_binlogs', 'MySQL raw binary-log archives...', 'open_mysql_raw_binlogs',
-            icon='action.backup', group='backup', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can administer native raw archive jobs.'))
-        actions.append(_action('endpoint.mysql.binlog_replay', 'MySQL binary-log replay...', 'open_mysql_binlog_replay',
-            icon='action.restore', group='restore', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can administer native replay jobs.'))
-        actions.append(_action('endpoint.mysql.binlogs', 'MySQL binary-log archives...', 'open_mysql_binlogs',
-            icon='action.backup', group='backup', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native archive jobs.'))
-        actions.append(_action('endpoint.mysql.instance_backups', 'MySQL full-instance backups...', 'open_mysql_instance_backups',
-            icon='action.backup', group='backup', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native instance backups.'))
-        actions.append(_action('endpoint.mysql.instance_restores', 'MySQL full-instance restores...', 'open_mysql_instance_restores',
-            icon='action.restore', group='restore', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native instance restores.'))
-        actions.append(_action('endpoint.mysql.sandboxes', 'MySQL local testing sandboxes...', 'open_mysql_sandboxes',
-            icon='action.settings', group='availability', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can open local sandbox administration.'))
-        actions.append(_action('endpoint.mysql.topologies', 'MySQL native topologies...', 'open_mysql_topologies',
-            icon='action.settings', group='availability', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native topologies.'))
-        actions.append(_action('endpoint.mysql.local_clone', 'MySQL physical clone...', 'open_mysql_local_clone',
-            icon='action.backup', group='backup', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native clone jobs.'))
-        for tab, label in (('monitoring', 'MySQL server dashboard...'),
-                           ('monitoring_policy', 'Configure monitoring collection...')):
-            actions.append(_action(f'endpoint.mysql.{tab}', label, 'open_workspace',
-                icon='tool.dashboard', group='availability', arguments={'tab': tab},
-                mutation='admin' if tab == 'monitoring_policy' else 'read', enabled=ready and can_manage,
-                disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can monitor it.'))
-        actions.append(_action('endpoint.mysql.dashboard_editor', 'Edit MySQL dashboard...', 'open_mysql_dashboard_editor',
-            icon='action.edit', group='availability', mutation='write', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
-        actions.append(_action('endpoint.mysql.server_catalog', 'MySQL server metadata and DDN...', 'open_workspace',
-            icon='action.export', group='database', arguments={'tab': 'export', 'server_catalog': True}, enabled=ready and can_manage,
-            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can inspect it.'))
     actions.extend([
         _action(
             f'endpoint.{engine_id}.create_database',
@@ -1234,26 +1173,6 @@ def database_target_context_actions(
         actions.append(_action('database.mariadb.dashboard_editor', 'Edit MariaDB dashboard...', 'open_mariadb_dashboard_editor',
             icon='action.edit', group='availability', mutation='write', arguments=base))
     if engine_id == 'mysql':
-        for tab, label in (('monitoring', 'MySQL database dashboard...'),
-                           ('monitoring_policy', 'Configure monitoring collection...')):
-            actions.append(_action(
-                f'database.mysql.{tab}', label, 'open_workspace',
-                icon='tool.dashboard', group='availability',
-                mutation='admin' if tab == 'monitoring_policy' else 'read',
-                arguments={**base, 'tab': tab},
-            ))
-        actions.append(_action('database.mysql.spatial', 'MySQL spatial data inspection...', 'open_workspace',
-            icon='command.default', group='diagnostics', arguments={**base,'tab':'mysql-spatial'}))
-        actions.append(_action('database.mysql.dashboard_editor', 'Edit MySQL dashboard...', 'open_mysql_dashboard_editor',
-            icon='action.edit', group='availability', mutation='write', arguments=base))
-        actions.append(_action(
-            'database.mysql.catalog_ddn', 'MySQL metadata and DDN diagrams...',
-            'open_workspace', icon='action.export', group='database',
-            priority=44, arguments={**base, 'tab': 'export'},
-        ))
-        actions.append(_action('database.mysql.test_data', 'Generate MySQL test data...',
-            'open_workspace', icon='action.insert', group='database', priority=45,
-            arguments={**base, 'tab': 'mysql-test-data'}))
         tasks = (
             ('backup_logical', 'Logical backup (MySQL Shell)...',
              'action.backup', 'admin', 'backup'),

@@ -3040,3 +3040,21 @@ Channel create/alter source-option forms still use their legacy contract and
 remain unsurfaced under the unified descriptor rules; this range fix does not
 qualify that UI. Broader inventory, diagnostics and protected generated-password
 delivery remain open.
+
+Declared native tool menus
+---------------------------
+
+The existing diagnostic, dashboard, native job and host/service tool openers
+are declared in ``ui_descriptors/mysql/tools.json`` and resolved through the
+shared menu loader. Their handlers and native workflows are unchanged. Source
+readers retain verified-endpoint and owner gates; retained native job and host
+views retain owner access during a SQL outage. Database actions carry the
+selected database target. Collection configuration and the DDN dashboard
+editor remain independent of the display-only viewer.
+
+This migration replaces 25 handwritten menu appenders, not any native operation
+or editor family. Channel create/alter lifecycle forms remain unsurfaced under
+Decision15 because the shared registry has no Engine-object editor. Native
+option APIs and the typed start/stop/reset/filter operation descriptors remain
+available at their previously qualified scope. Product inventory, retained
+role/temporary-object diagnostics and protected password delivery stay open.

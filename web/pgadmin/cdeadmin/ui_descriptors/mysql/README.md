@@ -207,3 +207,18 @@ unsurfaced channel create/alter source-option contract; native/API qualification
 is not descriptor or dialog acceptance. Relay-only observations retain
 `native_relay_position`; retry requests report `native_unsigned_long` for the
 largest requested guarded integer. No retry-sequence outcome is inferred.
+
+## Declared tool openers
+
+`tools.json` owns 25 existing endpoint/database openers. Stable command/handler
+IDs, native arguments, category/priority, owner/verification gates and offline
+job access are retained; only user-facing labels are normalized. The retired
+appenders are deleted from `context_menu.py`. Viewers, collection configuration
+and the separate DDN editor remain independent.
+
+Decision15 records why channel create/alter cannot yet have a valid descriptor:
+`engine_object` has no shared family skeleton and operation dialogs admit only
+tiers 2/3. Native source options need typed lifecycle fields with omission,
+false/zero/empty and nullable-value semantics. Keep that gap explicit; do not
+fabricate a family mapping or relabel lifecycle actions. The existing typed
+channel operation descriptors and backend option contracts remain unchanged.

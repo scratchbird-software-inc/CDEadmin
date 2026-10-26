@@ -535,3 +535,25 @@ and actual shared dialog round trip remain unsurfaced work. No new operation,
 field, descriptor status or lint count is claimed. Existing 84 draft entries,
 three missing beta row-action entries and Decisions9/11/12/13/14 remain as
 recorded above. Protected generated-password delivery remains open.
+
+MySQL tool openers and Engine-object lifecycle (2026-10-26)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Twenty-five existing endpoint/database tool openers now live in
+``mysql/tools.json``: diagnostics, spatial inspection, content search, workload,
+DDN capture, dashboards/collector configuration/editor, host/Router service
+administration, native backup/archive/replay/clone jobs, sandboxes, topologies
+and test data. Their legacy menu appenders are deleted. Stable command and
+handler IDs, permission gates, offline owner access for retained jobs, database
+scope, mutation classes and category/priority are retained. Labels name actions.
+The viewer, collector configuration and DDN editor remain separate entries.
+No native operation, renderer, family or operation status is added by this move.
+
+Decision15 records the missing Engine-object lifecycle editor for channel
+create/alter. Its typed form cannot pass the current family resolver/schema;
+it remains unsurfaced without reclassifying lifecycle actions or inventing a
+family. The four existing channel operation descriptors remain draft, as do
+all 84 operation entries. Independent diagnostics overlays, native inventory,
+protected generated-password delivery and shared Decisions9/11/12/13/14 remain
+open. Lint before/after: JSON297/297, MUI244/244, engine branches111/111,
+panels113/113, context-menu branches14/14.

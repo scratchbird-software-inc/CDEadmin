@@ -734,3 +734,20 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     metadata and contract tests; it does not expose raw JSON, turn all values
     into strings or add a second row editor. This does not block other typed
     operation descriptors or native backend work.
+
+15. Engine-object lifecycle editors (MySQL audit, 2026-10-26):
+    ``replication-channel`` is classified as ``engine_object`` with tier-1
+    create/alter. The current shared family registry and form resolver have
+    no Engine-object skeleton; the operation schema permits only tiers 2/3.
+    Consequently no valid lifecycle form can currently host the channel's
+    typed ``source_options.<native_option>`` fields and separate sensitive
+    ``source_password``. This also needs omit versus explicit false/zero/empty,
+    nullable TLS ciphersuites and privilege-check accounts, a numeric server-ID
+    grid and independent source/relay position fields. Default: retain the
+    native contract and record create/alter as unsurfaced until the front-end
+    stream declares the Engine-object editor or an approved family mapping.
+    Do not relabel lifecycle actions as tier 2/3, place them on an unrelated
+    server editor, add a renderer branch or replace options with raw JSON.
+    Existing channel start/stop/reset/filter descriptors and tool openers can
+    migrate independently. This decision does not change the native engine's
+    supported replication options or defer their backend implementation.
