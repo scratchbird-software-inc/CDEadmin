@@ -189,6 +189,8 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        common['server'] |= frozenset({'refresh_session_metadata'})
+        common['table'] |= frozenset({'drop_temporary'})
         from .column_masking import OPERATIONS as column_masking_operations
         common['column'] = common['column'] | column_masking_operations
         from .mysql_key_cache import OPERATIONS as key_cache_operations
@@ -981,6 +983,13 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def admin_operation_field_contract(self, request):
         kind, operation = request['resource_kind'], request['operation_id']
+        if kind == 'table' and operation == 'create':
+            from .descriptor_contracts import document, field_contract
+            fields = copy.deepcopy(request['legacy_fields'])
+            field = field_contract(next(field for field in document('forms/table.form.json')['fields'] if field['field_id'] == 'temporary'))
+            field.pop('default', None)  # Preserve explicit legacy options.temporary.
+            fields.append(field)
+            return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/table.form.json'}
         from .database_inputs import OPERATIONS as database_operations
         if (kind in {'system-variable', 'session'} or
                 kind == 'database' and operation in database_operations or
@@ -1014,6 +1023,13 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
         compiled = planned.get('provider_payload', {}).get('compiled', {})
+        if 'mysql_account_change' in compiled:
+            planned['provider_payload']['password_delivery_scope'] = request.get('plan_id')
+        if 'mysql_session_catalog' in compiled:
+            if not request.get('session_id'):
+                raise RelationalClientError('Select a retained session before reviewing this operation')
+            compiled['mysql_session_id'] = request['session_id']
+            return planned
         from .relay_positions import position, bind_review as bind_relay
         if position(compiled):
             return bind_relay(self, planned)
@@ -1097,13 +1113,14 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def __init__(self, config, module=None, tool_runner=None):
         super().__init__(config, module)
         from .mysql_connections import Connector
-        self._mysql_connector = Connector(self.module)
+        self._mysql_connector = Connector(self.module, config.secret_acquirer)
         self._connector = self._mysql_connector
         self._uncertain_sessions = set()
         from .mysql_execution import Executions
         self._executions = Executions(self)
         self._session_requests = {}
         self._native_operations = 0
+        self._session_catalogs = {}
         self._tool_runner = tool_runner or ProviderToolRunner({
             'mysql-shell': os.environ.get(
                 'CDEADMIN_MYSQLSH_BINARY', 'mysqlsh'
@@ -1112,6 +1129,14 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             'mysql-client': os.environ.get('CDEADMIN_MYSQL_CLIENT_BINARY','mysql'),
             'mysql-server': os.environ.get('CDEADMIN_MYSQL_SERVER_BINARY','mysqld'),
         })
+
+    def _invoke_connector(self, request, connector, overrides=None, **kwargs):
+        if connector is self._mysql_connector:
+            principal = self._route(request).get('principal_reference')
+            def scoped(*args, **options):
+                return self._mysql_connector.connect(principal, *args, **options)
+            connector = scoped
+        return super()._invoke_connector(request, connector, overrides, **kwargs)
 
     def _connect(self, request):
         # Keep admission through native initialization and handle publication.
@@ -1128,6 +1153,17 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
                 raise RelationalClientError('MySQL client is closing')
             handle = super().open_session(request)
             try:
+                selected = getattr(handle, '_cdeadmin_failover_target', None)
+                if isinstance(selected, dict):
+                    route = {**self._route(request), **selected}
+                    route.pop('failover', None)
+                    if selected.get('credential_reference_id'):
+                        references = dict(route.get('credential_references') or {})
+                        references.pop('database_password', None)
+                        references[selected['credential_kind']] = selected['credential_reference_id']
+                        route['credential_references'] = references
+                    request = {**request, 'route': route}
+                    self._connection_databases[id(handle)] = route.get('database')
                 self._executions.sessions.register(handle)
                 runtime = super().runtime_identity(request, handle)
                 from .mysql_session_variables import install
@@ -1163,10 +1199,19 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         from .mysql_completion import catalog
         return catalog(self, request)
 
+    def apply_admin_operation(self, request):
+        handle = request.get('_provider_session_handle')
+        if handle is not None:
+            from .mysql_session_catalog import invalidate
+            invalidate(self, handle)
+        return super().apply_admin_operation(request)
+
     def execute(self, handle, request):
         session_request = self._session_requests.get(id(handle))
         if session_request is None:
             raise RelationalClientError('MySQL session route is unavailable')
+        from .mysql_session_catalog import invalidate
+        invalidate(self, handle)
         return self._executions.execute(handle, request, session_request)
 
     def describe_result(self, token):
@@ -1242,6 +1287,8 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def close_session(self, handle):
         with self._executions.lock:
             self._executions.require_idle(handle)
+            from .mysql_session_catalog import invalidate
+            invalidate(self, handle)
             from .mysql_session_variables import uninstall
             uninstall(handle)
             self._session_requests.pop(id(handle), None)
@@ -1279,6 +1326,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             super().close()
         finally:
             self._mysql_connector.close()
+            self._session_catalogs.clear()
             self._uncertain_sessions.clear()
             self._session_requests.clear()
             self._executions.sessions.entries.clear()
@@ -3066,6 +3114,20 @@ def _create_client(profile, permissions, context):
     module_name = (
         'mysql.connector' if profile is MYSQL_PROFILE else 'mariadb'
     )
+    def acquire(reference, principal, purpose, kind):
+        from ...security import SecretAccessError
+        try:
+            return permissions.acquire_secret(reference, principal, purpose, kind)
+        except SecretAccessError:
+            if profile is not MYSQL_PROFILE or kind != 'password':
+                raise
+            from flask import current_app
+            from ...security.generated_passwords import for_app
+            results = for_app(current_app._get_current_object(), context)
+            if results.principal != principal:
+                raise SecretAccessError('Protected credential owner does not match') from None
+            results.register(reference)
+            return permissions.acquire_secret(reference, principal, purpose, kind)
     config = RelationalClientConfig(
         profile=profile,
         module_name=module_name,
@@ -3081,11 +3143,12 @@ def _create_client(profile, permissions, context):
                 'database_password': 'password',
                 'database_password_2': 'password2',
                 'database_password_3': 'password3',
+                'password': 'password',
             }
             if profile is MYSQL_PROFILE else
             {'database_password': 'password'}
         ),
-        secret_acquirer=permissions.acquire_secret,
+        secret_acquirer=acquire,
         connection_initializer=(
             _initialize_mysql_connection if profile is MYSQL_PROFILE
             else _initialize_connection),
@@ -3102,7 +3165,13 @@ def _create_client(profile, permissions, context):
         return MariaDBDBAPIClient(
             config, context.pool_namespace
         )
-    return MySQLDBAPIClient(config)
+    client = MySQLDBAPIClient(config)
+    def receiver(plan_id):
+        from flask import current_app
+        from ...security.generated_passwords import for_app
+        return for_app(current_app._get_current_object(), context, plan_id)
+    client.protected_password_receiver_factory = receiver
+    return client
 
 
 def create_provider(context, permissions, client=None):

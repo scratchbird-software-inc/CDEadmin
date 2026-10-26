@@ -16,10 +16,12 @@ def factors(intent):
         [row['factor'] for row in draft.get('factor_actions',[]) if row.get('mode')=='RANDOM_PASSWORD'])
 
 
-def receiver(client,intent,expected=None):
+def receiver(client,intent,expected=None,scope=None):
     if not factors(intent):return None
     value=getattr(client,'protected_password_receiver',None)
     try:
+        if value is None and callable(getattr(client, 'protected_password_receiver_factory', None)):
+            value = client.protected_password_receiver_factory(scope or intent.get('review', {}).get('delivery_scope'))
         binding=str(UUID(value.binding_id))
         if binding!=value.binding_id or expected is not None and expected!=binding:raise ValueError()
         if not all(callable(getattr(value,name,None)) for name in ('reserve','publish','release')):raise ValueError()
@@ -28,8 +30,8 @@ def receiver(client,intent,expected=None):
     return value
 
 
-def binding(client,intent):
-    value=receiver(client,intent)
+def binding(client,intent,scope=None):
+    value=receiver(client,intent,scope=scope)
     return value.binding_id if value else None
 
 

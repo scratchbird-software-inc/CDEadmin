@@ -3120,6 +3120,10 @@ open under their recorded decisions.
 Current Group9 integration boundary
 ------------------------------------
 
+This section records the earlier producer/private-peer boundary. The seven
+concrete backend gaps identified subsequently are reconciled in
+``Group9 backend completion`` below; shared presentation remains separate.
+
 Receiver, coordinator and worker inspection now projects all20,15 and24 native
 MySQL9.7 status fields, respectively. Wide IDs/counters and timestamps use text;
 multiple workers retain their native identities and order. Each table remains
@@ -3220,3 +3224,80 @@ reduces source overhead without changing the SDK or its evidence requirements.
 Shared UI Decisions9/11–17, independent inventory and platform/history scope
 remain as recorded above; these workflows do not establish full product
 completion.
+
+Group9 backend completion
+-------------------------
+
+The remaining seven identified backend items now have concrete contracts:
+
+* Temporary table creation uses a boolean ``temporary`` create field and a
+  reviewed retained session. ``table.drop_temporary`` emits DROP TEMPORARY TABLE,
+  so a base table can never be the fallback target. Neither action commits or
+  closes the caller's transaction. A pooled connection that managed temporary
+  objects is physically discarded at session close, including when reset is
+  disabled. An absent or changed retained-session binding refuses execution.
+* Structured foreign keys preserve ``on_delete`` and ``on_update``; structured
+  CHECK creation preserves boolean ``enforced``. Invalid action/enforcement
+  values refuse review. Native storage-engine restrictions remain authoritative,
+  including InnoDB's refusal of SET DEFAULT; no referential behavior is emulated.
+* Explicit ``server.refresh_session_metadata`` captures active roles and selected
+  temporary-table definitions, including shadows of committed tables. It requires
+  diagnostic-replacement acknowledgement. The source is locked and its retained
+  identity checked. Automatic completion reads the resulting snapshot without
+  a source command until execution/administration invalidates it. Without one,
+  automatic observation retains its existing private-peer path. Native MySQL
+  cannot enumerate every user temporary table; selected-name coverage stays
+  explicit, and ``complete=false`` does not assert an invented full enumeration.
+* Production RANDOM PASSWORD delivery reserves durable space before account DCL,
+  encrypts each factor with authenticated, scope-bound encryption, and returns
+  references only. The store binds application owner, endpoint, plan, native
+  account, factor and expiry. It uses the unlocked master-password authority or
+  ``CDEADMIN_GENERATED_PASSWORD_KEYS`` plus
+  ``CDEADMIN_GENERATED_PASSWORD_ACTIVE_KEY_ID``. The default lifetime is600seconds;
+  ``CDEADMIN_GENERATED_PASSWORD_TTL`` permits60..86400seconds and
+  ``CDEADMIN_GENERATED_PASSWORD_PATH`` selects private storage. A changed key
+  generation invalidates delivery review. Recovery by plan ID survives a lost
+  HTTP result or publication response; it never repeats account DCL. Expired
+  values cannot resolve. Explicit authenticated reveal is no-store. Ordinary
+  plans, receipts, endpoint configuration and logs never carry the password.
+* Each connection failover target can select an endpoint-protected credential
+  reference and its kind, plus its own provider-owned pool name/size/reset policy.
+  Credentials are acquired only around native connection setup. Higher priorities
+  are tried first; equals are randomized without replacement. Configuration or
+  secret-resolution failures do not silently fall back. Native connection errors
+  can advance to another target. No global Connector/Python pool is created.
+  Selected target/principal/reference metadata binds retained-session peers;
+  plaintext nested passwords are refused. New secret values retire old pool
+  generations; live leases remain owned until release.
+* Invalid plans return422 with allowlisted field/code errors; stale, replayed or
+  changed-session plans return409. Permission refusals return403. Confirmation
+  refusals remain explicit. These pre-dispatch envelopes carry no submitted
+  values and never claim a mutation occurred. Execution failures retain their
+  separate unknown-outcome/native-acknowledgement contract. All these responses
+  are no-store.
+
+``tools/cdeadmin_mysql_group9_completion_qualification.py`` exercises native9.7.0
+through both connectors and authenticated workspace requests. Its native pass
+covers savepoints, independent visibility, temporary shadowing, role snapshots,
+FK effects, unenforced CHECKs, disabled instrumentation, physical pool cleanup,
+per-target authentication and credential rotation. Its application pass checks
+protected delivery/reveal, actual password authentication, recovery after a lost
+publication response, one-shot plans, structured refusals and retained-session
+plan/apply. ``supplement_mysql_group9_contract.py`` admits the two new generated
+SQL tasks only after source-matched native/parser evidence. Task counts qualify
+these statements, not full product completeness.
+
+The corresponding Table/Server/User descriptors and91 operation entries remain
+at their recorded draft status. New retained-session selection, explicit refresh
+and protected reveal/recovery controls are **unsurfaced** pending the front-end
+stream. Decisions9/11/12/13/14/15 and the presentation portion of16/17 are the
+shared handoff. No shared renderer, schema, shell, menu JavaScript or family test
+was changed. Raw user-key export remains owner-excluded, and unavailable closed
+Enterprise implementations remain post beta.
+
+The finite seven-item backend audit is closed by the evidence above. This does
+not reclassify external archive references or optional deployments as tested,
+close the entire six-engine matrix, qualify Windows/macOS, resume ScratchBird
+history testing, or claim human presentation acceptance. The eleven adopted
+comparison priorities retain their existing completed scope; this audit does
+not add a new comparison queue.

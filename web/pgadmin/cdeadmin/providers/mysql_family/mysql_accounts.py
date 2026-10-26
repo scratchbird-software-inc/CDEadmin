@@ -248,12 +248,13 @@ def bind_review(client,planned):
     from . import mysql_passwords
     from .mysql_indexes import context
     compiled=planned['provider_payload']['compiled'];intent=compiled['mysql_account_change']
-    delivery=mysql_passwords.binding(client,intent)
+    scope = planned['provider_payload'].get('password_delivery_scope')
+    delivery=mysql_passwords.binding(client,intent,scope)
     handle=client._connect({'route':{**planned['provider_payload']['route'],'database':None}});cursor=None
     try:
         handle.autocommit=True;cursor=handle.cursor();identity=context(cursor)
         grammar=check_grammar(client,compiled,identity['sql_mode']);before=observe(cursor,intent)
-        intent['review']={'identity':identity,'before':before,'grammar':grammar,**({'password_delivery':delivery} if delivery else {})}
+        intent['review']={'identity':identity,'before':before,'grammar':grammar,**({'password_delivery':delivery, 'delivery_scope':scope} if delivery else {})}
         planned['command_preview'].update(native_execution_identity=identity,native_account_observation=before['public'],native_grammar=grammar)
         return planned
     finally:

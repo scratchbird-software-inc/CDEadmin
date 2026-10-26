@@ -37,6 +37,7 @@ def registration(app,route,password,use_c,username='root'):
         assert reply.headers['Cache-Control']=='no-store'
         return data['data']
     post.raw=lambda action,request:client.post(endpoint,json={'action':action,'request':{'database_target_id':target,**request}})
+    post.body=lambda action,**data:client.post(endpoint,json={'action':action,'database_target_id':target,**data})
     return sid,target,post
 
 

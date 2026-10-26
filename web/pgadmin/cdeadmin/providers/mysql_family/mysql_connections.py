@@ -5,6 +5,7 @@ import json
 import secrets
 import threading
 import weakref
+from contextlib import nullcontext
 
 from pgadmin.cdeadmin.sdk import RelationalClientError
 
@@ -12,6 +13,10 @@ from pgadmin.cdeadmin.sdk import RelationalClientError
 POOL_ARGUMENTS = frozenset({
     'pool_name', 'pool_size', 'pool_reset_session',
 })
+
+
+class PoolUnavailable(RelationalClientError):
+    """A target's provider-owned pool has no available lease."""
 
 
 def _close(connection):
@@ -86,7 +91,10 @@ class Lease:
         native = self._native
         if native is not None:
             object.__setattr__(self, '_native', None)
-            self._pool.release(native)
+            if getattr(native, '_cdeadmin_temporary_management_used', False) is True:
+                self._pool.discard(native)
+            else:
+                self._pool.release(native)
 
     def discard(self):
         native = self._native
@@ -118,7 +126,7 @@ class _Pool:
                     continue
                 return Lease(self, native)
             if self.count >= self.size:
-                raise RelationalClientError('MySQL connection pool exhausted')
+                raise PoolUnavailable('MySQL connection pool exhausted')
             native = self.connect(**options)
             self.count += 1
             return Lease(self, native)
@@ -154,14 +162,63 @@ class _Pool:
 class Connector:
     """Configuration generations are private to this provider instance."""
 
-    def __init__(self, module):
+    def __init__(self, module, secret_acquirer=None):
         self.module = module
+        self.secret_acquirer = secret_acquirer
         self._key = secrets.token_bytes(32)
         self._pools = {}
         self._lock = threading.RLock()
         self._closed = False
 
     def __call__(self, *args, **kwargs):
+        return self.connect(None, *args, **kwargs)
+
+    def connect(self, principal, *args, **kwargs):
+        if 'failover' not in kwargs:
+            return self._checkout(None, args, kwargs)
+        options = dict(kwargs)
+        targets = options.pop('failover')
+        if args or not isinstance(targets, (tuple, list)) or not targets or len(targets) > 128:
+            raise RelationalClientError('Select a bounded native failover target list')
+        allowed = {'host', 'port', 'unix_socket', 'user', 'database', 'priority',
+                   'pool_name', 'pool_size', 'pool_reset_session', 'credential_reference_id', 'credential_kind'}
+        validated = []
+        for index, target in enumerate(targets):
+            if not isinstance(target, dict) or set(target) - allowed:
+                raise RelationalClientError('Unknown failover option; use protected credential references')
+            selected = dict(target)
+            priority = selected.pop('priority', 100)
+            if type(priority) is not int or not 0 <= priority <= 100:
+                raise RelationalClientError('Failover priority must be 0 through 100')
+            reference = selected.pop('credential_reference_id', None)
+            kind = selected.pop('credential_kind', 'database_password')
+            if kind not in {'database_password', 'password'} or reference is not None and (
+                    not isinstance(reference, str) or not reference or not principal or not callable(self.secret_acquirer)):
+                raise RelationalClientError('Protected failover credentials are unavailable')
+            validated.append((priority, index, selected, reference, kind))
+        # Native priority order, with randomized selection without replacement
+        # among equals. Configuration/secret failures never become fallback.
+        validated.sort(key=lambda row: (-row[0], secrets.randbits(128)))
+        for _priority, index, target, reference, kind in validated:
+            selected = {**options, **target}
+            lease = self.secret_acquirer(reference, principal, 'connect', kind) if reference is not None else nullcontext()
+            with lease as password:
+                try:
+                    if reference is None:
+                        connection = self._checkout((principal, index), (), selected)
+                    else:
+                        connection = password.use(lambda value: self._checkout((principal, index), (), {
+                            **selected, 'password': bytes(value).decode('utf8')}))
+                    # A retained session's observer/cancellation peers must use
+                    # this target's principal and reference, not the root login.
+                    connection._cdeadmin_failover_target = {**target,
+                        **({'credential_reference_id': reference, 'credential_kind': kind} if reference is not None else {})}
+                    return connection
+                except (self.module.Error, PoolUnavailable):
+                    continue
+        raise self.module.InterfaceError('Unable to connect to any selected failover target')
+
+    def _checkout(self, scope, args, kwargs):
         options = dict(kwargs)
         size = options.pop('pool_size', None)
         name = options.pop('pool_name', 'default')
@@ -172,6 +229,7 @@ class Connector:
             raise RelationalClientError('MySQL pool reset must be Boolean')
         if not isinstance(name, str) or not name:
             raise RelationalClientError('MySQL pool name is invalid')
+        name = (scope, name)
         with self._lock:
             if self._closed:
                 raise RelationalClientError('MySQL connector is closed')

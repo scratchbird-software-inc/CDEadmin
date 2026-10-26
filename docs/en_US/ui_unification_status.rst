@@ -628,3 +628,28 @@ qualification does not replace shared dialog round trips. Shared shell, schema,
 family-render tests and source-overlay/protected-result integration remain with
 the front-end team. Lint before/after remains JSON297, MUI244, UI engine
 branches111, panels113 and context-menu branches14.
+
+MySQL seven-item Group9 backend reconciliation, 2026-10-26
+--------------------------------------------------------
+
+The Table descriptor now binds temporary creation, foreign-key update/delete
+rules and CHECK enforcement. The Server descriptor binds protected per-target
+credential references and independent pool options. Two typed operation entries
+add explicit session metadata refresh and temporary-table removal; there are91
+operation entries. Capabilities match the native catalog. Families stay draft;
+backend/API evidence does not replace generated-form round trips or presentation
+acceptance.
+
+Decision16's backend service is implemented: authenticated encrypted expiring
+storage, scoped references, recovery by plan and explicit no-store reveal. The
+workspace action ``protected_password_result`` is backend-only until the shared
+host provides recover/reveal controls. The User descriptor records that precise
+remaining gap. Decision17's explicit refresh accepts a retained session,
+diagnostic acknowledgement and typed database/name records. Its source snapshot
+feeds completion until the next source command. Session selection and the new
+refresh/drop interaction remain **unsurfaced** in the shared host.
+
+The identified seven backend gaps are implemented; shared UI stays with the
+front-end team. No shared shell, schema, renderer, panel, menu JavaScript or
+family-render test was edited. Lint before/after: JSON297/297, MUI244/244,
+UI engine branches111/111, panels113/113, context-menu branches14/14.

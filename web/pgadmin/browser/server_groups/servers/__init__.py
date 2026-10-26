@@ -94,7 +94,7 @@ from pgadmin.cdeadmin.report_delivery import ReportDeliveryError
 from pgadmin.cdeadmin.report_scheduler import ReportSchedulerError
 from pgadmin.cdeadmin.semantic_models import SemanticModelError
 from pgadmin.cdeadmin.visual_admin import (
-    VisualAdminError, VisualAdminExecutionError,
+    VisualAdminError, VisualAdminExecutionError, VisualAdminValidationError, VisualAdminAccessError,
 )
 from pgadmin.cdeadmin.visual_admin.execution_errors import (
     execution_failure_response,
@@ -2916,6 +2916,8 @@ class ServerNode(PGChildNodeView):
                     payload = service.database_target_action(
                         server, action, data.get('request') or {}
                     )
+                elif action == 'protected_password_result':
+                    payload = service.protected_password_result(server, data.get('request'))
                 elif action == 'open_session':
                     payload = service.open_session(
                         server, data.get('language_profile'),
@@ -3415,11 +3417,13 @@ class ServerNode(PGChildNodeView):
         except (EndpointRegistrationError,
                 ProviderNavigatorError) as exc:
             db.session.rollback()
-            return make_json_response(
+            response = make_json_response(
                 status=409, success=0, errormsg=str(exc)
             )
+            response.headers['Cache-Control'] = 'no-store'
+            return response
         except (SecretAccessError, RelationalCredentialError):
-            return make_json_response(
+            response = make_json_response(
                 status=401,
                 success=0,
                 errormsg=gettext(
@@ -3428,6 +3432,8 @@ class ServerNode(PGChildNodeView):
                 ),
                 info='CREDENTIAL_REQUIRED',
             )
+            response.headers['Cache-Control'] = 'no-store'
+            return response
         except EditorObservationUnavailable as exc:
             response = make_json_response(status=409, success=0, errormsg=str(exc),
                 info='MYSQL_EDITOR_OBSERVER_UNAVAILABLE', data={
@@ -3437,8 +3443,14 @@ class ServerNode(PGChildNodeView):
             response.headers['Cache-Control'] = 'no-store'
             return response
         except VisualAdminExecutionError as exc:
-            return make_json_response(**execution_failure_response(
-                exc, gettext))
+            response = make_json_response(**execution_failure_response(exc, gettext))
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except (VisualAdminValidationError, VisualAdminAccessError) as exc:
+            from pgadmin.cdeadmin.visual_admin.refusals import response as refusal_response
+            response = make_json_response(**refusal_response(exc))
+            response.headers['Cache-Control'] = 'no-store'
+            return response
         except (
             ProviderWorkspaceError,
             ProviderPermissionError,

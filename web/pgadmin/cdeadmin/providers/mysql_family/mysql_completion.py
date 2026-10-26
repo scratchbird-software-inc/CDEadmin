@@ -38,6 +38,17 @@ def _catalog(client, request):
 
 def complete(client, handle):
     from ..native_editor import metadata
+    snapshots = getattr(client, '_session_catalogs', {})
+    snapshot = snapshots.get(id(handle)) if isinstance(snapshots, dict) else None
+    if snapshot is not None:
+        from ..native_editor import session_access
+        with session_access(client, handle, 'mysql'):
+            client._executions.sessions.get(handle)
+            result = deepcopy(snapshot['editor_context'])
+            result.update(original_session_commands_sent=0, original_diagnostics_preserved=True,
+                original_diagnostics_preservation_qualified=True,
+                observation_source='explicit-source-session-snapshot', snapshot_invalidated_by_next_source_command=True)
+            return result
     observer = editor_observer(client, handle)
     try:
         prepare(handle)

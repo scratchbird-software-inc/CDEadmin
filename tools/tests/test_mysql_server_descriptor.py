@@ -39,5 +39,8 @@ def test_failover_does_not_expose_ordinary_storage_for_nested_passwords():
     descriptor=json.loads((Path(__file__).resolve().parents[2]/
         'web/pgadmin/cdeadmin/ui_descriptors/mysql/forms/server.form.json').read_text())
     failover=next(field for field in descriptor['fields'] if field['field_id']=='failover')
-    assert not {'password','pool_name','pool_size'} & {field['field_id'] for field in failover['columns']}
+    columns = {field['field_id']:field for field in failover['columns']}
+    assert 'password' not in columns
+    assert {'credential_reference_id','pool_name','pool_size'} <= columns.keys()
+    assert columns['credential_reference_id']['control'] == 'reference'
     assert all(field['control']!='json' for field in descriptor['fields'])

@@ -39,9 +39,20 @@ class VisualAdminError(RuntimeError):
 class VisualAdminValidationError(VisualAdminError):
     """A draft does not satisfy its provider-declared form."""
 
+    code = 'VISUAL_ADMIN_INVALID_DRAFT'
+    status = 422
+
+    def __init__(self, message, errors=()):
+        super().__init__(message)
+        self.errors = copy.deepcopy(errors)
+
 
 class VisualAdminAccessError(VisualAdminError):
     """An operation is unavailable or is not admitted for this endpoint."""
+
+    def __init__(self, message, code='VISUAL_ADMIN_ACCESS_REFUSED', status=403):
+        super().__init__(message)
+        self.code, self.status = code, status
 
 
 class VisualAdminExecutionError(VisualAdminError):
@@ -341,7 +352,7 @@ class ProviderVisualAdministration:
         validation = self.validate(payload, retain_sensitive=True)
         if not validation['valid']:
             raise VisualAdminValidationError(
-                'visual administration draft is invalid'
+                'visual administration draft is invalid', validation['errors']
             )
         planner = self._planner_callback()
         plan_id = str(uuid.uuid4())
@@ -387,7 +398,12 @@ class ProviderVisualAdministration:
             provider_request['_provider_route'] = _mapping(
                 route, 'provider route'
             )
-        native = _mapping(planner(provider_request), 'native plan')
+        from pgadmin.cdeadmin.sdk import RelationalClientError
+        try:
+            native = _mapping(planner(provider_request), 'native plan')
+        except RelationalClientError:
+            raise VisualAdminValidationError('Native review is unavailable',
+                [{'field_id': None, 'code': 'native_review_refused'}]) from None
         command_preview = native.get('command_preview')
         if command_preview is not None and not isinstance(
             command_preview, (str, Mapping, list)
@@ -434,21 +450,21 @@ class ProviderVisualAdministration:
             stored = self._plans.pop(plan_id, None)
         if stored is None or stored.digest != digest:
             raise VisualAdminAccessError(
-                'visual administration plan is absent, stale or changed'
+                'visual administration plan is absent, stale or changed', 'VISUAL_ADMIN_PLAN_STALE', 409
             )
         presentation = stored.presentation
         expected_session_id = presentation.get('session_id')
         supplied_session_id = payload.get('session_id')
         if expected_session_id != supplied_session_id:
             raise VisualAdminAccessError(
-                'visual administration session binding changed'
+                'visual administration session binding changed', 'VISUAL_ADMIN_SESSION_CHANGED', 409
             )
         execution_context = execution_context or {}
         if expected_session_id is not None and (
                 execution_context.get('session_id') != expected_session_id or
                 execution_context.get('session_handle') is None):
             raise VisualAdminAccessError(
-                'visual administration provider session is unavailable'
+                'visual administration provider session is unavailable', 'VISUAL_ADMIN_SESSION_UNAVAILABLE', 409
             )
         mutation_class = presentation['mutation_class']
         self._require_mutation(mutation_class)
@@ -456,7 +472,7 @@ class ProviderVisualAdministration:
             self.permissions.require(permission, 'endpoint')
         if presentation.get('confirmation_required') and not confirmed:
             raise VisualAdminAccessError(
-                'visual administration operation requires confirmation'
+                'visual administration operation requires confirmation', 'VISUAL_ADMIN_CONFIRMATION_REQUIRED', 409
             )
         if self.context.runtime_verification_state != 'verified':
             raise VisualAdminAccessError(

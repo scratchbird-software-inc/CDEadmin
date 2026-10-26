@@ -17,6 +17,7 @@ from . import mysql_triggers
 from . import mysql_accounts
 from . import mysql_privileges
 from . import mysql_failover
+from . import mysql_session_catalog
 from . import mysql_user_keys
 from . import mysql_xa
 from . import mysql_page_tracking
@@ -26,9 +27,9 @@ from . import mysql_key_cache_lifecycle as cache_lifecycle
 
 
 HANDLERS = dict(zip(('mysql_'+key for key in (
-    'failover privilege_change account_change trigger_create routine_create index_create user_keys page_tracking '
+    'session_catalog failover privilege_change account_change trigger_create routine_create index_create user_keys page_tracking '
     'rewriter server_control xa key_cache_lifecycle instance key_cache column_masking foreign_server spatial_reference').split()),
-    (mysql_failover,mysql_privileges,mysql_accounts,mysql_triggers,mysql_routines,mysql_indexes,mysql_user_keys,mysql_page_tracking,
+    (mysql_session_catalog,mysql_failover,mysql_privileges,mysql_accounts,mysql_triggers,mysql_routines,mysql_indexes,mysql_user_keys,mysql_page_tracking,
      mysql_rewriter,mysql_server_control,mysql_xa,cache_lifecycle,mysql_instance,mysql_key_cache,column_masking,foreign_servers,srs)))
 
 
@@ -82,6 +83,12 @@ class MySQLAdministration(RelationalAdministration):
                 'target_required': operation != 'create', 'confirmation_required': operation != 'inspect',
             } for operation in ['inspect', 'create', 'alter', 'drop']]})
         value=super().catalog(value)
+        for kind, operation in (('server', 'refresh_session_metadata'), ('table', 'drop_temporary')):
+            resource = next(row for row in value['objects'] if row['resource_kind'] == kind)
+            form = operation_entry(kind, operation)
+            resource['operations'].append({'operation_id': operation, 'title': form['title'], 'form': form,
+                'mutation_class': 'read' if kind == 'server' else 'destructive',
+                'target_required': True, 'confirmation_required': True})
         server=next(row for row in value['objects'] if row['resource_kind']=='server')
         server['operations'] += deepcopy(mysql_user_keys.catalog_entries())
         for resource in value['objects']:
@@ -117,7 +124,9 @@ class MySQLAdministration(RelationalAdministration):
         if self._native_operation({'resource_kind':kind,'operation_id':operation,'draft':draft}):return deepcopy(draft)
         if kind=='table' and operation=='create':
             if not isinstance(draft,Mapping):raise RelationalClientError('Select structured native MySQL table properties')
-            value=deepcopy(dict(draft));native={key:value.pop(key) for key in ('mysql_table_options','mysql_connection') if key in value}
+            value=deepcopy(dict(draft));native={key:value.pop(key) for key in ('mysql_table_options','mysql_connection','temporary') if key in value}
+            if 'temporary' in native and 'temporary' in (value.get('options') or {}) and native['temporary'] != value['options']['temporary']:
+                raise RelationalClientError('Temporary table selections conflict')
             if native.get('mysql_connection')=='':native.pop('mysql_connection')
             value=super()._normalize_draft(kind,operation,value);value['options'].update(native);return value
         return super()._normalize_draft(kind, operation, draft)
@@ -126,6 +135,8 @@ class MySQLAdministration(RelationalAdministration):
     def _native_operation(request):
         kind,operation=request.get('resource_kind'),request.get('operation_id')
         draft,target=request.get('draft'),request.get('target_resource')
+        if (kind, operation) in {('server', 'refresh_session_metadata'), ('table', 'drop_temporary')}:
+            return mysql_session_catalog.compile_operation, (operation, draft, target), 'invalid_mysql_session_catalog'
         if kind=='privilege' and operation in {'grant','revoke'}:
             return mysql_privileges.compile_operation,(operation,draft),'invalid_mysql_privilege'
         if kind=='user' and operation in {'rename','drop'} or kind=='role' and operation=='drop':
@@ -174,6 +185,8 @@ class MySQLAdministration(RelationalAdministration):
             try:
                 draft=request.get('draft') or {};options=draft.get('options') or {}
                 mysql_table_options.compile_options(draft.get('mysql_table_options',mysql_table_options.selected(options)),draft.get('mysql_connection',options.get('mysql_connection')) or None)
+                if not value['errors']:
+                    self._compile({**request, 'draft': self._normalize_draft('table', 'create', draft)})
             except (RelationalClientError,ValueError) as error:value['errors'].append({'field_id':None,'code':'invalid_mysql_table_options','message':str(error)})
             return value
         return super().validate(request)
@@ -185,10 +198,19 @@ class MySQLAdministration(RelationalAdministration):
             compiled=super()._compile(request);options=request['draft'].get('options') or {}
             suffix,parameters=mysql_table_options.compile_options(mysql_table_options.selected(options),options.get('mysql_connection'))
             compiled['statements'][0]['source']+=suffix;compiled['statements'][0]['parameters']+=parameters
+            from .mysql_tables import temporary
+            if temporary(options):
+                compiled['statements'][0]['source'] = compiled['statements'][0]['source'].replace('CREATE TABLE ', 'CREATE TEMPORARY TABLE ', 1)
+                compiled['mysql_session_catalog'] = {'operation': 'create_temporary'}
+                compiled.setdefault('warnings', []).append('Requires the selected retained session. The table lasts until dropped or that native session closes; temporary DDL does not commit your transaction.')
             if options.get('mysql_connection') is not None:compiled['warnings']=[*compiled.get('warnings',[]),
                 'FEDERATED stores a native remote reference; it does not copy remote rows or verify their recovery. Native table access can contact that remote server.']
             return compiled
         return super()._compile(request)
+
+    def _constraint_definition(self, item):
+        from .mysql_tables import constraint
+        return constraint(self, item, super()._constraint_definition(item))
 
     def apply(self, client, request, connection=None):
         from .relay_positions import position, apply as apply_relay

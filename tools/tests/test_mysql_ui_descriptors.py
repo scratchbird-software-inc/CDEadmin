@@ -87,7 +87,7 @@ def bind(draft,field,value):
 
 def test_every_table_binding_changes_the_real_provider_plan_and_uses_accepted_native_values():
     form=load('forms/table.form.json')
-    samples={'name':'changed_table','parent':['changed_database'],'columns':[{'name':'changed_column','type':'BIGINT'}],
+    samples={'name':'changed_table','temporary':True,'parent':['changed_database'],'columns':[{'name':'changed_column','type':'BIGINT'}],
         'primary_key':[{'name':'pk','columns':['id']}], 'unique_constraints':[{'name':'uq','columns':['id']}],
         'foreign_keys':[{'name':'fk','columns':['id'],'references':['db','parent'],'referenced_columns':['id']}],
         'check_constraints':[{'name':'ck','expression':'id>0'}], 'engine':'InnoDB','character_set':'utf8mb4',

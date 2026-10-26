@@ -2765,6 +2765,24 @@ class ProviderWorkspaceService:
     def plan_visual_admin(self, server, request):
         return self._visual_admin_call(server, 'plan_visual_admin', request)
 
+    def protected_password_result(self, server, request):
+        from ..security.generated_passwords import for_app
+        from flask import current_app
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Select a protected result action')
+        request = dict(request)
+        target = request.pop('database_target_id', Ellipsis)
+        context, _endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        results = for_app(current_app._get_current_object(), context)
+        if request.get('operation') == 'recover' and set(request) == {'operation', 'plan_id'}:
+            return results.recover(request['plan_id'])
+        if request.get('operation') == 'reveal' and set(request) == {'operation', 'reference_id', 'confirmed'} and request['confirmed'] is True:
+            from ..security import service_for_app
+            service = service_for_app(current_app).secrets
+            with service.acquire(request['reference_id'], context, results.principal, 'reveal', expected_kind='password') as lease:
+                return {'password': lease.use(lambda value: bytes(value).decode('utf8')), 'protected_result': True}
+        raise ProviderWorkspaceError('Select recovery by plan or an explicitly confirmed password reveal')
+
     def apply_visual_admin(self, server, request):
         context, callback, payload = self._prepare_visual_admin_call(
             server, 'apply_visual_admin', request

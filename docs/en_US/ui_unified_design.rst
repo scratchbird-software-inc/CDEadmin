@@ -762,13 +762,16 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     endpoint-bound ``SecretReference`` of kind password. Release frees capacity
     without deleting published references. Public receipts contain factor and
     reference ID only. Missing or changed delivery refuses before DCL; delivery
-    loss after native acknowledgement never causes replay. The shared stream
-    owns authenticated operation/principal/endpoint binding, private storage,
-    reference resolution, expiry, authorization and reveal/recovery controls.
-    Shared invalid-plan exception handling also needs the declared validation
-    result rather than its current generic failure envelope.
-    Default: keep the User variant draft and generated-password delivery
-    explicitly unsurfaced until that service and control are connected. Never
+    loss after native acknowledgement never causes replay. The owner subsequently
+    requested completion of the identified Group9 backend gaps. The backend now
+    provides authenticated operation/principal/endpoint binding, encrypted durable
+    storage, reference resolution, expiry and recovery/reveal APIs. Invalid drafts
+    return bounded field/code refusals (422); stale plans return 409. The shared
+    stream owns the reveal/recovery controls. The workspace action is
+    ``protected_password_result``: ``recover`` takes ``plan_id``; ``reveal`` takes
+    ``reference_id`` and explicit ``confirmed=true``. Responses are no-store.
+    Default: keep the User variant draft and its reveal/recovery controls
+    explicitly unsurfaced until the shared host connects them. Never
     return the native password rowset through an ordinary operation result or
     store it in plans, logs, downloads or endpoint DTOs. Decision10 remains
     limited to metadata-only user keys.
@@ -780,10 +783,18 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     ``CURRENT_ROLE()`` and selected-table inspection on the source session can
     replace it. There is no existing descriptor/editor interaction declaring
     that distinction or selecting temporary tables without writing SQL.
-    Default: retain private automatic reads, report source overlays unobserved
-    and ``complete=false``, and do not substitute an original-session query.
-    The shared stream must declare an explicit source-inspection interaction
-    and its diagnostic consequence, or an approved native observation contract,
-    before the engine stream implements that separate path. Do not infer all
+    The owner's request to finish the identified backend gaps authorizes an
+    explicit ``server.refresh_session_metadata`` operation, with retained-session
+    binding, a typed database/name grid and required ``replace_diagnostics=true``.
+    It captures active roles, committed metadata and selected temporary shadows
+    on the source. Later automatic completion can read that snapshot without a
+    source command until the next execution or administration attempt invalidates
+    it. Explicit inspection also works with Performance Schema disabled; its C
+    conversion allowance is scoped to that task and does not change ordinary
+    editor admission. The shared stream connects the session selection and
+    explicit inspection controls; they remain unsurfaced.
+    Default: retain private automatic reads when there is no explicit snapshot,
+    report source overlays unobserved and ``complete=false``, and do not
+    substitute an original-session query. Do not infer all
     temporary objects from committed catalogs, replay earlier role commands,
     or call a private peer's roles the source's active roles.

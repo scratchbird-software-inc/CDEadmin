@@ -6,9 +6,26 @@ Never send SET NAMES or overwrite the operator's session settings here.
 """
 import codecs
 from contextvars import ContextVar
+from contextlib import contextmanager
 import weakref
 
 from ...sdk import RelationalClientError
+
+
+_EXPLICIT_SOURCE = ContextVar('mysql_explicit_source_metadata', default=None)
+
+
+@contextmanager
+def explicit_source(handle):
+    """Only explicit retained-session tasks may replace diagnostics for metadata."""
+    from .mysql_connections import Lease
+    native = handle._native if isinstance(handle, Lease) else handle
+    state = {'connection': native, 'commands': 0}
+    token = _EXPLICIT_SOURCE.set(state)
+    try:
+        yield state
+    finally:
+        _EXPLICIT_SOURCE.reset(token)
 
 
 _LATIN1_DECODE={byte:ord(bytes([byte]).decode('cp1252')) for byte in range(128,160) if byte not in {129,141,143,144,157}}
@@ -78,15 +95,20 @@ def install(native):
         # Initialization precedes observer admission and user execution. Once
         # admitted (including denied/disabled admission), no command may borrow
         # the user's diagnostic area for conversion metadata.
-        if hasattr(owner, '_cdeadmin_session_variable_observer_status'):
+        explicit = _EXPLICIT_SOURCE.get()
+        authorized = explicit is not None and explicit['connection'] is owner
+        if hasattr(owner, '_cdeadmin_session_variable_observer_status') and not authorized:
             require_observation(owner)
             return
-        observed = observe(owner)
+        observed = None if authorized else observe(owner)
         if observed is not None:
             owner._cdeadmin_charset_variables = {key: observed['variables'][key] for key in owner._cdeadmin_charset_variables}
             return
-        metadata=factory(owner,raw=True)
+        construction = creating_cursor.set(True)
+        try: metadata=factory(owner,raw=True)
+        finally: creating_cursor.reset(construction)
         try:
+            if authorized: explicit['commands'] += 1
             metadata.execute('SELECT @@SESSION.character_set_client,@@SESSION.character_set_connection,@@SESSION.character_set_results')
             values=metadata.fetchone();metadata.fetchall()
             owner._cdeadmin_charset_variables=dict(zip(('character_set_client','character_set_connection','character_set_results'),
