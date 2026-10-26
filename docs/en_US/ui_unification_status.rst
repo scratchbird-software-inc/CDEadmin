@@ -570,3 +570,18 @@ at their recorded status; shared UI, independent inventory and protected-result
 gaps remain open. The operations document is compacted with parsed-identical
 content to retain the fixed source budget. Lint before/after: JSON297/297,
 MUI244/244, engine branches111/111, panels113/113, context-menu branches14/14.
+
+MySQL applier configuration and status (2026-10-26)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Existing channel inspection adds seven native applier-configuration fields and
+four applier-status fields. Receiver and applier grants are independent; partial
+visibility preserves the known channel identity and leaves unobserved fields
+absent. Server/DDN capture merges facts into that same channel, with transient
+status outside configuration comparison. No new form, operation or renderer is
+added. Channel lifecycle remains unsurfaced under Decision15, and the84 operation
+entries retain their status. Selected MySQL JSON documents are compacted with
+parsed-identical contents to preserve the existing source budget. Lint
+before/after: JSON297/297, MUI244/244, engine branches111/111, panels113/113,
+context-menu branches14/14. Other replication inventory and protected results
+remain open.

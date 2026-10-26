@@ -3084,3 +3084,35 @@ TLS handshakes, compression negotiation, failover execution or delivery.
 No operation or form status changes. Channel create/alter remains unsurfaced
 under Decision15; native installed-feature reconciliation, retained-session
 overlays and protected generated-password delivery remain open.
+
+Native replication applier observations
+----------------------------------------
+
+Channel inspection now retains all seven native applier-configuration fields:
+delay, the server-rendered privilege-check account, row-format/primary-key
+policies and anonymous-transaction GTID assignment. The account text is retained
+as reported; no separate host field or account parser is fabricated. Applier
+status retains all four native fields, with the unsigned retry counter as
+exact decimal text. The existing receiver status projection now preserves its
+error timestamp as native text, including zero timestamps and fractional digits.
+This does not expand the receiver status field inventory.
+
+Receiver configuration, applier configuration, receiver status and applier
+status are queried independently. Receiver-only access preserves its known
+fields when applier reads are denied. Applier-only or status-only access can
+still discover the channel's native identity without inventing a host, port
+or policy. Server/DDN capture merges these observations onto the canonical
+channel object; it does not turn each native table into another object.
+Applier configuration participates in configuration comparisons. Transient
+status stays outside that comparison and cannot become a migration instruction.
+The reads remain observational, with no atomic channel-generation claim.
+
+Native pure/C and authenticated API qualification covers four channels,
+nullable/quoted policy accounts, OFF/LOCAL/UUID assignment, primary-key policy
+variants, stopped and active SQL-applier observations, independent native grants,
+DDN exchange and disabled instrumentation. Warnings, ROW_COUNT and savepoints
+on the separate original connection remain unchanged. Native worker/coordinator
+and the wider receiver-status inventory remain separate follow-up work; this
+qualification does not claim event delivery or full replication completion.
+Shared channel lifecycle forms and protected generated-password delivery remain
+open under their recorded decisions.

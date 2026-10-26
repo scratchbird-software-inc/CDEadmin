@@ -2725,7 +2725,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             add('group-replication',[],'Group Replication',group)
             for member in members:
                 if member.get('member_id'):add('group-replication-member',['Group Replication'],str(member['member_id']),member)
-        from .installed_catalog import CHANNELS, CHANNEL_COLUMNS
+        from .installed_catalog import CHANNELS, CHANNEL_COLUMNS, CHANNEL_OBSERVATIONS, channel_native
         replication_source = (
             CHANNELS
             if profile is MYSQL_PROFILE else
@@ -2740,12 +2740,8 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         )
         for row in optional(replication_source):
             if profile is MYSQL_PROFILE:
-                native = dict(zip((key.lower() for key in CHANNEL_COLUMNS), row))
+                native = channel_native(dict(zip((key.lower() for key in CHANNEL_COLUMNS), row)))
                 name = native['channel_name']
-                native = {**native,
-                          'replication_password_returned': False,
-                          **({'administration': {'allowed_operations': ['inspect']}}
-                             if str(name).lower().startswith('group_replication_') else {})}
             else:
                 name, host, user, port, *detail = row
                 native = {
@@ -2772,15 +2768,14 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 name = channel_label(name)
             add('replication-channel', [], name, native)
         if profile is MYSQL_PROFILE:
-            for query, observation in [
-                ('SELECT CHANNEL_NAME, SERVICE_STATE, SOURCE_UUID, RECEIVED_TRANSACTION_SET, LAST_ERROR_NUMBER, LAST_ERROR_TIMESTAMP FROM performance_schema.replication_connection_status', 'receiver'),
-                ('SELECT CHANNEL_NAME, SERVICE_STATE, REMAINING_DELAY, COUNT_TRANSACTIONS_RETRIES FROM performance_schema.replication_applier_status', 'applier'),
-            ]:
+            from ..mysql_replication import channel_label
+            for observation, query in CHANNEL_OBSERVATIONS:
                 for record in optional_records(query):
                     name = record['channel_name']
                     key = resource_key('replication-channel', [], channel_label(name))
-                    if key in resources:
-                        resources[key]['native'][observation] = record
+                    if key not in resources:
+                        add('replication-channel', [], channel_label(name), channel_native({'channel_name':name}))
+                    resources[key]['native'][observation] = record
         if profile is MYSQL_PROFILE:
             from .foreign_servers import SELECT as foreign_select, normalized as foreign_normalized
             for record in optional_records(foreign_select + ' ORDER BY Server_name'):

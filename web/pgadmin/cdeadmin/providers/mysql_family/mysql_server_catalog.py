@@ -7,7 +7,7 @@ from .mysql_catalog import _value, DENIED, SYSTEM
 from ..mysql_grants import QUERIES as GRANTS
 from .system_variables import SELECT as VARIABLES_SELECT, administration as variable_administration
 from .mysql_xa import RECOVER as XA_RECOVER, decode_row as decode_xa, execute_recovery
-from .installed_catalog import PLUGINS, FUNCTIONS, CHANNELS
+from .installed_catalog import PLUGINS, FUNCTIONS, CHANNELS, CHANNEL_OBSERVATIONS
 
 MAX_FACTS = 20000
 MAX_BYTES = 8 * 1024 * 1024
@@ -104,9 +104,10 @@ def capture(connection, *, spatial_reference_ids=None):
             allowed = variable_administration(row)
             if allowed is not None: resource['native']['administration'] = allowed
         account(resource);resources.append(resource)
-    accounts = {}
+    accounts = {}; channels = {}
     account_rows = None
-    for section,kind,source,keys in SECTIONS:
+    for section,kind,source,keys in SECTIONS + tuple(
+            ('replication-'+field,'replication-channel',sql,('channel_name',)) for field,sql in CHANNEL_OBSERVATIONS):
         if section == 'spatial-reference-systems' and not selected:
             observations.append({'section':section,'available':False,
                 'reason':'Select explicit SRIDs for bounded native definition exchange', 'selected_ids':[]})
@@ -147,7 +148,17 @@ def capture(connection, *, spatial_reference_ids=None):
                         row.update(information_schema_grantee=row['grantee'],
                             grantee=account_row['grantee_identity'],
                             grantee_user=account_row['user'], grantee_host=account_row['host'])
-            for row in rows:add(section,kind,row,keys)
+            for row in rows:
+                if kind != 'replication-channel':
+                    add(section,kind,row,keys); continue
+                name = row['channel_name']
+                if name not in channels:
+                    add('replication-channels',kind,row if section=='replication-channels' else {'channel_name':name},keys)
+                    channels[name] = resources[-1]['native']
+                if section != 'replication-channels':
+                    field = section.removeprefix('replication-')
+                    target = channels[name]['catalog_row'] if field=='applier_configuration' else channels[name]
+                    target[field] = row
             observations.append({'section':section,'available':True,'rows':len(rows),
                 **({'selected_ids':selected} if section == 'spatial-reference-systems' else {})})
     if len({row['resource_id'] for row in resources}) != len(resources):

@@ -228,3 +228,11 @@ retry count is exact decimal text; cipher suites distinguish NULL and empty.
 TLS key/CA/certificate values are paths, not file contents. This expands metadata
 observations only; it does not surface the missing lifecycle editor in
 Decision15. The84 operation entries are parsed-identical after compaction.
+
+Applier configuration/status metadata is attached to the existing channel.
+Independent native grants do not erase known receiver fields. Applier-only or
+status-only inspection retains the channel identity without inventing receiver
+configuration. DDN stores policy/delay in configuration and transient state
+outside configuration comparisons. The privilege-check account remains native
+text. No form status changes; Decision15 remains open. JSON compaction is
+parsed-identical, with no control, version, default or capability changes.
