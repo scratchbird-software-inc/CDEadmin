@@ -5,7 +5,7 @@
   "resource_kinds": [
     "trigger"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "MariaDB",
   "omitted_tabs": [],
   "gaps": [
@@ -14,8 +14,8 @@
       "reason": "position is exposed but not as the native FOLLOWS/PRECEDES trigger reference"
     },
     {
-      "concept": "Trigger body on re-open",
-      "reason": "MariaDB inventory (mysql_family provider) lists this as a separate resource with positional details only (timing, event); the body is not reported. Backend ask for the mysql_family inventory owner."
+      "concept": "active / position",
+      "reason": "the shared provider create form lists them, but the MariaDB compiler emits neither (no ENABLE/DISABLE or POSITION clause); hidden so the form never shows a control that does nothing"
     }
   ],
   "fields": [
@@ -64,8 +64,7 @@
           "value": "INSTEAD OF",
           "label": "Instead Of"
         }
-      ],
-      "record_key": "details.0"
+      ]
     },
     {
       "field_id": "events",
@@ -80,24 +79,7 @@
         "dialect",
         "trigger_events",
         "table"
-      ],
-      "record_key": "details.1"
-    },
-    {
-      "field_id": "active",
-      "label": "Active",
-      "tab": "General",
-      "control": "boolean",
-      "required": false,
-      "default": true
-    },
-    {
-      "field_id": "position",
-      "label": "Position",
-      "tab": "General",
-      "control": "number",
-      "required": false,
-      "default": 0
+      ]
     },
     {
       "field_id": "body",
@@ -109,5 +91,5 @@
       "help": "Enter only the trigger body, not CREATE TRIGGER."
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database); table picker; trigger events typed as a multiselect from dialect.trigger_events. Create path round-tripped against MariaDB 10.11 (tools/tests/test_ui_descriptor_roundtrip_mariadb.py); stays draft until the inventory reports the body/parameters so a re-opened object shows its definition."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database); table picker; trigger events typed as a multiselect from dialect.trigger_events. Create path round-tripped against MariaDB 10.11 (tools/tests/test_ui_descriptor_roundtrip_mariadb.py); The MariaDB inventory now reports timing/events/position/body (mariadb_catalog.program_object_natives); create + re-open round-tripped against MariaDB 10.11."
 }

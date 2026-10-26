@@ -94,9 +94,9 @@ def backend_draft(form: dict, draft: dict, mode: str = "create", baseline: dict 
                 diff = diff_columns(baseline.get("columns") or [], value or [])
                 out.update({k: v for k, v in diff.items() if v})
                 continue
-            if mode == "alter" and baseline is not None and not field.get("required") and \
+            if mode == "alter" and baseline is not None and \
                     json.dumps(value, sort_keys=True, default=str) == json.dumps(baseline.get(fid), sort_keys=True, default=str):
-                continue
+                continue  # unchanged fields are not part of the ALTER set, required or not
             if field.get("wrap_list") and not isinstance(value, list):
                 value = [value] if value not in (None, "") else []
             target = field.get("backend_field_id") or fid

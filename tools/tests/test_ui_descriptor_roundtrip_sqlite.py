@@ -91,7 +91,7 @@ def test_table_create_and_alter_through_the_form(live):
     # Edit: add a column through the grid; the diff becomes add_columns for ALTER.
     edited = {**baseline, 'columns': baseline['columns'] + [{'name': 'amount', 'type': 'REAL'}]}
     alter = backend_draft(form, edited, mode='alter', baseline=baseline)
-    assert alter == {'name': 'orders', 'add_columns': [{'name': 'amount', 'type': 'REAL'}]}
+    assert alter == {'add_columns': [{'name': 'amount', 'type': 'REAL'}]}
     sql = run(client, connection, route, 'table', 'alter', alter, target=table)
     assert ' ADD ' in sql.upper() and 'amount' in sql
     with closing(sqlite3.connect(path)) as observer:
