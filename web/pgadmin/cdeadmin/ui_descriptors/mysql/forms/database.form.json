@@ -2,117 +2,22 @@
  "schema": "cdeadmin.ui-form.v1",
  "engine": "mysql",
  "family": "database",
- "resource_kinds": [
-  "database"
- ],
+ "resource_kinds": ["database"],
  "status": "complete",
  "engine_tab_title": "MySQL",
  "omitted_tabs": [
-  {
-   "tab": "Parameters",
-   "reason": "MySQL has server/session variables, not database-scoped parameter settings."
-  }
+  {"tab":"Parameters","reason":"MySQL has server/session variables, not database-scoped parameter settings."}
  ],
  "gaps": [
-  {
-   "concept": "Family privilege diff dispatch",
-   "reason": "Native database grants use the dedicated privilege operations. Applying a Security-tab diff remains the cross-operation part of Decision9."
-  }
+  {"concept":"Family privilege diff dispatch","reason":"Native database grants use the dedicated privilege operations. Applying a Security-tab diff remains the cross-operation part of Decision9."}
  ],
  "fields": [
-  {
-   "field_id": "name",
-   "label": "Name",
-   "control": "text",
-   "tab": "General",
-   "modes": [
-    "create"
-   ],
-   "required": true
-  },
-  {
-   "field_id": "if_not_exists",
-   "label": "Skip if it exists",
-   "control": "boolean",
-   "tab": "General",
-   "modes": [
-    "create"
-   ],
-   "default": false
-  },
-  {
-   "field_id": "character_set",
-   "label": "Character set",
-   "control": "select",
-   "tab": "Options",
-   "record_key": "default_character_set",
-   "option_values_path": [
-    "catalog",
-    "character_sets"
-   ]
-  },
-  {
-   "field_id": "collation",
-   "label": "Collation",
-   "control": "select",
-   "tab": "Options",
-   "record_key": "default_collation",
-   "option_values_path": [
-    "catalog",
-    "collations"
-   ]
-  },
-  {
-   "field_id": "encryption",
-   "label": "Default encryption",
-   "control": "select",
-   "tab": "Options",
-   "options": [
-    {
-     "value": "Y",
-     "label": "Enabled"
-    },
-    {
-     "value": "N",
-     "label": "Disabled"
-    }
-   ],
-   "record_derive": {
-    "cases": [
-     {
-      "key": "default_encryption",
-      "equals": "YES",
-      "value": "Y"
-     },
-     {
-      "key": "default_encryption",
-      "equals": "NO",
-      "value": "N"
-     }
-    ]
-   },
-   "help": "Changes the native default for new tables; it does not encrypt existing table data. Native keyring/privilege requirements apply."
-  },
-  {
-   "field_id": "read_only",
-   "label": "Read only",
-   "control": "select",
-   "tab": "Options",
-   "modes": [
-    "alter"
-   ],
-   "options": [
-    {
-     "value": "ON",
-     "label": "Enabled"
-    },
-    {
-     "value": "OFF",
-     "label": "Disabled"
-    }
-   ],
-   "help": "Native ALTER DATABASE only. State comes from SHOW CREATE DATABASE; unavailable observation remains unset."
-  }
+  {"field_id":"name","label":"Name","control":"text","tab":"General","modes":["create"],"required":true},
+  {"field_id":"if_not_exists","label":"Skip if it exists","control":"boolean","tab":"General","modes":["create"],"default":false},
+  {"field_id":"character_set","label":"Character set","control":"select","tab":"Options","record_key":"default_character_set","option_values_path":["catalog","character_sets"]},
+  {"field_id":"collation","label":"Collation","control":"select","tab":"Options","record_key":"default_collation","option_values_path":["catalog","collations"]},
+  {"field_id":"encryption","label":"Default encryption","control":"select","tab":"Options","options":[{"value":"Y","label":"Enabled"},{"value":"N","label":"Disabled"}],"record_derive":{"cases":[{"key":"default_encryption","equals":"YES","value":"Y"},{"key":"default_encryption","equals":"NO","value":"N"}]},"help":"Changes the native default for new tables; it does not encrypt existing table data. Native keyring/privilege requirements apply."},
+  {"field_id":"read_only","label":"Read only","control":"select","tab":"Options","modes":["alter"],"options":[{"value":"ON","label":"Enabled"},{"value":"OFF","label":"Disabled"}],"help":"Native ALTER DATABASE only. State comes from SHOW CREATE DATABASE; unavailable observation remains unset."}
  ],
  "notes": "The six declared fields are verified on native MySQL9.7 through shared record/draft projections, pure/C plan/apply/reinspection, authenticated APIs and the unchanged shared family-render suite. Backend endpoint/visual fields load from this descriptor; old engine-specific field tuples are removed. Security diff dispatch remains Decision9. Human presentation and cross-platform acceptance remain separately owned."
 }

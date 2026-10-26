@@ -451,3 +451,31 @@ stay within unchanged source budgets. Lint before/after: JSON300/297,
 MUI244/244, engine branches111/111, panels113/113, context-menu branches14/14.
 Eleven beta tier2/3 entries remain (database8 and row workflows3), alongside
 the separately recorded native inventory, shared UI and protected-result gaps.
+
+MySQL database operation descriptors (2026-10-26)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Eight database entries bring the operation total to84: analyze, check, optimize,
+repair, checksum, logical backup, restore and separate restored-data verification.
+Their eight legacy portfolio forms and overrides are removed. The existing
+common-profile path now resolves the descriptor adapter; native permissions and
+mutation classes are retained. Legacy browser form gates explicitly refuse the
+retired registry instead of accepting an empty fallback as UI evidence.
+
+Histogram import uses typed attributes and bucket records, including singleton,
+equi-height, empty histograms, integer endpoints, native numeric conversion,
+encoded string bounds and temporal values. Shell filters use string lists and
+partition/condition records. Optional collection switches preserve absent versus
+explicit empty input. Duplicate/unknown filter or bucket fields are refused;
+existing native arrays, maps and encoded API transports remain admitted.
+
+All eight entries remain draft/unsurfaced pending Decision12 and presentation
+acceptance. Their native/API evidence qualifies projected inputs, not an actual
+OperationDialog round trip. Three row workflows still lack descriptors (Decision14). Dynamic
+column types, row identity and concurrency must be reconciled with the shared
+Data editor rather than represented as raw JSON. Independent native inventory,
+protected RANDOM PASSWORD delivery and other recorded shared UI work remain
+open. Group9 is not complete. Parsed family, capability and navigator content is
+unchanged after compact formatting; no shared renderer/schema/family tests were
+edited. Lint before/after: JSON297/297, MUI244/244, engine branches111/111,
+panels113/113, context-menu branches14/14.

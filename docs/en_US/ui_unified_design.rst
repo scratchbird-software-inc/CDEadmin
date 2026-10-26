@@ -718,3 +718,19 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     mark the declared layout draft/unsurfaced in the status tracker. The
     front-end stream owns the generic descriptor-to-tree bridge; do not add
     another MySQL branch to ``navigator.py`` or a second in-panel tree.
+
+14. Dynamic Data-editor row operations (MySQL audit, 2026-10-26): the
+    remaining ``table.insert``, ``table.update`` and ``table.delete`` contracts
+    take column-name maps (``values`` / ``changes``), a provider row selector
+    and, where available, a concurrency token. A static string key/value grid
+    cannot preserve column-derived native types, SQL NULL versus an omitted
+    value/default, exact integers and binary values. The descriptor format has
+    static grid columns and references, but no declared binding that derives
+    cell controls from the selected table's column catalog and carries the
+    opaque row identity/concurrency context from the shared Data grid.
+    Default: use the canonical Data editor and preserve its native row API;
+    keep these three operation entries explicitly unsurfaced until the
+    front-end stream declares that binding. The engine stream supplies native
+    metadata and contract tests; it does not expose raw JSON, turn all values
+    into strings or add a second row editor. This does not block other typed
+    operation descriptors or native backend work.

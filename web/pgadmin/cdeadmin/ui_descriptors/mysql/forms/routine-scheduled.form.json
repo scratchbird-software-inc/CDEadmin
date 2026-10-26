@@ -3,249 +3,34 @@
  "engine": "mysql",
  "family": "routine",
  "variant": "scheduled",
- "resource_kinds": [
-  "event"
- ],
+ "resource_kinds": ["event"],
  "status": "draft",
  "engine_tab_title": "MySQL",
  "omitted_tabs": [
-  {
-   "tab": "Parameters",
-   "reason": "Native scheduled events have no routine argument list."
-  }
+  {"tab":"Parameters","reason":"Native scheduled events have no routine argument list."}
  ],
  "gaps": [
-  {
-   "concept": "Schedule projection",
-   "reason": "The existing native EVENTS catalog retains event schedule facts, but no descriptor projection assembles them into the AT/EVERY input. Omitted ALTER fields preserve native values; Decision9 applies."
-  },
-  {
-   "concept": "Name changes",
-   "reason": "Native event rename, including a move to another database, is a separate typed Maintenance operation until the shared family dispatch contract in Decision9 is available."
-  }
+  {"concept":"Schedule projection","reason":"The existing native EVENTS catalog retains event schedule facts, but no descriptor projection assembles them into the AT/EVERY input. Omitted ALTER fields preserve native values; Decision9 applies."},
+  {"concept":"Name changes","reason":"Native event rename, including a move to another database, is a separate typed Maintenance operation until the shared family dispatch contract in Decision9 is available."}
  ],
  "fields": [
-  {
-   "field_id": "name",
-   "label": "Name",
-   "control": "text",
-   "tab": "General",
-   "modes": [
-    "create"
-   ],
-   "required": true
-  },
-  {
-   "field_id": "database",
-   "label": "Database",
-   "control": "reference",
-   "tab": "General",
-   "modes": [
-    "create"
-   ],
-   "reference_kind": "database",
-   "required": true
-  },
-  {
-   "field_id": "if_not_exists",
-   "label": "If not exists",
-   "control": "boolean",
-   "tab": "General",
-   "modes": [
-    "create"
-   ],
-   "default": false
-  },
-  {
-   "field_id": "comment",
-   "label": "Comment",
-   "control": "text",
-   "tab": "General"
-  },
-  {
-   "field_id": "clear_comment",
-   "label": "Clear comment",
-   "control": "boolean",
-   "tab": "General",
-   "default": false
-  },
-  {
-   "field_id": "body_create",
-   "label": "Body",
-   "control": "code",
-   "tab": "Definition",
-   "modes": [
-    "create"
-   ],
-   "backend_field_id": "body",
-   "language": "sql",
-   "required": true
-  },
-  {
-   "field_id": "body_alter",
-   "label": "Body",
-   "control": "code",
-   "tab": "Definition",
-   "modes": [
-    "alter"
-   ],
-   "backend_field_id": "body",
-   "language": "sql",
-   "help": "Leave absent to preserve the existing event body."
-  },
-  {
-   "field_id": "schedule_create",
-   "label": "Schedule",
-   "control": "text",
-   "tab": "Options",
-   "modes": [
-    "create"
-   ],
-   "backend_field_id": "schedule",
-   "required": true,
-   "help": "Native AT or EVERY schedule expression. Leave absent on alter to preserve it."
-  },
-  {
-   "field_id": "completion_create",
-   "label": "On completion",
-   "control": "select",
-   "tab": "Options",
-   "modes": [
-    "create"
-   ],
-   "options": [
-    {
-     "value": "PRESERVE",
-     "label": "PRESERVE"
-    },
-    {
-     "value": "NOT PRESERVE",
-     "label": "NOT PRESERVE"
-    }
-   ],
-   "backend_field_id": "completion",
-   "default": "NOT PRESERVE"
-  },
-  {
-   "field_id": "status_create",
-   "label": "Status",
-   "control": "select",
-   "tab": "Options",
-   "modes": [
-    "create"
-   ],
-   "options": [
-    {
-     "value": "ENABLE",
-     "label": "ENABLE"
-    },
-    {
-     "value": "DISABLE",
-     "label": "DISABLE"
-    },
-    {
-     "value": "DISABLE ON REPLICA",
-     "label": "DISABLE ON REPLICA"
-    }
-   ],
-   "backend_field_id": "status",
-   "default": "ENABLE"
-  },
-  {
-   "field_id": "schedule_alter",
-   "label": "Schedule",
-   "control": "text",
-   "tab": "Options",
-   "modes": [
-    "alter"
-   ],
-   "backend_field_id": "schedule",
-   "required": false,
-   "help": "Native AT or EVERY schedule expression. Leave absent on alter to preserve it."
-  },
-  {
-   "field_id": "completion_alter",
-   "label": "On completion",
-   "control": "select",
-   "tab": "Options",
-   "modes": [
-    "alter"
-   ],
-   "options": [
-    {
-     "value": "UNCHANGED",
-     "label": "Unchanged"
-    },
-    {
-     "value": "PRESERVE",
-     "label": "PRESERVE"
-    },
-    {
-     "value": "NOT PRESERVE",
-     "label": "NOT PRESERVE"
-    }
-   ],
-   "backend_field_id": "completion",
-   "default": "UNCHANGED"
-  },
-  {
-   "field_id": "status_alter",
-   "label": "Status",
-   "control": "select",
-   "tab": "Options",
-   "modes": [
-    "alter"
-   ],
-   "options": [
-    {
-     "value": "UNCHANGED",
-     "label": "Unchanged"
-    },
-    {
-     "value": "ENABLE",
-     "label": "ENABLE"
-    },
-    {
-     "value": "DISABLE",
-     "label": "DISABLE"
-    },
-    {
-     "value": "DISABLE ON REPLICA",
-     "label": "DISABLE ON REPLICA"
-    }
-   ],
-   "backend_field_id": "status",
-   "default": "UNCHANGED"
-  },
-  {
-   "field_id": "time_zone",
-   "label": "Time zone",
-   "control": "text",
-   "tab": "Options",
-   "help": "Native session time zone for this independently owned operation; omission preserves its connection setting."
-  },
-  {
-   "field_id": "definer_user",
-   "label": "Definer user",
-   "control": "text",
-   "tab": "Engine"
-  },
-  {
-   "field_id": "definer_host",
-   "label": "Definer host",
-   "control": "text",
-   "tab": "Engine"
-  },
-  {
-   "field_id": "confirmation",
-   "label": "Confirmation",
-   "control": "text",
-   "tab": "Engine",
-   "modes": [
-    "alter"
-   ],
-   "required": true
-  }
+  {"field_id":"name","label":"Name","control":"text","tab":"General","modes":["create"],"required":true},
+  {"field_id":"database","label":"Database","control":"reference","tab":"General","modes":["create"],"reference_kind":"database","required":true},
+  {"field_id":"if_not_exists","label":"If not exists","control":"boolean","tab":"General","modes":["create"],"default":false},
+  {"field_id":"comment","label":"Comment","control":"text","tab":"General"},
+  {"field_id":"clear_comment","label":"Clear comment","control":"boolean","tab":"General","default":false},
+  {"field_id":"body_create","label":"Body","control":"code","tab":"Definition","modes":["create"],"backend_field_id":"body","language":"sql","required":true},
+  {"field_id":"body_alter","label":"Body","control":"code","tab":"Definition","modes":["alter"],"backend_field_id":"body","language":"sql","help":"Leave absent to preserve the existing event body."},
+  {"field_id":"schedule_create","label":"Schedule","control":"text","tab":"Options","modes":["create"],"backend_field_id":"schedule","required":true,"help":"Native AT or EVERY schedule expression. Leave absent on alter to preserve it."},
+  {"field_id":"completion_create","label":"On completion","control":"select","tab":"Options","modes":["create"],"options":[{"value":"PRESERVE","label":"PRESERVE"},{"value":"NOT PRESERVE","label":"NOT PRESERVE"}],"backend_field_id":"completion","default":"NOT PRESERVE"},
+  {"field_id":"status_create","label":"Status","control":"select","tab":"Options","modes":["create"],"options":[{"value":"ENABLE","label":"ENABLE"},{"value":"DISABLE","label":"DISABLE"},{"value":"DISABLE ON REPLICA","label":"DISABLE ON REPLICA"}],"backend_field_id":"status","default":"ENABLE"},
+  {"field_id":"schedule_alter","label":"Schedule","control":"text","tab":"Options","modes":["alter"],"backend_field_id":"schedule","required":false,"help":"Native AT or EVERY schedule expression. Leave absent on alter to preserve it."},
+  {"field_id":"completion_alter","label":"On completion","control":"select","tab":"Options","modes":["alter"],"options":[{"value":"UNCHANGED","label":"Unchanged"},{"value":"PRESERVE","label":"PRESERVE"},{"value":"NOT PRESERVE","label":"NOT PRESERVE"}],"backend_field_id":"completion","default":"UNCHANGED"},
+  {"field_id":"status_alter","label":"Status","control":"select","tab":"Options","modes":["alter"],"options":[{"value":"UNCHANGED","label":"Unchanged"},{"value":"ENABLE","label":"ENABLE"},{"value":"DISABLE","label":"DISABLE"},{"value":"DISABLE ON REPLICA","label":"DISABLE ON REPLICA"}],"backend_field_id":"status","default":"UNCHANGED"},
+  {"field_id":"time_zone","label":"Time zone","control":"text","tab":"Options","help":"Native session time zone for this independently owned operation; omission preserves its connection setting."},
+  {"field_id":"definer_user","label":"Definer user","control":"text","tab":"Engine"},
+  {"field_id":"definer_host","label":"Definer host","control":"text","tab":"Engine"},
+  {"field_id":"confirmation","label":"Confirmation","control":"text","tab":"Engine","modes":["alter"],"required":true}
  ],
  "notes": "Scheduled routine variant; no application scheduler is substituted for the native event scheduler. Native events can execute or expire independently. Draft pending shared rendering and round-trip acceptance."
 }

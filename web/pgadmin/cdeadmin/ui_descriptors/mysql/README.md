@@ -185,3 +185,10 @@ mapping APIs. Filter records and legacy pairs generate identical SQL. Selected
 empty filters clear that family. All11 entries remain draft/unsurfaced under
 Decision12. The server-operation factory and migrated action branches are
 retired. Family/options JSON reindentation preserves parsed content and fields.
+
+The84 operation entries include eight database maintenance/dump actions. Typed
+histogram attributes/buckets and Shell partition/condition records adapt to the
+existing native arrays/maps. Collection switches preserve absent versus empty.
+All eight remain draft/unsurfaced under Decision12. The retired portfolio forms
+are deleted; legacy browser gates refuse the empty fallback. Three dynamic row
+workflows still need shared Data-editor integration and descriptors (Decision14).

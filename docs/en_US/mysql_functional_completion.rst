@@ -2942,3 +2942,23 @@ all existing fields. The11 new entries remain draft/unsurfaced under Decision12,
 rather than claiming projected native inputs establish a working dialog.
 Database8 and row-workflow3 descriptor entries still remain, with independent
 native inventory and the previously recorded shared UI/protected-result work.
+
+Typed database maintenance and dump inputs
+-----------------------------------------
+
+Eight database operation entries bring the descriptor total to84. The legacy
+portfolio forms are deleted; typed fields reach the existing native contracts,
+permissions, plan previews and apply paths. Histogram attributes and bucket
+records preserve exact integer endpoints, native string/temporal encodings and
+native JSON numeric conversion. Shell include/exclude lists and per-table
+partition/condition records distinguish omitted options from explicit empties.
+Existing native array/map and encoded API inputs remain compatible.
+
+All entries remain draft/unsurfaced under Decision12. Qualification of projected
+native/API inputs does not establish a rendered operation dialog. Backup and
+restore run through the registered tool workspace on the CDEadmin execution
+host. Independent dump verification still requires native checksums and row
+counts; schema restoration alone does not qualify data recovery. Three row
+workflow descriptors (Decision14), independent native inventory/diagnostics reconciliation,
+shared UI integration and protected credential results remain open; this is
+progress toward Group9 rather than a completion claim.

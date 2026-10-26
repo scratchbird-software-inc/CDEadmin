@@ -979,7 +979,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def admin_operation_field_contract(self, request):
         kind, operation = request['resource_kind'], request['operation_id']
+        from .database_inputs import OPERATIONS as database_operations
         if (kind in {'system-variable', 'session'} or
+                kind == 'database' and operation in database_operations or
                 kind == 'resource-group' and operation == 'assign' or
                 kind == 'replication-channel' and operation in {'start', 'stop', 'reset', 'filter'}):
             from ..mysql_descriptor_contract import maintenance_contract

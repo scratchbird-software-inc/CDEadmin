@@ -107,6 +107,9 @@ class MySQLAdministration(RelationalAdministration):
         return super()._form(kind, operation)
 
     def _normalize_draft(self, kind, operation, draft):
+        from .database_inputs import OPERATIONS, normalize
+        if kind == 'database' and operation in OPERATIONS:
+            return normalize(operation, draft)
         if kind == 'privilege' and operation in {'grant', 'revoke'}:return deepcopy(draft)
         if kind == 'user' and operation in {'rename', 'drop'} or kind == 'role' and operation == 'drop':return deepcopy(draft)
         if kind == 'role' and operation == 'create':return deepcopy(draft)
@@ -137,6 +140,12 @@ class MySQLAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def validate(self, request):
+        from .database_inputs import OPERATIONS, normalize
+        if request.get('resource_kind') == 'database' and request.get('operation_id') in OPERATIONS:
+            try:
+                return super().validate({**request, 'draft': normalize(request['operation_id'], request.get('draft'))})
+            except (RelationalClientError, TypeError, ValueError, OverflowError) as error:
+                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_database_input', 'message': str(error)}]}
         if request.get('resource_kind') == 'privilege' and request.get('operation_id') in {'grant', 'revoke'}:
             try:
                 mysql_privileges.compile_operation(request['operation_id'], request.get('draft'))

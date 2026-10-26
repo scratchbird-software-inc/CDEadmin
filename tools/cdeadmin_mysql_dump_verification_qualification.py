@@ -12,6 +12,8 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'web'), str(ROOT / 'tools')]
 
 
 def qualify(output, shell, use_c=False, browser_binary=None, driver_binary=None):
+    if browser_binary:
+        raise RuntimeError('Legacy MySQL form gate retired; qualify the shared descriptor dialog under Decision12')
     from types import SimpleNamespace
     output = Path(output).resolve()
     if output == ROOT or ROOT in output.parents:

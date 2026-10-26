@@ -69,8 +69,10 @@ def maintenance_contract(kind, operation, draft):
                 field['json_type'] = 'scalar'
             if draft.get('value_mode', 'VALUE') != 'VALUE':
                 field['visible_when'] = {'field_id': 'value_mode', 'equals': 'VALUE'}
-        elif name in {'until', 'filters'} and isinstance(draft.get(name), str):
+        elif name in {'until', 'filters', 'histogram_data', 'partitions', 'where'} and isinstance(draft.get(name), str):
             field['control'] = 'json'
+        elif name in {'partitions', 'where'} and isinstance(draft.get(name), dict):
+            field['control'] = 'keyvalue'
     return {'fields': fields, 'authority': 'ui_descriptors/mysql/operations.json'}
 
 

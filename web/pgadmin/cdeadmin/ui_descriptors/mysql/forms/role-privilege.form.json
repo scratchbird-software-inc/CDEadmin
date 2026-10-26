@@ -3,274 +3,29 @@
  "engine": "mysql",
  "family": "role",
  "variant": "grant",
- "resource_kinds": [
-  "privilege"
- ],
+ "resource_kinds": ["privilege"],
  "status": "draft",
  "engine_tab_title": "MySQL",
  "omitted_tabs": [],
  "gaps": [
-  {
-   "concept": "Family privilege diff dispatch",
-   "reason": "Typed dedicated grant/revoke operations are declared in operations.json. Applying a family-editor cross-operation privilege diff still needs Decision9."
-  }
+  {"concept":"Family privilege diff dispatch","reason":"Typed dedicated grant/revoke operations are declared in operations.json. Applying a family-editor cross-operation privilege diff still needs Decision9."}
  ],
  "fields": [
-  {
-   "field_id": "grantees",
-   "label": "Grantees",
-   "control": "grid",
-   "tab": "General",
-   "required": true,
-   "columns": [
-    {
-     "field_id": "user",
-     "label": "User",
-     "control": "text",
-     "required": false,
-     "help": "Empty user text denotes a native anonymous account; supply its host separately."
-    },
-    {
-     "field_id": "host",
-     "label": "Host",
-     "control": "text",
-     "default": "%"
-    }
-   ],
-   "help": "Separate native account components preserve literal quotes, dots and @ characters."
-  },
-  {
-   "field_id": "object_type",
-   "label": "Scope",
-   "control": "select",
-   "tab": "General",
-   "options": [
-    {
-     "value": "GLOBAL",
-     "label": "Global"
-    },
-    {
-     "value": "DATABASE",
-     "label": "Database"
-    },
-    {
-     "value": "TABLE",
-     "label": "Table"
-    },
-    {
-     "value": "VIEW",
-     "label": "View"
-    },
-    {
-     "value": "PROCEDURE",
-     "label": "Procedure"
-    },
-    {
-     "value": "FUNCTION",
-     "label": "Function"
-    },
-    {
-     "value": "LIBRARY",
-     "label": "Library"
-    },
-    {
-     "value": "PROXY",
-     "label": "Proxy account"
-    },
-    {
-     "value": "ACCOUNT",
-     "label": "All account privileges"
-    }
-   ],
-   "required": true,
-   "help": "All account privileges is REVOKE ALL PRIVILEGES, GRANT OPTION. Library grants do not imply an available closed execution runtime."
-  },
-  {
-   "field_id": "database",
-   "label": "Database",
-   "control": "text",
-   "tab": "General",
-   "visible_when": {
-    "field": "object_type",
-    "in": [
-     "DATABASE",
-     "TABLE",
-     "VIEW",
-     "FUNCTION",
-     "PROCEDURE",
-     "LIBRARY"
-    ]
-   }
-  },
-  {
-   "field_id": "object",
-   "label": "Object",
-   "control": "text",
-   "tab": "General",
-   "visible_when": {
-    "field": "object_type",
-    "in": [
-     "TABLE",
-     "VIEW",
-     "FUNCTION",
-     "PROCEDURE",
-     "LIBRARY"
-    ]
-   }
-  },
-  {
-   "field_id": "privileges",
-   "label": "Privileges",
-   "control": "grid",
-   "tab": "Privileges",
-   "columns": [
-    {
-     "field_id": "name",
-     "label": "Privilege",
-     "control": "text",
-     "required": true
-    },
-    {
-     "field_id": "columns",
-     "label": "Columns",
-     "control": "multiselect",
-     "option_values_path": [
-      "target",
-      "columns"
-     ]
-    }
-   ],
-   "help": "Native keyword or installed dynamic privilege per row. Column lists apply to table/view SELECT, INSERT, UPDATE or REFERENCES; MySQL validates scope and availability."
-  },
-  {
-   "field_id": "grant_option",
-   "label": "With grant option",
-   "control": "boolean",
-   "tab": "Privileges",
-   "default": false,
-   "help": "GRANT only. To revoke delegation, select the GRANT OPTION privilege."
-  },
-  {
-   "field_id": "if_exists",
-   "label": "If it exists",
-   "control": "boolean",
-   "tab": "Engine",
-   "default": false,
-   "help": "REVOKE only; retain native warnings for absent grants."
-  },
-  {
-   "field_id": "ignore_unknown_user",
-   "label": "Ignore unknown users",
-   "control": "boolean",
-   "tab": "Engine",
-   "default": false,
-   "help": "REVOKE only; the native statement determines partial results and warnings."
-  },
-  {
-   "field_id": "proxy_user",
-   "label": "Proxy user",
-   "control": "text",
-   "tab": "Engine",
-   "visible_when": {
-    "field": "object_type",
-    "equals": "PROXY"
-   }
-  },
-  {
-   "field_id": "proxy_host",
-   "label": "Proxy host",
-   "control": "text",
-   "tab": "Engine",
-   "visible_when": {
-    "field": "object_type",
-    "equals": "PROXY"
-   }
-  },
-  {
-   "field_id": "grant_as_user",
-   "label": "Grant as user",
-   "control": "text",
-   "tab": "Engine",
-   "visible_when": {
-    "field": "object_type",
-    "equals": "GLOBAL"
-   },
-   "help": "GRANT AS is native global-privilege delegation only."
-  },
-  {
-   "field_id": "grant_as_host",
-   "label": "Grant as host",
-   "control": "text",
-   "tab": "Engine",
-   "visible_when": {
-    "field": "grant_as_user",
-    "truthy": true
-   }
-  },
-  {
-   "field_id": "grant_as_roles_mode",
-   "label": "Grantor roles",
-   "control": "select",
-   "tab": "Engine",
-   "options": [
-    {
-     "value": "NONE",
-     "label": "None"
-    },
-    {
-     "value": "DEFAULT",
-     "label": "Default"
-    },
-    {
-     "value": "ALL",
-     "label": "All"
-    },
-    {
-     "value": "SELECTED",
-     "label": "Selected"
-    },
-    {
-     "value": "ALL_EXCEPT",
-     "label": "All Except"
-    }
-   ],
-   "help": "GRANT AS only. A selected/excluded role set uses the separate native account grid.",
-   "visible_when": {
-    "field": "grant_as_user",
-    "truthy": true
-   }
-  },
-  {
-   "field_id": "grant_as_roles",
-   "label": "Grantor role accounts",
-   "control": "grid",
-   "tab": "Engine",
-   "columns": [
-    {
-     "field_id": "user",
-     "label": "User",
-     "control": "text",
-     "required": true
-    },
-    {
-     "field_id": "host",
-     "label": "Host",
-     "control": "text",
-     "default": "%"
-    }
-   ],
-   "visible_when": {
-    "field": "grant_as_user",
-    "truthy": true
-   }
-  },
-  {
-   "field_id": "confirmation",
-   "label": "Confirmation",
-   "control": "text",
-   "tab": "General",
-   "help": "Type the selected target display name when required."
-  }
+  {"field_id":"grantees","label":"Grantees","control":"grid","tab":"General","required":true,"columns":[{"field_id":"user","label":"User","control":"text","required":false,"help":"Empty user text denotes a native anonymous account; supply its host separately."},{"field_id":"host","label":"Host","control":"text","default":"%"}],"help":"Separate native account components preserve literal quotes, dots and @ characters."},
+  {"field_id":"object_type","label":"Scope","control":"select","tab":"General","options":[{"value":"GLOBAL","label":"Global"},{"value":"DATABASE","label":"Database"},{"value":"TABLE","label":"Table"},{"value":"VIEW","label":"View"},{"value":"PROCEDURE","label":"Procedure"},{"value":"FUNCTION","label":"Function"},{"value":"LIBRARY","label":"Library"},{"value":"PROXY","label":"Proxy account"},{"value":"ACCOUNT","label":"All account privileges"}],"required":true,"help":"All account privileges is REVOKE ALL PRIVILEGES, GRANT OPTION. Library grants do not imply an available closed execution runtime."},
+  {"field_id":"database","label":"Database","control":"text","tab":"General","visible_when":{"field":"object_type","in":["DATABASE","TABLE","VIEW","FUNCTION","PROCEDURE","LIBRARY"]}},
+  {"field_id":"object","label":"Object","control":"text","tab":"General","visible_when":{"field":"object_type","in":["TABLE","VIEW","FUNCTION","PROCEDURE","LIBRARY"]}},
+  {"field_id":"privileges","label":"Privileges","control":"grid","tab":"Privileges","columns":[{"field_id":"name","label":"Privilege","control":"text","required":true},{"field_id":"columns","label":"Columns","control":"multiselect","option_values_path":["target","columns"]}],"help":"Native keyword or installed dynamic privilege per row. Column lists apply to table/view SELECT, INSERT, UPDATE or REFERENCES; MySQL validates scope and availability."},
+  {"field_id":"grant_option","label":"With grant option","control":"boolean","tab":"Privileges","default":false,"help":"GRANT only. To revoke delegation, select the GRANT OPTION privilege."},
+  {"field_id":"if_exists","label":"If it exists","control":"boolean","tab":"Engine","default":false,"help":"REVOKE only; retain native warnings for absent grants."},
+  {"field_id":"ignore_unknown_user","label":"Ignore unknown users","control":"boolean","tab":"Engine","default":false,"help":"REVOKE only; the native statement determines partial results and warnings."},
+  {"field_id":"proxy_user","label":"Proxy user","control":"text","tab":"Engine","visible_when":{"field":"object_type","equals":"PROXY"}},
+  {"field_id":"proxy_host","label":"Proxy host","control":"text","tab":"Engine","visible_when":{"field":"object_type","equals":"PROXY"}},
+  {"field_id":"grant_as_user","label":"Grant as user","control":"text","tab":"Engine","visible_when":{"field":"object_type","equals":"GLOBAL"},"help":"GRANT AS is native global-privilege delegation only."},
+  {"field_id":"grant_as_host","label":"Grant as host","control":"text","tab":"Engine","visible_when":{"field":"grant_as_user","truthy":true}},
+  {"field_id":"grant_as_roles_mode","label":"Grantor roles","control":"select","tab":"Engine","options":[{"value":"NONE","label":"None"},{"value":"DEFAULT","label":"Default"},{"value":"ALL","label":"All"},{"value":"SELECTED","label":"Selected"},{"value":"ALL_EXCEPT","label":"All Except"}],"help":"GRANT AS only. A selected/excluded role set uses the separate native account grid.","visible_when":{"field":"grant_as_user","truthy":true}},
+  {"field_id":"grant_as_roles","label":"Grantor role accounts","control":"grid","tab":"Engine","columns":[{"field_id":"user","label":"User","control":"text","required":true},{"field_id":"host","label":"Host","control":"text","default":"%"}],"visible_when":{"field":"grant_as_user","truthy":true}},
+  {"field_id":"confirmation","label":"Confirmation","control":"text","tab":"General","help":"Type the selected target display name when required."}
  ],
  "notes": "Native MySQL9.7 pure/C and authenticated plan/apply qualify typed account tuples, scoped column lists, dynamic privileges, proxy accounts, global GRANT AS role modes, partial revokes and native warnings/errors. Shared rendering and family diff round trips remain pending."
 }
