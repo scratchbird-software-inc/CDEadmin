@@ -544,8 +544,10 @@ class RelationalInventoryTests(unittest.TestCase):
         for key, value in expected_database.items():
             self.assertEqual(value, databases[0]['native'][key])
         self.assertEqual(
-            expected_database, databases[0]['native']['definition']
+            {**expected_database, 'database_options_state': 'unavailable'},
+            databases[0]['native']['definition']
         )
+        self.assertNotIn('read_only', databases[0]['native'])
         self.assertEqual(
             ['widgets'],
             [item['display_name'] for item in resources

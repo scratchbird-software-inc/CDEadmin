@@ -126,3 +126,24 @@ native REVOKE options. The private review binds observed grants and the runtime
 partial_revokes setting. Per-field tests reach the compiler, native pure/C tests
 verify real allow/deny behavior, and authenticated APIs verify typed grant/revoke.
 Decision9 still owns applying a privilege diff from another family editor.
+
+## Database and Server migration
+
+Database is complete for its declared fields (6 fields/1 gap). Its JSON is also the field source for the
+existing endpoint and visual input contracts; the MySQL field tuples were
+deleted. Native SHOW CREATE DATABASE supplies the full definition and read-only
+state. Failed observation stays unavailable. The shared record projection
+converts native YES/NO encryption into Y/N without an engine branch. Native
+pure/C and authenticated APIs qualify create, prefill, alter, actual read-only
+write refusal, preserved data and drop. The shared family-render suite plus the native descriptor/draft round trip
+qualify those fields; human presentation and platform acceptance remain separate.
+Database Security diffs remain the cross-operation part of Decision9.
+
+Server is draft (41 fields/4 gaps). Every field binds the expanded mysql-native
+registration input contract. Arrays/objects use typed grids, multiselects and
+key/value controls. No engine-specific server form factory existed to retire;
+the shared profile-form builder remains a backend input contract. The existing
+family host sends visual_admin DDL actions, so Decision11 records the required
+registration dispatch. Server remains unsurfaced until that shared bridge lands.
+Nested failover credentials/pools and optional closed-server runtimes are
+recorded as gaps rather than exposed through ordinary text or JSON controls.

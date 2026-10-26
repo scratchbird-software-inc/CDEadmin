@@ -119,14 +119,14 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - n/a
    * - Database
      - draft (33f, 2g)
-     - pending (0f, 0g)
+     - complete (6f, 1g)
      - complete (6f, 0g)
      - complete (11f, 0g)
      - complete (2f, 3g)
      - complete (9f, 0g)
    * - Server
      - draft (46f, 5g)
-     - pending (0f, 0g)
+     - draft (41f, 4g)
      - draft (32f, 0g)
      - draft (47f, 0g)
      - draft (4f, 2g)
@@ -333,3 +333,33 @@ Public plans/receipts contain no key material and no download control is added.
 Protected generated-password delivery remains a separate gap. Descriptor draft
 and shared rendering/round-trip statuses are unchanged. Lint before/after:
 JSON303/303, MUI244/244, branches111/111, panels113/113.
+
+MySQL Database and Server descriptors (2026-10-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Database moves from pending to complete for its declared fields (6fields/1gap). The existing endpoint and
+visual-admin input contracts load the same descriptor fields; legacy MySQL
+create/alter/drop field tuples were removed. Native SHOW CREATE DATABASE now
+supplies read-only state and full definition; an unavailable observation stays
+unavailable. Record projections map native encryption YES/NO to the provider's
+Y/N inputs. Native MySQL9.7 pure/C and authenticated plan/apply qualify create,
+prefill, alter, read-only enforcement, data preservation and drop. The unchanged shared family-render suite and the native descriptor/draft
+round trip qualify these fields; human presentation and platform acceptance
+remain separately owned. Security diff dispatch remains Decision9.
+
+Server moves from pending to draft (41fields/4gaps), audited against the expanded
+registration profile and its existing input validation. Failover targets, TLS
+lists and connection attributes use typed grids/multiselect/keyvalue controls.
+Optional closed-server authentication dependencies remain post beta. Nested
+failover credentials/pools and absent application metadata bindings are explicit
+gaps. No MySQL-specific legacy server form factory existed; the shared profile
+builder remains a backend input contract for other connectors. Registration is
+not server DDL: Decision11 records the shared registration-action dispatch that
+must land before this Server form counts as surfaced. No shared host, schema or
+family-render test was changed. Lint before/after: JSON303/303, MUI244/244,
+engine branches111/111, panels113/113, context-menu branches14/14.
+
+The startup route assertion now includes the two authenticated descriptor GET
+routes introduced by the shared shell (1413 to1415). This updates the expected
+API surface, not a resource allowance: source/bundle byte limits, the8-second
+startup limit and240000KiB RSS limit are unchanged.

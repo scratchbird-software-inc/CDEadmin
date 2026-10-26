@@ -684,3 +684,16 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     credential delivery remains a separate unresolved protected-result scope;
     it is not implicitly deferred by this choice. No provider panel or shared
     result-schema change is introduced.
+
+11. Server-family registration dispatch (MySQL audit, 2026-10-25): Server
+    fields are native endpoint profile inputs, not visual_admin server DDL.
+    The existing actions are ``endpoint_profile_update`` and
+    ``endpoint_profile_remove``; initial registration uses the existing
+    provider endpoint creation route. MySQL's Server descriptor must bind
+    ``define`` / ``edit`` / ``remove`` to those registration paths, carry the
+    selected profile/group context, and pass secret fields through the existing
+    credential service. The current shared family host issues visual_admin
+    create/alter, while the native server catalog deliberately has no such
+    operations. Default: populate the typed Server descriptor and record it as
+    draft/unsurfaced until the front-end stream declares this dispatch. Do not
+    invent server SQL DDL, add a provider panel or branch the shared host.

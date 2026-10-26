@@ -2186,6 +2186,18 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             }
             if profile is MYSQL_PROFILE:
                 native['default_encryption'] = row[3]
+                # MySQL reports READ ONLY in a trailing SHOW CREATE comment,
+                # not in I_S.SCHEMATA. Absence after a successful native read
+                # means OFF; an unavailable read must never become OFF.
+                definition = optional('SHOW CREATE DATABASE ' + '`' + str(row[0]).replace('`', '``') + '`')
+                if (len(definition) == 1 and len(definition[0]) >= 2 and
+                        isinstance(definition[0][1], str) and
+                        definition[0][1].startswith('CREATE DATABASE ')):
+                    native['definition'] = definition[0][1]
+                    native['read_only'] = ('ON' if definition[0][1].rstrip().endswith(' /* READ ONLY = 1 */') else 'OFF')
+                    native['database_options_state'] = 'observed'
+                else:
+                    native['database_options_state'] = 'unavailable'
             else:
                 native['schema_comment'] = row[3]
             add('database', [], row[0], native)

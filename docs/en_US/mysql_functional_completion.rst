@@ -2845,3 +2845,34 @@ an unresolved implementation gap or closed-source Enterprise dependency. This
 resolves the user-key result decision only. Native RANDOM PASSWORD delivery and
 shared renderer/round-trip acceptance retain their separate recorded status;
 the ruling does not complete Group9 or the independent product inventory.
+
+Database defaults and registration descriptors
+-----------------------------------------------
+
+The Database descriptor now owns the native name, IF NOT EXISTS, character set,
+collation, default encryption and ALTER-only read-only fields. Endpoint and
+visual-admin input contracts load these same fields rather than maintaining
+MySQL field tuples in parallel. The native compiler and execution contract are
+unchanged. Existing-table character sets and encryption are not rewritten by
+changing database defaults; the native qualification verifies preserved Unicode
+data separately.
+
+Database navigation now retains the full SHOW CREATE DATABASE definition and
+its read-only state. MySQL9.7 reports that flag in a trailing native comment,
+not I_S.SCHEMATA. A successful read distinguishes ON/OFF; failed observation
+reports unavailable and does not invent OFF. The shared record projection maps
+native encryption YES/NO to Y/N. ``tools/cdeadmin_mysql_database_descriptor_qualification.py``
+qualifies descriptor create/prefill/alter/drop, actual native read-only write
+refusal, existing data and original-session diagnostic/savepoint preservation
+through pure/C and authenticated APIs. The six-field descriptor is complete under the shared family-render suite and
+native descriptor/draft round trip; human presentation and platform acceptance
+remain separate. Security diff dispatch remains Decision9.
+
+The Server descriptor lists41 typed registration inputs, including failover,
+TLS lists and connection attributes. Each binding reaches the existing
+registration input validator. Registration-action dispatch belongs to the
+shared shell and is recorded as Decision11; no server DDL is invented. This
+form remains draft/unsurfaced. Nested failover credentials/pools, optional
+closed-server authentication runtimes and application registration metadata
+retain explicit gaps. These scoped changes do not close Group9 or the broader
+native inventory/diagnostics reconciliation.
