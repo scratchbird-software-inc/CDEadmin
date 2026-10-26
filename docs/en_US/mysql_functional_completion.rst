@@ -3058,3 +3058,29 @@ Decision15 because the shared registry has no Engine-object editor. Native
 option APIs and the typed start/stop/reset/filter operation descriptors remain
 available at their previously qualified scope. Product inventory, retained
 role/temporary-object diagnostics and protected password delivery stay open.
+
+Native replication receiver catalog
+-------------------------------------
+
+Explorer discovery and server/DDN capture share an explicit projection of all
+27 fields in MySQL9.7's replication_connection_configuration table. This adds
+receiver identity, network binding/namespace, TLS paths and choices, compression,
+retry/heartbeat settings, automatic failover and GTID-only state to the explorer;
+server exchange no longer drops the fields omitted by its earlier11-column
+projection. Fields retain native names and enum values. CONNECTION_RETRY_COUNT
+is projected as exact decimal text so browser/DDN readers preserve unsigned
+64-bit values. TLS_CIPHERSUITES preserves native NULL versus an empty string.
+SSL_KEY is a file path; no key file, source password or credential store is read.
+
+The native qualification covers both connectors, default and quoted Unicode
+channel identities, all27 fields, DDN readback and generation-bound authenticated
+inspection. Restricted native grants produce explicit partial coverage. The
+native table is perpetual and remains observable when Performance Schema
+instrumentation is disabled; that case is tested independently. Dedicated
+capture connections preserve original warnings, ROW_COUNT and savepoints.
+These receipts establish configuration observations, not receiver connectivity,
+TLS handshakes, compression negotiation, failover execution or delivery.
+
+No operation or form status changes. Channel create/alter remains unsurfaced
+under Decision15; native installed-feature reconciliation, retained-session
+overlays and protected generated-password delivery remain open.

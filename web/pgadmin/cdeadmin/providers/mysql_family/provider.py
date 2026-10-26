@@ -2725,9 +2725,9 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             add('group-replication',[],'Group Replication',group)
             for member in members:
                 if member.get('member_id'):add('group-replication-member',['Group Replication'],str(member['member_id']),member)
+        from .installed_catalog import CHANNELS, CHANNEL_COLUMNS
         replication_source = (
-            'SELECT CHANNEL_NAME, HOST, PORT FROM performance_schema.'
-            'replication_connection_configuration ORDER BY CHANNEL_NAME'
+            CHANNELS
             if profile is MYSQL_PROFILE else
             'SELECT Connection_name, Master_host, Master_user, Master_port, '
             'Connect_retry, Master_log_file, Read_master_log_pos, '
@@ -2740,8 +2740,9 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         )
         for row in optional(replication_source):
             if profile is MYSQL_PROFILE:
-                name, host, port = row
-                native = {'channel_name': name, 'host': host, 'port': port,
+                native = dict(zip((key.lower() for key in CHANNEL_COLUMNS), row))
+                name = native['channel_name']
+                native = {**native,
                           'replication_password_returned': False,
                           **({'administration': {'allowed_operations': ['inspect']}}
                              if str(name).lower().startswith('group_replication_') else {})}

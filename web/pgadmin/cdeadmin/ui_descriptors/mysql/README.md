@@ -222,3 +222,9 @@ tiers 2/3. Native source options need typed lifecycle fields with omission,
 false/zero/empty and nullable-value semantics. Keep that gap explicit; do not
 fabricate a family mapping or relabel lifecycle actions. The existing typed
 channel operation descriptors and backend option contracts remain unchanged.
+
+Channel inspection retains all27 native receiver-configuration fields. The
+retry count is exact decimal text; cipher suites distinguish NULL and empty.
+TLS key/CA/certificate values are paths, not file contents. This expands metadata
+observations only; it does not surface the missing lifecycle editor in
+Decision15. The84 operation entries are parsed-identical after compaction.

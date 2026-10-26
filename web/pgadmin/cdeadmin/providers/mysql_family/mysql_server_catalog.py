@@ -7,7 +7,7 @@ from .mysql_catalog import _value, DENIED, SYSTEM
 from ..mysql_grants import QUERIES as GRANTS
 from .system_variables import SELECT as VARIABLES_SELECT, administration as variable_administration
 from .mysql_xa import RECOVER as XA_RECOVER, decode_row as decode_xa, execute_recovery
-from .installed_catalog import PLUGINS, FUNCTIONS
+from .installed_catalog import PLUGINS, FUNCTIONS, CHANNELS
 
 MAX_FACTS = 20000
 MAX_BYTES = 8 * 1024 * 1024
@@ -29,7 +29,7 @@ SECTIONS = (
     ('system-variables', 'system-variable', VARIABLES_SELECT, ('variable_name',)),
     ('foreign-servers', 'server-link', 'SELECT Server_name,Host,Db,Username,Port,Socket,Wrapper,Owner FROM mysql.servers ORDER BY Server_name', ('server_name',)),
     ('spatial-reference-systems', 'spatial-reference-system', 'SELECT SRS_NAME,SRS_ID,ORGANIZATION,ORGANIZATION_COORDSYS_ID,DEFINITION,DESCRIPTION FROM information_schema.ST_SPATIAL_REFERENCE_SYSTEMS', ('srs_id',)),
-    ('replication-channels', 'replication-channel', 'SELECT CHANNEL_NAME,HOST,PORT,USER,AUTO_POSITION,CONNECTION_RETRY_INTERVAL,CONNECTION_RETRY_COUNT,HEARTBEAT_INTERVAL,TLS_VERSION,SSL_ALLOWED,SSL_VERIFY_SERVER_CERTIFICATE FROM performance_schema.replication_connection_configuration ORDER BY CHANNEL_NAME', ('channel_name',)),
+    ('replication-channels', 'replication-channel', CHANNELS, ('channel_name',)),
 ) + tuple((section, 'privilege', sql, keys) for section, _scope, sql, keys in GRANTS)
 
 

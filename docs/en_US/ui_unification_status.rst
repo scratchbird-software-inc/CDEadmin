@@ -557,3 +557,16 @@ all 84 operation entries. Independent diagnostics overlays, native inventory,
 protected generated-password delivery and shared Decisions9/11/12/13/14 remain
 open. Lint before/after: JSON297/297, MUI244/244, engine branches111/111,
 panels113/113, context-menu branches14/14.
+
+MySQL replication receiver metadata (2026-10-26)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Existing channel inspection now retains all27 native receiver-configuration
+fields in both explorer and server/DDN exchange. Wide retry counts use decimal
+text; NULL/empty cipher-suite settings remain distinct. No new operation, form,
+menu or renderer is introduced. The native/API metadata receipts do not qualify
+channel create/alter forms or resolve Decision15. All84 operation entries remain
+at their recorded status; shared UI, independent inventory and protected-result
+gaps remain open. The operations document is compacted with parsed-identical
+content to retain the fixed source budget. Lint before/after: JSON297/297,
+MUI244/244, engine branches111/111, panels113/113, context-menu branches14/14.
