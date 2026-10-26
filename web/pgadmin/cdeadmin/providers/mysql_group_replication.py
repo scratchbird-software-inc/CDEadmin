@@ -72,17 +72,3 @@ def compile_operation(operation,draft,target):
             arguments=[bind(text(draft.get(field),field,128)) for field in ('action_name','event_name')]
         source='SELECT '+FUNCTIONS[operation]+'('+','.join(arguments)+')'
     return {'source':source,'preview_source':source.replace('%s','<bound-value>'),'parameters':tuple(parameters)}
-
-
-def form(operation,field):
-    fields=[]
-    if operation=='start':fields=[field('user','Recovery user (optional)','text'),
-        field('password','Recovery password (omit to retain)','password',sensitive=True),field('default_auth','Recovery authentication plugin (optional)','text')]
-    if operation in {'set_primary','single_primary'}:fields.append(field('member_uuid','Native member UUID', 'text',operation=='set_primary',
-        help_text='Exact server UUID from the observed group member inventory. Blank single-primary selection uses native election.'))
-    if operation=='set_primary':fields.append(field('timeout','Running transaction timeout (seconds; optional)','integer'))
-    if operation=='set_protocol':fields.append(field('version','Native communication protocol version','text',True))
-    if operation=='set_write_concurrency':fields.append(field('concurrency','Native write concurrency','integer',True))
-    if operation in {'enable_member_action','disable_member_action'}:fields += [field('action_name','Native member action name','text',True),field('event_name','Native event name','text',True)]
-    fields.append(field('confirmation','Confirmation','text',True))
-    return {'form_id':'mysql.group-replication.'+operation,'title':operation.replace('_',' ').title()+' — native MySQL Group Replication','fields':fields}

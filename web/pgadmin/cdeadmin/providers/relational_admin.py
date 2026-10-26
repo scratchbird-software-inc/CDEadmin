@@ -302,7 +302,7 @@ class RelationalAdministration:
                 } for operation in sorted(mysql_program_objects.OPERATIONS[kind])]
             if self.dialect.engine_id == 'mysql' and kind=='group-replication':
                 resource['operations']=[{'operation_id':'inspect','title':'Inspect native group','mutation_class':'read','target_required':True,'confirmation_required':False}]+[{
-                    'operation_id':operation,'title':mysql_group_replication.form(operation,self._field)['title'],
+                    'operation_id':operation,'title':self._form(kind, operation)['title'],
                     'mutation_class':'admin','target_required':True,'confirmation_required':True,
                 } for operation in sorted(mysql_group_replication.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind == 'component':
@@ -312,7 +312,7 @@ class RelationalAdministration:
                 } for operation in sorted(mysql_components.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind == 'constraint':
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_constraints.OPERATIONS] + [{
-                    'operation_id': operation, 'title': mysql_constraints.form(operation, self._field)['title'],
+                    'operation_id': operation, 'title': self._form(kind, operation)['title'],
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(mysql_constraints.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind == 'view':
@@ -334,7 +334,7 @@ class RelationalAdministration:
             if self.dialect.engine_id == 'mysql' and kind in mysql_partitions.OPERATIONS:
                 additions = mysql_partitions.OPERATIONS[kind]
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
-                    'operation_id': operation, 'title': mysql_partitions.form(kind, operation, self._field)['title'],
+                    'operation_id': operation, 'title': self._form(kind, operation)['title'],
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(additions)]
             if self.dialect.engine_id == 'mariadb' and kind in mariadb_partitions.OPERATIONS:
@@ -5353,15 +5353,11 @@ class RelationalAdministration:
             return mariadb_packages.form(operation, self._field)
         if self.dialect.engine_id=='mysql' and operation in mysql_program_objects.OPERATIONS.get(kind,()):
             return mysql_program_objects.form(kind,operation,self._field)
-        if self.dialect.engine_id=='mysql' and kind=='group-replication' and operation in mysql_group_replication.OPERATIONS:
-            return mysql_group_replication.form(operation,self._field)
         if self.dialect.engine_id == 'mysql' and kind=='component' and operation in mysql_components.OPERATIONS:
             return mysql_components.form(operation,self._field)
-        if self.dialect.engine_id == 'mysql' and kind == 'constraint' and operation in mysql_constraints.OPERATIONS:
-            return mysql_constraints.form(operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'replication-channel' and operation in mysql_replication.OPERATIONS:
             return mysql_replication.form(operation, self._field)
-        if self.dialect.engine_id == 'mysql' and operation in mysql_partitions.OPERATIONS.get(kind, ()):
+        if self.dialect.engine_id == 'mysql' and kind == 'partition' and operation == 'drop':
             return mysql_partitions.form(kind, operation, self._field)
         if self.dialect.engine_id == 'mariadb' and operation in mariadb_partitions.OPERATIONS.get(kind, ()):
             return mariadb_partitions.form(kind, operation, self._field)

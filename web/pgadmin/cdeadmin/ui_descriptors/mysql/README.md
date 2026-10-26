@@ -165,3 +165,16 @@ trips do not qualify actual dialog behavior. No shared renderer is changed.
 `navigator.json` covers the33 current catalog kinds with16 groups, semantic
 icons and table/view child kinds. Its layout is draft/unsurfaced pending shared
 tree consumption (Decision13), rather than another provider-specific tree.
+
+The65 entries now include partition maintenance, CHECK enforcement, Group
+Replication and privilege inspection (23 added). Group/CHECK form factories are
+retired; the partition factory keeps only Tier1 drop confirmation. Capabilities
+are parsed-identical after layout compaction. Declared prefill paths map back
+to the existing catalog `initial_value_path` contract.
+
+Native SQL partition definitions remain bounded grammar, not arbitrary actions.
+COUNT/DEFINITIONS visibility and the reorganize scalar grid require shared
+operation projection (Decision12); family grid dispatch remains Decision9.
+Those workflows are explicitly unsurfaced. All entries stay draft: native
+pure/C, authenticated API and three-member group qualifications verify projected
+inputs and native effects, separately from actual dialog/presentation acceptance.

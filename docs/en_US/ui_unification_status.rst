@@ -388,3 +388,33 @@ unsurfaced pending the shared tree consumer (Decision13). No extra MariaDB-only
 kinds were inferred. Group9/native inventory and generated-password delivery
 remain open. Lint before/after: JSON303/301, MUI244/244, engine branches111/111,
 panels113/113, context-menu branches14/14.
+
+MySQL partition, CHECK and Group Replication operations (2026-10-26)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Operations now declare65 entries (23 added): eleven partition/table maintenance
+actions, CHECK enforcement, ten Group Replication actions and privilege
+inspection. All remain draft. Native partition drop retains its Tier1 lifecycle
+classification and its existing confirmation-only input contract; it is not
+duplicated as a maintenance operation. The Group Replication and CHECK form
+factories/dispatches are deleted. The partition factory retains only that
+unmigrated drop contract; every migrated partition field comes from descriptor
+data. Existing catalog titles delegate to those same input contracts, without
+new engine branches or handwritten fields.
+
+Partition definitions use the existing bounded native SQL grammar; a separate
+statement or unrelated ALTER action is rejected. Reorganize uses a scalar-list
+grid. Hidden COUNT/DEFINITIONS fields require shared draft projection
+(Decision12); family Partitions-grid dispatch stays Decision9. Those workflows
+remain explicitly unsurfaced. Native projected-input qualifications cover
+partition data effects, CHECK refusal/enforcement, both connectors and
+authenticated APIs; the three-member group harness covers all ten group
+actions. They do not establish actual dialog acceptance.
+
+Capabilities retain identical parsed content, including all33 kinds, operation
+IDs and tiers; only nested JSON layout was compacted. The backend adapter now
+preserves declared prefill paths as the existing ``initial_value_path`` contract.
+No shared schema, renderer or family-render test changed. Lint before/after:
+JSON301/300, MUI244/244, engine branches111/111, panels113/113, context-menu
+branches14/14. Twenty-two beta tier2/3 entries still lack descriptors; two
+closed-source masking entries remain separately post beta. Group9 is open.

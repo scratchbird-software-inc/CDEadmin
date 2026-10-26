@@ -1,5 +1,6 @@
 """Execute generated MySQL partition plans against disposable native data."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import secrets
@@ -11,13 +12,26 @@ from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_ADMINISTRATIO
 from pgadmin.cdeadmin.providers.mysql_tablespaces import identifier
 
 
-def qualify(options,output):
+def qualify(options,output,descriptor_inputs=False):
     output.mkdir(parents=True,exist_ok=True);connection=mysql.connector.connect(**{**options,'autocommit':True})
     cursor=connection.cursor();database='sr_partition_'+secrets.token_hex(6);table='t`é';exchange='x`é'
     address=identifier(database)+'.'+identifier(table);other=identifier(database)+'.'+identifier(exchange)
     proof={'passed':False,'statements':{},'native_results':[]}
+    root=Path(__file__).resolve().parents[1]
+    proof.update(descriptor_inputs=descriptor_inputs,actual_operation_dialog_qualified=False,
+        source_sha256={name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in (
+            'web/pgadmin/cdeadmin/providers/mysql_partitions.py',
+            'web/pgadmin/cdeadmin/ui_descriptors/mysql/operations.json',
+            str(Path(__file__).relative_to(root)))})
+    if descriptor_inputs:
+        from ui_descriptor_roundtrip import backend_draft,engine_operations,operation_draft
+        declarations=engine_operations('mysql')
     def execute(kind,operation,draft=None,partition='p0'):
         target={'display_name':partition if kind=='partition' else table,'display_path':[database,table]+([partition] if kind=='partition' else [])}
+        if descriptor_inputs and operation!='drop':
+            declaration=declarations[operation+'@'+kind]
+            values=operation_draft(declaration,draft,target['display_name'])
+            draft=backend_draft({'tabs':[{'fields':declaration['fields']}]},values)
         request={'resource_kind':kind,'operation_id':operation,'draft':draft or {},'target_resource':target,'_provider_route':{'host':options.get('host','localhost')}}
         assert not MYSQL_ADMINISTRATION.validate(request)['errors']
         statement=MYSQL_ADMINISTRATION._compile(request)['statements'][0]
@@ -76,4 +90,5 @@ def qualify(options,output):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--connection-json',type=Path,required=True);parser.add_argument('--output-root',type=Path,required=True)
-    args=parser.parse_args();qualify(json.loads(args.connection_json.read_text()),args.output_root)
+    parser.add_argument('--descriptor-inputs',action='store_true')
+    args=parser.parse_args();qualify(json.loads(args.connection_json.read_text()),args.output_root,args.descriptor_inputs)

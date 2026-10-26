@@ -31,6 +31,8 @@ def operation_entry(kind, operation):
             field['minimum'] = field.pop('min')
         if 'max' in field:
             field['maximum'] = field.pop('max')
+        if 'default_path' in field:
+            field['initial_value_path'] = field.pop('default_path')
         fields.append(field)
     return {'form_id': 'mysql.' + kind + '.' + operation,
             'title': row['title'], 'fields': fields}

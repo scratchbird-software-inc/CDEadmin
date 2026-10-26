@@ -13,7 +13,7 @@ from tools.cdeadmin_mysql_family_object_live_orchestrator import _run,_wait_unti
 from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_ADMINISTRATION,MYSQL_PROFILE,_resources
 
 
-def qualify(output,use_c=False):
+def qualify(output,use_c=False,descriptor_inputs=False):
     import mysql.connector
     output.mkdir(parents=True,exist_ok=True)
     prefix='sr-gr-'+secrets.token_hex(5);network=prefix+'-net'
@@ -22,6 +22,13 @@ def qualify(output,use_c=False):
     root=Path(__file__).resolve().parents[1]
     for name in ('web/pgadmin/cdeadmin/providers/mysql_group_replication.py','tools/cdeadmin_mysql_group_replication_qualification.py'):
         proof['source_sha256'][name]=hashlib.sha256((root/name).read_bytes()).hexdigest()
+    if descriptor_inputs:
+        from ui_descriptor_roundtrip import backend_draft,engine_operations,operation_draft
+        declarations=engine_operations('mysql')
+        name='web/pgadmin/cdeadmin/ui_descriptors/mysql/operations.json'
+        proof['source_sha256'][name]=hashlib.sha256((root/name).read_bytes()).hexdigest()
+    proof['descriptor_inputs']=descriptor_inputs
+    proof['actual_operation_dialog_qualified']=False
     recovery_user='雪'*32
     password='sr\rquote"slash\\雪-'+secrets.token_hex(6)+'x'
     assert len(password.encode('utf8'))==32 and len(recovery_user.encode('utf8'))==96
@@ -34,6 +41,10 @@ def qualify(output,use_c=False):
             return cursor.fetchall() if cursor.description else []
         finally:cursor.close()
     def execute(index,operation,draft):
+        if descriptor_inputs:
+            declaration=declarations[operation+'@group-replication']
+            values=operation_draft(declaration,draft,targets[index]['display_name'])
+            draft=backend_draft({'tabs':[{'fields':declaration['fields']}]},values)
         request={'resource_kind':'group-replication','operation_id':operation,'draft':draft,'target_resource':targets[index]}
         assert not MYSQL_ADMINISTRATION.validate(request)['errors']
         statement=MYSQL_ADMINISTRATION._compile(request)['statements'][0]
@@ -163,5 +174,6 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output-root',type=Path,required=True)
     parser.add_argument('--use-c',action='store_true')
+    parser.add_argument('--descriptor-inputs',action='store_true')
     args=parser.parse_args()
-    qualify(args.output_root,use_c=args.use_c)
+    qualify(args.output_root,use_c=args.use_c,descriptor_inputs=args.descriptor_inputs)

@@ -17,11 +17,3 @@ def compile_operation(operation, draft, target):
         raise RelationalClientError('Select native ENFORCED or NOT ENFORCED')
     return {'source': 'ALTER TABLE ' + '.'.join(identifier(name) for name in path[:2]) +
             ' ALTER CHECK ' + identifier(path[2]) + ' ' + state, 'parameters': ()}
-
-
-def form(operation, field):
-    return {'form_id': 'mysql.constraint.' + operation, 'title': 'Change native CHECK enforcement',
-            'fields': [{**field('enforcement', 'Enforcement', 'select', True,
-                               options=('ENFORCED', 'NOT ENFORCED')),
-                        'initial_value_path': ['enforcement']},
-                       field('confirmation', 'Confirmation', 'text', True)]}

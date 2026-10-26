@@ -2894,3 +2894,25 @@ not dialog acceptance. Navigator data covers33 native kinds but is also
 draft/unsurfaced pending shared tree consumption (Decision13). Group9, native
 inventory reconciliation, generated-password delivery, human presentation and
 platform evidence retain their recorded scope; these counts close none of them.
+
+Partition, CHECK and group descriptor cutover
+--------------------------------------------
+
+The operations descriptor now lists65 entries. Twenty-three additions cover
+eleven partition/table maintenance actions, CHECK enforcement, ten Group
+Replication actions and privilege inspection. Every field binds the existing
+native compiler; compile/review/apply behavior is unchanged. Native numeric
+bounds and exact credential/identifier values are retained. CHECK prefill keeps
+the existing catalog metadata contract. The two Group/CHECK form factories and
+dispatches are removed; the partition factory retains only Tier1 drop, whose
+classification and confirmation contract are unchanged.
+
+The native qualification tools can now consume projected descriptor drafts.
+They verify real partition data effects, CHECK state and existing-row refusal
+through both connectors, authenticated plan/apply and a three-member group
+covering all ten group actions. The shared OperationDialog projection gap is
+still Decision12: reorganize grids and hidden COUNT/DEFINITIONS inputs remain
+explicitly unsurfaced until that bridge lands. Family partition-grid changes
+remain Decision9. All operation entries stay draft. Twenty-two remaining beta
+tier2/3 entries and the independent native inventory/diagnostics reconciliation
+remain open, alongside the previously recorded shared UI/protected-result gaps.

@@ -1,5 +1,6 @@
 """Qualify native CHECK state and existing-row validation in a disposable database."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import secrets
@@ -11,17 +12,30 @@ from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_ADMINISTRATIO
 from pgadmin.cdeadmin.providers.mysql_tablespaces import identifier
 
 
-def qualify(options, output):
+def qualify(options, output, descriptor_inputs=False):
     output.mkdir(parents=True, exist_ok=True)
     connection = mysql.connector.connect(**{**options, 'autocommit': True})
     cursor = connection.cursor()
     database = 'sr_checks_' + secrets.token_hex(6)
     db = identifier(database)
     proof = {'passed': False, 'checks': []}
+    root=Path(__file__).resolve().parents[1]
+    proof.update(descriptor_inputs=descriptor_inputs,actual_operation_dialog_qualified=False,
+        source_sha256={name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in (
+            'web/pgadmin/cdeadmin/providers/mysql_constraints.py',
+            'web/pgadmin/cdeadmin/ui_descriptors/mysql/operations.json',
+            str(Path(__file__).relative_to(root)))})
+    if descriptor_inputs:
+        from ui_descriptor_roundtrip import backend_draft,engine_operations,operation_draft
+        declaration=engine_operations('mysql')['enforcement@constraint']
     target = {'display_path': [database, 't`é', 'c`é'], 'native': {'constraint_type': 'CHECK'}}
     def execute(state):
+        draft={'enforcement':state}
+        if descriptor_inputs:
+            values=operation_draft(declaration,draft,target['display_path'][-1])
+            draft=backend_draft({'tabs':[{'fields':declaration['fields']}]},values)
         request = {'resource_kind': 'constraint', 'operation_id': 'enforcement',
-                   'draft': {'enforcement': state}, 'target_resource': target}
+                   'draft': draft, 'target_resource': target}
         assert not MYSQL_ADMINISTRATION.validate(request)['errors']
         statement = MYSQL_ADMINISTRATION._compile(request)['statements'][0]
         cursor.execute(statement['source'], statement['parameters'])
@@ -69,5 +83,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--connection-json', type=Path, required=True)
     parser.add_argument('--output-root', type=Path, required=True)
+    parser.add_argument('--descriptor-inputs', action='store_true')
     args = parser.parse_args()
-    qualify(json.loads(args.connection_json.read_text()), args.output_root)
+    qualify(json.loads(args.connection_json.read_text()), args.output_root, args.descriptor_inputs)

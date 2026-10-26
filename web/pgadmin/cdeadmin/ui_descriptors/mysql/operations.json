@@ -329,6 +329,156 @@
         {"field_id":"ignore_leaves","control":"boolean","required":false,"default":false,"label":"Skip leaf blocks","help":"Ignore index leaf blocks"},
         {"field_id":"confirmation","control":"text","required":true,"label":"Table name","help":"Type the selected target display name."}
       ]
+    },
+    {"resource_kind":"table","operation_id":"add_partitions","title":"Add partitions","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Enter PARTITION definitions without enclosing parentheses. Use doubled quotes in SQL literals and identifiers.",
+      "fields":[
+        {"field_id":"mode","label":"Native addition","control":"select","required":true,"default":"DEFINITIONS","options":[{"value":"DEFINITIONS","label":"Definitions"},{"value":"COUNT","label":"Count"}],"group":"Options"},
+        {"field_id":"count","label":"Partition count","control":"number","required":false,"visible_when":{"equals":"COUNT","field":"mode"},"help":"Number of partitions","group":"Options","min":1,"max":8192},
+        {"field_id":"definitions","label":"Partition definitions","control":"code","required":false,"visible_when":{"equals":"DEFINITIONS","field":"mode"},"help":"Native PARTITION definitions","group":"Definition","language":"sql"},
+        {"field_id":"confirmation","label":"Table name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"table","operation_id":"coalesce_partitions","title":"Coalesce partitions","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"count","label":"Partition count","control":"number","required":true,"help":"Number of partitions","group":"Options","min":1,"max":8192},
+        {"field_id":"confirmation","label":"Table name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"table","operation_id":"partition_by","title":"Change partitioning","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Enter a PARTITION BY definition using the database server SQL grammar.",
+      "fields":[
+        {"field_id":"partition_clause","label":"Partitioning definition","control":"code","required":true,"help":"Native PARTITION BY clause","group":"Definition","language":"sql"},
+        {"field_id":"confirmation","label":"Table name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"table","operation_id":"remove_partitioning","title":"Remove partitioning","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"confirmation","label":"Table name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"constraint","operation_id":"enforcement","title":"Change CHECK enforcement","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"enforcement","label":"Enforcement","control":"select","required":true,"options":[{"value":"ENFORCED","label":"Enforced"},{"value":"NOT ENFORCED","label":"Not Enforced"}],"group":"Options","default_path":["enforcement"]},
+        {"field_id":"confirmation","label":"Constraint name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"partition","operation_id":"analyze","title":"Analyze partition","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"confirmation","label":"Partition name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"partition","operation_id":"check","title":"Check partition","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"confirmation","label":"Partition name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"partition","operation_id":"exchange","title":"Exchange partition with table","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"exchange_database","label":"Exchange database","control":"text","required":true,"group":"Options"},
+        {"field_id":"exchange_table","label":"Nonpartitioned exchange table","control":"text","required":true,"group":"Options"},
+        {"field_id":"validation","label":"Validate row placement","control":"select","required":true,"default":"WITH VALIDATION","options":[{"value":"WITH VALIDATION","label":"With Validation"},{"value":"WITHOUT VALIDATION","label":"Without Validation"}],"group":"Options"},
+        {"field_id":"confirmation","label":"Partition name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"partition","operation_id":"optimize","title":"Optimize partition","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"confirmation","label":"Partition name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"partition","operation_id":"rebuild","title":"Rebuild partition","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"confirmation","label":"Partition name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"partition","operation_id":"reorganize","title":"Reorganize partitions","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Enter PARTITION definitions without enclosing parentheses. Use doubled quotes in SQL literals and identifiers.",
+      "fields":[
+        {"field_id":"partitions","label":"Partitions","control":"grid","required":false,"default":[],"help":"Empty uses the selected partition; otherwise include its exact name in this ordered list.","group":"Definition","item_kind":"string","columns":[{"field_id":"value","label":"Partition","control":"text"}]},
+        {"field_id":"definitions","label":"Partition definitions","control":"code","required":true,"help":"Native PARTITION definitions","group":"Definition","language":"sql"},
+        {"field_id":"confirmation","label":"Partition name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"partition","operation_id":"truncate","title":"Truncate partition","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"confirmation","label":"Partition name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"privilege","operation_id":"inspect","title":"Inspect privileges","tier":2,"status":"draft","menu":{"category":"security"},"confirmation":"none","produces_log":true,
+      "fields":[
+      ]
+    },
+    {"resource_kind":"group-replication","operation_id":"disable_member_action","title":"Disable member action","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Requires the Group Replication plugin to be active on this server.",
+      "fields":[
+        {"field_id":"action_name","label":"Member action","control":"text","required":true,"help":"Native member action name","group":"Options"},
+        {"field_id":"event_name","label":"Event","control":"text","required":true,"help":"Native event name","group":"Options"},
+        {"field_id":"confirmation","label":"Group name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"group-replication","operation_id":"enable_member_action","title":"Enable member action","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Requires the Group Replication plugin to be active on this server.",
+      "fields":[
+        {"field_id":"action_name","label":"Member action","control":"text","required":true,"help":"Native member action name","group":"Options"},
+        {"field_id":"event_name","label":"Event","control":"text","required":true,"help":"Native event name","group":"Options"},
+        {"field_id":"confirmation","label":"Group name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"group-replication","operation_id":"multi_primary","title":"Use multi-primary mode","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Requires the Group Replication plugin to be active on this server.",
+      "fields":[
+        {"field_id":"confirmation","label":"Group name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"group-replication","operation_id":"reset_member_actions","title":"Reset member actions","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Requires the Group Replication plugin to be active on this server.",
+      "fields":[
+        {"field_id":"confirmation","label":"Group name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"group-replication","operation_id":"set_primary","title":"Select primary member","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Requires the Group Replication plugin to be active on this server.",
+      "fields":[
+        {"field_id":"member_uuid","label":"Member UUID","control":"text","required":true,"help":"Exact server UUID from the observed group member inventory. Blank single-primary selection uses native election.","group":"Options"},
+        {"field_id":"timeout","label":"Transaction timeout (seconds)","control":"number","required":false,"help":"Running transaction timeout (seconds; optional)","group":"Options","min":0,"max":3600},
+        {"field_id":"confirmation","label":"Group name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"group-replication","operation_id":"set_protocol","title":"Set communication protocol","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Requires the Group Replication plugin to be active on this server.",
+      "fields":[
+        {"field_id":"version","label":"Protocol version","control":"text","required":true,"help":"Native communication protocol version","group":"Options"},
+        {"field_id":"confirmation","label":"Group name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"group-replication","operation_id":"set_write_concurrency","title":"Set write concurrency","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Requires the Group Replication plugin to be active on this server.",
+      "fields":[
+        {"field_id":"concurrency","label":"Write concurrency","control":"number","required":true,"help":"Native write concurrency","group":"Options","min":1,"max":4294967295},
+        {"field_id":"confirmation","label":"Group name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"group-replication","operation_id":"single_primary","title":"Use single-primary mode","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Requires the Group Replication plugin to be active on this server.",
+      "fields":[
+        {"field_id":"member_uuid","label":"Member UUID","control":"text","required":false,"help":"Exact server UUID from the observed group member inventory. Blank single-primary selection uses native election.","group":"Options"},
+        {"field_id":"confirmation","label":"Group name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"group-replication","operation_id":"start","title":"Start group replication","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Requires the Group Replication plugin to be active on this server.",
+      "fields":[
+        {"field_id":"user","label":"Recovery user","control":"text","required":false,"help":"Recovery user (optional)","group":"Recovery"},
+        {"field_id":"password","label":"Recovery password","control":"password","required":false,"help":"Recovery password (omit to retain)","group":"Recovery"},
+        {"field_id":"default_auth","label":"Authentication plugin","control":"text","required":false,"help":"Recovery authentication plugin (optional)","group":"Recovery"},
+        {"field_id":"confirmation","label":"Group name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"group-replication","operation_id":"stop","title":"Stop group replication","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "notes":"Requires the Group Replication plugin to be active on this server.",
+      "fields":[
+        {"field_id":"confirmation","label":"Group name","control":"text","required":true,"group":"Confirmation"}
+      ]
     }
   ]
 }
