@@ -237,7 +237,7 @@ class ProviderVisualAdministration:
                 'the selected operation requires a target resource'
             )
         draft = _mapping(payload.get('draft', {}), 'draft')
-        fields = self._operation_fields(resource, operation)
+        fields = self._operation_fields(resource, operation, draft)
         known = {field['field_id'] for field in fields}
         unknown = sorted(set(draft).difference(known))
         errors = []
@@ -361,7 +361,7 @@ class ProviderVisualAdministration:
             ),
             'target_resource': copy.deepcopy(payload.get('target_resource')),
             'draft': self._redact_sensitive(
-                self._operation_fields(resource, operation), admitted_draft
+                self._operation_fields(resource, operation, admitted_draft), admitted_draft
             ),
         }
         session_id = payload.get('session_id')
@@ -1101,6 +1101,11 @@ class ProviderVisualAdministration:
                         'field_id': field_id, 'code': 'json',
                         'message': f'{label} must contain valid JSON.',
                     }
+            if field.get('json_type') == 'scalar':
+                if type(value) not in {str, bool, int}:
+                    return None, {'field_id': field_id, 'code': 'type',
+                                  'message': f'{label} requires text, boolean or integer.'}
+                return value, None
             if isinstance(value, (Mapping, list)):
                 if field.get('object_editor'):
                     if not isinstance(value, Mapping):
@@ -1244,7 +1249,7 @@ class ProviderVisualAdministration:
     def _validation_callback(self):
         return self._callback('validate_admin_operation')
 
-    def _operation_fields(self, resource, operation):
+    def _operation_fields(self, resource, operation, draft=None):
         """Admit provider fields without rebuilding the frozen UI catalog."""
         fields = operation['form']['fields']
         callback = self._callback('admin_operation_field_contract')
@@ -1254,6 +1259,7 @@ class ProviderVisualAdministration:
             'resource_kind': resource['resource_kind'],
             'operation_id': operation['operation_id'],
             'legacy_fields': copy.deepcopy(fields),
+            'draft': copy.deepcopy(draft or {}),
         })
         if provided is None:
             return fields

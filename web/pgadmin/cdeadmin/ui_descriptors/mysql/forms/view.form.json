@@ -1,157 +1,157 @@
 {
-  "schema": "cdeadmin.ui-form.v1",
-  "engine": "mysql",
-  "family": "view",
-  "resource_kinds": [
-    "view",
-    "materialized-view"
-  ],
-  "status": "draft",
-  "engine_tab_title": "MySQL",
-  "omitted_tabs": [
+ "schema": "cdeadmin.ui-form.v1",
+ "engine": "mysql",
+ "family": "view",
+ "resource_kinds": [
+  "view",
+  "materialized-view"
+ ],
+ "status": "draft",
+ "engine_tab_title": "MySQL",
+ "omitted_tabs": [
+  {
+   "tab": "Triggers",
+   "reason": "MySQL does not allow triggers on views."
+  }
+ ],
+ "gaps": [
+  {
+   "concept": "Ordered output aliases",
+   "reason": "The backend accepts columns as an ordered list of scalar strings. A typed grid returns records; scalar-list projection is Decision 9. Do not submit records or silently omit existing aliases during ALTER.",
+   "tracking": "ui_unified_design.rst decision 9"
+  },
+  {
+   "concept": "Privileges",
+   "reason": "Native grants/revokes are separate provider operations. Embedding their diff in a view edit requires the cross-operation dispatch contract in Decision 9.",
+   "tracking": "ui_unified_design.rst decision 9"
+  },
+  {
+   "concept": "Materialized views",
+   "reason": "The exposed materialized-view kind is metadata-only for this exact-version profile. It has no admitted create/alter operation; do not offer ordinary view DDL for it."
+  }
+ ],
+ "fields": [
+  {
+   "field_id": "name",
+   "label": "Name",
+   "control": "text",
+   "tab": "General",
+   "required": true,
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "parent",
+   "label": "Database",
+   "control": "text",
+   "tab": "General",
+   "backend_field_id": "database",
+   "required": true,
+   "modes": [
+    "create"
+   ],
+   "help": "Database name as a single native identifier; the selected object supplies this identity during alteration."
+  },
+  {
+   "field_id": "query",
+   "label": "Query",
+   "control": "code",
+   "tab": "Definition",
+   "backend_field_id": "definition",
+   "language": "sql",
+   "required": true,
+   "default_path": [
+    "view_definition"
+   ]
+  },
+  {
+   "field_id": "algorithm",
+   "label": "Algorithm",
+   "control": "select",
+   "tab": "Options",
+   "options": [
     {
-      "tab": "Triggers",
-      "reason": "MySQL does not allow triggers on views."
+     "value": "UNDEFINED",
+     "label": "UNDEFINED"
+    },
+    {
+     "value": "MERGE",
+     "label": "MERGE"
+    },
+    {
+     "value": "TEMPTABLE",
+     "label": "TEMPTABLE"
     }
-  ],
-  "gaps": [
+   ],
+   "default": "UNDEFINED",
+   "default_path": [
+    "algorithm"
+   ]
+  },
+  {
+   "field_id": "check_option",
+   "label": "Check option",
+   "control": "select",
+   "tab": "Options",
+   "options": [
     {
-      "concept": "Ordered output aliases",
-      "reason": "The backend accepts columns as an ordered list of scalar strings. A typed grid returns records; scalar-list projection is Decision 9. Do not submit records or silently omit existing aliases during ALTER.",
-      "tracking": "ui_unified_design.rst decision 9"
+     "value": "NONE",
+     "label": "None"
     },
     {
-      "concept": "Privileges",
-      "reason": "Native grants/revokes are separate provider operations. Embedding their diff in a view edit requires the cross-operation dispatch contract in Decision 9.",
-      "tracking": "ui_unified_design.rst decision 9"
+     "value": "LOCAL",
+     "label": "Local"
     },
     {
-      "concept": "Materialized views",
-      "reason": "The exposed materialized-view kind is metadata-only for this exact-version profile. It has no admitted create/alter operation; do not offer ordinary view DDL for it."
+     "value": "CASCADED",
+     "label": "Cascaded"
     }
-  ],
-  "fields": [
+   ],
+   "default": "NONE",
+   "default_path": [
+    "check_option"
+   ]
+  },
+  {
+   "field_id": "sql_security",
+   "label": "SQL security",
+   "control": "select",
+   "tab": "Options",
+   "options": [
     {
-      "field_id": "name",
-      "label": "Name",
-      "control": "text",
-      "tab": "General",
-      "required": true,
-      "modes": [
-        "create"
-      ]
+     "value": "DEFINER",
+     "label": "DEFINER"
     },
     {
-      "field_id": "parent",
-      "label": "Database",
-      "control": "text",
-      "tab": "General",
-      "backend_field_id": "database",
-      "required": true,
-      "modes": [
-        "create"
-      ],
-      "help": "Database name as a single native identifier; the selected object supplies this identity during alteration."
-    },
-    {
-      "field_id": "query",
-      "label": "Query",
-      "control": "code",
-      "tab": "Definition",
-      "backend_field_id": "definition",
-      "language": "sql",
-      "required": true,
-      "default_path": [
-        "view_definition"
-      ]
-    },
-    {
-      "field_id": "algorithm",
-      "label": "Algorithm",
-      "control": "select",
-      "tab": "Options",
-      "options": [
-        {
-          "value": "UNDEFINED",
-          "label": "UNDEFINED"
-        },
-        {
-          "value": "MERGE",
-          "label": "MERGE"
-        },
-        {
-          "value": "TEMPTABLE",
-          "label": "TEMPTABLE"
-        }
-      ],
-      "default": "UNDEFINED",
-      "default_path": [
-        "algorithm"
-      ]
-    },
-    {
-      "field_id": "check_option",
-      "label": "Check option",
-      "control": "select",
-      "tab": "Options",
-      "options": [
-        {
-          "value": "NONE",
-          "label": "None"
-        },
-        {
-          "value": "LOCAL",
-          "label": "Local"
-        },
-        {
-          "value": "CASCADED",
-          "label": "Cascaded"
-        }
-      ],
-      "default": "NONE",
-      "default_path": [
-        "check_option"
-      ]
-    },
-    {
-      "field_id": "sql_security",
-      "label": "SQL security",
-      "control": "select",
-      "tab": "Options",
-      "options": [
-        {
-          "value": "DEFINER",
-          "label": "DEFINER"
-        },
-        {
-          "value": "INVOKER",
-          "label": "INVOKER"
-        }
-      ],
-      "default": "DEFINER",
-      "default_path": [
-        "sql_security"
-      ]
-    },
-    {
-      "field_id": "definer_user",
-      "label": "Definer user",
-      "control": "text",
-      "tab": "Options",
-      "default_path": [
-        "definer_user"
-      ],
-      "help": "Supply both user and host when changing the definer."
-    },
-    {
-      "field_id": "definer_host",
-      "label": "Definer host",
-      "control": "text",
-      "tab": "Options",
-      "default_path": [
-        "definer_host"
-      ]
+     "value": "INVOKER",
+     "label": "INVOKER"
     }
-  ],
-  "notes": "Ordinary view create/alter bindings audited against mysql_views.compile_operation. The SQL tab is supplied by the shared shell. Draft and unsurfaced until front-end render/round-trip acceptance. ALTER must preserve the existing ordered aliases or remain unavailable until Decision 9 is implemented; SQL backend support is retained."
+   ],
+   "default": "DEFINER",
+   "default_path": [
+    "sql_security"
+   ]
+  },
+  {
+   "field_id": "definer_user",
+   "label": "Definer user",
+   "control": "text",
+   "tab": "Options",
+   "default_path": [
+    "definer_user"
+   ],
+   "help": "Supply both user and host when changing the definer."
+  },
+  {
+   "field_id": "definer_host",
+   "label": "Definer host",
+   "control": "text",
+   "tab": "Options",
+   "default_path": [
+    "definer_host"
+   ]
+  }
+ ],
+ "notes": "Ordinary view create/alter bindings audited against mysql_views.compile_operation. The SQL tab is supplied by the shared shell. Draft and unsurfaced until front-end render/round-trip acceptance. ALTER must preserve the existing ordered aliases or remain unavailable until Decision 9 is implemented; SQL backend support is retained."
 }

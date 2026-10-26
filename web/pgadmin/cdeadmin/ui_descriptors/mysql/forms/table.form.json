@@ -1,664 +1,664 @@
 {
-  "schema": "cdeadmin.ui-form.v1",
-  "engine": "mysql",
-  "family": "table",
-  "resource_kinds": [
-    "table"
-  ],
-  "status": "draft",
-  "engine_tab_title": "MySQL",
-  "omitted_tabs": [],
-  "gaps": [
+ "schema": "cdeadmin.ui-form.v1",
+ "engine": "mysql",
+ "family": "table",
+ "resource_kinds": [
+  "table"
+ ],
+ "status": "draft",
+ "engine_tab_title": "MySQL",
+ "omitted_tabs": [],
+ "gaps": [
+  {
+   "concept": "Temporary table variant",
+   "reason": "The current table.create compiler emits CREATE TABLE; table_type is ignored. No temporary selector is claimed.",
+   "tracking": "INV-MYSQL"
+  },
+  {
+   "concept": "Separate column length/precision/scale/unsigned/identity/charset/collation/generated/comment controls",
+   "reason": "The column record compiler consumes only name, type, nullable, default, unique and primary_key. Other native clauses currently require the full type declaration, not the drafted standalone field ids.",
+   "tracking": "INV-MYSQL"
+  },
+  {
+   "concept": "Foreign-key actions and CHECK enforcement",
+   "reason": "The create constraint record compiler ignores on_update, on_delete and enforced. CHECK enforcement has a separate native constraint operation; these are not create-grid fields.",
+   "tracking": "INV-MYSQL"
+  },
+  {
+   "concept": "Partitions editor",
+   "reason": "partition_by and add_partitions are operation ids with partition_clause/definitions/count drafts, not nested properties accepted by table.create. Decision 4 defaults to the Partitions tab; the typed operation-to-grid integration remains open.",
+   "tracking": "INV-MYSQL"
+  },
+  {
+   "concept": "ALTER grid diff and online algorithm/lock",
+   "reason": "The current alter compiler accepts add_columns/drop_columns/rename_columns; it does not accept create-grid columns or alter_algorithm/alter_lock. The existing controlled-change workflow is separate.",
+   "tracking": "INV-MYSQL"
+  },
+  {
+   "concept": "Object privileges grid application",
+   "reason": "privilege.grant is an operation address, not a table.create draft property. Cross-operation diff dispatch needs the shared shell contract.",
+   "tracking": "INV-MYSQL"
+  },
+  {
+   "concept": "MERGE member selection",
+   "reason": "mysql_table_options.union accepts arrays of identifier-path arrays, not selected reference strings or grid records. Decision 9 records the missing value projection.",
+   "tracking": "INV-MYSQL"
+  },
+  {
+   "concept": "SECONDARY_ENGINE explicit NULL and JSON-attribute scalar variants",
+   "reason": "The backend accepts None for SECONDARY_ENGINE and arbitrary JSON for engine attributes. This draft exposes named text and key/value objects only; the schema has no explicit nullable/text or nested typed JSON value projection.",
+   "tracking": "INV-MYSQL"
+  },
+  {
+   "concept": "Primary engine attributes outside beta profile",
+   "reason": "Core SQL hooks require HTON_SUPPORTS_ENGINE_ATTRIBUTE. No implementation in the audited MySQL9.7 Community engine sources advertises it; release InnoDB/MyISAM/MEMORY reject index use with native error3981. Debug simulation is not product support. A separately available implementation and native qualification are required before surfacing this field. Secondary-engine attribute metadata is separate.",
+   "tracking": "MY-POST-BETA-PRIMARY-ENGINE-ATTRIBUTES"
+  }
+ ],
+ "notes": "Audited against MySQLAdministration plan/validate/apply at master815c9cb4b. Every retained binding is a create-draft field; unsupported controls are listed in gaps, not silently passed to the compiler. Constraint discriminators use backend uppercase SQL kind values. Integer native options use decimal text. Canonical read-only tabs and SQL come from the shared shell; draft is not a renderer/round-trip acceptance claim.",
+ "fields": [
+  {
+   "field_id": "name",
+   "label": "Name",
+   "control": "text",
+   "tab": "General",
+   "required": true,
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "parent",
+   "label": "Database",
+   "control": "reference",
+   "tab": "General",
+   "reference_kind": "database",
+   "required": true,
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "comment",
+   "label": "Comment",
+   "control": "text",
+   "tab": "General",
+   "native_keyword": "COMMENT",
+   "backend_field_id": "mysql_table_options.comment",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "columns",
+   "label": "Columns",
+   "control": "grid",
+   "tab": "Columns",
+   "required": true,
+   "reorderable": true,
+   "columns": [
     {
-      "concept": "Temporary table variant",
-      "reason": "The current table.create compiler emits CREATE TABLE; table_type is ignored. No temporary selector is claimed.",
-      "tracking": "INV-MYSQL"
+     "field_id": "name",
+     "label": "Name",
+     "control": "text",
+     "required": true
     },
     {
-      "concept": "Separate column length/precision/scale/unsigned/identity/charset/collation/generated/comment controls",
-      "reason": "The column record compiler consumes only name, type, nullable, default, unique and primary_key. Other native clauses currently require the full type declaration, not the drafted standalone field ids.",
-      "tracking": "INV-MYSQL"
+     "field_id": "type",
+     "label": "Type",
+     "control": "text",
+     "required": true,
+     "help": "Complete native type declaration, for example BIGINT UNSIGNED or VARCHAR(80). Separate length/identity/generated fields are not implemented by this record compiler."
     },
     {
-      "concept": "Foreign-key actions and CHECK enforcement",
-      "reason": "The create constraint record compiler ignores on_update, on_delete and enforced. CHECK enforcement has a separate native constraint operation; these are not create-grid fields.",
-      "tracking": "INV-MYSQL"
+     "field_id": "nullable",
+     "label": "Nullable",
+     "control": "boolean",
+     "default": true
     },
     {
-      "concept": "Partitions editor",
-      "reason": "partition_by and add_partitions are operation ids with partition_clause/definitions/count drafts, not nested properties accepted by table.create. Decision 4 defaults to the Partitions tab; the typed operation-to-grid integration remains open.",
-      "tracking": "INV-MYSQL"
+     "field_id": "default",
+     "label": "Default",
+     "control": "text"
     },
     {
-      "concept": "ALTER grid diff and online algorithm/lock",
-      "reason": "The current alter compiler accepts add_columns/drop_columns/rename_columns; it does not accept create-grid columns or alter_algorithm/alter_lock. The existing controlled-change workflow is separate.",
-      "tracking": "INV-MYSQL"
+     "field_id": "unique",
+     "label": "Unique",
+     "control": "boolean",
+     "default": false
     },
     {
-      "concept": "Object privileges grid application",
-      "reason": "privilege.grant is an operation address, not a table.create draft property. Cross-operation diff dispatch needs the shared shell contract.",
-      "tracking": "INV-MYSQL"
-    },
-    {
-      "concept": "MERGE member selection",
-      "reason": "mysql_table_options.union accepts arrays of identifier-path arrays, not selected reference strings or grid records. Decision 9 records the missing value projection.",
-      "tracking": "INV-MYSQL"
-    },
-    {
-      "concept": "SECONDARY_ENGINE explicit NULL and JSON-attribute scalar variants",
-      "reason": "The backend accepts None for SECONDARY_ENGINE and arbitrary JSON for engine attributes. This draft exposes named text and key/value objects only; the schema has no explicit nullable/text or nested typed JSON value projection.",
-      "tracking": "INV-MYSQL"
-    },
-    {
-      "concept": "Primary engine attributes outside beta profile",
-      "reason": "Core SQL hooks require HTON_SUPPORTS_ENGINE_ATTRIBUTE. No implementation in the audited MySQL9.7 Community engine sources advertises it; release InnoDB/MyISAM/MEMORY reject index use with native error3981. Debug simulation is not product support. A separately available implementation and native qualification are required before surfacing this field. Secondary-engine attribute metadata is separate.",
-      "tracking": "MY-POST-BETA-PRIMARY-ENGINE-ATTRIBUTES"
+     "field_id": "primary_key",
+     "label": "Primary key",
+     "control": "boolean",
+     "default": false
     }
-  ],
-  "notes": "Audited against MySQLAdministration plan/validate/apply at master815c9cb4b. Every retained binding is a create-draft field; unsupported controls are listed in gaps, not silently passed to the compiler. Constraint discriminators use backend uppercase SQL kind values. Integer native options use decimal text. Canonical read-only tabs and SQL come from the shared shell; draft is not a renderer/round-trip acceptance claim.",
-  "fields": [
+   ],
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "primary_key",
+   "label": "Primary key",
+   "control": "grid",
+   "tab": "Constraints",
+   "group": "Primary key",
+   "columns": [
     {
-      "field_id": "name",
-      "label": "Name",
-      "control": "text",
-      "tab": "General",
-      "required": true,
-      "modes": [
-        "create"
-      ]
+     "field_id": "name",
+     "label": "Name",
+     "control": "text"
     },
     {
-      "field_id": "parent",
-      "label": "Database",
-      "control": "reference",
-      "tab": "General",
-      "reference_kind": "database",
-      "required": true,
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "comment",
-      "label": "Comment",
-      "control": "text",
-      "tab": "General",
-      "native_keyword": "COMMENT",
-      "backend_field_id": "mysql_table_options.comment",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "columns",
-      "label": "Columns",
-      "control": "grid",
-      "tab": "Columns",
-      "required": true,
-      "reorderable": true,
-      "columns": [
-        {
-          "field_id": "name",
-          "label": "Name",
-          "control": "text",
-          "required": true
-        },
-        {
-          "field_id": "type",
-          "label": "Type",
-          "control": "text",
-          "required": true,
-          "help": "Complete native type declaration, for example BIGINT UNSIGNED or VARCHAR(80). Separate length/identity/generated fields are not implemented by this record compiler."
-        },
-        {
-          "field_id": "nullable",
-          "label": "Nullable",
-          "control": "boolean",
-          "default": true
-        },
-        {
-          "field_id": "default",
-          "label": "Default",
-          "control": "text"
-        },
-        {
-          "field_id": "unique",
-          "label": "Unique",
-          "control": "boolean",
-          "default": false
-        },
-        {
-          "field_id": "primary_key",
-          "label": "Primary key",
-          "control": "boolean",
-          "default": false
-        }
-      ],
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "primary_key",
-      "label": "Primary key",
-      "control": "grid",
-      "tab": "Constraints",
-      "group": "Primary key",
-      "columns": [
-        {
-          "field_id": "name",
-          "label": "Name",
-          "control": "text"
-        },
-        {
-          "field_id": "columns",
-          "label": "Columns",
-          "control": "multiselect",
-          "required": true,
-          "option_values_path": [
-            "draft",
-            "columns"
-          ]
-        }
-      ],
-      "backend_field_id": "constraints[kind=PRIMARY KEY]",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "unique_constraints",
-      "label": "Unique",
-      "control": "grid",
-      "tab": "Constraints",
-      "group": "Unique",
-      "columns": [
-        {
-          "field_id": "name",
-          "label": "Name",
-          "control": "text"
-        },
-        {
-          "field_id": "columns",
-          "label": "Columns",
-          "control": "multiselect",
-          "required": true,
-          "option_values_path": [
-            "draft",
-            "columns"
-          ]
-        }
-      ],
-      "backend_field_id": "constraints[kind=UNIQUE]",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "foreign_keys",
-      "label": "Foreign keys",
-      "control": "grid",
-      "tab": "Constraints",
-      "group": "Foreign keys",
-      "columns": [
-        {
-          "field_id": "name",
-          "label": "Name",
-          "control": "text"
-        },
-        {
-          "field_id": "columns",
-          "label": "Columns",
-          "control": "multiselect",
-          "required": true,
-          "option_values_path": [
-            "draft",
-            "columns"
-          ]
-        },
-        {
-          "field_id": "references",
-          "label": "Referenced table",
-          "control": "reference",
-          "reference_kind": "table",
-          "required": true,
-          "backend_field_id": "references_table"
-        },
-        {
-          "field_id": "referenced_columns",
-          "label": "Referenced columns",
-          "control": "multiselect",
-          "required": true,
-          "backend_field_id": "references_columns"
-        }
-      ],
-      "backend_field_id": "constraints[kind=FOREIGN KEY]",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "check_constraints",
-      "label": "Check",
-      "control": "grid",
-      "tab": "Constraints",
-      "group": "Check",
-      "columns": [
-        {
-          "field_id": "name",
-          "label": "Name",
-          "control": "text"
-        },
-        {
-          "field_id": "expression",
-          "label": "Expression",
-          "control": "code",
-          "language": "sql",
-          "required": true
-        }
-      ],
-      "backend_field_id": "constraints[kind=CHECK]",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "engine",
-      "label": "Storage engine",
-      "control": "text",
-      "tab": "Options",
-      "native_keyword": "ENGINE",
-      "backend_field_id": "mysql_table_options.engine",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "character_set",
-      "label": "Character set",
-      "control": "text",
-      "tab": "Options",
-      "native_keyword": "DEFAULT CHARACTER SET",
-      "backend_field_id": "mysql_table_options.character_set",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "collation",
-      "label": "Collation",
-      "control": "text",
-      "tab": "Options",
-      "native_keyword": "DEFAULT COLLATE",
-      "backend_field_id": "mysql_table_options.collation",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "tablespace",
-      "label": "Tablespace",
-      "control": "text",
-      "tab": "Options",
-      "backend_field_id": "mysql_table_options.tablespace",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "row_format",
-      "label": "Row format",
-      "control": "select",
-      "tab": "Engine",
-      "options": [
-        {
-          "value": "DEFAULT",
-          "label": "DEFAULT"
-        },
-        {
-          "value": "DYNAMIC",
-          "label": "Dynamic"
-        },
-        {
-          "value": "FIXED",
-          "label": "Fixed"
-        },
-        {
-          "value": "COMPRESSED",
-          "label": "Compressed"
-        },
-        {
-          "value": "REDUNDANT",
-          "label": "Redundant"
-        },
-        {
-          "value": "COMPACT",
-          "label": "Compact"
-        }
-      ],
-      "backend_field_id": "mysql_table_options.row_format",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "auto_increment",
-      "label": "Auto-increment start",
-      "control": "text",
-      "tab": "Engine",
-      "backend_field_id": "mysql_table_options.auto_increment",
-      "modes": [
-        "create"
-      ],
-      "help": "Unsigned decimal text, preserved without browser integer rounding."
-    },
-    {
-      "field_id": "key_block_size",
-      "label": "Key block size",
-      "control": "text",
-      "tab": "Engine",
-      "backend_field_id": "mysql_table_options.key_block_size",
-      "modes": [
-        "create"
-      ],
-      "help": "Unsigned decimal text, preserved without browser integer rounding."
-    },
-    {
-      "field_id": "compression",
-      "label": "Compression",
-      "control": "text",
-      "tab": "Engine",
-      "backend_field_id": "mysql_table_options.compression",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "encryption",
-      "label": "Encryption",
-      "control": "select",
-      "tab": "Engine",
-      "options": [
-        {
-          "value": "Y",
-          "label": "Yes"
-        },
-        {
-          "value": "N",
-          "label": "No"
-        }
-      ],
-      "backend_field_id": "mysql_table_options.encryption",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "stats_persistent",
-      "label": "Persistent statistics",
-      "control": "select",
-      "tab": "Engine",
-      "group": "Statistics",
-      "options": [
-        {
-          "value": "DEFAULT",
-          "label": "DEFAULT"
-        },
-        {
-          "value": "0",
-          "label": "0"
-        },
-        {
-          "value": "1",
-          "label": "1"
-        }
-      ],
-      "backend_field_id": "mysql_table_options.stats_persistent",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "stats_auto_recalc",
-      "label": "Auto recalculate statistics",
-      "control": "select",
-      "tab": "Engine",
-      "group": "Statistics",
-      "options": [
-        {
-          "value": "DEFAULT",
-          "label": "DEFAULT"
-        },
-        {
-          "value": "0",
-          "label": "0"
-        },
-        {
-          "value": "1",
-          "label": "1"
-        }
-      ],
-      "backend_field_id": "mysql_table_options.stats_auto_recalc",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "stats_sample_pages",
-      "label": "Statistics sample pages",
-      "control": "text",
-      "tab": "Engine",
-      "group": "Statistics",
-      "backend_field_id": "mysql_table_options.stats_sample_pages",
-      "modes": [
-        "create"
-      ],
-      "help": "Unsigned decimal text, preserved without browser integer rounding. DEFAULT is also accepted."
-    },
-    {
-      "field_id": "max_rows",
-      "label": "Max rows",
-      "control": "text",
-      "tab": "Engine",
-      "group": "Storage hints",
-      "backend_field_id": "mysql_table_options.max_rows",
-      "modes": [
-        "create"
-      ],
-      "help": "Unsigned decimal text, preserved without browser integer rounding."
-    },
-    {
-      "field_id": "min_rows",
-      "label": "Min rows",
-      "control": "text",
-      "tab": "Engine",
-      "group": "Storage hints",
-      "backend_field_id": "mysql_table_options.min_rows",
-      "modes": [
-        "create"
-      ],
-      "help": "Unsigned decimal text, preserved without browser integer rounding."
-    },
-    {
-      "field_id": "avg_row_length",
-      "label": "Average row length",
-      "control": "text",
-      "tab": "Engine",
-      "group": "Storage hints",
-      "backend_field_id": "mysql_table_options.avg_row_length",
-      "modes": [
-        "create"
-      ],
-      "help": "Unsigned decimal text, preserved without browser integer rounding."
-    },
-    {
-      "field_id": "pack_keys",
-      "label": "Pack keys",
-      "control": "select",
-      "tab": "Engine",
-      "group": "Storage hints",
-      "options": [
-        {
-          "value": "DEFAULT",
-          "label": "DEFAULT"
-        },
-        {
-          "value": "0",
-          "label": "0"
-        },
-        {
-          "value": "1",
-          "label": "1"
-        }
-      ],
-      "backend_field_id": "mysql_table_options.pack_keys",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "checksum",
-      "label": "Live checksum",
-      "control": "select",
-      "tab": "Engine",
-      "group": "Storage hints",
-      "backend_field_id": "mysql_table_options.checksum",
-      "modes": [
-        "create"
-      ],
-      "options": [
-        {
-          "value": "0",
-          "label": "Off"
-        },
-        {
-          "value": "1",
-          "label": "On"
-        }
-      ]
-    },
-    {
-      "field_id": "delay_key_write",
-      "label": "Delay key write",
-      "control": "select",
-      "tab": "Engine",
-      "group": "Storage hints",
-      "backend_field_id": "mysql_table_options.delay_key_write",
-      "modes": [
-        "create"
-      ],
-      "options": [
-        {
-          "value": "0",
-          "label": "Off"
-        },
-        {
-          "value": "1",
-          "label": "On"
-        }
-      ]
-    },
-    {
-      "field_id": "autoextend_size",
-      "label": "Autoextend size",
-      "control": "text",
-      "tab": "Engine",
-      "group": "Storage hints",
-      "version": {
-        "minimum": "8.0.23"
-      },
-      "backend_field_id": "mysql_table_options.autoextend_size",
-      "modes": [
-        "create"
-      ],
-      "help": "Unsigned decimal text, preserved without browser integer rounding."
-    },
-    {
-      "field_id": "data_directory",
-      "label": "Data directory",
-      "control": "text",
-      "tab": "Engine",
-      "group": "Files",
-      "backend_field_id": "mysql_table_options.data_directory",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "index_directory",
-      "label": "Index directory",
-      "control": "text",
-      "tab": "Engine",
-      "group": "Files",
-      "backend_field_id": "mysql_table_options.index_directory",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "secondary_engine",
-      "label": "Secondary engine",
-      "control": "text",
-      "tab": "Engine",
-      "group": "HeatWave / secondary",
-      "backend_field_id": "mysql_table_options.secondary_engine",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "secondary_engine_attribute",
-      "label": "Secondary engine attribute",
-      "control": "keyvalue",
-      "tab": "Engine",
-      "group": "Engine attributes",
-      "backend_field_id": "mysql_table_options.secondary_engine_attribute",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "insert_method",
-      "label": "Insert method",
-      "control": "select",
-      "tab": "Engine",
-      "group": "MERGE / FEDERATED",
-      "options": [
-        {
-          "value": "NO",
-          "label": "No"
-        },
-        {
-          "value": "FIRST",
-          "label": "First"
-        },
-        {
-          "value": "LAST",
-          "label": "Last"
-        }
-      ],
-      "visible_when": {
-        "field": "engine",
-        "equals": "MRG_MYISAM"
-      },
-      "backend_field_id": "mysql_table_options.insert_method",
-      "modes": [
-        "create"
-      ]
-    },
-    {
-      "field_id": "mysql_connection",
-      "label": "Connection or server reference",
-      "control": "password",
-      "tab": "Engine",
-      "group": "MERGE / FEDERATED",
-      "visible_when": {
-        "field": "engine",
-        "equals": "FEDERATED"
-      },
-      "modes": [
-        "create"
-      ]
+     "field_id": "columns",
+     "label": "Columns",
+     "control": "multiselect",
+     "required": true,
+     "option_values_path": [
+      "draft",
+      "columns"
+     ]
     }
-  ]
+   ],
+   "backend_field_id": "constraints[kind=PRIMARY KEY]",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "unique_constraints",
+   "label": "Unique",
+   "control": "grid",
+   "tab": "Constraints",
+   "group": "Unique",
+   "columns": [
+    {
+     "field_id": "name",
+     "label": "Name",
+     "control": "text"
+    },
+    {
+     "field_id": "columns",
+     "label": "Columns",
+     "control": "multiselect",
+     "required": true,
+     "option_values_path": [
+      "draft",
+      "columns"
+     ]
+    }
+   ],
+   "backend_field_id": "constraints[kind=UNIQUE]",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "foreign_keys",
+   "label": "Foreign keys",
+   "control": "grid",
+   "tab": "Constraints",
+   "group": "Foreign keys",
+   "columns": [
+    {
+     "field_id": "name",
+     "label": "Name",
+     "control": "text"
+    },
+    {
+     "field_id": "columns",
+     "label": "Columns",
+     "control": "multiselect",
+     "required": true,
+     "option_values_path": [
+      "draft",
+      "columns"
+     ]
+    },
+    {
+     "field_id": "references",
+     "label": "Referenced table",
+     "control": "reference",
+     "reference_kind": "table",
+     "required": true,
+     "backend_field_id": "references_table"
+    },
+    {
+     "field_id": "referenced_columns",
+     "label": "Referenced columns",
+     "control": "multiselect",
+     "required": true,
+     "backend_field_id": "references_columns"
+    }
+   ],
+   "backend_field_id": "constraints[kind=FOREIGN KEY]",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "check_constraints",
+   "label": "Check",
+   "control": "grid",
+   "tab": "Constraints",
+   "group": "Check",
+   "columns": [
+    {
+     "field_id": "name",
+     "label": "Name",
+     "control": "text"
+    },
+    {
+     "field_id": "expression",
+     "label": "Expression",
+     "control": "code",
+     "language": "sql",
+     "required": true
+    }
+   ],
+   "backend_field_id": "constraints[kind=CHECK]",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "engine",
+   "label": "Storage engine",
+   "control": "text",
+   "tab": "Options",
+   "native_keyword": "ENGINE",
+   "backend_field_id": "mysql_table_options.engine",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "character_set",
+   "label": "Character set",
+   "control": "text",
+   "tab": "Options",
+   "native_keyword": "DEFAULT CHARACTER SET",
+   "backend_field_id": "mysql_table_options.character_set",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "collation",
+   "label": "Collation",
+   "control": "text",
+   "tab": "Options",
+   "native_keyword": "DEFAULT COLLATE",
+   "backend_field_id": "mysql_table_options.collation",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "tablespace",
+   "label": "Tablespace",
+   "control": "text",
+   "tab": "Options",
+   "backend_field_id": "mysql_table_options.tablespace",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "row_format",
+   "label": "Row format",
+   "control": "select",
+   "tab": "Engine",
+   "options": [
+    {
+     "value": "DEFAULT",
+     "label": "DEFAULT"
+    },
+    {
+     "value": "DYNAMIC",
+     "label": "Dynamic"
+    },
+    {
+     "value": "FIXED",
+     "label": "Fixed"
+    },
+    {
+     "value": "COMPRESSED",
+     "label": "Compressed"
+    },
+    {
+     "value": "REDUNDANT",
+     "label": "Redundant"
+    },
+    {
+     "value": "COMPACT",
+     "label": "Compact"
+    }
+   ],
+   "backend_field_id": "mysql_table_options.row_format",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "auto_increment",
+   "label": "Auto-increment start",
+   "control": "text",
+   "tab": "Engine",
+   "backend_field_id": "mysql_table_options.auto_increment",
+   "modes": [
+    "create"
+   ],
+   "help": "Unsigned decimal text, preserved without browser integer rounding."
+  },
+  {
+   "field_id": "key_block_size",
+   "label": "Key block size",
+   "control": "text",
+   "tab": "Engine",
+   "backend_field_id": "mysql_table_options.key_block_size",
+   "modes": [
+    "create"
+   ],
+   "help": "Unsigned decimal text, preserved without browser integer rounding."
+  },
+  {
+   "field_id": "compression",
+   "label": "Compression",
+   "control": "text",
+   "tab": "Engine",
+   "backend_field_id": "mysql_table_options.compression",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "encryption",
+   "label": "Encryption",
+   "control": "select",
+   "tab": "Engine",
+   "options": [
+    {
+     "value": "Y",
+     "label": "Yes"
+    },
+    {
+     "value": "N",
+     "label": "No"
+    }
+   ],
+   "backend_field_id": "mysql_table_options.encryption",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "stats_persistent",
+   "label": "Persistent statistics",
+   "control": "select",
+   "tab": "Engine",
+   "group": "Statistics",
+   "options": [
+    {
+     "value": "DEFAULT",
+     "label": "DEFAULT"
+    },
+    {
+     "value": "0",
+     "label": "0"
+    },
+    {
+     "value": "1",
+     "label": "1"
+    }
+   ],
+   "backend_field_id": "mysql_table_options.stats_persistent",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "stats_auto_recalc",
+   "label": "Auto recalculate statistics",
+   "control": "select",
+   "tab": "Engine",
+   "group": "Statistics",
+   "options": [
+    {
+     "value": "DEFAULT",
+     "label": "DEFAULT"
+    },
+    {
+     "value": "0",
+     "label": "0"
+    },
+    {
+     "value": "1",
+     "label": "1"
+    }
+   ],
+   "backend_field_id": "mysql_table_options.stats_auto_recalc",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "stats_sample_pages",
+   "label": "Statistics sample pages",
+   "control": "text",
+   "tab": "Engine",
+   "group": "Statistics",
+   "backend_field_id": "mysql_table_options.stats_sample_pages",
+   "modes": [
+    "create"
+   ],
+   "help": "Unsigned decimal text, preserved without browser integer rounding. DEFAULT is also accepted."
+  },
+  {
+   "field_id": "max_rows",
+   "label": "Max rows",
+   "control": "text",
+   "tab": "Engine",
+   "group": "Storage hints",
+   "backend_field_id": "mysql_table_options.max_rows",
+   "modes": [
+    "create"
+   ],
+   "help": "Unsigned decimal text, preserved without browser integer rounding."
+  },
+  {
+   "field_id": "min_rows",
+   "label": "Min rows",
+   "control": "text",
+   "tab": "Engine",
+   "group": "Storage hints",
+   "backend_field_id": "mysql_table_options.min_rows",
+   "modes": [
+    "create"
+   ],
+   "help": "Unsigned decimal text, preserved without browser integer rounding."
+  },
+  {
+   "field_id": "avg_row_length",
+   "label": "Average row length",
+   "control": "text",
+   "tab": "Engine",
+   "group": "Storage hints",
+   "backend_field_id": "mysql_table_options.avg_row_length",
+   "modes": [
+    "create"
+   ],
+   "help": "Unsigned decimal text, preserved without browser integer rounding."
+  },
+  {
+   "field_id": "pack_keys",
+   "label": "Pack keys",
+   "control": "select",
+   "tab": "Engine",
+   "group": "Storage hints",
+   "options": [
+    {
+     "value": "DEFAULT",
+     "label": "DEFAULT"
+    },
+    {
+     "value": "0",
+     "label": "0"
+    },
+    {
+     "value": "1",
+     "label": "1"
+    }
+   ],
+   "backend_field_id": "mysql_table_options.pack_keys",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "checksum",
+   "label": "Live checksum",
+   "control": "select",
+   "tab": "Engine",
+   "group": "Storage hints",
+   "backend_field_id": "mysql_table_options.checksum",
+   "modes": [
+    "create"
+   ],
+   "options": [
+    {
+     "value": "0",
+     "label": "Off"
+    },
+    {
+     "value": "1",
+     "label": "On"
+    }
+   ]
+  },
+  {
+   "field_id": "delay_key_write",
+   "label": "Delay key write",
+   "control": "select",
+   "tab": "Engine",
+   "group": "Storage hints",
+   "backend_field_id": "mysql_table_options.delay_key_write",
+   "modes": [
+    "create"
+   ],
+   "options": [
+    {
+     "value": "0",
+     "label": "Off"
+    },
+    {
+     "value": "1",
+     "label": "On"
+    }
+   ]
+  },
+  {
+   "field_id": "autoextend_size",
+   "label": "Autoextend size",
+   "control": "text",
+   "tab": "Engine",
+   "group": "Storage hints",
+   "version": {
+    "minimum": "8.0.23"
+   },
+   "backend_field_id": "mysql_table_options.autoextend_size",
+   "modes": [
+    "create"
+   ],
+   "help": "Unsigned decimal text, preserved without browser integer rounding."
+  },
+  {
+   "field_id": "data_directory",
+   "label": "Data directory",
+   "control": "text",
+   "tab": "Engine",
+   "group": "Files",
+   "backend_field_id": "mysql_table_options.data_directory",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "index_directory",
+   "label": "Index directory",
+   "control": "text",
+   "tab": "Engine",
+   "group": "Files",
+   "backend_field_id": "mysql_table_options.index_directory",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "secondary_engine",
+   "label": "Secondary engine",
+   "control": "text",
+   "tab": "Engine",
+   "group": "HeatWave / secondary",
+   "backend_field_id": "mysql_table_options.secondary_engine",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "secondary_engine_attribute",
+   "label": "Secondary engine attribute",
+   "control": "keyvalue",
+   "tab": "Engine",
+   "group": "Engine attributes",
+   "backend_field_id": "mysql_table_options.secondary_engine_attribute",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "insert_method",
+   "label": "Insert method",
+   "control": "select",
+   "tab": "Engine",
+   "group": "MERGE / FEDERATED",
+   "options": [
+    {
+     "value": "NO",
+     "label": "No"
+    },
+    {
+     "value": "FIRST",
+     "label": "First"
+    },
+    {
+     "value": "LAST",
+     "label": "Last"
+    }
+   ],
+   "visible_when": {
+    "field": "engine",
+    "equals": "MRG_MYISAM"
+   },
+   "backend_field_id": "mysql_table_options.insert_method",
+   "modes": [
+    "create"
+   ]
+  },
+  {
+   "field_id": "mysql_connection",
+   "label": "Connection or server reference",
+   "control": "password",
+   "tab": "Engine",
+   "group": "MERGE / FEDERATED",
+   "visible_when": {
+    "field": "engine",
+    "equals": "FEDERATED"
+   },
+   "modes": [
+    "create"
+   ]
+  }
+ ]
 }

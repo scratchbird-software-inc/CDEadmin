@@ -418,3 +418,36 @@ No shared schema, renderer or family-render test changed. Lint before/after:
 JSON301/300, MUI244/244, engine branches111/111, panels113/113, context-menu
 branches14/14. Twenty-two beta tier2/3 entries still lack descriptors; two
 closed-source masking entries remain separately post beta. Group9 is open.
+
+MySQL configuration and channel operation descriptors (2026-10-26)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Operations now declare76 entries (11 added): global/persisted variable changes,
+persisted-value reset, query/connection termination, resource-group assignment
+and four asynchronous channel actions. The server-operation form factory and
+dispatch are deleted. Channel create/alter and resource-group lifecycle forms
+remain outside this operation cutover; their migrated action branches are
+removed rather than duplicated.
+
+Variable inputs use Text, Boolean, safe integer, exact integer, exact decimal
+and floating-point controls. Native scalar bindings and existing numeric CASTs
+are preserved. Input-dependent backend contracts receive private draft context;
+they retain AUTO and encoded mapping compatibility without a raw JSON UI
+control. An existing defect is fixed: scalar JSON input previously reached an
+object/array-only validator and was rejected. The explicit backend-only scalar
+admission mode now accepts the native scalar contract. DEFAULT/NULL skip ignored
+values. Native compiler checks still reject unsupported types and ranges.
+
+Channel controls declare every native UNTIL family and seven filter families.
+Typed database/table and rewrite records now compile to the same native SQL as
+the existing pair-array API. Empty selected filter lists clear only those
+filters; unselected filters are preserved. Thread IDs and positions remain
+exact decimal text. Projected inputs are qualified independently from actual
+dialog acceptance. All11 entries stay draft/unsurfaced pending shared operation
+projection (Decision12); no shared renderer, schema or family-render test changed.
+
+Existing family/options JSON was reindented with identical parsed content to
+stay within unchanged source budgets. Lint before/after: JSON300/297,
+MUI244/244, engine branches111/111, panels113/113, context-menu branches14/14.
+Eleven beta tier2/3 entries remain (database8 and row workflows3), alongside
+the separately recorded native inventory, shared UI and protected-result gaps.

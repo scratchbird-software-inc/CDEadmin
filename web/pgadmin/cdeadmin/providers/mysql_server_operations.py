@@ -38,7 +38,13 @@ def compile_operation(kind, operation, draft, target):
         raise RelationalClientError('Native variable requires bounded text, boolean or safe integer; use text for large numeric values')
     expression = '%s'
     value_type = draft.get('value_type', 'AUTO')
-    if value_type == 'INTEGER':
+    if not isinstance(value_type, str):
+        raise RelationalClientError('Select a native value representation')
+    if value_type in {'TEXT', 'BOOLEAN', 'SAFE_INTEGER'}:
+        expected = {'TEXT': str, 'BOOLEAN': bool, 'SAFE_INTEGER': int}[value_type]
+        if type(value) is not expected:
+            raise RelationalClientError('The supplied value must match its selected input type')
+    elif value_type == 'INTEGER':
         if not isinstance(value, str) or not re.fullmatch(r'-?(?:0|[1-9][0-9]{0,19})', value) or not -(2**63) <= int(value) <= 2**64-1:
             raise RelationalClientError('Explicit integer values require exact signed/unsigned 64-bit decimal text')
         expression = 'CAST(%s AS ' + ('SIGNED' if value.startswith('-') else 'UNSIGNED') + ')'
@@ -57,16 +63,3 @@ def compile_operation(kind, operation, draft, target):
     elif value_type != 'AUTO':
         raise RelationalClientError('Select automatic scalar, explicit integer, decimal or DOUBLE input')
     return {'source': source + expression, 'preview_source': source + '<redacted>', 'parameters': (value,)}
-
-
-def form(kind, operation, field):
-    fields = []
-    if kind == 'system-variable' and operation != 'reset_persist':
-        fields += [field('value_mode', 'Value source', 'select', default='VALUE', options=('VALUE', 'DEFAULT', 'NULL')),
-                   field('value_type', 'Native numeric representation', 'select', default='AUTO', options=('AUTO', 'INTEGER', 'DECIMAL', 'DOUBLE')),
-                   {**field('value', 'Native variable value', 'json', default='',
-                      help_text='JSON scalar: text, boolean or safe integer. For exact large numbers enter JSON text and select INTEGER, DECIMAL or DOUBLE. Native metadata describes type and scope; it does not attest mutability or accepted enum/set members.'),
-                    'visible_when': {'field_id': 'value_mode', 'equals': 'VALUE'}}]
-    fields.append(field('confirmation', 'Confirmation', 'text', True))
-    return {'form_id': 'mysql.' + kind + '.' + operation,
-            'title': operation.replace('_', ' ').title() + ' MySQL ' + kind.replace('-', ' '), 'fields': fields}

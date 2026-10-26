@@ -328,7 +328,7 @@ class RelationalAdministration:
                 } for operation in sorted(additions)]
             if self.dialect.engine_id == 'mysql' and kind == 'replication-channel':
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_replication.OPERATIONS] + [{
-                    'operation_id': operation, 'title': mysql_replication.form(operation, self._field)['title'],
+                    'operation_id': operation, 'title': self._form(kind, operation)['title'],
                     'mutation_class': 'admin', 'target_required': operation != 'create', 'confirmation_required': operation != 'create',
                 } for operation in sorted(mysql_replication.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind in mysql_partitions.OPERATIONS:
@@ -351,13 +351,13 @@ class RelationalAdministration:
             if self.dialect.engine_id == 'mysql' and kind in mysql_server_operations.OPERATIONS:
                 additions = mysql_server_operations.OPERATIONS[kind]
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
-                    'operation_id': operation, 'title': mysql_server_operations.form(kind, operation, self._field)['title'],
+                    'operation_id': operation, 'title': self._form(kind, operation)['title'],
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(additions)]
             if self.dialect.engine_id == 'mysql' and kind == 'resource-group':
                 resource['operations'] = [item for item in resource.get('operations', [])
                     if item['operation_id'] not in mysql_resource_groups.OPERATIONS] + [{
-                    'operation_id': operation, 'title': mysql_resource_groups.form(operation, self._field)['title'],
+                    'operation_id': operation, 'title': self._form(kind, operation)['title'],
                     'mutation_class': 'admin', 'target_required': operation != 'create',
                     'confirmation_required': operation != 'create',
                 } for operation in sorted(mysql_resource_groups.OPERATIONS)]
@@ -5355,7 +5355,7 @@ class RelationalAdministration:
             return mysql_program_objects.form(kind,operation,self._field)
         if self.dialect.engine_id == 'mysql' and kind=='component' and operation in mysql_components.OPERATIONS:
             return mysql_components.form(operation,self._field)
-        if self.dialect.engine_id == 'mysql' and kind == 'replication-channel' and operation in mysql_replication.OPERATIONS:
+        if self.dialect.engine_id == 'mysql' and kind == 'replication-channel' and operation in {'create', 'alter'}:
             return mysql_replication.form(operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'partition' and operation == 'drop':
             return mysql_partitions.form(kind, operation, self._field)
@@ -5363,9 +5363,7 @@ class RelationalAdministration:
             return mariadb_partitions.form(kind, operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'tablespace' and operation in mysql_tablespaces.OPERATIONS:
             return mysql_tablespaces.form(operation, self._field)
-        if self.dialect.engine_id == 'mysql' and operation in mysql_server_operations.OPERATIONS.get(kind, ()):
-            return mysql_server_operations.form(kind, operation, self._field)
-        if self.dialect.engine_id == 'mysql' and kind == 'resource-group' and operation in mysql_resource_groups.OPERATIONS:
+        if self.dialect.engine_id == 'mysql' and kind == 'resource-group' and operation in {'create', 'alter', 'drop'}:
             return mysql_resource_groups.form(operation, self._field)
         title = operation.replace('_', ' ').title()
         if (self.dialect.engine_id == 'firebird' and kind == 'table' and operation == 'reorder_columns'):

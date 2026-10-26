@@ -978,6 +978,12 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     """MySQL DB-API plus a constrained MySQL Shell administration port."""
 
     def admin_operation_field_contract(self, request):
+        kind, operation = request['resource_kind'], request['operation_id']
+        if (kind in {'system-variable', 'session'} or
+                kind == 'resource-group' and operation == 'assign' or
+                kind == 'replication-channel' and operation in {'start', 'stop', 'reset', 'filter'}):
+            from ..mysql_descriptor_contract import maintenance_contract
+            return maintenance_contract(kind, operation, request.get('draft') or {})
         if request['resource_kind'] == 'privilege' and request['operation_id'] in {'grant', 'revoke'}:
             from .descriptor_contracts import privilege_contract
             return privilege_contract(request['operation_id'])

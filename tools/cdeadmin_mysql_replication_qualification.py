@@ -1,5 +1,6 @@
 """Qualify native channel plans with two separately owned MySQL instances."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import secrets
@@ -12,13 +13,36 @@ from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_ADMINISTRATIO
 from pgadmin.cdeadmin.providers.mysql_tablespaces import identifier
 
 
-def qualify(source_options,replica_options,source_host,output):
+def qualify(source_options,replica_options,source_host,output,descriptor_inputs=False):
     output.mkdir(parents=True,exist_ok=True)
     source=mysql.connector.connect(**{**source_options,'autocommit':True});replica=mysql.connector.connect(**{**replica_options,'autocommit':True})
     sc=source.cursor();rc=replica.cursor();token=secrets.token_hex(6);database='sr_repl_'+token;user='sr_repl_'+token;password=secrets.token_urlsafe(18);channel='sr_channel_'+token+'é'
     proof={'passed':False,'statements':{},'checks':[]};created=False;default_created=False
+    root=Path(__file__).resolve().parents[1]
+    proof.update(descriptor_inputs=descriptor_inputs,actual_operation_dialog_qualified=False,
+        source_sha256={name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in (
+            'web/pgadmin/cdeadmin/providers/mysql_replication.py',
+            'web/pgadmin/cdeadmin/ui_descriptors/mysql/operations.json',
+            str(Path(__file__).relative_to(root)))})
+    if descriptor_inputs:
+        from ui_descriptor_roundtrip import backend_draft,engine_operations,operation_draft
+        declarations=engine_operations('mysql')
     def execute(operation,draft=None,selected=channel):
         target={'display_name':selected or 'Default channel','native':{'channel_name':selected}}
+        if descriptor_inputs and operation not in {'create','alter'}:
+            declaration=declarations[operation+'@replication-channel'];values=dict(draft or {})
+            if operation=='start' and values.get('until'):
+                until=values.pop('until');key=next(iter(until));family=key.split('_LOG_')[0] if '_LOG_' in key else key
+                values['until_kind']=family
+                for name,value in until.items():
+                    name='after_mts_gaps' if name=='SQL_AFTER_MTS_GAPS' else name.lower().replace('_log_','_')
+                    values[name]=str(value) if name.endswith('_pos') else value
+            if operation=='filter':
+                for key,rows in values.pop('filters').items():
+                    values['edit_'+key.lower()]=True
+                    names=('source','target') if key=='REPLICATE_REWRITE_DB' else ('database','table') if key in {'REPLICATE_DO_TABLE','REPLICATE_IGNORE_TABLE'} else None
+                    values[key.lower()]=[dict(zip(names,row)) if names else {'value':row} for row in rows]
+            draft=backend_draft({'tabs':[{'fields':declaration['fields']}]},operation_draft(declaration,values,target['display_name']))
         request={'resource_kind':'replication-channel','operation_id':operation,'draft':draft or {},'target_resource':target,'_provider_route':{'host':replica_options.get('host','localhost')}}
         assert not MYSQL_ADMINISTRATION.validate(request)['errors']
         statement=MYSQL_ADMINISTRATION._compile(request)['statements'][0]
@@ -93,4 +117,5 @@ def qualify(source_options,replica_options,source_host,output):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--source-connection-json',type=Path,required=True);parser.add_argument('--replica-connection-json',type=Path,required=True);parser.add_argument('--source-host',required=True);parser.add_argument('--output-root',type=Path,required=True)
-    args=parser.parse_args();qualify(json.loads(args.source_connection_json.read_text()),json.loads(args.replica_connection_json.read_text()),args.source_host,args.output_root)
+    parser.add_argument('--descriptor-inputs',action='store_true')
+    args=parser.parse_args();qualify(json.loads(args.source_connection_json.read_text()),json.loads(args.replica_connection_json.read_text()),args.source_host,args.output_root,args.descriptor_inputs)

@@ -2916,3 +2916,29 @@ explicitly unsurfaced until that bridge lands. Family partition-grid changes
 remain Decision9. All operation entries stay draft. Twenty-two remaining beta
 tier2/3 entries and the independent native inventory/diagnostics reconciliation
 remain open, alongside the previously recorded shared UI/protected-result gaps.
+
+Typed configuration and channel inputs
+--------------------------------------
+
+Eleven further operation descriptors bring the declared total to76. Variable
+inputs preserve native text, boolean, safe-integer and exact numeric binding
+semantics; existing AUTO and encoded-object API shapes remain supported. The
+shared backend validator's former object/array-only handling of scalar values
+is corrected through an explicit backend scalar contract. DEFAULT and NULL do
+not validate or bind ignored values. Native numeric conversion and refusal
+remain authoritative.
+
+All native UNTIL and filter families have typed fields. Database/table and
+rewrite records are accepted alongside pair arrays, generating identical SQL.
+Selected empty filters clear that family; unselected filters remain unchanged.
+Resource thread IDs, process targets and log positions retain their exact
+identity and numeric representations. Native/API qualification covers both
+connectors, actual persisted/runtime state, owned thread/query interruption,
+replication delivery and independently preserved session state.
+
+The retired server-operation factory and migrated channel/resource-group
+branches are removed. Family/options formatting preserves parsed content and
+all existing fields. The11 new entries remain draft/unsurfaced under Decision12,
+rather than claiming projected native inputs establish a working dialog.
+Database8 and row-workflow3 descriptor entries still remain, with independent
+native inventory and the previously recorded shared UI/protected-result work.

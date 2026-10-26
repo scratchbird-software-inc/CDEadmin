@@ -103,7 +103,14 @@ def compile_operation(operation,draft,target):
             if key not in FILTERS or not isinstance(values,list) or len(values)>4096:raise RelationalClientError('Unknown native filter or invalid value list')
             entries=[]
             for value in values:
+                if key not in {'REPLICATE_DO_TABLE','REPLICATE_IGNORE_TABLE','REPLICATE_REWRITE_DB'} and isinstance(value,dict):
+                    if set(value)!={'value'}:raise RelationalClientError('Native filter rows require one value')
+                    value=value['value']
                 if key in {'REPLICATE_DO_TABLE','REPLICATE_IGNORE_TABLE','REPLICATE_REWRITE_DB'}:
+                    if isinstance(value,dict):
+                        names=('source','target') if key=='REPLICATE_REWRITE_DB' else ('database','table')
+                        if set(value)!=set(names):raise RelationalClientError('Native filter records require exact named components')
+                        value=[value[name] for name in names]
                     if not isinstance(value,list) or len(value)!=2:raise RelationalClientError('Native filter entries require two exact names')
                     entries.append('('+identifier(value[0])+','+identifier(value[1])+')' if key=='REPLICATE_REWRITE_DB' else identifier(value[0])+'.'+identifier(value[1]))
                 elif key in {'REPLICATE_DO_DB','REPLICATE_IGNORE_DB'}:entries.append(identifier(value))
@@ -118,9 +125,5 @@ def form(operation,field):
     fields=[]
     if operation=='create':fields.append(field('name','Native channel name (blank is default)','text',default=''))
     if operation in {'create','alter'}:fields += [field('source_options','Native source options (JSON object)','json',default={},help_text='Exact native names: '+', '.join(sorted(TEXT|FLAGS|NUMBERS|{'SOURCE_HEARTBEAT_PERIOD','SOURCE_TLS_CIPHERSUITES','IGNORE_SERVER_IDS','PRIVILEGE_CHECKS_USER','REQUIRE_TABLE_PRIMARY_KEY_CHECK','ASSIGN_GTIDS_TO_ANONYMOUS_TRANSACTIONS'}))+'. Password has a separate field.'),field('source_password','Source password (omit to retain)','password',sensitive=True)]
-    if operation in {'start','stop'}:fields.append(field('thread','Native receiver/applier thread','select',default='ALL',options=('ALL','IO_THREAD','SQL_THREAD')))
-    if operation=='start':fields.append(field('until','Native UNTIL condition (JSON object)','json',default={}))
-    if operation=='reset':fields.append(field('delete_connection','Remove native channel definition (RESET ALL)','boolean',default=False))
-    if operation=='filter':fields.append(field('filters','Native replication filters (JSON object)','json',True))
     if operation!='create':fields.append(field('confirmation','Confirmation','text',True))
     return {'form_id':'mysql.replication-channel.'+operation,'title':operation.title()+' MySQL replication channel','fields':fields}

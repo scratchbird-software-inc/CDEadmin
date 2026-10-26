@@ -178,3 +178,10 @@ operation projection (Decision12); family grid dispatch remains Decision9.
 Those workflows are explicitly unsurfaced. All entries stay draft: native
 pure/C, authenticated API and three-member group qualifications verify projected
 inputs and native effects, separately from actual dialog/presentation acceptance.
+
+The76 entries include11 configuration/channel actions. Typed scalar inputs
+preserve native bindings; backend-only admission retains AUTO and encoded
+mapping APIs. Filter records and legacy pairs generate identical SQL. Selected
+empty filters clear that family. All11 entries remain draft/unsurfaced under
+Decision12. The server-operation factory and migrated action branches are
+retired. Family/options JSON reindentation preserves parsed content and fields.

@@ -18,10 +18,17 @@ def operation_entry(kind, operation):
     row = operation_documents().get((kind, operation))
     if row is None:
         return None
-    fields = []
+    fields = {}
     for original in row['fields']:
+        if original.get('ui_only'):
+            continue
         field = deepcopy(original)
         field['field_id'] = field.pop('backend_field_id', field['field_id'])
+        if '.' in field['field_id']:
+            root = field['field_id'].split('.')[0]
+            fields.setdefault(root, {'field_id': root, 'label': root.replace('_', ' ').title(),
+                                     'control': 'keyvalue', 'required': False})
+            continue
         field['required'] = bool(field.get('required', False))
         # Visibility is a UI concern. The native compiler owns conditional
         # requirements, including DEFAULT without a supplied cache value.
@@ -33,9 +40,38 @@ def operation_entry(kind, operation):
             field['maximum'] = field.pop('max')
         if 'default_path' in field:
             field['initial_value_path'] = field.pop('default_path')
-        fields.append(field)
+        fields.setdefault(field['field_id'], field)
     return {'form_id': 'mysql.' + kind + '.' + operation,
-            'title': row['title'], 'fields': fields}
+            'title': row['title'], 'fields': list(fields.values())}
+
+
+def maintenance_contract(kind, operation, draft):
+    """Validate native inputs; presentation controls stay in descriptor JSON.
+
+    AUTO and encoded mapping strings preserve the former scalar/object API.
+    Typed inputs use their declared representation without JSON coercion.
+    """
+    entry = operation_entry(kind, operation)
+    if entry is None:
+        return None
+    fields = entry['fields']
+    for field in fields:
+        name = field['field_id']
+        if kind == 'system-variable' and name == 'value_type':
+            field['default'] = 'AUTO'
+            field['options'].append({'value': 'AUTO', 'label': 'Automatic'})
+        if kind == 'system-variable' and name == 'value':
+            mode = draft.get('value_type', 'AUTO')
+            field['control'] = {'AUTO': 'json', 'TEXT': 'text', 'BOOLEAN': 'boolean',
+                                'SAFE_INTEGER': 'number'}.get(mode if isinstance(mode, str) else None, 'text')
+            field.pop('default', None)
+            if field['control'] == 'json':
+                field['json_type'] = 'scalar'
+            if draft.get('value_mode', 'VALUE') != 'VALUE':
+                field['visible_when'] = {'field_id': 'value_mode', 'equals': 'VALUE'}
+        elif name in {'until', 'filters'} and isinstance(draft.get(name), str):
+            field['control'] = 'json'
+    return {'fields': fields, 'authority': 'ui_descriptors/mysql/operations.json'}
 
 
 def database_fields(mode):

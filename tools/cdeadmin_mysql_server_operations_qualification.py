@@ -1,5 +1,6 @@
 """Qualify exact native MySQL configuration scopes and owned session control."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -12,12 +13,21 @@ import mysql.connector
 from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_ADMINISTRATION, MYSQL_PROFILE, _resources
 
 
-def qualify(options, output):
+def qualify(options, output, descriptor_inputs=False):
     output.mkdir(parents=True, exist_ok=True)
     connection = mysql.connector.connect(**{**options, 'autocommit': True})
     recipient = mysql.connector.connect(**{**options, 'autocommit': True})
     cursor = connection.cursor()
     proof = {'passed': False, 'statements': {}, 'checks': []}
+    root=Path(__file__).resolve().parents[1]
+    proof.update(descriptor_inputs=descriptor_inputs,actual_operation_dialog_qualified=False,
+        source_sha256={name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in (
+            'web/pgadmin/cdeadmin/providers/mysql_server_operations.py',
+            'web/pgadmin/cdeadmin/ui_descriptors/mysql/operations.json',
+            str(Path(__file__).relative_to(root)))})
+    if descriptor_inputs:
+        from ui_descriptor_roundtrip import backend_draft,engine_operations,operation_draft
+        declarations=engine_operations('mysql')
     worker = None
     variable = 'max_execution_time'
     cursor.execute('SELECT @@GLOBAL.max_execution_time')
@@ -27,6 +37,15 @@ def qualify(options, output):
     cursor.execute('SELECT VARIABLE_VALUE FROM performance_schema.persisted_variables WHERE VARIABLE_NAME=%s', (variable,))
     persisted = cursor.fetchone()
     def execute(kind, operation, draft, target):
+        if descriptor_inputs:
+            declaration=declarations[operation+'@'+kind]
+            values={key:value for key,value in draft.items() if key!='value'}
+            if 'value' in draft:
+                value=draft['value'];mode=draft.get('value_type','AUTO')
+                if mode=='AUTO':mode='BOOLEAN' if type(value) is bool else 'SAFE_INTEGER' if type(value) is int else 'TEXT'
+                values.update(value_type=mode)
+                values[{'BOOLEAN':'value_boolean','SAFE_INTEGER':'value_integer'}.get(mode,'value_text')]=value
+            draft=backend_draft({'tabs':[{'fields':declaration['fields']}]},operation_draft(declaration,values,target['display_name']))
         request = {'resource_kind': kind, 'operation_id': operation, 'draft': draft,
                    'target_resource': target, '_provider_route': {'host': options.get('host', 'localhost')}}
         assert not MYSQL_ADMINISTRATION.validate(request)['errors']
@@ -117,5 +136,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--connection-json', type=Path, required=True)
     parser.add_argument('--output-root', type=Path, required=True)
+    parser.add_argument('--descriptor-inputs',action='store_true')
     args = parser.parse_args()
-    qualify(json.loads(args.connection_json.read_text()), args.output_root)
+    qualify(json.loads(args.connection_json.read_text()), args.output_root,args.descriptor_inputs)

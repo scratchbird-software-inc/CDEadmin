@@ -479,6 +479,102 @@
       "fields":[
         {"field_id":"confirmation","label":"Group name","control":"text","required":true,"group":"Confirmation"}
       ]
+    },
+    {"resource_kind":"system-variable","operation_id":"set_global","title":"Set global value","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"value_mode","label":"Value source","control":"select","options":[{"value":"VALUE","label":"Value"},{"value":"DEFAULT","label":"Default"},{"value":"NULL","label":"Null"}],"default":"VALUE","group":"Value"},
+        {"field_id":"value_type","label":"Input type","control":"select","options":[{"value":"TEXT","label":"Text"},{"value":"BOOLEAN","label":"Boolean"},{"value":"SAFE_INTEGER","label":"Integer (safe range)"},{"value":"INTEGER","label":"Exact integer"},{"value":"DECIMAL","label":"Exact decimal"},{"value":"DOUBLE","label":"Floating point"}],"default":"TEXT","group":"Value"},
+        {"field_id":"value_text","label":"Value","control":"text","backend_field_id":"value","visible_when":{"field":"value_type","in":["TEXT","INTEGER","DECIMAL","DOUBLE"]},"group":"Value","default":""},
+        {"field_id":"value_boolean","label":"Value","control":"boolean","backend_field_id":"value","default":false,"visible_when":{"field":"value_type","equals":"BOOLEAN"},"group":"Value"},
+        {"field_id":"value_integer","label":"Value","control":"number","backend_field_id":"value","min":-9007199254740991,"max":9007199254740991,"visible_when":{"field":"value_type","equals":"SAFE_INTEGER"},"group":"Value","help":"Use Exact integer for larger signed/unsigned values."},
+        {"field_id":"confirmation","label":"Variable name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"system-variable","operation_id":"set_persist","title":"Set and persist value","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"value_mode","label":"Value source","control":"select","options":[{"value":"VALUE","label":"Value"},{"value":"DEFAULT","label":"Default"},{"value":"NULL","label":"Null"}],"default":"VALUE","group":"Value"},
+        {"field_id":"value_type","label":"Input type","control":"select","options":[{"value":"TEXT","label":"Text"},{"value":"BOOLEAN","label":"Boolean"},{"value":"SAFE_INTEGER","label":"Integer (safe range)"},{"value":"INTEGER","label":"Exact integer"},{"value":"DECIMAL","label":"Exact decimal"},{"value":"DOUBLE","label":"Floating point"}],"default":"TEXT","group":"Value"},
+        {"field_id":"value_text","label":"Value","control":"text","backend_field_id":"value","visible_when":{"field":"value_type","in":["TEXT","INTEGER","DECIMAL","DOUBLE"]},"group":"Value","default":""},
+        {"field_id":"value_boolean","label":"Value","control":"boolean","backend_field_id":"value","default":false,"visible_when":{"field":"value_type","equals":"BOOLEAN"},"group":"Value"},
+        {"field_id":"value_integer","label":"Value","control":"number","backend_field_id":"value","min":-9007199254740991,"max":9007199254740991,"visible_when":{"field":"value_type","equals":"SAFE_INTEGER"},"group":"Value","help":"Use Exact integer for larger signed/unsigned values."},
+        {"field_id":"confirmation","label":"Variable name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"system-variable","operation_id":"set_persist_only","title":"Persist startup value","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"value_mode","label":"Value source","control":"select","options":[{"value":"VALUE","label":"Value"},{"value":"DEFAULT","label":"Default"},{"value":"NULL","label":"Null"}],"default":"VALUE","group":"Value"},
+        {"field_id":"value_type","label":"Input type","control":"select","options":[{"value":"TEXT","label":"Text"},{"value":"BOOLEAN","label":"Boolean"},{"value":"SAFE_INTEGER","label":"Integer (safe range)"},{"value":"INTEGER","label":"Exact integer"},{"value":"DECIMAL","label":"Exact decimal"},{"value":"DOUBLE","label":"Floating point"}],"default":"TEXT","group":"Value"},
+        {"field_id":"value_text","label":"Value","control":"text","backend_field_id":"value","visible_when":{"field":"value_type","in":["TEXT","INTEGER","DECIMAL","DOUBLE"]},"group":"Value","default":""},
+        {"field_id":"value_boolean","label":"Value","control":"boolean","backend_field_id":"value","default":false,"visible_when":{"field":"value_type","equals":"BOOLEAN"},"group":"Value"},
+        {"field_id":"value_integer","label":"Value","control":"number","backend_field_id":"value","min":-9007199254740991,"max":9007199254740991,"visible_when":{"field":"value_type","equals":"SAFE_INTEGER"},"group":"Value","help":"Use Exact integer for larger signed/unsigned values."},
+        {"field_id":"confirmation","label":"Variable name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"system-variable","operation_id":"reset_persist","title":"Remove persisted value","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"confirmation","label":"Variable name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"session","operation_id":"terminate_query","title":"Cancel query","tier":2,"status":"draft","menu":{"category":"lifecycle"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"confirmation","label":"Session name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"session","operation_id":"terminate_connection","title":"Terminate connection","tier":2,"status":"draft","menu":{"category":"lifecycle"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"confirmation","label":"Session name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"resource-group","operation_id":"assign","title":"Assign threads to resource group","tier":2,"status":"draft","menu":{"category":"maintenance"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"thread_ids","label":"Threads","control":"grid","required":true,"item_kind":"string","columns":[{"field_id":"value","label":"Thread ID","control":"text"}],"default":[],"help":"Exact positive performance_schema THREAD_ID values; these differ from connection IDs. Select at most 256 distinct IDs."},
+        {"field_id":"confirmation","label":"Resource group name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"replication-channel","operation_id":"stop","title":"Stop replication channel","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"thread","label":"Threads","control":"select","options":[{"value":"ALL","label":"Receiver and applier"},{"value":"IO_THREAD","label":"Receiver"},{"value":"SQL_THREAD","label":"Applier"}],"default":"ALL"},
+        {"field_id":"confirmation","label":"Channel name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"replication-channel","operation_id":"reset","title":"Reset replication channel","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"delete_connection","label":"Remove connection configuration","control":"boolean","default":false,"help":"RESET REPLICA ALL removes the channel definition. Otherwise its connection options are retained."},
+        {"field_id":"confirmation","label":"Channel name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"replication-channel","operation_id":"start","title":"Start replication channel","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"thread","label":"Threads","control":"select","options":[{"value":"ALL","label":"Receiver and applier"},{"value":"IO_THREAD","label":"Receiver"},{"value":"SQL_THREAD","label":"Applier"}],"default":"ALL"},
+        {"field_id":"until_kind","label":"Stop condition","control":"select","options":[{"value":"NONE","label":"No stop condition"},{"value":"SQL_BEFORE_GTIDS","label":"Before GTID set"},{"value":"SQL_AFTER_GTIDS","label":"After GTID set"},{"value":"SQL_AFTER_MTS_GAPS","label":"After applier gaps"},{"value":"SOURCE","label":"Source file position"},{"value":"RELAY","label":"Relay file position"}],"default":"NONE","ui_only":true,"group":"Stop condition"},
+        {"field_id":"sql_before_gtids","label":"GTID set","control":"text","backend_field_id":"until.SQL_BEFORE_GTIDS","required":false,"visible_when":{"field":"until_kind","equals":"SQL_BEFORE_GTIDS"},"group":"Stop condition","default":""},
+        {"field_id":"sql_after_gtids","label":"GTID set","control":"text","backend_field_id":"until.SQL_AFTER_GTIDS","required":false,"visible_when":{"field":"until_kind","equals":"SQL_AFTER_GTIDS"},"group":"Stop condition","default":""},
+        {"field_id":"after_mts_gaps","label":"Finish applier gaps","control":"boolean","backend_field_id":"until.SQL_AFTER_MTS_GAPS","default":true,"readonly":true,"visible_when":{"field":"until_kind","equals":"SQL_AFTER_MTS_GAPS"},"group":"Stop condition"},
+        {"field_id":"source_file","label":"Log file","control":"text","backend_field_id":"until.SOURCE_LOG_FILE","required":false,"visible_when":{"field":"until_kind","equals":"SOURCE"},"group":"Stop condition","help":"Exact native log filename.","default":""},
+        {"field_id":"source_pos","label":"Position","control":"text","backend_field_id":"until.SOURCE_LOG_POS","required":true,"visible_when":{"field":"until_kind","equals":"SOURCE"},"group":"Stop condition","help":"Exact unsigned decimal position."},
+        {"field_id":"relay_file","label":"Log file","control":"text","backend_field_id":"until.RELAY_LOG_FILE","required":false,"visible_when":{"field":"until_kind","equals":"RELAY"},"group":"Stop condition","help":"Exact native log filename.","default":""},
+        {"field_id":"relay_pos","label":"Position","control":"text","backend_field_id":"until.RELAY_LOG_POS","required":true,"visible_when":{"field":"until_kind","equals":"RELAY"},"group":"Stop condition","help":"Exact unsigned decimal position."},
+        {"field_id":"confirmation","label":"Channel name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"replication-channel","operation_id":"filter","title":"Change replication filters","tier":2,"status":"draft","menu":{"category":"replication"},"confirmation":"typed_name","produces_log":true,
+      "fields":[
+        {"field_id":"edit_replicate_do_db","label":"Change included databases","control":"boolean","ui_only":true,"default":false,"group":"Included databases"},
+        {"field_id":"replicate_do_db","label":"Included databases","control":"grid","backend_field_id":"filters.REPLICATE_DO_DB","default":[],"visible_when":{"field":"edit_replicate_do_db","equals":true},"group":"Included databases","help":"An enabled empty list clears this filter. An unselected filter is preserved.","item_kind":"string","columns":[{"field_id":"value","label":"Database","control":"text","required":true}]},
+        {"field_id":"edit_replicate_ignore_db","label":"Change excluded databases","control":"boolean","ui_only":true,"default":false,"group":"Excluded databases"},
+        {"field_id":"replicate_ignore_db","label":"Excluded databases","control":"grid","backend_field_id":"filters.REPLICATE_IGNORE_DB","default":[],"visible_when":{"field":"edit_replicate_ignore_db","equals":true},"group":"Excluded databases","help":"An enabled empty list clears this filter. An unselected filter is preserved.","item_kind":"string","columns":[{"field_id":"value","label":"Database","control":"text","required":true}]},
+        {"field_id":"edit_replicate_do_table","label":"Change included tables","control":"boolean","ui_only":true,"default":false,"group":"Included tables"},
+        {"field_id":"replicate_do_table","label":"Included tables","control":"grid","backend_field_id":"filters.REPLICATE_DO_TABLE","default":[],"visible_when":{"field":"edit_replicate_do_table","equals":true},"group":"Included tables","help":"An enabled empty list clears this filter. An unselected filter is preserved.","columns":[{"field_id":"database","label":"Database","control":"text","required":true},{"field_id":"table","label":"Table","control":"text","required":true}]},
+        {"field_id":"edit_replicate_ignore_table","label":"Change excluded tables","control":"boolean","ui_only":true,"default":false,"group":"Excluded tables"},
+        {"field_id":"replicate_ignore_table","label":"Excluded tables","control":"grid","backend_field_id":"filters.REPLICATE_IGNORE_TABLE","default":[],"visible_when":{"field":"edit_replicate_ignore_table","equals":true},"group":"Excluded tables","help":"An enabled empty list clears this filter. An unselected filter is preserved.","columns":[{"field_id":"database","label":"Database","control":"text","required":true},{"field_id":"table","label":"Table","control":"text","required":true}]},
+        {"field_id":"edit_replicate_wild_do_table","label":"Change included table patterns","control":"boolean","ui_only":true,"default":false,"group":"Included table patterns"},
+        {"field_id":"replicate_wild_do_table","label":"Included table patterns","control":"grid","backend_field_id":"filters.REPLICATE_WILD_DO_TABLE","default":[],"visible_when":{"field":"edit_replicate_wild_do_table","equals":true},"group":"Included table patterns","help":"An enabled empty list clears this filter. An unselected filter is preserved.","item_kind":"string","columns":[{"field_id":"value","label":"Pattern","control":"text","required":true}]},
+        {"field_id":"edit_replicate_wild_ignore_table","label":"Change excluded table patterns","control":"boolean","ui_only":true,"default":false,"group":"Excluded table patterns"},
+        {"field_id":"replicate_wild_ignore_table","label":"Excluded table patterns","control":"grid","backend_field_id":"filters.REPLICATE_WILD_IGNORE_TABLE","default":[],"visible_when":{"field":"edit_replicate_wild_ignore_table","equals":true},"group":"Excluded table patterns","help":"An enabled empty list clears this filter. An unselected filter is preserved.","item_kind":"string","columns":[{"field_id":"value","label":"Pattern","control":"text","required":true}]},
+        {"field_id":"edit_replicate_rewrite_db","label":"Change database rewrites","control":"boolean","ui_only":true,"default":false,"group":"Database rewrites"},
+        {"field_id":"replicate_rewrite_db","label":"Database rewrites","control":"grid","backend_field_id":"filters.REPLICATE_REWRITE_DB","default":[],"visible_when":{"field":"edit_replicate_rewrite_db","equals":true},"group":"Database rewrites","help":"An enabled empty list clears this filter. An unselected filter is preserved.","columns":[{"field_id":"source","label":"Source database","control":"text","required":true},{"field_id":"target","label":"Target database","control":"text","required":true}]},
+        {"field_id":"confirmation","label":"Channel name","control":"text","required":true,"group":"Confirmation"}
+      ]
     }
   ]
 }
