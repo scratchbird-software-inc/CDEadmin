@@ -76,24 +76,6 @@ def compile_operation(operation, draft, target):
             ]}
 
 
-def form(operation, field):
-    fields = []
-    if operation in {'count_tracked_pages', 'export_tracked_pages'}:
-        fields += [field('start_lsn', 'Native start LSN (0 selects current group)', 'text', True, default='0'),
-                   field('stop_lsn', 'Native stop LSN (0 selects latest tracked checkpoint)', 'text', True, default='0')]
-    if operation == 'purge_page_tracking':
-        fields += [field('purge_lsn', 'Native purge LSN (0 selects checkpoint)', 'text', True, default='0'),
-                   field('tracking_files_not_required', 'Tracking files are no longer required by any backup', 'boolean', True, default=False)]
-    if operation == 'set_page_tracking_backup_id':
-        fields += [field('value_mode', 'Native backup ID source', 'select', default='VALUE', options=('VALUE', 'NULL', 'DEFAULT')),
-                   {**field('backup_id', 'Native backup ID text (export requires digits)', 'text'), 'visible_when': {'field_id': 'value_mode', 'equals': 'VALUE'}},
-                   field('prior_index_removal_confirmed', 'The prior exported index may be deleted, including when reusing the same ID', 'boolean', True, default=False)]
-    if operation in {'start_page_tracking', 'stop_page_tracking', 'set_page_tracking_backup_id', 'purge_page_tracking'}:
-        fields.append(field('coordinated_backup_window', 'This change is coordinated with all native backup/page-tracking clients', 'boolean', True, default=False))
-    if operation not in READS: fields.append(field('confirmation', 'Exact server name', 'text', True))
-    return {'form_id': 'mysql.server.' + operation, 'title': OPERATIONS[operation], 'fields': fields}
-
-
 def scalar(cursor, source, parameters=()):
     cursor.execute(source, parameters); row = cursor.fetchone()
     if not row or len(row) != 1 or type(row[0]) is not int or not -(2**63) <= row[0] <= 2**63 - 1:

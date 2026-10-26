@@ -147,3 +147,21 @@ family host sends visual_admin DDL actions, so Decision11 records the required
 registration dispatch. Server remains unsurfaced until that shared bridge lands.
 Nested failover credentials/pools and optional closed-server runtimes are
 recorded as gaps rather than exposed through ordinary text or JSON controls.
+
+## Maintenance operations and navigation
+
+The42 operation entries include29 migrated server/cache actions. Their existing
+native field IDs/defaults are preserved; seven module `form()` factories and
+their dispatches are removed. The input adapter reads the descriptor rather
+than keeping another field list. LSN/cache numbers and binary XA identities
+retain lossless text inputs. SDI paths and index lists are typed scalar grids.
+
+Entries remain draft. Decision12 records the shared OperationDialog projection
+gap: it currently submits grid records, while the native APIs require scalar
+lists. SDI import and both table cache operations are explicitly unsurfaced
+until that shared bridge lands. Backend projection tests/native cache round
+trips do not qualify actual dialog behavior. No shared renderer is changed.
+
+`navigator.json` covers the33 current catalog kinds with16 groups, semantic
+icons and table/view child kinds. Its layout is draft/unsurfaced pending shared
+tree consumption (Decision13), rather than another provider-specific tree.

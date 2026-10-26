@@ -1,985 +1,334 @@
 {
-  "schema": "cdeadmin.ui-operations.v1",
-  "engine": "mysql",
-  "operations": [
-    {
-      "operation_id": "install_user_key_functions",
-      "resource_kind": "server",
-      "title": "Install key functions",
-      "menu": {
-        "category": "security",
-        "order": 100
-      },
-      "tier": 2,
-      "status": "draft",
-      "confirmation": "typed_name",
-      "groups": [
-        "Native library",
-        "Key",
-        "Confirmation"
-      ],
-      "fields": [
-        {
-          "field_id": "library",
-          "label": "Library",
-          "control": "text",
-          "required": true,
-          "group": "Native library",
-          "default": "keyring_udf.so",
-          "help": "Library basename installed in the database server plugin directory. A keyring service must already be active."
-        },
-        {
-          "field_id": "trusted_library",
-          "label": "Trust this server library",
-          "control": "boolean",
-          "required": true,
-          "group": "Native library",
-          "default": false,
-          "help": "Authorizes the native plugin and six function definitions. Existing matching definitions are preserved."
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Server name",
-          "control": "text",
-          "required": true,
-          "group": "Confirmation",
-          "help": "Type the selected server display name."
-        }
-      ],
-      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads."
-    },
-    {
-      "operation_id": "inspect_user_key",
-      "resource_kind": "server",
-      "title": "Inspect user key",
-      "menu": {
-        "category": "security",
-        "order": 101
-      },
-      "tier": 2,
-      "status": "draft",
-      "confirmation": "typed_name",
-      "groups": [
-        "Native library",
-        "Key",
-        "Confirmation"
-      ],
-      "fields": [
-        {
-          "field_id": "key_id",
-          "label": "Key identifier",
-          "control": "text",
-          "required": true,
-          "group": "Key",
-          "help": "Native ownership uses CURRENT_USER(), including its host part."
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Server name",
-          "control": "text",
-          "required": true,
-          "group": "Confirmation",
-          "help": "Type the selected server display name."
-        }
-      ],
-      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads."
-    },
-    {
-      "operation_id": "store_user_key",
-      "resource_kind": "server",
-      "title": "Store user key",
-      "menu": {
-        "category": "security",
-        "order": 102
-      },
-      "tier": 2,
-      "status": "draft",
-      "confirmation": "typed_name",
-      "groups": [
-        "Native library",
-        "Key",
-        "Confirmation"
-      ],
-      "fields": [
-        {
-          "field_id": "key_id",
-          "label": "Key identifier",
-          "control": "text",
-          "required": true,
-          "group": "Key",
-          "help": "Native ownership uses CURRENT_USER(), including its host part."
-        },
-        {
-          "field_id": "key_type",
-          "label": "Key type",
-          "control": "select",
-          "required": true,
-          "group": "Key",
-          "default": "AES",
-          "options": [
-            {
-              "value": "AES",
-              "label": "AES"
-            },
-            {
-              "value": "RSA",
-              "label": "RSA"
-            },
-            {
-              "value": "DSA",
-              "label": "DSA"
-            },
-            {
-              "value": "SECRET",
-              "label": "SECRET"
-            }
-          ]
-        },
-        {
-          "field_id": "password",
-          "label": "Key value",
-          "control": "password",
-          "required": true,
-          "group": "Key",
-          "help": "Native store accepts nonempty UTF-8 text without NUL, at most 16384 bytes. Key material is not returned in receipts."
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Server name",
-          "control": "text",
-          "required": true,
-          "group": "Confirmation",
-          "help": "Type the selected server display name."
-        }
-      ],
-      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads."
-    },
-    {
-      "operation_id": "generate_user_key",
-      "resource_kind": "server",
-      "title": "Generate user key",
-      "menu": {
-        "category": "security",
-        "order": 103
-      },
-      "tier": 2,
-      "status": "draft",
-      "confirmation": "typed_name",
-      "groups": [
-        "Native library",
-        "Key",
-        "Confirmation"
-      ],
-      "fields": [
-        {
-          "field_id": "key_id",
-          "label": "Key identifier",
-          "control": "text",
-          "required": true,
-          "group": "Key",
-          "help": "Native ownership uses CURRENT_USER(), including its host part."
-        },
-        {
-          "field_id": "key_type",
-          "label": "Key type",
-          "control": "select",
-          "required": true,
-          "group": "Key",
-          "default": "AES",
-          "options": [
-            {
-              "value": "AES",
-              "label": "AES"
-            },
-            {
-              "value": "RSA",
-              "label": "RSA"
-            },
-            {
-              "value": "DSA",
-              "label": "DSA"
-            },
-            {
-              "value": "SECRET",
-              "label": "SECRET"
-            }
-          ]
-        },
-        {
-          "field_id": "key_length",
-          "label": "Length in bytes",
-          "control": "number",
-          "required": true,
-          "group": "Key",
-          "default": 32,
-          "min": 1,
-          "max": 16384,
-          "help": "The active native keyring service decides which key types and lengths it can generate."
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Server name",
-          "control": "text",
-          "required": true,
-          "group": "Confirmation",
-          "help": "Type the selected server display name."
-        }
-      ],
-      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads."
-    },
-    {
-      "operation_id": "remove_user_key",
-      "resource_kind": "server",
-      "title": "Remove user key",
-      "menu": {
-        "category": "security",
-        "order": 104
-      },
-      "tier": 2,
-      "status": "draft",
-      "confirmation": "typed_name",
-      "groups": [
-        "Native library",
-        "Key",
-        "Confirmation"
-      ],
-      "fields": [
-        {
-          "field_id": "key_id",
-          "label": "Key identifier",
-          "control": "text",
-          "required": true,
-          "group": "Key",
-          "help": "Native ownership uses CURRENT_USER(), including its host part."
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Server name",
-          "control": "text",
-          "required": true,
-          "group": "Confirmation",
-          "help": "Type the selected server display name."
-        }
-      ],
-      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads."
-    },
-    {
-      "operation_id": "visibility",
-      "resource_kind": "index",
-      "title": "Change index visibility",
-      "menu": {
-        "category": "maintenance",
-        "order": 20
-      },
-      "tier": 2,
-      "status": "draft",
-      "confirmation": "typed_name",
-      "groups": [
-        "Index",
-        "Confirmation"
-      ],
-      "fields": [
-        {
-          "field_id": "visibility",
-          "label": "Visibility",
-          "control": "select",
-          "options": [
-            {
-              "value": "VISIBLE",
-              "label": "Visible"
-            },
-            {
-              "value": "INVISIBLE",
-              "label": "Invisible"
-            }
-          ],
-          "required": true,
-          "default_path": [
-            "visibility"
-          ],
-          "group": "Index"
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Index name",
-          "control": "text",
-          "required": true,
-          "group": "Confirmation"
-        }
-      ],
-      "notes": "Binds the existing native visibility operation. Native primary keys cannot be made invisible. Draft pending shared operation-dialog rendering and acceptance."
-    },
-    {
-      "operation_id": "rename",
-      "resource_kind": "event",
-      "tier": 2,
-      "menu": {
-        "category": "maintenance"
-      },
-      "confirmation": "typed_name",
-      "fields": [
-        {
-          "field_id": "new_name",
-          "label": "Name",
-          "control": "text",
-          "required": true,
-          "group": "Event"
-        },
-        {
-          "field_id": "new_database",
-          "label": "Database",
-          "control": "reference",
-          "reference_kind": "database",
-          "help": "Leave absent to keep the existing database.",
-          "group": "Event"
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Confirmation",
-          "control": "text",
-          "required": true,
-          "group": "Confirmation"
-        }
-      ],
-      "title": "Rename event",
-      "status": "draft",
-      "groups": [
-        "Event",
-        "Confirmation"
+  "schema":"cdeadmin.ui-operations.v1",
+  "engine":"mysql",
+  "operations":[
+    {"operation_id":"install_user_key_functions","resource_kind":"server","title":"Install key functions","menu":{"category":"security","order":100},"tier":2,"status":"draft","confirmation":"typed_name","groups":["Native library","Key","Confirmation"],
+      "notes":"Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads.",
+      "fields":[
+        {"field_id":"library","label":"Library","control":"text","required":true,"group":"Native library","default":"keyring_udf.so","help":"Library basename installed in the database server plugin directory. A keyring service must already be active."},
+        {"field_id":"trusted_library","label":"Trust this server library","control":"boolean","required":true,"group":"Native library","default":false,"help":"Authorizes the native plugin and six function definitions. Existing matching definitions are preserved."},
+        {"field_id":"confirmation","label":"Server name","control":"text","required":true,"group":"Confirmation","help":"Type the selected server display name."}
       ]
     },
-    {
-      "resource_kind": "role",
-      "operation_id": "grant",
-      "title": "Grant role membership",
-      "tier": 2,
-      "status": "draft",
-      "menu": {
-        "category": "security",
-        "order": 30
-      },
-      "confirmation": "typed_name",
-      "groups": [
-        "Membership",
-        "Confirmation"
-      ],
-      "fields": [
-        {
-          "field_id": "member_user",
-          "label": "Recipient user",
-          "control": "text",
-          "default": "",
-          "group": "Membership",
-          "help": "An explicit empty user names the native anonymous account; MySQL decides whether it can receive this role."
-        },
-        {
-          "field_id": "member_host",
-          "label": "Recipient host",
-          "control": "text",
-          "default": "%",
-          "required": true,
-          "group": "Membership"
-        },
-        {
-          "field_id": "admin_option",
-          "label": "Allow delegation",
-          "control": "boolean",
-          "default": false,
-          "group": "Membership"
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Role name",
-          "control": "text",
-          "required": true,
-          "group": "Confirmation"
-        }
-      ],
-      "notes": "Binds the existing native role membership operation with separate user and host identities. Shared family grid dispatch remains Decision9; no new legacy form is generated."
+    {"operation_id":"inspect_user_key","resource_kind":"server","title":"Inspect user key","menu":{"category":"security","order":101},"tier":2,"status":"draft","confirmation":"typed_name","groups":["Native library","Key","Confirmation"],
+      "notes":"Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads.",
+      "fields":[
+        {"field_id":"key_id","label":"Key identifier","control":"text","required":true,"group":"Key","help":"Native ownership uses CURRENT_USER(), including its host part."},
+        {"field_id":"confirmation","label":"Server name","control":"text","required":true,"group":"Confirmation","help":"Type the selected server display name."}
+      ]
     },
-    {
-      "resource_kind": "role",
-      "operation_id": "revoke",
-      "title": "Revoke role membership",
-      "tier": 2,
-      "status": "draft",
-      "menu": {
-        "category": "security",
-        "order": 31
-      },
-      "confirmation": "typed_name",
-      "groups": [
-        "Membership",
-        "Confirmation"
-      ],
-      "fields": [
-        {
-          "field_id": "member_user",
-          "label": "Recipient user",
-          "control": "text",
-          "default": "",
-          "group": "Membership",
-          "help": "An explicit empty user names the native anonymous account; MySQL decides whether it can receive this role."
-        },
-        {
-          "field_id": "member_host",
-          "label": "Recipient host",
-          "control": "text",
-          "default": "%",
-          "required": true,
-          "group": "Membership"
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Role name",
-          "control": "text",
-          "required": true,
-          "group": "Confirmation"
-        }
-      ],
-      "notes": "Binds the existing native role membership operation with separate user and host identities. Shared family grid dispatch remains Decision9; no new legacy form is generated."
+    {"operation_id":"store_user_key","resource_kind":"server","title":"Store user key","menu":{"category":"security","order":102},"tier":2,"status":"draft","confirmation":"typed_name","groups":["Native library","Key","Confirmation"],
+      "notes":"Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads.",
+      "fields":[
+        {"field_id":"key_id","label":"Key identifier","control":"text","required":true,"group":"Key","help":"Native ownership uses CURRENT_USER(), including its host part."},
+        {"field_id":"key_type","label":"Key type","control":"select","required":true,"group":"Key","default":"AES","options":[{"value":"AES","label":"AES"},{"value":"RSA","label":"RSA"},{"value":"DSA","label":"DSA"},{"value":"SECRET","label":"SECRET"}]},
+        {"field_id":"password","label":"Key value","control":"password","required":true,"group":"Key","help":"Native store accepts nonempty UTF-8 text without NUL, at most 16384 bytes. Key material is not returned in receipts."},
+        {"field_id":"confirmation","label":"Server name","control":"text","required":true,"group":"Confirmation","help":"Type the selected server display name."}
+      ]
     },
-    {
-      "resource_kind": "role",
-      "operation_id": "set_default",
-      "title": "Set default roles",
-      "tier": 2,
-      "status": "draft",
-      "menu": {
-        "category": "security",
-        "order": 32
-      },
-      "confirmation": "typed_name",
-      "groups": [
-        "Membership",
-        "Confirmation"
-      ],
-      "fields": [
-        {
-          "field_id": "member_user",
-          "label": "Recipient user",
-          "control": "text",
-          "default": "",
-          "group": "Membership",
-          "help": "An explicit empty user names the native anonymous account; MySQL decides whether it can receive this role."
-        },
-        {
-          "field_id": "member_host",
-          "label": "Recipient host",
-          "control": "text",
-          "default": "%",
-          "required": true,
-          "group": "Membership"
-        },
-        {
-          "field_id": "mode",
-          "label": "Default role set",
-          "control": "select",
-          "default": "SELECTED",
-          "options": [
-            {
-              "value": "SELECTED",
-              "label": "Selected"
-            },
-            {
-              "value": "ALL",
-              "label": "All"
-            },
-            {
-              "value": "NONE",
-              "label": "None"
-            }
-          ],
-          "group": "Membership",
-          "help": "Replaces the native default-role set; does not grant missing membership."
-        },
-        {
-          "field_id": "roles",
-          "label": "Default roles",
-          "control": "grid",
-          "columns": [
-            {
-              "field_id": "user",
-              "label": "User",
-              "control": "text",
-              "required": true
-            },
-            {
-              "field_id": "host",
-              "label": "Host",
-              "control": "text"
-            }
-          ],
-          "visible_when": {
-            "field": "mode",
-            "equals": "SELECTED"
-          },
-          "help": "Optional complete replacement list. Omit it to use the selected role; a supplied list must contain every default role to retain."
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Role name",
-          "control": "text",
-          "required": true,
-          "group": "Confirmation"
-        }
-      ],
-      "notes": "Binds the existing native role membership operation with separate user and host identities. Shared family grid dispatch remains Decision9; no new legacy form is generated."
+    {"operation_id":"generate_user_key","resource_kind":"server","title":"Generate user key","menu":{"category":"security","order":103},"tier":2,"status":"draft","confirmation":"typed_name","groups":["Native library","Key","Confirmation"],
+      "notes":"Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads.",
+      "fields":[
+        {"field_id":"key_id","label":"Key identifier","control":"text","required":true,"group":"Key","help":"Native ownership uses CURRENT_USER(), including its host part."},
+        {"field_id":"key_type","label":"Key type","control":"select","required":true,"group":"Key","default":"AES","options":[{"value":"AES","label":"AES"},{"value":"RSA","label":"RSA"},{"value":"DSA","label":"DSA"},{"value":"SECRET","label":"SECRET"}]},
+        {"field_id":"key_length","label":"Length in bytes","control":"number","required":true,"group":"Key","default":32,"min":1,"max":16384,"help":"The active native keyring service decides which key types and lengths it can generate."},
+        {"field_id":"confirmation","label":"Server name","control":"text","required":true,"group":"Confirmation","help":"Type the selected server display name."}
+      ]
     },
-    {
-      "resource_kind": "user",
-      "operation_id": "rename",
-      "title": "Rename account",
-      "tier": 2,
-      "status": "draft",
-      "menu": {
-        "category": "security",
-        "order": 33
-      },
-      "confirmation": "typed_name",
-      "groups": [
-        "Identity",
-        "Confirmation"
-      ],
-      "fields": [
-        {
-          "field_id": "new_name",
-          "label": "Name",
-          "control": "text",
-          "group": "Identity",
-          "help": "Omit to retain the user name. An explicit empty value names the native anonymous account."
-        },
-        {
-          "field_id": "new_host",
-          "label": "Host",
-          "control": "text",
-          "group": "Identity",
-          "help": "Omit to retain the existing host."
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Account name",
-          "control": "text",
-          "required": true,
-          "group": "Confirmation"
-        }
-      ],
-      "notes": "Native user and host are separate identities; no splitting of displayed names is used for catalog targets. MySQL decides whether a role-used or system account may be renamed. Draft pending shared rendering acceptance."
+    {"operation_id":"remove_user_key","resource_kind":"server","title":"Remove user key","menu":{"category":"security","order":104},"tier":2,"status":"draft","confirmation":"typed_name","groups":["Native library","Key","Confirmation"],
+      "notes":"Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads.",
+      "fields":[
+        {"field_id":"key_id","label":"Key identifier","control":"text","required":true,"group":"Key","help":"Native ownership uses CURRENT_USER(), including its host part."},
+        {"field_id":"confirmation","label":"Server name","control":"text","required":true,"group":"Confirmation","help":"Type the selected server display name."}
+      ]
     },
-    {
-      "operation_id": "grant",
-      "resource_kind": "privilege",
-      "title": "Grant privileges",
-      "menu": {
-        "category": "security",
-        "order": 130
-      },
-      "tier": 2,
-      "status": "draft",
-      "confirmation": "confirm",
-      "fields": [
-        {
-          "field_id": "grantees",
-          "label": "Grantees",
-          "control": "grid",
-          "required": true,
-          "columns": [
-            {
-              "field_id": "user",
-              "label": "User",
-              "control": "text",
-              "required": false,
-              "help": "Empty user text denotes a native anonymous account; supply its host separately."
-            },
-            {
-              "field_id": "host",
-              "label": "Host",
-              "control": "text",
-              "default": "%"
-            }
-          ],
-          "help": "Separate native account components preserve literal quotes, dots and @ characters."
-        },
-        {
-          "field_id": "object_type",
-          "label": "Scope",
-          "control": "select",
-          "options": [
-            {
-              "value": "GLOBAL",
-              "label": "Global"
-            },
-            {
-              "value": "DATABASE",
-              "label": "Database"
-            },
-            {
-              "value": "TABLE",
-              "label": "Table"
-            },
-            {
-              "value": "VIEW",
-              "label": "View"
-            },
-            {
-              "value": "PROCEDURE",
-              "label": "Procedure"
-            },
-            {
-              "value": "FUNCTION",
-              "label": "Function"
-            },
-            {
-              "value": "LIBRARY",
-              "label": "Library"
-            },
-            {
-              "value": "PROXY",
-              "label": "Proxy account"
-            },
-            {
-              "value": "ACCOUNT",
-              "label": "All account privileges"
-            }
-          ],
-          "required": true,
-          "help": "All account privileges is REVOKE ALL PRIVILEGES, GRANT OPTION. Library grants do not imply an available closed execution runtime."
-        },
-        {
-          "field_id": "database",
-          "label": "Database",
-          "control": "text",
-          "visible_when": {
-            "field": "object_type",
-            "in": [
-              "DATABASE",
-              "TABLE",
-              "VIEW",
-              "FUNCTION",
-              "PROCEDURE",
-              "LIBRARY"
-            ]
-          }
-        },
-        {
-          "field_id": "object",
-          "label": "Object",
-          "control": "text",
-          "visible_when": {
-            "field": "object_type",
-            "in": [
-              "TABLE",
-              "VIEW",
-              "FUNCTION",
-              "PROCEDURE",
-              "LIBRARY"
-            ]
-          }
-        },
-        {
-          "field_id": "privileges",
-          "label": "Privileges",
-          "control": "grid",
-          "columns": [
-            {
-              "field_id": "name",
-              "label": "Privilege",
-              "control": "text",
-              "required": true
-            },
-            {
-              "field_id": "columns",
-              "label": "Columns",
-              "control": "multiselect",
-              "option_values_path": [
-                "target",
-                "columns"
-              ]
-            }
-          ],
-          "help": "Native keyword or installed dynamic privilege per row. Column lists apply to table/view SELECT, INSERT, UPDATE or REFERENCES; MySQL validates scope and availability."
-        },
-        {
-          "field_id": "grant_option",
-          "label": "With grant option",
-          "control": "boolean",
-          "default": false,
-          "help": "GRANT only. To revoke delegation, select the GRANT OPTION privilege."
-        },
-        {
-          "field_id": "proxy_user",
-          "label": "Proxy user",
-          "control": "text",
-          "visible_when": {
-            "field": "object_type",
-            "equals": "PROXY"
-          }
-        },
-        {
-          "field_id": "proxy_host",
-          "label": "Proxy host",
-          "control": "text",
-          "visible_when": {
-            "field": "object_type",
-            "equals": "PROXY"
-          }
-        },
-        {
-          "field_id": "grant_as_user",
-          "label": "Grant as user",
-          "control": "text",
-          "visible_when": {
-            "field": "object_type",
-            "equals": "GLOBAL"
-          },
-          "help": "GRANT AS is native global-privilege delegation only."
-        },
-        {
-          "field_id": "grant_as_host",
-          "label": "Grant as host",
-          "control": "text",
-          "visible_when": {
-            "field": "grant_as_user",
-            "truthy": true
-          }
-        },
-        {
-          "field_id": "grant_as_roles_mode",
-          "label": "Grantor roles",
-          "control": "select",
-          "options": [
-            {
-              "value": "NONE",
-              "label": "None"
-            },
-            {
-              "value": "DEFAULT",
-              "label": "Default"
-            },
-            {
-              "value": "ALL",
-              "label": "All"
-            },
-            {
-              "value": "SELECTED",
-              "label": "Selected"
-            },
-            {
-              "value": "ALL_EXCEPT",
-              "label": "All Except"
-            }
-          ],
-          "help": "GRANT AS only. A selected/excluded role set uses the separate native account grid.",
-          "visible_when": {
-            "field": "grant_as_user",
-            "truthy": true
-          }
-        },
-        {
-          "field_id": "grant_as_roles",
-          "label": "Grantor role accounts",
-          "control": "grid",
-          "columns": [
-            {
-              "field_id": "user",
-              "label": "User",
-              "control": "text",
-              "required": true
-            },
-            {
-              "field_id": "host",
-              "label": "Host",
-              "control": "text",
-              "default": "%"
-            }
-          ],
-          "visible_when": {
-            "field": "grant_as_user",
-            "truthy": true
-          }
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Confirmation",
-          "control": "text",
-          "help": "Type the selected target display name when required."
-        }
-      ],
-      "notes": "Native plan/validate/apply with a provider SQL preview. Draft pending shared operation-dialog rendering and round trips."
+    {"operation_id":"visibility","resource_kind":"index","title":"Change index visibility","menu":{"category":"maintenance","order":20},"tier":2,"status":"draft","confirmation":"typed_name","groups":["Index","Confirmation"],
+      "notes":"Binds the existing native visibility operation. Native primary keys cannot be made invisible. Draft pending shared operation-dialog rendering and acceptance.",
+      "fields":[
+        {"field_id":"visibility","label":"Visibility","control":"select","options":[{"value":"VISIBLE","label":"Visible"},{"value":"INVISIBLE","label":"Invisible"}],"required":true,"default_path":["visibility"],"group":"Index"},
+        {"field_id":"confirmation","label":"Index name","control":"text","required":true,"group":"Confirmation"}
+      ]
     },
-    {
-      "operation_id": "revoke",
-      "resource_kind": "privilege",
-      "title": "Revoke privileges",
-      "menu": {
-        "category": "security",
-        "order": 131
-      },
-      "tier": 2,
-      "status": "draft",
-      "confirmation": "typed_name",
-      "fields": [
-        {
-          "field_id": "grantees",
-          "label": "Grantees",
-          "control": "grid",
-          "required": true,
-          "columns": [
-            {
-              "field_id": "user",
-              "label": "User",
-              "control": "text",
-              "required": false,
-              "help": "Empty user text denotes a native anonymous account; supply its host separately."
-            },
-            {
-              "field_id": "host",
-              "label": "Host",
-              "control": "text",
-              "default": "%"
-            }
-          ],
-          "help": "Separate native account components preserve literal quotes, dots and @ characters."
-        },
-        {
-          "field_id": "object_type",
-          "label": "Scope",
-          "control": "select",
-          "options": [
-            {
-              "value": "GLOBAL",
-              "label": "Global"
-            },
-            {
-              "value": "DATABASE",
-              "label": "Database"
-            },
-            {
-              "value": "TABLE",
-              "label": "Table"
-            },
-            {
-              "value": "VIEW",
-              "label": "View"
-            },
-            {
-              "value": "PROCEDURE",
-              "label": "Procedure"
-            },
-            {
-              "value": "FUNCTION",
-              "label": "Function"
-            },
-            {
-              "value": "LIBRARY",
-              "label": "Library"
-            },
-            {
-              "value": "PROXY",
-              "label": "Proxy account"
-            },
-            {
-              "value": "ACCOUNT",
-              "label": "All account privileges"
-            }
-          ],
-          "required": true,
-          "help": "All account privileges is REVOKE ALL PRIVILEGES, GRANT OPTION. Library grants do not imply an available closed execution runtime."
-        },
-        {
-          "field_id": "database",
-          "label": "Database",
-          "control": "text",
-          "visible_when": {
-            "field": "object_type",
-            "in": [
-              "DATABASE",
-              "TABLE",
-              "VIEW",
-              "FUNCTION",
-              "PROCEDURE",
-              "LIBRARY"
-            ]
-          }
-        },
-        {
-          "field_id": "object",
-          "label": "Object",
-          "control": "text",
-          "visible_when": {
-            "field": "object_type",
-            "in": [
-              "TABLE",
-              "VIEW",
-              "FUNCTION",
-              "PROCEDURE",
-              "LIBRARY"
-            ]
-          }
-        },
-        {
-          "field_id": "privileges",
-          "label": "Privileges",
-          "control": "grid",
-          "columns": [
-            {
-              "field_id": "name",
-              "label": "Privilege",
-              "control": "text",
-              "required": true
-            },
-            {
-              "field_id": "columns",
-              "label": "Columns",
-              "control": "multiselect",
-              "option_values_path": [
-                "target",
-                "columns"
-              ]
-            }
-          ],
-          "help": "Native keyword or installed dynamic privilege per row. Column lists apply to table/view SELECT, INSERT, UPDATE or REFERENCES; MySQL validates scope and availability."
-        },
-        {
-          "field_id": "if_exists",
-          "label": "If it exists",
-          "control": "boolean",
-          "default": false,
-          "help": "REVOKE only; retain native warnings for absent grants."
-        },
-        {
-          "field_id": "ignore_unknown_user",
-          "label": "Ignore unknown users",
-          "control": "boolean",
-          "default": false,
-          "help": "REVOKE only; the native statement determines partial results and warnings."
-        },
-        {
-          "field_id": "proxy_user",
-          "label": "Proxy user",
-          "control": "text",
-          "visible_when": {
-            "field": "object_type",
-            "equals": "PROXY"
-          }
-        },
-        {
-          "field_id": "proxy_host",
-          "label": "Proxy host",
-          "control": "text",
-          "visible_when": {
-            "field": "object_type",
-            "equals": "PROXY"
-          }
-        },
-        {
-          "field_id": "confirmation",
-          "label": "Confirmation",
-          "control": "text",
-          "help": "Type the selected target display name when required."
-        }
-      ],
-      "notes": "Native plan/validate/apply with a provider SQL preview. Draft pending shared operation-dialog rendering and round trips."
+    {"operation_id":"rename","resource_kind":"event","tier":2,"menu":{"category":"maintenance"},"confirmation":"typed_name","title":"Rename event","status":"draft","groups":["Event","Confirmation"],
+      "fields":[
+        {"field_id":"new_name","label":"Name","control":"text","required":true,"group":"Event"},
+        {"field_id":"new_database","label":"Database","control":"reference","reference_kind":"database","help":"Leave absent to keep the existing database.","group":"Event"},
+        {"field_id":"confirmation","label":"Confirmation","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"role","operation_id":"grant","title":"Grant role membership","tier":2,"status":"draft","menu":{"category":"security","order":30},"confirmation":"typed_name","groups":["Membership","Confirmation"],
+      "notes":"Binds the existing native role membership operation with separate user and host identities. Shared family grid dispatch remains Decision9; no new legacy form is generated.",
+      "fields":[
+        {"field_id":"member_user","label":"Recipient user","control":"text","default":"","group":"Membership","help":"An explicit empty user names the native anonymous account; MySQL decides whether it can receive this role."},
+        {"field_id":"member_host","label":"Recipient host","control":"text","default":"%","required":true,"group":"Membership"},
+        {"field_id":"admin_option","label":"Allow delegation","control":"boolean","default":false,"group":"Membership"},
+        {"field_id":"confirmation","label":"Role name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"role","operation_id":"revoke","title":"Revoke role membership","tier":2,"status":"draft","menu":{"category":"security","order":31},"confirmation":"typed_name","groups":["Membership","Confirmation"],
+      "notes":"Binds the existing native role membership operation with separate user and host identities. Shared family grid dispatch remains Decision9; no new legacy form is generated.",
+      "fields":[
+        {"field_id":"member_user","label":"Recipient user","control":"text","default":"","group":"Membership","help":"An explicit empty user names the native anonymous account; MySQL decides whether it can receive this role."},
+        {"field_id":"member_host","label":"Recipient host","control":"text","default":"%","required":true,"group":"Membership"},
+        {"field_id":"confirmation","label":"Role name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"role","operation_id":"set_default","title":"Set default roles","tier":2,"status":"draft","menu":{"category":"security","order":32},"confirmation":"typed_name","groups":["Membership","Confirmation"],
+      "notes":"Binds the existing native role membership operation with separate user and host identities. Shared family grid dispatch remains Decision9; no new legacy form is generated.",
+      "fields":[
+        {"field_id":"member_user","label":"Recipient user","control":"text","default":"","group":"Membership","help":"An explicit empty user names the native anonymous account; MySQL decides whether it can receive this role."},
+        {"field_id":"member_host","label":"Recipient host","control":"text","default":"%","required":true,"group":"Membership"},
+        {"field_id":"mode","label":"Default role set","control":"select","default":"SELECTED","options":[{"value":"SELECTED","label":"Selected"},{"value":"ALL","label":"All"},{"value":"NONE","label":"None"}],"group":"Membership","help":"Replaces the native default-role set; does not grant missing membership."},
+        {"field_id":"roles","label":"Default roles","control":"grid","columns":[{"field_id":"user","label":"User","control":"text","required":true},{"field_id":"host","label":"Host","control":"text"}],"visible_when":{"field":"mode","equals":"SELECTED"},"help":"Optional complete replacement list. Omit it to use the selected role; a supplied list must contain every default role to retain."},
+        {"field_id":"confirmation","label":"Role name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"resource_kind":"user","operation_id":"rename","title":"Rename account","tier":2,"status":"draft","menu":{"category":"security","order":33},"confirmation":"typed_name","groups":["Identity","Confirmation"],
+      "notes":"Native user and host are separate identities; no splitting of displayed names is used for catalog targets. MySQL decides whether a role-used or system account may be renamed. Draft pending shared rendering acceptance.",
+      "fields":[
+        {"field_id":"new_name","label":"Name","control":"text","group":"Identity","help":"Omit to retain the user name. An explicit empty value names the native anonymous account."},
+        {"field_id":"new_host","label":"Host","control":"text","group":"Identity","help":"Omit to retain the existing host."},
+        {"field_id":"confirmation","label":"Account name","control":"text","required":true,"group":"Confirmation"}
+      ]
+    },
+    {"operation_id":"grant","resource_kind":"privilege","title":"Grant privileges","menu":{"category":"security","order":130},"tier":2,"status":"draft","confirmation":"confirm",
+      "notes":"Native plan/validate/apply with a provider SQL preview. Draft pending shared operation-dialog rendering and round trips.",
+      "fields":[
+        {"field_id":"grantees","label":"Grantees","control":"grid","required":true,"columns":[{"field_id":"user","label":"User","control":"text","required":false,"help":"Empty user text denotes a native anonymous account; supply its host separately."},{"field_id":"host","label":"Host","control":"text","default":"%"}],"help":"Separate native account components preserve literal quotes, dots and @ characters."},
+        {"field_id":"object_type","label":"Scope","control":"select","options":[{"value":"GLOBAL","label":"Global"},{"value":"DATABASE","label":"Database"},{"value":"TABLE","label":"Table"},{"value":"VIEW","label":"View"},{"value":"PROCEDURE","label":"Procedure"},{"value":"FUNCTION","label":"Function"},{"value":"LIBRARY","label":"Library"},{"value":"PROXY","label":"Proxy account"},{"value":"ACCOUNT","label":"All account privileges"}],"required":true,"help":"All account privileges is REVOKE ALL PRIVILEGES, GRANT OPTION. Library grants do not imply an available closed execution runtime."},
+        {"field_id":"database","label":"Database","control":"text","visible_when":{"field":"object_type","in":["DATABASE","TABLE","VIEW","FUNCTION","PROCEDURE","LIBRARY"]}},
+        {"field_id":"object","label":"Object","control":"text","visible_when":{"field":"object_type","in":["TABLE","VIEW","FUNCTION","PROCEDURE","LIBRARY"]}},
+        {"field_id":"privileges","label":"Privileges","control":"grid","columns":[{"field_id":"name","label":"Privilege","control":"text","required":true},{"field_id":"columns","label":"Columns","control":"multiselect","option_values_path":["target","columns"]}],"help":"Native keyword or installed dynamic privilege per row. Column lists apply to table/view SELECT, INSERT, UPDATE or REFERENCES; MySQL validates scope and availability."},
+        {"field_id":"grant_option","label":"With grant option","control":"boolean","default":false,"help":"GRANT only. To revoke delegation, select the GRANT OPTION privilege."},
+        {"field_id":"proxy_user","label":"Proxy user","control":"text","visible_when":{"field":"object_type","equals":"PROXY"}},
+        {"field_id":"proxy_host","label":"Proxy host","control":"text","visible_when":{"field":"object_type","equals":"PROXY"}},
+        {"field_id":"grant_as_user","label":"Grant as user","control":"text","visible_when":{"field":"object_type","equals":"GLOBAL"},"help":"GRANT AS is native global-privilege delegation only."},
+        {"field_id":"grant_as_host","label":"Grant as host","control":"text","visible_when":{"field":"grant_as_user","truthy":true}},
+        {"field_id":"grant_as_roles_mode","label":"Grantor roles","control":"select","options":[{"value":"NONE","label":"None"},{"value":"DEFAULT","label":"Default"},{"value":"ALL","label":"All"},{"value":"SELECTED","label":"Selected"},{"value":"ALL_EXCEPT","label":"All Except"}],"help":"GRANT AS only. A selected/excluded role set uses the separate native account grid.","visible_when":{"field":"grant_as_user","truthy":true}},
+        {"field_id":"grant_as_roles","label":"Grantor role accounts","control":"grid","columns":[{"field_id":"user","label":"User","control":"text","required":true},{"field_id":"host","label":"Host","control":"text","default":"%"}],"visible_when":{"field":"grant_as_user","truthy":true}},
+        {"field_id":"confirmation","label":"Confirmation","control":"text","help":"Type the selected target display name when required."}
+      ]
+    },
+    {"operation_id":"revoke","resource_kind":"privilege","title":"Revoke privileges","menu":{"category":"security","order":131},"tier":2,"status":"draft","confirmation":"typed_name",
+      "notes":"Native plan/validate/apply with a provider SQL preview. Draft pending shared operation-dialog rendering and round trips.",
+      "fields":[
+        {"field_id":"grantees","label":"Grantees","control":"grid","required":true,"columns":[{"field_id":"user","label":"User","control":"text","required":false,"help":"Empty user text denotes a native anonymous account; supply its host separately."},{"field_id":"host","label":"Host","control":"text","default":"%"}],"help":"Separate native account components preserve literal quotes, dots and @ characters."},
+        {"field_id":"object_type","label":"Scope","control":"select","options":[{"value":"GLOBAL","label":"Global"},{"value":"DATABASE","label":"Database"},{"value":"TABLE","label":"Table"},{"value":"VIEW","label":"View"},{"value":"PROCEDURE","label":"Procedure"},{"value":"FUNCTION","label":"Function"},{"value":"LIBRARY","label":"Library"},{"value":"PROXY","label":"Proxy account"},{"value":"ACCOUNT","label":"All account privileges"}],"required":true,"help":"All account privileges is REVOKE ALL PRIVILEGES, GRANT OPTION. Library grants do not imply an available closed execution runtime."},
+        {"field_id":"database","label":"Database","control":"text","visible_when":{"field":"object_type","in":["DATABASE","TABLE","VIEW","FUNCTION","PROCEDURE","LIBRARY"]}},
+        {"field_id":"object","label":"Object","control":"text","visible_when":{"field":"object_type","in":["TABLE","VIEW","FUNCTION","PROCEDURE","LIBRARY"]}},
+        {"field_id":"privileges","label":"Privileges","control":"grid","columns":[{"field_id":"name","label":"Privilege","control":"text","required":true},{"field_id":"columns","label":"Columns","control":"multiselect","option_values_path":["target","columns"]}],"help":"Native keyword or installed dynamic privilege per row. Column lists apply to table/view SELECT, INSERT, UPDATE or REFERENCES; MySQL validates scope and availability."},
+        {"field_id":"if_exists","label":"If it exists","control":"boolean","default":false,"help":"REVOKE only; retain native warnings for absent grants."},
+        {"field_id":"ignore_unknown_user","label":"Ignore unknown users","control":"boolean","default":false,"help":"REVOKE only; the native statement determines partial results and warnings."},
+        {"field_id":"proxy_user","label":"Proxy user","control":"text","visible_when":{"field":"object_type","equals":"PROXY"}},
+        {"field_id":"proxy_host","label":"Proxy host","control":"text","visible_when":{"field":"object_type","equals":"PROXY"}},
+        {"field_id":"confirmation","label":"Confirmation","control":"text","help":"Type the selected target display name when required."}
+      ]
+    },
+    {"operation_id":"inspect_page_tracking","resource_kind":"server","title":"Inspect InnoDB page tracking","menu":{"category":"backup_restore"},"tier":2,"status":"draft","produces_log":true,"confirmation":"none",
+      "fields":[
+      ]
+    },
+    {"operation_id":"start_page_tracking","resource_kind":"server","title":"Start or reset InnoDB page tracking","menu":{"category":"backup_restore"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"coordinated_backup_window","control":"boolean","required":true,"default":false,"label":"Coordinated backup window","help":"This change is coordinated with all native backup/page-tracking clients"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"stop_page_tracking","resource_kind":"server","title":"Stop InnoDB page tracking","menu":{"category":"backup_restore"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"coordinated_backup_window","control":"boolean","required":true,"default":false,"label":"Coordinated backup window","help":"This change is coordinated with all native backup/page-tracking clients"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"count_tracked_pages","resource_kind":"server","title":"Count tracked page IDs","menu":{"category":"backup_restore"},"tier":2,"status":"draft","produces_log":true,"confirmation":"none",
+      "fields":[
+        {"field_id":"start_lsn","control":"text","required":true,"default":"0","label":"Start LSN","help":"Native start LSN (0 selects current group)"},
+        {"field_id":"stop_lsn","control":"text","required":true,"default":"0","label":"Stop LSN","help":"Native stop LSN (0 selects latest tracked checkpoint)"}
+      ]
+    },
+    {"operation_id":"set_page_tracking_backup_id","resource_kind":"server","title":"Set page-tracking backup ID","menu":{"category":"backup_restore"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"value_mode","control":"select","required":false,"default":"VALUE","options":[{"value":"VALUE","label":"Value"},{"value":"NULL","label":"Null"},{"value":"DEFAULT","label":"Default"}],"label":"Value source","help":"Native backup ID source"},
+        {"field_id":"backup_id","control":"text","required":false,"label":"Backup identifier","help":"Native backup ID text (export requires digits)","visible_when":{"field":"value_mode","equals":"VALUE"}},
+        {"field_id":"prior_index_removal_confirmed","control":"boolean","required":true,"default":false,"label":"Allow removal of the prior index","help":"The prior exported index may be deleted, including when reusing the same ID"},
+        {"field_id":"coordinated_backup_window","control":"boolean","required":true,"default":false,"label":"Coordinated backup window","help":"This change is coordinated with all native backup/page-tracking clients"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"export_tracked_pages","resource_kind":"server","title":"Export tracked page IDs","menu":{"category":"backup_restore"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"start_lsn","control":"text","required":true,"default":"0","label":"Start LSN","help":"Native start LSN (0 selects current group)"},
+        {"field_id":"stop_lsn","control":"text","required":true,"default":"0","label":"Stop LSN","help":"Native stop LSN (0 selects latest tracked checkpoint)"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"purge_page_tracking","resource_kind":"server","title":"Purge page-tracking files","menu":{"category":"backup_restore"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"purge_lsn","control":"text","required":true,"default":"0","label":"Purge LSN","help":"Native purge LSN (0 selects checkpoint)"},
+        {"field_id":"tracking_files_not_required","control":"boolean","required":true,"default":false,"label":"Tracking files are no longer required","help":"Tracking files are no longer required by any backup"},
+        {"field_id":"coordinated_backup_window","control":"boolean","required":true,"default":false,"label":"Coordinated backup window","help":"This change is coordinated with all native backup/page-tracking clients"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"inspect_rewrite_rules","resource_kind":"server","title":"Inspect query rewrite rules","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"none",
+      "fields":[
+      ]
+    },
+    {"operation_id":"create_rewrite_rule","resource_kind":"server","title":"Add query rewrite rule","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"pattern","control":"code","required":true,"label":"SQL pattern","help":"Native SQL pattern (question marks match literals)","language":"sql"},
+        {"field_id":"pattern_database_mode","control":"select","required":false,"default":"NULL","options":[{"value":"NULL","label":"Null"},{"value":"VALUE","label":"Value"}],"label":"Pattern database source"},
+        {"field_id":"pattern_database","control":"text","required":false,"label":"Pattern database","help":"Exact pattern database (empty text allowed)","visible_when":{"field":"pattern_database_mode","equals":"VALUE"}},
+        {"field_id":"replacement","control":"code","required":true,"label":"Replacement SQL","help":"Native SQL replacement","language":"sql"},
+        {"field_id":"enabled","control":"select","required":false,"default":"YES","options":[{"value":"YES","label":"Yes"},{"value":"NO","label":"No"}],"label":"Enabled","help":"Stored native rule enabled"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"alter_rewrite_rule","resource_kind":"server","title":"Change query rewrite rule","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"rule_id","control":"text","required":true,"label":"Rule identifier","help":"Exact native rule ID from inspection"},
+        {"field_id":"pattern","control":"code","required":true,"label":"SQL pattern","help":"Native SQL pattern (question marks match literals)","language":"sql"},
+        {"field_id":"pattern_database_mode","control":"select","required":false,"default":"NULL","options":[{"value":"NULL","label":"Null"},{"value":"VALUE","label":"Value"}],"label":"Pattern database source"},
+        {"field_id":"pattern_database","control":"text","required":false,"label":"Pattern database","help":"Exact pattern database (empty text allowed)","visible_when":{"field":"pattern_database_mode","equals":"VALUE"}},
+        {"field_id":"replacement","control":"code","required":true,"label":"Replacement SQL","help":"Native SQL replacement","language":"sql"},
+        {"field_id":"enabled","control":"select","required":false,"default":"YES","options":[{"value":"YES","label":"Yes"},{"value":"NO","label":"No"}],"label":"Enabled","help":"Stored native rule enabled"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"drop_rewrite_rule","resource_kind":"server","title":"Remove query rewrite rule","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"rule_id","control":"text","required":true,"label":"Rule identifier","help":"Exact native rule ID from inspection"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"reload_rewrite_rules","resource_kind":"server","title":"Reload query rewrite rules","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"all_queries_affected","control":"boolean","required":true,"default":false,"label":"Apply rewriting changes to all clients","help":"Reload affects query rewriting for all clients"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"shutdown_server","resource_kind":"server","title":"Shut down server","menu":{"category":"lifecycle"},"tier":3,"status":"draft","produces_log":true,"confirmation":"typed_name","execution_host":false,
+      "notes":"Native SQL runs on the registered server; no external execution host is selected.",
+      "fields":[
+        {"field_id":"disconnect_all_clients","control":"boolean","required":true,"default":false,"label":"Disconnect all clients","help":"Disconnect all clients on this native server"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"restart_server","resource_kind":"server","title":"Restart server","menu":{"category":"lifecycle"},"tier":3,"status":"draft","produces_log":true,"confirmation":"typed_name","execution_host":false,
+      "notes":"Native SQL runs on the registered server; no external execution host is selected.",
+      "fields":[
+        {"field_id":"disconnect_all_clients","control":"boolean","required":true,"default":false,"label":"Disconnect all clients","help":"Disconnect all clients on this native server"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"inspect_prepared_xa","resource_kind":"server","title":"Inspect prepared XA transactions","menu":{"category":"backup_restore"},"tier":2,"status":"draft","produces_log":true,"confirmation":"none",
+      "fields":[
+      ]
+    },
+    {"operation_id":"commit_prepared_xa","resource_kind":"server","title":"Commit a prepared XA transaction","menu":{"category":"backup_restore"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"gtrid_hex","control":"text","required":false,"default":"","label":"Global transaction identifier (hex)","help":"Global transaction ID (hexadecimal bytes)"},
+        {"field_id":"bqual_hex","control":"text","required":false,"default":"","label":"Branch qualifier (hex)","help":"Branch qualifier (hexadecimal bytes)"},
+        {"field_id":"format_id","control":"text","required":true,"default":"1","label":"Format identifier","help":"Exact native XA format ID"},
+        {"field_id":"decision_reference","control":"text","required":true,"label":"Recovery decision reference","help":"Transaction manager decision or recovery instruction"},
+        {"field_id":"lock_wait_seconds","control":"number","required":false,"default":15,"label":"Metadata lock wait (seconds)","help":"Native metadata lock wait (seconds)"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"rollback_prepared_xa","resource_kind":"server","title":"Roll back a prepared XA transaction","menu":{"category":"backup_restore"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"gtrid_hex","control":"text","required":false,"default":"","label":"Global transaction identifier (hex)","help":"Global transaction ID (hexadecimal bytes)"},
+        {"field_id":"bqual_hex","control":"text","required":false,"default":"","label":"Branch qualifier (hex)","help":"Branch qualifier (hexadecimal bytes)"},
+        {"field_id":"format_id","control":"text","required":true,"default":"1","label":"Format identifier","help":"Exact native XA format ID"},
+        {"field_id":"decision_reference","control":"text","required":true,"label":"Recovery decision reference","help":"Transaction manager decision or recovery instruction"},
+        {"field_id":"lock_wait_seconds","control":"number","required":false,"default":15,"label":"Metadata lock wait (seconds)","help":"Native metadata lock wait (seconds)"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"rotate_innodb_master_key","resource_kind":"server","title":"Rotate InnoDB master key","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"lock_wait_seconds","control":"number","required":false,"default":15,"label":"Metadata lock wait (seconds)","help":"Native metadata lock wait (seconds)"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"rotate_binlog_master_key","resource_kind":"server","title":"Rotate binary log master key","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"lock_wait_seconds","control":"number","required":false,"default":15,"label":"Metadata lock wait (seconds)","help":"Native metadata lock wait (seconds)"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"reload_tls","resource_kind":"server","title":"Reload TLS context","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"lock_wait_seconds","control":"number","required":false,"default":15,"label":"Metadata lock wait (seconds)","help":"Native metadata lock wait (seconds)"},
+        {"field_id":"channel","control":"select","required":false,"default":"mysql_main","options":[{"value":"mysql_main","label":"Mysql Main"},{"value":"mysql_admin","label":"Mysql Admin"}],"label":"TLS channel","help":"Native TLS channel"},
+        {"field_id":"rollback_on_error","control":"boolean","required":false,"default":true,"label":"Keep prior context on error","help":"Keep the prior TLS context on reload error"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"reload_keyring","resource_kind":"server","title":"Reload keyring","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"lock_wait_seconds","control":"number","required":false,"default":15,"label":"Metadata lock wait (seconds)","help":"Native metadata lock wait (seconds)"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"enable_innodb_redo","resource_kind":"server","title":"Enable InnoDB redo logging","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"lock_wait_seconds","control":"number","required":false,"default":15,"label":"Metadata lock wait (seconds)","help":"Native metadata lock wait (seconds)"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"disable_innodb_redo","resource_kind":"server","title":"Disable InnoDB redo for initial load","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"lock_wait_seconds","control":"number","required":false,"default":15,"label":"Metadata lock wait (seconds)","help":"Native metadata lock wait (seconds)"},
+        {"field_id":"initial_load_only","control":"boolean","required":true,"default":false,"label":"Dedicated initial-load server","help":"This server is dedicated to an initial load; crash recovery will be unavailable"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"import_table_sdi","resource_kind":"server","title":"Import table definitions from SDI files","menu":{"category":"backup_restore"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "notes":"Draft/unsurfaced: shared dialog scalar-list projection is pending (Decision12). Native APIs accept strings, not grid records.",
+      "fields":[
+        {"field_id":"lock_wait_seconds","control":"number","required":false,"default":15,"label":"Metadata lock wait (seconds)","help":"Native metadata lock wait (seconds)"},
+        {"field_id":"database","control":"text","required":true,"label":"Default database","help":"Native default database for import"},
+        {"field_id":"files","control":"grid","required":true,"default":[],"label":"SDI file patterns","help":"Database-host file patterns; files must already be staged on that host.","item_kind":"string","columns":[{"field_id":"value","label":"Pattern","control":"text"}]},
+        {"field_id":"trusted_host_files","control":"boolean","required":true,"default":false,"label":"Trust staged server files","help":"I trust these native definitions and have staged their required engine files on the database host"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"inspect_key_cache","resource_kind":"server","title":"Inspect named MyISAM key cache","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"none",
+      "fields":[
+        {"field_id":"cache_name","control":"text","required":true,"default":"default","label":"Cache name","help":"Exact native key-cache name"}
+      ]
+    },
+    {"operation_id":"configure_key_cache","resource_kind":"server","title":"Configure MyISAM key cache","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"cache_name","control":"text","required":true,"default":"default","label":"Cache name","help":"Exact native key-cache name"},
+        {"field_id":"variable","control":"select","required":false,"default":"key_buffer_size","options":[{"value":"key_buffer_size","label":"Key Buffer Size"},{"value":"key_cache_block_size","label":"Key Cache Block Size"},{"value":"key_cache_division_limit","label":"Key Cache Division Limit"},{"value":"key_cache_age_threshold","label":"Key Cache Age Threshold"}],"label":"Variable","help":"Native key-cache variable"},
+        {"field_id":"value_mode","control":"select","required":false,"default":"VALUE","options":[{"value":"VALUE","label":"Value"},{"value":"DEFAULT","label":"Default"}],"label":"Value source"},
+        {"field_id":"value","control":"text","required":true,"default":"4194304","label":"Value","help":"Exact unsigned native value","visible_when":{"field":"value_mode","equals":"VALUE"}},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"release_key_cache","resource_kind":"server","title":"Release named MyISAM key cache","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "fields":[
+        {"field_id":"cache_name","control":"text","required":true,"default":"default","label":"Cache name","help":"Exact native key-cache name"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Server name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"assign_index_cache","resource_kind":"table","title":"Assign MyISAM index cache","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "notes":"Draft/unsurfaced: shared dialog scalar-list projection is pending (Decision12). Native APIs accept strings, not grid records.",
+      "fields":[
+        {"field_id":"indexes","control":"grid","required":false,"help":"Empty selects all native indexes; supplied names remain exact identifiers.","default":[],"label":"Indexes","item_kind":"string","columns":[{"field_id":"value","label":"Index","control":"text"}]},
+        {"field_id":"cache_name","control":"text","required":true,"default":"default","label":"Cache name","help":"Native key cache"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Table name","help":"Type the selected target display name."}
+      ]
+    },
+    {"operation_id":"preload_index_cache","resource_kind":"table","title":"Preload MyISAM indexes","menu":{"category":"maintenance"},"tier":2,"status":"draft","produces_log":true,"confirmation":"typed_name",
+      "notes":"Draft/unsurfaced: shared dialog scalar-list projection is pending (Decision12). Native APIs accept strings, not grid records.",
+      "fields":[
+        {"field_id":"indexes","control":"grid","required":false,"help":"Empty selects all native indexes; supplied names remain exact identifiers.","default":[],"label":"Indexes","item_kind":"string","columns":[{"field_id":"value","label":"Index","control":"text"}]},
+        {"field_id":"ignore_leaves","control":"boolean","required":false,"default":false,"label":"Skip leaf blocks","help":"Ignore index leaf blocks"},
+        {"field_id":"confirmation","control":"text","required":true,"label":"Table name","help":"Type the selected target display name."}
+      ]
     }
   ]
 }

@@ -3,6 +3,7 @@ from copy import deepcopy
 from collections.abc import Mapping
 
 from ..relational_admin import RelationalAdministration
+from ..mysql_descriptor_contract import operation_entry
 from ...sdk import RelationalClientError
 from . import spatial_reference_systems as srs
 from . import foreign_servers
@@ -56,7 +57,7 @@ class MySQLAdministration(RelationalAdministration):
                 } for operation,title in cache_lifecycle.OPERATIONS.items()]
             if resource['resource_kind'] == 'table':
                 resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in mysql_key_cache.OPERATIONS] + [{
-                    'operation_id':operation,'title':mysql_key_cache.form(operation,self._field)['title'],
+                    'operation_id':operation,'title':operation_entry('table',operation)['title'],
                     'mutation_class':'admin','target_required':True,'confirmation_required':True,
                 } for operation in sorted(mysql_key_cache.OPERATIONS)]
             if resource['resource_kind'] == 'column':
@@ -89,16 +90,9 @@ class MySQLAdministration(RelationalAdministration):
         return value
 
     def _form(self, kind, operation):
-        if kind == 'server' and operation in mysql_page_tracking.OPERATIONS:
-            return mysql_page_tracking.form(operation, self._field)
-        if kind == 'server' and operation in mysql_rewriter.OPERATIONS:
-            return mysql_rewriter.form(operation, self._field)
-        if kind=='server' and operation in mysql_server_control.OPERATIONS:return mysql_server_control.form(operation,self._field)
-        if kind=='server' and operation in mysql_xa.OPERATIONS:return mysql_xa.form(operation,self._field)
-        if kind=='server' and operation in cache_lifecycle.OPERATIONS:return cache_lifecycle.form(operation,self._field)
-        if kind=='server' and operation in mysql_instance.OPERATIONS:return mysql_instance.form(operation,self._field)
-        if kind == 'table' and operation in mysql_key_cache.OPERATIONS:
-            return mysql_key_cache.form(operation,self._field)
+        declared = operation_entry(kind, operation)
+        if declared is not None:
+            return declared
         if kind == 'column' and operation in column_masking.OPERATIONS:
             fields = []
             if operation == 'set_masking_policy':

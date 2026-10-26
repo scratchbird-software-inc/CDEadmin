@@ -43,15 +43,6 @@ def compile_operation(operation,draft,target):
             'Release sets the selected buffer to zero. MySQL moves its assigned tables to the default cache and retains the named prefix; native error1438 protects the default cache.']}
 
 
-def form(operation,field):
-    fields=[field('cache_name','Exact native key-cache name','text',True,default='default')]
-    if operation=='configure_key_cache':fields += [field('variable','Native key-cache variable','select',default='key_buffer_size',options=VARIABLES),
-        field('value_mode','Value source','select',default='VALUE',options=('VALUE','DEFAULT')),
-        {**field('value','Exact unsigned native value','text',True,default='4194304'), 'visible_when':{'field_id':'value_mode','equals':'VALUE'}}]
-    if operation!='inspect_key_cache':fields.append(field('confirmation','Exact server name','text',True))
-    return {'form_id':'mysql.server.'+operation,'title':OPERATIONS[operation],'fields':fields}
-
-
 def observe(cursor,name):
     cursor.execute(source(name));row=cursor.fetchone()
     if not row or len(row)!=4 or any(type(value) is not int or not 0<=value<=2**64-1 for value in row):

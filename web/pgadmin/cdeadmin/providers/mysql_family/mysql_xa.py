@@ -82,18 +82,6 @@ def compile_operation(operation, draft, target):
             'The server owns branch resolution. Native acknowledgement and later recovery-list observations are separate; an absent XID alone does not prove commit or rollback. This operation is never automatically replayed.']}
 
 
-def form(operation, field):
-    fields = []
-    if operation != 'inspect_prepared_xa':
-        fields = [field('gtrid_hex', 'Global transaction ID (hexadecimal bytes)', 'text', default=''),
-            field('bqual_hex', 'Branch qualifier (hexadecimal bytes)', 'text', default=''),
-            field('format_id', 'Exact native XA format ID', 'text', True, default='1'),
-            field('decision_reference', 'Transaction manager decision or recovery instruction', 'text', True),
-            field('lock_wait_seconds', 'Native metadata lock wait (seconds)', 'number', default=15),
-            field('confirmation', 'Exact server name', 'text', True)]
-    return {'form_id': 'mysql.server.'+operation, 'title': OPERATIONS[operation], 'fields': fields}
-
-
 def execute_recovery(cursor):
     try:
         cursor.execute(RECOVER)

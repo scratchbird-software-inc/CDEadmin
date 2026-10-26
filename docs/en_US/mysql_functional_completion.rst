@@ -2876,3 +2876,21 @@ form remains draft/unsurfaced. Nested failover credentials/pools, optional
 closed-server authentication runtimes and application registration metadata
 retain explicit gaps. These scoped changes do not close Group9 or the broader
 native inventory/diagnostics reconciliation.
+
+Server maintenance descriptor cutover
+------------------------------------
+
+The current operations descriptor lists42 entries, including29 migrated server
+and MyISAM cache operations. Seven legacy native-module form factories and
+dispatches are retired; the catalog/input boundary loads the same declared
+fields. Native compile/review/apply functions are unchanged. Exact numeric and
+binary identities remain lossless text; SDI files and index lists use typed
+scalar grids. Descriptor/native input tests cover all29 migrated operations.
+
+These entries are draft. UI design Decision12 records the shared operation
+dialog projection gap; the SDI and table cache grid workflows remain explicitly
+unsurfaced until it is fixed. Backend projection/native API qualification is
+not dialog acceptance. Navigator data covers33 native kinds but is also
+draft/unsurfaced pending shared tree consumption (Decision13). Group9, native
+inventory reconciliation, generated-password delivery, human presentation and
+platform evidence retain their recorded scope; these counts close none of them.

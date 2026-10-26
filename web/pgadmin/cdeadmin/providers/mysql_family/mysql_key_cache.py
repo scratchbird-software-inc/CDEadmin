@@ -49,15 +49,6 @@ def compile_operation(operation, draft, target):
             'Only native MyISAM implements these handlers in this profile. A named cache must already be configured. Native result rows distinguish errors/notes from positive OK status; no cache contents or durable recovery guarantee is inferred.']}
 
 
-def form(operation, field):
-    fields=[field('indexes','Exact index names','json',default=[],help_text='JSON array of exact native index names. Empty selects all indexes.')]
-    if operation == 'assign_index_cache':fields.append(field('cache_name','Native key cache','text',True,default='default'))
-    else:fields.append(field('ignore_leaves','Ignore index leaf blocks','boolean',default=False))
-    fields.append(field('confirmation','Exact table name','text',True))
-    return {'form_id':'mysql.table.'+operation,
-        'title':'Assign MyISAM index cache' if operation=='assign_index_cache' else 'Preload MyISAM indexes', 'fields':fields}
-
-
 def environment(cursor):
     cursor.execute('SELECT VERSION(),@@server_uuid,CURRENT_USER(),USER(),CURRENT_ROLE()')
     row=cursor.fetchone()

@@ -86,23 +86,6 @@ def compile_operation(operation, draft, target):
     }
 
 
-def form(operation, field):
-    fields = []
-    if operation in {'alter_rewrite_rule', 'drop_rewrite_rule'}:
-        fields.append(field('rule_id', 'Exact native rule ID from inspection', 'text', True))
-    if operation in {'create_rewrite_rule', 'alter_rewrite_rule'}:
-        fields += [field('pattern', 'Native SQL pattern (question marks match literals)', 'multiline', True),
-                   field('pattern_database_mode', 'Pattern database source', 'select', default='NULL', options=('NULL', 'VALUE')),
-                   {**field('pattern_database', 'Exact pattern database (empty text allowed)', 'text'), 'visible_when': {'field_id': 'pattern_database_mode', 'equals': 'VALUE'}},
-                   field('replacement', 'Native SQL replacement', 'multiline', True),
-                   field('enabled', 'Stored native rule enabled', 'select', default='YES', options=('YES', 'NO'))]
-    if operation == 'reload_rewrite_rules':
-        fields.append(field('all_queries_affected', 'Reload affects query rewriting for all clients', 'boolean', True, default=False))
-    if operation != 'inspect_rewrite_rules':
-        fields.append(field('confirmation', 'Exact server name', 'text', True))
-    return {'form_id': 'mysql.server.' + operation, 'title': OPERATIONS[operation], 'fields': fields}
-
-
 def bounded(rows):
     value = [dict(zip(COLUMNS, row)) for row in rows]
     if len(value) > MAX_RULES or len(json.dumps(value, ensure_ascii=False).encode('utf8')) > MAX_BYTES:

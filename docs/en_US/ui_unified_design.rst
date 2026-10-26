@@ -697,3 +697,24 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     operations. Default: populate the typed Server descriptor and record it as
     draft/unsurfaced until the front-end stream declares this dispatch. Do not
     invent server SQL DDL, add a provider panel or branch the shared host.
+
+12. Operation draft projections (MySQL audit, 2026-10-25): the shared
+    OperationDialog currently submits its raw field values, whereas ObjectEditor
+    applies ``toBackendDraft``. Typed scalar-list grids therefore submit records
+    instead of strings; hidden defaults and ``backend_field_id`` mappings also
+    need the existing declared projection. Exact examples are
+    ``server.import_table_sdi.files`` and
+    ``table.assign_index_cache.indexes`` / ``preload_index_cache.indexes``.
+    Default: populate those typed operation descriptors, keep them draft and
+    explicitly unsurfaced until the shared dialog applies the same projection.
+    Native scalar-list APIs remain unchanged; do not stringify records or add
+    an engine-specific renderer/input workaround. Descriptor-projected backend
+    qualification is separate from an actual dialog round trip.
+
+13. Navigator descriptor consumption (MySQL audit, 2026-10-25): the bundle
+    serves ``navigator.json``, but the current tree builds from provider paths
+    without consuming its ``groups``, ``kind_icons``, ``resource_children`` or
+    ``system_object_group``. Default: populate the native kind inventory and
+    mark the declared layout draft/unsurfaced in the status tracker. The
+    front-end stream owns the generic descriptor-to-tree bridge; do not add
+    another MySQL branch to ``navigator.py`` or a second in-panel tree.

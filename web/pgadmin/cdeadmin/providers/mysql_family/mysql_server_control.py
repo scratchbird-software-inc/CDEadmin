@@ -28,12 +28,6 @@ def compile_operation(operation, draft, target):
             'SHUTDOWN does not start the server again. Use the configured database host service to start a stopped instance.']}
 
 
-def form(operation, field):
-    return {'form_id': 'mysql.server.'+operation, 'title': OPERATIONS[operation][0],
-        'fields': [field('disconnect_all_clients', 'Disconnect all clients on this native server', 'boolean', True, default=False),
-            field('confirmation', 'Exact server name', 'text', True)]}
-
-
 def instance(cursor):
     cursor.execute('SELECT @@hostname,@@port,@@datadir,@@pid_file')
     row = cursor.fetchone()

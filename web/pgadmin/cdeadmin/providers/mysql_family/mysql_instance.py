@@ -77,18 +77,6 @@ def compile_operation(operation,draft,target):
               'This review binds the selected paths, server identity and visible table inventory, not file bytes or concurrent external writers. Import can change native metadata/files and is never automatically retried.'] if operation=='import_table_sdi' else [])}
 
 
-def form(operation,field):
-    fields=[field('lock_wait_seconds','Native metadata lock wait (seconds)','number',default=15)]
-    if operation=='reload_tls':fields += [field('channel','Native TLS channel','select',default='mysql_main',options=('mysql_main','mysql_admin')),
-        field('rollback_on_error','Keep the prior TLS context on reload error','boolean',default=True)]
-    if operation=='disable_innodb_redo':fields.append(field('initial_load_only','This server is dedicated to an initial load; crash recovery will be unavailable','boolean',True,default=False))
-    if operation=='import_table_sdi':fields += [field('database','Native default database for import','text',True),
-        field('files','Database-host SDI file patterns (JSON array)','json',True,default=[]),
-        field('trusted_host_files','I trust these native definitions and have staged their required engine files on the database host','boolean',True,default=False)]
-    fields.append(field('confirmation','Exact server name','text',True))
-    return {'form_id':'mysql.server.'+operation,'title':OPERATIONS[operation][0],'fields':fields}
-
-
 def environment(cursor):
     cursor.execute('SELECT VERSION(),@@server_uuid,CURRENT_USER(),USER(),CURRENT_ROLE()')
     row=cursor.fetchone()

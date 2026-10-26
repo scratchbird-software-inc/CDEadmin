@@ -363,3 +363,28 @@ The startup route assertion now includes the two authenticated descriptor GET
 routes introduced by the shared shell (1413 to1415). This updates the expected
 API surface, not a resource allowance: source/bundle byte limits, the8-second
 startup limit and240000KiB RSS limit are unchanged.
+
+MySQL server maintenance and navigation descriptors (2026-10-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Operations now declare42 entries (29 added): page tracking, query rewrite rules,
+server shutdown/restart, prepared XA recovery, instance maintenance and SDI
+import, named MyISAM cache lifecycle and table cache assignment/preload.
+The seven legacy native-module form factories and their dispatches are deleted;
+the existing catalog/input adapter derives fields solely from descriptor data.
+All29 native field sets and defaults are preserved; unsigned64-bit values and
+binary XA identities stay text, and three former JSON lists become scalar-list
+grids. The seven native modules' remaining ASTs are unchanged.
+
+All42 entries remain draft. Decision12 records the shared operation dialog's
+missing declared draft projection; the three scalar-list operations are
+explicitly unsurfaced until it lands. Backend projection/admission and native
+pure/C plus authenticated cache workflows are separate from dialog acceptance.
+No shared schema, renderer or family-render tests were changed.
+
+Navigator now declares all33 actual catalog kinds,16 folders, semantic icons,
+system grouping and table/view child kinds. The declared layout is draft and
+unsurfaced pending the shared tree consumer (Decision13). No extra MariaDB-only
+kinds were inferred. Group9/native inventory and generated-password delivery
+remain open. Lint before/after: JSON303/301, MUI244/244, engine branches111/111,
+panels113/113, context-menu branches14/14.
