@@ -33,6 +33,17 @@ if "pgadmin" not in sys.modules:
 from pgadmin.cdeadmin.endpoints.profiles import registration_profiles  # noqa: E402
 
 ENGINES = ("mysql", "mariadb", "firebird", "duckdb", "sqlite")
+# Registration keys of the servers API (web/pgadmin/browser/server_groups/servers) that are
+# not provider contract fields. Everything else travels as cde_route_<id> / cde_secret_<id>.
+GENERIC = {"name": "name", "host": "host", "port": "port", "username": "username", "password": "password",
+           "save_password": "save_password", "database": "db", "connect_now": "connect_now", "bgcolor": "bgcolor",
+           "fgcolor": "fgcolor", "comment": "comment", "tags": "tags"}
+JSON_CONTROLS = {
+    "attached_databases": {"control": "grid", "columns": [
+        {"field_id": "name", "label": "Alias", "control": "text", "required": True},
+        {"field_id": "database", "label": "Database file", "control": "file", "required": True}]},
+    "config": {"control": "keyvalue", "help": "Connection configuration options passed to the engine as named scalar values."},
+}
 TITLE = {"mysql": "MySQL", "mariadb": "MariaDB", "firebird": "Firebird", "duckdb": "DuckDB", "sqlite": "SQLite"}
 ORDER = ["Connection", "Authentication", "SSL/TLS", "Advanced", "Engine", "Tags"]
 CONTROLS = {"text", "number", "boolean", "select", "multiselect", "radio", "password", "secret-reference",
@@ -68,9 +79,19 @@ def draft(engine, profiles):
             out = {"field_id": fid, "label": field.get("label") or fid, "tab": tab, "control": field.get("control", "text")}
             if out["control"] == "multiline":
                 out["control"], out["language"] = "code", "text"
+            if out["control"] == "json" and fid in JSON_CONTROLS:
+                out.update(JSON_CONTROLS[fid])
             if out["control"] not in CONTROLS:
                 gaps.append({"concept": f"server.{fid}", "reason": f"provider control {out['control']!r} needs a typed control"})
                 out["control"] = "text"
+            contract_ids = {f["field_id"] for f in profile.get("connection_fields", [])}
+            secret_ids = {f["field_id"] for f in profile.get("secret_fields", [])}
+            if fid in contract_ids:
+                out["backend_field_id"] = f"cde_route_{fid}"
+            elif fid in secret_ids:
+                out["backend_field_id"] = f"cde_secret_{fid}"
+            else:
+                out["backend_field_id"] = GENERIC.get(fid, fid)
             if group:
                 out["group"] = group
             for key in ("required", "options", "default", "help"):
@@ -90,26 +111,53 @@ def draft(engine, profiles):
             if len(profiles) > 1 and fid not in others and "visible_when" not in out:
                 out["visible_when"] = {"field": "profile", "equals": pid}
             fields.append(out)
+    embedded = all(p.get("route_kind") == "embedded_file" for p in profiles)
+    network = all(p.get("route_kind") == "network" for p in profiles)
+    database = {"field_id": "database", "tab": "Connection", "backend_field_id": "db",
+                "label": "Database file" if embedded else "Maintenance database",
+                "control": "file" if embedded else "text", "required": embedded,
+                "help": ("Absolute path of the database file this profile opens; further files are registered as databases under it."
+                         if embedded else "Database the profile connects to first; leave empty for the engine default.")}
+    if not network and not embedded:  # mixed profiles (Firebird): file path for the embedded kind only
+        database.update({"label": "Database file", "control": "file", "required": True,
+                         "visible_when": {"field": "profile", "equals": next(p["profile_id"] for p in profiles if p.get("route_kind") == "embedded_file")}})
+    fields.append(database)
+    fields.extend([
+        {"field_id": "connect_now", "label": "Connect now", "tab": "Connection", "control": "boolean", "default": True, "backend_field_id": "connect_now"},
+        {"field_id": "comment", "label": "Comments", "tab": "Connection", "control": "code", "language": "text", "backend_field_id": "comment"},
+        {"field_id": "bgcolor", "label": "Background colour", "tab": "Tags", "control": "text", "backend_field_id": "bgcolor",
+         "help": "Hex colour shown behind the server node; also tints the query tool."},
+        {"field_id": "fgcolor", "label": "Foreground colour", "tab": "Tags", "control": "text", "backend_field_id": "fgcolor"},
+        {"field_id": "tags", "label": "Tags", "tab": "Tags", "control": "grid", "backend_field_id": "tags", "columns": [
+            {"field_id": "text", "label": "Tag", "control": "text", "required": True},
+            {"field_id": "color", "label": "Colour", "control": "text"}]},
+    ])
     if len(profiles) > 1:
         fields.insert(0, {"field_id": "profile", "label": "Connection kind", "tab": "Connection", "control": "select", "required": True,
                           "options": [{"value": p["profile_id"], "label": p["profile_id"].replace(f"{engine}-", "").capitalize()} for p in profiles]})
     fields.sort(key=lambda f: ORDER.index(f["tab"]))
+    omitted = [] if not embedded else [
+        {"tab": "Authentication", "reason": "embedded file engine: no credentials"},
+        {"tab": "SSL/TLS", "reason": "embedded file engine: no network transport"}]
     return {
         "schema": "cdeadmin.ui-form.v1", "engine": engine, "family": "server", "resource_kinds": ["server"],
-        "status": "draft", "engine_tab_title": TITLE[engine], "omitted_tabs": [], "gaps": gaps, "fields": fields,
+        "status": "draft", "engine_tab_title": TITLE[engine], "omitted_tabs": omitted, "gaps": gaps, "fields": fields,
         "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for "
                  + ", ".join(p["profile_id"] for p in profiles)
-                 + ". Field ids are the registration contract's own. Review tab/group placement.",
+                 + ". Field ids are the registration contract's own; backend_field_id is the servers API key "
+                   "(cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement.",
     }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--write", action="store_true")
+    parser.add_argument("--engine", action="append", help="limit to these engines (default: all but mysql, owned by its stream)")
     args = parser.parse_args()
+    selected = tuple(args.engine) if args.engine else tuple(e for e in ENGINES if e != "mysql")
     by_engine = {}
     for profile in registration_profiles():
-        if profile["engine_id"] in ENGINES:
+        if profile["engine_id"] in selected:
             by_engine.setdefault(profile["engine_id"], []).append(profile)
     for engine, profiles in by_engine.items():
         form = draft(engine, profiles)

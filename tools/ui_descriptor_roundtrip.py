@@ -228,11 +228,65 @@ def record_draft(form: dict, record: dict, mode: str = "alter") -> dict:
     return draft
 
 
+def registration_data(form: dict, draft: dict) -> dict:
+    """Server family: the servers-API payload a draft produces (README step 8 for
+    registration). Contract fields travel as ``cde_route_<id>`` / ``cde_secret_<id>``,
+    generic registration keys as the API names (``db``, ``username`` ...)."""
+    data = backend_draft(form, draft)
+    data.setdefault("cde_profile_id", draft.get("profile") or form.get("profile_id"))
+    return data
+
+
+def registration_route(profile: dict, data: dict) -> dict:
+    """Mirror the servers API create path: contract fields through
+    ``provider_route_options`` plus the generic host/port/user/database keys
+    (network) or the file-derived roots (embedded)."""
+    import os
+    from pgadmin.cdeadmin.endpoints.profiles import provider_route_options
+    if profile.get("route_kind") == "embedded_file":
+        database = os.path.realpath(str(data["db"]))
+        base = {"database": database, "filesystem_root": os.path.dirname(database),
+                "database_create_root": os.path.dirname(database)}
+        return provider_route_options(profile, data, base)
+    route = provider_route_options(profile, data, {})
+    route.update({"host": data.get("host"), "port": data.get("port"), "user": data.get("username"),
+                  "database": data.get("db"), "connection_timeout": route.get("connection_timeout", 10)})
+    return route
+
+
+def registration_prefill(form: dict, profile: dict, route: dict, data: dict) -> dict:
+    """Project a persisted route back into the server form (edit pre-fill):
+    ``provider_route_form_values`` for contract fields, API keys for the rest."""
+    from pgadmin.cdeadmin.endpoints.profiles import provider_route_form_values
+    values = provider_route_form_values(profile, route)
+    for field in profile.get("connection_fields", []):  # the legacy UI showed JSON text; typed controls take the value
+        key = f"cde_route_{field['field_id']}"
+        if field.get("control") == "json" and isinstance(values.get(key), str):
+            values[key] = json.loads(values[key])
+    generic = {"name": data.get("name"), "host": route.get("host"), "port": route.get("port"),
+               "username": route.get("user"), "db": route.get("database"), "connect_now": data.get("connect_now"),
+               "comment": data.get("comment"), "bgcolor": data.get("bgcolor"), "fgcolor": data.get("fgcolor"),
+               "tags": data.get("tags")}
+    record = {}
+    for tab in form.get("tabs", []):
+        for field in tab.get("fields", []):
+            target = field.get("backend_field_id") or field["field_id"]
+            if target in values:
+                record[field["field_id"]] = values[target]
+            elif target in generic and generic[target] is not None:
+                record[field["field_id"]] = generic[target]
+    if "profile" in form_field_ids(form):
+        record["profile"] = profile["profile_id"]
+    return record_draft(form, record)
+
+
 def form_field_ids(form: dict) -> set:
     return {f["field_id"] for tab in form.get("tabs", []) for f in tab.get("fields", [])}
 
 
-__all__ = ("backend_draft", "diff_columns", "resolved_form", "active_fields", "field_visible", "form_field_ids", "record_draft", "record_value", "record_from_resource", "is_child_of", "operation_draft", "engine_operations")
+__all__ = ("backend_draft", "diff_columns", "resolved_form", "active_fields", "field_visible", "form_field_ids", "record_draft",
+           "record_value", "record_from_resource", "is_child_of", "operation_draft", "engine_operations",
+           "registration_data", "registration_route", "registration_prefill")
 
 
 def operation_draft(operation: dict, values: dict | None = None, confirmation: str | None = None) -> dict:

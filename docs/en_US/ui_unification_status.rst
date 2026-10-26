@@ -40,7 +40,7 @@ Phase status
    * - 3
      - Engine descriptors (Firebird, MySQL, MariaDB, DuckDB, SQLite)
      - in progress
-     - Firebird: 9/10 forms ``complete`` by live round trip (server form stays draft). MariaDB: 6/8 ``complete`` (trigger, routine draft: inventory reports no body/parameters). DuckDB: 7/8, SQLite: 5/6 (server forms draft). MySQL: owned by the MySQL stream. PostgreSQL: drafts pass the ui.js schema-id gate; routing is phase 5. Family table below
+     - Firebird 10/10, MariaDB 8/8, DuckDB 8/8, SQLite 6/6 forms ``complete`` by live round trip (server forms through the registration contract, ``tools/tests/test_ui_descriptor_server_forms.py``). MySQL: owned by the MySQL stream. PostgreSQL: drafts pass the ui.js schema-id gate; routing is phase 5. Family table below
    * - 4
      - Operations, panels, menus
      - in progress
@@ -91,14 +91,14 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
    * - Routine
      - draft (57f, 4g)
      - draft (15f, 3g)
-     - draft (11f, 4g)
+     - complete (10f, 2g)
      - complete (9f, 0g)
      - complete (7f, 0g)
      - n/a
    * - Trigger
      - draft (30f, 3g)
      - draft (11f, 1g)
-     - draft (8f, 2g)
+     - complete (6f, 2g)
      - complete (7f, 0g)
      - n/a
      - complete (8f, 1g)
@@ -133,10 +133,10 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
    * - Server
      - draft (46f, 5g)
      - draft (41f, 4g)
-     - draft (32f, 0g)
-     - draft (47f, 0g)
-     - draft (4f, 2g)
-     - draft (11f, 1g)
+     - complete (38f, 0g)
+     - complete (53f, 0g)
+     - complete (10f, 0g)
+     - complete (17f, 0g)
 
 Baseline lint counts (2026-10-25)
 ---------------------------------
@@ -172,6 +172,29 @@ count sets its maximum to zero in the enforcement file.
 
 Change log
 ----------
+
+MariaDB program objects and the Server family (2026-10-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+MariaDB trigger and routine forms are ``complete``: the MariaDB inventory now
+reports trigger timing/events/position/body, routine body/parameters/returns
+and event schedule/preserve/enabled/body (``mariadb_catalog.program_object_natives``,
+additive), so a re-opened object shows its definition; ``active``/``position``
+are hidden on the MariaDB trigger form because the compiler emits neither, and
+OUT/INOUT parameter modes are recorded as a backend ask. The Server family is
+``complete`` for MariaDB, Firebird (network live; embedded by contract mapping),
+DuckDB and SQLite: ``tools/draft_server_descriptors.py`` now emits the
+servers-API keys (``backend_field_id`` = ``cde_route_<id>`` / ``cde_secret_<id>``
+/ ``db`` ...), the generic registration fields (database or file, connect now,
+comment, colours, tags) and typed controls for the former JSON fields (attached
+databases grid, DuckDB configuration key/value); the round trip is draft ->
+servers-API payload -> persisted route through ``provider_route_options`` ->
+live identity -> edit pre-fill through ``provider_route_form_values``. Provider
+fix found by it: the MariaDB ``ssl_verify_cert`` registration default forced
+TLS on routes with SSL off. Shell rule change: in alter mode an unchanged field
+stays out of the ALTER set whether or not it is required (the target names the
+object); both twins and their tests agree. PostgreSQL server/family forms stay
+``draft`` (phase 5, open decision 1).
 
 Firebird, MariaDB, SQLite and DuckDB round trips (2026-10-25)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
