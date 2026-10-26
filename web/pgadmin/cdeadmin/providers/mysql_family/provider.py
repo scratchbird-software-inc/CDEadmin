@@ -226,7 +226,9 @@ def _administration(profile):
         for kind, operations in object_changes.items():
             common[kind] = common[kind] | operations
         from ..mysql_replication import OPERATIONS as replication_operations
-        common['replication-channel'] = common['replication-channel'] | replication_operations
+        from .mysql_failover import OPERATIONS as failover_operations
+        common['server'] |= {'reset_failover_sources'}
+        common['replication-channel'] |= replication_operations | (failover_operations.keys()-{'reset_failover_sources'})
         from ..mysql_partitions import OPERATIONS as partition_operations
         for kind, operations in partition_operations.items():
             common[kind] = common[kind] | operations
@@ -1015,7 +1017,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         from .relay_positions import position, bind_review as bind_relay
         if position(compiled):
             return bind_relay(self, planned)
-        for suffix in ('privilege_change account_change trigger_create routine_create index_create server_control xa '
+        for suffix in ('failover privilege_change account_change trigger_create routine_create index_create server_control xa '
                 'page_tracking rewriter key_cache_lifecycle instance user_keys key_cache').split():
             key = 'mysql_'+suffix
             if key in compiled:return HANDLERS[key].bind_review(self, planned)
@@ -2698,7 +2700,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             add('group-replication',[],'Group Replication',group)
             for member in members:
                 if member.get('member_id'):add('group-replication-member',['Group Replication'],str(member['member_id']),member)
-        from .installed_catalog import CHANNELS, CHANNEL_COLUMNS, CHANNEL_OBSERVATIONS, channel_native
+        from .installed_catalog import CHANNELS, CHANNEL_COLUMNS, CHANNEL_OBSERVATIONS, CHANNEL_COLLECTIONS, channel_native
         replication_source = (
             CHANNELS
             if profile is MYSQL_PROFILE else
@@ -2742,18 +2744,21 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             add('replication-channel', [], name, native)
         if profile is MYSQL_PROFILE:
             from ..mysql_replication import channel_label
+            available_collections=set()
             for observation, query in CHANNEL_OBSERVATIONS:
                 before = len(catalog_failures); records = optional_records(query)
-                if observation == 'workers' and len(catalog_failures) == before:
-                    for item in resources.values():
-                        if item['resource_kind']=='replication-channel':item['native']['workers']=[]
+                if observation in CHANNEL_COLLECTIONS and len(catalog_failures)==before:available_collections.add(observation)
                 for record in records:
                     name = record['channel_name']
                     key = resource_key('replication-channel', [], channel_label(name))
                     if key not in resources:
                         add('replication-channel', [], channel_label(name), channel_native({'channel_name':name}))
-                    if observation == 'workers':resources[key]['native'].setdefault('workers',[]).append(record)
+                    if observation in CHANNEL_COLLECTIONS:resources[key]['native'].setdefault(observation,[]).append(record)
                     else:resources[key]['native'][observation] = record
+            for item in resources.values():
+                if item['resource_kind']=='replication-channel':
+                    item['native']['server_uuid']=resources.get('server:MySQL',{}).get('native',{}).get('server_uuid')
+                    for field in available_collections:item['native'].setdefault(field,[])
         if profile is MYSQL_PROFILE:
             from .foreign_servers import SELECT as foreign_select, normalized as foreign_normalized
             for record in optional_records(foreign_select + ' ORDER BY Server_name'):

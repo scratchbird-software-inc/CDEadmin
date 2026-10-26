@@ -27,6 +27,23 @@ def effect(row, operation, live):
     observed = live['rows'].get(row['resource_id'])
     facts = observed['native']['catalog_row'] if observed else {}
     draft = row['native']['mysql_change'].get('draft', {})
+    if kind=='replication-channel':
+        from .mysql_family.mysql_failover import OPERATIONS,sections
+        if action in OPERATIONS:
+            available={section['section']:section['available'] for item in live['rows'].values() if item['kind']=='server'
+                for section in item['native'].get('catalog_observations',[])}
+            if not all(available.get('replication-'+field) for field in sections(action)):return False
+            native=observed['native'] if observed else {}
+            sources=native.get('failover_sources',[]);managed=native.get('failover_managed',[])
+            if action in {'add_failover_source','remove_failover_source'}:
+                matches=[item for item in sources if item['host']==draft['host'] and item['port']==draft.get('port',3306)
+                    and item['network_namespace']=='' and item['managed_name']=='']
+                return any(item['weight']==draft.get('weight',50) for item in matches) if action=='add_failover_source' else not matches
+            matches=[item for item in managed if item['managed_name']==draft['managed_name']]
+            if action=='remove_managed_failover':return not matches and not any(item['managed_name']==draft['managed_name'] for item in sources)
+            import json
+            return any(item['managed_type']=='GroupReplication' and json.loads(item['configuration'])==
+                {'Primary_weight':draft.get('primary_weight',80),'Secondary_weight':draft.get('secondary_weight',60)} for item in matches)
     if action in {'drop', 'revoke'} or kind == 'replication-channel' and action == 'reset' and draft.get('delete_connection', True):
         return observed is None
     if kind == 'user' and action == 'rename':
@@ -143,7 +160,11 @@ def apply_operation(connection, record, operation):
             raise ValueError('Native spatial reference execution identity changed since review')
         available = {item['section']: item['available']
                      for item in root['native']['catalog_observations']}
-        if not available.get(row['native']['section']):
+        from .mysql_family.mysql_failover import OPERATIONS,sections
+        failover=row['kind']=='replication-channel' and operation['operation'] in OPERATIONS
+        if failover and not all(available.get('replication-'+field) for field in sections(operation['operation'])):
+            raise ValueError('Native failover configuration is unavailable before dispatch')
+        if not failover and not available.get(row['native']['section']):
             raise ValueError('Native catalog section is unavailable before dispatch')
         if row['kind'] == 'privilege' and not available.get('accounts'):
             raise ValueError('Separate native account identities are unavailable before dispatch')

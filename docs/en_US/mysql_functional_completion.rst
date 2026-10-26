@@ -3163,3 +3163,60 @@ The shared handoff also retains Decisions9/11/12/13/14/15: family privilege/valu
 dispatch, registration, operation projection, navigator, typed Data row binding
 and Engine-object lifecycle. Platform acceptance, human presentation, deferred
 ScratchBird history and closed Enterprise runtimes retain their existing scope.
+
+Native asynchronous failover candidates
+----------------------------------------
+
+Five native Community functions now have reviewed management workflows: add and
+remove an unmanaged source, add and remove a managed GroupReplication group,
+and reset failover configuration for every channel. The four scoped actions
+belong to the selected asynchronous channel; reset belongs to the server and
+requires an explicit all-channel acknowledgement. Each ships with typed fields
+and a Replication menu descriptor. No Engine-object lifecycle form or shared
+renderer is added. The89 operation descriptors retain their draft status.
+
+Calls own independent connections, bind exact parameters and recheck the native
+instance, principal, active roles and selected configuration before dispatch.
+Source-only changes need only their source-table read grant; managed changes
+and global reset also inspect the managed table. Native mutation grants remain
+authoritative. Changed reviews refuse before dispatch. Missing replies and
+post-acknowledgement observation failures never trigger automatic replay.
+
+Discovery independently reads all six source fields and four managed fields,
+including exact native identities, weights and configuration. A successful empty
+list differs from a denied read; failover-only visibility can discover a channel
+without inventing its connection options. DDN retains both collections on the
+canonical channel and includes their known configuration in comparison guards.
+Explicit native change instructions use the same compiler. Apply checks the
+required section visibility and actual source/managed postconditions; an existing
+channel row alone cannot establish success. A missing DDN selection is still
+never deletion intent. Original query-session diagnostics and savepoints are
+preserved by independent execution and capture.
+
+MySQL9.7 ignores the deprecated namespace argument of these functions; calls
+supply an empty value rather than presenting an ineffective option. Their native
+argument charset is Latin1. Unrepresentable channel text retains native
+error3854/HY000; ordinary channel SQL has a different native text contract.
+Managed addition requires the native group UUID and port1..65535; removal keeps
+the reported managed name and case. Unmanaged add/delete use native unsigned
+32-bit port storage. Connection success is a separate observation; native
+configuration inspection does not establish source election or data delivery.
+
+``tools/cdeadmin_mysql_failover_qualification.py`` covers pure/C native effects,
+independent read/mutation grants, DDN plan/apply, native conversion/refusal,
+stale review, post-acknowledgement loss, restart durability and disabled
+instrumentation. Its ``--application`` mode exercises authenticated typed
+validate/plan/apply and single-use plans after native task admission.
+``tools/cdeadmin_mysql_failover_delivery_qualification.py`` separately uses
+three owned servers, shuts down the original source and checks the native
+candidate switch, exact new rows and GTID catch-up. Application election or
+SQL replay does not substitute for that engine behavior.
+
+The fixed generated tasks are admitted only by source-matched native parser and
+pure/C receipts through ``supplement_mysql_failover_contract.py``. Redundant
+single-statement arrays/format annotations were removed from existing task
+records; their SQL, bindings and proof references remain unchanged. This
+reduces source overhead without changing the SDK or its evidence requirements.
+Shared UI Decisions9/11–17, independent inventory and platform/history scope
+remain as recorded above; these workflows do not establish full product
+completion.

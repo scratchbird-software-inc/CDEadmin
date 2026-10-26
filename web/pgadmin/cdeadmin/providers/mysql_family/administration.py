@@ -16,6 +16,7 @@ from . import mysql_routines
 from . import mysql_triggers
 from . import mysql_accounts
 from . import mysql_privileges
+from . import mysql_failover
 from . import mysql_user_keys
 from . import mysql_xa
 from . import mysql_page_tracking
@@ -25,9 +26,9 @@ from . import mysql_key_cache_lifecycle as cache_lifecycle
 
 
 HANDLERS = dict(zip(('mysql_'+key for key in (
-    'privilege_change account_change trigger_create routine_create index_create user_keys page_tracking '
+    'failover privilege_change account_change trigger_create routine_create index_create user_keys page_tracking '
     'rewriter server_control xa key_cache_lifecycle instance key_cache column_masking foreign_server spatial_reference').split()),
-    (mysql_privileges,mysql_accounts,mysql_triggers,mysql_routines,mysql_indexes,mysql_user_keys,mysql_page_tracking,
+    (mysql_failover,mysql_privileges,mysql_accounts,mysql_triggers,mysql_routines,mysql_indexes,mysql_user_keys,mysql_page_tracking,
      mysql_rewriter,mysql_server_control,mysql_xa,cache_lifecycle,mysql_instance,mysql_key_cache,column_masking,foreign_servers,srs)))
 
 
@@ -83,6 +84,13 @@ class MySQLAdministration(RelationalAdministration):
         value=super().catalog(value)
         server=next(row for row in value['objects'] if row['resource_kind']=='server')
         server['operations'] += deepcopy(mysql_user_keys.catalog_entries())
+        for resource in value['objects']:
+            for operation in mysql_failover.OPERATIONS:
+                if resource['resource_kind']!=('server' if operation=='reset_failover_sources' else 'replication-channel'):continue
+                resource['operations'].append({'operation_id':operation,'title':operation_entry(resource['resource_kind'],operation)['title'],
+                    'form':operation_entry(resource['resource_kind'],operation),
+                    'mutation_class':'destructive' if operation.startswith(('remove_','reset_')) else 'admin',
+                    'target_required':True,'confirmation_required':True})
         return value
 
     def _form(self, kind, operation):
@@ -129,6 +137,8 @@ class MySQLAdministration(RelationalAdministration):
         if kind in {'trigger','index'} and operation=='create':
             return (mysql_triggers if kind=='trigger' else mysql_indexes).compile_create,(draft,),'invalid_mysql_'+kind
         for family,module,code in (
+            ('server',mysql_failover,'invalid_mysql_failover'),
+            ('replication-channel',mysql_failover,'invalid_mysql_failover'),
             ('server',mysql_user_keys,'invalid_user_key'),
             ('server',mysql_page_tracking,'invalid_mysql_page_tracking'),
             ('server',mysql_rewriter,'invalid_mysql_rewriter'),
@@ -141,7 +151,9 @@ class MySQLAdministration(RelationalAdministration):
             (foreign_servers.KIND,foreign_servers,'invalid_mysql_foreign_server'),
             (srs.KIND,srs,'invalid_mysql_spatial_reference'),
         ):
-            if kind==family and operation in module.OPERATIONS:return module.compile_operation,(operation,draft,target),code
+            if kind==family and operation in module.OPERATIONS:
+                if module is mysql_failover and (kind=='server')!=(operation=='reset_failover_sources'):continue
+                return module.compile_operation,(operation,draft,target),code
 
     def validate(self, request):
         from .database_inputs import OPERATIONS, normalize

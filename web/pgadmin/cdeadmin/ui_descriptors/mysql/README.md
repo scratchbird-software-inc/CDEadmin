@@ -252,3 +252,18 @@ fields. Live diagnostic text is retained for inspection and redacted from schema
 exchange. Retained catalog reads preserve source diagnostics using the admitted
 private peer. Source roles/temporary overlays remain unobserved under Decision17.
 The84 operation entries and25 tool openers do not change status.
+
+## Asynchronous failover candidates
+
+The89 operation entries include five native failover actions. Four operate on
+the selected channel; server-wide reset requires the all-channel acknowledgement.
+All fields are flat typed values and bind the native function arguments. No raw
+JSON or operation picker is introduced. Managed addition validates a group UUID;
+removal preserves its native name/case. Namespace input is omitted because the
+9.7 implementation ignores it. Its Latin1 conversion errors remain native.
+
+Native source/managed configuration is preserved in discovery and DDN, with
+independent grants and explicit empty versus unobserved collections. Only known
+configuration participates in comparison guards; explicit change instructions
+and verified native postconditions remain necessary. API/native evidence is
+separate from shared rendering acceptance, so these entries stay draft.

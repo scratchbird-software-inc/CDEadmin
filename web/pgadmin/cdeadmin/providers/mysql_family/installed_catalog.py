@@ -31,13 +31,15 @@ CHANNELS = channel_query('connection_configuration', CHANNEL_COLUMNS)
 APPLIER_COLUMNS = ('CHANNEL_NAME DESIRED_DELAY PRIVILEGE_CHECKS_USER REQUIRE_ROW_FORMAT '
     'REQUIRE_TABLE_PRIMARY_KEY_CHECK ASSIGN_GTIDS_TO_ANONYMOUS_TRANSACTIONS_TYPE '
     'ASSIGN_GTIDS_TO_ANONYMOUS_TRANSACTIONS_VALUE').split()
+from .mysql_failover import queries as failover_queries
+CHANNEL_COLLECTIONS = frozenset({'workers','failover_sources','failover_managed'})
 CHANNEL_OBSERVATIONS = (
     ('applier_configuration',channel_query('applier_configuration',APPLIER_COLUMNS)),
     ('receiver',channel_query('connection_status',RECEIVER_COLUMNS)),
     ('applier',channel_query('applier_status','CHANNEL_NAME SERVICE_STATE REMAINING_DELAY COUNT_TRANSACTIONS_RETRIES'.split())),
     ('coordinator',channel_query('applier_status_by_coordinator',COORDINATOR_COLUMNS)),
     ('workers',channel_query('applier_status_by_worker',WORKER_COLUMNS)),
-)
+) + tuple(failover_queries())
 
 
 def catalog_status(row):

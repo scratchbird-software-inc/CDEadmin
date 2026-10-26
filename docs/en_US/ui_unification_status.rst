@@ -610,3 +610,21 @@ schema, family renderer, shell or family-render test was edited. Decisions9 and
 11–17 remain the explicit shared handoff; the native independent inventory is
 not closed by these additions. Group9 is not complete. Lint before/after remains
 JSON297, MUI244, UI engine branches111, panels113, context-menu branches14.
+
+MySQL asynchronous failover operations, 2026-10-26
+--------------------------------------------------
+
+Five Replication descriptors accompany native candidate management: four scoped
+channel actions (add/remove source and managed group) and a server-wide reset
+with a separate all-channel acknowledgement. Controls are typed host, port,
+weight, managed-name and confirmation fields. MySQL9.7 ignores the old namespace
+argument; no editable namespace control is invented. Its native Latin1 conversion
+refusal is retained. The operation count is89; family/operation statuses remain
+draft except the previously accepted Database fields.
+
+Native pure/C, parser, scoped grants, DDN comparison/application, failure and
+restart/disabled-instrumentation receipts qualify the backend. Authenticated API
+qualification does not replace shared dialog round trips. Shared shell, schema,
+family-render tests and source-overlay/protected-result integration remain with
+the front-end team. Lint before/after remains JSON297, MUI244, UI engine
+branches111, panels113 and context-menu branches14.

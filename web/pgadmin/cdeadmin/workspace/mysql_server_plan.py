@@ -28,7 +28,8 @@ def state(row):
         return None
     return {'kind': row['kind'], 'section': row['native'].get('section'),
             'catalog_row': {key: value for key, value in row['native'].get('catalog_row', {}).items()
-                            if key not in VOLATILE}}
+                            if key not in VOLATILE},
+            **({'failover_configuration':{key:row['native'][key] for key in ('failover_sources','failover_managed') if key in row['native']}} if row['kind']=='replication-channel' else {})}
 
 
 def root(document):
@@ -164,6 +165,12 @@ def compile_operation(row):
         identity = 'name' if kind in {'plugin', 'tablespace', 'resource-group', 'replication-channel'} else None
         if identity and draft.get(identity) != name or kind == 'component' and draft.get('urns') != [name]:
             raise ValueError('Creation draft differs from the DDN target identity')
+    if kind=='replication-channel':
+        from ..providers.mysql_family.mysql_failover import OPERATIONS
+        if action in OPERATIONS:
+            if intent.get('confirmation')!=row['name']:raise ValueError('Confirm the native failover channel label')
+            draft.setdefault('confirmation',row['name']);target.update(resource_kind=kind,display_name=row['name'])
+            target['native']['server_uuid']=row['native']['server_uuid']
     request = {'resource_kind': kind, 'operation_id': action, 'draft': draft, 'target_resource': target}
     errors = MYSQL_ADMINISTRATION.validate(request)['errors']
     if errors:
@@ -194,12 +201,17 @@ def plan(baseline, desired, live):
             address(after, uuid)
             if before is not None and before.get('system') != 'false':
                 raise ValueError('Native system objects are not migration targets')
-            if not observations.get(after['native']['section']):
+            failover=after['kind']=='replication-channel' and isinstance(intent,dict) and intent.get('action') in {'add_failover_source','remove_failover_source','add_managed_failover','remove_managed_failover'}
+            if not failover and not observations.get(after['native']['section']):
                 raise ValueError('Native catalog section is unavailable; absence is not authoritative')
             if after['kind'] == 'spatial-reference-system':
                 observed_scope = next(item for item in server['native']['catalog_observations'] if item['section']=='spatial-reference-systems')
                 if after['native']['catalog_row']['srs_id'] not in observed_scope.get('selected_ids', []):
                     raise ValueError('Exact SRID was not observed in this native capture')
+            if failover:
+                required=['failover_sources']+(['failover_managed'] if 'managed' in intent['action'] else [])
+                if not all(observations.get('replication-'+key) for key in required):
+                    raise ValueError('The native failover configuration sections for this change must be visible')
             if after['kind'] == 'privilege' and not observations.get('accounts'):
                 raise ValueError('Separate native account identities are unavailable')
             if (before is None) != (current is None) or before is not None and state(before) != state(current):
