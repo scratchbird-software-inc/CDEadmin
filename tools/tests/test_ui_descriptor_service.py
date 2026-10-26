@@ -114,6 +114,18 @@ def test_bundle_carries_option_sources(service):
     assert bundle['options']['catalog']['tablespaces']['resource_kind'] == 'tablespace'
 
 
+@pytest.mark.parametrize('engine,viewer', [
+    ('mysql', 'relational_monitoring'), ('firebird', 'firebird_monitoring'),
+])
+def test_bundle_carries_dashboard_tools_for_each_scope(service, engine, viewer):
+    bundle = service.resolve_for_version(engine, '9.7.0' if engine == 'mysql' else '5.0.4')
+    dashboards = [row for row in bundle['tools']
+                  if row.get('arguments', {}).get('dashboard_viewer')]
+    assert {row['scope'] for row in dashboards} == {'endpoint', 'database'}
+    assert all(row['arguments']['dashboard_viewer'] == viewer and
+               row['arguments']['tab'] == 'monitoring' for row in dashboards)
+
+
 def test_unknown_engine_raises(service):
     with pytest.raises(UIDescriptorError):
         service.engine('no-such-engine')

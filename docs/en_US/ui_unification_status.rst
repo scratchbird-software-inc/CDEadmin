@@ -8,6 +8,12 @@ or panel; counts are produced by ``python3 tools/validate_ui_descriptors.py --co
 (``make ui-descriptors-check``). This page records progress; it never certifies
 acceptance on its own.
 
+Owner-approved shared dashboard integration (2026-10-26): MySQL and Firebird
+endpoint/database openers declare their existing DDN viewer in ``tools.json``.
+The shared dashboard pane consumes this metadata without engine branches or
+interactive SQL-session gating. Collector policy and layout editing remain
+separate; object-family form acceptance is unchanged. See design Decision18.
+
 Phase status
 ------------
 

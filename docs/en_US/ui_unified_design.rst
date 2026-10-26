@@ -798,3 +798,14 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     substitute an original-session query. Do not infer all
     temporary objects from committed catalogs, replay earlier role commands,
     or call a private peer's roles the source's active roles.
+
+18. Shared dashboard pane (owner-approved integration, 2026-10-26): the
+    existing dashboard pane may display an engine's read-only DDN viewer.
+    ``tools.json`` declares ``arguments.dashboard_viewer`` on endpoint and
+    database dashboard openers; the resolved descriptor bundle includes those
+    tools. The shell dispatches registered viewer implementations without
+    engine conditionals. Monitoring APIs authorize reads independently of
+    interactive SQL-session state; PostgreSQL polling is never used for a
+    provider endpoint. Target changes remount the viewer. Collector policy
+    and layout editing remain separate tools. This does not add workspace
+    tabs or change the object-family editor landing behavior in Decision3.

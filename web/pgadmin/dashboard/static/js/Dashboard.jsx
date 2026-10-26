@@ -16,8 +16,7 @@ import TabPanel from 'sources/cdeadmin_ui/navigation/TabPanel';
 import { InputCheckbox, FormInputSwitch, FormInputToggle } from '../../../static/js/components/FormComponents';
 import url_for from 'sources/url_for';
 import Graphs from './Graphs';
-import FirebirdMonitoring from 'sources/Dialogs/FirebirdMonitoring';
-import {providerEndpointSessionReady} from 'sources/cdeadmin_ui/navigation/providerDatabaseTree';
+import ProviderDashboard from './ProviderDashboard';
 import { Box, Tab, Tabs } from '@mui/material';
 import { PgIconButton } from '../../../static/js/components/Buttons';
 import BlockRoundedIcon from '@mui/icons-material/BlockRounded';
@@ -314,7 +313,7 @@ function Dashboard({
   const did = treeNodeInfo?.database?._id ?? 0;
   const sid = treeNodeInfo?.server?._id ?? 0;
   const dbConnected = treeNodeInfo?.database?.connected ?? false;
-  const serverConnected = treeNodeInfo?.server?.connected ?? false;
+  const serverConnected = !treeNodeInfo?.server?.cde_endpoint && (treeNodeInfo?.server?.connected ?? false);
   const prefStore = usePreferences();
   let mainTabs = [gettext('Activity'), gettext('State')];
 
@@ -927,11 +926,9 @@ function Dashboard({
   const showDefaultContents = () => {
     if (treeNodeInfo?.server?.cde_endpoint) {
       const server = treeNodeInfo.server;
-      if (!providerEndpointSessionReady(server)) return <EmptyPanelMessage text={gettext('Connect to this server or expand a database to authenticate.')} />;
-      if (server.cde_engine_id === 'firebird') return <FirebirdMonitoring
-        key={`${sid}:${treeNodeInfo?.cde_database_target?._id || ''}`}
-        serverId={Number(sid)} targetId={treeNodeInfo?.cde_database_target?._id} />;
-      return <EmptyPanelMessage text={gettext('Connected. Select a database or open SQL to use this connection.')} />;
+      return <ProviderDashboard key={`${server.cde_engine_id}:${sid}`}
+        engine={server.cde_engine_id} version={server.verified_runtime_version}
+        serverId={sid} targetId={treeNodeInfo?.cde_database_target?._id} />;
     }
     return (
       sid && !serverConnected ? (

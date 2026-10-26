@@ -46,6 +46,13 @@ objects) and `enabled_when` conditions (`verified`, `owner`, `available`) with
 optional per-condition `disabled_reasons`. Labels and ids may use `{display}`
 and `{engine_id}`.
 
+Read-only dashboard openers may declare `arguments.dashboard_viewer`:
+`firebird_monitoring` or `relational_monitoring` selects an existing DDN
+viewer. The shared dashboard pane reads this option from the resolved bundle's
+`tools` list, using `endpoint` or `database` scope. It passes the engine and
+registered target identity, never collector policy or editing arguments.
+Monitoring APIs authorize each read independently of interactive SQL sessions.
+
 Only openers belong here. Tier 1 lifecycle comes from the family forms and
 tier 2/3 operations from `operations.json` (the tree already retires a legacy
 entry whose operation id a descriptor operation covers). The validator counts
