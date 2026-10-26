@@ -2981,3 +2981,35 @@ connector implementations and authenticated workspace requests, including a
 restricted native principal. This closes these metadata-loss gaps, not the full
 ``INV-MYSQL`` or ``MY-DIAGNOSTICS`` inventory. The recorded shared UI,
 protected-result and externally owned acceptance scopes remain open.
+
+Native relay position range
+----------------------------
+
+RELAY_LOG_POS now accepts exact unsigned 64-bit text at the input boundary.
+Coordinates above 2^32-1 require a separately owned native review and dispatch
+connection. The target's ``bulk_insert_buffer_size`` metadata exposes ULONG_MAX
+from its native Sys_var_ulong declaration. The compiler's unsigned-long relay
+position therefore follows the server ABI, independently of the application
+host or a guessed OS name. A native 32-bit ceiling or unavailable/denied metadata
+refuses the wide plan; small coordinates retain their existing path.
+
+Review binds the exact compiled statement and parameter digest, server UUID,
+ceiling and requested coordinate. Apply rechecks on the same owned connection
+that dispatches the command. A changed target/ceiling refuses mutation. Native
+errors, acknowledgement and post-acknowledgement cleanup loss stay distinct;
+unknown commands are not replayed and no transactional staging is claimed.
+The typed UNTIL relay-position field documents this requirement. Channel
+create/alter legacy source-option forms remain a separate descriptor migration;
+this range fix does not complete those forms or the shared dialog projection.
+
+``tools/cdeadmin_mysql_relay_positions_qualification.py`` covers actual wide
+CHANGE/UNTIL values, unchanged original diagnostics/savepoints, native errors,
+replacement-instance refusal, limited native grants, disabled instrumentation and authenticated
+plan/apply through both connectors. Existing source-to-replica delivery runs
+remain part of that qualification. Native Windows/macOS acceptance stays with
+the platform teams; modeled 32-bit metadata refusal does not establish it.
+
+The native metadata table is world-readable in MySQL9.7. A replication operator
+needs no added SELECT grant for this bound; injected denial handling remains
+covered separately. This perpetual metadata table remains available with disabled
+Performance Schema. That scope does not change retained SQL-editor admission.

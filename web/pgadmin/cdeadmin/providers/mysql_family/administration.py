@@ -311,6 +311,10 @@ class MySQLAdministration(RelationalAdministration):
         return super()._compile(request)
 
     def apply(self, client, request, connection=None):
+        from .relay_positions import position, apply as apply_relay
+        compiled = (request.get('provider_payload') or {}).get('compiled', {})
+        if 'mysql_relay_review' in compiled or position(compiled):
+            return apply_relay(client, request, connection)
         if 'mysql_privilege_change' in (request.get('provider_payload') or {}).get('compiled', {}):
             return mysql_privileges.apply(client, request, connection)
         if 'mysql_account_change' in (request.get('provider_payload') or {}).get('compiled', {}):

@@ -196,3 +196,7 @@ workflows still need shared Data-editor integration and descriptors (Decision14)
 Installed catalog facts retain all eleven plugin fields and five runtime
 function fields. Server DDN carries these observations; usage counters are
 volatile. Shared family acceptance and the independent inventory remain open.
+
+Operation drafts require shared projection/render acceptance (Decision12).
+Wide relay coordinates bind the target's ULONG_MAX metadata at review/apply.
+Shared SQL tabs and form-reference allocation belong to the front-end shell.

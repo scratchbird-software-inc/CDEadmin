@@ -504,3 +504,23 @@ do not complete the independent installed-feature/workflow inventory or qualify
 new shared UI rendering. Family/operation statuses, the84 operation entries and
 Decisions9/11/12/13/14 remain unchanged. Lint before/after: JSON297/297,
 MUI244/244, engine branches111/111, panels113/113, context-menu branches14/14.
+
+MySQL relay coordinate admission (2026-10-26)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The existing Start channel descriptor retains a text relay position and now
+explains native ULONG_MAX review/revalidation. Wide coordinates are bound to
+the target's metadata and server UUID before dispatch; neither the application's
+word size nor a universal 32-bit limit determines support. Native 32-bit or
+unavailable ceilings refuse wide requests. Small-position behavior is retained.
+Both CHANGE and UNTIL receive native/API qualification; channel create/alter
+source-option forms and shared OperationDialog projection remain separate gaps.
+
+Common draft/render/SQL-tab prose is consolidated into the engine README;
+operation-specific native constraints, key-material exclusions, execution-host
+and verification trust details are retained. Static options are parsed-identical
+after compact formatting. No operation count or completion status changes:
+84 entries remain draft, three beta row entries and shared Decisions9/11/12/13/14
+remain open. Lint before/after: JSON297/297, MUI244/244, engine branches111/111,
+panels113/113, context-menu branches14/14. The independent inventory and
+protected generated-password delivery remain open.

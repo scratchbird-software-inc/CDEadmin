@@ -1012,6 +1012,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
         compiled = planned.get('provider_payload', {}).get('compiled', {})
+        from .relay_positions import position, bind_review as bind_relay
+        if position(compiled):
+            return bind_relay(self, planned)
         if 'mysql_privilege_change' in compiled:
             from .mysql_privileges import bind_review
             return bind_review(self, planned)
