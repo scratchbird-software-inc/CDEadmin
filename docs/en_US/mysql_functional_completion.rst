@@ -3013,3 +3013,30 @@ The native metadata table is world-readable in MySQL9.7. A replication operator
 needs no added SELECT grant for this bound; injected denial handling remains
 covered separately. This perpetual metadata table remains available with disabled
 Performance Schema. That scope does not change retained SQL-editor admission.
+
+Native retry-count range
+--------------------------
+
+SOURCE_RETRY_COUNT accepts exact unsigned decimal text through the target's
+native unsigned-long ceiling, using the same owned review and dispatch guard
+as wide relay positions. Port and connection retry seconds remain unsigned
+32-bit fields. The native delay maximum is 2,147,483,647; compression level
+validation remains native (1..22, with zero retaining the previous setting).
+Those distinct types are not widened by the retry-count change.
+
+For a request containing both wide relay and retry values, the largest value
+must fit the observed ceiling. The exact statement and parameters, native
+version, server UUID and ceiling are bound and rechecked before dispatch.
+The public ``native_unsigned_long`` observation identifies the maximum requested
+integer when retry count is supplied; relay-only receipts retain
+``native_relay_position``. Neither observation promises that a retry sequence
+has executed. Native errors and lost acknowledgements are never replayed.
+
+The replication qualification checks exact retry counts through both connectors,
+SHOW REPLICA STATUS, Performance Schema and the native repository, including
+2^64-1 across a native restart. Authenticated plan/apply, single-use plans,
+limited native grants and disabled instrumentation are also covered.
+Channel create/alter source-option forms still use their legacy contract and
+remain unsurfaced under the unified descriptor rules; this range fix does not
+qualify that UI. Broader inventory, diagnostics and protected generated-password
+delivery remain open.

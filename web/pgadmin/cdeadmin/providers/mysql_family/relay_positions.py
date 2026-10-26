@@ -1,4 +1,4 @@
-"""Wide relay coordinates bound to the target's native unsigned-long ceiling."""
+"""Wide replication integers bound to the target's unsigned-long ceiling."""
 from contextlib import contextmanager
 import hashlib
 import json
@@ -13,11 +13,16 @@ def position(compiled):
     for statement in compiled.get('statements', []):
         source = statement.get('source', '')
         if source.startswith(('CHANGE REPLICATION SOURCE TO ', 'START REPLICA')):
-            match = re.search(r'\bRELAY_LOG_POS=([0-9]+)(?:,| FOR CHANNEL)', source)
-            if match and int(match[1]) > 2**32-1:
+            values = re.findall(r'\b(?:RELAY_LOG_POS|SOURCE_RETRY_COUNT)=([0-9]+)(?:,| FOR CHANNEL)', source)
+            value = max(values, key=int, default='0')
+            if int(value) > 2**32-1:
                 if len(compiled['statements']) != 1:
                     raise RelationalClientError('Review one native channel statement')
-                return match[1]
+                return value
+
+
+def evidence_key(compiled):
+    return 'native_unsigned_long' if 'SOURCE_RETRY_COUNT=' in compiled['statements'][0]['source'] else 'native_relay_position'
 
 
 def signature(compiled):
@@ -33,7 +38,7 @@ def observe(cursor, requested):
             str(rows[0][1]) not in {str(2**32-1), str(2**64-1)}):
         raise RelationalClientError('The target unsigned-long ceiling is unavailable')
     if requested is None or int(requested) > int(rows[0][1]):
-        raise RelationalClientError('Relay position exceeds the target unsigned-long ceiling')
+        raise RelationalClientError('Value exceeds the target unsigned-long ceiling')
     return {'server_uuid': rows[0][0], 'maximum': str(rows[0][1]), 'requested': requested}
 
 
@@ -59,7 +64,7 @@ def bind_review(client, planned):
         with peer(client, payload) as cursor:
             observed = observe(cursor, position(compiled))
             compiled['mysql_relay_review'] = {**observed, 'statement_sha256': signature(compiled)}
-            planned['command_preview']['native_relay_position'] = observed
+            planned['command_preview'][evidence_key(compiled)] = observed
     except Exception as error:
         raise failure(error) from None
     return planned
@@ -67,7 +72,7 @@ def bind_review(client, planned):
 
 def apply(client, request, connection=None):
     if connection is not None:
-        raise RelationalClientError('Use an independent connection for wide relay positions')
+        raise RelationalClientError('Use an independent connection for wide integers')
     payload = request['provider_payload']; compiled = payload['compiled']
     review = compiled.get('mysql_relay_review')
     if not isinstance(review, dict) or review.get('statement_sha256') != signature(compiled):
@@ -77,7 +82,7 @@ def apply(client, request, connection=None):
         with peer(client, payload) as cursor:
             observed = observe(cursor, position(compiled))
             if observed != {key: review.get(key) for key in observed}:
-                raise RelationalClientError('The target instance or relay ceiling changed')
+                raise RelationalClientError('The target instance or ceiling changed')
             statement = compiled['statements'][0]; dispatched = True
             cursor.execute(statement['source'], statement['parameters'] or None); acknowledged = True
             rows = cursor.fetchall() if cursor.description else []
@@ -86,7 +91,7 @@ def apply(client, request, connection=None):
                     'commit_requested': False, 'rollback_requested': False,
                     'staged_in_provider_session': False, 'driver_observation_only': True,
                     'transaction_finality_interpreted_by_common_code': False,
-                    'native_relay_position': observed}
+                    evidence_key(compiled): observed}
     except Exception as error:
         raise failure(error, dispatched, acknowledged) from None
 

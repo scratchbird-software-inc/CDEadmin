@@ -524,3 +524,14 @@ after compact formatting. No operation count or completion status changes:
 remain open. Lint before/after: JSON297/297, MUI244/244, engine branches111/111,
 panels113/113, context-menu branches14/14. The independent inventory and
 protected generated-password delivery remain open.
+
+MySQL retry-count admission (2026-10-26)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The existing channel create/alter backend now admits wide SOURCE_RETRY_COUNT
+values under the target-bound unsigned-long guard. Native/API qualification
+does not migrate those legacy source-option forms: their descriptor population
+and actual shared dialog round trip remain unsurfaced work. No new operation,
+field, descriptor status or lint count is claimed. Existing 84 draft entries,
+three missing beta row-action entries and Decisions9/11/12/13/14 remain as
+recorded above. Protected generated-password delivery remains open.

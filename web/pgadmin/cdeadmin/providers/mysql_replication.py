@@ -51,7 +51,7 @@ def compile_operation(operation,draft,target):
             elif key in FLAGS:
                 if type(value) is not bool:raise RelationalClientError('Native replication switches require booleans')
                 sql='1' if value else '0'
-            elif key in NUMBERS:sql=number(value,2**64-1 if key in {'SOURCE_LOG_POS','RELAY_LOG_POS'} else 2**32-1)
+            elif key in NUMBERS:sql=number(value,2**64-1 if key in {'SOURCE_LOG_POS','RELAY_LOG_POS','SOURCE_RETRY_COUNT'} else 2**32-1)
             elif key=='SOURCE_HEARTBEAT_PERIOD':
                 if type(value) not in {int,float} or not math.isfinite(value) or not 0<=value<=4294967:raise RelationalClientError('Invalid native heartbeat period')
                 sql=str(value)

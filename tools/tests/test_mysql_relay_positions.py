@@ -125,6 +125,52 @@ def test_small_positions_keep_the_existing_native_path_without_metadata_requirem
     assert relay.position(compiled) is None
 
 
+@pytest.mark.parametrize('value',[str(2**32),str(2**53+1),str(2**63-1),str(2**64-1)])
+def test_retry_count_uses_the_same_owned_native_ulong_review_without_a_coordinate_alias(value):
+    native=client(); selected=request()
+    selected['draft']={'source_options':{'SOURCE_RETRY_COUNT':value}}
+    planned=native.plan_admin_operation(selected)
+    expected={'server_uuid':'server','maximum':str(2**64-1),'requested':value}
+    assert planned['command_preview']['native_unsigned_long']==expected
+    assert 'native_relay_position' not in planned['command_preview']
+    result=native.apply_admin_operation(planned)
+    assert result['native_unsigned_long']==expected and result['native_acknowledged']
+    assert native.handles[-1].calls[-1][0]=='CHANGE REPLICATION SOURCE TO SOURCE_RETRY_COUNT='+value+' FOR CHANNEL %s'
+
+
+@pytest.mark.parametrize('values',[
+    {'RELAY_LOG_POS':str(2**64-1),'SOURCE_RETRY_COUNT':str(2**32)},
+    {'SOURCE_RETRY_COUNT':str(2**64-1),'RELAY_LOG_POS':str(2**32)},
+])
+def test_mixed_wide_options_review_the_largest_native_ulong_in_either_order(values):
+    selected=request();selected['draft']={'source_options':values}
+    native=client(); planned=native.plan_admin_operation(selected)
+    assert planned['command_preview']['native_unsigned_long']['requested']==str(2**64-1)
+    native.rows=[('server',str(2**32-1))]
+    with pytest.raises(RelationalClientError) as caught:native.apply_admin_operation(planned)
+    assert not caught.value.native_dispatched
+    assert all(sql==relay.QUERY for sql,_ in native.handles[-1].calls)
+
+
+@pytest.mark.parametrize('value',[True,2**53,str(2**64),'01',-1,'1;STOP REPLICA'])
+def test_retry_count_never_admits_inexact_or_malformed_unsigned_values(value):
+    with pytest.raises(RelationalClientError):compile_operation('alter',{'source_options':{'SOURCE_RETRY_COUNT':value}},TARGET)
+
+
+@pytest.mark.parametrize('key',['SOURCE_PORT','SOURCE_CONNECT_RETRY','SOURCE_ZSTD_COMPRESSION_LEVEL'])
+def test_uint_storage_options_do_not_borrow_the_ulong_widening(key):
+    with pytest.raises(RelationalClientError):compile_operation('alter',{'source_options':{key:str(2**32)}},TARGET)
+
+
+def test_small_retry_count_keeps_the_existing_dispatch_path_and_narrow_targets_refuse_wide_values():
+    selected=request();selected['draft']={'source_options':{'SOURCE_RETRY_COUNT':str(2**32-1)}}
+    assert relay.position(MYSQL_ADMINISTRATION._compile(selected)) is None
+    selected['draft']['source_options']['SOURCE_RETRY_COUNT']=str(2**32)
+    native=client([('server',str(2**32-1))])
+    with pytest.raises(RelationalClientError):native.plan_admin_operation(selected)
+    assert len(native.handles)==1 and native.handles[0].calls==[(relay.QUERY,None)]
+
+
 def test_declared_until_text_field_projects_the_full_unsigned_coordinate_without_rounding():
     declaration=engine_operations('mysql')['start@replication-channel']
     ui=operation_draft(declaration,{'until_kind':'RELAY','relay_file':'relay.000001','relay_pos':str(2**64-1)},'Owned channel')

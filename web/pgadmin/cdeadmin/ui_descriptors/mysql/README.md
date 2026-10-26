@@ -200,3 +200,10 @@ volatile. Shared family acceptance and the independent inventory remain open.
 Operation drafts require shared projection/render acceptance (Decision12).
 Wide relay coordinates bind the target's ULONG_MAX metadata at review/apply.
 Shared SQL tabs and form-reference allocation belong to the front-end shell.
+
+Wide `SOURCE_RETRY_COUNT` uses the target's native unsigned-long ceiling, with
+owned review/revalidation and exact decimal text. It remains part of the
+unsurfaced channel create/alter source-option contract; native/API qualification
+is not descriptor or dialog acceptance. Relay-only observations retain
+`native_relay_position`; retry requests report `native_unsigned_long` for the
+largest requested guarded integer. No retry-sequence outcome is inferred.
