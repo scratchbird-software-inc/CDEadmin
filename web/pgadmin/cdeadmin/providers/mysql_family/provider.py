@@ -2643,7 +2643,8 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         )
         for name, engine in optional(tablespace_source):
             add('tablespace', [], name, {'engine': engine})
-        plugin_rows = optional('SHOW PLUGINS')
+        from .installed_catalog import PLUGINS, PLUGIN_COLUMNS, FUNCTIONS
+        plugin_rows = optional(PLUGINS if profile is MYSQL_PROFILE else 'SHOW PLUGINS')
         if profile is MYSQL_PROFILE:
             from .spatial_reference_systems import SELECT as srs_select, normalized as srs_normalized
             for row in optional(srs_select + ' ORDER BY SRS_ID'):
@@ -2678,12 +2679,14 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         if profile is MYSQL_PROFILE:
             for record in optional_records('SELECT component_id,component_group_id,component_urn FROM mysql.component ORDER BY component_id'):
                 add('component',[],record['component_urn'],record)
-        for name, status, plugin_type, library, license_name in plugin_rows:
+        for plugin in plugin_rows:
+            name, status, plugin_type, library, license_name = plugin[:5]
             # MariaDB's uuid is both a DATA TYPE and a FUNCTION plugin.
             # Preserve native names for operations and distinct catalog IDs.
             identity = ('mariadb:plugin:' + json.dumps([name, plugin_type],
                 ensure_ascii=False, separators=(',', ':'))) if profile is MARIADB_PROFILE else None
             add('plugin', [], name, {
+                **(dict(zip((key.lower() for key in PLUGIN_COLUMNS), plugin)) if profile is MYSQL_PROFILE else {}),
                 **({'plugin_name': name} if profile is MARIADB_PROFILE else {}),
                 'status': status,
                 'plugin_type': plugin_type,
@@ -2698,7 +2701,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             functions={}
             for record in optional_records('SELECT name,ret,dl,type FROM mysql.func ORDER BY name'):
                 name=record['name'];functions[name]={**record,'registration_origin':'mysql.func'}
-            for record in optional_records('SELECT * FROM performance_schema.user_defined_functions ORDER BY UDF_NAME'):
+            for record in optional_records(FUNCTIONS):
                 name=record['udf_name'];functions.setdefault(name,{'registration_origin':'runtime-service'}).update(record)
             for name,record in functions.items():
                 record['administration']={'allowed_operations':['inspect','drop'] if record['registration_origin']=='mysql.func' else ['inspect']}

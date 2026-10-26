@@ -192,3 +192,7 @@ existing native arrays/maps. Collection switches preserve absent versus empty.
 All eight remain draft/unsurfaced under Decision12. The retired portfolio forms
 are deleted; legacy browser gates refuse the empty fallback. Three dynamic row
 workflows still need shared Data-editor integration and descriptors (Decision14).
+
+Installed catalog facts retain all eleven plugin fields and five runtime
+function fields. Server DDN carries these observations; usage counters are
+volatile. Shared family acceptance and the independent inventory remain open.

@@ -2962,3 +2962,22 @@ counts; schema restoration alone does not qualify data recovery. Three row
 workflow descriptors (Decision14), independent native inventory/diagnostics reconciliation,
 shared UI integration and protected credential results remain open; this is
 progress toward Group9 rather than a completion claim.
+
+Installed-interface metadata preservation
+-----------------------------------------
+
+Native plugin discovery now keeps all eleven PLUGINS fields in both the explorer
+and server DDN exchange, retaining the established short metadata aliases.
+Runtime loadable functions also enter the bounded server capture with their
+native return/type/library and exact usage count. Built-in/service NULL libraries
+are preserved. Counter changes do not become migration intent; observed runtime
+registration does not authorize create/drop in the server migration planner.
+Native denied access remains an explicit unavailable section. Metadata capture
+uses independently owned connections and does not probe the user's session.
+
+The owning qualification is ``tools/cdeadmin_mysql_installed_catalog_qualification.py``.
+It compares native facts, explorer inspection and server DDN through both
+connector implementations and authenticated workspace requests, including a
+restricted native principal. This closes these metadata-loss gaps, not the full
+``INV-MYSQL`` or ``MY-DIAGNOSTICS`` inventory. The recorded shared UI,
+protected-result and externally owned acceptance scopes remain open.

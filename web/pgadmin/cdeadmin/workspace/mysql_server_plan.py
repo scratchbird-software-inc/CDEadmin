@@ -11,7 +11,7 @@ from ..providers.mysql_roles import account
 SPEC = {section: (kind, keys) for section, kind, _sql, keys in SECTIONS}
 SUPPORTED = {'user', 'role-membership', 'default-role', 'privilege', 'plugin', 'component', 'server-link', 'spatial-reference-system',
              'tablespace', 'resource-group', 'system-variable', 'replication-channel'}
-VOLATILE = {'component_id', 'component_group_id', 'space', 'file_size', 'allocated_size'}
+VOLATILE = {'component_id', 'component_group_id', 'space', 'file_size', 'allocated_size', 'udf_usage_count'}
 
 
 def spatial_selection(*documents):

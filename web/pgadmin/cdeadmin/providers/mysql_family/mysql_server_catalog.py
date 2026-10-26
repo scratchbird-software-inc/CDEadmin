@@ -7,6 +7,7 @@ from .mysql_catalog import _value, DENIED, SYSTEM
 from ..mysql_grants import QUERIES as GRANTS
 from .system_variables import SELECT as VARIABLES_SELECT, administration as variable_administration
 from .mysql_xa import RECOVER as XA_RECOVER, decode_row as decode_xa, execute_recovery
+from .installed_catalog import PLUGINS, FUNCTIONS
 
 MAX_FACTS = 20000
 MAX_BYTES = 8 * 1024 * 1024
@@ -17,7 +18,8 @@ SECTIONS = (
     ('role-edges', 'role-membership', 'SELECT FROM_USER, FROM_HOST, TO_USER, TO_HOST, WITH_ADMIN_OPTION FROM mysql.role_edges ORDER BY FROM_USER, FROM_HOST, TO_USER, TO_HOST', ('from_user','from_host','to_user','to_host')),
     ('default-roles', 'default-role', 'SELECT USER, HOST, DEFAULT_ROLE_USER, DEFAULT_ROLE_HOST FROM mysql.default_roles ORDER BY USER, HOST, DEFAULT_ROLE_USER, DEFAULT_ROLE_HOST', ('user','host','default_role_user','default_role_host')),
     ('visible-global-grants', 'privilege', 'SELECT GRANTEE, PRIVILEGE_TYPE, IS_GRANTABLE FROM information_schema.USER_PRIVILEGES ORDER BY GRANTEE, PRIVILEGE_TYPE', ('grantee','privilege_type')),
-    ('plugins', 'plugin', 'SELECT PLUGIN_NAME, PLUGIN_VERSION, PLUGIN_STATUS, PLUGIN_TYPE, PLUGIN_TYPE_VERSION, PLUGIN_LIBRARY, PLUGIN_LIBRARY_VERSION, PLUGIN_LICENSE, LOAD_OPTION FROM information_schema.PLUGINS ORDER BY PLUGIN_NAME', ('plugin_name',)),
+    ('plugins', 'plugin', PLUGINS, ('plugin_name',)),
+    ('runtime-functions', 'loadable-function', FUNCTIONS, ('udf_name',)),
     ('components', 'component', 'SELECT component_id, component_group_id, component_urn FROM mysql.component ORDER BY component_id', ('component_urn',)),
     ('character-sets', 'character-set', 'SELECT CHARACTER_SET_NAME, DEFAULT_COLLATE_NAME, DESCRIPTION, MAXLEN FROM information_schema.CHARACTER_SETS ORDER BY CHARACTER_SET_NAME', ('character_set_name',)),
     ('collations', 'collation', 'SELECT COLLATION_NAME, CHARACTER_SET_NAME, ID, IS_DEFAULT, IS_COMPILED, SORTLEN, PAD_ATTRIBUTE FROM information_schema.COLLATIONS ORDER BY COLLATION_NAME', ('collation_name',)),

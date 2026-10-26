@@ -354,10 +354,10 @@ class RelationalInventoryTests(unittest.TestCase):
             def fetchall(self):
                 if 'information_schema.TABLES' in self.source:
                     return [('app', 'widgets', 'BASE TABLE')]
-                if self.source == 'SHOW PLUGINS':
+                if 'FROM information_schema.PLUGINS' in self.source:
                     return [(
                         'auth_example', 'ACTIVE', 'AUTHENTICATION',
-                        'auth_example.so', 'GPL',
+                        'auth_example.so', 'GPL', '1.2', '1.0', '1.1', 'Native author', 'Description 雪', 'ON',
                     )]
                 return []
 
@@ -383,6 +383,9 @@ class RelationalInventoryTests(unittest.TestCase):
             'auth_example.so', plugin['native']['definition']['library']
         )
         self.assertEqual('generation-one', plugin['generation'])
+        self.assertEqual('1.2', plugin['native']['plugin_version'])
+        self.assertEqual('Description 雪', plugin['native']['definition']['plugin_description'])
+        self.assertEqual('ON', plugin['native']['load_option'])
 
     def test_mysql_materialized_view_discovery_uses_show_create(self):
         class Cursor:
@@ -509,10 +512,10 @@ class RelationalInventoryTests(unittest.TestCase):
                         ('app', 'widgets', 'BASE TABLE'),
                         ('sibling', 'private_rows', 'BASE TABLE'),
                     ]
-                if self.source == 'SHOW PLUGINS':
+                if 'FROM information_schema.PLUGINS' in self.source:
                     return [(
                         'mysql_native_password', 'ACTIVE',
-                        'AUTHENTICATION', None, 'GPL',
+                        'AUTHENTICATION', None, 'GPL', '1.0', '1.0', None, 'Native author', 'Native description', 'ON',
                     )]
                 return []
 

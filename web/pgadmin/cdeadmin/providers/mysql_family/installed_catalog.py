@@ -1,0 +1,7 @@
+"""Explicit, noncredential projections of installed native MySQL interfaces."""
+PLUGIN_COLUMNS = ('PLUGIN_NAME PLUGIN_STATUS PLUGIN_TYPE PLUGIN_LIBRARY PLUGIN_LICENSE '
+                  'PLUGIN_VERSION PLUGIN_TYPE_VERSION PLUGIN_LIBRARY_VERSION '
+                  'PLUGIN_AUTHOR PLUGIN_DESCRIPTION LOAD_OPTION').split()
+PLUGINS = 'SELECT '+','.join(PLUGIN_COLUMNS)+' FROM information_schema.PLUGINS ORDER BY PLUGIN_NAME'
+FUNCTIONS = ('SELECT UDF_NAME,UDF_RETURN_TYPE,UDF_TYPE,UDF_LIBRARY,UDF_USAGE_COUNT '
+             'FROM performance_schema.user_defined_functions ORDER BY UDF_NAME')

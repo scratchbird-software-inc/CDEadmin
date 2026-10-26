@@ -479,3 +479,28 @@ open. Group9 is not complete. Parsed family, capability and navigator content is
 unchanged after compact formatting; no shared renderer/schema/family tests were
 edited. Lint before/after: JSON297/297, MUI244/244, engine branches111/111,
 panels113/113, context-menu branches14/14.
+
+MySQL installed-interface catalog facts (2026-10-26)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Explorer plugin discovery and server DDN capture now retain all eleven native
+``information_schema.PLUGINS`` fields, including version/type/library versions,
+author, description and load option. Existing status/type/library/license aliases
+remain compatible. The query is explicit; MariaDB retains its own SHOW PLUGINS
+contract. The existing Plugin inspect capability documents this projection.
+
+Server DDN now includes all five native ``user_defined_functions`` fields.
+A NULL library remains NULL for runtime service registrations; it is not an
+inferred shared-library filename or authorization to remove a service function.
+Usage counts are volatile observations, excluded from migration state. Server
+migration plans still refuse function creation/removal from these observational
+rows; existing native provider lifecycle operations are separate. Denied SELECT
+produces an unavailable section with its native code instead of an apparently
+successful empty inventory. The Loadable function inspect capability records
+this native metadata scope.
+
+These additions preserve native metadata and existing operation contracts. They
+do not complete the independent installed-feature/workflow inventory or qualify
+new shared UI rendering. Family/operation statuses, the84 operation entries and
+Decisions9/11/12/13/14 remain unchanged. Lint before/after: JSON297/297,
+MUI244/244, engine branches111/111, panels113/113, context-menu branches14/14.

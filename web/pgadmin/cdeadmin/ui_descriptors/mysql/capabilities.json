@@ -134,7 +134,7 @@
  {"operation_id":"drop","tier":1,"mutation_class":"admin","support_state":"implemented","notes":"Native SQL library-definition metadata only; closed Enterprise MLE body execution is post beta."}
  ]},
  {"resource_kind":"loadable-function","family":"engine_object","operations":[
- {"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},
+ {"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented","notes":"Server DDN retains runtime facts; usage counts are observations, not DDL intent."},
  {"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"},
  {"operation_id":"drop","tier":1,"mutation_class":"admin","support_state":"implemented"}
  ]},
@@ -177,7 +177,7 @@
  {"operation_id":"revoke","tier":2,"mutation_class":"admin","support_state":"implemented"}
  ]},
  {"resource_kind":"plugin","family":"engine_object","operations":[
- {"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},
+ {"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented","notes":"All 11 native PLUGINS fields are retained in explorer and server DDN."},
  {"operation_id":"create","tier":1,"mutation_class":"write","support_state":"implemented"},
  {"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"}
  ]},
