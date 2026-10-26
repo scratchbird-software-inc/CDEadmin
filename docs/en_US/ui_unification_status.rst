@@ -585,3 +585,28 @@ parsed-identical contents to preserve the existing source budget. Lint
 before/after: JSON297/297, MUI244/244, engine branches111/111, panels113/113,
 context-menu branches14/14. Other replication inventory and protected results
 remain open.
+
+MySQL Group9 backend and shared integration boundary, 2026-10-26
+---------------------------------------------------------------
+
+User authentication and factor mode choices now include Generate password,
+bound to native RANDOM PASSWORD. The native producer reserves protected delivery
+before DCL and returns reference IDs only. Real native create/rotation/login,
+lease closure and post-acknowledgement failure handling are qualified through
+both connectors. Ordinary authenticated application requests refuse before DCL
+without the protected service. Decision16 records the missing shared storage,
+authorization, reference resolution and reveal/recovery bridge. The User variant
+stays draft/unsurfaced for that workflow; no family or operation status advances.
+Decision10 governs user keys only.
+
+All20 receiver,15 coordinator and24 worker status fields are now observed through
+independent grants. Live native diagnostic text is redacted from schema exchange;
+transient status remains outside migration state. Retained catalog reads use a
+private admitted peer and preserve source diagnostics/savepoints. Source active
+roles and temporary objects remain unobserved (Decision17), not inferred.
+
+The owner reaffirmed that shared UI stays with the front-end team. No shared
+schema, family renderer, shell or family-render test was edited. Decisions9 and
+11–17 remain the explicit shared handoff; the native independent inventory is
+not closed by these additions. Group9 is not complete. Lint before/after remains
+JSON297, MUI244, UI engine branches111, panels113, context-menu branches14.

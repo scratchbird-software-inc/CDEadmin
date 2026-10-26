@@ -751,3 +751,39 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     Existing channel start/stop/reset/filter descriptors and tool openers can
     migrate independently. This decision does not change the native engine's
     supported replication options or defer their backend implementation.
+
+16. Protected generated-password delivery (MySQL audit, 2026-10-26):
+    User authentication and factor mode ``RANDOM_PASSWORD`` now have a native
+    producer and typed Role/User choices. The producer needs a trusted
+    ``client.protected_password_receiver`` with a UUID ``binding_id`` and
+    ``reserve(user, host, factors)``, ``publish(reservation, factor, lease)``
+    and ``release(reservation)`` methods. Reservation precedes account DCL;
+    publish receives a short-lived ``SecretLease`` and must return an
+    endpoint-bound ``SecretReference`` of kind password. Release frees capacity
+    without deleting published references. Public receipts contain factor and
+    reference ID only. Missing or changed delivery refuses before DCL; delivery
+    loss after native acknowledgement never causes replay. The shared stream
+    owns authenticated operation/principal/endpoint binding, private storage,
+    reference resolution, expiry, authorization and reveal/recovery controls.
+    Shared invalid-plan exception handling also needs the declared validation
+    result rather than its current generic failure envelope.
+    Default: keep the User variant draft and generated-password delivery
+    explicitly unsurfaced until that service and control are connected. Never
+    return the native password rowset through an ordinary operation result or
+    store it in plans, logs, downloads or endpoint DTOs. Decision10 remains
+    limited to metadata-only user keys.
+
+17. Explicit source-session catalog overlays (MySQL audit, 2026-10-26):
+    The stock native private-peer interfaces used for SQL completion do not
+    expose another session's active roles or user temporary-table definitions.
+    Committed catalog reads can preserve the original diagnostic area; native
+    ``CURRENT_ROLE()`` and selected-table inspection on the source session can
+    replace it. There is no existing descriptor/editor interaction declaring
+    that distinction or selecting temporary tables without writing SQL.
+    Default: retain private automatic reads, report source overlays unobserved
+    and ``complete=false``, and do not substitute an original-session query.
+    The shared stream must declare an explicit source-inspection interaction
+    and its diagnostic consequence, or an approved native observation contract,
+    before the engine stream implements that separate path. Do not infer all
+    temporary objects from committed catalogs, replay earlier role commands,
+    or call a private peer's roles the source's active roles.

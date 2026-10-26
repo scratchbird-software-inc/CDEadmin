@@ -85,11 +85,11 @@ def compile_operation(operation,draft,target=None):
     if type(exists) is not bool:raise RelationalClientError('Account existence option must be boolean')
     statement=Statement(operation.upper()+' USER '+(('IF NOT EXISTS ' if operation=='create' else 'IF EXISTS ') if exists else '')+selected)
     mode=draft.get('authentication_mode', 'PASSWORD' if 'password' in draft else 'PLUGIN' if draft.get('plugin') else 'UNCHANGED' if operation=='alter' else 'PASSWORD')
-    if not isinstance(mode,str) or mode not in {'PASSWORD','AUTHENTICATION_STRING','PLUGIN','NONE','UNCHANGED'}:
+    if not isinstance(mode,str) or mode not in {'PASSWORD','RANDOM_PASSWORD','AUTHENTICATION_STRING','PLUGIN','NONE','UNCHANGED'}:
         raise RelationalClientError('Select the native account authentication mode')
     if mode=='UNCHANGED' and operation=='create':raise RelationalClientError('Select explicit create authentication')
     plugin=draft.get('plugin')
-    if plugin == '' and mode in {'PASSWORD','NONE','UNCHANGED'}:
+    if plugin == '' and mode in {'PASSWORD','RANDOM_PASSWORD','NONE','UNCHANGED'}:
         plugin=None  # Existing optional text controls submit an empty value.
     if plugin is not None:
         plugin=text(plugin,'Authentication plugin',64)
@@ -102,6 +102,7 @@ def compile_operation(operation,draft,target=None):
         if 'password' not in draft:raise RelationalClientError('Supply the new native password explicitly')
         statement.add(' IDENTIFIED'+(' WITH '+identifier(plugin) if plugin else '')+' BY ')
         statement.value(draft['password'],'Password')
+    elif mode=='RANDOM_PASSWORD':statement.add(' IDENTIFIED'+(' WITH '+identifier(plugin) if plugin else '')+' BY RANDOM PASSWORD')
     elif mode=='AUTHENTICATION_STRING':
         statement.add(' IDENTIFIED WITH '+identifier(plugin)+' AS ');statement.value(draft.get('authentication_string'),'Authentication string')
     elif mode=='PLUGIN':statement.add(' IDENTIFIED WITH '+identifier(plugin))
@@ -111,13 +112,13 @@ def compile_operation(operation,draft,target=None):
     if mode=='PASSWORD' and 'authentication_string' in draft or mode=='AUTHENTICATION_STRING' and 'password' in draft:
         raise RelationalClientError('Select password or native authentication string, not both')
     if 'replace_password' in draft:
-        if operation!='alter' or mode!='PASSWORD':raise RelationalClientError('REPLACE requires an ALTER password change')
+        if operation!='alter' or mode not in {'PASSWORD','RANDOM_PASSWORD'}:raise RelationalClientError('REPLACE requires an ALTER password change')
         statement.add(' REPLACE ');statement.value(draft['replace_password'],'Current password')
     retain=draft.get('retain_current_password',False);discard=draft.get('discard_old_password',False)
     if type(retain) is not bool or type(discard) is not bool or retain and discard:
         raise RelationalClientError('Select native retained-password behavior')
     if retain:
-        if operation!='alter' or mode not in {'PASSWORD','AUTHENTICATION_STRING'}:raise RelationalClientError('Retaining the current password requires a native ALTER authentication change')
+        if operation!='alter' or mode not in {'PASSWORD','RANDOM_PASSWORD','AUTHENTICATION_STRING'}:raise RelationalClientError('Retaining the current password requires a native ALTER authentication change')
         statement.add(' RETAIN CURRENT PASSWORD')
     if discard:
         if operation!='alter' or mode!='UNCHANGED':raise RelationalClientError('Discarding the secondary password is a separate native ALTER change')
@@ -244,13 +245,15 @@ def observe(cursor,intent):
 
 
 def bind_review(client,planned):
+    from . import mysql_passwords
     from .mysql_indexes import context
     compiled=planned['provider_payload']['compiled'];intent=compiled['mysql_account_change']
+    delivery=mysql_passwords.binding(client,intent)
     handle=client._connect({'route':{**planned['provider_payload']['route'],'database':None}});cursor=None
     try:
         handle.autocommit=True;cursor=handle.cursor();identity=context(cursor)
         grammar=check_grammar(client,compiled,identity['sql_mode']);before=observe(cursor,intent)
-        intent['review']={'identity':identity,'before':before,'grammar':grammar}
+        intent['review']={'identity':identity,'before':before,'grammar':grammar,**({'password_delivery':delivery} if delivery else {})}
         planned['command_preview'].update(native_execution_identity=identity,native_account_observation=before['public'],native_grammar=grammar)
         return planned
     finally:
@@ -259,6 +262,7 @@ def bind_review(client,planned):
 
 
 def apply(client,request,connection=None):
+    from . import mysql_passwords
     from .mysql_indexes import context
     if connection is not None:raise RelationalClientError('Account changes require an independently owned connection')
     payload=request['provider_payload'];compiled=payload['compiled'];intent=compiled['mysql_account_change'];review=intent.get('review')
@@ -267,32 +271,53 @@ def apply(client,request,connection=None):
     candidate=deepcopy(compiled);candidate['mysql_account_change'].pop('review',None)
     if compile_operation(intent['operation'],intent['draft'],target)!=candidate:raise RelationalClientError('Reviewed native account change was modified')
     if check_grammar(client,candidate,review['identity']['sql_mode'])!=review['grammar']:raise RelationalClientError('Native grammar dependency changed')
-    handle=client._connect({'route':{**payload['route'],'database':None}});cursor=None;dispatched=acknowledged=False;acknowledgements=[]
+    if mysql_passwords.factors(intent) and not review.get('password_delivery'):raise RelationalClientError('Review protected password delivery before dispatch')
+    receiver=mysql_passwords.receiver(client,intent,review.get('password_delivery'))
+    handle=client._connect({'route':{**payload['route'],'database':None}});cursor=None;dispatched=acknowledged=False;acknowledgements=[];reservation=None;delivered=[];primary=False
     try:
         handle.autocommit=True;handle.get_warnings=True;handle.raise_on_warnings=False
         cursor=handle.cursor();identity=context(cursor);before=observe(cursor,intent)
         if identity!=review['identity'] or before!=review['before']:raise RelationalClientError('Native account or execution identity changed since review')
         warnings=[]
+        if receiver:
+            reservation=receiver.reserve(intent['user'],intent['host'],mysql_passwords.factors(intent))
+            if reservation is None:raise RelationalClientError('Protected password delivery capacity was not reserved')
         for ordinal,statement in enumerate(compiled['statements'],1):
             dispatched=True
             cursor.execute(statement['source'],statement['parameters'] or None);acknowledged=True
             acknowledgements.append({'ordinal':ordinal,'native_acknowledged':True})
-            warnings.extend({'level':level,'code':code,'message':message} for level,code,message in (cursor.warnings or ()))
+            if receiver:delivered.extend(mysql_passwords.deliver(receiver,reservation,cursor,intent))
+            warnings.extend({'level':level,'code':code,**({} if receiver else {'message':message})} for level,code,message in (cursor.warnings or ()))
         after_intent={**intent,**({'user':intent['new_user'],'host':intent['new_host']} if intent['operation']=='rename_user' else {})}
         after=observe(cursor,after_intent)
         return {'accepted':True,'native_implicit_commit':True,'commit_requested':False,'rollback_requested':False,
             'staged_in_provider_session':False,'automatic_retry':False,'native_warnings':warnings,
             'driver_observation_only':True,'transaction_finality_interpreted_by_common_code':False,
+            **({'protected_password_results':delivered} if receiver else {}),
             'account_observation':{'native_acknowledged':True,'acknowledgements':acknowledgements,'before':before['public'],'after':after['public'],'concurrent_external_writers_fenced':False}}
     except Exception as error:
-        failure=error if isinstance(error,RelationalClientError) else RelationalClientError('Native account change failed ('+type(error).__name__+')')
+        primary=True
+        failure=error if isinstance(error,RelationalClientError) and not receiver else RelationalClientError('Native account change failed ('+type(error).__name__+')')
         failure.native_dispatched=dispatched;failure.native_acknowledged=acknowledged;failure.automatic_retry=False
         failure.native_acknowledgements=acknowledgements
         failure.errno=getattr(error,'errno',None);failure.sqlstate=getattr(error,'sqlstate',None)
         raise failure from None
     finally:
-        if cursor is not None:client._safe_close(cursor)
-        client._forget_and_close(handle)
+        try:
+            if receiver and reservation is not None:receiver.release(reservation)
+        except Exception:
+            if not primary:
+                failure=RelationalClientError('Protected password delivery cleanup failed; inspect native state before another review')
+                failure.native_dispatched=dispatched;failure.native_acknowledged=acknowledged;failure.automatic_retry=False
+                raise failure from None
+        finally:
+            if cursor is not None:client._safe_close(cursor)
+            try:client._forget_and_close(handle)
+            except Exception:
+                if not primary:
+                    failure=RelationalClientError('Account connection cleanup failed; inspect native state before another review')
+                    failure.native_dispatched=dispatched;failure.native_acknowledged=acknowledged;failure.automatic_retry=False
+                    raise failure from None
 
 
 def compile_role(draft):
@@ -337,7 +362,7 @@ def append_factor(statement,row):
     if not isinstance(row,Mapping) or set(row)-{'mode','plugin','password','authentication_string'}:
         raise RelationalClientError('Unknown native factor authentication field')
     mode=row.get('mode','PLUGIN' if 'plugin' in row else 'PASSWORD')
-    if not isinstance(mode,str) or mode not in {'PASSWORD','AUTHENTICATION_STRING','PLUGIN'}:
+    if not isinstance(mode,str) or mode not in {'PASSWORD','RANDOM_PASSWORD','AUTHENTICATION_STRING','PLUGIN'}:
         raise RelationalClientError('Select a native factor identification mode; generated secrets require protected results')
     plugin=row.get('plugin')
     if plugin is not None:
@@ -348,6 +373,9 @@ def append_factor(statement,row):
     if mode=='PASSWORD':
         if 'authentication_string' in row:raise RelationalClientError('Select password or authentication string')
         statement.add(' BY ');statement.value(row.get('password'),'Factor password')
+    elif mode=='RANDOM_PASSWORD':
+        if {'password','authentication_string'}&set(row):raise RelationalClientError('Generated factors take no supplied credential')
+        statement.add(' BY RANDOM PASSWORD')
     elif mode=='AUTHENTICATION_STRING':
         if 'password' in row:raise RelationalClientError('Select password or authentication string')
         statement.add(' AS ');statement.value(row.get('authentication_string'),'Factor authentication string')

@@ -30,7 +30,7 @@ from ..relational_admin import (
 from ..distributed_sql import mysql_route
 from ..form_contracts import provider_form_contract
 from .mariadb_connections import Connector as _MariaDBConnectorFacade
-from .administration import MySQLAdministration
+from .administration import MySQLAdministration, HANDLERS
 
 
 MYSQL_PROFILE = PilotProfile(
@@ -1015,57 +1015,15 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         from .relay_positions import position, bind_review as bind_relay
         if position(compiled):
             return bind_relay(self, planned)
-        if 'mysql_privilege_change' in compiled:
-            from .mysql_privileges import bind_review
-            return bind_review(self, planned)
-        if 'mysql_account_change' in compiled:
-            from .mysql_accounts import bind_review
-            return bind_review(self, planned)
-        if 'mysql_trigger_create' in compiled:
-            from .mysql_triggers import bind_review
-            return bind_review(self, planned)
-        if 'mysql_routine_create' in compiled:
-            from .mysql_routines import bind_review
-            return bind_review(self, planned)
-        if 'mysql_index_create' in compiled:
-            from .mysql_indexes import bind_review
-            return bind_review(self, planned)
-        if 'mysql_server_control' in compiled:
-            from .mysql_server_control import bind_review
-            return bind_review(self,planned)
-        if 'mysql_xa' in compiled:
-            from .mysql_xa import bind_review
-            return bind_review(self,planned)
-        if 'mysql_page_tracking' in compiled:
-            from .mysql_page_tracking import bind_review
-            return bind_review(self, planned)
-        if 'mysql_rewriter' in compiled:
-            from .mysql_rewriter import bind_review
-            return bind_review(self, planned)
-        if 'mysql_key_cache_lifecycle' in compiled:
-            from .mysql_key_cache_lifecycle import bind_review
-            return bind_review(self,planned)
-        if 'mysql_instance' in compiled:
-            from .mysql_instance import bind_review
-            return bind_review(self,planned)
-        if 'mysql_user_keys' in compiled:
-            from .mysql_user_keys import bind_review
-            return bind_review(self,planned)
-        if 'mysql_key_cache' in compiled:
-            from .mysql_key_cache import bind_review
-            return bind_review(self,planned)
+        for suffix in ('privilege_change account_change trigger_create routine_create index_create server_control xa '
+                'page_tracking rewriter key_cache_lifecycle instance user_keys key_cache').split():
+            key = 'mysql_'+suffix
+            if key in compiled:return HANDLERS[key].bind_review(self, planned)
         if compiled.get('driver_operation') == 'mysql-shell' and compiled.get('operation_id') == 'verify_logical':
             from .mysql_dump_verification import bind_review
             return bind_review(self, planned)
-        if 'mysql_column_masking' in planned.get('provider_payload', {}).get('compiled', {}):
-            from .column_masking import bind_review
-            return bind_review(self, planned)
-        if 'mysql_foreign_server' in planned.get('provider_payload', {}).get('compiled', {}):
-            from .foreign_servers import bind_review
-            return bind_review(self, planned)
-        if 'mysql_spatial_reference' in planned.get('provider_payload', {}).get('compiled', {}):
-            from .spatial_reference_systems import bind_review
-            return bind_review(self, planned)
+        for key in ('mysql_column_masking','mysql_foreign_server','mysql_spatial_reference'):
+            if key in compiled:return HANDLERS[key].bind_review(self, planned)
         return planned
 
     _OPTION_NAMES = {
@@ -1187,6 +1145,21 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             self._executions.sessions.get(handle)
             return copy.deepcopy(handle._cdeadmin_admitted_runtime_identity)
         return super().runtime_identity(request, handle)
+
+    def validate_admin_operation(self, request):
+        value=super().validate_admin_operation(request)
+        if not value.get('errors') and request.get('resource_kind')=='user' and request.get('operation_id') in {'create','alter'}:
+            from . import mysql_accounts, mysql_passwords
+            intent=mysql_accounts.compile_operation(request['operation_id'],request.get('draft'),request.get('target_resource'))['mysql_account_change']
+            try:mysql_passwords.binding(self,intent)
+            except RelationalClientError as error:
+                value['errors']=[{'field_id':'authentication_mode','code':'protected_password_delivery_unavailable','message':str(error)}]
+        return value
+
+    def list_resources(self, request):
+        if request.get('_provider_session_handle') is None or self._uses_server_scope(request):return super().list_resources(request)
+        from .mysql_completion import catalog
+        return catalog(self, request)
 
     def execute(self, handle, request):
         session_request = self._session_requests.get(id(handle))
@@ -2770,12 +2743,17 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         if profile is MYSQL_PROFILE:
             from ..mysql_replication import channel_label
             for observation, query in CHANNEL_OBSERVATIONS:
-                for record in optional_records(query):
+                before = len(catalog_failures); records = optional_records(query)
+                if observation == 'workers' and len(catalog_failures) == before:
+                    for item in resources.values():
+                        if item['resource_kind']=='replication-channel':item['native']['workers']=[]
+                for record in records:
                     name = record['channel_name']
                     key = resource_key('replication-channel', [], channel_label(name))
                     if key not in resources:
                         add('replication-channel', [], channel_label(name), channel_native({'channel_name':name}))
-                    resources[key]['native'][observation] = record
+                    if observation == 'workers':resources[key]['native'].setdefault('workers',[]).append(record)
+                    else:resources[key]['native'][observation] = record
         if profile is MYSQL_PROFILE:
             from .foreign_servers import SELECT as foreign_select, normalized as foreign_normalized
             for record in optional_records(foreign_select + ' ORDER BY Server_name'):

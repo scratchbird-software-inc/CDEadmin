@@ -1,9 +1,39 @@
 """Independent committed-catalog completion without clearing source diagnostics."""
 import hashlib
 import json
+from copy import deepcopy
 
 from ...sdk.relational import RelationalClientError
 from .mysql_session_variables import SourceIdentityUnavailable, prepare, editor_observer
+
+
+def catalog(client, request):
+    try:return _catalog(client, request)
+    except SourceIdentityUnavailable:
+        client._uncertain_sessions.add(id(request['_provider_session_handle']))
+        raise RelationalClientError('The original MySQL session identity is unconfirmed; close this session') from None
+    except Exception:
+        raise RelationalClientError('Private MySQL catalog observation is unavailable; no original-session metadata command was substituted') from None
+
+
+def _catalog(client, request):
+    from ..native_editor import session_access
+    handle = request['_provider_session_handle']
+    with session_access(client, handle, 'mysql'):
+        observer = editor_observer(client, handle); prepare(handle)
+        with observer.parser_session() as (peer, observation):
+            effective = dict(request); effective.pop('_provider_session_handle')
+            rows = deepcopy(client.config.metadata_reader(peer, effective))
+            if not isinstance(rows,list):raise RelationalClientError('relational metadata reader must return a list')
+            for row in rows:
+                native = row.setdefault('native', {})
+                native['original_session_catalog_binding_validated'] = False
+                if row['resource_kind'] in {'server','database'}:
+                    native['metadata_observation'] = {
+                        'original_session_commands_sent':0,'observation_source':'private-native-peer',
+                        'source_default_schema':observation['default_schema'],
+                        'original_active_roles_observed':False,'original_temporary_objects_observed':False}
+            return rows
 
 
 def complete(client, handle):

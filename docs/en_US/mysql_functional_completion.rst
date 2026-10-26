@@ -2776,7 +2776,7 @@ are qualified on MySQL9.7 through both connector classes; no plugin simulation
 is used. The acquired Community production plugins/components contain no
 registration-requiring implementation. Core registration hooks do not establish
 available WebAuthn/Enterprise functionality. Generated passwords remain a beta
-protected-result gap under Decision10, separate from closed implementations.
+protected-result integration gap under Decision16, separate from closed implementations.
 
 User and host are separate native identities. Rename/drop preserve literal
 quotes, backticks, backslashes, Unicode and @ characters, independently of SQL
@@ -3116,3 +3116,50 @@ and the wider receiver-status inventory remain separate follow-up work; this
 qualification does not claim event delivery or full replication completion.
 Shared channel lifecycle forms and protected generated-password delivery remain
 open under their recorded decisions.
+
+Current Group9 integration boundary
+------------------------------------
+
+Receiver, coordinator and worker inspection now projects all20,15 and24 native
+MySQL9.7 status fields, respectively. Wide IDs/counters and timestamps use text;
+multiple workers retain their native identities and order. Each table remains
+independently authorized. An observed empty worker list is distinct from a
+failed read. Live inspection retains native diagnostic messages; schema/DDN
+exchange replaces their contents with explicit redaction/null/empty facts.
+Transient status does not become desired configuration or a migration command.
+Native pure/C, authenticated inspection, mixed-grant discovery and disabled
+instrumentation are qualified by the channel-catalog command.
+
+Retained resource discovery/inspection now uses the admitted private metadata
+peer under the source session lock. It cannot issue incidental catalog queries
+on the original editor connection. The selected target remains explicit;
+source database, diagnostic preservation and unobserved role/temporary scope
+are reported separately. Native warnings, ROW_COUNT and pending savepoints
+are qualified through both connectors. Unavailable observation fails without
+an intrusive fallback. Exact source overlays remain open under Decision17.
+
+Native account create/alter and factor clauses accept RANDOM PASSWORD. A trusted
+protected receiver reserves capacity before DCL and consumes generated values
+through zeroized SecretLease buffers. Only password reference IDs and native
+factor numbers appear in the public receipt. Review binds the receiver; apply
+rechecks it before connecting. No configured receiver, changed review or failed
+reservation can dispatch DCL. A lost result or post-acknowledgement delivery
+failure is never replayed. Native generated-password creation, rotation and
+actual authentication are qualified through pure/C; callback/transport failures
+and sanitized receipts have regression coverage. The authenticated application
+refuses generation before DCL until the shared bridge is installed.
+``tools/cdeadmin_mysql_protected_passwords_qualification.py`` is the native gate.
+
+The User descriptor carries typed choices in the existing authentication fields.
+This completes the native producer, not the application delivery workflow.
+Decision16 records the trusted service and reveal/recovery integration owned by
+the front-end stream. User-key type/length inspection and native setup/store/
+generate/remove remain separate and implemented; raw-key export stays outside
+beta by owner ruling. No shared UI, family schema or shell was changed.
+
+Group9 remains open for the shared integration/round trips and Decision17;
+independent INV-MYSQL reconciliation is still a separate implementation gate.
+The shared handoff also retains Decisions9/11/12/13/14/15: family privilege/value
+dispatch, registration, operation projection, navigator, typed Data row binding
+and Engine-object lifecycle. Platform acceptance, human presentation, deferred
+ScratchBird history and closed Enterprise runtimes retain their existing scope.

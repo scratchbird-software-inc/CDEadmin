@@ -37,13 +37,27 @@ def qualify(output):
     def records(cursor, source):
         cursor.execute(source); names = [column[0].lower() for column in cursor.description]
         return [dict(zip(names,row)) for row in cursor.fetchall()]
+    status_tables={'applier':'replication_applier_status','receiver':'replication_connection_status',
+        'coordinator':'replication_applier_status_by_coordinator','workers':'replication_applier_status_by_worker'}
     def observe_status(cursor):
-        queries = {
-            'applier': 'SELECT CHANNEL_NAME,SERVICE_STATE,REMAINING_DELAY,COUNT_TRANSACTIONS_RETRIES FROM performance_schema.replication_applier_status',
-            'receiver': 'SELECT CHANNEL_NAME,SERVICE_STATE,SOURCE_UUID,RECEIVED_TRANSACTION_SET,LAST_ERROR_NUMBER,CAST(LAST_ERROR_TIMESTAMP AS CHAR) AS LAST_ERROR_TIMESTAMP FROM performance_schema.replication_connection_status'}
-        result = {key:{row['channel_name']:row for row in records(cursor,query)} for key,query in queries.items()}
-        for row in result['applier'].values():row['count_transactions_retries']=str(row['count_transactions_retries'])
+        result={}
+        for key,table in status_tables.items():
+            cursor.execute('SHOW COLUMNS FROM performance_schema.'+table)
+            columns=[(row[0],row[1]) for row in cursor.fetchall()]
+            fields=','.join('CAST('+name+' AS CHAR) AS '+name if dtype.startswith(('timestamp','bigint')) else name for name,dtype in columns)
+            rows=records(cursor,'SELECT '+fields+' FROM performance_schema.'+table+' ORDER BY CHANNEL_NAME'+(', '+table+'.WORKER_ID' if key=='workers' else ''))
+            result[key]={}
+            for row in rows:
+                if key=='workers':result[key].setdefault(row['channel_name'],[]).append(row)
+                else:result[key][row['channel_name']]=row
         return result
+    def status(native,name,exported=False):
+        def sanitize(row):
+            return {k:({'redacted':True,'is_null':v is None,'is_empty':v==''} if exported and k.endswith('_message') else v) for k,v in row.items()}
+        for field,values in expected_status.items():
+            if field=='workers':assert native[field]==[sanitize(row) for row in values.get(name,[])]
+            elif name in values:assert native[field]==sanitize(values[name])
+            else:assert field not in native
     def configure(cursor):
         nonlocal expected_status
         policy_user="policy雪'@reader"
@@ -90,7 +104,7 @@ def qualify(output):
         for name, facts in actual.items():
             assert {key:facts[key] for key in expected[name]}==expected[name]
             assert facts['replication_password_returned'] is False
-            for field, values in expected_status.items():assert facts[field]==values[name]
+            status(facts,name)
         assert source_password not in json.dumps(rows)
     def ddn(captured, expected):
         exported = build_export(captured['resources'], endpoint_id='owned', target_id='server:'+captured['server_uuid'],
@@ -103,13 +117,26 @@ def qualify(output):
         assert actual==expected and source_password not in json.dumps(document)
         for row in parsed['rows'].values():
             if row['kind']=='replication-channel':
-                for field, values in expected_status.items():assert row['native'][field]==values[row['native']['catalog_row']['channel_name']]
+                status(row['native'],row['native']['catalog_row']['channel_name'],exported=True)
         return parsed
     try:
         with server(output/'fixture') as (route,_name,fixture):
             owned.append(fixture); oracle=_root_connection('mysql',route['port']);oracle.autocommit=True;q=oracle.cursor()
             try:
+                q.execute('SET GLOBAL replica_parallel_workers=12')
                 expected=configure(q);q.execute('CREATE DATABASE sr_osc');q.execute('CREATE TABLE sr_osc.pending(id INT PRIMARY KEY)')
+                q.execute("START REPLICA IO_THREAD FOR CHANNEL ''")
+                try:
+                    deadline=time.monotonic()+10
+                    while True:
+                        expected_status=observe_status(q)
+                        if expected_status['receiver']['']['last_error_message']:break
+                        if time.monotonic()>deadline:raise TimeoutError('Native receiver diagnostic did not arrive')
+                        time.sleep(.05)
+                finally:q.execute("STOP REPLICA IO_THREAD FOR CHANNEL ''")
+                expected_status=observe_status(q)
+                assert expected_status['receiver']['']['last_error_number'] and expected_status['receiver']['']['last_error_message']
+                proof['native_nonempty_error_text_live_and_redacted']=True
                 for pure in (True,False):
                     client=_create_client(MYSQL_PROFILE,SimpleNamespace(acquire_secret=None),SimpleNamespace())
                     handle=client._connect({'route':{**route,'database':'sr_osc','use_pure':pure,'autocommit':True}})
@@ -124,6 +151,7 @@ def qualify(output):
                             if time.monotonic()>deadline:raise TimeoutError('Native applier did not start')
                             time.sleep(.05)
                         try:
+                            assert [row['worker_id'] for row in expected_status['workers']['']]==[str(n) for n in range(1,13)]
                             explorer(_resources(handle,{'route':{'database':'sr_osc'}},MYSQL_PROFILE),expected)
                             ddn(capture(handle),expected)
                         finally:
@@ -139,6 +167,8 @@ def qualify(output):
                             'all_27_fields':True,'null_empty_and_uint64_text_exact':True,'ddn_roundtrip_exact':True,
                             'original_diagnostics_and_savepoint_preserved':True,'source_password_excluded':True,
                             'all_7_applier_configuration_fields':True,'all_4_applier_status_fields':True,
+                            'receiver_20_coordinator_15_worker_24_fields':True,'diagnostic_text_redacted_in_ddn':True,
+                            'multi_digit_worker_numeric_order_exact':True,
                             'native_active_and_stopped_applier_observed':True})
                     finally:client._forget_and_close(handle);client.close()
                 password=secrets.token_urlsafe(24);q.execute('ALTER USER CURRENT_USER() IDENTIFIED BY %s',(password,))
@@ -179,7 +209,9 @@ def qualify(output):
                     finally:client._forget_and_close(handle);client.close()
                 for mode, tables in [('receiver-only',['replication_connection_configuration']),
                     ('applier-only',['replication_applier_configuration','replication_applier_status']),
-                    ('status-only',['replication_applier_status'])]:
+                    ('status-only',['replication_applier_status']),
+                    ('receiver-status-only',['replication_connection_status']),('coordinator-only',['replication_applier_status_by_coordinator']),
+                    ('workers-only',['replication_applier_status_by_worker'])]:
                     q.execute('REVOKE ALL PRIVILEGES, GRANT OPTION FROM `channel_reader`@`%`')
                     q.execute('GRANT SELECT ON sr_osc.* TO `channel_reader`@`%`')
                     for table in tables:q.execute('GRANT SELECT ON performance_schema.'+table+' TO `channel_reader`@`%`')
@@ -195,22 +227,23 @@ def qualify(output):
                             exchanged={row['native']['catalog_row']['channel_name']:row for row in parsed['rows'].values() if row['kind']=='replication-channel'}
                             rows=_resources(handle,{'route':{'database':'sr_osc'}},MYSQL_PROFILE)
                             actual={row['native']['channel_name']:row['native'] for row in rows if row['resource_kind']=='replication-channel'}
-                            assert actual.keys()==exchanged.keys()==expected.keys()
+                            visible=set(expected) if 'replication_connection_configuration' in tables or 'replication_applier_configuration' in tables else set().union(*(set(expected_status[field]) for field,table in status_tables.items() if table in tables))
+                            assert actual.keys()==exchanged.keys()==visible
                             for name,native in actual.items():
                                 values=exchanged[name]['native']['catalog_row']
                                 assert exchanged[name]['native']['section']=='replication-channels'
-                                if mode=='receiver-only':
-                                    desired={k:v for k,v in expected[name].items() if k!='applier_configuration'}
-                                    assert values==desired and {k:native[k] for k in desired}==desired
-                                    assert 'applier_configuration' not in native and 'applier' not in native
-                                else:
-                                    assert 'host' not in native and 'host' not in values
-                                    assert native['applier']==exchanged[name]['native']['applier']==expected_status['applier'][name]
-                                    if mode=='applier-only':assert native['applier_configuration']==values['applier_configuration']==expected[name]['applier_configuration']
-                                    else:assert 'applier_configuration' not in values and 'applier_configuration' not in native
+                                desired={'channel_name':name}
+                                if 'replication_connection_configuration' in tables:desired.update({k:v for k,v in expected[name].items() if k!='applier_configuration'})
+                                if 'replication_applier_configuration' in tables:desired['applier_configuration']=expected[name]['applier_configuration']
+                                assert values==desired and {k:native[k] for k in desired}==desired
+                                for field,table in status_tables.items():
+                                    if table not in tables:
+                                        assert field not in native and field not in exchanged[name]['native']
+                                    elif field=='workers':assert native[field]==expected_status[field].get(name,[])
+                                    elif name in expected_status[field]:assert native[field]==expected_status[field][name]
                             denied={row['section'] for row in captured['observations'] if row.get('error_code')==1142}
-                            assert ('replication-applier_configuration' in denied) is (mode!='applier-only')
-                            assert ('replication-channels' in denied) is (mode!='receiver-only')
+                            assert ('replication-applier_configuration' in denied) is ('replication_applier_configuration' not in tables)
+                            assert ('replication-channels' in denied) is ('replication_connection_configuration' not in tables)
                             proof['mixed_grants'].append({'mode':mode,'use_pure':pure,'independent_native_grants_preserved':True,
                                 'single_canonical_channel_identity':True,'unobserved_fields_not_fabricated':True,'ddn_exact':True})
                         finally:client._forget_and_close(handle);client.close()

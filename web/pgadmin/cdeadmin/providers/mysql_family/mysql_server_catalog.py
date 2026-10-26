@@ -7,7 +7,7 @@ from .mysql_catalog import _value, DENIED, SYSTEM
 from ..mysql_grants import QUERIES as GRANTS
 from .system_variables import SELECT as VARIABLES_SELECT, administration as variable_administration
 from .mysql_xa import RECOVER as XA_RECOVER, decode_row as decode_xa, execute_recovery
-from .installed_catalog import PLUGINS, FUNCTIONS, CHANNELS, CHANNEL_OBSERVATIONS
+from .installed_catalog import PLUGINS, FUNCTIONS, CHANNELS, CHANNEL_OBSERVATIONS, catalog_status
 
 MAX_FACTS = 20000
 MAX_BYTES = 8 * 1024 * 1024
@@ -158,7 +158,10 @@ def capture(connection, *, spatial_reference_ids=None):
                 if section != 'replication-channels':
                     field = section.removeprefix('replication-')
                     target = channels[name]['catalog_row'] if field=='applier_configuration' else channels[name]
-                    target[field] = row
+                    if field == 'workers':target.setdefault(field,[]).append(catalog_status(row))
+                    else:target[field] = row if field=='applier_configuration' else catalog_status(row)
+            if section=='replication-workers':
+                for native in channels.values():native.setdefault('workers',[])
             observations.append({'section':section,'available':True,'rows':len(rows),
                 **({'selected_ids':selected} if section == 'spatial-reference-systems' else {})})
     if len({row['resource_id'] for row in resources}) != len(resources):

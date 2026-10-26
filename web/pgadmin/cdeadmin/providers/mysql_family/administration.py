@@ -24,37 +24,33 @@ from . import mysql_server_control
 from . import mysql_key_cache_lifecycle as cache_lifecycle
 
 
+HANDLERS = dict(zip(('mysql_'+key for key in (
+    'privilege_change account_change trigger_create routine_create index_create user_keys page_tracking '
+    'rewriter server_control xa key_cache_lifecycle instance key_cache column_masking foreign_server spatial_reference').split()),
+    (mysql_privileges,mysql_accounts,mysql_triggers,mysql_routines,mysql_indexes,mysql_user_keys,mysql_page_tracking,
+     mysql_rewriter,mysql_server_control,mysql_xa,cache_lifecycle,mysql_instance,mysql_key_cache,column_masking,foreign_servers,srs)))
+
+
 class MySQLAdministration(RelationalAdministration):
     def catalog(self, catalog):
         value = deepcopy(catalog)
         for resource in value['objects']:
             if resource['resource_kind']=='server':
-                resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in mysql_page_tracking.OPERATIONS] + [{
-                    'operation_id': operation, 'title': title,
-                    'mutation_class': 'read' if operation in mysql_page_tracking.READS else 'destructive' if operation in {'set_page_tracking_backup_id', 'purge_page_tracking'} else 'admin',
-                    'target_required': True, 'confirmation_required': operation not in mysql_page_tracking.READS,
-                } for operation, title in mysql_page_tracking.OPERATIONS.items()]
-                resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in mysql_rewriter.OPERATIONS] + [{
-                    'operation_id': operation, 'title': title,
-                    'mutation_class': 'read' if operation == 'inspect_rewrite_rules' else 'destructive' if operation == 'drop_rewrite_rule' else 'admin',
-                    'target_required': True, 'confirmation_required': operation != 'inspect_rewrite_rules',
-                } for operation, title in mysql_rewriter.OPERATIONS.items()]
-                resource['operations']=[row for row in resource['operations'] if row['operation_id'] not in mysql_server_control.OPERATIONS]+[{
-                    'operation_id':operation,'title':title[0],'mutation_class':'destructive',
-                    'target_required':True,'confirmation_required':True,
-                } for operation,title in mysql_server_control.OPERATIONS.items()]
-                resource['operations']=[row for row in resource['operations'] if row['operation_id'] not in mysql_xa.OPERATIONS]+[{
-                    'operation_id':operation,'title':title,'mutation_class':'read' if operation=='inspect_prepared_xa' else 'destructive',
-                    'target_required':True,'confirmation_required':operation!='inspect_prepared_xa',
-                } for operation,title in mysql_xa.OPERATIONS.items()]
-                resource['operations']=[row for row in resource['operations'] if row['operation_id'] not in mysql_instance.OPERATIONS]+[{
-                    'operation_id':operation,'title':mysql_instance.OPERATIONS[operation][0],
-                    'mutation_class':'admin','target_required':True,'confirmation_required':True,
-                } for operation in mysql_instance.OPERATIONS]
-                resource['operations']=[row for row in resource['operations'] if row['operation_id'] not in cache_lifecycle.OPERATIONS]+[{
-                    'operation_id':operation,'title':title,'mutation_class':'read' if operation=='inspect_key_cache' else 'admin',
-                    'target_required':True,'confirmation_required':operation!='inspect_key_cache',
-                } for operation,title in cache_lifecycle.OPERATIONS.items()]
+                policies = (
+                    (mysql_page_tracking, mysql_page_tracking.READS, {'set_page_tracking_backup_id','purge_page_tracking'}),
+                    (mysql_rewriter, {'inspect_rewrite_rules'}, {'drop_rewrite_rule'}),
+                    (mysql_server_control, set(), set(mysql_server_control.OPERATIONS)),
+                    (mysql_xa, {'inspect_prepared_xa'}, set(mysql_xa.OPERATIONS)-{'inspect_prepared_xa'}),
+                    (mysql_instance, set(), set()),
+                    (cache_lifecycle, {'inspect_key_cache'}, set()),
+                )
+                for module, reads, destructive in policies:
+                    operations = module.OPERATIONS
+                    resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in operations] + [{
+                        'operation_id':operation,'title':title[0] if isinstance(title,tuple) else title,
+                        'mutation_class':'read' if operation in reads else 'destructive' if operation in destructive else 'admin',
+                        'target_required':True,'confirmation_required':operation not in reads,
+                    } for operation,title in operations.items()]
             if resource['resource_kind'] == 'table':
                 resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in mysql_key_cache.OPERATIONS] + [{
                     'operation_id':operation,'title':operation_entry('table',operation)['title'],
@@ -110,34 +106,42 @@ class MySQLAdministration(RelationalAdministration):
         from .database_inputs import OPERATIONS, normalize
         if kind == 'database' and operation in OPERATIONS:
             return normalize(operation, draft)
-        if kind == 'privilege' and operation in {'grant', 'revoke'}:return deepcopy(draft)
-        if kind == 'user' and operation in {'rename', 'drop'} or kind == 'role' and operation == 'drop':return deepcopy(draft)
-        if kind == 'role' and operation == 'create':return deepcopy(draft)
-        if kind == 'user' and operation in {'create', 'alter'}:return deepcopy(draft)
-        if kind == 'trigger' and operation == 'create':return deepcopy(draft)
-        if kind in mysql_routines.KINDS and operation == 'create':return deepcopy(draft)
-        if kind == 'index' and operation == 'create':return deepcopy(draft)
-        if kind=='server' and operation in mysql_user_keys.OPERATIONS:return deepcopy(draft)
+        if self._native_operation({'resource_kind':kind,'operation_id':operation,'draft':draft}):return deepcopy(draft)
         if kind=='table' and operation=='create':
             if not isinstance(draft,Mapping):raise RelationalClientError('Select structured native MySQL table properties')
             value=deepcopy(dict(draft));native={key:value.pop(key) for key in ('mysql_table_options','mysql_connection') if key in value}
             if native.get('mysql_connection')=='':native.pop('mysql_connection')
             value=super()._normalize_draft(kind,operation,value);value['options'].update(native);return value
-        if kind == 'server' and operation in mysql_page_tracking.OPERATIONS:
-            return deepcopy(draft)
-        if kind == 'server' and operation in mysql_rewriter.OPERATIONS:
-            return deepcopy(draft)
-        if kind=='server' and operation in mysql_server_control.OPERATIONS:return deepcopy(draft)
-        if kind=='server' and operation in mysql_xa.OPERATIONS:return deepcopy(draft)
-        if kind=='server' and operation in cache_lifecycle.OPERATIONS:return deepcopy(draft)
-        if kind=='server' and operation in mysql_instance.OPERATIONS:return deepcopy(draft)
-        if kind == 'table' and operation in mysql_key_cache.OPERATIONS:return deepcopy(draft)
-        if kind == 'column' and operation in column_masking.OPERATIONS:
-            return deepcopy(draft)
-        if ((kind == srs.KIND and operation in srs.OPERATIONS) or
-                (kind == foreign_servers.KIND and operation in foreign_servers.OPERATIONS)):
-            return deepcopy(draft)
         return super()._normalize_draft(kind, operation, draft)
+
+    @staticmethod
+    def _native_operation(request):
+        kind,operation=request.get('resource_kind'),request.get('operation_id')
+        draft,target=request.get('draft'),request.get('target_resource')
+        if kind=='privilege' and operation in {'grant','revoke'}:
+            return mysql_privileges.compile_operation,(operation,draft),'invalid_mysql_privilege'
+        if kind=='user' and operation in {'rename','drop'} or kind=='role' and operation=='drop':
+            return mysql_accounts.compile_operation,(operation+'_'+kind,draft,target),'invalid_mysql_account_identity'
+        if kind=='role' and operation=='create':return mysql_accounts.compile_role,(draft,),'invalid_mysql_role'
+        if kind=='user' and operation in {'create','alter'}:
+            return mysql_accounts.compile_operation,(operation,draft,target),'invalid_mysql_account'
+        if kind in mysql_routines.KINDS and operation=='create':return mysql_routines.compile_create,(kind,draft),'invalid_mysql_routine'
+        if kind in {'trigger','index'} and operation=='create':
+            return (mysql_triggers if kind=='trigger' else mysql_indexes).compile_create,(draft,),'invalid_mysql_'+kind
+        for family,module,code in (
+            ('server',mysql_user_keys,'invalid_user_key'),
+            ('server',mysql_page_tracking,'invalid_mysql_page_tracking'),
+            ('server',mysql_rewriter,'invalid_mysql_rewriter'),
+            ('server',mysql_server_control,'invalid_mysql_server_control'),
+            ('server',mysql_xa,'invalid_mysql_xa'),
+            ('server',cache_lifecycle,'invalid_mysql_key_cache_lifecycle'),
+            ('server',mysql_instance,'invalid_mysql_instance'),
+            ('table',mysql_key_cache,'invalid_mysql_key_cache'),
+            ('column',column_masking,'invalid_mysql_column_masking'),
+            (foreign_servers.KIND,foreign_servers,'invalid_mysql_foreign_server'),
+            (srs.KIND,srs,'invalid_mysql_spatial_reference'),
+        ):
+            if kind==family and operation in module.OPERATIONS:return module.compile_operation,(operation,draft,target),code
 
     def validate(self, request):
         from .database_inputs import OPERATIONS, normalize
@@ -146,54 +150,13 @@ class MySQLAdministration(RelationalAdministration):
                 return super().validate({**request, 'draft': normalize(request['operation_id'], request.get('draft'))})
             except (RelationalClientError, TypeError, ValueError, OverflowError) as error:
                 return {'errors': [{'field_id': None, 'code': 'invalid_mysql_database_input', 'message': str(error)}]}
-        if request.get('resource_kind') == 'privilege' and request.get('operation_id') in {'grant', 'revoke'}:
+        selected=self._native_operation(request)
+        if selected:
+            compile,args,code=selected
             try:
-                mysql_privileges.compile_operation(request['operation_id'], request.get('draft'))
-                return {'errors': []}
+                compile(*args);return {'errors':[]}
             except RelationalClientError as error:
-                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_privilege', 'message': str(error)}]}
-        kind, operation = request.get('resource_kind'), request.get('operation_id')
-        if kind == 'user' and operation in {'rename', 'drop'} or kind == 'role' and operation == 'drop':
-            try:
-                mysql_accounts.compile_operation(operation+'_'+kind, request.get('draft'), request.get('target_resource'))
-                return {'errors': []}
-            except RelationalClientError as error:
-                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_account_identity', 'message': str(error)}]}
-        if request.get('resource_kind') == 'role' and request.get('operation_id') == 'create':
-            try:
-                mysql_accounts.compile_role(request.get('draft'))
-                return {'errors': []}
-            except RelationalClientError as error:
-                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_role', 'message': str(error)}]}
-        if request.get('resource_kind') == 'user' and request.get('operation_id') in {'create', 'alter'}:
-            try:
-                mysql_accounts.compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
-                return {'errors': []}
-            except RelationalClientError as error:
-                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_account', 'message': str(error)}]}
-        if request.get('resource_kind') == 'trigger' and request.get('operation_id') == 'create':
-            try:
-                mysql_triggers.compile_create(request.get('draft'))
-                return {'errors': []}
-            except RelationalClientError as error:
-                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_trigger', 'message': str(error)}]}
-        if request.get('resource_kind') in mysql_routines.KINDS and request.get('operation_id') == 'create':
-            try:
-                mysql_routines.compile_create(request['resource_kind'], request.get('draft'))
-                return {'errors': []}
-            except RelationalClientError as error:
-                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_routine', 'message': str(error)}]}
-        if request.get('resource_kind') == 'index' and request.get('operation_id') == 'create':
-            try:
-                mysql_indexes.compile_create(request.get('draft'))
-                return {'errors': []}
-            except RelationalClientError as error:
-                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_index', 'message': str(error)}]}
-        if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_user_keys.OPERATIONS:
-            try:
-                mysql_user_keys.compile_operation(request['operation_id'],request.get('draft'),request.get('target_resource'))
-                return {'errors':[]}
-            except RelationalClientError as error:return {'errors':[{'field_id':None,'code':'invalid_user_key','message':str(error)}]}
+                return {'errors':[{'field_id':None,'code':code,'message':str(error)}]}
         if request.get('resource_kind')=='table' and request.get('operation_id')=='create':
             value=super().validate(request)
             try:
@@ -201,86 +164,11 @@ class MySQLAdministration(RelationalAdministration):
                 mysql_table_options.compile_options(draft.get('mysql_table_options',mysql_table_options.selected(options)),draft.get('mysql_connection',options.get('mysql_connection')) or None)
             except (RelationalClientError,ValueError) as error:value['errors'].append({'field_id':None,'code':'invalid_mysql_table_options','message':str(error)})
             return value
-        if request.get('resource_kind') == 'server' and request.get('operation_id') in mysql_page_tracking.OPERATIONS:
-            try:
-                mysql_page_tracking.compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
-                return {'errors': []}
-            except RelationalClientError as error:
-                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_page_tracking', 'message': str(error)}]}
-        if request.get('resource_kind') == 'server' and request.get('operation_id') in mysql_rewriter.OPERATIONS:
-            try:
-                mysql_rewriter.compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
-                return {'errors': []}
-            except RelationalClientError as error:
-                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_rewriter', 'message': str(error)}]}
-        if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_server_control.OPERATIONS:
-            try:
-                mysql_server_control.compile_operation(request['operation_id'],request.get('draft'),request.get('target_resource'))
-                return {'errors':[]}
-            except RelationalClientError as error:
-                return {'errors':[{'field_id':None,'code':'invalid_mysql_server_control','message':str(error)}]}
-        if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_xa.OPERATIONS:
-            try:
-                mysql_xa.compile_operation(request['operation_id'],request.get('draft'),request.get('target_resource'))
-                return {'errors':[]}
-            except RelationalClientError as error:
-                return {'errors':[{'field_id':None,'code':'invalid_mysql_xa','message':str(error)}]}
-        if request.get('resource_kind')=='server' and request.get('operation_id') in cache_lifecycle.OPERATIONS:
-            try:
-                cache_lifecycle.compile_operation(request['operation_id'],request.get('draft'),request.get('target_resource'))
-                return {'errors':[]}
-            except RelationalClientError as error:
-                return {'errors':[{'field_id':None,'code':'invalid_mysql_key_cache_lifecycle','message':str(error)}]}
-        if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_instance.OPERATIONS:
-            try:
-                mysql_instance.compile_operation(request['operation_id'],request.get('draft'),request.get('target_resource'))
-                return {'errors':[]}
-            except RelationalClientError as error:
-                return {'errors':[{'field_id':None,'code':'invalid_mysql_instance','message':str(error)}]}
-        if request.get('resource_kind')=='table' and request.get('operation_id') in mysql_key_cache.OPERATIONS:
-            try:
-                mysql_key_cache.compile_operation(request['operation_id'],request.get('draft'),request.get('target_resource'))
-                return {'errors':[]}
-            except RelationalClientError as error:
-                return {'errors':[{'field_id':None,'code':'invalid_mysql_key_cache','message':str(error)}]}
-        if request.get('resource_kind') == 'column' and request.get('operation_id') in column_masking.OPERATIONS:
-            try:
-                column_masking.compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
-                return {'errors': []}
-            except RelationalClientError as error:
-                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_column_masking', 'message': str(error)}]}
-        if request.get('resource_kind') == foreign_servers.KIND and request.get('operation_id') in foreign_servers.OPERATIONS:
-            try:
-                foreign_servers.compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
-                return {'errors': []}
-            except RelationalClientError as error:
-                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_foreign_server', 'message': str(error)}]}
-        if request.get('resource_kind') == srs.KIND and request.get('operation_id') in srs.OPERATIONS:
-            try:
-                srs.compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
-                return {'errors': []}
-            except RelationalClientError as error:
-                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_spatial_reference', 'message': str(error)}]}
         return super().validate(request)
 
     def _compile(self, request):
-        if request.get('resource_kind') == 'privilege' and request.get('operation_id') in {'grant', 'revoke'}:
-            return mysql_privileges.compile_operation(request['operation_id'], request['draft'])
-        kind, operation = request.get('resource_kind'), request.get('operation_id')
-        if kind == 'user' and operation in {'rename', 'drop'} or kind == 'role' and operation == 'drop':
-            return mysql_accounts.compile_operation(operation+'_'+kind, request['draft'], request.get('target_resource'))
-        if request.get('resource_kind') == 'role' and request.get('operation_id') == 'create':
-            return mysql_accounts.compile_role(request['draft'])
-        if request.get('resource_kind') == 'user' and request.get('operation_id') in {'create', 'alter'}:
-            return mysql_accounts.compile_operation(request['operation_id'], request['draft'], request.get('target_resource'))
-        if request.get('resource_kind') == 'trigger' and request.get('operation_id') == 'create':
-            return mysql_triggers.compile_create(request['draft'])
-        if request.get('resource_kind') in mysql_routines.KINDS and request.get('operation_id') == 'create':
-            return mysql_routines.compile_create(request['resource_kind'], request['draft'])
-        if request.get('resource_kind') == 'index' and request.get('operation_id') == 'create':
-            return mysql_indexes.compile_create(request['draft'])
-        if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_user_keys.OPERATIONS:
-            return mysql_user_keys.compile_operation(request['operation_id'],request['draft'],request.get('target_resource'))
+        selected=self._native_operation(request)
+        if selected:return selected[0](*selected[1])
         if request.get('resource_kind')=='table' and request.get('operation_id')=='create':
             compiled=super()._compile(request);options=request['draft'].get('options') or {}
             suffix,parameters=mysql_table_options.compile_options(mysql_table_options.selected(options),options.get('mysql_connection'))
@@ -288,26 +176,6 @@ class MySQLAdministration(RelationalAdministration):
             if options.get('mysql_connection') is not None:compiled['warnings']=[*compiled.get('warnings',[]),
                 'FEDERATED stores a native remote reference; it does not copy remote rows or verify their recovery. Native table access can contact that remote server.']
             return compiled
-        if request.get('resource_kind') == 'server' and request.get('operation_id') in mysql_page_tracking.OPERATIONS:
-            return mysql_page_tracking.compile_operation(request['operation_id'], request['draft'], request.get('target_resource'))
-        if request.get('resource_kind') == 'server' and request.get('operation_id') in mysql_rewriter.OPERATIONS:
-            return mysql_rewriter.compile_operation(request['operation_id'], request['draft'], request.get('target_resource'))
-        if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_server_control.OPERATIONS:
-            return mysql_server_control.compile_operation(request['operation_id'],request['draft'],request.get('target_resource'))
-        if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_xa.OPERATIONS:
-            return mysql_xa.compile_operation(request['operation_id'],request['draft'],request.get('target_resource'))
-        if request.get('resource_kind')=='server' and request.get('operation_id') in cache_lifecycle.OPERATIONS:
-            return cache_lifecycle.compile_operation(request['operation_id'],request['draft'],request.get('target_resource'))
-        if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_instance.OPERATIONS:
-            return mysql_instance.compile_operation(request['operation_id'],request['draft'],request.get('target_resource'))
-        if request.get('resource_kind')=='table' and request.get('operation_id') in mysql_key_cache.OPERATIONS:
-            return mysql_key_cache.compile_operation(request['operation_id'],request['draft'],request.get('target_resource'))
-        if request.get('resource_kind') == 'column' and request.get('operation_id') in column_masking.OPERATIONS:
-            return column_masking.compile_operation(request['operation_id'], request['draft'], request.get('target_resource'))
-        if request.get('resource_kind') == foreign_servers.KIND and request.get('operation_id') in foreign_servers.OPERATIONS:
-            return foreign_servers.compile_operation(request['operation_id'], request['draft'], request.get('target_resource'))
-        if request.get('resource_kind') == srs.KIND and request.get('operation_id') in srs.OPERATIONS:
-            return srs.compile_operation(request['operation_id'], request['draft'], request.get('target_resource'))
         return super()._compile(request)
 
     def apply(self, client, request, connection=None):
@@ -315,36 +183,6 @@ class MySQLAdministration(RelationalAdministration):
         compiled = (request.get('provider_payload') or {}).get('compiled', {})
         if 'mysql_relay_review' in compiled or position(compiled):
             return apply_relay(client, request, connection)
-        if 'mysql_privilege_change' in (request.get('provider_payload') or {}).get('compiled', {}):
-            return mysql_privileges.apply(client, request, connection)
-        if 'mysql_account_change' in (request.get('provider_payload') or {}).get('compiled', {}):
-            return mysql_accounts.apply(client, request, connection)
-        if 'mysql_trigger_create' in (request.get('provider_payload') or {}).get('compiled', {}):
-            return mysql_triggers.apply(client, request, connection)
-        if 'mysql_routine_create' in (request.get('provider_payload') or {}).get('compiled', {}):
-            return mysql_routines.apply(client, request, connection)
-        if 'mysql_index_create' in (request.get('provider_payload') or {}).get('compiled', {}):
-            return mysql_indexes.apply(client, request, connection)
-        if 'mysql_user_keys' in (request.get('provider_payload') or {}).get('compiled',{}):
-            return mysql_user_keys.apply(client,request,connection)
-        if 'mysql_page_tracking' in (request.get('provider_payload') or {}).get('compiled', {}):
-            return mysql_page_tracking.apply(client, request, connection)
-        if 'mysql_rewriter' in (request.get('provider_payload') or {}).get('compiled', {}):
-            return mysql_rewriter.apply(client, request, connection)
-        if 'mysql_server_control' in (request.get('provider_payload') or {}).get('compiled',{}):
-            return mysql_server_control.apply(client,request,connection)
-        if 'mysql_xa' in (request.get('provider_payload') or {}).get('compiled',{}):
-            return mysql_xa.apply(client,request,connection)
-        if 'mysql_key_cache_lifecycle' in (request.get('provider_payload') or {}).get('compiled',{}):
-            return cache_lifecycle.apply(client,request,connection)
-        if 'mysql_instance' in (request.get('provider_payload') or {}).get('compiled',{}):
-            return mysql_instance.apply(client,request,connection)
-        if 'mysql_key_cache' in (request.get('provider_payload') or {}).get('compiled',{}):
-            return mysql_key_cache.apply(client,request,connection)
-        if 'mysql_column_masking' in (request.get('provider_payload') or {}).get('compiled', {}):
-            return column_masking.apply(client, request, connection)
-        if 'mysql_foreign_server' in (request.get('provider_payload') or {}).get('compiled', {}):
-            return foreign_servers.apply(client, request, connection)
-        if 'mysql_spatial_reference' in (request.get('provider_payload') or {}).get('compiled', {}):
-            return srs.apply(client, request, connection)
+        for key,module in HANDLERS.items():
+            if key in compiled:return module.apply(client, request, connection)
         return super().apply(client, request, connection)

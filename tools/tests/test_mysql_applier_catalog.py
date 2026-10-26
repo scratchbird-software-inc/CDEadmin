@@ -36,7 +36,7 @@ class Observed(Channels):
             self.calls.append(source); rows = self.observed[key]
             if rows is None:
                 error = RuntimeError('Private native denial detail'); error.errno = 1142; error.sqlstate = '42000'; raise error
-            cursor.description = [(key,) for key in rows[0]]
+            cursor.description = [(key,) for key in rows[0]] if rows else []
             cursor.rows = [tuple(row.values()) for row in rows]
         cursor.execute = selected
         return cursor
@@ -104,8 +104,47 @@ def test_transient_status_does_not_change_migration_state_but_applier_configurat
     assert not any('applier' in key for key in SPEC)  # Observations are not object kinds.
 
 
-def test_native_projection_preserves_nullable_policy_and_exact_status_fields_without_joins_or_error_text():
+def test_native_projection_preserves_exact_status_fields_without_joins():
     assert len(APPLIER_COLUMNS)==len(set(APPLIER_COLUMNS))==7
-    assert all('JOIN' not in query and 'LAST_ERROR_MESSAGE' not in query for query in QUERIES.values())
+    assert all('JOIN' not in query for query in QUERIES.values())
     assert 'CAST(COUNT_TRANSACTIONS_RETRIES AS CHAR)' in QUERIES['applier']
     assert 'CAST(LAST_ERROR_TIMESTAMP AS CHAR)' in QUERIES['receiver']
+
+
+def test_native_status_messages_are_available_live_but_redacted_from_schema_exchange():
+    from pgadmin.cdeadmin.providers.mysql_family.installed_catalog import catalog_status,RECEIVER_COLUMNS,COORDINATOR_COLUMNS,WORKER_COLUMNS
+    assert len(RECEIVER_COLUMNS)==20 and len(COORDINATOR_COLUMNS)==15 and len(WORKER_COLUMNS)==24
+    for columns in (RECEIVER_COLUMNS,COORDINATOR_COLUMNS,WORKER_COLUMNS):assert len(columns)==len(set(columns))
+    row={'last_error_message':'private-query-password-text','last_error_number':1062,
+         'applying_transaction_last_transient_error_message':None,'empty_message':''}
+    result=catalog_status(row)
+    assert result['last_error_message']=={'redacted':True,'is_null':False,'is_empty':False}
+    assert result['applying_transaction_last_transient_error_message']=={'redacted':True,'is_null':True,'is_empty':False}
+    assert result['empty_message']=={'redacted':True,'is_null':False,'is_empty':True}
+    assert result['last_error_number']==1062 and row['last_error_message']=='private-query-password-text'
+
+
+@pytest.mark.parametrize('worker_rows',[None,[],[{'channel_name':'','worker_id':'2','thread_id':None,'last_error_message':'private SQL with credential'},
+    {'channel_name':'','worker_id':'10','thread_id':'18446744073709551615','last_error_message':''}]])
+def test_workers_keep_multiple_exact_identities_and_denied_versus_observed_empty_state(worker_rows):
+    connection=Observed();connection.observed['workers']=worker_rows
+    native=next(row for row in _resources(connection,{'route':{}},MYSQL_PROFILE) if row['resource_kind']=='replication-channel')['native']
+    exchanged=next(row for row in restored(catalog.capture(connection))['rows'].values() if row['kind']=='replication-channel')['native']
+    if worker_rows is None:
+        assert 'workers' not in native and 'workers' not in exchanged
+    else:
+        assert native['workers']==worker_rows
+        assert [row['worker_id'] for row in exchanged['workers']]==[row['worker_id'] for row in worker_rows]
+        assert 'private SQL with credential' not in str(exchanged)
+        if worker_rows:assert exchanged['workers'][0]['last_error_message']=={'redacted':True,'is_null':False,'is_empty':False}
+    assert 'workers' not in exchanged['catalog_row']
+
+
+def test_worker_only_channel_discovery_does_not_invent_configuration():
+    connection=Observed(receiver=False,config=False,status=False)
+    connection.observed['workers']=[{'channel_name':'worker-only','worker_id':'3','last_error_message':'sensitive native data'}]
+    native=next(row for row in _resources(connection,{'route':{}},MYSQL_PROFILE) if row['resource_kind']=='replication-channel')['native']
+    assert native['channel_name']=='worker-only' and 'host' not in native and len(native['workers'])==1
+    row=next(row for row in restored(catalog.capture(connection))['rows'].values() if row['kind']=='replication-channel')
+    assert row['native']['catalog_row']=={'channel_name':'worker-only'}
+    assert row['native']['workers'][0]['last_error_message']['redacted']

@@ -236,3 +236,19 @@ configuration. DDN stores policy/delay in configuration and transient state
 outside configuration comparisons. The privilege-check account remains native
 text. No form status changes; Decision15 remains open. JSON compaction is
 parsed-identical, with no control, version, default or capability changes.
+
+## Generated-password producer and diagnostics
+
+User authentication and factor modes include `RANDOM_PASSWORD` with the existing
+typed selects. The native producer requires a trusted protected receiver before
+DCL; public receipts contain only factor/reference IDs. Decision16 defines the
+shared storage, authorization and reveal/recovery integration. This workflow
+remains draft/unsurfaced until that bridge is connected; no new panel, shared
+schema or renderer is supplied by the engine stream. Decision10 applies only to
+metadata-only user keys.
+
+Native replication status now includes20 receiver,15 coordinator and24 worker
+fields. Live diagnostic text is retained for inspection and redacted from schema
+exchange. Retained catalog reads preserve source diagnostics using the admitted
+private peer. Source roles/temporary overlays remain unobserved under Decision17.
+The84 operation entries and25 tool openers do not change status.
