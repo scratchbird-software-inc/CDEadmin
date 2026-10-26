@@ -670,10 +670,17 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
    without engine code. The cross-operation half (driving ``privilege.grant`` or
    ``partition_by`` from a table edit) is still open.
 
-10. Protected operation results (user keys, 2026-10-25): the operation schema
-    declares input fields and ordinary receipts, but no one-time protected
-    result binding for native key retrieval/export. Default: inspection returns
-    key type and byte length; native key bytes may be fetched privately for
-    review binding, but are never placed in the plan preview or receipt. A
-    user-facing key-value export remains an explicit gap until the shared
-    protected-result contract is defined; no provider panel is introduced.
+10. Protected operation results (user keys, 2026-10-25): **decided by the
+    owner: metadata-only for beta**. User-key inspection returns key type and
+    byte length. Raw key material is never placed in public plans, receipts or
+    downloads. A private native fingerprint may still bind a reviewed change.
+    Existing native setup, supplied-key storage, generation and removal remain
+    in scope. User-facing raw-key retrieval/export is excluded from the current
+    beta by owner direction; it is no longer an implementation blocker or a
+    request for a protected-result control. This is an owner scope decision for
+    source-available functionality, not closed-source Enterprise deferral.
+
+    The ruling applies to user-key inspection/export. Native RANDOM PASSWORD
+    credential delivery remains a separate unresolved protected-result scope;
+    it is not implicitly deferred by this choice. No provider panel or shared
+    result-schema change is introduced.

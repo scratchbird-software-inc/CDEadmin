@@ -207,3 +207,11 @@ shell. Run `make ui-descriptors-check` before publishing; it fails when a form
 breaks its family skeleton or when a retired lint count grows
 (`tools/ui_lint_maximums.json`). Track progress in
 `docs/en_US/ui_unification_status.rst`.
+
+Owner ruling on UI design Decision10, 2026-10-25: MySQL user-key inspection is
+metadata-only for beta (key type and byte length). Raw-key retrieval/export is
+excluded from the current beta by owner scope, not as closed-source Enterprise
+functionality. Keep key material out of public plans, receipts and downloads;
+private fingerprint binding and existing native setup/store/generate/remove
+remain in scope. This ruling does not implicitly defer native RANDOM PASSWORD
+credential delivery or other protected-result workflows.

@@ -440,8 +440,9 @@ The native inventory also confirms the GPL implementation of MySQL
 ``keyring_udf`` and its shipped native library. Native plugin/function setup, current-principal key storage and generation,
 metadata inspection and removal are implemented and qualified through both
 connectors and authenticated plan/apply APIs. They ship with five typed Security
-operation descriptors. Protected raw-key retrieval/export remains the beta gap
-under UI design Decision 10. The descriptors remain draft/unsurfaced pending the
+operation descriptors. The owner resolved UI design Decision 10 as metadata-only for beta: inspection
+returns type and byte length. Raw-key retrieval/export is outside the current
+beta by owner scope, not an implementation blocker or Enterprise deferral. The descriptors remain draft/unsurfaced pending the
 front-end stream's shared operation-dialog and render acceptance. This native
 implementation is source available and is not deferred as closed Enterprise
 functionality.
@@ -450,7 +451,8 @@ Native User/Role policies, exact identity rename/drop, role grants/defaults and
 available GPL socket second/third authentication factors are now implemented and
 qualified through both connectors and authenticated APIs. Their typed descriptors
 remain draft; the privilege variant now has typed native scopes and dedicated grant/revoke operations. Generated
-password delivery shares Decision10 with raw key export. Registration-dependent
+password delivery remains a separate protected-result gap; the metadata-only
+user-key ruling does not implicitly defer it. Registration-dependent
 plugins have no production implementor in the acquired Community source and are
 not emulated. These scoped receipts do not close the independent inventory.
 

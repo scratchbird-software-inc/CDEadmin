@@ -46,7 +46,7 @@
           "help": "Type the selected server display name."
         }
       ],
-      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner."
+      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads."
     },
     {
       "operation_id": "inspect_user_key",
@@ -82,7 +82,7 @@
           "help": "Type the selected server display name."
         }
       ],
-      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner."
+      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads."
     },
     {
       "operation_id": "store_user_key",
@@ -152,7 +152,7 @@
           "help": "Type the selected server display name."
         }
       ],
-      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner."
+      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads."
     },
     {
       "operation_id": "generate_user_key",
@@ -225,7 +225,7 @@
           "help": "Type the selected server display name."
         }
       ],
-      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner."
+      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads."
     },
     {
       "operation_id": "remove_user_key",
@@ -261,7 +261,7 @@
           "help": "Type the selected server display name."
         }
       ],
-      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner."
+      "notes": "Provider plan/validate/apply backend operation. The shared operation dialog supplies its SQL tab. Draft pending front-end family rendering and presentation acceptance; no legacy form or panel is introduced. Stable SR-F allocation remains with the front-end registry owner. Owner Decision10: user-key results are metadata-only for beta (type and byte length); raw-key retrieval/export is outside this beta scope. No key material is returned in public plans, receipts or downloads."
     },
     {
       "operation_id": "visibility",

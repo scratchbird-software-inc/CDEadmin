@@ -2642,8 +2642,8 @@ The unified View family descriptor now accompanies the existing native view
 compiler, with every declared create/alter binding verified. Its legacy field
 factory and dispatch branch were removed. It remains draft until the front-end
 stream verifies rendering and round trips. Ordered scalar aliases and
-cross-operation privilege edits remain Decision 9 gaps; raw user-key retrieval
-remains Decision 10. Native/API evidence does not establish unified UI acceptance.
+cross-operation privilege edits remain Decision 9 gaps; user-key inspection/export follows the owner's metadata-only beta ruling in
+Decision 10. Raw-key export is outside that scope. Native/API evidence does not establish unified UI acceptance.
 
 Typed native index definitions
 ------------------------------
@@ -2727,8 +2727,8 @@ comment-only edits from resetting security, data access, event completion or
 scheduler status. Event rename has a typed Maintenance entry. The migrated
 legacy field factories were deleted. All variants remain draft until the shared
 front-end renderer and round trips are accepted. Native qualification command:
-``tools/cdeadmin_mysql_routines_qualification.py``. Protected key results remain
-under Decision10; this routine work does not close that unrelated gap.
+``tools/cdeadmin_mysql_routines_qualification.py``. Decision10 now limits user-key results to metadata for beta; raw-key export is
+owner-excluded. This routine work does not establish shared UI acceptance.
 
 Native trigger definitions and ordering
 ---------------------------------------
@@ -2829,3 +2829,19 @@ and authenticated typed grant/revoke through both connectors. Legacy scalar
 privilege lists and simple account strings remain accepted; literal identities
 use the structured fields. Shared rendering and family privilege-diff dispatch
 remain pending under Decision9; the descriptor is draft.
+
+Owner-approved user-key beta scope
+----------------------------------
+
+On 2026-10-25 the owner selected metadata-only for user keys under UI design
+Decision10. Inspection returns native key type and byte length; public plans,
+receipts and downloads contain no raw key material. Native setup, supplied-key
+storage, generation and removal remain implemented and in beta. Private native
+fingerprints continue to protect reviewed changes. No new execution path or
+protected download is introduced by this ruling.
+
+Raw-key retrieval/export is outside the current beta by owner scope, rather than
+an unresolved implementation gap or closed-source Enterprise dependency. This
+resolves the user-key result decision only. Native RANDOM PASSWORD delivery and
+shared renderer/round-trip acceptance retain their separate recorded status;
+the ruling does not complete Group9 or the independent product inventory.

@@ -46,7 +46,9 @@ and remove a key owned by `CURRENT_USER()`. They use the existing provider
 plan/validate/apply contract and Security menu category. No new legacy form
 function, panel, engine branch or raw JSON control is introduced. Native review
 checks do not lock out other keyring writers or implement atomic compare-and-set.
-Retrieving/exporting raw key material awaits Decision 10 and remains a beta gap.
+Decision 10 is resolved for user keys: the owner selected metadata-only for beta.
+Inspection returns type and byte length; raw-key retrieval/export is outside the
+current beta scope and is not an implementation blocker or Enterprise deferral.
 The operation descriptors remain **draft / unsurfaced by the unified shell** until
 the front-end stream's operation-dialog and family-render acceptance is available.
 
@@ -113,8 +115,8 @@ initial-grant failures. Named-account role aliases are action views, never
 attested creation origin. User listing preserves accounts used as roles.
 
 The old MySQL role field factory and dispatch are deleted. The separate privilege
-variant is draft with15fields and two typed Security operations; Decision9 grids and Decision10 protected outputs are
-explicit gaps. No shared schema, family renderer or shell was changed. All
+variant is draft with15fields and two typed Security operations; Decision9 grids and protected generated-password delivery remain
+explicit gaps. Decision10 user-key export is owner-excluded from beta. No shared schema, family renderer or shell was changed. All
 variants remain draft pending shared rendering and round trips.
 
 

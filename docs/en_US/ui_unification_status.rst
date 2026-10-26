@@ -321,3 +321,15 @@ The old MySQL-specific privilege scope field branch was deleted; the generic
 factory remains for other engines. Family diff dispatch remains Decision9.
 Shared rendering/round trips remain pending. Lint before/after: JSON303/303,
 MUI244/244, branches111/111, panels113/113.
+
+MySQL user-key result scope ruling (2026-10-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Decision10 is resolved for user keys: the owner selected metadata-only for beta.
+Type/byte-length inspection and the five existing native Security operations
+remain in scope; raw-key retrieval/export is owner-excluded from the current
+beta, not an implementation blocker or closed-source Enterprise deferral.
+Public plans/receipts contain no key material and no download control is added.
+Protected generated-password delivery remains a separate gap. Descriptor draft
+and shared rendering/round-trip statuses are unchanged. Lint before/after:
+JSON303/303, MUI244/244, branches111/111, panels113/113.
