@@ -1,5 +1,6 @@
 """DuckDB retained-session administration and catalog-aware row identity."""
 from contextlib import contextmanager
+from copy import deepcopy
 import os
 
 from ..relational_admin import RelationalAdministration
@@ -7,7 +8,48 @@ from ...sdk.relational import RelationalClientError
 
 
 class DuckDBAdministration(RelationalAdministration):
+    def _duckdb_secret(self, name, options):
+        from .secret_values import compile_secret
+        return compile_secret(self, name, options)
+
+    def catalog(self, catalog):
+        from .object_metadata import KINDS
+        from .extension_updates import OPERATIONS
+        value = deepcopy(catalog)
+        for resource in value.get('objects', []):
+            for kind, operation in sorted(OPERATIONS):
+                if resource['resource_kind'] == kind:
+                    resource['operations'] = [row for row in resource.get('operations', [])
+                        if row['operation_id'] != operation] + [{
+                            'operation_id': operation,
+                            'title': 'Update native extension' if kind == 'extension' else 'Update installed extensions',
+                            'mutation_class': 'admin', 'target_required': True,
+                            'confirmation_required': True, 'long_running': False,
+                            'cancellable': False, 'post_state_required': False}]
+            if resource['resource_kind'] in KINDS:
+                resource['operations'] = [row for row in resource.get('operations', [])
+                    if row['operation_id'] != 'comment'] + [{
+                        'operation_id': 'comment', 'title': 'Edit native comment',
+                        'mutation_class': 'admin', 'target_required': True,
+                        'confirmation_required': True, 'long_running': False,
+                        'cancellable': False, 'post_state_required': False}]
+        return super().catalog(value)
+
     def _form(self, kind, operation):
+        if kind == 'secret' and operation == 'create':
+            from .secrets import form
+            return form(self._field)
+        from .extension_updates import OPERATIONS, form
+        if (kind, operation) in OPERATIONS:
+            return form(kind, operation, self._field)
+        if operation == 'comment':
+            return {'form_id': f'duckdb.{kind}.comment', 'title': 'Edit native DuckDB comment',
+                'fields': [{**self._field('comment', 'Comment', 'multiline'),
+                    'submit_unchanged': True,
+                    'initial_value_path': ['catalog_metadata', 'comment'],
+                    'visible_when': {'field_id': 'clear_comment', 'equals': False}},
+                    self._field('clear_comment', 'Remove comment', 'boolean', default=False),
+                    self._field('confirmation', 'Exact object name', 'text', True)]}
         if operation == 'alter' and kind in {'view', 'macro'}:
             fields = [self._field(
                 'query' if kind == 'view' else 'source',
@@ -70,6 +112,29 @@ class DuckDBAdministration(RelationalAdministration):
             ]}
 
     def validate(self, request):
+        if request.get('resource_kind') == 'secret' and request.get('operation_id') in {'create', 'drop'}:
+            try:
+                from .secrets import compile_operation
+                compile_operation(self, request)
+                return {'errors': []}
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None, 'code': 'invalid_duckdb_secret', 'message': str(error)}]}
+        from .extension_updates import OPERATIONS, compile_operation
+        if (request.get('resource_kind'), request.get('operation_id')) in OPERATIONS:
+            try:
+                compile_operation(self, request)
+                return {'errors': []}
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None,
+                    'code': 'invalid_duckdb_extension_update', 'message': str(error)}]}
+        if request.get('operation_id') == 'comment':
+            try:
+                from .object_metadata import compile_operation
+                compile_operation(self, request)
+                return {'errors': []}
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None,
+                    'code': 'invalid_duckdb_comment', 'message': str(error)}]}
         result = super().validate(request)
         if (not result['errors'] and request.get('operation_id') == 'alter' and
                 request.get('resource_kind') in {'view', 'macro'}):
@@ -82,10 +147,24 @@ class DuckDBAdministration(RelationalAdministration):
         return result
 
     def _compile(self, request):
+        if request.get('resource_kind') == 'secret' and request.get('operation_id') in {'create', 'drop'}:
+            from .secrets import compile_operation
+            return compile_operation(self, request)
+        from .extension_updates import OPERATIONS, compile_operation
+        if (request.get('resource_kind'), request.get('operation_id')) in OPERATIONS:
+            return compile_operation(self, request)
+        if request.get('operation_id') == 'comment':
+            from .object_metadata import compile_operation
+            return compile_operation(self, request)
         if (request['operation_id'] == 'alter' and
                 request['resource_kind'] in {'view', 'macro'}):
             return self._definition_replacement(request)
         return super()._compile(request)
+
+    def _normalize_draft(self, kind, operation, draft):
+        if kind == 'secret' and operation in {'create', 'drop'}:
+            return deepcopy(draft)
+        return super()._normalize_draft(kind, operation, draft)
 
     def plan(self, request):
         result = super().plan(request)
@@ -133,6 +212,15 @@ class DuckDBAdministration(RelationalAdministration):
 
     def apply(self, client, request, connection=None):
         with self._borrow(client, connection):
+            if 'duckdb_secret' in (request.get('provider_payload') or {}).get('compiled', {}):
+                from .secrets import apply
+                return apply(client, request, connection)
+            if 'duckdb_extension_update' in (request.get('provider_payload') or {}).get('compiled', {}):
+                from .extension_updates import apply
+                return apply(self, client, request, connection)
+            if 'duckdb_comment' in (request.get('provider_payload') or {}).get('compiled', {}):
+                from .object_metadata import apply
+                return apply(self, client, request, connection)
             return super().apply(client, request, connection=connection)
 
     def read_rows(self, client, request, connection=None):

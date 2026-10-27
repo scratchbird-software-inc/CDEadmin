@@ -1,0 +1,67 @@
+{
+  "schema": "cdeadmin.ui-options.v1",
+  "engine": "duckdb",
+  "dialect": {
+    "column_types": [
+      "BOOLEAN",
+      "TINYINT",
+      "SMALLINT",
+      "INTEGER",
+      "BIGINT",
+      "HUGEINT",
+      "UTINYINT",
+      "USMALLINT",
+      "UINTEGER",
+      "UBIGINT",
+      "UHUGEINT",
+      "FLOAT",
+      "DOUBLE",
+      "DECIMAL",
+      "VARCHAR",
+      "BLOB",
+      "DATE",
+      "TIME",
+      "TIMESTAMP",
+      "TIMESTAMP WITH TIME ZONE",
+      "INTERVAL",
+      "UUID",
+      "JSON",
+      "BIT",
+      "ARRAY",
+      "LIST",
+      "STRUCT",
+      "MAP",
+      "UNION",
+      "ENUM"
+    ],
+    "index_methods": [
+      "ART"
+    ],
+    "routine_languages": [
+      "SQL"
+    ],
+    "privileges": {},
+    "trigger_events": {},
+    "system_privileges": [],
+    "auth_plugins": [],
+    "grantable_kinds": []
+  },
+  "catalog": {
+    "databases": {
+      "resource_kind": "database"
+    },
+    "schemas": {
+      "resource_kind": "schema"
+    },
+    "tables": {
+      "resource_kind": "table"
+    },
+    "types": {
+      "resource_kind": "type"
+    },
+    "extensions": {
+      "resource_kind": "extension"
+    }
+  },
+  "notes": "Static dialect lists are drafts for the tested version; the engine stream verifies them against the dialect contract. catalog entries resolve at runtime from the endpoint's resources of the named kind."
+}

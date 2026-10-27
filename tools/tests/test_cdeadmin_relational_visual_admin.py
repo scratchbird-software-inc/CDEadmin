@@ -1973,7 +1973,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         privilege_source = privilege['command_preview']['statements'][0][
             'source'
         ]
-        self.assertIn("TO 'operator'@'localhost'", privilege_source)
+        self.assertIn("TO `operator`@`localhost`", privilege_source)
         plugin = MYSQL_ADMINISTRATION.plan({
             'resource_kind': 'plugin', 'operation_id': 'create',
             'target_resource': None,
@@ -2555,10 +2555,10 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         statements = plan['command_preview']['statements']
         self.assertEqual(2, len(statements))
         self.assertEqual(
-            "CREATE ROLE 'data_reader'@'%'", statements[0]['source']
+            "CREATE ROLE `data_reader`@`%`", statements[0]['source']
         )
         self.assertEqual(
-            "GRANT 'data_reader'@'%' TO 'operator'@'localhost'",
+            "GRANT `data_reader`@`%` TO `operator`@`localhost`",
             statements[1]['source'],
         )
 
@@ -2746,11 +2746,11 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             for item in database['operations']
         }
         self.assertEqual({
-            'analyze_tables': 'mysql_analyze_tables',
-            'check_tables': 'mysql_check_tables',
-            'optimize_tables': 'mysql_optimize_tables',
-            'repair_tables': 'mysql_repair_tables',
-            'checksum_tables': 'mysql_checksum_tables',
+            'analyze_tables': 'mysql.database.analyze_tables',
+            'check_tables': 'mysql.database.check_tables',
+            'optimize_tables': 'mysql.database.optimize_tables',
+            'repair_tables': 'mysql.database.repair_tables',
+            'checksum_tables': 'mysql.database.checksum_tables',
         }, {key: forms[key] for key in {
             'analyze_tables', 'check_tables', 'optimize_tables',
             'repair_tables', 'checksum_tables',
@@ -3077,7 +3077,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
     def test_relational_dialects_publish_fail_closed_concept_status(self):
         cases = (
             ('mysql', '9.7.0', MYSQL_ADMINISTRATION, {
-                'servers': 'read_only',
+                'servers': 'supported',
                 'schemas': 'supported',
                 'materialized_views': 'supported',
                 'extensions_and_plugins': 'supported',

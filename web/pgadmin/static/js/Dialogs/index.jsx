@@ -22,11 +22,29 @@ import UrlDialogContent from './UrlDialogContent';
 import RenameTabContent from './RenameTabContent';
 import { BROWSER_PANELS } from '../../../browser/static/js/constants';
 import ErrorBoundary from '../helpers/ErrorBoundary';
+import {createCloseGuardRegistry, ModalCloseGuardContext} from '../helpers/ModalCloseGuard';
 import QuickSearch from '../QuickSearch';
 import ProviderWorkspaceContent from './ProviderWorkspaceContent';
+import MySQLPhysical from './MySQLPhysical';
 import {activateSQLConnection, registerSQLConnection} from '../cdeadmin_ui/editors/SQLConnections';
 import FirebirdMonitoring from './FirebirdMonitoring';
 import PostgresqlMonitoring from './PostgresqlMonitoring';
+import PostgresqlContinuity from './PostgresqlContinuity';
+import DuckDBOperationReceipts from './DuckDBOperationReceipts';
+import MySQLClone from './MySQLClone';
+import MySQLHost from './MySQLHost';
+import MySQLRouters from './MySQLRouters';
+import MySQLWorkload from './MySQLWorkload';
+import MySQLContentSearch from './MySQLContentSearch';
+import MySQLDataDrift from './MySQLDataDrift';
+import MySQLSpatial from './MySQLSpatial';
+import MySQLBinlogArchives from './MySQLBinlogArchives';
+import MySQLInstanceBackups from './MySQLInstanceBackups';
+import MySQLInstanceRestores from './MySQLInstanceRestores';
+import MySQLTopologies from './MySQLTopologies';
+import MySQLSandboxes from './MySQLSandboxes';
+import MySQLBinlogReplay from './MySQLBinlogReplay';
+import SQLiteRecovery from './SQLiteRecovery';
 import MySQLMonitoring from './MySQLMonitoring';
 import FirebirdDocker from './FirebirdDocker';
 import FirebirdDashboardEditor from './FirebirdDashboardEditor';
@@ -285,13 +303,29 @@ export function showProviderWorkspace(
   }
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = `id-provider-workspace-${++providerWorkspaceSequence}`;
+  const closeGuards = createCloseGuardRegistry();
   const onClose = () => workspace.close(panelId);
+  const recoveryTargetRegistered = () => {
+    const tree = pgAdmin.Browser.tree;
+    const parent = tree.parent(itemNodeData);
+    const connector = pgAdmin.Browser.Nodes[tree.itemData(parent)?._type];
+    connector?.callbacks?.refresh?.call(connector, null, parent);
+  };
+  const serverTool=initialTab==='mysql-routers' ? <MySQLRouters post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-physical' ? <MySQLPhysical onTargetRegistered={recoveryTargetRegistered} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-spatial' ? <MySQLSpatial databaseTargetId={databaseTargetId} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-data-drift' ? <MySQLDataDrift databaseTargetId={databaseTargetId} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-content-search' ? <MySQLContentSearch databaseTargetId={databaseTargetId} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-workload' ? <MySQLWorkload databaseTargetId={databaseTargetId} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-sandboxes' ? <MySQLSandboxes post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-topologies' ? <MySQLTopologies post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-instance-restores' ? <MySQLInstanceRestores post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-instance-backups' ? <MySQLInstanceBackups endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-host' ? <MySQLHost post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='duckdb-session-receipts' ? <DuckDBOperationReceipts databaseTargetId={databaseTargetId}
+    post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='sqlite-recovery' ? <SQLiteRecovery databaseTargetId={databaseTargetId}
+    onTargetCatalogChanged={() => nodeObj.callbacks.refresh.call(nodeObj,null,itemNodeData)}
+    post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : ['mysql-binlog-replay','mariadb-binlog-replay'].includes(initialTab) ?
+    <MySQLBinlogReplay engine={initialTab==='mariadb-binlog-replay' ? 'mariadb' : 'mysql'} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : ['mysql-binlogs','mariadb-binlogs','mysql-raw-binlogs'].includes(initialTab) ?
+      <MySQLBinlogArchives raw={initialTab==='mysql-raw-binlogs'} engine={initialTab==='mariadb-binlogs' ? 'mariadb' : 'mysql'} endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'mysql-clone' ?
+        <MySQLClone post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'postgresql-continuity' ?
+          <PostgresqlContinuity endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : null;
   const panel = {
     id: panelId,
+    beforeClose: closeGuards.beforeClose,
     title,
     closable: true,
     floatable: true,
-    content: <ErrorBoundary>{initialTab === 'firebird-registration' ?
+    content: <ModalCloseGuardContext.Provider value={closeGuards.register}><ErrorBoundary>{serverTool || (initialTab === 'firebird-registration' ?
       <FirebirdRegistration targetId={databaseTargetId} operation={initialContext.registration_operation}
         post={payload => getApiInstance().post(endpointUrl, payload).then(response => response.data.data)
           .catch(error => {throw new Error(error?.response?.data?.errormsg || error.message);})}
@@ -337,7 +371,7 @@ export function showProviderWorkspace(
               onSuccess: retry,
             });
           }}
-        />}</ErrorBoundary>,
+        />)}</ErrorBoundary></ModalCloseGuardContext.Provider>,
   };
   if (initialTab === 'studio') {
     activateSQLConnection({...connection, content: panel.content});

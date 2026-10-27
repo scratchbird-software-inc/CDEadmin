@@ -319,6 +319,10 @@ def run_engine(engine, target):
                         log=target / 'fixture-acl.log')
             fixture = firebird(directory, target, dict(os.environ)) if engine == 'firebird' else sql_server(engine, directory, target, dict(os.environ))
             with fixture as (specification, password):
+                if engine == 'postgresql':
+                    # These files live in this disposable cluster and are
+                    # removed with its owned data directory after shutdown.
+                    specification['server_file_tests'] = True
                 routes = target / 'route.json'
                 routes.write_text(json.dumps({engine: specification}), encoding='utf-8')
                 selected = dict(os.environ, CDEADMIN_OWNED_FIXTURE_PASSWORD=password)

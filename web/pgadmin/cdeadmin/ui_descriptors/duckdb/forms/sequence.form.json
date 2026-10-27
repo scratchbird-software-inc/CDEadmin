@@ -1,0 +1,77 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "duckdb",
+  "family": "sequence",
+  "resource_kinds": [
+    "sequence"
+  ],
+  "status": "complete",
+  "engine_tab_title": "DuckDB",
+  "omitted_tabs": [
+    {
+      "tab": "Security",
+      "reason": "no users or privileges"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "sequence.alter",
+      "reason": "only create/drop/comment; restart/increment changes need ALTER SEQUENCE"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "required": false,
+      "help": "Use a qualified database or schema name where needed.",
+      "reference_kind": "schema"
+    },
+    {
+      "field_id": "start",
+      "label": "Start value",
+      "tab": "General",
+      "control": "number",
+      "required": false
+    },
+    {
+      "field_id": "increment",
+      "label": "Increment",
+      "tab": "General",
+      "control": "number",
+      "required": false
+    },
+    {
+      "field_id": "minimum",
+      "label": "Minimum",
+      "tab": "General",
+      "control": "number",
+      "required": false
+    },
+    {
+      "field_id": "maximum",
+      "label": "Maximum",
+      "tab": "General",
+      "control": "number",
+      "required": false
+    },
+    {
+      "field_id": "cycle",
+      "label": "Cycle",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (schema). Round trip verified in-process (create, re-inspect) on DuckDB 2.0.0 (profile pins 1.5.2) by tools/tests/test_ui_descriptor_roundtrip_duckdb.py. Native qualification on the pinned version remains with the platform teams."
+}

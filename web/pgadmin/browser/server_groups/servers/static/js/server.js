@@ -244,6 +244,56 @@ define('pgadmin.node.server', [
           label: gettext('PostgreSQL server catalog DDN...'), priority: 9,
           enable: node => node?.connected && (!node.cde_endpoint || node.cde_profile_id === 'postgresql-native'),
         }, {
+          name: 'postgresql_continuity', node: 'server', module: this,
+          applies: ['object', 'context'], callback: 'open_postgresql_continuity',
+          label: gettext('PostgreSQL physical backup and verification...'), priority: 9,
+          enable: node => !node.cde_endpoint || node.cde_profile_id === 'postgresql-native',
+        }, {
+          name: 'mysql_host', node: 'server', module: this,
+          applies: ['object','context'], callback: 'open_mysql_host',
+          label: gettext('MySQL database-host administration...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mysql-native',
+        }, {
+          name: 'mysql_routers', node: 'server', module: this,
+          applies: ['object','context'], callback: 'open_mysql_routers',
+          label: gettext('MySQL Router host and service administration...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mysql-native',
+        }, {
+          name: 'mysql_workload', node: 'server', module: this,
+          applies: ['object', 'context'], callback: 'open_mysql_workload',
+          label: gettext('MySQL workload analysis...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mysql-native',
+        }, {
+          name: 'mysql_local_clone', node: 'server', module: this,
+          applies: ['object','context'], callback: 'open_mysql_local_clone',
+          label: gettext('MySQL physical clone...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mysql-native',
+        }, {
+          name: 'mysql_binlogs', node: 'server', module: this,
+          applies: ['object','context'], callback: 'open_mysql_binlogs',
+          label: gettext('MySQL binary-log archives...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mysql-native',
+        }, {
+          name: 'mysql_raw_binlogs', node: 'server', module: this,
+          applies: ['object','context'], callback: 'open_mysql_raw_binlogs',
+          label: gettext('MySQL raw binary-log archives...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mysql-native',
+        }, {
+          name: 'mysql_binlog_replay', node: 'server', module: this,
+          applies: ['object','context'], callback: 'open_mysql_binlog_replay',
+          label: gettext('MySQL binary-log replay...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mysql-native',
+        }, {
+          name: 'mariadb_binlog_replay', node: 'server', module: this,
+          applies: ['object','context'], callback: 'open_mariadb_binlog_replay',
+          label: gettext('MariaDB binary-log replay...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mariadb-native',
+        }, {
+          name: 'mariadb_binlogs', node: 'server', module: this,
+          applies: ['object','context'], callback: 'open_mariadb_binlogs',
+          label: gettext('MariaDB binary-log archives...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mariadb-native',
+        }, {
           name: 'copy_server', node: 'server', module: this,
           applies: ['object', 'context'], callback: 'show_obj_properties',
           label: gettext('Copy Server...'), data: {action: 'copy'},
@@ -377,7 +427,8 @@ define('pgadmin.node.server', [
           const data = item ? tree.itemData(item) : undefined;
           const providerReady = providerEndpointSessionReady(data);
           const localProfile = data?.cde_endpoint &&
-            isProviderRegistrationWorkspace(initialTab, initialContext);
+            (isProviderRegistrationWorkspace(initialTab, initialContext) ||
+              initialTab === 'sqlite-recovery' && data.cde_profile_id === 'sqlite-native');
           const postgresReady = ['semantic', 'studio'].includes(initialTab) &&
             !data?.cde_endpoint && data?.connected;
           if (!providerReady && !postgresReady && !localProfile) {
@@ -431,6 +482,96 @@ define('pgadmin.node.server', [
             title, this, data, item, initialTab, initialContext,
             () => pgBrowser.removeTreeNode(item, true)
           );
+          return false;
+        },
+        open_postgresql_continuity: function(args) {
+          const item = args?.item || pgBrowser.tree.selected();
+          const data = pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('PostgreSQL physical backup and verification'), this, data, item, 'postgresql-continuity');
+          return false;
+        },
+        open_mysql_workload: function(args) {
+          const item = args?.item || pgBrowser.tree.selected();
+          const data = pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL workload analysis'), this, data, item, 'mysql-workload');
+          return false;
+        },
+        open_mysql_host: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL database-host administration'),this,data,item,'mysql-host');
+          return false;
+        },
+        open_mysql_routers: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL Router host and service administration'),this,data,item,'mysql-routers');
+          return false;
+        },
+        open_mysql_physical: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL physical backups'),this,data,item,'mysql-physical');
+          return false;
+        },
+        open_mysql_local_clone: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL physical clone'),this,data,item,'mysql-clone');
+          return false;
+        },
+        open_mysql_binlogs: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL binary-log archives'),this,data,item,'mysql-binlogs');
+          return false;
+        },
+        open_mysql_instance_backups: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL full-instance backups'),this,data,item,'mysql-instance-backups');
+          return false;
+        },
+        open_mysql_instance_restores: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL full-instance restores'),this,data,item,'mysql-instance-restores');
+          return false;
+        },
+        open_mysql_sandboxes: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL local sandboxes'),this,data,item,'mysql-sandboxes');
+          return false;
+        },
+        open_mysql_topologies: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL native topologies'),this,data,item,'mysql-topologies');
+          return false;
+        },
+        open_mysql_raw_binlogs: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL raw binary-log archives'),this,data,item,'mysql-raw-binlogs');
+          return false;
+        },
+        open_mysql_binlog_replay: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL binary-log replay'),this,data,item,'mysql-binlog-replay');
+          return false;
+        },
+        open_mariadb_binlog_replay: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MariaDB binary-log replay'),this,data,item,'mariadb-binlog-replay');
+          return false;
+        },
+        open_mariadb_binlogs: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MariaDB binary-log archives'),this,data,item,'mariadb-binlogs');
           return false;
         },
         open_postgresql_server_catalog: function(args) {

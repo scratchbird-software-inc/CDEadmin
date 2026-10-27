@@ -2,6 +2,8 @@ import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FirebirdERD from './FirebirdERD';
+import MySQLDataImport from './MySQLDataImport';
+import MySQLControlledChange, {MySQLAlterPolicy} from './MySQLControlledChange';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
@@ -12,6 +14,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
   const [requestBusy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [source, setSource] = useState(''), [comparison, setComparison] = useState(null);
   const [baseline, setBaseline] = useState(''), [schemaPlan, setSchemaPlan] = useState(null);
+  const [execution, setExecution] = useState(null);
   const [review, setReview] = useState(null), [confirmed, setConfirmed] = useState(false), [receiptId, setReceiptId] = useState('');
   const [metadata, setMetadata] = useState(null), [dataCapture, setDataCapture] = useState(null);
   const [relation, setRelation] = useState(''), [dataMode, setDataMode] = useState('sample'), [rowLimit, setRowLimit] = useState('100');
@@ -22,6 +25,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
   useEffect(() => {
     serial.current++; setDataCapture(null); setRelation(''); setMetadata(null); setResult(null); setSource(''); setComparison(null); setError(''); setBusy(false);
     setBaseline(''); setSchemaPlan(null); setReview(null); setConfirmed(false); setReceiptId('');
+    setExecution(null);
     setDisplay('inventory'); setView('inventory_1');
     return () => {serial.current++;};
   }, [post, databaseTargetId]);
@@ -61,7 +65,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     setBusy(true); setError(''); setSchemaPlan(null); setReview(null); setConfirmed(false);
     try {
       const response = await post({action: validate ? 'mysql_schema_validate' : 'mysql_schema_plan', request: {database_target_id: databaseTargetId,
-        baseline, source: source || JSON.stringify(result.snapshot)}});
+        baseline, source: source || JSON.stringify(result.snapshot),...(execution ? {execution} : {})}});
       if(token === serial.current) setSchemaPlan(response);
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'MySQL native change preview failed');}
     finally {if(token === serial.current) setBusy(false);}
@@ -72,7 +76,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     try {
       const request = {database_target_id: databaseTargetId};
       if(action === 'mysql_schema_review') Object.assign(request, {
-        baseline, source: source || JSON.stringify(result.snapshot), execution_sha256: schemaPlan.execution_sha256});
+        baseline, source: source || JSON.stringify(result.snapshot), execution_sha256: schemaPlan.execution_sha256,...(execution ? {execution} : {})});
       else if(action === 'mysql_schema_apply') Object.assign(request, {
         review_id: review.review_id, review_digest: review.review_digest, confirmed});
       else request.review_id = receiptId;
@@ -99,6 +103,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
   };
   return <Box sx={{...compactFormSx, p: 1, overflow: 'auto', flex: 1}}>
     <FormReference formKey="mysql-catalog-ddn" />
+    <MySQLDataImport post={post} databaseTargetId={databaseTargetId} />
     {error && <Alert severity="error">{error}</Alert>}
     <Alert severity="info">Native MySQL metadata on a separate connection. Catalog visibility is privilege filtered and concurrent DDL is not fenced. Documentary comparison does not authorize migration or deletion.</Alert>
     <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
@@ -140,6 +145,9 @@ export default function MySQLCatalog({post, databaseTargetId}) {
         {shown.views.map(item => <MenuItem key={item.id} value={item.id}>{item.label}</MenuItem>)}
       </TextField>}
     </Box>
+    <MySQLAlterPolicy value={execution} disabled={busy} post={post} databaseTargetId={databaseTargetId} onChange={value => {
+      serial.current++;setExecution(value);setSchemaPlan(null);setReview(null);setConfirmed(false);
+    }} />
     {result && <FormReference formKey="mysql-data-capture">
       <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
         <TextField select size="small" label="Native table or view" value={relation} disabled={busy} sx={{minWidth: 220}}
@@ -184,7 +192,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     </Box>}
     {schemaPlan && <Box>
       <FormReference formKey="mysql-native-schema-preview" />
-      <Alert severity="info">Review the displayed native CREATE/ALTER/DROP statements in order. Earlier committed statements remain committed if a later step stops. MySQL DDL commits implicitly. Existing tables use native table locks; views, libraries, events, routines and triggers use cooperating advisory locks. Baselines are revalidated before dispatch; unknown outcomes are never automatically retried.</Alert>
+      <Alert severity="info">Review the displayed native CREATE/ALTER/DROP statements in order. Earlier committed statements remain committed if a later step stops. MySQL DDL commits implicitly. Existing tables use native table locks unless controlled execution is selected; controlled changes and other native objects use cooperating advisory locks. Baselines are revalidated before dispatch; unknown outcomes are never automatically retried.</Alert>
       {schemaPlan.native_validation && <Alert severity={schemaPlan.native_grammar_validated ? 'success' : 'error'}>
         {schemaPlan.native_grammar_validated ? (schemaPlan.native_validation.some(item => item.validation_stage === 'parse-only') ? 'Native grammar accepted; some statements cannot be prepared. Semantic and privilege checks occur on execution. None were executed.' : 'Native PREPARE accepted the change statements; none were executed.') : 'Native PREPARE rejected one or more change statements.'}
       </Alert>}
@@ -201,13 +209,14 @@ export default function MySQLCatalog({post, databaseTargetId}) {
       onClick={() => schemaApplication('mysql_schema_review')}>Prepare reviewed change</Button>
       <FormControlLabel label="Confirm reviewed native DDL and implicit commit" control={<Checkbox checked={confirmed}
         disabled={busy || review?.state !== 'reviewed'} onChange={event => setConfirmed(event.target.checked)} />} />
-      <Button disabled={busy || review?.state !== 'reviewed' || !confirmed}
+      <Button disabled={busy || review?.state !== 'reviewed' || !confirmed || review?.plan?.operations?.some(op => op.execution)}
         onClick={() => schemaApplication('mysql_schema_apply')}>Apply reviewed change</Button>
       <TextField size="small" label="Schema receipt ID" value={receiptId} disabled={busy} sx={{width: 340}}
         onChange={event => {setReceiptId(event.target.value); setReview(null); setConfirmed(false);}} />
       <Button disabled={busy || !receiptId || !databaseTargetId}
         onClick={() => schemaApplication('mysql_schema_receipt')}>Read receipt</Button>
     </Box>
+    <MySQLControlledChange post={post} databaseTargetId={databaseTargetId} review={review} confirmed={confirmed} onReceipt={setReview} />
     {schemaPlan?.warnings?.map((warning,index) => <Alert key={index} severity="warning">{warning}</Alert>)}
     {review && <Box>
       <Alert severity={review.state === 'committed' ? 'success' : review.state === 'reviewed' ? 'info' : 'warning'}>

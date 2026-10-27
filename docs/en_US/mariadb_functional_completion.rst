@@ -1,6 +1,10 @@
 MariaDB engine functional completion
 ====================================
 
+Product-wide catalog, editor and complete native management acceptance is
+defined in :doc:`six_engine_completion`. The scoped receipts below do not close
+the open requirements recorded there.
+
 The native qualification target is MariaDB 12.2.2 with the patched MariaDB
 Connector/Python 1.1.14 described in ``mariadb_driver_development.rst``. MySQL
 qualification is not MariaDB qualification. This contract supplements that
@@ -237,8 +241,9 @@ MARIA-COMP-05: Native DDN roundtrip
   COLLATIONS, ENGINES, INNODB_SYS_TABLESPACES, mysql.func and mysql.servers. Distinguish roles
   using native is_role. Plugin identity includes native name and plugin type;
   MariaDB uuid DATA TYPE and FUNCTION plugins are separate entries. Preserve
-  the native name for commands. Do not read authentication_string, Password, global_priv
-  JSON or arbitrary server-link Options. Omitted confidential link options are
+  the native name for commands. Do not export authentication_string, Password, global_priv JSON blobs or
+  arbitrary server-link Options. Account-lock inspection projects only its
+  native Boolean; the underlying credential document never reaches the client. Omitted confidential link options are
   disclosed as a coverage limit. Native max_statement_time and lock_wait_timeout
   bound probes. Database expansion requires explicit owned registered targets;
   independently captured scopes must report the same native server_uid.
@@ -289,8 +294,8 @@ MARIA-COMP-08: Qualification and cleanup
 Current-run exclusions
 ----------------------
 
-Persistent monitoring history and its ScratchBird backend remain deferred.
-Windows/macOS work and platform QA belong to the separate platform teams.
+Persistent monitoring history and its native ScratchBird connection are included.
+Human form validation and Windows/macOS platform QA belong to the separate teams.
 Persistent SQL history, dashboard definitions, recipes and native DDN conversion
 are in scope. MariaDB completion does not authorize starting DuckDB.
 
@@ -311,3 +316,148 @@ Package/partition additions require native parser and live execution evidence
 before admission. Keep the provider task-ID set and dialect coverage identical;
 an inventory mismatch must continue to block generated DDL rather than bypass
 the engine gate.
+
+Implementation and qualification — October 16
+---------------------------------------------
+
+Native server DDN now supports explicit ``native.mariadb_change`` review and
+one-use application for accounts, native roles/memberships/default roles,
+global/database/table/column/routine/package grants, plugins, remote server
+registrations, loadable functions, writable global variables and replication
+channels. Native storage-engine, charset, collation and tablespace inventories
+remain inspectable. MySQL components, resource groups, libraries and materialized
+views are not introduced. Captured facts remain immutable; missing selections
+never request deletion. Accounts created from DDN are locked and credential-free.
+Remote authentication is configured separately through native administration.
+
+Every dispatched server operation checks the endpoint, native server_uid, exact
+address, current section visibility, reviewed baseline and separately observed
+recipient identities. Roles have no host suffix. Effective routine/package
+privileges use native SHOW GRANTS, rather than guessing the encoding of private
+grant-table storage. Only scoped routine facts are retained; global lines and
+authentication clauses are discarded before reaching exported metadata. Reviews
+expire after five minutes, persist uncertainty before dispatch, preserve an
+acknowledged prefix and never replay after refusal, lost replies or restart.
+Native server DDL is not atomic. Use an exclusive administration window; advisory
+locks coordinate ScratchRobin only. Recent scoped receipts can be reopened.
+
+Typed relation-data DDN imports use the paired DDN reader and exact native column
+layouts. They preserve zero AUTO_INCREMENT values, invisible columns, unsigned
+integers, decimals, zero/partial temporal values, JSON text, UUID/INET4/INET6,
+LOBs, geometry/SRID and finite VECTOR float32 bytes. Generated columns are
+omitted. System-versioned imports create current rows with new native time
+boundaries; neither old boundaries nor historical versions are restored. Native
+constraints and triggers remain active. The owned transaction holds a metadata
+lock while revalidating layout/definition, explicitly commits, and independently
+rereads primary-key postimages. MariaDB's generated temporal primary-key suffix
+is handled through current-visible row identity. Keyless imports retain native
+acknowledgements but cannot claim exact row rediscovery. Nontransactional storage
+requires an explicit acknowledgement and retains partial effects. Lost COMMIT
+replies stay unknown. Durable receipts discard private rows before dispatch.
+
+Named test-data recipes use a separate MariaDB project-asset namespace with
+owner/endpoint/database scope, immutable revisions and optimistic version checks.
+Reading a saved recipe never executes SQL. Persistent monitoring policies and
+the display-only history viewer share the native ScratchBird archive with
+engine-isolated scopes, exact numeric summaries, source epochs and gaps. No
+browser or collector credential grant is required for an authorized history read.
+
+Refresh DDN before qualification and preserve evidence outside the repository::
+
+    python tools/cdeadmin_mariadb_tasks_gate.py --output /work/mariadb-tasks --ddn-work /work/ddn
+    python tools/cdeadmin_mariadb_catalog_completeness_gate.py --evidence /work/mariadb-catalog
+    python tools/cdeadmin_mariadb_completion_gate.py --output /work/mariadb-product
+    python tools/cdeadmin_mariadb_extended_gate.py --output /work/mariadb-extended
+    python tools/cdeadmin_monitoring_history_gate.py --config /etc/cdeadmin/history.json --engine mariadb
+
+The first four commands default to uniquely owned MariaDB 12.2.2 containers.
+Set CDEADMIN_MARIADB_CLIENT_BINARY, CDEADMIN_MARIADB_DUMP_BINARY and
+CDEADMIN_MARIADB_UPGRADE_BINARY to separately staged exact native tools. The
+product and extended gates also accept credential-free --route JSON and a
+--password-env name for a disposable native estate. The native Windows/macOS
+fixture workflow runs those portable consumers after the driver proof and
+retains separate receipts. Connector/Python requires its patched 1.1.14 build;
+MySQL connector receipts do not transfer.
+
+The consolidated administration gate qualifies all 88 declared tasks. Independent
+catalog reconciliation compares 30 categories and ten native DDN child-fact sets
+for privileged and restricted accounts, and checks navigator reachability, exact
+identities, orphan grants and explicit denied observations. These receipts are
+separate from broader browser, platform and archive acceptance.
+
+Persistent-history drivers and integration remain wired. The owner's October16
+correction defers ScratchBird history qualification until explicitly resumed;
+no history tests run as part of the six-engine implementation work. Current-source native
+Windows/macOS receipts remain necessary before claiming cross-platform completion.
+Human form validation and signing/release approval remain separate.
+
+Native binary-log archives
+---------------------------
+
+The server's backup menu exposes native ``mariadb-binlog12.2.2`` retrieval of
+an explicitly selected contiguous closed-log range. The active log remains on
+the server. Review and dispatch revalidate native catalog order, closure,
+physical file sizes, ``server_uid`` and the authenticated principal. An owned
+observer checks source identity and the selected closed range again after
+retrieval. The native server UID observation is distinct from a cryptographic
+provenance claim about a binary-log file.
+
+Current-file observations now bracket native catalog reads, with bounded retries
+when rotation makes the observed range inconsistent. Complete retrieved lengths
+must match the selected closed server files independently from valid event
+framing. Stronger verification preserves existing sealed postimages and their
+original native utility receipts.
+
+Retrieval preserves the registered transport policy and delegates credentials
+in a private native defaults file. Native parser verification covers each
+retrieved file; streaming event framing/CRC32 and complete SHA256 byte
+inventories bind its postimage to the durable receipt. Native checksum-disabled
+and compressed event streams retain their own semantics. Complete events in a
+crash-closed log do not require an invented STOP/ROTATE event. Native GTID
+domains are preserved in the raw event bytes. File data is flushed before
+atomic application-archive publication.
+
+Shared owner/endpoint job infrastructure supplies durable claims, offline
+receipts, cancellation, uncertain-process handling, paged file inventories,
+authenticated downloads and exact-identity-confirmed artifact removal. Native
+archive formats and verifiers remain separate for MySQL and MariaDB. Configure
+``CDEADMIN_MARIADB_BINLOG_BINARY``, ``CDEADMIN_MARIADB_BINLOG_ROOT`` and the
+optional ``CDEADMIN_MARIADB_BINLOG_MAX_RUNTIME_SECONDS`` at the application host.
+The native development provisioner already includes the platform's vendor
+binary. The raw archive workspace also exposes continuous native reception and
+independently verified closed batches, documented in
+:doc:`six_engine_completion`. Clean stopped receivers can review a new receiver
+from the exact retained next-log checkpoint; purged checkpoints and changed
+native sources are refused. Explicit writer reconciliation stops only owned
+receiver/linked-parser utilities and preserves unknown outcomes without
+verifying artifacts. Complete stopped closed-log files have separate reviewed
+adoption into verified native archives, with native parser/checksum/source and
+file-postimage checks; active/incomplete files are refused and the parent outcome
+is preserved. Retention automation, PITR and
+physical continuity retain separate product
+acceptance.
+
+Private receiver inputs have paged, reviewed offline cleanup with exact
+postimages, shared adoption/removal filesystem claims and per-file intent and
+acknowledgement receipts. Lost acknowledgements remain unknown without an
+automatic repeat. Published archives and receipts remain retained. Scheduled
+and recovery-chain-aware archive retention remain separate requirements.
+
+
+Native archived-log replay
+-------------------------
+
+The server Restore menu exposes native MariaDB 12.2.2 archive replay using
+``mariadb-binlog`` and ``mariadb`` on the recorded application host. Select an
+owned sealed archive, inspect the separate native target, confirm its exact
+``server_uid``, review native GTID and stop-before/stop-after boundaries, then
+confirm dispatch. Registered transport and delegated credentials remain bound
+to that review. The source server can be offline.
+
+Native unsigned domain/server/sequence positions, sealed bytes and native
+transaction group boundaries drive admission. Restore and independently verify
+a compatible base first. The in-client native target/state guard and named lock
+precede replay. Durable cross-registration fences retain uncertain outcomes;
+fresh native observations and exact acknowledgement cannot rewrite an unknown
+result as success. Utility return and domain-sequence coverage do not verify
+recovered data, physical recovery, complete PITR or production cutover.

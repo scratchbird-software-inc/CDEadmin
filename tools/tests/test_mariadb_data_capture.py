@@ -13,10 +13,12 @@ def address(database='demo',kind='table',name='a`table'):
 
 def connection(rows, *, engine='InnoDB'):
     control=Mock()
-    control.fetchone.side_effect=[('demo','12.2.2-MariaDB','server-identity'),('BASE TABLE',engine),None]
+    control.fetchone.side_effect=[('demo','12.2.2-MariaDB','server-identity'),('BASE TABLE',engine),None,('',)]
+    control.fetchall.return_value=[('value','bigint unsigned','NO','','',None,None)]
     stream=Mock()
     stream.metadata={'flags': [32], 'charset': [63]}
     stream.cdeadmin_exact_temporals = False
+    stream.cdeadmin_checked_fetch_errors = True
     stream.description=[('value',FieldType.LONGLONG,None,None,None,None,False,32,63)]
     stream.fetchmany.side_effect=[[(value,) for value in rows],[]]
     native=Mock(server_status=0)
@@ -37,7 +39,8 @@ def test_sample_preserves_native_uint64_and_explicit_coverage_and_finishes_its_t
     assert result['acquisition']['rows']==1 and result['acquisition']['more_rows_observed']
     assert result['acquisition']['consistent_innodb_table_snapshot']
     assert '18446744073709551615' in result['snapshot']['files']['result-1.ddn']
-    assert stream.execute.call_args.args==('SELECT * FROM `demo`.`a``table` LIMIT ?',(2,))
+    assert stream.execute.call_args.args==('SELECT `value` FROM `demo`.`a``table` LIMIT ?',(2,))
+    assert result['acquisition']['native_columns'][0]['column_type']=='bigint unsigned'
     assert any(call.args[0]=='START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY' for call in control.execute.call_args_list)
     native.rollback.assert_called_once();stream.close.assert_called_once();control.close.assert_called_once()
 

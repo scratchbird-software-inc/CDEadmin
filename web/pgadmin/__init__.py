@@ -606,6 +606,7 @@ def create_app(app_name=None):
         init_app as init_cde_semantic_models,
     )
     from pgadmin.cdeadmin.workspace import init_app as init_cde_workspace
+    from pgadmin.cdeadmin.ui_descriptors import init_app as init_cde_ui_descriptors
     cde_security = init_cde_security(app)
     cde_registry = init_cdeadmin(app, cde_security.secrets)
     driver.init_app(app)
@@ -626,6 +627,7 @@ def create_app(app_name=None):
         cde_semantic_models, cde_operations, cde_report_delivery,
         cde_report_scheduler,
     )
+    init_cde_ui_descriptors(app)
     authenticate.init_app(app)
     heartbeat.init_app(app)
 

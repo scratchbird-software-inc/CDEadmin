@@ -194,11 +194,16 @@ class DataStudioService:
         identity = binding.manifest['identity']
         key = (identity['provider_id'], identity['provider_version'])
         profiles = self._provider_languages.get(key, ())
+        def tooling(profile):
+            result = capabilities(profile)
+            if callable(getattr(type(binding.instance), 'source_tooling', None)):
+                result.update(binding.instance.source_tooling(profile))
+            return result
         return tuple({
             'language_profile': item.language_profile,
             'title': item.title,
             'editor_mode': item.editor_mode,
-            'tooling': capabilities(item.language_profile),
+            'tooling': tooling(item.language_profile),
             'model_families': sorted(item.model_families),
             'source_kind': item.source_kind,
             'parameter_shape': item.parameter_shape,
@@ -259,6 +264,7 @@ class DataStudioService:
             contribution.contribution_id,
             execution.contribution_id,
             completion.contribution_id if completion else None,
+            provider_isolation_key=context.isolation_key,
         )
         with self._lock:
             if session.session_id in self._sessions:
@@ -273,8 +279,9 @@ class DataStudioService:
         })
         return session.to_dict()
 
+    @serialized_execution
     def complete(
-        self, context, session_id, full_source, source_before_cursor
+        self, context, session_id, full_source, source_before_cursor, *, client_sql_dialect=None
     ):
         session, binding = self._operational_session(context, session_id)
         contribution = self.contributions.completion(
@@ -285,6 +292,10 @@ class DataStudioService:
             'full_source': str(full_source),
             'source_before_cursor': str(source_before_cursor),
         }
+        if client_sql_dialect is not None:
+            if session.language_profile != 'firebird-sql' or type(client_sql_dialect) is not int or client_sql_dialect not in {1, 2, 3}:
+                raise DataStudioAccessError('Invalid native editor dialect')
+            request['client_sql_dialect'] = client_sql_dialect
         return contribution.complete(binding, request)
 
     @serialized_execution
@@ -531,17 +542,261 @@ class DataStudioService:
         )
         return copy.deepcopy(presentation)
 
-    def validate_source(self, context, session_id, source):
+    @serialized_execution
+    def session_catalog(self, context, session_id, *, include_system=False):
+        session, binding = self._operational_session(context, session_id)
+        if type(include_system) is not bool:
+            raise DataStudioAccessError('Invalid system-object selection')
+        engines={'postgresql-sql':'postgresql','duckdb-sql':'duckdb','sqlite-sql':'sqlite'}
+        engine=engines.get(session.language_profile)
+        if engine is None or not callable(
+                getattr(type(binding.instance), 'capture_session_catalog', None)):
+            raise DataStudioAccessError('Retained-session catalog is unavailable for this provider')
+        result = binding.instance.capture_session_catalog({
+            'session_id': session.provider_session['session_id'],
+            'language_profile': session.language_profile, 'include_system': include_system})
+        from ..workspace.firebird_catalog_export import build_export
+        try:
+            result['document'] = build_export(result['resources'], endpoint_id=context.endpoint_id,
+                target_id='postgresql-database:' + str(result['database_oid']) if engine=='postgresql' else result['catalog_target_id'],
+                generation=result['generation'], include_system=include_system,
+                refreshed=True, engine=engine)
+        except ValueError:
+            result['document'] = None
+            result['export_warning'] = 'This catalog exceeds the DDN export bounds. Native inspection remains available.'
+        result['engine']=engine
+        from .catalog_values import exact_native_integers
+        for resource in result['resources']:exact_native_integers(resource)
+        return result
+
+    @serialized_execution
+    def firebird_eds_pool_action(self,context,session_id,request,archive):
+        from ..sdk import RelationalClientError
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='firebird-sql' or context.provider_id not in {'org.cdeadmin.firebird','org.cdeadmin.firebird.embedded'}:
+            raise DataStudioAccessError('Native Firebird EDS query session required')
+        try:
+            return binding.instance.eds_pool_action({**request,'session_id':session.provider_session['session_id'],
+                'language_profile':session.language_profile},archive)
+        except (ValueError,RelationalClientError) as error:raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def mariadb_backup_stage_action(self, context, session_id, request):
+        from ..sdk import RelationalClientError
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'mariadb-sql' or context.provider_id != 'org.cdeadmin.mariadb':
+            raise DataStudioAccessError('Native MariaDB query session required')
+        try:
+            return binding.instance.backup_stage_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile})
+        except (ValueError, RelationalClientError) as error:
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def bind_duckdb_receipt_archive(self, context, session_id, archive, route):
+        from ..sdk import RelationalClientError
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='duckdb-sql' or context.provider_id!='org.cdeadmin.duckdb':
+            raise DataStudioAccessError('Native DuckDB query session required')
+        try:
+            binding.instance.bind_receipt_archive({'session_id':session.provider_session['session_id'],
+                'language_profile':session.language_profile},archive,route)
+        except (ValueError,RelationalClientError) as error:
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def duckdb_attachment_action(self, context, session_id, request, route):
+        from ..sdk import RelationalClientError
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'duckdb-sql' or context.provider_id != 'org.cdeadmin.duckdb':
+            raise DataStudioAccessError('Native DuckDB query session required')
+        try:
+            return binding.instance.attachment_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile}, route)
+        except (ValueError, RelationalClientError) as error:
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def duckdb_database_copy_action(self, context, session_id, request, route):
+        from ..sdk import RelationalClientError
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'duckdb-sql' or context.provider_id != 'org.cdeadmin.duckdb':
+            raise DataStudioAccessError('Native DuckDB query session required')
+        try:
+            return binding.instance.database_copy_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile}, route)
+        except (ValueError, RelationalClientError) as error:
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def duckdb_extension_action(self, context, session_id, request, route):
+        from ..sdk import RelationalClientError
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='duckdb-sql' or context.provider_id!='org.cdeadmin.duckdb':
+            raise DataStudioAccessError('Native DuckDB query session required')
+        try:
+            return binding.instance.extension_action({**request,'session_id':session.provider_session['session_id'],
+                'language_profile':session.language_profile},route)
+        except (ValueError,RelationalClientError) as error:raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def sqlite_retained_schema_action(self,context,session_id,request,archive,owner,scope_binding,target):
+        import sqlite3
+        from ..sdk import RelationalClientError
+        from ..workspace import sqlite_retained_schema as native
+        from ..workspace.firebird_catalog_import import read_catalog
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Select the original native SQLite query connection')
+        provider=binding.instance;provider._require('execute');provider._require('administer')
+        handle=provider._editor_session({'session_id':session.provider_session['session_id']})
+        operation=request.get('operation')
+        try:
+            with provider.client._lock:
+                if operation=='start':
+                    existing=archive.get(request['review_id'],owner,scope_binding)
+                    if request.get('confirmed') is not True or request.get('review_digest')!=existing['review_digest']:
+                        raise ValueError('Confirm the exact original-session SQLite DDL review')
+                    if existing['state']!='reviewed':return existing
+                provider.client._require_idle(handle)
+                if operation in {'columns','alter'}:
+                    baseline=read_catalog(request['baseline'],engine='sqlite')
+                    if operation=='columns':
+                        desired=native.generate_columns(provider.client,handle,baseline,context.endpoint_id,session.session_id,
+                            request['resource_id'],request['columns'])
+                    else:
+                        from ..workspace.sqlite_retained_alter import generate
+                        desired=generate(provider.client,handle,baseline,context.endpoint_id,session.session_id,request['alterations'])[0]
+                    from ..workspace.firebird_catalog_export import build_export
+                    resources=[{'resource_id':row['resource_id'],'resource_kind':row['kind'],'display_name':row['name'],
+                        'display_path':row['path'],'native':row['native']} for row in desired['rows'].values()]
+                    return build_export(resources,endpoint_id=context.endpoint_id,
+                        target_id='retained-session:'+session.session_id,generation='retained-native-column-design' if operation=='columns' else 'retained-native-alter-design',
+                        include_system=False,refreshed=True,engine='sqlite')
+                if operation in {'preview','review'}:
+                    baseline=read_catalog(request['baseline'],engine='sqlite')
+                    desired=read_catalog(request['desired'],engine='sqlite')
+                    live=native.observe(provider.client,handle,context.endpoint_id,session.session_id)
+                    preview=native.plan(provider.client,handle,baseline,desired,live,context.endpoint_id,session.session_id,
+                        deletions=request.get('deletions',()),alterations=request.get('alterations',()))
+                    if operation=='preview':return preview
+                    if request['execution_sha256']!=preview['execution_sha256']:
+                        raise ValueError('Original native preview changed; inspect it before preparing another review')
+                    return archive.review(preview,baseline,desired,native.context(handle,session.native_work_revision),
+                        owner,scope_binding,target,session.session_id)
+                if operation=='start':
+                    revision=session.native_work_revision
+                    value=archive.start({key:request[key] for key in ('review_id','review_digest','confirmed')},
+                        owner,scope_binding,session.session_id,provider.client,handle,context.endpoint_id,revision)
+                    session.native_work_revision+=1
+                    return value
+                raise ValueError('Unknown original-session SQLite DDL action')
+        except (ValueError,RelationalClientError,sqlite3.Error) as error:raise DataStudioAccessError(str(error)[:400]) from None
+
+    @serialized_execution
+    def sqlite_extension_action(self, context, session_id, request):
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'sqlite-sql' or context.provider_id != 'org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        import config
+        try:
+            return binding.instance.extension_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile},
+                config.CDEADMIN_SQLITE_EXTENSION_MANIFEST)
+        except (ValueError, OSError) as error:
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def sqlite_native_session_action(self, context, session_id, request):
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        import config
+        try:
+            return binding.instance.native_session_action({**request,'session_id':session.provider_session['session_id'],
+                'language_profile':session.language_profile},getattr(config,'CDEADMIN_SQLITE_SESSION_LIBRARY',None))
+        except (ValueError,OSError) as error:raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def sqlite_native_array_action(self, context, session_id, request):
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        import config
+        try:
+            return binding.instance.native_array_action({**request,'session_id':session.provider_session['session_id'],
+                'language_profile':session.language_profile},getattr(config,'CDEADMIN_SQLITE_ARRAY_LIBRARY',None),
+                getattr(config,'CDEADMIN_SQLITE_ARRAY_MAX_BYTES',None))
+        except (ValueError,OSError) as error:raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def sqlite_native_preupdate_action(self, context, session_id, request):
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        import config
+        try:
+            return binding.instance.native_preupdate_action({**request,'session_id':session.provider_session['session_id'],
+                'language_profile':session.language_profile},getattr(config,'CDEADMIN_SQLITE_PREUPDATE_LIBRARY',None))
+        except (ValueError,OSError) as error:raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def sqlite_transform_binding(self, context, session_id, library, database=None):
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        from ..providers.sqlite.session_api import SessionAPI,SessionAPIError
+        from ..providers.sqlite.transform_context import retained_snapshot
+        provider=binding.instance;provider._require('execute');provider._require('administer')
+        handle=provider._editor_session({'session_id':session.provider_session['session_id']})
+        with provider.client._lock:
+            provider.client._require_idle(handle)
+            api=handle._cdeadmin_session_api or SessionAPI(handle,library,owner_shutdown=provider.client.close)
+            if api.program.get('native_session_revision',0)<3:raise SessionAPIError('The retained helper lacks native changegroups')
+            source=retained_snapshot(handle,api,session_id,database)
+            return {'client':provider.client,'handle':handle,'api':api,'source':source,'program':api.program}
+
+    @serialized_execution
+    def sqlite_capture_binding(self, context, session_id, capture_id):
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        provider=binding.instance;provider._require('execute');provider._require('administer')
+        handle=provider._editor_session({'session_id':session.provider_session['session_id']})
+        with provider.client._lock:
+            provider.client._require_idle(handle)
+            api=handle._cdeadmin_session_api
+            if api is None or capture_id not in api.captures:raise DataStudioAccessError('Native capture belongs to another or closed query connection')
+            observed=api.status(capture_id)
+            source={'studio_session_id':session_id,'capture_id':capture_id,'database':observed['database'],
+                'databases':[list(row) for row in handle.execute('PRAGMA database_list')]}
+            return {'client':provider.client,'handle':handle,'api':api,'source':source,'program':api.program}
+
+    @serialized_execution
+    def validate_source(self, context, session_id, source, *, client_sql_dialect=None, script=False):
         from .language_tools import analyze
         session, binding = self._operational_session(context, session_id)
+        options = {}
+        if type(script) is not bool:
+            raise DataStudioAccessError('Script checking requires a boolean')
+        if script:
+            options['script'] = True
+        if client_sql_dialect is not None:
+            if session.language_profile != 'firebird-sql' or type(client_sql_dialect) is not int or client_sql_dialect not in {1, 2, 3}:
+                raise DataStudioAccessError('Invalid native editor dialect')
+            options['client_sql_dialect'] = client_sql_dialect
         # Providers may supply an explicitly non-executing native validator.
         validator = getattr(binding.instance, 'validate_source_without_execution', None)
         if callable(validator):
             return validator({
                 'session_id': session.provider_session['session_id'],
                 'language_profile': session.language_profile,
-                'source': source})
-        return analyze(source, session.language_profile)
+                'source': source, **options})
+        return analyze(source, session.language_profile, script=script)
 
     def preview_script(self, context, session_id, source):
         session, binding = self._operational_session(context, session_id)
@@ -676,8 +931,17 @@ class DataStudioService:
             raise FixtureExecutionError(
                 'non-production Data Studio fixtures cannot execute'
             )
+        if session.provider_isolation_key != context.isolation_key:
+            raise DataStudioAccessError(
+                'Data Studio session belongs to another provider scope'
+            )
         binding = self.provider_registry.resolve(context)
-        if dict(session.provider_session['identity']) != dict(binding.manifest['identity']):
+        # Evidence references describe qualification provenance. A provider's
+        # session citation may differ from its package citation without changing
+        # the contract/provider/profile identity that owns the retained handle.
+        identity_keys = ('contract_version', 'provider_id', 'provider_version', 'profile_id', 'profile_version')
+        if any(session.provider_session['identity'].get(key) != binding.manifest['identity'].get(key)
+               for key in identity_keys):
             raise DataStudioAccessError('Retained session provider identity changed')
         self._ensure_contributions(binding)
         return session, binding
@@ -727,12 +991,12 @@ class DataStudioService:
                 'sessions': SessionContribution,
                 'executions': ExecutionContribution,
             }
-            registrars = {
-                'languages': self.contributions.register_language,
-                'completions': self.contributions.register_completion,
-                'sessions': self.contributions.register_session,
-                'executions': self.contributions.register_execution,
-            }
+            # Network and embedded interfaces can share an exact SQL contract.
+            # Stage the whole provider so a conflicting later port cannot leave
+            # an earlier language registered after admission failed. Callbacks
+            # are still endpoint-independent and receive the resolved binding.
+            staged = {name: dict(getattr(self.contributions, '_' + name))
+                      for name in expected}
             for collection, expected_type in expected.items():
                 for contribution in payload.get(collection, ()):
                     if not isinstance(contribution, expected_type):
@@ -740,7 +1004,18 @@ class DataStudioService:
                             f'provider {collection} contribution is invalid'
                         )
                     self._reject_endpoint_bound_callbacks(contribution)
-                    registrars[collection](contribution)
+                    profiles = ((contribution.language_profile,)
+                                if collection == 'languages' else
+                                contribution.language_profiles)
+                    for profile in profiles:
+                        previous = staged[collection].get(profile)
+                        if previous is not None and previous != contribution:
+                            raise DataStudioError(
+                                'Conflicting Data Studio contribution for '
+                                f'{profile!r}')
+                        staged[collection][profile] = contribution
+            for collection, values in staged.items():
+                setattr(self.contributions, '_' + collection, values)
             self._provider_languages[key] = tuple(
                 item.language_profile
                 for item in payload.get('languages', ())

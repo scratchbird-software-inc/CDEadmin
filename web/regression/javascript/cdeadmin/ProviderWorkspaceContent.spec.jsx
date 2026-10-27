@@ -941,6 +941,29 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText('No plan requested for this execution. Use Explain or explicitly run Explain Analyze.')).toBeVisible();
   });
 
+  it.each(['postgresql', 'mysql'])('keeps %s source editing stable while its first session policy is loading', async (engine) => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: `${engine}-sql`, title: `${engine} SQL`, starter_source: 'SELECT 1',
+      transaction_actions: ['commit', 'rollback', 'autocommit_on', 'autocommit_off'],
+    }]}}});
+    let resolvePolicy;
+    const policy=new Promise(resolve=>{resolvePolicy=resolve;});
+    api.post.mockImplementation((_url,payload)=> {
+      if(payload.action==='open_session') return Promise.resolve({data:{data:{session_id:'opening-policy'}}});
+      if(payload.action==='transaction') return policy;
+      if(payload.action==='source_validate') return Promise.resolve({data:{data:{grammar_valid:true}}});
+      return Promise.resolve({data:{data:{}}});
+    });
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio"
+      initialContext={{database_target_id:'42'}} />);
+    fireEvent.click(await screen.findByRole('button',{name:'Check source'}));
+    await waitFor(()=>expect(api.post).toHaveBeenCalledWith('/workspace/1',expect.objectContaining({action:'transaction'})));
+    expect(screen.getByRole('textbox',{name:'Query source'})).toBeEnabled();
+    await act(async()=>resolvePolicy({data:{data:{provider_payload:{autocommit:true}}}}));
+    await waitFor(()=>expect(api.post).toHaveBeenCalledWith('/workspace/1',expect.objectContaining({action:'source_validate',session_id:'opening-policy'})));
+    expect(screen.getByRole('checkbox',{name:'Autocommit'})).toBeChecked();
+  });
+
   it.each(['postgresql', 'mysql'])('observes %s autocommit and changes only acknowledged policy', async (engine) => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: `${engine}-sql`, title: `${engine} SQL`, starter_source: 'SELECT 1',
@@ -973,6 +996,38 @@ describe('ProviderWorkspaceContent', () => {
     await waitFor(() => expect(screen.getByRole('button', {name: 'commit', exact: true})).toBeEnabled());
     expect(screen.getByRole('checkbox', {name: 'Autocommit'})).not.toBeChecked();
     expect(api.post.mock.calls.some(([, payload]) => payload.action === 'execute')).toBe(false);
+  });
+
+  it.each(['mysql', 'mariadb'])('allows %s native diagnostics after ERR without assuming transaction policy', async (engine) => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: `${engine}-sql`, title: `${engine} SQL`, starter_source: 'SELECT missing_column',
+      transaction_actions: ['commit', 'rollback', 'autocommit_on', 'autocommit_off'],
+    }]}}});
+    let executed = false;
+    api.post.mockImplementation((_url, payload) => {
+      if (payload.action === 'execute') executed = true;
+      const data = {
+        open_session: {session_id: 'diagnostic-session'},
+        execute: {occurrence_id: 'native-error'},
+        poll: {occurrence: {operation: {terminal: true}}, rendered_result: null},
+        transaction: {provider_payload: executed ? {
+          state: 'unknown', connection_usable: true, status_current: false,
+        } : {state: 'idle', autocommit: true, connection_usable: true, status_current: true}},
+      }[payload.action];
+      return Promise.resolve({data: {data}});
+    });
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio"
+      initialContext={{database_target_id: '42'}} />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', expect.objectContaining({action: 'poll'})));
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Run', exact: true})).toBeEnabled());
+    expect(screen.getByRole('checkbox', {name: 'Autocommit'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'commit', exact: true})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'rollback', exact: true})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
+    await waitFor(() => expect(api.post.mock.calls.filter(([, p]) => p.action === 'execute')).toHaveLength(2));
+    expect(api.post.mock.calls.filter(([, p]) => p.action === 'open_session')).toHaveLength(1);
+    expect(api.post.mock.calls.some(([, p]) => p.action === 'transaction_action')).toBe(false);
   });
 
   it.each([
@@ -1011,6 +1066,33 @@ describe('ProviderWorkspaceContent', () => {
     expect(api.post.mock.calls.some(([, value]) => value.action === 'transaction_action')).toBe(false);
   });
 
+  it('presents native MySQL operators from the plan response without another SQL dispatch', async () => {
+    const text = '{"query_plan":{"operation":"Table scan on native_plan_t","estimated_rows":9007199254740993}}';
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'mysql-sql', title: 'MySQL SQL', starter_source: 'SELECT * FROM native_plan_t',
+      parameter_shape: 'object-or-array', query_plan_templates: [
+        {label: 'MySQL JSON query plan', source_template: 'EXPLAIN FORMAT=JSON {source}'},
+      ],
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'mysql-graph'}, execute: {occurrence_id: 'mysql-plan-graph'},
+      poll: {occurrence: {operation: {terminal: true}, result: {extensions: {mysql: {payload: {
+        has_page: true, rows: [[text]], result_set_end: true,
+      }}}}}, rendered_result: {result_id: 'native-graph-result', view_model: {
+        columns: [{name: 'EXPLAIN'}], rows: [{EXPLAIN: text}],
+      }}},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio"
+      initialContext={{database_target_id: 'mysql-target'}} />);
+    fireEvent.click(await screen.findByRole('button', {name: 'MySQL JSON query plan'}));
+    expect(await screen.findByRole('tree', {name: 'Native MySQL operator graph'})).toBeVisible();
+    expect(screen.getByLabelText('Original MySQL plan text').textContent).toBe(text);
+    expect(screen.getByLabelText('Selected native operator')).toHaveTextContent('9007199254740993');
+    fireEvent.click(screen.getByRole('button', {name: 'Inspect operator 1'}));
+    expect(api.post.mock.calls.filter(([, value]) => value.action === 'execute')).toHaveLength(1);
+    expect(api.post.mock.calls.some(([, value]) => value.action === 'transaction_action')).toBe(false);
+  });
+
   it('retains MySQL dispatch timing and native diagnostics without inventing engine timing or a row result', async () => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: 'mysql-sql', title: 'MySQL SQL', starter_source: 'SELECT missing',
@@ -1032,6 +1114,26 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByLabelText('Statement metrics')).toHaveTextContent('Preparation: Unavailable');
     expect(screen.getByLabelText('Statement metrics')).toHaveTextContent('Execution: Unavailable');
     expect(screen.getByLabelText('Statement metrics')).toHaveTextContent('Plan used: Unavailable');
+  });
+
+  it('shows partial MySQL dispatch without retrying or deciding the transaction', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'mysql-sql', title: 'MySQL SQL', starter_source: 'SELECT 1;SELECT %s',
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'mysql-partial'}, execute: {occurrence_id: 'mysql-partial-execution'},
+      poll: {occurrence: {operation: {terminal: true}, result: {extensions: {mysql: {payload: {
+        has_page: false, error: {type:'MySQLParameterAdmissionError', query_dispatch:'partially_started',
+          commands_dispatched:1, message_primary:'Earlier commands ran.'}, session_reuse_blocked:false,
+      }}}}}, rendered_result:null},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio" />);
+    const run=await screen.findByRole('button',{name:'Run',exact:true});
+    await waitFor(() => expect(run).toBeEnabled()); fireEvent.click(run);
+    expect(await screen.findByLabelText('MySQL partial execution')).toHaveTextContent('Earlier commands ran. The next command was not sent.');
+    await waitFor(() => expect(run).toBeEnabled());
+    expect(api.post.mock.calls.filter(([,value]) => value.action==='execute')).toHaveLength(1);
+    expect(api.post.mock.calls.some(([,value]) => value.action==='transaction_action')).toBe(false);
   });
 
   it.each(['[42,null]', '{"id":42}'])('submits MySQL native parameter shape %s', async (parameters) => {
@@ -1951,10 +2053,11 @@ describe('ProviderWorkspaceContent', () => {
       body.action === 'visual_admin_apply')).toHaveLength(1);
   });
 
-  it.each(['ok', 'reload', 'execute'])('does not replay an edit after %s outcome', async (outcome) => {
+  it.each(['ok', 'reload', 'execute', 'deferred'])('does not replay an edit after %s outcome', async (outcome) => {
     const object = {resource_id: 'sequence:one', resource_kind: 'sequence',
       display_name: 'Sequence one'};
-    const applied = {provider_result: {accepted: true}};
+    const applied = {provider_result: {accepted: true,
+      ...(outcome === 'deferred' ? {catalog_refresh_deferred: true} : {})}};
     const post = jest.fn(async ({action}) => {
       if (action === 'resource_inspect') return object;
       if (action === 'visual_admin_validate') return {valid: true};
@@ -1984,7 +2087,11 @@ describe('ProviderWorkspaceContent', () => {
     await waitFor(() => expect(screen.getByRole('button', {name: 'Apply provider plan'}))
       .toBeEnabled());
     fireEvent.click(screen.getByRole('button', {name: 'Apply provider plan'}));
-    if (outcome === 'execute') {
+    if (outcome === 'deferred') {
+      expect(await screen.findByText(/Automatic metadata refresh is deferred/))
+        .toHaveTextContent('Reconnect and refresh after the server is available. Do not repeat the request.');
+      expect(reload).not.toHaveBeenCalled();
+    } else if (outcome === 'execute') {
       await waitFor(() => expect(setError).toHaveBeenCalledWith('Response lost'));
       expect(reload).not.toHaveBeenCalled();
     } else {
@@ -2346,14 +2453,17 @@ describe('ProviderWorkspaceContent', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('loads provider resources through the workspace endpoint', async () => {
+  it('loads provider resources through the workspace endpoint and hands navigation to the tree', async () => {
     render(<ProviderWorkspaceContent
       closeModal={jest.fn()}
       endpointUrl="/workspace/1"
     />);
-    fireEvent.click(await screen.findByRole('treeitem', {name: /database/i}));
-    expect(await screen.findByText('example')).toBeInTheDocument();
-    expect(screen.getAllByText('database')).toHaveLength(2);
+    // The Object Explorer tree is the navigator; the workspace carries no object list.
+    expect(await screen.findByRole('region', {name: 'Object navigation'}))
+      .toHaveTextContent('listed in the Object Explorer tree');
+    expect(screen.getByText('1 objects in the current catalog page.')).toBeInTheDocument();
+    expect(screen.queryByRole('treeitem')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Filter provider objects')).not.toBeInTheDocument();
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith('/workspace/1');
   });
@@ -2645,8 +2755,7 @@ describe('ProviderWorkspaceContent', () => {
     await act(async () => {
       onCredentialRequired.mock.calls[0][0]();
     });
-    fireEvent.click(await screen.findByRole('treeitem', {name: /database/i}));
-    expect(await screen.findByText('example')).toBeInTheDocument();
+    expect(await screen.findByRole('region', {name: 'Object navigation'})).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledTimes(2);
   });
 
@@ -2829,38 +2938,6 @@ describe('ProviderWorkspaceContent', () => {
     })).toHaveTextContent('MAX_CONNECTIONS'));
   });
 
-  it('navigates the provider tree by keyboard and opens the linked editor', async () => {
-    api.post.mockResolvedValue({data: {data: {
-      ...bootstrap.resource_page.items[0], generation: 'generation-one',
-      extensions: {mysql: {native: {character_set: 'utf8mb4'}}},
-    }}});
-    render(<ProviderWorkspaceContent closeModal={jest.fn()}
-      endpointUrl="/workspace/1" />);
-    const branch = await screen.findByRole('treeitem', {name: /database/i});
-    fireEvent.focus(branch);
-    fireEvent.keyDown(branch, {key: 'ArrowRight'});
-    expect(branch).toHaveAttribute('aria-expanded', 'true');
-    const resource = await screen.findByRole('treeitem', {name: /example/i});
-    fireEvent.keyDown(resource, {key: 'Enter'});
-    expect(await screen.findByRole('navigation', {
-      name: 'Selected object breadcrumb',
-    })).toHaveTextContent('database / example');
-    fireEvent.click(screen.getByText('Open object editor'));
-    expect(await screen.findByRole('textbox', {name: /Name/}))
-      .toBeInTheDocument();
-    expect(await screen.findByRole('combobox', {
-      name: 'Object properties task',
-    })).toHaveTextContent('Summary');
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
-    expect(screen.getByRole('tabpanel', {name: 'properties object section'}))
-      .toHaveTextContent('generation-one');
-    expect(api.post).toHaveBeenCalledWith('/workspace/1', {
-      action: 'resource_inspect', request: {
-        resource_id: 'database:example', generation: undefined,
-      },
-    });
-  });
-
   it.each([false, true])('opens server-only recovery and handles failed response %s without replay', async (failed) => {
     const onCredentialRequired = jest.fn();
     const failureMessage = 'The provider operation outcome is unknown. Inspect native state. The plan will not be automatically retried. Native status codes: 335544788, 335545112';
@@ -3032,7 +3109,7 @@ describe('ProviderWorkspaceContent', () => {
     });
   });
 
-  it('opens provider-owned object actions from the resource context menu', async () => {
+  it('opens provider-owned object actions for a tree-selected resource', async () => {
     const inspectOperation = {
       operation_id: 'inspect', title: 'Inspect MySQL database',
       mutation_class: 'read', target_required: true,
@@ -3055,19 +3132,15 @@ describe('ProviderWorkspaceContent', () => {
         definition: {character_set: 'utf8mb4'},
       }}},
     }}});
+    // The tree's context menu opens the workspace on the administration tab with the resource.
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
-      endpointUrl="/workspace/1" />);
-    fireEvent.click(await screen.findByRole('treeitem', {name: /database/i}));
-    const resource = await screen.findByRole('treeitem', {name: /example/i});
-    fireEvent.contextMenu(resource, {clientX: 120, clientY: 80});
-    fireEvent.click(await screen.findByText('Inspect object'));
+      endpointUrl="/workspace/1" initialTab="administration"
+      initialContext={{resource_id: 'database:example', resource_kind: 'database', operation_id: 'inspect'}} />);
     expect(await screen.findByRole('heading', {
       name: /Inspect MySQL database/,
     })).toBeInTheDocument();
-    expect(await screen.findByRole('table', {
-      name: 'Native provider properties',
-    }))
-      .toHaveTextContent('character set');
+    const tables = await screen.findAllByRole('table', {name: 'Native provider properties'});
+    expect(tables.some((table) => table.textContent.includes('character set'))).toBe(true);
   });
 
   it('surfaces unique native tasks but omits unsupported tasks', async () => {
@@ -3103,17 +3176,11 @@ describe('ProviderWorkspaceContent', () => {
         next_cursor: 'cursor-one', total_count: 2,
       },
     }}});
-    api.post.mockResolvedValue({data: {data: {
-      generation: 'generation-one', next_cursor: null, total_count: 2,
-      items: [{
-        resource_id: 'schema:example:public', resource_kind: 'schema',
-        display_name: 'public', display_path: ['database', 'example', 'public'],
-        authority_path: ['database', 'example', 'schema', 'public'],
-      }],
-    }}});
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" />);
-    fireEvent.click(await screen.findByText('Load more provider objects'));
+    expect(await screen.findByRole('region', {name: 'Object navigation'})).toBeInTheDocument();
+    expect(screen.queryByLabelText('Filter provider objects')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Load more provider objects'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(
       '/workspace/1', {
         action: 'resource_page', request: {
@@ -3121,10 +3188,6 @@ describe('ProviderWorkspaceContent', () => {
         },
       }
     ));
-    fireEvent.change(screen.getByLabelText('Filter provider objects'), {
-      target: {value: 'public'},
-    });
-    expect(await screen.findByText('public')).toBeInTheDocument();
   });
 
   it('refreshes only the active provider generation', async () => {
@@ -3138,6 +3201,8 @@ describe('ProviderWorkspaceContent', () => {
       ...bootstrap.resource_page, generation: 'generation-two',
       items: [{
         ...bootstrap.resource_page.items[0], display_name: 'refreshed',
+      }, {
+        ...bootstrap.resource_page.items[0], resource_id: 'database:other', display_name: 'other',
       }],
     }}});
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
@@ -3150,9 +3215,7 @@ describe('ProviderWorkspaceContent', () => {
         },
       }
     ));
-    fireEvent.click(await screen.findByRole('treeitem', {name: /database/i}));
-    fireEvent.click(await screen.findByRole('treeitem', {name: /example/i}));
-    expect(await screen.findByText('refreshed')).toBeInTheDocument();
+    expect(await screen.findByText('2 objects in the current catalog page.')).toBeInTheDocument();
   });
 
   it('opens a provider session, executes and renders rows', async () => {

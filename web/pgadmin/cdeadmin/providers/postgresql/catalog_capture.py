@@ -1,7 +1,8 @@
 """Bounded PostgreSQL-native catalog evidence on an independently owned session.
 
 This adapter captures definitions; it never interprets imported SQL as authority.
-Callers own attachment creation/release. No existing transaction may be borrowed.
+Callers own attachment creation/release. Retained-session captures require an
+explicit transaction guard which restores settings and preserves pending work.
 """
 import json
 import uuid
@@ -9,8 +10,8 @@ import uuid
 from psycopg import sql, errors, Cursor, ServerCursor
 from psycopg.rows import tuple_row
 
-MAX_OBJECTS = 20000
-MAX_BYTES = 8 * 1024 * 1024
+MAX_OBJECTS = 100000
+MAX_BYTES = 64 * 1024 * 1024
 
 # SQL fragments are application constants. No document/browser text enters them.
 # (catalog, kind, name expression, namespace expression, extra FROM, predicate,
@@ -18,7 +19,7 @@ MAX_BYTES = 8 * 1024 * 1024
 CATALOGS = (
     ('pg_namespace', 'schema', 'c.nspname', 'c.nspname', '', 'true', 'c.oid', 'NULL::text'),
     ('pg_class', 'relation', 'c.relname', 'n.nspname', 'JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace',
-     "c.relkind IN ('r','p','v','m','f','S','i','I','c') AND c.relpersistence <> 't'", 'c.oid',
+     "c.relkind IN ('r','p','v','m','f','S','i','I','c','t') AND c.relpersistence <> 't'", 'c.oid',
      "CASE WHEN c.relkind IN ('v','m') THEN pg_catalog.pg_get_viewdef(c.oid,false) WHEN c.relkind IN ('i','I') THEN pg_catalog.pg_get_indexdef(c.oid) END"),
     ('pg_type', 'type', 'c.typname', 'n.nspname', 'JOIN pg_catalog.pg_namespace n ON n.oid=c.typnamespace', 'true', 'c.oid', 'pg_catalog.format_type(c.oid,NULL)'),
     ('pg_proc', 'routine', 'c.proname', 'n.nspname', 'JOIN pg_catalog.pg_namespace n ON n.oid=c.pronamespace', 'true', 'c.oid',
@@ -42,6 +43,7 @@ CATALOGS = (
     ('pg_transform', 'transform', "pg_catalog.format_type(c.trftype,NULL) || ' / ' || l.lanname", 'NULL::text', 'JOIN pg_catalog.pg_language l ON l.oid=c.trflang', 'true', 'c.oid', 'NULL::text'),
     ('pg_default_acl', 'default-privileges', "pg_catalog.pg_get_userbyid(c.defaclrole) || ' / ' || COALESCE(n.nspname, '*') || ' / ' || c.defaclobjtype::text", 'NULL::text', 'LEFT JOIN pg_catalog.pg_namespace n ON n.oid=c.defaclnamespace', 'true', 'c.oid', 'NULL::text'),
     ('pg_user_mapping', 'user-mapping', "CASE WHEN c.umuser=0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(c.umuser) END || ' / ' || s.srvname", 'NULL::text', 'JOIN pg_catalog.pg_foreign_server s ON s.oid=c.umserver', 'true', 'c.oid', 'NULL::text'),
+    ('pg_largeobject_metadata', 'large-object', 'c.oid::text', 'NULL::text', '', 'true', 'c.oid', 'NULL::text'),
 )
 GLOBAL = (
     ('pg_language', 'language', 'lanname'), ('pg_event_trigger', 'event-trigger', 'evtname'),
@@ -53,7 +55,7 @@ GLOBAL = (
 RELATION_KINDS = {
     'r': 'table', 'p': 'partitioned-table', 'v': 'view',
     'm': 'materialized-view', 'f': 'foreign-table', 'S': 'sequence',
-    'i': 'index', 'I': 'partitioned-index', 'c': 'composite-relation',
+    'i': 'index', 'I': 'partitioned-index', 'c': 'composite-relation', 't': 'toast-table',
 }
 ROUTINE_KINDS = {
     'p': 'procedure', 'a': 'aggregate', 'w': 'window-function', 'f': 'function',
@@ -91,12 +93,14 @@ EXCLUSIONS = (
 )
 
 
-def capture(connection, database_oid, *, include_system=False, _in_transaction=False):
-    """Capture using an idle, independently owned psycopg connection."""
+def capture(connection, database_oid, *, include_system=False, _in_transaction=False, session_scope=False):
+    """Capture using an owned connection or an explicitly guarded transaction."""
     if type(database_oid) is not int or not 1 <= database_oid <= 4294967295:
         raise ValueError('Select an explicit native database OID')
     if type(include_system) is not bool:
         raise ValueError('Invalid system-object selection')
+    if type(session_scope) is not bool or (session_scope and not _in_transaction):
+        raise ValueError('Session catalog capture requires an admitted transaction guard')
     if type(_in_transaction) is not bool or int(connection.info.transaction_status) != (2 if _in_transaction else 0):
         raise ValueError('Catalog capture requires its own idle connection or an admitted owned transaction')
     resources, observations, addresses = [], [], {}
@@ -107,7 +111,7 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
         size += len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode('utf8'))
         facts += 1
         if size > MAX_BYTES or facts > MAX_OBJECTS:
-            raise ValueError('Native catalog exceeds the 20,000-fact / 8 MiB capture limit')
+            raise ValueError('Native catalog exceeds the 100,000-fact / 64 MiB capture limit')
 
     def read(cursor, query, params=None):
         # Stream on the owning transaction instead of buffering an entire
@@ -145,6 +149,11 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
             oid, database_name, metadata = cursor.fetchone()
             if oid != database_oid:
                 raise ValueError('Selected database identity changed')
+            cursor.execute('SELECT pg_catalog.pg_my_temp_schema()::oid, pg_catalog.pg_backend_pid(), current_user, current_setting(\'transaction_isolation\')')
+            temp_oid, backend_pid, principal, isolation = cursor.fetchone()
+            cursor.execute('SELECT nspname FROM pg_catalog.pg_namespace WHERE oid=%s', (temp_oid,))
+            temp_row = cursor.fetchone()
+            temp_schema = temp_row[0] if temp_row else None
             root_id = f'postgresql:pg_database:{oid}'
             root = {'resource_id': root_id, 'resource_kind': 'database', 'display_name': database_name,
                     'display_path': [database_name], 'native': {'system_object': False, 'catalog': 'pg_database',
@@ -155,14 +164,24 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
             specs = list(CATALOGS) + [(catalog, kind, 'c.' + name, 'NULL::text', '',
                 'true' if include_system else 'c.oid >= 16384', 'c.oid', 'NULL::text')
                 for catalog, kind, name in GLOBAL]
-            for catalog, kind, name, namespace, joins, predicate, identity, definition in specs:
+            for storage_catalog, kind, name, namespace, joins, predicate, identity, definition in specs:
+                # PostgreSQL addresses large objects through pg_largeobject;
+                # owner/ACL facts live in pg_largeobject_metadata. Contents are
+                # never selected as a side effect of metadata discovery.
+                catalog = 'pg_largeobject' if storage_catalog == 'pg_largeobject_metadata' else storage_catalog
                 where = predicate
-                if namespace == 'NULL::text' and not include_system:
+                if catalog == 'pg_class' and session_scope:
+                    where = predicate.replace("c.relpersistence <> 't'", "NOT pg_catalog.pg_is_other_temp_schema(c.relnamespace)")
+                if namespace == 'NULL::text' and not include_system and catalog != 'pg_largeobject':
                     where += ' AND c.oid >= 16384'
                 if catalog == 'pg_subscription':
                     where += f' AND c.subdbid = {database_oid}'
                 if namespace != 'NULL::text' and not include_system:
-                    where += f" AND {namespace} NOT IN ('pg_catalog','information_schema') AND {namespace} NOT LIKE 'pg_toast%%' AND {namespace} NOT LIKE 'pg_temp_%%'"
+                    temporary = f" OR {namespace} = (SELECT nspname FROM pg_catalog.pg_namespace WHERE oid=pg_catalog.pg_my_temp_schema())" if session_scope else ''
+                    where += f" AND {namespace} NOT IN ('pg_catalog','information_schema') AND {namespace} NOT LIKE 'pg_toast%%' AND ({namespace} NOT LIKE 'pg_temp_%%'{temporary})"
+                if namespace != 'NULL::text' and session_scope:
+                    namespace_oid = 'c.oid' if catalog == 'pg_namespace' else 'n.oid'
+                    where += f" AND NOT pg_catalog.pg_is_other_temp_schema({namespace_oid})"
                 native = 'to_jsonb(c)'
                 if catalog == 'pg_proc':
                     native += " || jsonb_build_object('identity_arguments', pg_catalog.pg_get_function_identity_arguments(c.oid))"
@@ -193,17 +212,22 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                     native = 'jsonb_build_object(' + ','.join(f"'{field}',c.{field}" for field in fields) + ", 'connection_redacted',true)"
                 description = 'shobj_description' if catalog == 'pg_subscription' else 'obj_description'
                 native_identity = f"(pg_catalog.pg_identify_object('pg_catalog.{catalog}'::regclass,c.oid,0)).identity"
-                query = sql.SQL(f"SELECT {identity}, {name}, {namespace}, ({native})::text, {definition}, pg_catalog.{description}(c.oid, %s), {native_identity} FROM pg_catalog.{{}} c {joins} WHERE {where} ORDER BY c.oid").format(sql.Identifier(catalog))
+                query = sql.SQL(f"SELECT {identity}, {name}, {namespace}, ({native})::text, {definition}, pg_catalog.{description}(c.oid, %s), {native_identity} FROM pg_catalog.{{}} c {joins} WHERE {where} ORDER BY c.oid").format(sql.Identifier(storage_catalog))
 
                 def objects():
                     pending = []
                     for objid, label, schema, data, ddl, comment, sql_identity in read(cursor, query, (catalog,)):
                         raw = json.loads(data)
-                        system = schema in {'pg_catalog', 'information_schema'} or bool(schema and schema.startswith(('pg_toast', 'pg_temp_'))) if schema is not None else objid < 16384
+                        system = schema in {'pg_catalog', 'information_schema'} or bool(schema and schema.startswith(('pg_toast', 'pg_temp_'))) if schema is not None else objid < 16384 and catalog != 'pg_largeobject'
+                        if session_scope and temp_schema is not None and schema == temp_schema:
+                            system = False
                         native = {'catalog': catalog, 'oid': objid, 'subobject': 0, 'schema': schema,
                                   'system_object': system, 'catalog_row': raw, 'definition': ddl, 'comment': comment,
                                   'sql_identity': sql_identity,
                                   'navigator_parent_resource_id': root_id}
+                        if session_scope:
+                            native['observation_scope'] = 'retained-session'
+                            native['session_local'] = bool(schema and schema.startswith(('pg_temp_', 'pg_toast_temp_')))
                         item = {'resource_id': f'postgresql:{catalog}:{objid}', 'resource_kind': kind,
                                 'display_name': label, 'display_path': [database_name] + ([schema] if schema else []) + [label], 'native': native}
                         account(item)
@@ -212,7 +236,7 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                         addresses[(catalog, item['native']['oid'])] = item
                     resources.extend(pending)
                     return len(pending)
-                group(cursor, catalog, objects)
+                group(cursor, storage_catalog, objects)
 
             for catalog, owner, parent, predicate in CHILDREN:
                 ids = [objid for (cat, objid) in addresses if cat == parent]
@@ -334,8 +358,30 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                         if cat == 'pg_namespace' and obj['display_name'] == native['schema']), None)
                 if parent:
                     native['navigator_parent_resource_id'] = parent['resource_id']
+            # Native ownership, rather than display labels, determines tree
+            # paths. A namespace must not repeat its own name, and table-owned
+            # indexes/triggers/constraints must descend from that exact table.
+            by_identity = {item['resource_id']: item for item in resources}
+            resolved = {root_id: [database_name]}
+            def navigator_path(item, visiting):
+                identity = item['resource_id']
+                if identity in resolved: return resolved[identity]
+                if identity in visiting: raise ValueError('Native catalog ownership cycle')
+                parent = by_identity.get(item['native'].get('navigator_parent_resource_id'), root)
+                path = navigator_path(parent, visiting | {identity}) + [item['display_name']]
+                resolved[identity] = path
+                return path
+            for item in resources:
+                item['display_path'] = navigator_path(item, set())
             root['native'].update(catalog_observations=observations, catalog_warnings=list(EXCLUSIONS),
                                   isolation='repeatable-read/owned-write' if _in_transaction else 'repeatable-read/read-only', coverage_complete=False)
+            if session_scope:
+                root['native'].update(observation_scope='retained-session', isolation=isolation,
+                    session_context={'backend_pid': backend_pid, 'principal': principal,
+                                     'temporary_schema_oid': temp_oid, 'temporary_schema': temp_schema})
+                root['native']['catalog_warnings'].append('This retained-session observation includes pending catalog changes and this session\'s temporary objects. Other sessions\' temporary objects are excluded. It cannot be applied as an independent database migration.')
+            else:
+                root['native']['catalog_warnings'].append('Temporary relations require explicit retained-session catalog inspection.')
         if not _in_transaction:
             connection.execute('COMMIT')
     except BaseException:

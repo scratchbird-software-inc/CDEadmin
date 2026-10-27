@@ -1,0 +1,496 @@
+"""Reviewed native physical artifacts on an independently authenticated DB host."""
+from copy import deepcopy
+import base64
+import hashlib
+from pathlib import Path
+from pathlib import PurePosixPath
+import time
+
+from ..providers.mysql_family import mysql_physical_transport as native
+from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+from ..providers.mysql_family.mysql_connections import POOL_ARGUMENTS
+from ..providers.mysql_family.provider import MySQLPilotProvider
+from .mysql_binlog_jobs import MySQLBinlogJobs, digest, identity, review_digest
+from . import mysql_host_service as host
+from .mysql_monitoring_host import MySQLMonitoringHost
+
+
+def resolve_storage(captured,observed):
+    """Resolve each pending native layout using its own authenticated-host facts."""
+    if captured['state'].get('native_storage_resolution_pending') or captured['state'].get('native_undo_naming_pending') or captured['state'].get('native_system_naming_pending'):
+        resolved=observed.get('external_paths',{}).get('storage')
+        if not resolved or captured['state'].get('native_storage_resolution_pending') and not resolved.get('resolved_paths'):
+            raise native.HostError('Native source filesystem resolution was not observed on its authenticated host')
+        if captured['state'].get('native_undo_naming_pending') and resolved.get('undo_naming')!=native.worker.geometry_module().UNDO_NAMING:
+            raise native.HostError('Qualified native undo naming was not observed on its authenticated host')
+        if captured['state'].get('native_system_naming_pending') and resolved.get('system_naming')!=native.worker.geometry_module().SYSTEM_NAMING:
+            raise native.HostError('Qualified native system-file naming was not observed on its authenticated host')
+        modeled,_directories=native.worker.geometry_module().external_entries(resolved)
+        captured['state']['native_external_files']=[{'file_name':name} for name in sorted(
+            {row['file_name'] for row in captured['state'].get('native_external_files',[])}|{row['file_name'] for row in modeled})]
+
+
+def source(service, server, *, admitted=None, keyring=None, isolate_external_paths=False):
+    """Admit the actual persistent engine/encryption scope, not a generic dump."""
+    captured = host.source(service,server) if admitted is None else host.source(service,server,admitted=admitted)
+    context, payload, _root = service.endpoint_service.workspace(server, database_target_id=None)
+    provider = service.endpoint_service.provider_registry.resolve(context).instance
+    from ..providers.mysql_family.mysql_log_purge import private_connection
+    from ..providers.mysql_family.mysql_clone import configure, rows
+    route = {key: value for key,value in payload['route'].items() if key not in POOL_ARGUMENTS}
+    client,route=admitted if admitted is not None else (provider.client,route)
+    connection = private_connection(client, {**route, 'database':None, 'read_timeout':15})
+    try:
+        configure(connection)
+        engines = rows(connection, "SELECT ENGINE AS engine,COUNT(*) AS objects FROM information_schema.TABLES "
+            "WHERE TABLE_SCHEMA NOT IN ('information_schema','performance_schema','sys') AND TABLE_TYPE='BASE TABLE' GROUP BY ENGINE ORDER BY ENGINE")
+        unsupported = [row['engine'] for row in engines if (row['engine'] or '').casefold() not in
+            {'innodb','myisam','csv','archive','blackhole','mrg_myisam','memory','federated'}]
+        if unsupported:
+            raise native.HostError('This physical backend has not admitted these persistent storage engines: ' + ', '.join(str(item) for item in unsupported))
+        encrypted = rows(connection, "SELECT COUNT(*) AS encrypted FROM information_schema.INNODB_TABLESPACES WHERE ENCRYPTION='Y'")[0]['encrypted']
+        native_flags=rows(connection,"SELECT @@global.innodb_redo_log_encrypt AS redo_encrypted,@@global.innodb_undo_log_encrypt AS undo_encrypted,@@global.binlog_encryption AS binlog_encrypted")[0]
+        flags={key:native_flags[key+'_encrypted'] for key in ('redo','undo','binlog')}
+        if any(flags.get(key) not in {0,1} for key in ('redo','undo','binlog')):
+            raise native.HostError('Native source encryption flags are unavailable')
+        flags={key:bool(flags[key]) for key in ('redo','undo','binlog')}
+        if (encrypted or any(flags.values())) and keyring is None:
+            raise native.HostError('Review native file-keyring retention and isolated recovery before backing up encrypted data or logs')
+        if keyring is not None:
+            status={str(row['status_key']).lower():row['status_value'] for row in rows(connection,
+                'SELECT STATUS_KEY AS status_key,STATUS_VALUE AS status_value FROM performance_schema.keyring_component_status')}
+            if (status.get('component_name')!='component_keyring_file' or status.get('component_status')!='Active' or
+                    status.get('license')!='GPL' or not status.get('data_file')):
+                raise native.HostError('This native backend requires the initialized source-available component_keyring_file')
+            plugin=rows(connection,'SELECT CAST(@@plugin_dir AS CHAR CHARACTER SET utf8mb4) AS plugin_directory')[0]['plugin_directory']
+            captured['state']['native_keyring_source']={'component':'component_keyring_file','data_file':status['data_file'],
+                'server_plugin_directory':plugin,'encryption':flags}
+        captured['state']['source_encryption']=flags
+        storage_variables=rows(connection,
+            'SELECT CAST(@@innodb_data_home_dir AS CHAR CHARACTER SET utf8mb4) AS innodb_data_home_dir,'
+            'CAST(@@innodb_data_file_path AS CHAR CHARACTER SET utf8mb4) AS innodb_data_file_path,'
+            'CAST(@@innodb_undo_directory AS CHAR CHARACTER SET utf8mb4) AS innodb_undo_directory,'
+            'CAST(@@innodb_directories AS CHAR CHARACTER SET utf8mb4) AS innodb_directories')[0]
+        storage_files=rows(connection,"SELECT FILE_ID AS file_id,FILE_NAME AS file_name,TABLESPACE_NAME AS tablespace_name,FILE_TYPE AS file_type "
+            "FROM information_schema.FILES WHERE ENGINE='InnoDB' AND (TABLESPACE_NAME='innodb_system' OR FILE_TYPE='UNDO LOG') ORDER BY FILE_NAME")
+        for row in storage_files:
+            space_id=row.pop('file_id',None)
+            if row['file_type']=='UNDO LOG' and space_id is not None:
+                try:row['undo_number']=native.worker.geometry_module().undo_number(space_id)
+                except native.worker.Refused as error:raise native.HostError(str(error)) from None
+        captured['state']['native_storage_source']={'variables':storage_variables,'files':storage_files}
+        data=PurePosixPath(captured['state']['host_binding']['datadir'])
+        files=rows(connection,'SELECT CAST(PATH AS CHAR CHARACTER SET utf8mb4) AS file_name FROM information_schema.INNODB_DATAFILES ORDER BY PATH')
+        try:
+            geometry=native.worker.geometry_module()
+            effective=[]
+            for row in files:
+                try:effective.append(geometry.absolute(row['file_name'],str(data)))
+                except geometry.ResolutionRequired:
+                    captured['state']['native_storage_resolution_pending']=True
+            external=[{'file_name':name} for name in sorted(set(effective)) if not PurePosixPath(name).is_relative_to(data)]
+            try:
+                storage=geometry.from_source({'source_storage':captured['state']['native_storage_source'],
+                    'binding':captured['state']['host_binding'],'isolate_external_paths':isolate_external_paths})
+            except geometry.SystemNamingRequired:
+                if isolate_external_paths is not True:raise native.HostError('Review native system-path isolation before backing up colliding filenames') from None
+                captured['state']['native_system_naming_pending']=True;storage=None
+            except geometry.UndoNamingRequired:
+                if isolate_external_paths is not True:raise native.HostError('Review native undo-path isolation before backing up duplicate filenames') from None
+                captured['state']['native_undo_naming_pending']=True;storage=None
+            except geometry.ResolutionRequired:
+                if isolate_external_paths is not True:raise native.HostError('Review native filesystem path isolation before resolving source storage paths') from None
+                captured['state']['native_storage_resolution_pending']=True;storage=None
+        except native.worker.Refused as error:raise native.HostError(str(error)) from None
+        if storage is not None:
+            modeled,_directories=native.worker.geometry_module().external_entries(storage)
+            external=[{'file_name':name} for name in sorted({row['file_name'] for row in external}|{row['file_name'] for row in modeled})]
+        if external and isolate_external_paths is not True:
+            raise native.HostError('Review native external-path isolation before backing up external InnoDB files')
+        if external:captured['state']['native_external_files']=external
+        captured['state']['storage_engine_counts'] = engines
+        captured['state']['encrypted_tablespaces'] = encrypted
+        volatile = rows(connection, "SELECT TABLE_SCHEMA AS schema_name,TABLE_NAME AS table_name,TABLE_ROWS AS current_rows FROM information_schema.TABLES "
+            "WHERE TABLE_SCHEMA NOT IN ('information_schema','performance_schema','sys') AND ENGINE='MEMORY' ORDER BY TABLE_SCHEMA,TABLE_NAME")
+        if volatile: captured['state']['volatile_memory_tables'] = volatile
+        tls = sql_tls(service, server)
+        if tls is not None: captured['state']['sql_tls_policy'] = tls['policy']
+        return captured
+    finally: client._discard_failed_session(connection)
+
+
+def options(value):
+    fields = {'connection', 'workspace', 'executable', 'mysql', 'phase', 'sql_host', 'sql_port',
+        'input_job_id', 'parallel', 'memory_bytes', 'timeout_seconds', 'accept_release_candidate'}
+    extra = ({'mysqld', 'recovery_gtid_mode'} if isinstance(value,dict) and value.get('phase') == 'recover' else
+        {'deployment'} if isinstance(value,dict) and value.get('phase') == 'deploy' else set())
+    optional = ({'recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','recovery_federated'} if isinstance(value,dict) and value.get('phase')=='recover' else ({'incremental_job_id'} if isinstance(value,dict) and value.get('phase')=='prepare_redo' else set()))|{'keyring','isolate_external_paths'}
+    if not isinstance(value, dict) or not fields | extra <= set(value) or set(value)-fields-extra-optional:
+        raise native.HostError('Select the complete native physical host and operation options')
+    selected = deepcopy(value); selected['connection'] = native.ssh.public_route(value['connection'])
+    if 'isolate_external_paths' in value and type(value['isolate_external_paths']) is not bool:
+        raise native.HostError('Select native external-path isolation explicitly')
+    if 'keyring' in value:
+        material=value['keyring']
+        if (not isinstance(material,dict) or set(material)!={'xtrabackup_plugin_dir'} or
+                not isinstance(material['xtrabackup_plugin_dir'],str) or not material['xtrabackup_plugin_dir'].startswith('/') or
+                '\0' in material['xtrabackup_plugin_dir'] or len(material['xtrabackup_plugin_dir'])>4096):
+            raise native.HostError('Select the absolute native XtraBackup file-keyring component directory')
+    if selected['connection']['platform'] != 'posix' or value['accept_release_candidate'] is not True:
+        raise native.HostError('Confirm the admitted Linux XtraBackup9.7.1-rc1 release candidate explicitly')
+    for key in ('workspace', 'executable', 'mysql', *(['mysqld'] if value['phase']=='recover' else [])):
+        if not isinstance(value[key], str) or not value[key] or '\x00' in value[key] or len(value[key]) > 4096:
+            raise native.HostError('Select bounded absolute paths on the authenticated database host')
+    if (not isinstance(value['sql_host'],str) or not value['sql_host'] or len(value['sql_host'])>253 or
+            any(character.isspace() or character in '/\\\0' for character in value['sql_host']) or
+            type(value['sql_port']) is not int or not 1 <= value['sql_port'] <= 65535):
+        raise native.HostError('Select the source TCP hostname or address reachable from its authenticated database host')
+    for key, low, high in [('parallel', 1, 64), ('memory_bytes', 64 * 1024 * 1024, 16 * 1024**3), ('timeout_seconds', 1, 604800)]:
+        if type(value[key]) is not int or not low <= value[key] <= high:
+            raise native.HostError('Select bounded native physical ' + key)
+    if value['phase'] not in {'backup','incremental','prepare','prepare_redo','copy_back','recover','deploy'}:
+        raise native.HostError('Select full/incremental backup, redo-only/final preparation, isolated copy-back or managed recovery')
+    if value['phase']=='deploy':
+        try:selected['deployment']=native.worker.deployment_module().options(value['deployment'],host_paths=False)
+        except native.worker.Refused as error:raise native.HostError(str(error)) from None
+    if value['phase']=='recover' and value['recovery_gtid_mode'] not in {'OFF','OFF_PERMISSIVE','ON_PERMISSIVE','ON'}:
+        raise native.HostError('Select the native recovery GTID mode explicitly')
+    if value['phase']=='recover':
+        port = value.get('recovery_port',0)
+        if type(port) is not int or port != 0 and not 1024 <= port <= 65535:
+            raise native.HostError('Select no recovery TCP listener or a native loopback port from 1024 through 65535')
+        selected['recovery_port'] = port
+        if 'recovery_tls' in value:
+            tls = value['recovery_tls']
+            if (not port or not isinstance(tls,dict) or set(tls)!={'ssl_ca','ssl_cert','ssl_key'} or
+                    any(not isinstance(path,str) or not path.startswith('/') or '\0' in path or len(path)>4096 for path in tls.values())):
+                raise native.HostError('Select a recovery TCP port and absolute host CA, server certificate and key paths')
+        local = value.get('recovery_local_infile', False)
+        if type(local) is not bool: raise native.HostError('Explicitly select trusted recovery checksum input')
+        selected['recovery_local_infile'] = local
+        if type(value.get('recovery_federated',False)) is not bool:raise native.HostError('Explicitly select native FEDERATED remote access')
+        selected['recovery_federated']=value.get('recovery_federated',False)
+        mode=value.get('recovery_mode','read_only')
+        if mode not in {'read_only','replay'}:raise native.HostError('Select read-only inspection or writable native replay startup')
+        selected['recovery_mode']=mode
+        if mode=='replay':
+            server_id=value.get('recovery_server_id')
+            if not port or type(server_id) is not int or not 1<=server_id<=4294967295:
+                raise native.HostError('Writable replay startup requires an explicit loopback TCP port and native server ID')
+        elif 'recovery_server_id' in value:raise native.HostError('A recovery server ID applies only to writable replay startup')
+    if value['phase']=='prepare_redo':
+        selected['incremental_job_id']=identity(value['incremental_job_id']) if value.get('incremental_job_id') is not None else None
+    if value['phase'] == 'backup':
+        if value['input_job_id'] is not None:
+            raise native.HostError('A full physical backup has no prior input')
+    else:
+        selected['input_job_id'] = identity(value['input_job_id'])
+    return selected
+
+
+class PhysicalJobs(MySQLBinlogJobs):
+    operation = 'mysql_native_physical_backup'
+    review_warnings = (
+        'The admitted backend is upstream XtraBackup9.7.1-rc1, a release candidate. Its original native replies, verified files and recovery acceptance are separate facts.',
+        'Full backups take native backup/read locks and copy complete supported instance files. Prepare mutates a separate private copy. Copy-back creates only a new isolated job data directory; it never overwrites the live data directory or starts a database.',
+        'Native processes run under an independent supervisor on the authenticated database SSH host. Closing the viewer or losing a reply does not cancel or roll back native work. An original unknown dispatch is never automatically repeated.',
+        'This workflow requires complete, uncompressed native backup files. Encrypted data/log recovery requires explicitly retained native file-keyring material and matching components. Incrementals require exact base lineage and contiguous LSNs; apply to separate redo-only copies, then finalize. Native system/undo and external tablespace paths require retained source metadata and reviewed Linux filesystem isolation. Relative homes/scan roots resolve from the native datadir and recovery uses the retained effective paths. Circular paths require retained filesystem resolution observed on the database host. Native MERGE children require complete MyISAM payload and retain original member metadata. Raw-device files and unmapped legacy storage layouts require additional admission. Production cutover remains separate.',
+        'Managed recovery starts a separate native MySQL9.7.0 data copy under the authenticated SSH OS account with a fresh UUID, private Unix socket and selected loopback TCP listener. Read-only inspection is the default. Explicit replay startup is writable with private ROW binary logging and the selected server ID. Both disable events/replication autostart and automatic upgrades, and end on stop or reviewed lifetime. SQL readiness is distinct from full data recovery acceptance.',
+        'Physical files and native output are private to the selected host OS account. Broad source archive protection is acquired before backup dispatch and is retired only by its separate reviewed protection workflow.',
+        'Physical recovery preserves MEMORY table definitions; native MySQL discards their volatile rows on restart. Inspect the listed MEMORY tables and use the logical backup workflow when their current rows must be retained.',
+    )
+
+    def public(self, record):
+        result = super().public(record)
+        result['remote_review'] = deepcopy(record['source_state']['remote_review'])
+        try:
+            result['host_binding']=original_binding(record)
+            result['host_binding_source']='source_capture' if record['source_state'].get('host_binding') else 'retained_original_host_review'
+        except native.HostError:
+            result['host_binding']=None;result['host_binding_unavailable']=True
+        if 'sql_tls_policy' in record['source_state']:
+            result['sql_tls_policy'] = deepcopy(record['source_state']['sql_tls_policy'])
+        if 'storage_engine_counts' in record['source_state']:
+            result['storage_engine_counts'] = deepcopy(record['source_state']['storage_engine_counts'])
+            if any(str(row['engine']).lower()=='federated' for row in result['storage_engine_counts']):
+                result['warnings']=[*result['warnings'],'FEDERATED physical backup retains local definitions and server references, including private credentials. Remote rows are owned by the referenced server and are not copied or recovered by this backup. Recovery disables FEDERATED unless remote access is explicitly confirmed.']
+        if 'volatile_memory_tables' in record['source_state']:
+            result['volatile_memory_tables'] = deepcopy(record['source_state']['volatile_memory_tables'])
+        if 'source_encryption' in record['source_state']:result['source_encryption']=deepcopy(record['source_state']['source_encryption'])
+        if 'native_external_files' in record['source_state']:result['native_external_files']=deepcopy(record['source_state']['native_external_files'])
+        if record['options'].get('keyring'):
+            result['warnings']=[*result['warnings'],'Native file-keyring and transition-key material is retained privately with this backup. Recovery uses separate keyring and native plugin copies; their retention follows the protected physical dependency chain.']
+        if record['options'].get('isolate_external_paths'):
+            result['warnings']=[*result['warnings'],'Native external recovery requires mount-namespace and mount_setattr privileges on the selected Linux SSH account. It preserves original native directory names as private aliases, makes the host view read-only, and permits writes within the private workspace. Actual native-process namespace and directory identities are independently checked.']
+        result['source_connection_class'] = record['source_state'].get('source_connection_class')
+        remote = record.get('remote_observation') or {}
+        result['native_process_termination_confirmed'] = remote.get('process_termination_confirmed') is True
+        result['file_verification_confirmed'] = bool(not record.get('artifact_removed') and not record.get('artifact_removal') and remote.get('return_code') == 0 and not remote.get('error_type') and
+            (remote.get('artifact') or remote.get('restored_files')) and remote.get('process_termination_confirmed') is True and
+            remote.get('credential_cleanup_confirmed') is True and remote.get('supervisor_finished') is True)
+        result['database_recovery_verified'] = False
+        result['recovery_running'] = not record.get('artifact_removed') and remote.get('recovery_running_verified') is True
+        result['recovery_sql_startup_observed'] = remote.get('sql_ready_observed') is True
+        result['production_cutover_verified'] = False
+        if record['options']['phase']=='deploy':
+            result['permanent_deployment']={'directory':record['options']['deployment']['directory'],
+                'service':record['options']['deployment']['service'],
+                'unit_installation_observed':remote.get('installation',{}).get('installed') is True,
+                'native_start_returned':remote.get('service_start',{}).get('return_code')==0,
+                'initial_super_read_only_requested':True,'database_acceptance_verified':False,
+                'observation':remote.get('deployment_observation'),
+                'production_cutover_verified':False}
+        result['backup_schedule_id']=record['source_state'].get('backup_schedule_id')
+        return result
+
+
+def manager(service, server):
+    _base, owner, endpoint = host.manager(service, server)
+    context = service.endpoint_service._context(endpoint, ())
+    if 'backup_admin' not in service.endpoint_service.provider_registry.admitted_permissions(context):
+        raise native.HostError('Native physical artifacts require backup administration permission')
+    with service._semantic_lock:
+        jobs = getattr(service, 'mysql_physical_jobs', None)
+        if jobs is None:
+            from flask import current_app
+            path = service.operation_bus.store.path
+            root = current_app.config.get('CDEADMIN_MYSQL_PHYSICAL_ROOT') or str(path.parent / 'mysql-physical-receipts')
+            jobs = service.mysql_physical_jobs = PhysicalJobs(str(path) + '.mysql-physical', root)
+    return jobs, owner, endpoint
+
+
+def original_binding(record):
+    """Recover a missing duplicate from original facts, without contacting SQL."""
+    value=record['source_state'].get('host_binding')
+    if value is None:
+        observed=record['source_state'].get('remote_review',{}).get('host',{})
+        if not isinstance(observed,dict) or not {'server_uuid','hostname','datadir'}<=set(observed):
+            raise native.HostError('Original physical host binding is unavailable; preserve this receipt without guessing a replacement source')
+        value={key:observed[key] for key in ('server_uuid','hostname','datadir')}
+        if value['server_uuid']!=record['source'].get('server_uuid'):
+            raise native.HostError('Retained original physical host review differs from its source UUID')
+    if (not isinstance(value,dict) or set(value)!={'server_uuid','hostname','datadir'} or
+            any(not isinstance(item,str) or not item or '\0' in item or len(item)>32768 for item in value.values()) or
+            not PurePosixPath(value['datadir']).is_absolute()):
+        raise native.HostError('Original physical host binding is incompatible')
+    try:identity(value['server_uuid'])
+    except BinlogArchiveError:raise native.HostError('Original physical source UUID is incompatible') from None
+    return deepcopy(value)
+
+
+def remote_request(record, action):
+    selected = record['options']
+    return {'schema': 'cdeadmin.mysql-physical.v1', 'action': action,
+        **{key: deepcopy(selected[key]) for key in ('workspace', 'executable', 'mysql', 'phase', 'sql_host', 'sql_port',
+            'input_job_id', 'parallel', 'memory_bytes', 'timeout_seconds')},
+        'binding': original_binding(record), 'source_identity': deepcopy(record['source']),
+        'reviewed': deepcopy(record['source_state']['remote_review']),
+        'job_id': record['job_id'], 'input_digest': record['review_digest'],
+        **({'sql_tls_policy': deepcopy(record['source_state']['sql_tls_policy'])} if 'sql_tls_policy' in record['source_state'] else {}),
+        **({'source_keyring':deepcopy(record['source_state']['native_keyring_source'])} if 'native_keyring_source' in record['source_state'] else {}),
+        **({'source_storage':deepcopy(record['source_state']['native_storage_source'])} if 'native_storage_source' in record['source_state'] else {}),
+        **{key: selected[key] for key in ('mysqld','recovery_gtid_mode','recovery_port','recovery_mode','recovery_server_id','recovery_local_infile','recovery_tls','recovery_federated','incremental_job_id','keyring','isolate_external_paths','deployment') if key in selected}}
+
+
+def sql_tls(service, server):
+    """Carry the registered client policy and exact files across pinned SSH."""
+    context, payload, _root = service.endpoint_service.workspace(server, database_target_id=None)
+    route = payload['route']
+    files = {}
+    for name in ('ssl_ca', 'ssl_cert', 'ssl_key'):
+        if route.get(name):
+            from ..providers.mysql_family.mysql_host_worker import regular_stream
+            try:
+                with regular_stream(Path(route[name])) as stream:
+                    data = stream.read(131073)
+            except (OSError, ValueError):
+                raise native.HostError('Registered native TLS material is unavailable: ' + name) from None
+            if not data or len(data) > 131072:
+                raise native.HostError('Registered native TLS material exceeds its bound: ' + name)
+            files[name] = base64.b64encode(data).decode('ascii')
+    settings = {'ssl-mode': 'VERIFY_IDENTITY' if route.get('ssl_verify_identity') else
+        'VERIFY_CA' if route.get('ssl_verify_cert') else 'REQUIRED'}
+    for source, target, separator in [('ssl_cipher', 'ssl-cipher', ':'),
+            ('tls_versions', 'tls-version', ','), ('tls_ciphersuites', 'tls-ciphersuites', ':')]:
+        value = route.get(source)
+        if value:
+            if isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value):
+                value = separator.join(value)
+            if not isinstance(value, str) or '\0' in value or len(value) > 4096:
+                raise native.HostError('Registered native TLS settings are invalid')
+            settings[target] = value
+    if not files and settings == {'ssl-mode': 'REQUIRED'}:
+        return None
+    policy = {'options': settings, 'files': {name: hashlib.sha256(base64.b64decode(data)).hexdigest()
+        for name, data in files.items()}}
+    return {'policy': policy, 'files': files}
+
+
+def delegate(service, server):
+    context, payload, _root = service.endpoint_service.workspace(server, database_target_id=None)
+    provider = service.endpoint_service.provider_registry.resolve(context).instance
+    if not isinstance(provider, MySQLPilotProvider):
+        raise native.HostError('Native MySQL backup credential delegation is unavailable')
+    route = {key: value for key, value in payload['route'].items() if key not in POOL_ARGUMENTS}
+    tls = sql_tls(service, server)
+    def sealed(values):
+        if len(values) > 1:
+            raise native.HostError('This physical backend has not admitted native multiple-factor credential delegation')
+        return {'user': route.get('user') or route.get('username'), 'password': values[0] if values else '',
+            **({'tls': tls} if tls is not None else {})}
+    return provider.client._tool_secrets(route, sealed, allow_recovery_credentials=True)
+
+
+def claim(jobs, record, owner, endpoint, request):
+    with jobs.store(record['job_id']) as store:
+        def change(state):
+            current = jobs.record(state, record['job_id'], owner, endpoint)
+            if request.get('confirmed') is not True or request.get('review_digest') != current['review_digest'] or review_digest(current) != current['review_digest']:
+                raise native.HostError('Confirm the exact original physical review')
+            if current['state'] != 'reviewed': return False
+            if time.time() > current['expires_at']: raise native.HostError('Physical review expired; review its current inputs again')
+            current.update(state='dispatching', native_may_have_dispatched=True, started_at=time.time())
+            return True
+        return store.change(change)
+
+
+def action(service, server, operation, request):
+    from .mysql_physical_retention import admission
+    jobs,owner,endpoint=manager(service,server)
+    if operation.startswith(('retention_schedule_','backup_schedule_','check_schedule_')):
+        if not isinstance(request,dict):raise native.HostError('Select a physical schedule request')
+        from ..report_scheduler.crypto import WorkerKeyError
+        scheduler=service.mysql_check_scheduler if operation.startswith('check_schedule_') else service.mysql_backup_scheduler if operation.startswith('backup_schedule_') else service.mysql_physical_scheduler
+        try:
+            if operation.endswith('_enable'):
+                with admission(jobs):return scheduler.action(server,jobs,owner,endpoint,operation,request)
+            return scheduler.action(server,jobs,owner,endpoint,operation,request)
+        except WorkerKeyError:raise native.HostError('Physical SSH delegation is unavailable; configure worker keys and review a new policy') from None
+    with admission(jobs):return _action(service,server,operation,request)
+
+
+def _action(service, server, operation, request, *, source_capture=None,database_credentials=None,on_review=None,scheduled_policy_id=None,scheduled_operation=None,authorize=None):
+    if not isinstance(request, dict): raise native.HostError('Select a native physical request')
+    if operation.startswith('connection_'):
+        from .mysql_recovery_connections import action as connection_action
+        return connection_action(service, server, operation[11:], request)
+    jobs, owner, endpoint = manager(service, server)
+    if operation.startswith('cutover_'):
+        from .mysql_recovery_cutover import action as cutover_action
+        return cutover_action(service,server,jobs,owner,endpoint,operation[8:],request)
+    if operation.startswith('retention_batch_'):
+        from .mysql_physical_batch_retention import action as batch_action
+        return batch_action(service,server,jobs,owner,endpoint,operation,request)
+    if operation.startswith('retention_'):
+        from .mysql_physical_retention import action as retention_action
+        return retention_action(service,server,jobs,owner,endpoint,operation,request)
+    if operation == 'peer' and set(request) == {'host', 'port'}:
+        return native.ssh.probe(request['host'], request['port'])
+    if operation == 'list' and not set(request) - {'offset', 'limit'}:
+        return jobs.list(owner, endpoint.id, **request)
+    if operation == 'status' and set(request) == {'job_id'}:
+        return jobs.get(request['job_id'], owner, endpoint.id)
+    if operation == 'review' and set(request) == {'options', 'credentials'}:
+        selected = options(request['options']); record = None
+    elif operation in {'start', 'reconcile', 'cancel', 'output'}:
+        fields = {'job_id', 'credentials'} | ({'review_digest', 'confirmed', 'delegate_database_credentials'} if operation == 'start' else set())
+        if set(request) != fields: raise native.HostError('Select the exact physical job and private SSH authentication')
+        record = jobs.load(request['job_id'], owner, endpoint.id); selected = record['options']
+        owning=record['source_state'].get('backup_schedule_id')
+        scheduler=(getattr(service,'mysql_check_scheduler',None) if record['source_state'].get('schedule_operation')=='mysql_scheduled_physical_check' else getattr(service,'mysql_backup_scheduler',None))
+        if owning and owning!=scheduled_policy_id and operation!='output' and (scheduler is None or scheduler.read(owning)['state']=='enabled'):
+            raise native.HostError('Disable the owning backup schedule before changing its native job')
+        if operation == 'start' and record['state'] != 'reviewed':
+            if request['confirmed'] is not True or request['review_digest'] != record['review_digest']:
+                raise native.HostError('Confirm the exact original physical review')
+            return jobs.get(record['job_id'], owner, endpoint.id)
+        if operation == 'cancel' and record['state'] == 'reviewed':
+            jobs.update(record, state='cancelled', native_may_have_dispatched=False, process_termination_confirmed=True)
+            return jobs.get(record['job_id'], owner, endpoint.id)
+    else:
+        raise native.HostError('Native physical action is unavailable')
+    configuration = digest(MySQLMonitoringHost._configuration(server))
+    if record and operation=='start' and (record['configuration'] != configuration or
+            any(record['program'].get(key) != value for key, value in native.program().items())):
+        raise native.HostError('Physical registration or host adapter changed; preserve the original receipt and review new work separately')
+    transport = native.Transport(selected['connection'], host.credentials(request['credentials']))
+    try:
+        peer = transport.connect()
+        if operation in {'reconcile', 'cancel', 'output'}:
+            remote = transport.request(remote_request(record, 'status' if operation == 'reconcile' else operation))
+            if operation == 'output': return remote
+            if remote.get('input_digest') != record['review_digest']:
+                raise native.HostError('Original remote physical receipt is unavailable or differs from this reviewed job')
+            values = {'remote_observation': remote, 'observed_at': time.time(),
+                'original_dispatch_reply_unchanged': True}
+            if remote.get('supervisor_control_unavailable'):
+                values['state'] = 'unknown'
+            if record['state'] != 'unknown' and remote.get('supervisor_finished') is True and remote.get('state') in {'native_returned', 'not_dispatched'}:
+                values['state'] = 'native_returned' if remote.get('return_code') == 0 else 'native_failed' if remote.get('native_reply_observed') else 'not_dispatched'
+            jobs.update(record, **values)
+            return jobs.get(record['job_id'], owner, endpoint.id)
+        if selected['phase'] in {'backup','incremental'}:
+            captured = source_capture() if source_capture is not None else source(service, server, keyring=selected.get('keyring'),isolate_external_paths=selected.get('isolate_external_paths',False))
+            if operation == 'start':
+                if captured['identity'] != record['source'] or captured['state']['host_binding'] != record['source_state']['host_binding']:
+                    raise native.HostError('Native physical source changed after review')
+        if selected['phase']!='backup':
+            prior = jobs.load(selected['input_job_id'], owner, endpoint.id)
+            if (prior.get('artifact_removed') or prior.get('artifact_removal') or prior.get('retention_batch_id') or
+                    prior.get('backup_workflow_protected') and prior['source_state'].get('backup_schedule_id')!=scheduled_policy_id or
+                    prior['options']['connection'] != selected['connection'] or prior['options']['workspace'] != selected['workspace'] or
+                    (selected['phase']!='deploy' and not jobs.public(prior)['file_verification_confirmed']) or
+                    (selected['phase']=='deploy' and prior['options']['phase']!='recover') or
+                    (selected['phase']!='deploy' and not (prior.get('remote_observation') or {}).get('restored_files' if selected['phase'] == 'recover' else 'artifact'))):
+                raise native.HostError('Select an observed physical input in this owner/registration and pinned host workspace')
+            if selected['phase']=='incremental':
+                if captured['identity']!=prior['source'] or captured['state']['host_binding']!=original_binding(prior):
+                    raise native.HostError('The incremental source differs from its original base and principal')
+            else:
+                captured = {'identity': deepcopy(prior['source']), 'state': {key: deepcopy(prior['source_state'][key])
+                    for key in ('host_binding', 'source_connection_class','storage_engine_counts') if key in prior['source_state']}}
+                captured['state']['host_binding']=original_binding(prior)
+            if selected.get('incremental_job_id') is not None:
+                delta=jobs.load(selected['incremental_job_id'],owner,endpoint.id)
+                if (delta['options']['phase']!='incremental' or delta.get('artifact_removed') or delta.get('artifact_removal') or delta.get('retention_batch_id') or
+                        delta.get('backup_workflow_protected') or not jobs.public(delta)['file_verification_confirmed'] or
+                        delta['source']!=prior['source'] or original_binding(delta)!=original_binding(prior) or
+                        delta['options']['connection']!=selected['connection'] or delta['options']['workspace']!=selected['workspace']):
+                    raise native.HostError('Select a verified incremental in this exact original source and host workspace')
+        if selected['phase'] == 'recover':
+            tls = sql_tls(service, server)
+            if tls is not None: captured['state']['sql_tls_policy'] = tls['policy']
+        provisional = {'options': selected, 'source': captured['identity'], 'source_state': {**captured['state'], 'remote_review': {}}, 'job_id': '', 'review_digest': ''}
+        observed = transport.request(remote_request(provisional, 'inspect'))
+        resolve_storage(captured,observed)
+        captured['state']['remote_review'] = observed
+        if scheduled_policy_id is not None:captured['state'].update(backup_schedule_id=scheduled_policy_id,schedule_operation=scheduled_operation or 'mysql_scheduled_physical_backup')
+        program = {**native.program(), 'execution_host': {**peer, 'kind': 'database-server-ssh-host', 'workspace': selected['workspace']}}
+        if operation == 'review':
+            value=jobs.review(owner,endpoint.id,selected,captured,configuration,program)
+            if on_review is not None:on_review(value)
+            if scheduled_policy_id is not None:jobs.update(jobs.load(value['job_id'],owner,endpoint.id),backup_workflow_protected=True)
+            return value
+        if captured['state'] != record['source_state'] or program != record['program']:
+            raise native.HostError('Physical host or input changed after review')
+        if selected['phase'] in {'backup','incremental','recover'} and request['delegate_database_credentials'] is not True:
+            raise native.HostError('Confirm private database credential delegation to the pinned database SSH host')
+        delegated = (database_credentials if database_credentials is not None else delegate(service,server)) if selected['phase'] in {'backup','incremental','recover'} else None
+        if authorize is not None:authorize()
+        if not claim(jobs, record, owner, endpoint.id, request): return jobs.get(record['job_id'], owner, endpoint.id)
+        try:
+            if selected['phase'] in {'backup','incremental'}:
+                from .mysql_backup_protection import manager as protection
+                ticket = protection(service).scoped(owner, endpoint.id).begin(record['source'], 'Incremental physical instance' if selected['phase']=='incremental' else 'Full physical instance',
+                    selected['workspace'] + '/' + record['job_id'] + '/artifact', {})
+                ticket.update(backup_kind='mysql_native_xtrabackup_incremental' if selected['phase']=='incremental' else 'mysql_native_xtrabackup_full', native_physical_job_id=record['job_id'],
+                    execution_host=program['execution_host'])
+                jobs.update(record, backup_protection_id=ticket.backup_id)
+            payload = remote_request(record, 'start'); payload['database_credentials'] = delegated
+            remote = transport.request(payload)
+            jobs.update(record, state='remote_running', dispatch_reply=remote, original_dispatch_reply_observed=True)
+        except BaseException as error:
+            jobs.update(record, state='unknown', dispatch_error_type=type(error).__name__)
+            raise
+        return jobs.get(record['job_id'], owner, endpoint.id)
+    finally: transport.close()

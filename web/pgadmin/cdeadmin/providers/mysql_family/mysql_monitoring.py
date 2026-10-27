@@ -181,7 +181,11 @@ class MySQLMonitor:
                         self._group(result, 'storage', 'SELECT ENGINE, COUNT(*) AS tables_count, '
                             'SUM(TABLE_ROWS) AS estimated_rows, SUM(DATA_LENGTH) AS data_bytes, SUM(INDEX_LENGTH) AS index_bytes '
                             'FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() GROUP BY ENGINE LIMIT 101')
-                    self._metadata_cache = {name: copy.deepcopy(result['groups'][name]) for name in ('settings', 'storage') if name in result['groups']}
+                    if self.engine == 'mysql':
+                        from .mysql_workload import observe
+                        result['groups'].update(observe(self, self.route.get('database') if self.scope == 'database' else None)['groups'])
+                    self._metadata_cache = {name: copy.deepcopy(group) for name, group in result['groups'].items()
+                        if name in {'settings', 'storage'} or name.startswith('workload_')}
                     self._metadata_clock = start
                 else:
                     for name, group in self._metadata_cache.items():
@@ -189,6 +193,13 @@ class MySQLMonitor:
                             'observation_age_seconds': round(start - self._metadata_clock, 3)}
                 self._group(result, 'activity', self._activity_source())
                 self._group(result, 'replication', self.replication_source, scope='server')
+                if self.engine == 'mysql':
+                    self._group(result, 'alert_capacity', 'SELECT @@max_connections AS max_connections', scope='server')
+                    self._group(result, 'alert_transactions', 'SELECT COALESCE(MAX(TIMESTAMPDIFF(SECOND, TRX_STARTED, NOW())),0) AS value FROM information_schema.innodb_trx', scope='server')
+                    self._group(result, 'alert_locks', 'SELECT COUNT(*) AS value FROM performance_schema.data_lock_waits', scope='server')
+                    self._group(result, 'alert_replication_appliers', 'SELECT CHANNEL_NAME, SERVICE_STATE FROM performance_schema.replication_applier_status ORDER BY CHANNEL_NAME LIMIT 101', scope='server')
+                    self._group(result, 'alert_replication_workers', 'SELECT CHANNEL_NAME, WORKER_ID, LAST_ERROR_NUMBER FROM performance_schema.replication_applier_status_by_worker ORDER BY CHANNEL_NAME, WORKER_ID LIMIT 101', scope='server')
+                    self._group(result, 'alert_replication_coordinators', 'SELECT CHANNEL_NAME, LAST_ERROR_NUMBER FROM performance_schema.replication_applier_status_by_coordinator ORDER BY CHANNEL_NAME LIMIT 101', scope='server')
                 if self._transaction_active():
                     raise ValueError('Monitoring probe retained a transaction')
                 result.update(status='partial', transaction_completed=True)
@@ -196,6 +207,9 @@ class MySQLMonitor:
                 result[probe] = {'status': 'completed', 'evidence': 'owned-autocommit-read-probes'}
                 result['rates'] = counter_rates(self._previous, result,
                     None if self._previous_clock is None else start - self._previous_clock, identity_key=self.identity_key)
+                if self.engine == 'mysql':
+                    from .mysql_workload import reset_evidence
+                    result['workload_reset'] = reset_evidence(self._previous, result)
                 self._previous, self._previous_clock = copy.deepcopy(result), start
                 self._last_success = datetime.now(timezone.utc).isoformat()
             except Exception as error:

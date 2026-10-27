@@ -5,12 +5,20 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from .mysql_catalog import identifier, SYSTEM
+from .mysql_catalog import identifier, SYSTEM, _value
 from .mysql_values import value, columns
 from ...results.ddn_export import export_workspace
 
 MAX_ROWS = 6000
 MAX_BYTES = 4 * 1024 * 1024
+LAYOUT_FIELDS = ('column_name', 'column_type', 'is_nullable', 'extra', 'generation_expression',
+                 'character_set_name', 'collation_name', 'srs_id')
+
+
+def native_layout(cursor, database, name):
+    cursor.execute('SELECT COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,EXTRA,GENERATION_EXPRESSION,CHARACTER_SET_NAME,COLLATION_NAME,SRS_ID '
+                   'FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s ORDER BY ORDINAL_POSITION LIMIT 257', (database, name))
+    return [{field: _value(value) for field, value in zip(LAYOUT_FIELDS, row)} for row in cursor.fetchall()]
 
 
 def relation_address(database, resource_id):
@@ -58,14 +66,23 @@ def capture(connection, database, resource_id, *, endpoint_id, target_id, mode='
                 kind == 'table' and relation[0] != 'BASE TABLE' or
                 kind in {'view', 'materialized-view'} and relation[0] != 'VIEW'):
             raise ValueError('Native relation is unavailable or its kind changed')
+        layout = native_layout(control, database, name)
+        if not 1 <= len(layout) <= 256:
+            raise ValueError('DDN data capture needs 1–256 visible native columns')
+        control.execute('SELECT @@sql_mode')
+        sql_mode = control.fetchone()[0]
+        control.execute('SET SESSION time_zone=%s', ('+00:00',))
         stream = connection.cursor(raw=True, buffered=False)
-        stream.execute('SELECT * FROM ' + identifier(database) + '.' + identifier(name) + ' LIMIT %s', (row_limit + 1,))
+        stream.execute('SELECT ' + ','.join(identifier(column['column_name']) for column in layout) +
+            ' FROM ' + identifier(database) + '.' + identifier(name) + ' LIMIT %s', (row_limit + 1,))
         schema = {'columns': columns(stream)}
         if not schema['columns'] or len(schema['columns']) > 256:
             raise ValueError('DDN data capture needs 1–256 visible columns')
         description = stream.description
         records = []
-        size = len(json.dumps(schema, ensure_ascii=False).encode('utf8'))
+        size = len(json.dumps({'schema': schema, 'native_columns': layout}, ensure_ascii=False).encode('utf8'))
+        if size > MAX_BYTES:
+            raise ValueError('Data capture column metadata exceeds 4 MiB')
         exceeded = False
         while True:
             page = stream.fetchmany(128)
@@ -87,6 +104,8 @@ def capture(connection, database, resource_id, *, endpoint_id, target_id, mode='
         if exceeded and mode == 'full':
             raise ValueError('Full data capture exceeds the row budget; no partial download is available')
         stream.close(); stream = None
+        if native_layout(control, database, name) != layout:
+            raise ValueError('Native column layout changed during data capture')
         connection.rollback(); begun = False
         consistent = kind == 'table' and relation[1] == 'InnoDB'
         acquisition = {'engine_id': 'mysql', 'endpoint_id': endpoint_id, 'database_target_id': target_id,
@@ -95,6 +114,7 @@ def capture(connection, database, resource_id, *, endpoint_id, target_id, mode='
             'observed_at': datetime.now(timezone.utc).isoformat(), 'mode': mode, 'row_limit': row_limit,
             'rows': len(records), 'more_rows_observed': exceeded, 'ordering': 'unspecified native order',
             'transaction_completed': True, 'consistent_innodb_table_snapshot': consistent}
+        acquisition.update(native_columns=layout, sql_mode=sql_mode, time_zone='+00:00', timestamp_transport='UTC session projection')
         metadata = {'result_id': str(uuid.uuid4()), 'execution_id': None, 'title': database + '.' + name,
             'schema': schema, 'complete': not exceeded, 'export_coverage': 'full relation' if not exceeded else 'bounded sample',
             'acquisition': acquisition, 'value_encoding': 'exact MySQL text-protocol positional JSON; binary uses base64',

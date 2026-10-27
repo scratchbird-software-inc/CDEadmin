@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cdeadmin.ui-operations.v1",
+  "title": "Tier 2 and 3 operation dialogs and their menu placement",
+  "type": "object",
+  "required": [
+    "schema",
+    "engine",
+    "operations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "cdeadmin.ui-operations.v1"
+    },
+    "engine": {
+      "type": "string"
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "resource_kind",
+          "title",
+          "menu",
+          "tier",
+          "status",
+          "fields"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          },
+          "resource_kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "description": "menu label; names the action, never the engine"
+          },
+          "menu": {
+            "type": "object",
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "enum": [
+                  "create",
+                  "open",
+                  "lifecycle",
+                  "maintenance",
+                  "backup_restore",
+                  "replication",
+                  "security",
+                  "diagnostics",
+                  "refresh"
+                ]
+              },
+              "submenu": {
+                "type": "string"
+              },
+              "order": {
+                "type": "integer"
+              }
+            }
+          },
+          "tier": {
+            "enum": [
+              2,
+              3
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "draft",
+              "complete"
+            ]
+          },
+          "form_reference": {
+            "type": "string",
+            "pattern": "^SR-F-[0-9]{6}$"
+          },
+          "confirmation": {
+            "enum": [
+              "none",
+              "confirm",
+              "typed_name"
+            ]
+          },
+          "execution_host": {
+            "type": "boolean",
+            "description": "tier 3: needs the execution-host selector"
+          },
+          "produces_log": {
+            "type": "boolean"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "field group order in the dialog"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "form.schema.json#/$defs/field"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

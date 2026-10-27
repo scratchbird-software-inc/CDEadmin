@@ -1,0 +1,249 @@
+{
+  "schema": "cdeadmin.ui-family.v1",
+  "family": "view",
+  "title": "View",
+  "variants": [
+    "ordinary",
+    "materialized"
+  ],
+  "tabs": [
+    {
+      "tab": "General",
+      "primitive": "group",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "parent",
+          "label": "Schema / database",
+          "control": "reference",
+          "reference_kind": "schema"
+        },
+        {
+          "field_id": "materialized",
+          "label": "Materialized",
+          "control": "boolean"
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "tab": "Definition",
+      "primitive": "code",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "query",
+          "label": "Query",
+          "control": "code",
+          "language": "sql",
+          "required": true
+        }
+      ]
+    },
+    {
+      "tab": "Columns",
+      "primitive": "grid",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "name",
+          "label": "Column alias",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "tab": "Triggers",
+      "primitive": "readonly_grid",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "readonly": true
+        },
+        {
+          "field_id": "timing",
+          "label": "Timing",
+          "control": "text",
+          "readonly": true
+        },
+        {
+          "field_id": "events",
+          "label": "Events",
+          "control": "text",
+          "readonly": true
+        }
+      ]
+    },
+    {
+      "tab": "Options",
+      "primitive": "group",
+      "required": false,
+      "fields": [
+        {
+          "field_id": "check_option",
+          "label": "Check option",
+          "control": "select",
+          "options": [
+            {
+              "value": "none",
+              "label": "None"
+            },
+            {
+              "value": "local",
+              "label": "Local"
+            },
+            {
+              "value": "cascaded",
+              "label": "Cascaded"
+            }
+          ]
+        },
+        {
+          "field_id": "security_barrier",
+          "label": "Security barrier",
+          "control": "boolean"
+        },
+        {
+          "field_id": "sql_security",
+          "label": "SQL security",
+          "control": "select",
+          "options": [
+            {
+              "value": "definer",
+              "label": "Definer"
+            },
+            {
+              "value": "invoker",
+              "label": "Invoker"
+            }
+          ]
+        },
+        {
+          "field_id": "definer",
+          "label": "Definer",
+          "control": "reference",
+          "reference_kind": "role"
+        },
+        {
+          "field_id": "with_data",
+          "label": "With data",
+          "control": "boolean",
+          "visible_when": {
+            "field": "materialized",
+            "truthy": true
+          }
+        }
+      ]
+    },
+    {
+      "tab": "Engine",
+      "primitive": "group",
+      "required": false
+    },
+    {
+      "tab": "Security",
+      "primitive": "privileges",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "$resource_kind"
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "Dependencies",
+      "primitive": "readonly_grid",
+      "required": false,
+      "nested": [
+        {
+          "name": "Depends on",
+          "grid_columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "text",
+              "readonly": true
+            },
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        },
+        {
+          "name": "Dependents",
+          "grid_columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "text",
+              "readonly": true
+            },
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "Data",
+      "primitive": "data_grid",
+      "required": false
+    },
+    {
+      "tab": "SQL",
+      "primitive": "sql_preview",
+      "required": true,
+      "notes": "Read-only. Create mode: full native DDL from the provider plan. Alter mode: the ALTER set. Replaces the confirm-step preview."
+    }
+  ]
+}

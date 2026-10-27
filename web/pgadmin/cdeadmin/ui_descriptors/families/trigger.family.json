@@ -1,0 +1,224 @@
+{
+  "schema": "cdeadmin.ui-family.v1",
+  "family": "trigger",
+  "title": "Trigger",
+  "tabs": [
+    {
+      "tab": "General",
+      "primitive": "group",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "scope",
+          "label": "Scope",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "table",
+              "label": "Table"
+            },
+            {
+              "value": "view",
+              "label": "View"
+            },
+            {
+              "value": "database",
+              "label": "Database"
+            },
+            {
+              "value": "ddl",
+              "label": "DDL"
+            }
+          ]
+        },
+        {
+          "field_id": "table",
+          "label": "Table / view",
+          "control": "reference",
+          "reference_kind": "table",
+          "visible_when": {
+            "field": "scope",
+            "in": [
+              "table",
+              "view"
+            ]
+          }
+        },
+        {
+          "field_id": "timing",
+          "label": "Timing",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "before",
+              "label": "Before"
+            },
+            {
+              "value": "after",
+              "label": "After"
+            },
+            {
+              "value": "instead_of",
+              "label": "Instead of"
+            }
+          ]
+        },
+        {
+          "field_id": "events",
+          "label": "Events",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "trigger_events",
+            "$scope"
+          ]
+        },
+        {
+          "field_id": "columns",
+          "label": "Of columns (update)",
+          "control": "multiselect",
+          "option_values_path": [
+            "target",
+            "columns"
+          ]
+        },
+        {
+          "field_id": "granularity",
+          "label": "For each",
+          "control": "select",
+          "options": [
+            {
+              "value": "row",
+              "label": "Row"
+            },
+            {
+              "value": "statement",
+              "label": "Statement"
+            }
+          ],
+          "default": "row"
+        },
+        {
+          "field_id": "when",
+          "label": "When condition",
+          "control": "code",
+          "language": "sql"
+        },
+        {
+          "field_id": "active",
+          "label": "Active",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "position",
+          "label": "Position / order",
+          "control": "number"
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "tab": "Definition",
+      "primitive": "code",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "function",
+          "label": "Trigger function",
+          "control": "reference",
+          "reference_kind": "function"
+        },
+        {
+          "field_id": "body",
+          "label": "Body",
+          "control": "code",
+          "language": "sql"
+        }
+      ],
+      "notes": "Engines with trigger functions (PostgreSQL) show function; engines with inline bodies show body."
+    },
+    {
+      "tab": "Options",
+      "primitive": "group",
+      "required": false,
+      "fields": [
+        {
+          "field_id": "deferrable",
+          "label": "Deferrable",
+          "control": "boolean"
+        },
+        {
+          "field_id": "constraint_trigger",
+          "label": "Constraint trigger",
+          "control": "boolean"
+        }
+      ]
+    },
+    {
+      "tab": "Engine",
+      "primitive": "group",
+      "required": false
+    },
+    {
+      "tab": "Dependencies",
+      "primitive": "readonly_grid",
+      "required": false,
+      "nested": [
+        {
+          "name": "Depends on",
+          "grid_columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "text",
+              "readonly": true
+            },
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        },
+        {
+          "name": "Dependents",
+          "grid_columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "text",
+              "readonly": true
+            },
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "SQL",
+      "primitive": "sql_preview",
+      "required": true,
+      "notes": "Read-only. Create mode: full native DDL from the provider plan. Alter mode: the ALTER set. Replaces the confirm-step preview."
+    }
+  ]
+}

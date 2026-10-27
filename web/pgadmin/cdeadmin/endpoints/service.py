@@ -23,7 +23,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from functools import wraps
 
-from pgadmin.cdeadmin.core import EndpointContext, ProviderReleaseError
+from pgadmin.cdeadmin.core import EndpointContext, ProviderReleaseError, ProviderRegistry
 from pgadmin.cdeadmin.navigator import server_display_name
 from pgadmin.cdeadmin.security import SecretReference
 from pgadmin.cdeadmin.security import (
@@ -134,7 +134,7 @@ EMBEDDED_VERIFY_PERMISSIONS = frozenset({
     'embedded_runtime', 'filesystem',
 })
 EMBEDDED_WORKSPACE_PERMISSIONS = frozenset({
-    'embedded_runtime', 'filesystem', 'data_read', 'data_write',
+    'embedded_runtime', 'filesystem', 'secret_read', 'data_read', 'data_write',
     'administer', 'execute', 'topology_admin', 'security_admin',
     'backup_admin', 'restore_admin', 'replication_admin',
     'maintenance_admin', 'upgrade_admin',
@@ -150,10 +150,19 @@ def _connection_change(method):
                             'endpoint_configuration_change', None)
         if endpoint is None or not callable(admission):
             return method(self, server, *args, **kwargs)
+        from ..providers.mysql_family.mysql_recovery_bridge import bridges
+        from ..sdk import RelationalClientError
         try:
-            with admission(self.provider_registry, endpoint.id):
+            with ExitStack() as held:
+                ownership = bridges.registration_change_guard(endpoint.id)
+                if isinstance(self.provider_registry, ProviderRegistry):
+                    held.enter_context(admission(self.provider_registry, endpoint.id,
+                                                 ownership=ownership))
+                else:
+                    held.enter_context(admission(self.provider_registry, endpoint.id))
+                    held.enter_context(ownership)
                 return method(self, server, *args, **kwargs)
-        except ProviderReleaseError as exc:
+        except (ProviderReleaseError, RelationalClientError) as exc:
             raise EndpointRegistrationError(str(exc)) from None
     return guarded
 
@@ -599,6 +608,8 @@ class EndpointService:
         self.forget_server_credentials(server)
         endpoint = getattr(server, 'endpoint_profile', None)
         if endpoint is not None:
+            from ..providers.mysql_family.mysql_recovery_bridge import bridges
+            bridges.detach_endpoint(endpoint.id)
             self._record_verification(endpoint, 'unverified')
 
     @contextmanager
@@ -1246,6 +1257,8 @@ class EndpointService:
             raise EndpointRegistrationError(
                 'confirmation must exactly match the connection profile name'
             )
+        from ..providers.mysql_family.mysql_recovery_bridge import bridges
+        bridges.detach_endpoint(endpoint.id)
         return {
             'endpoint_id': endpoint.id,
             'display_name': server.name,
@@ -1870,6 +1883,14 @@ class EndpointService:
                 'endpoint route or credential reference is unavailable'
             )
         route = json.loads(route_model.configuration)
+        extension = getattr(endpoint, 'extension_profile', None)
+        if extension is not None and extension.schema_reference == 'cdeadmin.mysql-recovery-registration.v1':
+            bound = json.loads(extension.profile_data)['binding']
+            if (endpoint.profile_id != 'mysql-native' or bound.get('owner') != server.user_id or
+                    bound.get('endpoint_id') != endpoint.id or route.get('mysql_recovery_binding') != bound or
+                    route.get('host') != 'managed-recovery.invalid' or route.get('port') != 3306 or
+                    route.get('unix_socket') or route.get('failover')):
+                raise EndpointRegistrationError('Managed recovery registration requires its reviewed private transport; network failover is unavailable')
         if credential_target is None and database_override is Ellipsis:
             credential_target = next((item for item in getattr(
                 endpoint, 'database_targets', ()) if item.active), None)

@@ -49,3 +49,38 @@ def test_exact_numeric_text_keeps_native_numeric_type_and_avoids_json_rounding()
     assert result['parameters']==('0.1234567890123456789',) and 'CAST(%s AS DECIMAL(65,30))' in result['source']
     import json
     json.dumps(result)
+
+
+@pytest.mark.parametrize('operation',['set_global','set_persist','set_persist_only','reset_persist'])
+def test_component_variables_keep_the_exact_native_dotted_name(operation):
+    target={'display_name':'validate_password.length'}
+    draft={} if operation=='reset_persist' else {'value':12}
+    result=operations.compile_operation('system-variable',operation,draft,target)
+    assert '`validate_password.length`' in result['source']
+    assert result['parameters']==(() if operation=='reset_persist' else (12,))
+
+
+@pytest.mark.parametrize('name',['.length','validate_password.','a.b.c','a.; DROP TABLE t','a.`b`','a..b'])
+def test_component_variable_admission_refuses_ambiguous_or_injected_names(name):
+    with pytest.raises(RelationalClientError):
+        operations.compile_operation('system-variable','set_global',{'value':12},{'display_name':name})
+
+
+def test_native_null_is_a_distinct_value_source_and_double_uses_native_conversion():
+    target={'display_name':'mysqlbackup.backupid'}
+    for operation,scope in [('set_global','GLOBAL'),('set_persist','PERSIST'),('set_persist_only','PERSIST_ONLY')]:
+        value=operations.compile_operation('system-variable',operation,{'value_mode':'NULL'},target)
+        assert value == {'source': 'SET '+scope+' `mysqlbackup.backupid` = NULL','parameters': ()}
+    value=operations.compile_operation('system-variable','set_global',{'value_type':'DOUBLE','value':'1e-300'}, {'display_name':'innodb_max_dirty_pages_pct'})
+    assert value['parameters']==('1e-300',) and value['source'].endswith('CAST(%s AS DOUBLE)')
+    for text in ('NaN','Infinity','1e3); SHUTDOWN',{'sql':'1e1'}):
+        with pytest.raises(RelationalClientError):
+            operations.compile_operation('system-variable','set_global',{'value_type':'DOUBLE','value':text},target)
+
+
+def test_native_session_only_metadata_refuses_global_assignments_and_retains_persist_cleanup():
+    target={'display_name':'gtid_next','native':{'variable_scope':'SESSION_ONLY'}}
+    for operation in ('set_global','set_persist','set_persist_only'):
+        with pytest.raises(RelationalClientError,match='session-only'):
+            operations.compile_operation('system-variable',operation,{'value_mode':'DEFAULT'},target)
+    assert operations.compile_operation('system-variable','reset_persist',{},target)['source']=='RESET PERSIST `gtid_next`'

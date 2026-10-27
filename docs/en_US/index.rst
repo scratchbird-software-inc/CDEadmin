@@ -20,6 +20,10 @@ upstream attribution.
    cdeadmin_hard_fork
    project_governance
    cdeadmin_architecture
+   six_engine_completion
+   six_engine_remaining_work
+   ui_unified_design
+   ui_unification_status
    firebird_driver_development
    mysql_driver_development
    mariadb_driver_development
@@ -86,6 +90,8 @@ upstream attribution.
    monitoring_history
    ddn_database_roundtrip
    mysql_functional_completion
+   mysql_implementation_priorities
+   mysql_router_hosts
    mariadb_functional_completion
    duckdb_functional_completion
    sqlite_functional_completion

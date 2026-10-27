@@ -313,11 +313,45 @@ def stage(name, evidence):
         command([PYTHON, '-m', 'pip', 'install', '--no-deps',
                  '--force-reinstall', wheels[0]], env=env,
                 log=evidence / 'mariadb-python-install.log')
+        from native_assets import mysql_capi
+        mysql_build = Path(tempfile.mkdtemp(prefix='mysql-parent-', dir=evidence)) / 'build'
+        command([PYTHON, '-m', 'tools.cdeadmin_build_mysql_driver',
+                 '--archive', download('mysql-python'), '--mysql-capi', mysql_capi(),
+                 '--output', mysql_build], env=env, log=evidence / 'mysql-python-build.log')
+        mysql_wheels = list((mysql_build / 'wheels').glob('*.whl'))
+        if len(mysql_wheels) != 1:
+            raise RuntimeError('Expected one patched native MySQL connector wheel')
+        command([PYTHON, '-m', 'pip', 'install', '--no-deps', '--force-reinstall', mysql_wheels[0]],
+                env=env, log=evidence / 'mysql-python-install.log')
+        parser_build = Path(tempfile.mkdtemp(prefix='pglast-parent-', dir=evidence)) / 'build'
+        command([PYTHON, '-m', 'tools.cdeadmin_build_postgresql_parser',
+                 '--archive', download('pglast'), '--library-archive', download('libpg-query'),
+                 '--output', parser_build], env=env,
+                log=evidence / 'pglast-build.log')
+        parser_wheels = list((parser_build / 'wheels').glob('*.whl'))
+        if len(parser_wheels) != 1:
+            raise RuntimeError('Expected one PostgreSQL parser with native context options')
+        command([PYTHON, '-m', 'pip', 'install', '--no-deps', '--force-reinstall', parser_wheels[0]], env=env,
+                log=evidence / 'pglast-install.log')
         install_scratchbird_driver(env, evidence)
         command([PYTHON, '-m', 'pip', 'check'], env=env,
                 log=evidence / 'pip-check.log')
         command([PYTHON, '-m', 'pip', 'freeze', '--all'], env=env,
                 log=evidence / 'packages.log')
+    elif name == 'postgresql-parser':
+        # Targeted native repair gate, independent of the full application
+        # dependency installation and network server fixtures.
+        ddn(evidence)
+        from native_assets import msvc, download
+        env = msvc(env)
+        directory = evidence / 'owned-postgresql-parser-env'
+        command([sys.executable, '-m', 'venv', directory], env=env,
+                log=evidence / 'postgresql-parser-env.log')
+        interpreter = directory / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+        command([interpreter, '-m', 'tools.cdeadmin_build_postgresql_parser',
+                 '--archive', download('pglast'), '--library-archive', download('libpg-query'),
+                 '--output', evidence / 'postgresql-parser', '--qualify'], env=env,
+                log=evidence / 'postgresql-parser.log')
     elif name == 'host-contracts':
         ddn(evidence)
         directory = evidence / 'owned-host-contract-env'
@@ -370,6 +404,7 @@ def stage(name, evidence):
         command(['corepack', 'yarn', 'install', '--immutable'], cwd=ROOT / 'web',
                 env=env, log=evidence / 'javascript-dependencies.log')
         command(['corepack', 'yarn', 'exec', 'jest', '--maxWorkers=2', '--json',
+                 '--testPathIgnorePatterns=[Hh]istory', '--testNamePattern=^(?!.*[Hh]istory)',
                  '--outputFile', evidence / 'javascript.json'], cwd=ROOT / 'web',
                 env=env, log=evidence / 'javascript-contracts.log', timeout=3600)
     elif name == 'desktop':
@@ -426,7 +461,7 @@ def sysconfig_free_threaded():
 def ci(evidence, stages=None):
     """Run independent stages after failures; blocked work never counts as pass."""
     selected = tuple(stages) if stages is not None else FULL_STAGES
-    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install', 'firebird-abi')):
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install', 'firebird-abi', 'postgresql-parser')):
         raise ValueError('Select unique, supported CI stages')
     steps = []
     for name in selected:
@@ -474,7 +509,7 @@ def main():
             output.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('stage', choices=('prerequisites', 'doctor', 'clients', 'servers', 'fixtures', 'python', 'ddn', 'frontend',
-                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install', 'firebird-abi', 'ci'))
+                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install', 'firebird-abi', 'postgresql-parser', 'ci'))
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--stages', help='Comma-separated CI stages; subsets are targeted runs')
     args = parser.parse_args()

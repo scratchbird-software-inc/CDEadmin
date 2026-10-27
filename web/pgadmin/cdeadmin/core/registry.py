@@ -674,7 +674,7 @@ class ProviderRegistry:
             )
 
     @contextmanager
-    def endpoint_configuration_change(self, endpoint_id):
+    def endpoint_configuration_change(self, endpoint_id, *, ownership=None):
         """Serialize configuration changes with provider-owned admission.
 
         Providers opting into this lifecycle hook must reject release while
@@ -701,6 +701,11 @@ class ProviderRegistry:
                                 'and release failed or temporary attachments '
                                 'before changing its configuration'
                             ) from None
+            # Independent native owners must also pass preflight before any
+            # idle binding is invalidated. Acquire their admission after ALL
+            # provider locks, preserving connection -> transport lock order.
+            if ownership is not None:
+                admission.enter_context(ownership)
             for registration in self._registrations.values():
                 for key, binding in list(registration.bindings.items()):
                     if binding.context.endpoint_id != endpoint_id:

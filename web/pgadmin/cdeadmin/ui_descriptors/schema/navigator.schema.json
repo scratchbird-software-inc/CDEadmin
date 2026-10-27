@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cdeadmin.ui-navigator.v1",
+  "title": "Tree layout for one engine",
+  "type": "object",
+  "required": [
+    "schema",
+    "engine",
+    "sort",
+    "groups"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "cdeadmin.ui-navigator.v1"
+    },
+    "engine": {
+      "type": "string"
+    },
+    "sort": {
+      "enum": [
+        "alphabetical",
+        "declared"
+      ],
+      "description": "declared = keep the order below (what Firebird uses today); alphabetical = sort leaves case-insensitively"
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "group_id",
+          "title",
+          "kinds"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "group_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "icon_key": {
+            "type": "string"
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "under": {
+            "type": "string",
+            "description": "parent group_id for nested virtual folders"
+          },
+          "order": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "kind_icons": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "resource_kind -> semantic icon key (object.table ...)"
+    },
+    "direct_children": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "kinds shown directly under the database root, not in a folder"
+    },
+    "name_rules": {
+      "type": "array",
+      "description": "Route objects of the listed kinds into a group by a name prefix (Firebird MON$/SEC$/RDB$ tables). Evaluated before kind grouping.",
+      "items": {
+        "type": "object",
+        "required": [
+          "kinds",
+          "prefix",
+          "group_id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "group_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "system_object_group": {
+      "type": "string",
+      "description": "group_id for objects the provider flags as system_object"
+    },
+    "resource_children": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "description": "kinds shown as children under a resource of the key kind (table -> column, index, trigger, constraint)"
+    }
+  }
+}

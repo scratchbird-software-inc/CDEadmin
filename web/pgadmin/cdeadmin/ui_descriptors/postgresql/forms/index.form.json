@@ -1,0 +1,400 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "index",
+  "resource_kinds": [
+    "index"
+  ],
+  "status": "draft",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Access-method dependent clearing",
+      "reason": "pgAdmin depChange blanks fillfactor/buffering/fastupdate/... when amname changes and sets nulls=FIRST when sort_order becomes DESC; visible_when only hides."
+    },
+    {
+      "concept": "Skeleton 'table' field",
+      "reason": "the owning table is the tree parent in pgAdmin, not a form field."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "control": "text",
+      "tab": "General",
+      "required": true,
+      "help": "Required in edit mode."
+    },
+    {
+      "field_id": "oid",
+      "label": "OID",
+      "control": "number",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "indisunique",
+      "label": "Unique?",
+      "control": "boolean",
+      "tab": "General",
+      "native_keyword": "UNIQUE",
+      "help": "btree only; read-only once the index exists."
+    },
+    {
+      "field_id": "indconstraint",
+      "label": "Constraint",
+      "control": "code",
+      "tab": "General",
+      "language": "sql",
+      "native_keyword": "WHERE",
+      "help": "Partial index predicate; read-only once the index exists."
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns/Expressions",
+      "control": "grid",
+      "tab": "General",
+      "required": true,
+      "help": "pgAdmin header form: Is expression / Column / Expression. Rows can be added or removed only while the index is new. Sort order and NULLs apply to btree only; operator classes are filtered by access method.",
+      "columns": [
+        {
+          "field_id": "is_exp",
+          "label": "Is expression",
+          "control": "boolean",
+          "default": false,
+          "help": "Hidden in the grid (shown as E/C)."
+        },
+        {
+          "field_id": "colname",
+          "label": "Col/Exp",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "op_class",
+          "label": "Operator class",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "operator_classes"
+          ]
+        },
+        {
+          "field_id": "sort_order",
+          "label": "Sort order",
+          "control": "select",
+          "default": false,
+          "options": [
+            {
+              "value": false,
+              "label": "ASC"
+            },
+            {
+              "value": true,
+              "label": "DESC"
+            }
+          ]
+        },
+        {
+          "field_id": "nulls",
+          "label": "NULLs",
+          "control": "select",
+          "default": false,
+          "options": [
+            {
+              "value": true,
+              "label": "FIRST"
+            },
+            {
+              "value": false,
+              "label": "LAST"
+            }
+          ]
+        },
+        {
+          "field_id": "collspcname",
+          "label": "Collation",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "collations"
+          ]
+        },
+        {
+          "field_id": "statistics",
+          "label": "Statistics",
+          "control": "number",
+          "min": -1,
+          "max": 10000,
+          "modes": [
+            "alter"
+          ],
+          "native_keyword": "ALTER INDEX ... SET STATISTICS",
+          "help": "Expression columns only, PostgreSQL 11+."
+        }
+      ]
+    },
+    {
+      "field_id": "indisvalid",
+      "label": "Valid?",
+      "control": "boolean",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "indisprimary",
+      "label": "Primary?",
+      "control": "boolean",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "is_sys_idx",
+      "label": "System index?",
+      "control": "boolean",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "control": "text",
+      "tab": "General",
+      "native_keyword": "COMMENT ON INDEX",
+      "help": "Enabled once the index has a name."
+    },
+    {
+      "field_id": "amname",
+      "label": "Access Method",
+      "control": "select",
+      "tab": "Options",
+      "required": true,
+      "option_values_path": [
+        "catalog",
+        "index_access_methods"
+      ],
+      "native_keyword": "USING",
+      "help": "Read-only once the index exists; changing it clears the column rows (pgAdmin confirms first)."
+    },
+    {
+      "field_id": "include",
+      "label": "Include columns",
+      "control": "multiselect",
+      "tab": "Options",
+      "version": {
+        "minimum": "11"
+      },
+      "option_values_path": [
+        "catalog",
+        "columns"
+      ],
+      "native_keyword": "INCLUDE",
+      "help": "Read-only once the index exists."
+    },
+    {
+      "field_id": "fillfactor",
+      "label": "Fill factor",
+      "control": "number",
+      "tab": "Options",
+      "min": 10,
+      "max": 100,
+      "native_keyword": "WITH (fillfactor)",
+      "visible_when": {
+        "field": "amname",
+        "in": [
+          "btree",
+          "hash",
+          "gist",
+          "spgist"
+        ]
+      }
+    },
+    {
+      "field_id": "isconcurrent",
+      "label": "Concurrent build?",
+      "control": "boolean",
+      "tab": "Options",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "CONCURRENTLY"
+    },
+    {
+      "field_id": "spcname",
+      "label": "Tablespace",
+      "control": "select",
+      "tab": "Options",
+      "option_values_path": [
+        "catalog",
+        "tablespaces"
+      ],
+      "native_keyword": "TABLESPACE"
+    },
+    {
+      "field_id": "dependsonextensions",
+      "label": "Depends on extensions",
+      "control": "multiselect",
+      "tab": "Engine",
+      "version": {
+        "minimum": "13"
+      },
+      "option_values_path": [
+        "catalog",
+        "extensions"
+      ],
+      "native_keyword": "ALTER ... DEPENDS ON EXTENSION"
+    },
+    {
+      "field_id": "indisonly",
+      "label": "Only Table?",
+      "control": "boolean",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "version": {
+        "minimum": "11"
+      },
+      "native_keyword": "ON ONLY",
+      "help": "When enabled, the index will only be created on this table, not on its partitions. Enabled for partitioned tables only."
+    },
+    {
+      "field_id": "gin_pending_list_limit",
+      "label": "Gin pending list limit",
+      "control": "number",
+      "tab": "Engine",
+      "group": "Access method options",
+      "min": 64,
+      "max": 2147483647,
+      "native_keyword": "gin_pending_list_limit",
+      "visible_when": {
+        "field": "amname",
+        "equals": "gin"
+      },
+      "help": "This value is specified in kilobytes."
+    },
+    {
+      "field_id": "pages_per_range",
+      "label": "Pages per range",
+      "control": "number",
+      "tab": "Engine",
+      "group": "Access method options",
+      "native_keyword": "pages_per_range",
+      "visible_when": {
+        "field": "amname",
+        "equals": "brin"
+      },
+      "help": "Number of table blocks that make up one block range for each entry of a BRIN index."
+    },
+    {
+      "field_id": "buffering",
+      "label": "Buffering",
+      "control": "select",
+      "tab": "Engine",
+      "group": "Access method options",
+      "native_keyword": "buffering",
+      "default": "auto",
+      "options": [
+        {
+          "value": "auto",
+          "label": "Auto"
+        },
+        {
+          "value": "on",
+          "label": "On"
+        },
+        {
+          "value": "off",
+          "label": "Off"
+        }
+      ],
+      "visible_when": {
+        "field": "amname",
+        "equals": "gist"
+      }
+    },
+    {
+      "field_id": "deduplicate_items",
+      "label": "Deduplicate items?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Access method options",
+      "version": {
+        "minimum": "13"
+      },
+      "native_keyword": "deduplicate_items",
+      "default": true,
+      "visible_when": {
+        "field": "amname",
+        "equals": "btree"
+      }
+    },
+    {
+      "field_id": "fastupdate",
+      "label": "Fast update?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Access method options",
+      "native_keyword": "fastupdate",
+      "default": true,
+      "visible_when": {
+        "field": "amname",
+        "equals": "gin"
+      }
+    },
+    {
+      "field_id": "autosummarize",
+      "label": "Autosummarize?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Access method options",
+      "native_keyword": "autosummarize",
+      "visible_when": {
+        "field": "amname",
+        "equals": "brin"
+      }
+    },
+    {
+      "field_id": "indnullsnotdistinct",
+      "label": "NULLs not distinct?",
+      "control": "boolean",
+      "tab": "Engine",
+      "version": {
+        "minimum": "15"
+      },
+      "native_keyword": "NULLS NOT DISTINCT",
+      "visible_when": {
+        "field": "indisunique",
+        "truthy": true
+      },
+      "help": "Read-only once the index exists."
+    },
+    {
+      "field_id": "indisclustered",
+      "label": "Clustered?",
+      "control": "boolean",
+      "tab": "Engine",
+      "native_keyword": "CLUSTER ON",
+      "help": "Enabled once the index has a name."
+    }
+  ],
+  "notes": "Fields map 1:1 onto the legacy pgAdmin dialog (workflow legacy_preserved): field ids are the BaseUISchema ids and are served by the existing SQL templates. Source: web/pgadmin/browser/server_groups/servers/databases/schemas/tables/indexes/static/js/index.ui.js (IndexSchema, IndexColHeaderSchema, IndexColumnSchema, WithSchema). Mapping by field match: name/unique/constraint(where)/columns/comment->General; access method/include/fillfactor/concurrent/tablespace->Options; With fieldset access-method options, only-table, extensions, nulls-not-distinct, clustered->Engine. Field ids are checked against the pgAdmin *.ui.js schema ids by tools/tests/test_ui_descriptor_postgresql_schema_ids.py (the schema id gate); the form stays draft until phase 5 routes it to the SQL templates and ports the ui.spec expectations."
+}

@@ -94,18 +94,25 @@ from pgadmin.cdeadmin.report_delivery import ReportDeliveryError
 from pgadmin.cdeadmin.report_scheduler import ReportSchedulerError
 from pgadmin.cdeadmin.semantic_models import SemanticModelError
 from pgadmin.cdeadmin.visual_admin import (
-    VisualAdminError, VisualAdminExecutionError,
+    VisualAdminError, VisualAdminExecutionError, VisualAdminValidationError, VisualAdminAccessError,
 )
 from pgadmin.cdeadmin.visual_admin.execution_errors import (
     execution_failure_response,
 )
 from pgadmin.cdeadmin.sdk import RelationalCredentialError
+from pgadmin.cdeadmin.providers.mysql_family.mysql_session_variables import EditorObservationUnavailable
 from pgadmin.cdeadmin.workspace import (
     ProviderWorkspaceError,
     service_for_app as provider_workspace_for_app,
 )
 from pgadmin.utils.server_access import get_server, \
     get_user_server_query, get_server_group
+
+POSTGRESQL_REPLICATION_TEMPORARY_ACTIONS = frozenset(
+    'postgresql_replication_temporary_' + suffix for suffix in (
+        'scope', 'review', 'start', 'status', 'list', 'release', 'inventory',
+        'command_review', 'command_start', 'command_status', 'command_list', 'command_cancel',
+        'stream_preview', 'stream_reconcile', 'stream_remove', 'copy_preview', 'copy_reconcile', 'copy_remove'))
 
 
 # File-path keys in connection_params that are per-user and must
@@ -1206,6 +1213,10 @@ class ServerNode(PGChildNodeView):
     def delete(self, gid, sid):
         """Delete a server node in the settings database."""
         servers = Server.query.filter_by(user_id=current_user.id, id=sid)
+        managed = servers.first()
+        if managed is not None and _cde_registration(managed)['engine_id'] == 'mysql':
+            return make_json_response(status=409, success=0, errormsg=gettext(
+                'Use this MySQL endpoint\'s Remove connection profile form.'))
         server_name = None
 
         # TODO:: A server, which is connected, cannot be deleted
@@ -1251,6 +1262,10 @@ class ServerNode(PGChildNodeView):
                 success=0,
                 errormsg=gettext("Could not find the required server.")
             )
+
+        if _cde_registration(server)['engine_id'] == 'mysql':
+            return make_json_response(status=409, success=0, errormsg=gettext(
+                'Use this MySQL endpoint\'s Edit connection profile form.'))
 
         if config.SERVER_MODE and server.shared and \
                 server.user_id != current_user.id:
@@ -2628,6 +2643,153 @@ class ServerNode(PGChildNodeView):
                         gid, sid, profile, state, snapshot
                     )
             else:
+                if request.form.get('action') == 'sqlite_changeset_conflict_value_download':
+                    from pgadmin.cdeadmin.workspace.sqlite_changeset_service import download_conflict_value as download
+                    body = request.form.get('payload', '')
+                    if len(body) > 4096:
+                        return bad_request('File delivery request is too large')
+                    try:
+                        selected = json.loads(body)
+                        target = request.args.get('database_target_id')
+                        if target is not None and (not isinstance(selected, dict) or selected.get('database_target_id') != target):
+                            raise ValueError('File download database scope does not match this workspace')
+                        return download(service, server, selected)
+                    except (ValueError, TypeError, KeyError, OSError):
+                        return bad_request('Invalid native conflict value delivery request')
+                if request.form.get('action') == 'sqlite_changeset_inspect_download':
+                    from pgadmin.cdeadmin.workspace.sqlite_inspection_service import download
+                    body = request.form.get('payload', '')
+                    if len(body) > 4096:
+                        return bad_request('File delivery request is too large')
+                    try:
+                        selected = json.loads(body)
+                        target = request.args.get('database_target_id')
+                        if target is not None and (not isinstance(selected, dict) or selected.get('database_target_id') != target):
+                            raise ValueError('File download database scope does not match this workspace')
+                        return download(service, server, selected)
+                    except (ValueError, TypeError, KeyError, OSError):
+                        return bad_request('Invalid native inspection file delivery request')
+                if request.form.get('action') == 'sqlite_changeset_diff_download':
+                    from pgadmin.cdeadmin.workspace.sqlite_diff_service import download
+                    body = request.form.get('payload', '')
+                    if len(body) > 4096:
+                        return bad_request('File delivery request is too large')
+                    try:
+                        selected = json.loads(body)
+                        target = request.args.get('database_target_id')
+                        if target is not None and (not isinstance(selected, dict) or selected.get('database_target_id') != target):
+                            raise ValueError('File download database scope does not match this workspace')
+                        return download(service, server, selected)
+                    except (ValueError, TypeError, KeyError, OSError):
+                        return bad_request('Invalid native comparison file delivery request')
+                if request.form.get('action') == 'sqlite_changeset_transform_download':
+                    from pgadmin.cdeadmin.workspace.sqlite_transform_service import download
+                    body = request.form.get('payload', '')
+                    if len(body) > 4096:
+                        return bad_request('File delivery request is too large')
+                    try:
+                        selected = json.loads(body)
+                        target = request.args.get('database_target_id')
+                        if target is not None and (not isinstance(selected, dict) or selected.get('database_target_id') != target):
+                            raise ValueError('File download database scope does not match this workspace')
+                        return download(service, server, selected)
+                    except (ValueError, TypeError, KeyError, OSError):
+                        return bad_request('Invalid native transform file delivery request')
+                if request.form.get('action') == 'sqlite_changeset_upload_download':
+                    from pgadmin.cdeadmin.workspace.sqlite_upload_service import download
+                    body = request.form.get('payload', '')
+                    if len(body) > 4096:
+                        return bad_request('File delivery request is too large')
+                    try:
+                        selected = json.loads(body)
+                        target = request.args.get('database_target_id')
+                        if target is not None and (not isinstance(selected, dict) or selected.get('database_target_id') != target):
+                            raise ValueError('File download database scope does not match this workspace')
+                        return download(service, server, selected)
+                    except (ValueError, TypeError, KeyError, OSError):
+                        return bad_request('Invalid native intake file delivery request')
+                if request.form.get('action') == 'sqlite_changeset_download':
+                    from pgadmin.cdeadmin.workspace.sqlite_changeset_service import download
+                    body = request.form.get('payload', '')
+                    if len(body) > 4096:
+                        return bad_request('File delivery request is too large')
+                    try:
+                        selected = json.loads(body)
+                        target = request.args.get('database_target_id')
+                        if target is not None and (not isinstance(selected, dict) or selected.get('database_target_id') != target):
+                            raise ValueError('File download database scope does not match this workspace')
+                        return download(service, server, selected)
+                    except (ValueError, TypeError, KeyError, OSError):
+                        return bad_request('Invalid native apply output delivery request')
+                if request.form.get('action') == 'sqlite_capture_export_download':
+                    from pgadmin.cdeadmin.workspace.sqlite_capture_service import download
+                    body = request.form.get('payload', '')
+                    if len(body) > 4096:
+                        return bad_request('File delivery request is too large')
+                    try:
+                        selected = json.loads(body)
+                        target = request.args.get('database_target_id')
+                        if target is not None and (not isinstance(selected, dict) or selected.get('database_target_id') != target):
+                            raise ValueError('File download database scope does not match this workspace')
+                        return download(service, server, selected)
+                    except (ValueError, TypeError, KeyError, OSError):
+                        return bad_request('Invalid native capture file delivery request')
+                if request.form.get('action') in {'mysql_binlog_download','mariadb_binlog_download','mysql_raw_binlog_download','mysql_instance_backup_download'}:
+                    from pgadmin.cdeadmin.workspace.mysql_binlog_service import download
+                    from pgadmin.cdeadmin.providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+                    body=request.form.get('payload','')
+                    if len(body)>4096:return bad_request('File delivery request is too large')
+                    try:return download(service,server,json.loads(body),family={'mariadb_binlog_download':'mariadb','mysql_raw_binlog_download':'mysql-raw','mysql_instance_backup_download':'mysql-instance'}.get(request.form['action'],'mysql'))
+                    except (ValueError,TypeError,KeyError,OSError) as error:
+                        return bad_request(str(error) if isinstance(error,BinlogArchiveError) else 'Invalid archive file delivery request')
+                if request.form.get('action') in {'postgresql_replication_temporary_stream_download', 'postgresql_replication_temporary_copy_download'}:
+                    from pgadmin.cdeadmin.workspace.postgresql_replication_temporary_service import stream_download
+                    body = request.form.get('payload', '')
+                    if len(body) > 4096:
+                        return bad_request('File delivery request is too large')
+                    try:
+                        if request.args.get('database_target_id'):
+                            raise ValueError('Use the server replication workspace')
+                        return stream_download(service, server, json.loads(body),
+                            copy=request.form['action'] == 'postgresql_replication_temporary_copy_download')
+                    except (ValueError, TypeError, KeyError, OSError):
+                        return bad_request('Invalid original replication capture delivery request')
+                if request.form.get('action') == 'postgresql_temporary_slots_change_download':
+                    from pgadmin.cdeadmin.workspace.postgresql_temporary_slot_service import change_download
+                    body=request.form.get('payload','')
+                    if len(body)>4096:return bad_request('File delivery request is too large')
+                    try:
+                        selected=json.loads(body);target=request.args.get('database_target_id')
+                        if target is not None and (not isinstance(selected,dict) or selected.get('database_target_id')!=target):raise ValueError('File delivery database scope does not match this workspace')
+                        return change_download(service,server,selected)
+                    except (ValueError,TypeError,KeyError,OSError):return bad_request('Invalid owned logical capture delivery request')
+                if request.form.get('action') == 'postgresql_continuity_logical_stream_download':
+                    from pgadmin.cdeadmin.workspace.postgresql_continuity_service import logical_stream_download
+                    body=request.form.get('payload','')
+                    if len(body)>4096:return bad_request('File delivery request is too large')
+                    try:return logical_stream_download(service,server,json.loads(body),database_target_id=request.args.get('database_target_id'))
+                    except (ValueError,TypeError,KeyError,OSError):return bad_request('Invalid native logical stream delivery request')
+                if request.form.get('action') == 'postgresql_continuity_change_download':
+                    from pgadmin.cdeadmin.workspace.postgresql_continuity_service import change_download
+                    from pgadmin.cdeadmin.providers.postgresql.continuity import ContinuityError
+                    body=request.form.get('payload','')
+                    if len(body)>4096:return bad_request('Change delivery request is too large')
+                    try:return change_download(service,server,json.loads(body))
+                    except (ValueError,TypeError,KeyError,OSError) as error:
+                        return bad_request(str(error) if isinstance(error,ContinuityError) else 'Invalid native change delivery request')
+                if request.form.get('action') == 'postgresql_large_object_download':
+                    from pgadmin.cdeadmin.workspace.postgresql_large_object_service import download
+                    from pgadmin.cdeadmin.providers.postgresql.large_object_files import LargeObjectFileError
+                    body=request.form.get('payload','')
+                    if len(body)>4096:return bad_request('File delivery request is too large')
+                    try:
+                        data=json.loads(body)
+                        target=request.args.get('database_target_id')
+                        if target is not None and (not isinstance(data,dict) or data.get('database_target_id')!=target):
+                            raise LargeObjectFileError('File download database scope does not match this workspace')
+                        return download(service,server,data)
+                    except (ValueError,TypeError,KeyError) as error:
+                        return bad_request(str(error) if isinstance(error,LargeObjectFileError) else 'Invalid file delivery request')
                 if request.form.get('action') == 'firebird_file_download':
                     from pgadmin.cdeadmin.workspace.firebird_download import (
                         response as file_response,
@@ -2645,12 +2807,45 @@ class ServerNode(PGChildNodeView):
                 data = request.get_json(silent=True) or {}
                 action = data.get('action')
                 scoped_target = request.args.get('database_target_id')
+                if scoped_target and action in POSTGRESQL_REPLICATION_TEMPORARY_ACTIONS:
+                    return bad_request(gettext(
+                        'Open the server continuity workspace for its registered replication database.'))
+                if scoped_target and action in {'sqlite_retained_schema','sqlite_retained_schema_receipts'}:
+                    if data.get('database_target_id') not in (None,scoped_target):
+                        return bad_request('Retained SQLite database scope does not match this workspace.')
+                    data['database_target_id']=scoped_target
+                if scoped_target and action in {'firebird_eds_pool','firebird_eds_pool_receipts'}:
+                    if data.get('database_target_id') not in (None, scoped_target):
+                        return bad_request('Native Firebird database scope does not match this workspace.')
+                    data['database_target_id'] = scoped_target
+                if scoped_target and action == 'mariadb_backup_stages':
+                    if data.get('database_target_id') not in (None, scoped_target):
+                        return bad_request('Native MariaDB database scope does not match this workspace.')
+                    data['database_target_id'] = scoped_target
+                if scoped_target and action in {'duckdb_session_receipts','duckdb_attachments','duckdb_extensions', 'duckdb_database_copy'}:
+                    if data.get('database_target_id') not in (None, scoped_target):
+                        return bad_request('Native DuckDB database scope does not match this workspace.')
+                    data['database_target_id'] = scoped_target
                 if scoped_target and action in {
+                        'sqlite_changeset_inspect_catalog', 'sqlite_changeset_inspect_review', 'sqlite_changeset_inspect_start', 'sqlite_changeset_inspect_status', 'sqlite_changeset_inspect_cancel', 'sqlite_changeset_inspect_result', 'sqlite_changeset_inspect_list', 'sqlite_changeset_inspect_files', 'sqlite_changeset_inspect_reconcile', 'sqlite_changeset_inspect_remove_artifact', 'sqlite_changeset_diff_catalog', 'sqlite_changeset_diff_tables', 'sqlite_changeset_diff_review', 'sqlite_changeset_diff_start', 'sqlite_changeset_diff_status', 'sqlite_changeset_diff_cancel', 'sqlite_changeset_diff_reconcile', 'sqlite_changeset_diff_list', 'sqlite_changeset_diff_files', 'sqlite_changeset_diff_remove_artifact', 'sqlite_changeset_transform_catalog', 'sqlite_changeset_transform_schemas', 'sqlite_changeset_transform_sources', 'sqlite_changeset_transform_review', 'sqlite_changeset_transform_start', 'sqlite_changeset_transform_status', 'sqlite_changeset_transform_cancel', 'sqlite_changeset_transform_list', 'sqlite_changeset_transform_files', 'sqlite_changeset_transform_reconcile', 'sqlite_changeset_transform_remove_artifact',
+                        'sqlite_changeset_upload_catalog', 'sqlite_changeset_upload_create', 'sqlite_changeset_upload_chunk', 'sqlite_changeset_upload_seal', 'sqlite_changeset_upload_status', 'sqlite_changeset_upload_cancel', 'sqlite_changeset_upload_list', 'sqlite_changeset_upload_files', 'sqlite_changeset_upload_reconcile', 'sqlite_changeset_upload_remove_artifact',
+                        'sqlite_changeset_conflict', 'sqlite_changeset_decide', 'sqlite_changeset_catalog', 'sqlite_changeset_sources', 'sqlite_changeset_review', 'sqlite_changeset_start', 'sqlite_changeset_status', 'sqlite_changeset_cancel', 'sqlite_changeset_list', 'sqlite_changeset_files', 'sqlite_changeset_reconcile', 'sqlite_changeset_remove_artifact',
+                        'sqlite_capture_export_review', 'sqlite_capture_export_start', 'sqlite_capture_export_status', 'sqlite_capture_export_cancel', 'sqlite_capture_export_list', 'sqlite_capture_export_files', 'sqlite_capture_export_reconcile', 'sqlite_capture_export_remove_artifact',
+                        'sqlite_recovery_catalog', 'sqlite_recovery_review', 'sqlite_recovery_start', 'sqlite_recovery_status', 'sqlite_recovery_cancel', 'sqlite_recovery_list', 'sqlite_recovery_reconcile', 'sqlite_recovery_remove_images', 'sqlite_recovery_activate',
+                        'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal',
+                        'postgresql_large_object_start','postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact',
+                        'postgresql_temporary_slots_databases', 'postgresql_temporary_slots_review', 'postgresql_temporary_slots_start', 'postgresql_temporary_slots_status', 'postgresql_temporary_slots_list', 'postgresql_temporary_slots_release', 'postgresql_temporary_slots_reconcile', 'postgresql_temporary_slots_inventory', 'postgresql_temporary_slots_command_review', 'postgresql_temporary_slots_command_start', 'postgresql_temporary_slots_command_status', 'postgresql_temporary_slots_command_list', 'postgresql_temporary_slots_change_preview', 'postgresql_temporary_slots_change_reconcile', 'postgresql_temporary_slots_change_remove', 'postgresql_temporary_slots_command_cancel',
+                        'postgresql_recipe_read', 'postgresql_recipe_save',
+                        'duckdb_recipe_read', 'duckdb_recipe_save',
+                        'sqlite_recipe_read', 'sqlite_recipe_save',
+                        'postgresql_data_plan', 'postgresql_data_review', 'postgresql_data_apply', 'postgresql_data_receipt', 'postgresql_data_receipts',
+                        'duckdb_data_plan', 'duckdb_data_review', 'duckdb_data_apply', 'duckdb_data_receipt', 'duckdb_data_receipts',
+                        'sqlite_data_plan', 'sqlite_data_review', 'sqlite_data_apply', 'sqlite_data_receipt', 'sqlite_data_receipts',
                         'resource_page', 'resource_inspect', 'resource_refresh',
                         'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
-                        'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
-                        'mariadb_relational_review', 'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt', 'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_design_read', 'mariadb_design_save',
-                        'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_test_data', 'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt', 'mysql_relational_review',
+                        'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_fts_configuration_design', 'sqlite_schema_column_design', 'sqlite_schema_rename_design', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
+                        'mariadb_relational_review', 'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt', 'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_recipe_read', 'mariadb_recipe_save', 'mariadb_data_plan', 'mariadb_data_review', 'mariadb_data_apply', 'mariadb_data_receipt', 'mariadb_data_receipts', 'mariadb_server_plan', 'mariadb_server_review', 'mariadb_server_apply', 'mariadb_server_receipt', 'mariadb_server_receipts', 'mariadb_design_read', 'mariadb_design_save',
+                        'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_data_plan', 'mysql_data_review', 'mysql_data_apply', 'mysql_data_receipt', 'mysql_data_receipts', 'mysql_test_data', 'mysql_recipe_read', 'mysql_recipe_save', 'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt', 'mysql_relational_review',
                         'postgresql_catalog_export', 'postgresql_catalog_compare', 'postgresql_schema_plan', 'postgresql_relational_review', 'postgresql_server_catalog', 'postgresql_test_data', 'postgresql_data_capture',
                         'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt',
                         'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_sql_export', 'firebird_data_export', 'firebird_data_import_plan',
@@ -2701,17 +2896,16 @@ class ServerNode(PGChildNodeView):
                         server, data.get('request') or {}
                     )
                 elif action == 'endpoint_profile_remove':
-                    payload = endpoint_service_for_app(
-                        current_app
-                    ).validate_endpoint_removal(
-                        server, data.get('request') or {}
-                    )
-                    server_name = server.name
-                    get_driver(PG_DEFAULT_DRIVER).delete_manager(server.id)
-                    db.session.delete(server)
-                    db.session.commit()
-                    self.delete_shared_server(gid, sid)
-                    QueryHistory.clear_history(current_user.id, sid)
+                    from contextlib import nullcontext
+                    removal = service.mysql_backup_scheduler.removal_guard(server) if _cde_registration(server)['engine_id']=='mysql' else nullcontext()
+                    with removal:
+                        payload = endpoint_service_for_app(current_app).validate_endpoint_removal(server,data.get('request') or {})
+                        server_name = server.name
+                        get_driver(PG_DEFAULT_DRIVER).delete_manager(server.id)
+                        db.session.delete(server)
+                        db.session.commit()
+                        self.delete_shared_server(gid,sid)
+                        QueryHistory.clear_history(current_user.id,sid)
                     payload.update({
                         'removed': True,
                         'display_name': server_name,
@@ -2722,6 +2916,8 @@ class ServerNode(PGChildNodeView):
                     payload = service.database_target_action(
                         server, action, data.get('request') or {}
                     )
+                elif action == 'protected_password_result':
+                    payload = service.protected_password_result(server, data.get('request'))
                 elif action == 'open_session':
                     payload = service.open_session(
                         server, data.get('language_profile'),
@@ -2742,6 +2938,7 @@ class ServerNode(PGChildNodeView):
                         history_sensitive=data.get('history_sensitive', False),
                         profile_mode=data.get('profile_mode', False),
                         statistics_mode=data.get('statistics_mode', False),
+                        **({'mysql_query_attributes':data['mysql_query_attributes']} if 'mysql_query_attributes' in data else {}),
                     )
                 elif action in {'query_history_read', 'query_history_configure', 'query_history_clear'}:
                     payload = service.query_history_action(server, action, data.get('request'))
@@ -2755,7 +2952,7 @@ class ServerNode(PGChildNodeView):
                     payload = service.firebird_metadata_search(server, data.get('request'))
                 elif action == 'firebird_editor_metadata':
                     payload = service.firebird_editor_metadata(server, data.get('database_target_id'))
-                elif action in {'source_validate', 'source_complete', 'native_script_prepare',
+                elif action in {'sqlite_retained_schema','sqlite_retained_schema_receipts','firebird_eds_pool','firebird_eds_pool_receipts','duckdb_session_receipts','mariadb_backup_stages', 'duckdb_attachments', 'duckdb_extensions', 'duckdb_database_copy', 'sqlite_extensions', 'sqlite_native_sessions', 'sqlite_native_arrays', 'sqlite_native_preupdate', 'source_validate', 'source_complete', 'source_catalog', 'native_script_prepare',
                                 'native_script_advance', 'native_script_stop',
                                 'native_script_discard'}:
                     payload = service.language_tool_action(server, action, data)
@@ -2832,18 +3029,55 @@ class ServerNode(PGChildNodeView):
                     payload = service.mariadb_schema_application(server, action, data.get('request'))
                 elif action == 'mariadb_server_catalog':
                     payload = service.mariadb_server_catalog(server, data.get('request'))
+                elif action == 'mariadb_server_plan':
+                    payload = service.mariadb_server_plan(server, data.get('request'))
+                elif action in {'mariadb_server_review', 'mariadb_server_apply', 'mariadb_server_receipt', 'mariadb_server_receipts'}:
+                    payload = service.mariadb_server_application(server, action.removeprefix('mariadb_server_'), data.get('request'))
+                elif action in {'postgresql_recipe_read', 'postgresql_recipe_save',
+                                'duckdb_recipe_read', 'duckdb_recipe_save',
+                                'sqlite_recipe_read', 'sqlite_recipe_save'}:
+                    engine, _recipe, operation = action.split('_')
+                    payload = service.native_recipe_asset(server, engine, operation, data.get('request'))
+                elif action in {'mariadb_recipe_read', 'mariadb_recipe_save'}:
+                    payload = service.mariadb_recipe_asset(server, action.removeprefix('mariadb_recipe_'), data.get('request'))
+                elif action in {'postgresql_data_plan', 'duckdb_data_plan', 'sqlite_data_plan'}:
+                    payload = service.native_data_plan(server, action.split('_')[0], data.get('request'))
+                    payload = {key: value for key, value in payload.items() if key != 'rows'}
+                elif action in {'postgresql_data_review', 'postgresql_data_apply', 'postgresql_data_receipt', 'postgresql_data_receipts',
+                                'duckdb_data_review', 'duckdb_data_apply', 'duckdb_data_receipt', 'duckdb_data_receipts',
+                                'sqlite_data_review', 'sqlite_data_apply', 'sqlite_data_receipt', 'sqlite_data_receipts'}:
+                    engine, _data, operation = action.split('_')
+                    payload = service.native_data_application(server, engine, operation, data.get('request'))
+                elif action == 'mariadb_data_plan':
+                    payload = service.mariadb_data_plan(server, data.get('request'))
+                    payload = {key: value for key, value in payload.items() if key != 'rows'}
+                elif action in {'mariadb_data_review', 'mariadb_data_apply', 'mariadb_data_receipt', 'mariadb_data_receipts'}:
+                    payload = service.mariadb_data_application(server, action.removeprefix('mariadb_data_'), data.get('request'))
                 elif action == 'mysql_server_catalog':
                     payload = service.mysql_server_catalog(server, data.get('request'))
+                elif action == 'mysql_server_plan':
+                    payload = service.mysql_server_plan(server, data.get('request'))
+                elif action in {'mysql_server_review', 'mysql_server_apply', 'mysql_server_receipt', 'mysql_server_receipts'}:
+                    payload = service.mysql_server_application(server, action.removeprefix('mysql_server_'), data.get('request'))
                 elif action == 'mysql_relational_review':
                     payload = service.mysql_relational_review(server, data.get('request'))
                 elif action in {'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt'}:
                     payload = service.mysql_schema_application(server, action, data.get('request'))
+                elif action in {'mysql_online_ddl_start','mysql_online_ddl_status','mysql_online_ddl_cancel','mysql_online_ddl_observe','mysql_online_ddl_cutover','mysql_online_ddl_replicas'}:
+                    payload = service.mysql_online_ddl(server, action.removeprefix('mysql_online_ddl_'), data.get('request'))
                 elif action in {'mysql_schema_plan', 'mysql_schema_validate'}:
                     payload = service.mysql_schema_plan(server, data.get('request'), validate=action == 'mysql_schema_validate')
                 elif action == 'mysql_test_data':
                     payload = service.mysql_test_data(server, data.get('request'))
+                elif action in {'mysql_recipe_read', 'mysql_recipe_save'}:
+                    payload = service.mysql_recipe_asset(server, action.removeprefix('mysql_recipe_'), data.get('request'))
                 elif action == 'mysql_data_capture':
                     payload = service.mysql_data_capture(server, data.get('request'))
+                elif action == 'mysql_data_plan':
+                    payload = service.mysql_data_plan(server, data.get('request'))
+                    payload = {key: value for key, value in payload.items() if key != 'rows'}
+                elif action in {'mysql_data_review', 'mysql_data_apply', 'mysql_data_receipt', 'mysql_data_receipts'}:
+                    payload = service.mysql_data_application(server, action.removeprefix('mysql_data_'), data.get('request'))
                 elif action in {'mysql_design_read', 'mysql_design_save'}:
                     payload = service.mysql_design_asset(server, action.removeprefix('mysql_design_'), data.get('request'))
                 elif action == 'mysql_sql_export':
@@ -2873,6 +3107,14 @@ class ServerNode(PGChildNodeView):
                 elif action in {'duckdb_catalog_export', 'duckdb_catalog_compare'}:
                     payload = service.duckdb_catalog(server, data.get('request'),
                         compare=action == 'duckdb_catalog_compare')
+                elif action in {'sqlite_changeset_conflict', 'sqlite_changeset_decide', 'sqlite_changeset_catalog', 'sqlite_changeset_sources', 'sqlite_changeset_review', 'sqlite_changeset_start', 'sqlite_changeset_status', 'sqlite_changeset_cancel', 'sqlite_changeset_list', 'sqlite_changeset_files', 'sqlite_changeset_reconcile', 'sqlite_changeset_remove_artifact',
+                                'sqlite_changeset_inspect_catalog', 'sqlite_changeset_inspect_review', 'sqlite_changeset_inspect_start', 'sqlite_changeset_inspect_status', 'sqlite_changeset_inspect_cancel', 'sqlite_changeset_inspect_result', 'sqlite_changeset_inspect_list', 'sqlite_changeset_inspect_files', 'sqlite_changeset_inspect_reconcile', 'sqlite_changeset_inspect_remove_artifact', 'sqlite_changeset_diff_catalog', 'sqlite_changeset_diff_tables', 'sqlite_changeset_diff_review', 'sqlite_changeset_diff_start', 'sqlite_changeset_diff_status', 'sqlite_changeset_diff_cancel', 'sqlite_changeset_diff_reconcile', 'sqlite_changeset_diff_list', 'sqlite_changeset_diff_files', 'sqlite_changeset_diff_remove_artifact', 'sqlite_changeset_transform_catalog', 'sqlite_changeset_transform_schemas', 'sqlite_changeset_transform_sources', 'sqlite_changeset_transform_review', 'sqlite_changeset_transform_start', 'sqlite_changeset_transform_status', 'sqlite_changeset_transform_cancel', 'sqlite_changeset_transform_list', 'sqlite_changeset_transform_files', 'sqlite_changeset_transform_reconcile', 'sqlite_changeset_transform_remove_artifact',
+                                'sqlite_changeset_upload_catalog', 'sqlite_changeset_upload_create', 'sqlite_changeset_upload_chunk', 'sqlite_changeset_upload_seal', 'sqlite_changeset_upload_status', 'sqlite_changeset_upload_cancel', 'sqlite_changeset_upload_list', 'sqlite_changeset_upload_files', 'sqlite_changeset_upload_reconcile', 'sqlite_changeset_upload_remove_artifact'}:
+                    payload = service.sqlite_changeset(server, action.removeprefix('sqlite_changeset_'), data.get('request'))
+                elif action in {'sqlite_capture_export_review', 'sqlite_capture_export_start', 'sqlite_capture_export_status', 'sqlite_capture_export_cancel', 'sqlite_capture_export_list', 'sqlite_capture_export_files', 'sqlite_capture_export_reconcile', 'sqlite_capture_export_remove_artifact'}:
+                    payload = service.sqlite_capture_export(server, action.removeprefix('sqlite_capture_export_'), data.get('request'))
+                elif action in {'sqlite_recovery_catalog', 'sqlite_recovery_review', 'sqlite_recovery_start', 'sqlite_recovery_status', 'sqlite_recovery_cancel', 'sqlite_recovery_list', 'sqlite_recovery_reconcile', 'sqlite_recovery_remove_images', 'sqlite_recovery_activate'}:
+                    payload = service.sqlite_recovery(server, action.removeprefix('sqlite_recovery_'), data.get('request'))
                 elif action in {'sqlite_catalog_export', 'sqlite_catalog_compare'}:
                     payload = service.sqlite_catalog(server, data.get('request'),
                         compare=action == 'sqlite_catalog_compare')
@@ -2882,6 +3124,12 @@ class ServerNode(PGChildNodeView):
                     payload = service.sqlite_data_script(server, data.get('request'))
                 elif action == 'sqlite_test_data':
                     payload = service.sqlite_test_data(server, data.get('request'))
+                elif action == 'sqlite_schema_rename_design':
+                    payload = service.sqlite_schema_rename_design(server, data.get('request'))
+                elif action == 'sqlite_schema_column_design':
+                    payload = service.sqlite_schema_column_design(server, data.get('request'))
+                elif action == 'sqlite_fts_configuration_design':
+                    payload = service.sqlite_fts_configuration_design(server, data.get('request'))
                 elif action == 'sqlite_schema_plan':
                     payload = service.sqlite_schema_plan(server, data.get('request'))
                 elif action in {'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt'}:
@@ -2903,6 +3151,143 @@ class ServerNode(PGChildNodeView):
                     payload = service.postgresql_data_capture(server, data.get('request'))
                 elif action == 'postgresql_server_catalog':
                     payload = service.postgresql_server_catalog(server, data.get('request'))
+                elif action in {'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal',
+                                'postgresql_large_object_start','postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact'}:
+                    try:payload=service.postgresql_large_object_file(server,action.removeprefix('postgresql_large_object_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'postgresql_temporary_slots_databases', 'postgresql_temporary_slots_review', 'postgresql_temporary_slots_start', 'postgresql_temporary_slots_status', 'postgresql_temporary_slots_list', 'postgresql_temporary_slots_release', 'postgresql_temporary_slots_reconcile', 'postgresql_temporary_slots_inventory', 'postgresql_temporary_slots_command_review', 'postgresql_temporary_slots_command_start', 'postgresql_temporary_slots_command_status', 'postgresql_temporary_slots_command_list', 'postgresql_temporary_slots_change_preview', 'postgresql_temporary_slots_change_reconcile', 'postgresql_temporary_slots_change_remove', 'postgresql_temporary_slots_command_cancel'}:
+                    try:payload=service.postgresql_temporary_slots(server,action.removeprefix('postgresql_temporary_slots_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in POSTGRESQL_REPLICATION_TEMPORARY_ACTIONS:
+                    try:
+                        payload = service.postgresql_replication_temporary(server, action.removeprefix('postgresql_replication_temporary_'), data.get('request'))
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
+                elif action in {'postgresql_continuity_release_transport','postgresql_continuity_transport','postgresql_continuity_review', 'postgresql_continuity_start',
+                                'postgresql_continuity_status', 'postgresql_continuity_list', 'postgresql_continuity_cancel',
+                                'postgresql_continuity_reconcile_writer', 'postgresql_continuity_archives', 'postgresql_continuity_slots',
+                                'postgresql_continuity_slot_databases','postgresql_continuity_change_preview',
+                                'postgresql_continuity_change_reconcile','postgresql_continuity_logical_stream_preview','postgresql_continuity_logical_stream_reconcile'}:
+                    try:
+                        payload = service.postgresql_continuity(server, action.removeprefix('postgresql_continuity_'), data.get('request'))
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
+                elif action in {'mysql_spatial_databases','mysql_spatial_tables','mysql_spatial_columns','mysql_spatial_read'}:
+                    try:payload=service.mysql_spatial(server,action.removeprefix('mysql_spatial_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_drift_peers','mysql_drift_databases','mysql_drift_tables','mysql_drift_describe',
+                                'mysql_drift_start','mysql_drift_status','mysql_drift_cancel','mysql_drift_forget'}:
+                    try:payload=service.mysql_drift(server,action.removeprefix('mysql_drift_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_content_search_databases', 'mysql_content_search_tables', 'mysql_content_search_columns',
+                                'mysql_content_search_start', 'mysql_content_search_status', 'mysql_content_search_cancel',
+                                'mysql_content_search_forget', 'mysql_content_search_row'}:
+                    try:
+                        payload = service.mysql_content_search(server, action.removeprefix('mysql_content_search_'), data.get('request'))
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
+                elif action in {'mysql_workload_snapshot', 'mysql_workload_waits', 'mysql_workload_sample',
+                                'mysql_workload_plan', 'mysql_workload_slow_table', 'mysql_workload_slow_file'}:
+                    try:
+                        payload = service.mysql_workload(server, action.removeprefix('mysql_workload_'), data.get('request'))
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
+                elif action in {'mysql_host_peer','mysql_host_catalog','mysql_host_review','mysql_host_start','mysql_host_status','mysql_host_list','mysql_host_cancel','mysql_host_reconcile','mysql_host_cancel_initialization','mysql_host_acknowledge_initialization','mysql_host_acknowledge_upgrade'}:
+                    try:payload=service.mysql_host(server,action.removeprefix('mysql_host_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_router_catalog','mysql_router_peer','mysql_router_review','mysql_router_start','mysql_router_status','mysql_router_list','mysql_router_cancel','mysql_router_reconcile','mysql_router_cancel_original','mysql_router_acknowledge'}:
+                    try:payload=service.mysql_router(server,action.removeprefix('mysql_router_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_physical_peer','mysql_physical_review','mysql_physical_start','mysql_physical_status','mysql_physical_list','mysql_physical_cancel','mysql_physical_reconcile','mysql_physical_output',
+                                'mysql_physical_cutover_review','mysql_physical_cutover_start','mysql_physical_cutover_status','mysql_physical_cutover_cancel','mysql_physical_cutover_list','mysql_physical_cutover_reconcile','mysql_physical_cutover_observe_utilities',
+                                'mysql_physical_retention_pin','mysql_physical_retention_review','mysql_physical_retention_start','mysql_physical_retention_status','mysql_physical_retention_reconcile','mysql_physical_retention_abandon',
+                                'mysql_physical_retention_batch_review','mysql_physical_retention_batch_list','mysql_physical_retention_batch_status','mysql_physical_retention_batch_advance','mysql_physical_retention_batch_resume','mysql_physical_retention_batch_reconcile','mysql_physical_retention_batch_cancel',
+                                'mysql_physical_retention_schedule_review','mysql_physical_retention_schedule_list','mysql_physical_retention_schedule_status','mysql_physical_retention_schedule_enable','mysql_physical_retention_schedule_disable','mysql_physical_retention_schedule_scan','mysql_physical_retention_schedule_rotate',
+                                'mysql_physical_check_schedule_review','mysql_physical_check_schedule_list','mysql_physical_check_schedule_status','mysql_physical_check_schedule_enable','mysql_physical_check_schedule_disable','mysql_physical_check_schedule_scan','mysql_physical_check_schedule_rotate','mysql_physical_check_schedule_occurrences','mysql_physical_check_schedule_occurrence','mysql_physical_check_schedule_release',
+                                'mysql_physical_backup_schedule_review','mysql_physical_backup_schedule_list','mysql_physical_backup_schedule_status','mysql_physical_backup_schedule_enable','mysql_physical_backup_schedule_disable','mysql_physical_backup_schedule_scan','mysql_physical_backup_schedule_rotate','mysql_physical_backup_schedule_occurrences','mysql_physical_backup_schedule_occurrence','mysql_physical_backup_schedule_release',
+                                'mysql_physical_connection_review','mysql_physical_connection_connect','mysql_physical_connection_status','mysql_physical_connection_detach','mysql_physical_connection_info'}:
+                    try: payload=service.mysql_physical(server,action.removeprefix('mysql_physical_'),data.get('request'))
+                    except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
+                elif action in {'mysql_instance_backup_review','mysql_instance_backup_start','mysql_instance_backup_status',
+                                'mysql_instance_backup_list','mysql_instance_backup_observe_source_locks','mysql_instance_backup_cancel','mysql_instance_backup_reconcile','mysql_instance_backup_cleanup_script',
+                                'mysql_instance_backup_files','mysql_instance_backup_remove_artifact','mysql_instance_backup_removal_reconcile','mysql_instance_backup_pin'}:
+                    try: payload = service.mysql_instance_backup(server, action.removeprefix('mysql_instance_backup_'), data.get('request'))
+                    except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
+                elif action in {'mysql_instance_restore_review','mysql_instance_restore_start','mysql_instance_restore_status',
+                                'mysql_instance_restore_list','mysql_instance_restore_cancel', 'mysql_instance_restore_observe_utilities','mysql_instance_restore_sources',
+                                'mysql_instance_restore_backups','mysql_instance_restore_inspect','mysql_instance_restore_reconcile','mysql_instance_restore_acknowledge'}:
+                    try: payload = service.mysql_instance_restore(server, action.removeprefix('mysql_instance_restore_'), data.get('request'))
+                    except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
+                elif action in {'mysql_instance_acceptance_review','mysql_instance_acceptance_start','mysql_instance_acceptance_status',
+                                'mysql_instance_acceptance_list','mysql_instance_acceptance_observe_utilities','mysql_instance_acceptance_cancel','mysql_instance_acceptance_reconcile','mysql_instance_acceptance_acknowledge'}:
+                    try: payload = service.mysql_instance_acceptance(server, action.removeprefix('mysql_instance_acceptance_'), data.get('request'))
+                    except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
+                elif action in {'mysql_sandbox_catalog','mysql_sandbox_inspect','mysql_sandbox_review','mysql_sandbox_start',
+                                'mysql_sandbox_status','mysql_sandbox_list','mysql_sandbox_cancel','mysql_sandbox_reconcile','mysql_sandbox_acknowledge'}:
+                    try: payload = service.mysql_sandbox(server, action.removeprefix('mysql_sandbox_'), data.get('request'))
+                    except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
+                elif action in {'mysql_topology_catalog','mysql_topology_inspect','mysql_topology_inspect_native','mysql_topology_members',
+                                'mysql_topology_review','mysql_topology_start','mysql_topology_status','mysql_topology_list',
+                                'mysql_topology_cancel','mysql_topology_reconcile','mysql_topology_acknowledge'}:
+                    try: payload = service.mysql_topology(server, action.removeprefix('mysql_topology_'), data.get('request'))
+                    except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
+                elif action in {'mysql_clone_review','mysql_clone_start','mysql_clone_status','mysql_clone_list','mysql_clone_cancel','mysql_clone_reconcile','mysql_clone_donors'}:
+                    try:
+                        payload=service.mysql_clone(server,action.removeprefix('mysql_clone_'),data.get('request'))
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
+                elif action in {'mysql_binlog_backup_protection_list','mysql_binlog_backup_protection_review_retire','mysql_binlog_backup_protection_retire',
+                                'mysql_binlog_recovery_chain_list','mysql_binlog_recovery_chain_review','mysql_binlog_recovery_chain_activate',
+                                'mysql_binlog_recovery_chain_review_retire','mysql_binlog_recovery_chain_retire',
+                                'mysql_binlog_source_reset_catalog','mysql_binlog_source_reset_review','mysql_binlog_source_reset_start',
+                                'mysql_binlog_source_reset_status','mysql_binlog_source_reset_cancel','mysql_binlog_source_reset_list','mysql_binlog_source_reset_reconcile',
+                                'mysql_binlog_source_purge_catalog','mysql_binlog_source_purge_review','mysql_binlog_source_purge_start',
+                                'mysql_binlog_source_purge_status','mysql_binlog_source_purge_cancel','mysql_binlog_source_purge_list','mysql_binlog_source_purge_reconcile',
+                                'mysql_binlog_catalog','mysql_binlog_review','mysql_binlog_start','mysql_binlog_status',
+                                'mysql_binlog_list','mysql_binlog_cancel','mysql_binlog_reconcile','mysql_binlog_files','mysql_binlog_remove_artifact',
+                                'mysql_binlog_pin','mysql_binlog_removal_reconcile','mysql_binlog_retention_list','mysql_binlog_retention_status',
+                                'mysql_binlog_retention_cancel','mysql_binlog_retention_review','mysql_binlog_retention_start','mysql_binlog_retention_reconcile',
+                                'mysql_binlog_retention_schedule_review','mysql_binlog_retention_schedule_enable','mysql_binlog_retention_schedule_disable',
+                                'mysql_binlog_retention_schedule_list','mysql_binlog_retention_schedule_status','mysql_binlog_retention_schedule_scan'}:
+                    try:payload=service.mysql_binlog(server,action.removeprefix('mysql_binlog_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_binlog_capture_catalog','mysql_binlog_capture_review','mysql_binlog_capture_start','mysql_binlog_capture_status',
+                                'mysql_binlog_capture_list','mysql_binlog_capture_cancel','mariadb_binlog_capture_catalog','mariadb_binlog_capture_review',
+                                'mariadb_binlog_capture_start','mariadb_binlog_capture_status','mariadb_binlog_capture_list','mariadb_binlog_capture_cancel',
+                                'mysql_binlog_capture_reconcile_writer','mariadb_binlog_capture_reconcile_writer',
+                                'mysql_binlog_capture_checkpoint_catalog','mysql_binlog_capture_checkpoint_inspect',
+                                'mysql_binlog_capture_tail_catalog','mysql_binlog_capture_tail_review','mysql_binlog_capture_tail_start',
+                                'mariadb_binlog_capture_tail_catalog','mariadb_binlog_capture_tail_review','mariadb_binlog_capture_tail_start',
+                                'mysql_binlog_capture_cleanup_catalog','mysql_binlog_capture_cleanup_review','mysql_binlog_capture_cleanup_start',
+                                'mysql_binlog_capture_cleanup_status','mysql_binlog_capture_cleanup_cancel','mysql_binlog_capture_cleanup_list',
+                                'mysql_binlog_capture_cleanup_reconcile',
+                                'mariadb_binlog_capture_cleanup_catalog','mariadb_binlog_capture_cleanup_review','mariadb_binlog_capture_cleanup_start',
+                                'mariadb_binlog_capture_cleanup_status','mariadb_binlog_capture_cleanup_cancel','mariadb_binlog_capture_cleanup_list'}:
+                    family='mariadb' if action.startswith('mariadb_') else 'mysql'
+                    try:payload=service.continuous_binlog(server,action.removeprefix(family+'_binlog_capture_'),data.get('request'),family)
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_raw_binlog_catalog','mysql_raw_binlog_review','mysql_raw_binlog_start','mysql_raw_binlog_status',
+                                'mysql_raw_binlog_list','mysql_raw_binlog_cancel','mysql_raw_binlog_reconcile','mysql_raw_binlog_files','mysql_raw_binlog_remove_artifact',
+                                'mysql_raw_binlog_pin','mysql_raw_binlog_removal_reconcile','mysql_raw_binlog_retention_list','mysql_raw_binlog_retention_status',
+                                'mysql_raw_binlog_retention_cancel','mysql_raw_binlog_retention_review','mysql_raw_binlog_retention_start','mysql_raw_binlog_retention_reconcile',
+                                'mysql_raw_binlog_retention_schedule_review','mysql_raw_binlog_retention_schedule_enable','mysql_raw_binlog_retention_schedule_disable',
+                                'mysql_raw_binlog_retention_schedule_list','mysql_raw_binlog_retention_schedule_status','mysql_raw_binlog_retention_schedule_scan'}:
+                    try:payload=service.mysql_raw_binlog(server,action.removeprefix('mysql_raw_binlog_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_binlog_replay_sources','mysql_binlog_replay_archives','mysql_binlog_replay_boundaries','mysql_binlog_replay_inspect',
+                                'mysql_binlog_replay_review','mysql_binlog_replay_start','mysql_binlog_replay_status',
+                                'mysql_binlog_replay_list','mysql_binlog_replay_cancel','mysql_binlog_replay_observe_utilities','mysql_binlog_replay_reconcile','mysql_binlog_replay_acknowledge'}:
+                    try:payload=service.mysql_binlog_replay(server,action.removeprefix('mysql_binlog_replay_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mariadb_binlog_replay_sources','mariadb_binlog_replay_archives','mariadb_binlog_replay_inspect',
+                                'mariadb_binlog_replay_review','mariadb_binlog_replay_start','mariadb_binlog_replay_status',
+                                'mariadb_binlog_replay_list','mariadb_binlog_replay_cancel','mariadb_binlog_replay_reconcile','mariadb_binlog_replay_acknowledge'}:
+                    try:payload=service.mariadb_binlog_replay(server,action.removeprefix('mariadb_binlog_replay_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mariadb_binlog_catalog','mariadb_binlog_review','mariadb_binlog_start','mariadb_binlog_status',
+                                'mariadb_binlog_list','mariadb_binlog_cancel','mariadb_binlog_reconcile','mariadb_binlog_files','mariadb_binlog_remove_artifact'}:
+                    try:payload=service.mariadb_binlog(server,action.removeprefix('mariadb_binlog_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt'}:
                     payload = service.postgresql_schema_application(server, action, data.get('request'))
                 elif action == 'postgresql_relational_review':
@@ -3032,11 +3417,13 @@ class ServerNode(PGChildNodeView):
         except (EndpointRegistrationError,
                 ProviderNavigatorError) as exc:
             db.session.rollback()
-            return make_json_response(
+            response = make_json_response(
                 status=409, success=0, errormsg=str(exc)
             )
+            response.headers['Cache-Control'] = 'no-store'
+            return response
         except (SecretAccessError, RelationalCredentialError):
-            return make_json_response(
+            response = make_json_response(
                 status=401,
                 success=0,
                 errormsg=gettext(
@@ -3045,9 +3432,25 @@ class ServerNode(PGChildNodeView):
                 ),
                 info='CREDENTIAL_REQUIRED',
             )
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except EditorObservationUnavailable as exc:
+            response = make_json_response(status=409, success=0, errormsg=str(exc),
+                info='MYSQL_EDITOR_OBSERVER_UNAVAILABLE', data={
+                    'original_session_commands_sent': 0,
+                    'original_diagnostics_preserved': True,
+                    'native_errno': exc.native_observer_errno})
+            response.headers['Cache-Control'] = 'no-store'
+            return response
         except VisualAdminExecutionError as exc:
-            return make_json_response(**execution_failure_response(
-                exc, gettext))
+            response = make_json_response(**execution_failure_response(exc, gettext))
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except (VisualAdminValidationError, VisualAdminAccessError) as exc:
+            from pgadmin.cdeadmin.visual_admin.refusals import response as refusal_response
+            response = make_json_response(**refusal_response(exc))
+            response.headers['Cache-Control'] = 'no-store'
+            return response
         except (
             ProviderWorkspaceError,
             ProviderPermissionError,
@@ -3081,7 +3484,9 @@ class ServerNode(PGChildNodeView):
                     'The endpoint provider did not complete the request.'
                 ),
             )
-        return make_json_response(data=payload)
+        response = make_json_response(data=payload)
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
     def connect_status(self, gid, sid):
         """Check and return the connection status."""
@@ -3418,7 +3823,7 @@ class ServerNode(PGChildNodeView):
 
         disconnect_profile = _cde_registration(server)
         if (disconnect_profile['workflow'] == 'provider_endpoint' and
-                disconnect_profile['engine_id'] == 'firebird'):
+                disconnect_profile['engine_id'] in {'firebird', 'mysql'}):
             if _is_non_owner(server):
                 return forbidden(errormsg=gettext(
                     'Only the endpoint owner can disconnect its credentials.'))

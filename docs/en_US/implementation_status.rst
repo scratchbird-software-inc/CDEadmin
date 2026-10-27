@@ -223,6 +223,17 @@ replication, partition and specialized object operations. Their separate
 qualification gates must be reconciled before full dialect completion is
 claimed.
 
+The subsequent MySQL consolidated task gate reconciles all 105 declared tasks,
+including the specialized partition, security, storage, replication and server
+operation receipts. Independent privileged/restricted catalog reconciliation
+also compares 30 native categories and nine DDN child-fact sections. MySQL now
+has server/security/storage DDN application, exact typed DDN data import,
+durable named test-data recipes and opt-in ScratchBird monitoring history.
+The new portable product and extended gates run both connector implementations
+and are included in native platform fixtures. See
+:doc:`mysql_functional_completion` for contracts and the remaining external
+ScratchBird-history and current-source Windows/macOS acceptance requirements.
+
 Firebird network task qualification subsequently passed all 128 declared tasks
 through the consolidated network-task gate on Python 3.14.8, driver 1.10.11 and
 the exact 5.0.4 runtime. All 24 native component gates passed, with no missing
@@ -255,6 +266,14 @@ successful run before any current revision is called CI-qualified.
 
 Current-run scope and open gates
 ================================
+
+The October 16 source audit records the four full-product acceptance areas and
+concrete cross-engine gaps in :doc:`six_engine_completion`. Existing declared-task
+and component receipts do not close that expanded acceptance. In particular,
+catalog-backed completion, full native/procedural grammar checking, persistent
+history integration, native recovery workflows and remaining DDN operation
+coverage must be tracked by engine. No full-product completion claim is made
+for any of the six required engine families.
 
 The owner's newer direction brings persistent monitoring history and its
 ScratchBird connection into this completion scope. Native ScratchBird

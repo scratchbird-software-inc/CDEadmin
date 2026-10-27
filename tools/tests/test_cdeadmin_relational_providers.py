@@ -354,10 +354,10 @@ class RelationalInventoryTests(unittest.TestCase):
             def fetchall(self):
                 if 'information_schema.TABLES' in self.source:
                     return [('app', 'widgets', 'BASE TABLE')]
-                if self.source == 'SHOW PLUGINS':
+                if 'FROM information_schema.PLUGINS' in self.source:
                     return [(
                         'auth_example', 'ACTIVE', 'AUTHENTICATION',
-                        'auth_example.so', 'GPL',
+                        'auth_example.so', 'GPL', '1.2', '1.0', '1.1', 'Native author', 'Description 雪', 'ON',
                     )]
                 return []
 
@@ -383,6 +383,9 @@ class RelationalInventoryTests(unittest.TestCase):
             'auth_example.so', plugin['native']['definition']['library']
         )
         self.assertEqual('generation-one', plugin['generation'])
+        self.assertEqual('1.2', plugin['native']['plugin_version'])
+        self.assertEqual('Description 雪', plugin['native']['definition']['plugin_description'])
+        self.assertEqual('ON', plugin['native']['load_option'])
 
     def test_mysql_materialized_view_discovery_uses_show_create(self):
         class Cursor:
@@ -509,10 +512,10 @@ class RelationalInventoryTests(unittest.TestCase):
                         ('app', 'widgets', 'BASE TABLE'),
                         ('sibling', 'private_rows', 'BASE TABLE'),
                     ]
-                if self.source == 'SHOW PLUGINS':
+                if 'FROM information_schema.PLUGINS' in self.source:
                     return [(
                         'mysql_native_password', 'ACTIVE',
-                        'AUTHENTICATION', None, 'GPL',
+                        'AUTHENTICATION', None, 'GPL', '1.0', '1.0', None, 'Native author', 'Native description', 'ON',
                     )]
                 return []
 
@@ -544,8 +547,10 @@ class RelationalInventoryTests(unittest.TestCase):
         for key, value in expected_database.items():
             self.assertEqual(value, databases[0]['native'][key])
         self.assertEqual(
-            expected_database, databases[0]['native']['definition']
+            {**expected_database, 'database_options_state': 'unavailable'},
+            databases[0]['native']['definition']
         )
+        self.assertNotIn('read_only', databases[0]['native'])
         self.assertEqual(
             ['widgets'],
             [item['display_name'] for item in resources
@@ -870,7 +875,7 @@ class RelationalInventoryTests(unittest.TestCase):
             operation_calls[0][2]['secret_argument'],
         )
 
-    def test_mysql_shell_backup_uses_workspace_and_stdin_secret(self):
+    def test_mysql_shell_backup_uses_workspace_and_private_json_secret(self):
         observations = {}
         leases = []
 
@@ -878,9 +883,12 @@ class RelationalInventoryTests(unittest.TestCase):
             def run(self, grant, arguments, **kwargs):
                 observations['grant'] = grant
                 observations['arguments'] = arguments
-                observations['input'] = kwargs['input_bytes']
+                observations['input'] = kwargs.get('input_bytes', b'')
                 observations['redact_values'] = kwargs['redact_values']
-                source = kwargs['secret_config'].decode('utf-8')
+                observations['credentials'] = json.loads(kwargs['secret_config'])
+                script = Path(next(item.split('=', 1)[1] for item in arguments if item.startswith('--file=')))
+                observations['script'] = script
+                source = script.read_text(encoding='utf8')
                 observations['source'] = source
                 observations['secret_argument'] = kwargs['secret_argument']
                 encoded_path = source.split(
@@ -941,7 +949,9 @@ class RelationalInventoryTests(unittest.TestCase):
             self.assertGreater(result['artifact_total_bytes'], 0)
             self.assertEqual('', result['stdout'])
             self.assertTrue((Path(temporary).resolve() / 'backup-one').is_dir())
-        self.assertEqual(b'mysql-shell-secret-canary\n', observations['input'])
+        self.assertEqual(b'', observations['input'])
+        self.assertEqual({'password': 'mysql-shell-secret-canary'}, observations['credentials'])
+        self.assertFalse(observations['script'].exists())
         self.assertNotIn(
             'mysql-shell-secret-canary', ' '.join(observations['arguments'])
         )
@@ -958,8 +968,8 @@ class RelationalInventoryTests(unittest.TestCase):
         self.assertNotIn('util.dumpSchemas', ' '.join(
             observations['arguments']
         ))
-        self.assertEqual('--file={path}', observations['secret_argument'])
-        self.assertIn('--ssl-mode=DISABLED', observations['arguments'])
+        self.assertIsNone(observations['secret_argument'])
+        self.assertIn('"ssl-mode": "DISABLED"', source)
 
     def test_mysql_shell_paths_and_restore_completion_fail_closed(self):
         config = RelationalClientConfig(
@@ -1584,7 +1594,8 @@ class RelationalInventoryTests(unittest.TestCase):
         module.ConnectionPool.assert_not_called()
 
     def test_mariadb_client_retires_private_pool_after_checked_out_handle(self):
-        native = mock.Mock()
+        native = mock.Mock(connection_id=7)
+        native.cursor.return_value.fetchone.return_value = ('server-one', 7)
         module = SimpleNamespace(connect=mock.Mock(return_value=native),
                                  ConnectionPool=mock.Mock())
         client = MariaDBDBAPIClient(RelationalClientConfig(

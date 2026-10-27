@@ -14,6 +14,48 @@ import {ManageTreeNodes} from 'sources/tree/tree_nodes';
 jest.mock('sources/api_instance');
 
 describe('CDEadmin provider tree hierarchy', () => {
+  const endpoint = {id:'endpoint',_id:7,_pid:1,_type:'server',label:'localhost',inode:true,
+    cde_endpoint:true,children_url:'/browser/server/children/1/7'};
+  const child = label => ({id:'database-'+label,_id:label,_pid:7,_type:'cde_database_target',label,inode:true});
+  const deferred = () => {let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
+
+  it('coalesces simultaneous child loads instead of duplicating endpoint rows', async () => {
+    const reply=deferred(),get=jest.fn().mockReturnValue(reply.promise);
+    getApiInstance.mockReturnValue({get});
+    const nodes=new ManageTreeNodes();await nodes.addNode(null,'/browser/endpoint',{...endpoint});
+    const first=nodes.readNode('/browser/endpoint'),second=nodes.readNode('/browser/endpoint');
+    expect(get).toHaveBeenCalledTimes(1);
+    reply.resolve({data:{data:[child('owned')]}});
+    const loaded=await Promise.all([first,second]);
+    expect(loaded[0]).toBe(loaded[1]);expect(loaded[0].map(node=>node.name)).toEqual(['owned']);
+  });
+
+  it('reloads a replaced parent instead of returning the detached empty children', async () => {
+    const reply=deferred(),get=jest.fn().mockReturnValueOnce(reply.promise)
+      .mockResolvedValueOnce({data:{data:[child('current')]}});
+    getApiInstance.mockReturnValue({get});
+    const nodes=new ManageTreeNodes();await nodes.addNode(null,'/browser/endpoint',{...endpoint});
+    const loaded=nodes.readNode('/browser/endpoint');
+    nodes.tempTree.children=[];
+    await nodes.addNode(null,'/browser/endpoint',{...endpoint});
+    reply.resolve({data:{data:[child('stale')]}});
+    expect((await loaded).map(node=>node.name)).toEqual(['current']);
+    expect(nodes.findNode('/browser/endpoint').children.map(node=>node.name)).toEqual(['current']);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('discards an old route response after endpoint metadata changes', async () => {
+    const reply=deferred(),get=jest.fn().mockReturnValueOnce(reply.promise)
+      .mockResolvedValueOnce({data:{data:[child('new-route')]}});
+    getApiInstance.mockReturnValue({get});
+    const nodes=new ManageTreeNodes();await nodes.addNode(null,'/browser/endpoint',{...endpoint});
+    const loaded=nodes.readNode('/browser/endpoint');
+    await nodes.updateNode('/browser/endpoint',{...endpoint,children_url:'/browser/server/children/2/9'});
+    reply.resolve({data:{data:[child('old-route')]}});
+    expect((await loaded).map(node=>node.name)).toEqual(['new-route']);
+    expect(get).toHaveBeenLastCalledWith('/browser/server/children/2/9',{timeout:30000});
+  });
+
   it('loads retained databases from the endpoint-owned child URL', async () => {
     const get = jest.fn().mockResolvedValue({data: {data: [{
       id: 'cde_database_target_example',

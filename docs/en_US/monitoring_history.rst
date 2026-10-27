@@ -1,7 +1,8 @@
 Persistent monitoring history
 =============================
 
-Firebird network and embedded database-file collectors can opt into a native
+Firebird network/embedded database-file collectors and MySQL/MariaDB server/database
+collectors can opt into a native
 ScratchBird archive with
 ``history_enabled: true`` in the monitoring policy. Collection remains independent
 of viewers and user connections. The destination connection and transaction are
@@ -93,7 +94,8 @@ Source observation and destination ingestion are not a distributed transaction.
 Query interface
 ---------------
 
-Authenticated ``GET /cdeadmin/api/monitoring/firebird/<server-id>/history`` takes
+Authenticated ``GET /cdeadmin/api/monitoring/firebird/<server-id>/history`` and
+``GET /cdeadmin/api/monitoring/mysql/<server-id>/history`` take
 ``target_id`` for a registered database, required timezone-aware ISO ``start`` and
 ``end`` timestamps, ``tier=raw|rollup``, ``limit`` (1–720) and optional returned
 ``after`` cursor. Windows are bounded by configured rollup retention. Pages are further capped at 32 records and 8 MiB; follow the returned cursor

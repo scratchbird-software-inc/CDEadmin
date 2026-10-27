@@ -10,7 +10,8 @@ import uuid
 
 from ..embedded_route import contained_database
 from .provider import _resource_id
-from .values import value
+from .values import archive_value
+from ..native_data_layout import inspect_relation
 from ...results.ddn_export import export_workspace
 from pgadmin.cdeadmin.sdk import RelationalClientError
 
@@ -81,13 +82,14 @@ def capture(provider, route, resource_id, *, endpoint_id, target_id,
                 kind == 'fts-table') != is_fts:
             raise ValueError('Native relation kind changed')
         qualified = _identifier(schema) + '.' + _identifier(name)
+        layout = inspect_relation(connection, 'sqlite', resource_id, route)
         cursor = connection.execute('SELECT * FROM ' + qualified +
                                     ' LIMIT ?', (row_limit + 1,))
         description = cursor.description or ()
         if not 1 <= len(description) <= 256:
             raise ValueError('DDN data capture needs 1–256 visible columns')
         columns = [{'name': str(item[0]), 'key': str(index),
-                    'ordinal': index, 'native_type': None}
+                    'ordinal': index, 'native_type': layout['native_columns'][index]['native_type'], 'native_name': str(item[0])}
                    for index, item in enumerate(description)]
         rows, size, exceeded = [], 0, False
         for native_row in cursor:
@@ -96,7 +98,7 @@ def capture(provider, route, resource_id, *, endpoint_id, target_id,
             if len(rows) >= row_limit:
                 exceeded = True
                 break
-            row = [value(item) for item in native_row]
+            row = [archive_value(item) for item in native_row]
             size += len(json.dumps(row, ensure_ascii=False,
                                    allow_nan=False).encode('utf8'))
             if size > MAX_BYTES:
@@ -114,6 +116,8 @@ def capture(provider, route, resource_id, *, endpoint_id, target_id,
             'observed_at': datetime.now(timezone.utc).isoformat(),
             'consistency': 'independently owned native read transaction',
             'value_encoding': 'exact SQLite storage values in positional JSON'}
+        acquisition.update(native_version=layout['native_version'], native_columns=layout['native_columns'],
+                           native_layout=layout, transaction_completed=True)
         metadata = {
             'result_id': str(uuid.uuid4()), 'execution_id': None,
             'title': qualified, 'schema': {'columns': columns},
@@ -121,9 +125,9 @@ def capture(provider, route, resource_id, *, endpoint_id, target_id,
             'export_coverage': 'full relation' if not exceeded else 'bounded sample',
             'acquisition': acquisition, 'consistency': acquisition['consistency'],
             'value_encoding': acquisition['value_encoding']}
-        encoded = export_workspace(metadata, rows)
         connection.execute('ROLLBACK')
         begun = False
+        encoded = export_workspace(metadata, rows)
         snapshot = json.loads(encoded)
         return {
             'snapshot': snapshot, 'acquisition': acquisition,

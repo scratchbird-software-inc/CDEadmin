@@ -125,7 +125,7 @@ def test_metadata_interval_preserves_original_time_and_refreshes_after_deadline(
     second = monitor.sample()
     assert first['groups']['settings']['observed_at'] == second['groups']['settings']['observed_at']
     assert second['groups']['settings']['observation_age_seconds'] == 5
-    settings_queries = lambda: sum(sql.args[0].startswith('SELECT @@max_connections') for sql in monitor._read.call_args_list)
+    settings_queries = lambda: sum(sql.args[0] == monitor.settings_source for sql in monitor._read.call_args_list)
     assert settings_queries() == 1
     now[0] = 71
     assert monitor.sample()['groups']['settings']['observation_age_seconds'] == 0

@@ -1,0 +1,152 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "database",
+  "resource_kinds": [
+    "database"
+  ],
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [
+    {
+      "tab": "Security",
+      "reason": "grants are per object; database-level privileges are role system privileges"
+    }
+  ],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "database_path",
+      "label": "Absolute database filename on the Firebird server",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "page_size",
+      "label": "Page size",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "default": "8192",
+      "options": [
+        {
+          "value": "4096",
+          "label": "4096"
+        },
+        {
+          "value": "8192",
+          "label": "8192"
+        },
+        {
+          "value": "16384",
+          "label": "16384"
+        },
+        {
+          "value": "32768",
+          "label": "32768"
+        }
+      ]
+    },
+    {
+      "field_id": "default_charset",
+      "label": "Default character set",
+      "tab": "Options",
+      "control": "text",
+      "required": false,
+      "default": "UTF8"
+    },
+    {
+      "field_id": "sql_dialect",
+      "label": "Database SQL dialect",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "default": "3",
+      "options": [
+        {
+          "value": "1",
+          "label": "1"
+        },
+        {
+          "value": "3",
+          "label": "3"
+        }
+      ]
+    },
+    {
+      "field_id": "forced_writes",
+      "label": "Force synchronous writes",
+      "tab": "Options",
+      "control": "boolean",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "reserve_space",
+      "label": "Reserve page space for record versions",
+      "tab": "Options",
+      "control": "boolean",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "stored_page_buffers",
+      "label": "Stored database page buffers",
+      "tab": "Options",
+      "control": "number",
+      "required": false,
+      "help": "Optional persistent database-header override. Zero uses the server default; nonzero values must be at least 50 and take precedence over attachment cache requests. 32-bit servers limit this to 131072; 64-bit servers to 2147483646. Allocation also depends on available memory."
+    },
+    {
+      "field_id": "sweep_interval",
+      "label": "Automatic sweep interval (transaction gap)",
+      "tab": "Options",
+      "control": "number",
+      "required": false,
+      "help": "Optional stored threshold in transaction numbers. Omission keeps the native default; zero disables automatic threshold-triggered sweeps, not manual sweep or garbage collection. Applies to the database being created."
+    },
+    {
+      "field_id": "linger_seconds",
+      "label": "Linger time in seconds",
+      "tab": "Options",
+      "control": "number",
+      "required": false,
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "drop_linger",
+      "label": "Drop the configured linger time",
+      "tab": "Options",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "default_sql_security",
+      "label": "Default SQL security",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "options": [
+        {
+          "value": "DEFINER",
+          "label": "Definer"
+        },
+        {
+          "value": "INVOKER",
+          "label": "Invoker"
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Round-tripped against Firebird 5.0.3 by tools/tests/test_ui_descriptor_roundtrip_firebird.py (create, re-inspect pre-fill, alter)."
+}

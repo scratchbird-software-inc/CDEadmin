@@ -324,7 +324,7 @@ def suggest_based_on_last_token(token, stmt):
         return _suggest_expression(token_v, stmt)
     elif token_v == "set":
         return (Column(table_refs=stmt.get_tables(),
-                       local_tables=stmt.local_tables),)
+                       local_tables=stmt.local_tables, context="update"),)
     elif token_v in ("select", "where", "having", "order by", "distinct"):
         return _suggest_expression(token_v, stmt)
     elif token_v == "as":
@@ -400,7 +400,7 @@ def suggest_based_on_last_token(token, stmt):
 
     elif token_v == "column":
         # E.g. 'ALTER TABLE foo ALTER COLUMN bar
-        return (Column(table_refs=stmt.get_tables()),)
+        return (Column(table_refs=stmt.get_tables(), context="ddl"),)
 
     elif token_v == "on":
         tables = stmt.get_tables("before")

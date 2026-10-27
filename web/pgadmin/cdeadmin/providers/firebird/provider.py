@@ -53,6 +53,7 @@ from .query_parameters import normalize_parameters
 from .query_values import normalize_value
 from .query_columns import describe_columns
 from .query_client import FirebirdQueryClient
+from ..native_editor import NativeEditorProvider
 from .service_connection import (
     connect_service, notify_attached, security_context,
 )
@@ -197,7 +198,7 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
 ))
 
 
-class FirebirdProvider(ActualEnginePilotProvider):
+class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client, *, profile=PROFILE):
         embedded = context.target_adapter_id == 'firebird-embedded-client'
         if embedded and 'network' in context.effective_permissions:
@@ -246,6 +247,16 @@ class FirebirdProvider(ActualEnginePilotProvider):
             raise ValueError('Provider session is unavailable')
         from .scripts import preview
         return preview(request.get('source'))
+
+    def eds_pool_action(self,request,archive):
+        self._require('execute')
+        if not isinstance(request,dict) or request.get('language_profile')!='firebird-sql':
+            raise RelationalClientError('Native Firebird EDS session is required')
+        if request.get('operation') not in {'inventory','receipt'}:self._require('administer')
+        handle=self._editor_session(request)
+        from .eds_pool import action
+        return action(self.client,handle,request['session_id'],
+            {key:value for key,value in request.items() if key not in {'session_id','language_profile'}},archive)
 
     def query_stream(self, request):
         self._require('execute')
@@ -1956,6 +1967,13 @@ def _resources(connection, request):
             add('configuration', [], setting[0],
                 configuration.metadata(setting))
 
+        from . import eds_pool
+        pool_rows=catalog_rows(eds_pool.SQL,'external connection pool',required=False)
+        pool_observation=(eds_pool.metadata(pool_rows[0]) if len(pool_rows)==1 else
+            {'available':False,'scope':'attachment-engine-process','reason':'Native EDS pool observation unavailable'})
+        database_native['external_connection_pool']=pool_observation
+        resources[_catalog_resource_id('server',[],'Firebird')]['native']['external_connection_pool']=pool_observation
+
         def routine_named(kind, name, package):
             name = str(name or '').rstrip(' ')
             package = str(package or '').rstrip(' ')
@@ -2722,6 +2740,26 @@ def _resources(connection, request):
                 rendered
             )
 
+        for item in resources.values():
+            native = item.setdefault('native', {})
+            if item['resource_kind'] == 'domain':
+                # One rendered type expression for editors.
+                native['type_sql'] = data_type(native, include_domain=False)
+            if item['resource_kind'] not in {'procedure', 'function'}:
+                continue
+            # Rendered parameter types for editors (the grid shows one
+            # type expression per parameter rather than catalog codes).
+            for parameter in native.get('parameters', []):
+                parameter['type_sql'] = parameter_definition(
+                    parameter, include_name=False)
+                if item['resource_kind'] == 'function' and not parameter.get('mode'):
+                    parameter['mode'] = 'input' if parameter.get('name') else 'return'
+            if item['resource_kind'] == 'function':
+                returned = [parameter for parameter in native.get('parameters', [])
+                            if not parameter.get('name')]
+                native['return_type_sql'] = (
+                    returned[0].get('type_sql') if len(returned) == 1 else None)
+
         def udf_parameter(parameter):
             # Legacy UDF grammar accepts only bare BLOB, not the table-field
             # SUB_TYPE / SEGMENT SIZE / CHARACTER SET clauses.
@@ -2911,6 +2949,12 @@ def _resources(connection, request):
             elif kind == 'trigger':
                 action = trigger_action(native.get('trigger_type'))
                 body = routine_body(native, trigger=True)
+                if action:
+                    # Decoded event mask for editors: timing + event list.
+                    timing, _, events = action.partition(' ')
+                    native['trigger_timing'] = timing
+                    native['trigger_events'] = [
+                        event.strip() for event in events.split(' OR ')]
                 if action and body:
                     definition = f'CREATE TRIGGER {identifier(name)}'
                     relation = str(native.get('relation') or '').rstrip(' ')
@@ -3100,6 +3144,10 @@ def _resources(connection, request):
                     tuple(candidate['display_path'][:-1]), set()).update(
                         index_segments(detail.get('index_name')))
         for item in resources.values():
+            if item['resource_kind'] == 'domain':
+                # Same scalar type summary the column editor pre-fills from.
+                item.setdefault('native', {})['type_editor'] = (
+                    type_editor_values(item['native']))
             if item['resource_kind'] != 'column':
                 continue
             path = item['display_path']

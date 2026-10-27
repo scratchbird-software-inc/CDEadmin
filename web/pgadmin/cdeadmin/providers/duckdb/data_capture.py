@@ -7,6 +7,7 @@ import os
 import threading
 import time
 import uuid
+from ..native_data_layout import inspect_relation
 
 from ..embedded_route import contained_database
 from .provider import _resource_id
@@ -70,16 +71,21 @@ def capture(provider, route, resource_id, *, endpoint_id, target_id, mode='sampl
         if connection.fetchone()[0] != 1:
             raise ValueError('Native relation is unavailable or its kind changed')
         qualified = '.'.join(map(_identifier, (catalog, schema, name)))
+        layout = inspect_relation(connection, 'duckdb', resource_id, route)
         connection.execute('SELECT * FROM ' + qualified + ' LIMIT ?', [row_limit + 1])
         description = list(connection.description or ())
         if not 1 <= len(description) <= 256:
             raise ValueError('DDN data capture needs 1–256 visible columns')
         reader = connection.to_arrow_reader(128)
-        columns = [{'name': str(field.name), 'key': str(index), 'ordinal': index,
+        columns = [{'name': str(field.name), 'native_name': str(field.name), 'key': str(index), 'ordinal': index,
                     'native_type': str(description[index][1]), 'arrow_type': str(field.type)}
                    for index, field in enumerate(reader.schema)]
+        arrow_schema = reader.schema
+        native_batches = []
         rows, size, exceeded = [], 0, False
         for batch in reader:
+            remaining = row_limit - len(rows)
+            if remaining > 0: native_batches.append(batch.slice(0, min(remaining, batch.num_rows)))
             for index in range(batch.num_rows):
                 if time.monotonic() - started > MAX_SECONDS:
                     raise ValueError('DuckDB data capture exceeded 30 seconds')
@@ -102,19 +108,28 @@ def capture(provider, route, resource_id, *, endpoint_id, target_id, mode='sampl
             'observed_at': datetime.now(timezone.utc).isoformat(),
             'consistency': 'independently owned native read transaction',
             'value_encoding': 'exact DuckDB Arrow positional JSON; temporal ticks and binary envelopes'}
+        import pyarrow as pa
+        sink = pa.BufferOutputStream()
+        with pa.ipc.new_stream(sink, arrow_schema) as writer:
+            for batch in native_batches: writer.write_batch(batch)
+        payload = sink.getvalue().to_pybytes()
+        acquisition.update(native_version=layout['native_version'], native_columns=layout['native_columns'], native_layout=layout,
+            transaction_completed=True, native_payload={'format': 'arrow-ipc@1', 'byte_length': len(payload),
+                'sha256': hashlib.sha256(payload).hexdigest(), 'chunks': (len(payload) + 1024 * 1024 - 1) // (1024 * 1024)})
         metadata = {'result_id': str(uuid.uuid4()), 'execution_id': None,
+            'native_payload_bytes': payload,
             'title': qualified, 'schema': {'columns': columns}, 'complete': not exceeded,
             'export_coverage': 'full relation' if not exceeded else 'bounded sample',
             'acquisition': acquisition, 'consistency': acquisition['consistency'],
             'value_encoding': acquisition['value_encoding']}
+        connection.execute('ROLLBACK'); begun = False
         encoded = export_workspace(metadata, rows)
         if len(encoded) > 8 * 1024 * 1024:
             raise ValueError('DuckDB DDN data document exceeds 8 MiB')
-        connection.execute('ROLLBACK'); begun = False
         snapshot = json.loads(encoded)
         return {'snapshot': snapshot, 'acquisition': acquisition, 'columns': columns,
             'views': [{'id': 'result_' + str(number), 'label': 'Data page ' + str(number), 'entry': filename}
-                      for number, filename in enumerate(snapshot['files'], 1)],
+                      for number, filename in enumerate((name for name in snapshot['files'] if name.startswith('result-')), 1)],
             'sha256': hashlib.sha256(encoded).hexdigest(),
             'filename': 'duckdb-relation-data.ddn-workspace.json',
             'warnings': ['This is a bounded sample; more rows were observed.'] if exceeded else []}

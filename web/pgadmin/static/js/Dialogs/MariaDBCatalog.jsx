@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FirebirdDesignStorage from './FirebirdDesignStorage';
 import FirebirdERD from './FirebirdERD';
+import MySQLDataImport from './MySQLDataImport';
 import MariaDBSchemaChanges from './MariaDBSchemaChanges';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
@@ -72,6 +73,7 @@ export default function MariaDBCatalog({post, databaseTargetId}) {
   };
   return <Box sx={{...compactFormSx, p: 1, overflow: 'auto', flex: 1}}>
     <FormReference formKey="mariadb-catalog-ddn" />
+    <MySQLDataImport engine="mariadb" post={post} databaseTargetId={databaseTargetId} />
     {error && <Alert severity="error">{error}</Alert>}
     <Alert severity="info">Native MariaDB metadata uses a separate connection. Visibility is privilege filtered and concurrent DDL is not fenced. Comparison is documentary and does not authorize changes.</Alert>
     <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>

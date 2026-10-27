@@ -1,15 +1,10 @@
 """Exact counters, reset epochs and retained collector ownership."""
-import importlib.util
-from pathlib import Path
 from decimal import Decimal
 from unittest.mock import Mock
 
 import pytest
 
-path = Path(__file__).resolve().parents[2] / 'web/pgadmin/cdeadmin/providers/postgresql/monitoring.py'
-spec = importlib.util.spec_from_file_location('pg_monitor', path)
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
+from pgadmin.cdeadmin.providers.postgresql import monitoring as module
 
 
 def source():

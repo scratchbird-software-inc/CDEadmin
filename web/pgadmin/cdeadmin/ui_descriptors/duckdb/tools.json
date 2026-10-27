@@ -1,0 +1,221 @@
+{
+  "schema": "cdeadmin.ui-tools.v1",
+  "engine": "duckdb",
+  "notes": "Tool, dashboard and registration openers that context_menu.py used to add with engine_id branches. Lifecycle entries come from the family forms, tier 2/3 operations from operations.json; keep only openers here.",
+  "tools": [
+    {
+      "command_id": "connector.duckdb.monitoring",
+      "scope": "connector",
+      "label": "DuckDB engine dashboard...",
+      "handler": "open_duckdb_fleet",
+      "icon": "tool.dashboard",
+      "group": "information",
+      "priority": 5,
+      "when": {
+        "localhost_placeholder": false
+      }
+    },
+    {
+      "command_id": "connector.duckdb.dashboard_editor",
+      "scope": "connector",
+      "label": "Edit DuckDB engine dashboard...",
+      "handler": "open_duckdb_dashboard_editor",
+      "icon": "action.edit",
+      "group": "information",
+      "priority": 6,
+      "mutation": "write",
+      "when": {
+        "localhost_placeholder": false
+      }
+    },
+    {
+      "command_id": "endpoint.duckdb.monitoring",
+      "scope": "endpoint",
+      "label": "DuckDB registered-file dashboard...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "arguments": {
+        "tab": "monitoring"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can monitor it."
+      }
+    },
+    {
+      "command_id": "endpoint.duckdb.catalog_ddn",
+      "scope": "endpoint",
+      "label": "Registered DuckDB files and DDN...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.export",
+      "group": "database",
+      "arguments": {
+        "tab": "export",
+        "server_catalog": true
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can inspect it."
+      }
+    },
+    {
+      "command_id": "endpoint.duckdb.dashboard_editor",
+      "scope": "endpoint",
+      "label": "Edit DuckDB dashboard...",
+      "handler": "open_duckdb_dashboard_editor",
+      "slot": "after_verify",
+      "icon": "action.edit",
+      "group": "availability",
+      "mutation": "write",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can edit it."
+      }
+    },
+    {
+      "command_id": "database.duckdb.catalog_ddn",
+      "scope": "database",
+      "label": "DuckDB metadata and DDN diagrams...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.export",
+      "group": "database",
+      "arguments": {
+        "tab": "export"
+      }
+    },
+    {
+      "command_id": "database.duckdb.monitoring",
+      "scope": "database",
+      "label": "DuckDB database dashboard...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "mutation": "read",
+      "arguments": {
+        "tab": "monitoring"
+      }
+    },
+    {
+      "command_id": "database.duckdb.monitoring_policy",
+      "scope": "database",
+      "label": "Configure DuckDB monitoring collection...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "monitoring_policy"
+      }
+    },
+    {
+      "command_id": "database.duckdb.dashboard_editor",
+      "scope": "database",
+      "label": "Edit DuckDB dashboard...",
+      "handler": "open_duckdb_dashboard_editor",
+      "slot": "post_tasks",
+      "icon": "action.edit",
+      "group": "availability",
+      "mutation": "write"
+    },
+    {
+      "command_id": "database.duckdb.test_data",
+      "scope": "database",
+      "label": "Generate DuckDB test data...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "action.insert",
+      "group": "database",
+      "priority": 45,
+      "arguments": {
+        "tab": "duckdb-test-data"
+      }
+    },
+    {
+      "command_id": "database.duckdb.copy",
+      "scope": "database",
+      "label": "Native DuckDB COPY...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "action.export",
+      "group": "database",
+      "priority": 46,
+      "arguments": {
+        "tab": "duckdb-copy"
+      }
+    },
+    {
+      "command_id": "database.duckdb.attachment",
+      "scope": "database",
+      "label": "Plan native DuckDB attachment...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "action.connect",
+      "group": "database",
+      "priority": 47,
+      "arguments": {
+        "tab": "duckdb-attachment"
+      }
+    },
+    {
+      "command_id": "database.duckdb.receipts",
+      "scope": "database",
+      "label": "Saved DuckDB operation receipts...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "action.view",
+      "group": "database",
+      "priority": 48,
+      "arguments": {
+        "tab": "duckdb-session-receipts"
+      }
+    },
+    {
+      "command_id": "database.duckdb.extension_sources",
+      "scope": "database",
+      "label": "Install or load DuckDB extensions...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "action.settings",
+      "group": "database",
+      "priority": 49,
+      "arguments": {
+        "tab": "duckdb-extensions"
+      }
+    },
+    {
+      "command_id": "resource.duckdb.table.copy",
+      "scope": "resource",
+      "label": "Native DuckDB COPY...",
+      "handler": "open_workspace",
+      "slot": "after_data",
+      "icon": "action.export",
+      "group": "object",
+      "priority": 12,
+      "arguments": {
+        "tab": "duckdb-copy"
+      },
+      "when": {
+        "resource_kinds": [
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true,
+        "not_temporary": true
+      }
+    }
+  ]
+}

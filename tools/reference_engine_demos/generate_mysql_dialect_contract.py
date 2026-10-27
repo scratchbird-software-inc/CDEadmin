@@ -42,6 +42,8 @@ REFERENCE_VERSION = '9.7.0'
 GRAMMAR = Path('sql/sql_yacc.yy')
 FUNCTIONS = Path('sql/item_create.cc')
 DIAGNOSTICS = Path('share/messages_to_clients.txt')
+COMMANDS = Path('include/my_sqlcommand.h')
+LEXICAL_SYMBOLS = Path('sql/lex.h')
 
 
 def _sha256(path):
@@ -57,59 +59,21 @@ def _record(item_id, native_name, source, **details):
     }
 
 
-def _production_bounds(text, name):
-    start = re.search(rf'(?m)^{re.escape(name)}\s*:', text)
-    if start is None:
-        raise RuntimeError(f'MySQL grammar production is absent: {name}')
-    following = re.search(
-        r'(?m)^[A-Za-z_][A-Za-z0-9_]*\s*:', text[start.end():]
-    )
-    end = (
-        start.end() + following.start() if following is not None else len(text)
-    )
-    return start, text[start.start():end]
-
-
 def _alternatives(text, name, category):
-    start, block = _production_bounds(text, name)
-    base_line = text.count('\n', 0, start.start()) + 1
-    records = []
-    for offset, line in enumerate(block.splitlines()):
-        stripped = line.strip()
-        if offset == 0:
-            stripped = stripped.split(':', 1)[1].strip()
-        elif not stripped.startswith('|'):
-            continue
-        else:
-            stripped = stripped[1:].strip()
-        stripped = stripped.split('{', 1)[0].strip()
-        if not stripped or stripped == '%empty':
-            continue
-        records.append(_record(
-            f'{category}.{len(records) + 1:04d}', stripped,
-            f'{GRAMMAR.as_posix()}:{base_line + offset}',
-            production=name,
-        ))
-    return records
+    if __package__:from .mysql_source_inventory import Grammar
+    else:from mysql_source_inventory import Grammar
+    return Grammar(text).alternatives(name,category)
 
 
 def _source_inventory(source_root):
     grammar_path = source_root / GRAMMAR
     grammar = grammar_path.read_text(encoding='utf-8')
-    commands = [
-        _record(
-            f'commands.{position:04d}', match.group(1),
-            f'{GRAMMAR.as_posix()}:'
-            f'{grammar.count(chr(10), 0, match.start()) + 1}',
-        )
-        for position, match in enumerate(re.finditer(
-            r'(?m)^([A-Za-z_][A-Za-z0-9_]*)\s*:', grammar
-        ), 1)
-    ]
-    statements = _alternatives(
-        grammar, 'simple_statement', 'statements'
-    )
-    data_types = _alternatives(grammar, 'type', 'data_types')
+    if __package__:from .mysql_source_inventory import Grammar,command_inventory,type_inventory
+    else:from mysql_source_inventory import Grammar,command_inventory,type_inventory
+    parsed=Grammar(grammar)
+    commands=command_inventory((source_root/COMMANDS).read_text(encoding='utf8'))
+    statements=parsed.alternatives('simple_statement','statements')
+    data_types=type_inventory(parsed,(source_root/LEXICAL_SYMBOLS).read_text(encoding='utf8'))
     operators = []
     for match in re.finditer(
             r'(?m)^%(?:left|right|nonassoc)\s+(.+)$', grammar):
@@ -287,7 +251,10 @@ def generate(
         'completeness': {
             'runtime_version': REFERENCE_VERSION,
             'runtime_catalogs_exhausted': True,
-            'grammar_productions_exhausted': True,
+            'grammar_productions_exhausted': False,
+            'grammar_entrypoint_alternatives_exhausted': True,
+            'native_dispatch_enum_exhausted': True,
+            'native_type_spellings_source_derived': True,
             'function_registry_exhausted': True,
             'diagnostic_catalog_exhausted': True,
             'inventory_counts': {
@@ -445,7 +412,7 @@ def main():
     )
     options.contract_output.parent.mkdir(parents=True, exist_ok=True)
     options.contract_output.write_text(
-        json.dumps(contract, indent=2, sort_keys=True) + '\n',
+        json.dumps(contract, sort_keys=True, separators=(',', ':')) + '\n',
         encoding='utf-8',
     )
     print(json.dumps({

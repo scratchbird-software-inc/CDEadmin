@@ -14,10 +14,10 @@ _DERIVED_COLUMN_FACTS = {'data_type_id', 'character_maximum_length',
 def _column_metadata_matches(actual, desired):
     return (isinstance(actual, dict) and isinstance(desired, dict) and
         all(actual.get(key) == value for key, value in desired.items()
-            if key not in _DERIVED_COLUMN_FACTS or value is not None))
+            if key != 'owner_oid' and (key not in _DERIVED_COLUMN_FACTS or value is not None)))
 
 
-def _table_columns_match(actual, desired, added_ids):
+def _table_columns_match(actual, desired, added_ids, owner_oid=None):
     if (not isinstance(actual, list) or not isinstance(desired, list) or
             len(actual) != len(desired)):
         return False
@@ -25,6 +25,10 @@ def _table_columns_match(actual, desired, added_ids):
     for found, expected in zip(actual, desired):
         if not isinstance(found, dict) or not isinstance(expected, dict):
             return False
+        if owner_oid is not None and found.get('owner_oid') != owner_oid:
+            return False
+        found = {key: value for key, value in found.items() if key != 'owner_oid'}
+        expected = {key: value for key, value in expected.items() if key != 'owner_oid'}
         if expected.get('resource_id') not in added_ids:
             if found != expected:
                 return False
@@ -357,7 +361,8 @@ def apply_review(provider, route, record):
                             record['desired']['rows'][operation['resource_id']]['native'].get('columns')
                             if operation.get('stage_columns') is not None else
                             baseline['native'].get('columns')),
-                            operation.get('added_column_ids', [])) and
+                            operation.get('added_column_ids', []),
+                            current['native'].get('catalog_metadata', {}).get('oid')) and
                         current['native'].get('catalog_metadata', {}).get('comment') ==
                             baseline['native'].get('catalog_metadata', {}).get('comment'))
                     if verified:

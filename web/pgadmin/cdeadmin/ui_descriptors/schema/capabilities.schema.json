@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cdeadmin.ui-capabilities.v1",
+  "title": "Single capability source for one engine",
+  "type": "object",
+  "required": [
+    "schema",
+    "engine",
+    "profiles",
+    "kinds"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "cdeadmin.ui-capabilities.v1"
+    },
+    "engine": {
+      "type": "string"
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "provider profile ids, e.g. mysql-native"
+    },
+    "beta_tier": {
+      "enum": [
+        "full",
+        "basic"
+      ]
+    },
+    "version_range": {
+      "type": "object",
+      "properties": {
+        "minimum": {
+          "type": "string"
+        },
+        "maximum_exclusive": {
+          "type": "string"
+        },
+        "tested": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "kinds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "resource_kind",
+          "family",
+          "operations"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "resource_kind": {
+            "type": "string"
+          },
+          "family": {
+            "enum": [
+              "table",
+              "view",
+              "index",
+              "routine",
+              "trigger",
+              "sequence",
+              "type",
+              "role",
+              "database",
+              "server",
+              "engine_object"
+            ]
+          },
+          "variant": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "parent_kinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "form": {
+            "type": "string",
+            "description": "forms/<file>.form.json that edits this kind"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "operation_id",
+                "tier"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "operation_id": {
+                  "type": "string"
+                },
+                "tier": {
+                  "enum": [
+                    1,
+                    2,
+                    3
+                  ]
+                },
+                "mutation_class": {
+                  "enum": [
+                    "none",
+                    "read",
+                    "write",
+                    "admin",
+                    "destructive"
+                  ]
+                },
+                "version": {
+                  "$ref": "form.schema.json#/$defs/version_gate"
+                },
+                "requires_utility": {
+                  "type": "string",
+                  "description": "native utility this needs on the execution host"
+                },
+                "support_state": {
+                  "enum": [
+                    "implemented",
+                    "experimental",
+                    "deferred",
+                    "unsupported",
+                    "post_beta_closed_source"
+                  ]
+                },
+                "notes": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -18,10 +18,13 @@ construction and any post-state verification.
 from __future__ import annotations
 
 import hashlib
+import ntpath
 import os
+import re
 import shutil
-import subprocess
+import socket
 import tempfile
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,6 +34,26 @@ MAX_TOOL_OUTPUT = 2 * 1024 * 1024
 
 class ProviderToolError(RuntimeError):
     """An external provider tool grant or invocation is unsafe."""
+
+
+def tool_environment(executable, workspace, *, platform=None, inherited=None):
+    """Supply native OS requirements while isolating tool settings and secrets."""
+    platform = sys.platform if platform is None else platform
+    inherited = os.environ if inherited is None else inherited
+    workspace, executable = str(workspace), str(executable)
+    environment = {'LANG': 'C' if platform == 'darwin' else 'C.UTF-8',
+                   'LC_ALL': 'C' if platform == 'darwin' else 'C.UTF-8'}
+    if platform == 'win32':
+        root = inherited.get('SYSTEMROOT') or inherited.get('SystemRoot')
+        if not isinstance(root, str) or '\x00' in root or not ntpath.isabs(root):
+            raise ProviderToolError('Windows native tools require an absolute SystemRoot')
+        environment.update(SYSTEMROOT=root, WINDIR=root,
+            PATH=';'.join((ntpath.dirname(executable), ntpath.join(root, 'System32'), root)),
+            USERPROFILE=workspace, TEMP=workspace, TMP=workspace)
+    else:
+        environment.update(PATH=os.pathsep.join((str(Path(executable).parent), os.defpath)),
+                           HOME=workspace, TMPDIR=workspace)
+    return environment
 
 
 def _safe_root(value):
@@ -54,9 +77,12 @@ class ProviderToolGrant:
     workspace: str
     endpoint_host: str
     endpoint_port: int
-    timeout_seconds: int = 300
+    timeout_seconds: int | None = 300
     max_output_bytes: int = MAX_TOOL_OUTPUT
     secret_environment_names: tuple[str, ...] = ()
+    allow_unbounded_runtime: bool = False
+    durable_name: str | None = None
+    guard_parent_death: bool = False
 
     def __post_init__(self):
         if not isinstance(self.executable_id, str) or not self.executable_id:
@@ -68,9 +94,16 @@ class ProviderToolGrant:
             self.endpoint_port, int
         ) or not 1 <= self.endpoint_port <= 65535:
             raise ProviderToolError('tool endpoint port is invalid')
-        if isinstance(self.timeout_seconds, bool) or not isinstance(
-            self.timeout_seconds, int
-        ) or not 1 <= self.timeout_seconds <= 3600:
+        if type(self.guard_parent_death) is not bool or self.guard_parent_death and self.durable_name is None:
+            raise ProviderToolError('Native guardian death policy requires an explicit durable invocation')
+        if type(self.allow_unbounded_runtime) is not bool:
+            raise ProviderToolError('tool runtime authority is invalid')
+        if self.durable_name is not None and (not isinstance(self.durable_name, str) or
+                re.fullmatch(r'[a-z][a-z0-9-]{0,63}', self.durable_name) is None):
+            raise ProviderToolError('durable tool identity is invalid')
+        if (self.timeout_seconds is None and not self.allow_unbounded_runtime or
+                self.timeout_seconds is not None and (type(self.timeout_seconds) is not int or
+                not 1 <= self.timeout_seconds <= 2147483647)):
             raise ProviderToolError('tool timeout is invalid')
         if isinstance(self.max_output_bytes, bool) or not isinstance(
             self.max_output_bytes, int
@@ -107,7 +140,9 @@ class ProviderToolRunner:
         candidate = value if os.path.isabs(value) else shutil.which(value)
         if candidate is None:
             return None
-        path = Path(candidate).resolve(strict=False)
+        # Preserve launcher identity: resolving a venv's python symlink first
+        # discards its environment and can make native tool dependencies vanish.
+        path = Path(os.path.abspath(candidate))
         return path if path.is_file() and os.access(path, os.X_OK) else None
 
     def run(
@@ -116,9 +151,16 @@ class ProviderToolRunner:
         secret_argument='--config={path}', secret_suffix='.yaml',
         secret_argument_position=None, redact_values=(),
         secret_environment=None,
+        progress=None, cancel_signal=None,
+        secret_environment_name=None, reservation_socket=None,
     ):
         if not isinstance(grant, ProviderToolGrant):
             raise ProviderToolError('provider tool grant is required')
+        if reservation_socket is not None and (os.name!='posix' or grant.durable_name is None or
+                not isinstance(reservation_socket,socket.socket) or reservation_socket.family!=socket.AF_INET or
+                reservation_socket.getsockname()!=(grant.endpoint_host,grant.endpoint_port) or
+                grant.endpoint_host!='127.0.0.1' or not reservation_socket.getsockopt(socket.SOL_SOCKET,socket.SO_ACCEPTCONN)):
+            raise ProviderToolError('Durable native endpoint reservation is invalid')
         declared = self._allowlist.get(grant.executable_id)
         executable = self._resolve(declared)
         if executable is None:
@@ -129,8 +171,38 @@ class ProviderToolRunner:
             raise ProviderToolError('provider tool arguments are invalid')
         if not isinstance(input_bytes, (bytes, bytearray, memoryview)):
             raise ProviderToolError('provider tool input must be bytes')
+        if progress is not None and not callable(progress):
+            raise ProviderToolError('provider tool progress callback is invalid')
+        if cancel_signal is not None and any(not callable(getattr(cancel_signal, name, None)) for name in ('is_set','wait')):
+            raise ProviderToolError('provider tool cancellation signal is invalid')
+        redactions = tuple(value for value in ((redact_values,) if isinstance(redact_values,str) else redact_values)
+                           if isinstance(value,str) and value)
         workspace = Path(grant.workspace)
         workspace.mkdir(parents=True, exist_ok=True)
+        environment = tool_environment(executable, workspace)
+        if secret_environment is not None:
+            if not isinstance(secret_environment, dict) or any(
+                not isinstance(key, str) or not key or '\x00' in key or
+                not isinstance(value, str) or '\x00' in value
+                for key, value in secret_environment.items()
+            ):
+                raise ProviderToolError(
+                    'provider tool secret environment is invalid'
+                )
+            if not set(secret_environment).issubset(
+                grant.secret_environment_names
+            ):
+                raise ProviderToolError(
+                    'provider tool secret environment key is not granted'
+                )
+            if set(secret_environment).intersection(environment):
+                raise ProviderToolError('Secret environment cannot replace native process settings')
+            environment.update(secret_environment)
+        if secret_environment_name is not None and (
+                not isinstance(secret_environment_name,str) or
+                secret_environment_name not in grant.secret_environment_names or
+                secret_environment_name in environment or secret_config is None):
+            raise ProviderToolError('provider tool secret file environment is not granted')
         input_stream = None
         if input_path is not None:
             if input_bytes:
@@ -155,28 +227,8 @@ class ProviderToolRunner:
                 raise ProviderToolError('provider tool input path is invalid')
             input_stream = candidate.open('rb')
         config_path = None
+        guardian_owns_config = False
         command = [str(executable), *arguments]
-        environment = {
-            'PATH': '/usr/bin:/bin',
-            'LANG': 'C.UTF-8',
-            'LC_ALL': 'C.UTF-8',
-        }
-        if secret_environment is not None:
-            if not isinstance(secret_environment, dict) or any(
-                not isinstance(key, str) or not key or '\x00' in key or
-                not isinstance(value, str) or '\x00' in value
-                for key, value in secret_environment.items()
-            ):
-                raise ProviderToolError(
-                    'provider tool secret environment is invalid'
-                )
-            if not set(secret_environment).issubset(
-                grant.secret_environment_names
-            ):
-                raise ProviderToolError(
-                    'provider tool secret environment key is not granted'
-                )
-            environment.update(secret_environment)
         try:
             if secret_config is not None:
                 if not isinstance(secret_config, (bytes, bytearray)):
@@ -194,7 +246,11 @@ class ProviderToolRunner:
                     stream.write(bytes(secret_config))
                     stream.flush()
                     os.fsync(stream.fileno())
-                if isinstance(secret_argument, str):
+                if secret_environment_name is not None:
+                    environment[secret_environment_name] = str(config_path)
+                if secret_argument is None and secret_environment_name is not None:
+                    secret_arguments = []
+                elif isinstance(secret_argument, str):
                     secret_arguments = [secret_argument]
                 elif (
                     isinstance(secret_argument, (list, tuple)) and
@@ -208,7 +264,7 @@ class ProviderToolRunner:
                     raise ProviderToolError(
                         'provider tool secret argument is invalid'
                     )
-                if sum(
+                if secret_arguments and sum(
                     item.count('{path}') for item in secret_arguments
                 ) != 1:
                     raise ProviderToolError(
@@ -231,54 +287,73 @@ class ProviderToolRunner:
                 else:
                     offset = 1 + secret_argument_position
                     command[offset:offset] = secret_options
+            from .tool_process import observe_process, ToolProcessFailure
+            secret_bytes = sorted({value.encode('utf8') for value in redactions}, key=len, reverse=True)
             try:
-                run_options = {
-                    'cwd': workspace,
-                    'env': environment,
-                    'stdout': subprocess.PIPE,
-                    'stderr': subprocess.PIPE,
-                    'timeout': grant.timeout_seconds,
-                    'check': False,
-                    'shell': False,
-                    'close_fds': True,
-                }
-                if input_stream is None:
-                    run_options['input'] = bytes(input_bytes)
+                capture_limit = grant.max_output_bytes + max(map(len,secret_bytes),default=0)
+                if grant.durable_name is not None and not (cancel_signal is not None and cancel_signal.is_set()):
+                    if input_bytes or secret_environment:
+                        raise ProviderToolError('Durable native invocation requires file-based credentials and file-based stdin')
+                    from .durable_tool import run as durable_run
+                    def handoff():
+                        nonlocal guardian_owns_config
+                        guardian_owns_config = True
+                    observed = durable_run(command, workspace=workspace, environment=environment,
+                        timeout=grant.timeout_seconds, capture_limit=capture_limit, name=grant.durable_name,
+                        credential_file=config_path, input_path=candidate if input_stream is not None else None,
+                        cancel_signal=cancel_signal, progress=progress, handoff=handoff,reservation_socket=reservation_socket,guard_parent_death=grant.guard_parent_death)
                 else:
-                    run_options['stdin'] = input_stream
-                completed = subprocess.run(command, **run_options)
-            except subprocess.TimeoutExpired as exc:
-                raise ProviderToolError('provider tool timed out') from exc
-            output = completed.stdout[:grant.max_output_bytes]
-            error = completed.stderr[:grant.max_output_bytes]
-            output_text = output.decode('utf-8', errors='replace')
-            error_text = error.decode('utf-8', errors='replace')
-            for secret in redact_values:
-                if isinstance(secret, str) and secret:
-                    output_text = output_text.replace(secret, '[redacted]')
-                    error_text = error_text.replace(secret, '[redacted]')
-            return {
+                    observed = observe_process(command, workspace=workspace, environment=environment,
+                        input_bytes=bytes(input_bytes), input_stream=input_stream, timeout=grant.timeout_seconds,
+                        capture_limit=capture_limit, cancel_signal=cancel_signal, progress=progress)
+            except ToolProcessFailure as failure:
+                observed = failure.observation
+            def output_text(raw):
+                if secret_bytes:
+                    pattern = re.compile(b'|'.join(re.escape(value) for value in secret_bytes))
+                    masked, end = bytearray(), 0
+                    for match in pattern.finditer(raw):
+                        if match.start() >= grant.max_output_bytes:break
+                        remaining = grant.max_output_bytes-len(masked)
+                        masked.extend(raw[end:match.start()][:remaining])
+                        masked.extend(b'[redacted]'[:max(0,grant.max_output_bytes-len(masked))])
+                        end=match.end()
+                        if len(masked)>=grant.max_output_bytes:break
+                    if end<grant.max_output_bytes:masked.extend(raw[end:grant.max_output_bytes][:max(0,grant.max_output_bytes-len(masked))])
+                    raw=bytes(masked)
+                return raw[:grant.max_output_bytes].decode('utf8',errors='replace')
+            result = {
                 'executable_id': grant.executable_id,
                 'executable_sha256': hashlib.sha256(
                     executable.read_bytes()
                 ).hexdigest(),
                 'workspace': str(workspace),
+                'execution_host': {'kind': 'application-host', 'platform': sys.platform,
+                                   'filesystem_scope': str(workspace)},
                 'network_grant': {
                     'host': grant.endpoint_host,
                     'port': grant.endpoint_port,
                 },
-                'return_code': completed.returncode,
-                'stdout': output_text,
-                'stderr': error_text,
-                'stdout_truncated': len(completed.stdout) > len(output),
-                'stderr_truncated': len(completed.stderr) > len(error),
+                'return_code': observed['return_code'],
+                'stdout': output_text(observed['stdout']),
+                'stderr': output_text(observed['stderr']),
+                'stdout_truncated': observed['stdout_bytes'] > grant.max_output_bytes,
+                'stderr_truncated': observed['stderr_bytes'] > grant.max_output_bytes,
+                'process_observation': {key:value for key,value in observed.items() if key not in {'stdout','stderr'}},
                 'remote_finality_inferred': False,
                 'local_process_observation_only': True,
             }
+            if observed.get('supervision_error_type') or observed['timed_out'] or not observed['cleanup_confirmed']:
+                error = ProviderToolError('provider tool output supervision failed' if observed.get('supervision_error_type') else
+                                          'provider tool timed out' if observed['timed_out'] else
+                                          'provider tool process cleanup is unconfirmed')
+                error.process_observation = result
+                raise error
+            return result
         finally:
             if input_stream is not None:
                 input_stream.close()
-            if config_path is not None and config_path.exists():
+            if not guardian_owns_config and config_path is not None and config_path.exists():
                 try:
                     size = config_path.stat().st_size
                     with config_path.open('r+b') as stream:

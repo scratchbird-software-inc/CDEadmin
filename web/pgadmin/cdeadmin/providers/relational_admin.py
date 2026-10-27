@@ -123,7 +123,7 @@ _MARIADB_TOOL_SERVER_OPERATIONS = frozenset({
     'check_upgrade_required',
 })
 _MYSQL_SHELL_DATABASE_OPERATIONS = frozenset({
-    'backup_logical', 'restore_logical',
+    'backup_logical', 'restore_logical', 'verify_logical',
 })
 
 
@@ -292,7 +292,7 @@ class RelationalAdministration:
                 } for operation in sorted(mariadb_packages.OPERATIONS)]
             if self.dialect.engine_id=='mysql' and kind=='event':
                 resource['operations']=[{'operation_id':'inspect','title':'Inspect native event','mutation_class':'read','target_required':True,'confirmation_required':False}]+[{
-                    'operation_id':operation,'title':mysql_events.form(operation,self._field)['title'],
+                    'operation_id':operation,'title':operation.replace('_',' ').title()+' event',
                     'mutation_class':'admin','target_required':operation!='create','confirmation_required':operation!='create',
                 } for operation in sorted(mysql_events.OPERATIONS)]
             if self.dialect.engine_id=='mysql' and kind in mysql_program_objects.OPERATIONS:
@@ -302,7 +302,7 @@ class RelationalAdministration:
                 } for operation in sorted(mysql_program_objects.OPERATIONS[kind])]
             if self.dialect.engine_id == 'mysql' and kind=='group-replication':
                 resource['operations']=[{'operation_id':'inspect','title':'Inspect native group','mutation_class':'read','target_required':True,'confirmation_required':False}]+[{
-                    'operation_id':operation,'title':mysql_group_replication.form(operation,self._field)['title'],
+                    'operation_id':operation,'title':self._form(kind, operation)['title'],
                     'mutation_class':'admin','target_required':True,'confirmation_required':True,
                 } for operation in sorted(mysql_group_replication.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind == 'component':
@@ -312,29 +312,29 @@ class RelationalAdministration:
                 } for operation in sorted(mysql_components.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind == 'constraint':
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_constraints.OPERATIONS] + [{
-                    'operation_id': operation, 'title': mysql_constraints.form(operation, self._field)['title'],
+                    'operation_id': operation, 'title': self._form(kind, operation)['title'],
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(mysql_constraints.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind == 'view':
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_views.OPERATIONS] + [{
-                    'operation_id': operation, 'title': mysql_views.form(operation, self._field)['title'],
+                    'operation_id': operation, 'title': operation.title() + ' view',
                     'mutation_class': 'admin', 'target_required': operation != 'create', 'confirmation_required': operation != 'create',
                 } for operation in sorted(mysql_views.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind in mysql_object_changes.OPERATIONS:
                 additions = mysql_object_changes.OPERATIONS[kind]
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
-                    'operation_id': operation, 'title': mysql_object_changes.form(kind, operation, self._field)['title'],
+                    'operation_id': operation, 'title': mysql_object_changes.TITLES[operation],
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(additions)]
             if self.dialect.engine_id == 'mysql' and kind == 'replication-channel':
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_replication.OPERATIONS] + [{
-                    'operation_id': operation, 'title': mysql_replication.form(operation, self._field)['title'],
+                    'operation_id': operation, 'title': self._form(kind, operation)['title'],
                     'mutation_class': 'admin', 'target_required': operation != 'create', 'confirmation_required': operation != 'create',
                 } for operation in sorted(mysql_replication.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind in mysql_partitions.OPERATIONS:
                 additions = mysql_partitions.OPERATIONS[kind]
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
-                    'operation_id': operation, 'title': mysql_partitions.form(kind, operation, self._field)['title'],
+                    'operation_id': operation, 'title': self._form(kind, operation)['title'],
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(additions)]
             if self.dialect.engine_id == 'mariadb' and kind in mariadb_partitions.OPERATIONS:
@@ -351,20 +351,20 @@ class RelationalAdministration:
             if self.dialect.engine_id == 'mysql' and kind in mysql_server_operations.OPERATIONS:
                 additions = mysql_server_operations.OPERATIONS[kind]
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
-                    'operation_id': operation, 'title': mysql_server_operations.form(kind, operation, self._field)['title'],
+                    'operation_id': operation, 'title': self._form(kind, operation)['title'],
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(additions)]
             if self.dialect.engine_id == 'mysql' and kind == 'resource-group':
                 resource['operations'] = [item for item in resource.get('operations', [])
                     if item['operation_id'] not in mysql_resource_groups.OPERATIONS] + [{
-                    'operation_id': operation, 'title': mysql_resource_groups.form(operation, self._field)['title'],
+                    'operation_id': operation, 'title': self._form(kind, operation)['title'],
                     'mutation_class': 'admin', 'target_required': operation != 'create',
                     'confirmation_required': operation != 'create',
                 } for operation in sorted(mysql_resource_groups.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind == 'role':
                 resource['operations'] = [item for item in resource.get('operations', [])
                     if item['operation_id'] not in mysql_roles.OPERATIONS] + [{
-                    'operation_id': operation, 'title': mysql_roles.form(operation, self._field)['title'],
+                    'operation_id': operation, 'title': mysql_roles.operation_title(operation),
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(mysql_roles.OPERATIONS)]
             if self.dialect.engine_id == 'firebird' and kind == 'view':
@@ -1890,7 +1890,7 @@ class RelationalAdministration:
         return errors
 
     @staticmethod
-    def _validate_mysql_shell_operation(operation, draft, route):
+    def _validate_mysql_shell_operation(operation, draft, route, *, require_database=True):
         backup_fields = {
             'path', 'consistent', 'skip_consistency_checks', 'ddl_only',
             'data_only', 'checksum', 'chunking', 'bytes_per_chunk',
@@ -1924,6 +1924,8 @@ class RelationalAdministration:
         fields = backup_fields if operation == 'backup_logical' else (
             restore_fields
         )
+        if operation == 'verify_logical':
+            fields = {'path', 'confirmation', 'source_schema', 'threads', 'enable_local_infile'}
         errors = []
         unknown = set(draft).difference(fields)
         if unknown:
@@ -1939,7 +1941,7 @@ class RelationalAdministration:
                     'message': f'MySQL Shell {field.replace("_", " ")} '
                                'is required.',
                 })
-        if not isinstance(route.get('database'), str) or not route['database']:
+        if require_database and (not isinstance(route.get('database'), str) or not route['database']):
             errors.append({
                 'field_id': None, 'code': 'mysql_shell_database_required',
                 'message': 'MySQL Shell requires a database target.',
@@ -2053,7 +2055,7 @@ class RelationalAdministration:
                 'message': 'Drop-existing and ignore-existing are mutually '
                            'exclusive.',
             })
-        if operation == 'restore_logical':
+        if operation in {'restore_logical', 'verify_logical'}:
             expected = route.get('database')
             if draft.get('confirmation') != expected:
                 errors.append({
@@ -3324,7 +3326,7 @@ class RelationalAdministration:
                     failure.native_status_codes = failure.gds_codes
                     failure.task_rollback_unconfirmed = True
                     raise failure from None
-            else:
+            elif owns_connection:
                 rollback = getattr(connection, 'rollback', None)
                 if callable(rollback) and cursor is not None:
                     rollback_requested = True
@@ -3338,7 +3340,7 @@ class RelationalAdministration:
                         task_savepoint.rollback()
                 except Exception:
                     task_rollback_failed = True
-            else:
+            elif owns_connection:
                 rollback = getattr(connection, 'rollback', None)
                 if callable(rollback):
                     rollback_requested = True
@@ -5347,36 +5349,22 @@ class RelationalAdministration:
     def _form(self, kind, operation):
         if self.dialect.engine_id == 'mariadb' and operation in mariadb_server_objects.OPERATIONS.get(kind, ()):
             return mariadb_server_objects.form(kind, operation, self._field)
-        if self.dialect.engine_id=='mysql' and kind=='event' and operation in mysql_events.OPERATIONS:
-            return mysql_events.form(operation,self._field)
         if self.dialect.engine_id == 'mariadb' and kind == 'package' and operation in mariadb_packages.OPERATIONS:
             return mariadb_packages.form(operation, self._field)
         if self.dialect.engine_id=='mysql' and operation in mysql_program_objects.OPERATIONS.get(kind,()):
             return mysql_program_objects.form(kind,operation,self._field)
-        if self.dialect.engine_id=='mysql' and kind=='group-replication' and operation in mysql_group_replication.OPERATIONS:
-            return mysql_group_replication.form(operation,self._field)
         if self.dialect.engine_id == 'mysql' and kind=='component' and operation in mysql_components.OPERATIONS:
             return mysql_components.form(operation,self._field)
-        if self.dialect.engine_id == 'mysql' and kind == 'constraint' and operation in mysql_constraints.OPERATIONS:
-            return mysql_constraints.form(operation, self._field)
-        if self.dialect.engine_id == 'mysql' and kind == 'view' and operation in mysql_views.OPERATIONS:
-            return mysql_views.form(operation, self._field)
-        if self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(kind, ()):
-            return mysql_object_changes.form(kind, operation, self._field)
-        if self.dialect.engine_id == 'mysql' and kind == 'replication-channel' and operation in mysql_replication.OPERATIONS:
+        if self.dialect.engine_id == 'mysql' and kind == 'replication-channel' and operation in {'create', 'alter'}:
             return mysql_replication.form(operation, self._field)
-        if self.dialect.engine_id == 'mysql' and operation in mysql_partitions.OPERATIONS.get(kind, ()):
+        if self.dialect.engine_id == 'mysql' and kind == 'partition' and operation == 'drop':
             return mysql_partitions.form(kind, operation, self._field)
         if self.dialect.engine_id == 'mariadb' and operation in mariadb_partitions.OPERATIONS.get(kind, ()):
             return mariadb_partitions.form(kind, operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'tablespace' and operation in mysql_tablespaces.OPERATIONS:
             return mysql_tablespaces.form(operation, self._field)
-        if self.dialect.engine_id == 'mysql' and operation in mysql_server_operations.OPERATIONS.get(kind, ()):
-            return mysql_server_operations.form(kind, operation, self._field)
-        if self.dialect.engine_id == 'mysql' and kind == 'resource-group' and operation in mysql_resource_groups.OPERATIONS:
+        if self.dialect.engine_id == 'mysql' and kind == 'resource-group' and operation in {'create', 'alter', 'drop'}:
             return mysql_resource_groups.form(operation, self._field)
-        if self.dialect.engine_id == 'mysql' and kind == 'role' and operation in mysql_roles.OPERATIONS:
-            return mysql_roles.form(operation, self._field)
         title = operation.replace('_', ' ').title()
         if (self.dialect.engine_id == 'firebird' and kind == 'table' and operation == 'reorder_columns'):
             return firebird_column_order.form(self._field)
@@ -5669,9 +5657,7 @@ class RelationalAdministration:
                         default='USER', options=('USER', 'ROLE'),
                     ),
                 ))
-            elif kind == 'role' and self.dialect.engine_id in {
-                'mysql', 'dolt',
-            }:
+            elif kind == 'role' and self.dialect.engine_id == 'dolt':
                 fields.append(self._field(
                     'members', 'Initial members', 'json', False,
                     'Account names that receive this role. MySQL persists '
@@ -7876,9 +7862,8 @@ class RelationalAdministration:
         target_kind = self._safe_fragment(
             draft.get('object_type'), 'privilege object type'
         ).upper()
-        target_name = self._qualified(
-            self._path_value(draft.get('object_name'))
-        )
+        target_name = ('*.*' if self.dialect.engine_id == 'mysql' and target_kind == 'GLOBAL' else
+                       self._qualified(self._path_value(draft.get('object_name'))))
         preposition = 'TO' if operation == 'GRANT' else 'FROM'
         if self.dialect.sql_family == 'mysql':
             principal = (
@@ -7892,7 +7877,7 @@ class RelationalAdministration:
                 target_name = '*.*'
             elif target_kind == 'DATABASE':
                 target_name = self._quote(draft.get('object_name')) + '.*'
-            elif target_kind in {'FUNCTION', 'PROCEDURE'}:
+            elif target_kind in {'FUNCTION', 'PROCEDURE'} or target_kind == 'LIBRARY' and self.dialect.engine_id == 'mysql':
                 object_prefix = f'{target_kind} '
         else:
             object_prefix = f'{target_kind} '
@@ -8265,6 +8250,17 @@ class RelationalAdministration:
                     f'CREATE TRIGGER {name} {timing} {event_sql} ON {table} '
                     f'FOR EACH ROW {body}'
                 )
+            if self.dialect.engine_id == 'sqlite':
+                # SQLite triggers fire on exactly one event and require a
+                # BEGIN ... END block; the form supplies the statements only.
+                if len(list(events)) != 1:
+                    raise RelationalClientError(
+                        'SQLite triggers fire on exactly one event'
+                    )
+                stripped = body.strip()
+                if not re.match(r'(?is)^BEGIN\b', stripped):
+                    stripped = stripped.rstrip(';')
+                    body = f'BEGIN {stripped}; END'
             return (
                 f'CREATE TRIGGER {name} {timing} {event_sql} ON {table} '
                 f'{body}'

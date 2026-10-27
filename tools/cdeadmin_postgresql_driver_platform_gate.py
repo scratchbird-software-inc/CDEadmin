@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'web'))
 
 
-def qualify(route, password, evidence, *, reply_loss=False, multi_database=False, catalog_ddn=False, native_transform=False):
+def qualify(route, password, evidence, *, reply_loss=False, multi_database=False, catalog_ddn=False, native_transform=False, server_files=False):
     evidence = Path(evidence).resolve()
     if evidence == ROOT or ROOT in evidence.parents:
         raise ValueError('Evidence must be outside the repository')
@@ -61,10 +61,18 @@ def qualify(route, password, evidence, *, reply_loss=False, multi_database=False
     files += list((ROOT / 'web/pgadmin/utils/sqlautocomplete').rglob('*.py'))
     files += list((ROOT / 'web/pgadmin/misc/templates/sqlautocomplete').rglob('*.sql'))
     files += list((ROOT / 'web/pgadmin/cdeadmin/results').glob('*.py'))
+    files += [ROOT / 'web/pgadmin/cdeadmin/providers/native_data_layout.py']
+    files += [ROOT / 'web/pgadmin/cdeadmin/workspace' / name for name in (
+        'native_data_import.py', 'mysql_data_import.py', 'firebird_data_import.py',
+        'firebird_schema_apply.py', 'firebird_schema_plan.py')]
     files += [Path(__file__)]
     files += [ROOT / 'tools' / name for name in (
         'cdeadmin_postgresql_operator_qualification.py',
         'cdeadmin_postgresql_aggregate_qualification.py',
+        'cdeadmin_postgresql_editor_qualification.py',
+        'cdeadmin_postgresql_large_object_qualification.py',
+        'cdeadmin_postgresql_server_catalog_qualification.py',
+        'cdeadmin_postgresql_session_catalog_qualification.py',
         'cdeadmin_postgresql_ssh_qualification.py')]
     if native_transform:
         files += [ROOT / 'tools/cdeadmin_postgresql_transform_qualification.py']
@@ -149,9 +157,11 @@ def qualify(route, password, evidence, *, reply_loss=False, multi_database=False
                 session, language_profile='postgresql-sql', source='SELCT 1'))['grammar_valid']
             assert not raw.execute("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname='never_executed')").fetchone()[0]
             raw.execute('SET standard_conforming_strings=off')
-            assert not provider.validate_source_without_execution(dict(
+            assert provider.validate_source_without_execution(dict(
                 session, language_profile='postgresql-sql', script=True,
                 source='SELECT 1'))['script_ready']
+            from cdeadmin_postgresql_editor_qualification import qualify as qualify_editor
+            qualify_editor(provider, session, raw, route, password, receipt, evidence, owner_id=user.id)
             raw.execute('SET standard_conforming_strings=on')
             receipt['checks'].append('offline-native-grammar-and-session-framing-no-execution')
             from pgadmin.cdeadmin.providers.postgresql.monitoring import PostgreSQLMonitor
@@ -373,13 +383,19 @@ def qualify(route, password, evidence, *, reply_loss=False, multi_database=False
             if catalog_ddn:
                 from cdeadmin_postgresql_catalog_qualification import qualify as qualify_catalog
                 qualify_catalog(provider, route, password, server, user, receipt, evidence)
+                from cdeadmin_postgresql_server_catalog_qualification import qualify as qualify_server_catalog
+                qualify_server_catalog(provider, route, password, server, user, receipt, evidence)
+                from cdeadmin_postgresql_session_catalog_qualification import qualify as qualify_session_catalog
+                qualify_session_catalog(provider, route, password, server, user, receipt, evidence)
             original_admin_apply = provider.apply_admin_operation
             def record_admin_apply(plan):
                 result = original_admin_apply(plan)
                 payload = plan['provider_payload']
                 receipt.setdefault('native_admin_task_proofs', []).append({
                     'task_id': payload['resource_kind'] + ':' + payload['operation_id'],
-                    'statement': payload['statement'], 'read_only': payload['read_only'],
+                    **({'statement_sha256': hashlib.sha256(payload['statement'].encode()).hexdigest()}
+                       if payload['resource_kind'] == 'large-object' else {'statement': payload['statement']}),
+                    'read_only': payload['read_only'],
                     'native_execution_returned': True,
                     'transaction_outcome': result.get('transaction_outcome'),
                     'release_status': result.get('release_status'),
@@ -388,6 +404,8 @@ def qualify(route, password, evidence, *, reply_loss=False, multi_database=False
             provider.apply_admin_operation = record_admin_apply
             try:
                 qualify_admin_transactions(provider, driver, route, password, server, receipt)
+                from cdeadmin_postgresql_large_object_qualification import qualify as qualify_large_objects
+                qualify_large_objects(provider, route, password, server, receipt, server_files=server_files)
                 from cdeadmin_postgresql_operator_qualification import qualify as qualify_operator
                 qualify_operator(provider, route, password, server, receipt)
                 from cdeadmin_postgresql_aggregate_qualification import qualify as qualify_aggregate

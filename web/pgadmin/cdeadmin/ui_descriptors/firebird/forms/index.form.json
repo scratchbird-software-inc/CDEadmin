@@ -1,0 +1,173 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "index",
+  "resource_kinds": [
+    "index"
+  ],
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "reference",
+      "required": true,
+      "reference_kind": "table",
+      "record_key": "navigator_parent_resource_id",
+      "record_pattern": "^[a-z-]+:(.*)$"
+    },
+    {
+      "field_id": "columns",
+      "label": "Indexed columns",
+      "tab": "General",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Column",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "column"
+        }
+      ],
+      "required": true,
+      "visible_when": {
+        "field": "index_kind",
+        "equals": "columns"
+      },
+      "item_kind": "string",
+      "record_key": "segments",
+      "record_pluck": "field_name"
+    },
+    {
+      "field_id": "unique",
+      "label": "Unique index",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "record_truthy": true
+    },
+    {
+      "field_id": "direction",
+      "label": "Index direction",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "default": "ASCENDING",
+      "options": [
+        {
+          "value": "ASCENDING",
+          "label": "Ascending"
+        },
+        {
+          "value": "DESCENDING",
+          "label": "Descending"
+        }
+      ],
+      "record_derive": {
+        "cases": [
+          {
+            "key": "index_type",
+            "equals": "1",
+            "value": "DESCENDING"
+          }
+        ],
+        "default": "ASCENDING"
+      }
+    },
+    {
+      "field_id": "expression",
+      "label": "Computed expression",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "visible_when": {
+        "field": "index_kind",
+        "equals": "expression"
+      },
+      "record_key": "expression_source",
+      "record_pattern": "^\\s*\\((.*?)\\s*\\)\\s*$"
+    },
+    {
+      "field_id": "condition",
+      "label": "Partial index predicate",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Optional expression after WHERE.",
+      "record_key": "condition_source"
+    },
+    {
+      "field_id": "active",
+      "label": "Active",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "modes": [
+        "alter"
+      ],
+      "record_derive": {
+        "cases": [
+          {
+            "key": "inactive",
+            "equals": "1",
+            "value": false
+          }
+        ],
+        "default": true
+      }
+    },
+    {
+      "field_id": "index_kind",
+      "label": "Index definition",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "default": "columns",
+      "options": [
+        {
+          "value": "columns",
+          "label": "Columns"
+        },
+        {
+          "value": "expression",
+          "label": "Expression"
+        }
+      ],
+      "record_derive": {
+        "cases": [
+          {
+            "key": "expression_source",
+            "truthy": true,
+            "value": "expression"
+          }
+        ],
+        "default": "columns"
+      }
+    },
+    {
+      "field_id": "refresh_statistics",
+      "label": "Recalculate index statistics",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: index columns select from target columns; table picker. Reviewed by tools/review_ui_descriptors.py: index columns as an ordered column list. Round-tripped against Firebird 5.0.3 by tools/tests/test_ui_descriptor_roundtrip_firebird.py (create, re-inspect pre-fill, alter)."
+}

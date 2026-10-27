@@ -19,6 +19,16 @@ def text(value,label,limit):
     return value
 
 
+def credential(value,label,limit):
+    # START GROUP_REPLICATION uses the native no-LF string grammar. CR is
+    # ordinary password text; the native credential buffers are byte bounded.
+    if not isinstance(value,str) or not value or len(value.encode('utf8'))>limit or any(char in value for char in '\x00\n'):
+        raise RelationalClientError(label+' requires bounded exact native credential text')
+    if label=='USER' and len(value)>32:
+        raise RelationalClientError('Native recovery account names contain at most 32 characters')
+    return value
+
+
 def compile_operation(operation,draft,target):
     native=(target or {}).get('native') or (target or {}).get('extensions',{}).get('mysql',{}).get('native',{})
     if operation not in OPERATIONS or not isinstance(draft,dict) or native.get('group_replication_plugin_status')!='ACTIVE':
@@ -29,11 +39,11 @@ def compile_operation(operation,draft,target):
     def bind(value):parameters.append(value);return '%s'
     if operation=='start':
         options=[]
-        for field,keyword,limit in [('user','USER',32),('password','PASSWORD',32),('default_auth','DEFAULT_AUTH',64)]:
+        for field,keyword,limit in [('user','USER',96),('password','PASSWORD',32),('default_auth','DEFAULT_AUTH',64)]:
             if field in draft and draft[field] is not None:
                 value=draft[field]
                 if field=='password' and value=='':value=''
-                else:value=text(value,keyword,limit)
+                else:value=credential(value,keyword,limit)
                 options.append(keyword+'='+bind(value))
         source='START GROUP_REPLICATION'+(' '+','.join(options) if options else '')
     elif operation=='stop':source='STOP GROUP_REPLICATION'
@@ -62,17 +72,3 @@ def compile_operation(operation,draft,target):
             arguments=[bind(text(draft.get(field),field,128)) for field in ('action_name','event_name')]
         source='SELECT '+FUNCTIONS[operation]+'('+','.join(arguments)+')'
     return {'source':source,'preview_source':source.replace('%s','<bound-value>'),'parameters':tuple(parameters)}
-
-
-def form(operation,field):
-    fields=[]
-    if operation=='start':fields=[field('user','Recovery user (optional)','text'),
-        field('password','Recovery password (omit to retain)','password',sensitive=True),field('default_auth','Recovery authentication plugin (optional)','text')]
-    if operation in {'set_primary','single_primary'}:fields.append(field('member_uuid','Native member UUID', 'text',operation=='set_primary',
-        help_text='Exact server UUID from the observed group member inventory. Blank single-primary selection uses native election.'))
-    if operation=='set_primary':fields.append(field('timeout','Running transaction timeout (seconds; optional)','integer'))
-    if operation=='set_protocol':fields.append(field('version','Native communication protocol version','text',True))
-    if operation=='set_write_concurrency':fields.append(field('concurrency','Native write concurrency','integer',True))
-    if operation in {'enable_member_action','disable_member_action'}:fields += [field('action_name','Native member action name','text',True),field('event_name','Native event name','text',True)]
-    fields.append(field('confirmation','Confirmation','text',True))
-    return {'form_id':'mysql.group-replication.'+operation,'title':operation.replace('_',' ').title()+' — native MySQL Group Replication','fields':fields}

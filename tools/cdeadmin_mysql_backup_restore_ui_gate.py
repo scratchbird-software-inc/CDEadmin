@@ -105,6 +105,12 @@ def arguments(argv=None):
 
 def _operations():
     catalog = json.loads(CATALOG_PATH.read_text(encoding='utf-8'))
+    # These legacy presentation helpers must not silently bind the empty
+    # portfolio fallback after the descriptor cutover. Shared OperationDialog
+    # round trips remain a separate gate (design Decision12).
+    required = {case['operation_id'] for case in CASES}
+    if not all('mysql_'+operation in catalog['forms'] for operation in required):
+        raise RuntimeError('Legacy MySQL form gate retired; qualify the shared descriptor dialog under Decision12')
     forms = catalog['forms']
     operations = {
         item['operation_id']: {**item, 'form': forms[item['form_id']]}

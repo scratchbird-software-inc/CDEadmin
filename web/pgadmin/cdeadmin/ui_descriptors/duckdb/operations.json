@@ -1,0 +1,168 @@
+{
+  "schema": "cdeadmin.ui-operations.v1",
+  "engine": "duckdb",
+  "operations": [
+    {
+      "operation_id": "checkpoint",
+      "resource_kind": "database",
+      "title": "Checkpoint",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "force_checkpoint",
+      "resource_kind": "database",
+      "title": "Force checkpoint",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "vacuum",
+      "resource_kind": "database",
+      "title": "Vacuum",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "analyze",
+      "resource_kind": "database",
+      "title": "Analyze",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "export_database",
+      "resource_kind": "database",
+      "title": "Export database",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "directory",
+          "label": "Absolute empty export directory",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "format",
+          "label": "Export format",
+          "control": "select",
+          "required": true,
+          "default": "PARQUET",
+          "options": [
+            {
+              "value": "PARQUET",
+              "label": "Parquet"
+            },
+            {
+              "value": "CSV",
+              "label": "CSV"
+            }
+          ]
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "import_database",
+      "resource_kind": "database",
+      "title": "Import database",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "directory",
+          "label": "Absolute DuckDB export directory",
+          "control": "text",
+          "required": true,
+          "help": "The directory must contain schema.sql and load.sql from EXPORT DATABASE."
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "update_extensions",
+      "resource_kind": "database",
+      "title": "Update all installed extensions",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "filesystem_effects_acknowledged",
+          "label": "I reviewed the native extension files and accept effects outside database rollback",
+          "control": "boolean",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "execute",
+      "resource_kind": "extension",
+      "title": "Install or load extension",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "action",
+          "label": "Action",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "INSTALL",
+              "label": "Install"
+            },
+            {
+              "value": "LOAD",
+              "label": "Load"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

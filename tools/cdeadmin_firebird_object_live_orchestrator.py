@@ -84,9 +84,16 @@ def _stage_runtime(source, target):
 
 def _initialize_security(runtime, password, environment):
     bootstrap = runtime / 'bootstrap.fdb'
+    create = ("CREATE USER SYSDBA PASSWORD '" + password.replace("'", "''") + "'").replace("'", "''")
+    alter = ("ALTER USER SYSDBA PASSWORD '" + password.replace("'", "''") + "'").replace("'", "''")
     source = (
         f"CREATE DATABASE '{bootstrap}' USER 'SYSDBA';\n"
-        f"CREATE USER SYSDBA PASSWORD '{password}';\n"
+        # The source runtime may already contain SYSDBA. Only its independently
+        # copied security database is changed; the source is never altered.
+        'SET TERM ^;\nEXECUTE BLOCK AS BEGIN\n'
+        "IF (EXISTS(SELECT 1 FROM SEC$USERS WHERE SEC$USER_NAME='SYSDBA')) THEN\n"
+        f"EXECUTE STATEMENT '{alter}';\nELSE EXECUTE STATEMENT '{create}';\n"
+        'END^\nSET TERM ;^\n'
         'COMMIT;\nDROP DATABASE;\nQUIT;\n'
     )
     completed = subprocess.run(

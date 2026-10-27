@@ -13,12 +13,17 @@ from .values import parameters, scalar
 from .unions import project, restore
 
 
+class ReceiptRecordingError(RelationalClientError):
+    """Application storage failed; this does not change a native command's outcome."""
+
+
 def identity(exc):
     # Driver messages can contain SQL, paths, secrets or bound values.
     return {'type': type(exc).__name__}
 
 
 def uncertain(exc):
+    if isinstance(exc,ReceiptRecordingError):return False
     import duckdb
     return not isinstance(exc, duckdb.Error) or isinstance(
         exc, (duckdb.IOException, duckdb.FatalException,
@@ -212,6 +217,44 @@ class DuckDBClient(RelationalDBAPIClient):
         self._states = {}
         self._busy = set()
         self._closing = False
+        self._attachment_contexts = {}
+        self._attachment_reviews = {}
+        self._extension_reviews = {}
+        self._database_copy_reviews = {}
+        self._receipt_archives = {}
+
+    def bind_receipt_archive(self, handle, archive, route):
+        with self._lock:
+            context=self._attachment_contexts.get(id(handle))
+            if context is None or context['route']!=route:
+                raise RelationalClientError('Original DuckDB session or database target changed')
+            bound=self._receipt_archives.get(id(handle))
+            if bound is not None and bound.binding!=archive.binding:
+                raise RelationalClientError('Original DuckDB receipt scope changed')
+            if bound is None:self._receipt_archives[id(handle)]=archive.bind(context)
+
+    def publish_receipt(self, handle, family, record):
+        bound=self._receipt_archives.get(id(handle))
+        if bound is not None:
+            try:bound.publish(family,record)
+            except Exception as error:
+                raise ReceiptRecordingError('Native receipt recording failed ('+type(error).__name__+
+                    '). Inspect the existing live receipt; no native replay is authorized.') from None
+
+    def open_session(self, request):
+        handle = super().open_session(request)
+        try:
+            row = handle.execute('SELECT database_name,database_oid,path FROM duckdb_databases() '
+                'WHERE database_name=current_database()').fetchone()
+            if not row:
+                raise RelationalClientError('Original DuckDB catalog identity is unavailable')
+            self._attachment_contexts[id(handle)] = {
+                'route': copy.deepcopy(self._route(request)), 'origin': tuple(row),
+                'session_scope_id': str(uuid.uuid4())}
+            return handle
+        except BaseException:
+            self._discard_failed_session(handle)
+            raise
 
     def _connect(self, request):
         with self._lock:
@@ -310,17 +353,39 @@ class DuckDBClient(RelationalDBAPIClient):
             return super().list_resources(request)
 
     def _forget_and_close(self, handle):
+        context = self._attachment_contexts.get(id(handle))
+        if context is not None:
+            from .attachments import release_session_keys
+            release_session_keys(self, context['session_scope_id'])
+        bound=self._receipt_archives.get(id(handle))
+        release={'receipt_release_recorded':None}
+        if bound is not None:
+            try:bound.release('release_requested')
+            except Exception as error:release['receipt_release_error_type']=type(error).__name__
         try:
             handle.close()
-        except Exception:
+        except Exception as error:
+            if bound is not None:
+                try:bound.release('release_unconfirmed',{'error_type':type(error).__name__})
+                except Exception:pass
             self._states.setdefault(id(handle), {})[
                 'session_reuse_blocked'] = True
             raise RelationalClientError(
                 'DuckDB native release failed') from None
         self._forget_connection(handle)
+        self._attachment_contexts.pop(id(handle), None)
         self._states.pop(id(handle), None)
         self._executions = [token for token in self._executions
                             if token.connection is not handle]
+        self._receipt_archives.pop(id(handle),None)
+        if bound is not None:
+            try:
+                bound.release('released',{'connection_released':True,'native_close_discards_uncommitted':True,
+                    'transaction_finality_inferred':False})
+                release={'receipt_release_recorded':True}
+            except Exception as error:
+                release.update(receipt_release_recorded=False,receipt_release_error_type=type(error).__name__)
+        return release
 
     def _discard_failed_session(self, handle):
         self._forget_and_close(handle)
@@ -342,10 +407,10 @@ class DuckDBClient(RelationalDBAPIClient):
                     while token.final is None:
                         token.describe()
             state = copy.deepcopy(self._states[id(handle)])
-            self._forget_and_close(handle)
+            receipt_release=self._forget_and_close(handle)
             return dict(state, connection_released=True,
                         native_close_discards_uncommitted=True,
-                        driver_observation_only=True)
+                        driver_observation_only=True,**receipt_release)
 
     def close(self):
         with self._lock:

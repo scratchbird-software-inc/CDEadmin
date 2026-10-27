@@ -92,6 +92,12 @@ DUCK-COMP-03: Shared SQL editor and native language
   column completions in the shared editor. Identifier insertion quotes and
   escapes exact native names. This page-scoped completion never claims a
   truncated or inaccessible catalog is empty or complete.
+  Observed STRUCT, UNION, list, array, map and positional-STRUCT member types
+  survive grouping parentheses and chained native element access. Explicit CTE
+  column lists retain projection positions, including preceding computed
+  expressions with unobserved result types. Completion does not treat a function
+  argument, cast, scalar subquery or arbitrary expression as its result type;
+  those computed-result bindings retain separate acceptance.
 
 DUCK-COMP-04: Data and file workflows
   Implement native row editing with qualified identity, paging, commit/rollback,
@@ -808,9 +814,15 @@ DUCK-COMP-08: Qualification and cleanup
   and evidence outside the repository. Clean up only owned disposable fixtures.
   Static forms and driver receipts alone do not prove full engine completion.
 
-Current-run exclusions
-----------------------
+Remaining completion and ownership
+----------------------------------
 
-Persistent monitoring history and its ScratchBird backend remain deferred.
-Windows/macOS development and platform UX qualification belong to their teams.
-Persistent SQL history, design/dashboard definitions and recipes remain in scope.
+The owner's October 14/16 scope includes persistent monitoring history and its
+ScratchBird backend. DuckDB archive integration is wired. The owner
+correction of October 16 defers ScratchBird history testing until explicitly
+resumed; the remaining product work continues independently. Windows/macOS development and platform UX
+qualification belong to their teams, and their evidence is required for a
+cross-platform completion claim. Persistent SQL history, design/dashboard
+definitions and recipes remain in scope. The additional catalog, language and
+complete management-workflow requirements and current gaps are recorded in
+:doc:`six_engine_completion`.

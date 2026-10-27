@@ -43,8 +43,14 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
             result['native_graphical_operation_count'],
             result['graphical_operation_count'],
         )
-        # Includes the activated Firebird embedded administration surface.
-        self.assertEqual(2280, result['graphical_operation_count'])
+        # Includes Firebird embedded and eleven native large-object operations.
+        self.assertEqual(2291, result['graphical_operation_count'])
+        large_object = next(item for item in self.catalogs['postgresql-native']['descriptor']['objects']
+            if item['resource_kind'] == 'large-object')
+        self.assertEqual({'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop',
+                          'import-server-file', 'export-server-file'},
+            {item['operation_id'] for item in large_object['operations']})
+        self.assertTrue(all(item['execution_route'] == 'provider-native' for item in large_object['operations']))
         self.assertEqual(0, result['activation_permission_failure_count'])
         self.assertEqual(0, result['provider_identity_failure_count'])
         self.assertEqual(0, result['shared_semantics_failure_count'])

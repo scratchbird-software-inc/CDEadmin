@@ -114,3 +114,154 @@ failure/deadline behavior, aliases, cleanup retry and session independence.
 Linux evidence does not prove native Windows/macOS behavior. Those teams run
 this gate with their packaged libraries and own UX, accessibility and platform
 release acceptance; native driver defects they find remain backend work.
+
+Native catalog declaration generation
+-------------------------------------
+
+DDN creation and replacement accept SQLite's stored declaration spellings,
+including bare, bracketed, backtick and quoted identifiers. Native compilation
+governs optional trigger timing and comments/spacing between header tokens.
+Generation binds the created name to the exact DDN namespace and uses the
+engine's identifier quoting. Identifier generation uses the statement byte budget;
+native names longer than 256 bytes remain supported. Keywords follow SQLite's
+ASCII case rules, preserving distinct Unicode identifier names.
+Explicit contradictory namespaces, names and owners are refused. Expression,
+constraint, SELECT and trigger bodies retain their original text. Header spelling
+is normalized for definition comparison; the exported catalog retains its native
+SQL. An existence clause is creation policy rather than an object property;
+reviewed generation creates the object explicitly and checks native outcomes.
+
+The declaration helper can bind TEMP and attached namespaces, with an explicit
+observed owner for TEMP triggers. This does not authorize an independent file
+migration from retained-session observations. That migration path continues
+requiring its registered main file, while original-session DDN application
+remains a separate implementation requirement. Native SQL compilation and
+authorization own grammar, extension/function/collation binding and execution.
+
+``tools/cdeadmin_sqlite_native_declaration_qualification.py`` qualifies native
+catalog import through the authenticated application API, reviewed application,
+independent data/schema observations and retained-scope refusal. Use the pinned
+Python/SQLite runtime and a new external evidence directory. It does not start
+database servers or exercise deferred ScratchBird history.
+
+Catalog-derived column additions
+--------------------------------
+
+An existing table's desired native CREATE declaration and complete column and
+constraint records generate reviewed ADD COLUMN stages automatically. Untyped
+columns, declared types, defaults, CHECK/NOT NULL/REFERENCES constraints and
+virtual or stored generated columns retain their native definitions. Several
+columns can share an atomic batch, including generated expressions referring
+to an earlier added column, new indexes/triggers using those columns and native
+view projections. Existing columns, table constraints, STRICT/WITHOUT ROWID
+options, rows, indexes and triggers are preserved. A change to an existing
+definition requires its separately reviewed migration or table rebuild.
+
+Preview prepares native statements and executes them only on an owned empty
+prototype. This establishes the resulting schema, not suitability for existing
+rows. The real write transaction revalidates the parent and child definitions,
+then SQLite checks its actual data. In pinned SQLite 3.53 a stored generated
+column, nonconstant default or NOT NULL column without a non-NULL default can
+be added to an empty table; populated tables may refuse those operations.
+CHECK/STRICT and foreign-key checks also remain native. A refusal rolls back
+the entire batch, including earlier added columns, and records the native error.
+Duplicate requests return the durable result without replay. Native column and
+constraint facts are checked before commit and after independent rediscovery.
+This workflow retains the independent main-file scope boundary described above.
+
+The catalog dialog's ``Native column additions`` controls generate the desired
+DDN from structured properties. Several columns can be designed together without
+writing a CREATE/ALTER command or constructing native_json. Fields preserve a
+blank declared type, nullability, default and generated expressions/storage,
+collation, CHECK expressions, named constraints and REFERENCES targets/actions,
+MATCH and deferrable/initial timing. Selecting no referenced column uses the
+native referenced primary key. Generation observes the registered baseline and
+materializes schema definitions only on an owned empty prototype; it never
+copies user rows or applies SQL to the registered file. The generated design
+uses the existing separate preview/review/confirmation and durable receipts.
+Changing targets discards late generator replies. Stale, retained-session and
+cross-target/URL-bound designs are refused by the backend.
+
+Installed functions/collations and custom virtual modules still need matching
+owned preview adapters. The generator can reproduce core FTS3/4/5 and RTree
+declarations; it refuses an unknown module rather than invoking its arbitrary
+creation callback during schema-only generation. This is an explicit preview
+implementation boundary, not a declaration that the native module is absent.
+
+Original query-connection DDN
+----------------------------
+
+``Original-session SQLite design`` in the Query Tool's engine controls captures
+TEMP, attached and pending schema definitions from the existing query connection.
+Its DDN preview, review and application use that same handle. Begin a transaction
+with the Query Tool controls before preparing a review. No file reopening or
+namespace projection grants authority over these definitions. The independent
+registered-file migration continues refusing retained-session provenance.
+
+Native table/view/index/trigger creation, explicit removal, view/index/trigger
+replacement and ordinary-table column additions use ordered native stages.
+Structured column properties support main, TEMP and attached tables, including
+same-named relations in different namespaces. The DDN designer is the paired
+sister-project editor. An empty owned schema establishes native grammar and
+resulting facts without copying user rows or executing mutations on the query
+connection during preview. Native callbacks and actual write-time checks remain
+authoritative at each application stage. Unimplemented preservation transforms,
+unobservable trigger owners and unreproducible installed capabilities remain
+explicit gaps; they are not engine features to discard from the product matrix.
+
+Application owns only its nested savepoint and never commits the caller's
+transaction. The acknowledgement is ``applied_pending_caller_transaction``;
+later commit/rollback decisions are not inferred from closing a session. A
+review binds native schema/settings, attachments, authorization and the original
+request revision. Intervening query or transaction work requires a new review.
+SQLite cancellation/severe errors can end a whole transaction, so cancellation
+does not promise that every preexisting pending row survives. Receipts preserve
+the observed native transaction state, cleanup and unknown outcomes separately.
+
+Durable uncertainty precedes dispatch. Duplicate tokens never redispatch, and
+receipt inspection/retention does not require opening a SQL workspace after the
+original connection closes. Unresolved dispatch evidence is retained. Native
+acknowledgement is saved before releasing the session for reuse; receipt-storage
+failures do not erase a known engine acknowledgement. Constructor-observed
+virtual-module storage remains module managed even when SQLite's transient
+``table_list`` flags expose it as ordinary storage under namespace shadowing.
+Native table definitions and storage facts are verified separately from that
+classification. No name-suffix guess establishes module ownership.
+
+Original-session native ALTER TABLE
+----------------------------------
+
+The original-session design controls generate desired DDN for ordinary native
+table/column renames, column removal, named constraint removal, SET/DROP NOT
+NULL and named/unnamed CHECK additions. Native constraint conflict policies are
+preserved. The selected table and its namespace come from the captured original
+catalog; same-named main, TEMP and attached relations remain distinct. Ordered
+backend batches bind later operations to the table's current native name.
+The native empty prototype uses the original foreign-key, legacy-alter and
+recursive-trigger modes. Generation and review do not mutate caller data.
+
+Application uses the original authorized handle and the retained DDL receipt
+workflow. Native column-removal effects and existing-row checks occur within
+the owned savepoint. Successful DDL stays pending the caller's commit/rollback;
+a later refused constraint restores earlier stages and caller work. Native
+authorizer column arguments for DROP COLUMN and SET/DROP NOT NULL are preserved
+exactly. Normal native dependency rewriting includes views, triggers, indexes
+and foreign keys. Identity/projection changes affecting external-content FTS
+require their explicit preservation adapter; unrelated namespaces remain usable.
+
+The pinned SQLite3.53.0 runtime refuses quoted DROP CONSTRAINT lookup and can
+refuse table rename with a dependent trigger when TEMP shadows the table name.
+Direct native reproductions establish these limitations. Constraint removal
+requires one identifier token whose raw spelling equals the actual name,
+including literal quote characters where present. Names requiring additional
+quoting need a preservation rebuild; they are refused before native dispatch.
+Other native refusals leave original state untouched during generation. These limitations,
+broader module transformations and original-session rebuild work remain visible
+in the product backlog. This workflow does not establish full SQLite acceptance.
+
+The native declaration qualification command additionally exercises all seven
+ALTER families through authenticated generation/preview/review/apply in main,
+TEMP and an attached namespace, original pending data/savepoint preservation,
+native data-dependent refusal and durable duplicate dispatch refusal. The
+source packet remains structurally complete rather than release proven;
+recorded runtime evidence qualifies only its stated installation and scope.

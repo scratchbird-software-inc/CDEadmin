@@ -82,6 +82,7 @@ else:
 
 
 MENU_GROUPS = {
+    'connection': 'Connection',
     'database': 'Database workspace',
     'database-lifecycle': 'Definition and lifecycle',
     'endpoint': 'Endpoint registration',

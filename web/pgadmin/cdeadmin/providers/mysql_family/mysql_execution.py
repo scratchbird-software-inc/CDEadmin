@@ -8,7 +8,8 @@ import uuid
 from dataclasses import dataclass, field
 
 from pgadmin.cdeadmin.sdk import RelationalClientError
-from .mysql_values import Cursor, columns, parameters
+from .session_state import SessionIdentities
+from .mysql_values import Cursor, columns, parameters, MySQLParameterAdmissionError
 
 
 @dataclass(eq=False)
@@ -37,6 +38,7 @@ class Executions:
         self.tokens = []
         self.lock = threading.RLock()
         self.closing = False
+        self.sessions = SessionIdentities('MySQL')
 
     def active(self, handle):
         return next((t for t in self.tokens if t.connection is handle
@@ -51,14 +53,27 @@ class Executions:
         if not isinstance(source, str) or not source.strip():
             raise RelationalClientError('MySQL query source is required')
         bound = parameters(request.get('parameters', ()))
+        from .mysql_query_attributes import decoded
+        attributes=decoded((request.get('output_policy') or {}).get('mysql_query_attributes',{}))
         with self.lock:
             if self.closing:
                 raise RelationalClientError('MySQL execution owner is closing')
             self.require_idle(handle)
             self.client._require_usable_session(handle)
-            token = Execution(handle, copy.deepcopy(session_request))
+            try:
+                identity = self.sessions.get(handle)
+            except RelationalClientError:
+                self.client._uncertain_sessions.add(id(handle))
+                raise
+            from .mysql_session_variables import prepare, SourceIdentityUnavailable
+            try:
+                prepare(handle)
+            except SourceIdentityUnavailable:
+                self.client._uncertain_sessions.add(id(handle))
+                raise
+            token = Execution(handle, copy.deepcopy(session_request), identity=identity)
             token.worker = threading.Thread(
-                target=self._run, args=(token, source, bound), daemon=True,
+                target=self._run, args=(token, source, bound, attributes), daemon=True,
                 name='cdeadmin-mysql-' + token.reference[:8])
             self.tokens.append(token)
             token.worker.start()
@@ -79,26 +94,46 @@ class Executions:
             'sqlstate': getattr(exc, 'sqlstate', None),
         }.items() if isinstance(item, (str, int))}
         errno, sqlstate = result.get('errno'), result.get('sqlstate')
+        if isinstance(exc, MySQLParameterAdmissionError):
+            commands = exc.commands_dispatched
+            result['query_dispatch'] = 'partially_started' if commands else 'not_started'
+            result['commands_dispatched'] = commands
+            if getattr(exc,'query_attributes_admission',False):
+                result['query_attributes_admission_failed']=True
+                result['message_primary']=str(exc)
+            if getattr(exc, 'original_diagnostics_preserved', False):
+                result['original_diagnostics_preserved'] = True
+                result['native_observer_error_type'] = exc.native_observer_error_type
+                result['message_primary'] = ('Independent MySQL session-variable observation is unavailable. '
+                    'This command was not sent; the original session diagnostics are preserved.')
+                guidance = getattr(exc, 'observation_guidance', None)
+                if isinstance(guidance, str):
+                    result['message_primary'] = guidance
+                if type(getattr(exc, 'native_observer_errno', None)) is int:
+                    result['native_observer_errno'] = exc.native_observer_errno
+            if getattr(exc, 'original_session_identity_unconfirmed', False):
+                result['original_session_identity_unconfirmed'] = True
+                result['message_primary'] = ('The original MySQL session identity could not be confirmed. '
+                    'This command was not sent; close this session.')
+            if commands:
+                result['message_primary'] = ('Earlier commands ran. This command was not sent because its '
+                    'parameters or script framing could not be admitted. Review completed results before running the script again.')
         if (isinstance(errno, int) and errno >= 1000 and
                 not 2000 <= errno < 3000 and isinstance(sqlstate, str) and
                 len(sqlstate) == 5 and isinstance(getattr(exc, 'msg', None), str)):
             result['message_primary'] = exc.msg[:16384]
         return result
 
-    def _run(self, token, source, bound):
-        cursor = None
+    def _run(self, token, source, bound, attributes=None):
+        cursor = scope = None
         try:
-            identity_cursor = token.connection.cursor()
-            try:
-                identity_cursor.execute(
-                    'SELECT @@server_uuid, CONNECTION_ID()')
-                server, connection_id = identity_cursor.fetchone()
-                token.identity = (str(server), int(connection_id))
-            finally:
-                identity_cursor.close()
             if token.cancelled:
                 return  # Shutdown before dispatch is not a native SQL outcome.
-            cursor = Cursor(token.connection)
+            from .mysql_query_attributes import Scope
+            scope=Scope(token.connection,attributes or {});scope.install()
+            options={'cancel_requested':lambda: token.cancelled}
+            if attributes:options['before_command']=scope.bind
+            cursor = Cursor(token.connection, **options)
             started = time.perf_counter()
             try:
                 if bound:
@@ -142,6 +177,7 @@ class Executions:
                 if not cursor.nextset():
                     break
                 index += 1
+            self.sessions.status_unknown.discard(id(token.connection))
         except Exception as exc:
             token.error = self._error(exc)
             # Only a decoded server error establishes a command boundary.
@@ -152,19 +188,30 @@ class Executions:
             server_error = (isinstance(errno, int) and errno >= 1000 and
                             not 2000 <= errno < 3000 and
                             isinstance(sqlstate, str) and len(sqlstate) == 5)
-            if not server_error:
+            if isinstance(exc, MySQLParameterAdmissionError):
+                # A private observer failure leaves the source protocol alone.
+                # Missing exact source identity still forbids reusing it.
+                token.cleanup_failed = bool(getattr(exc, 'original_session_identity_unconfirmed', False))
+            elif not server_error:
                 token.cleanup_failed = True
             else:
-                try:
-                    token.connection.ping(reconnect=False)
-                except Exception:
-                    token.cleanup_failed = True
+                # A decoded ERR already establishes the command boundary.
+                # PING would replace the user's diagnostic state. ERR carries
+                # no current status flags, so policy remains unknown until a
+                # later acknowledged command supplies fresh native status.
+                self.sessions.status_unknown.add(id(token.connection))
         finally:
             if cursor is not None and not token.cleanup_failed:
                 try:
                     cursor.close()
                 except Exception:
                     token.cleanup_failed = True
+            if scope is not None:
+                try:scope.restore()
+                except Exception:
+                    token.cleanup_failed=True
+                    token.error=token.error or {'message_primary':'Native MySQL query returned, but query-attribute cleanup is unconfirmed; close this session. No command was replayed.'}
+                    token.error['query_attribute_state_restore_unconfirmed']=True
             with self.lock:
                 if token.cleanup_failed:
                     self.client._uncertain_sessions.add(id(token.connection))

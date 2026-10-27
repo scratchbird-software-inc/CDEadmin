@@ -347,6 +347,52 @@ SQLITE_PATH = env('SQLITE_PATH') or \
 CDEADMIN_OPERATION_STORE_PATH = env('CDEADMIN_OPERATION_STORE_PATH') or \
     os.path.join(DATA_DIR, 'cdeadmin-operations.json')
 
+# Qualified SQLite recovery library on the application host. Jobs cannot supply
+# executable/library paths; recovered output stays in the registered file root.
+CDEADMIN_SQLITE_RECOVERY_LIBRARY = env('CDEADMIN_SQLITE_RECOVERY_LIBRARY') or ''
+CDEADMIN_SQLITE_BINARY = env('CDEADMIN_SQLITE_BINARY') or ''
+CDEADMIN_SQLITE_RECOVERY_ROOT = env('CDEADMIN_SQLITE_RECOVERY_ROOT') or ''
+CDEADMIN_SQLITE_RECOVERY_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_SQLITE_RECOVERY_MAX_RUNTIME_SECONDS') or 86400)
+
+# Public native SQLite session API bridge and private capture artifacts.
+CDEADMIN_SQLITE_SESSION_LIBRARY = env('CDEADMIN_SQLITE_SESSION_LIBRARY') or ''
+CDEADMIN_SQLITE_ARRAY_LIBRARY = env('CDEADMIN_SQLITE_ARRAY_LIBRARY') or ''
+CDEADMIN_SQLITE_PREUPDATE_LIBRARY = env('CDEADMIN_SQLITE_PREUPDATE_LIBRARY') or ''
+CDEADMIN_SQLITE_ARRAY_MAX_BYTES = int(env('CDEADMIN_SQLITE_ARRAY_MAX_BYTES') or 0) or None
+CDEADMIN_SQLITE_CAPTURE_ROOT = env('CDEADMIN_SQLITE_CAPTURE_ROOT') or ''
+CDEADMIN_SQLITE_CAPTURE_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_SQLITE_CAPTURE_MAX_RUNTIME_SECONDS') or 0) or None
+CDEADMIN_SQLITE_CAPTURE_MAX_UPLOAD_BYTES = int(env('CDEADMIN_SQLITE_CAPTURE_MAX_UPLOAD_BYTES') or 0) or None
+
+# Application-host PostgreSQL physical backup artifacts and trusted native tools.
+# These paths are configured by the application operator, never by a job request.
+CDEADMIN_POSTGRESQL_CONTINUITY_ROOT = env('CDEADMIN_POSTGRESQL_CONTINUITY_ROOT') or ''
+CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH = env('CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH') or ''
+CDEADMIN_POSTGRESQL_CONTINUITY_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_POSTGRESQL_CONTINUITY_MAX_RUNTIME_SECONDS') or 0) or None
+CDEADMIN_POSTGRESQL_WAL_ARCHIVE_ROOT = env('CDEADMIN_POSTGRESQL_WAL_ARCHIVE_ROOT') or ''
+
+# Native MySQL9.7 Shell archives on the application host. The operator chooses
+# storage and any mandatory deadline; browser requests cannot supply paths.
+CDEADMIN_MYSQL_BINLOG_ROOT = env('CDEADMIN_MYSQL_BINLOG_ROOT') or ''
+# Native testing sandboxes run under the application's OS account. Server-mode
+# deployment requires this explicit opt-in AND an Administrator application role.
+CDEADMIN_MYSQL_SANDBOX_ENABLED = False
+CDEADMIN_MYSQL_SANDBOX_ROOT = ''
+CDEADMIN_MYSQL_SANDBOX_JOB_ROOT = ''
+CDEADMIN_MYSQL_SANDBOX_DIRECTORIES = []
+CDEADMIN_MYSQL_BINLOG_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_MYSQL_BINLOG_MAX_RUNTIME_SECONDS') or 0) or None
+CDEADMIN_MYSQL_BINLOG_REPLAY_ROOT = env('CDEADMIN_MYSQL_BINLOG_REPLAY_ROOT') or ''
+CDEADMIN_MYSQL_BINLOG_REPLAY_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_MYSQL_BINLOG_REPLAY_MAX_RUNTIME_SECONDS') or 0) or None
+CDEADMIN_MYSQL_RAW_BINLOG_ROOT = env('CDEADMIN_MYSQL_RAW_BINLOG_ROOT') or ''
+CDEADMIN_MYSQL_RAW_BINLOG_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_MYSQL_RAW_BINLOG_MAX_RUNTIME_SECONDS') or 0) or None
+CDEADMIN_MARIADB_BINLOG_ROOT = env('CDEADMIN_MARIADB_BINLOG_ROOT') or ''
+CDEADMIN_MARIADB_BINLOG_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_MARIADB_BINLOG_MAX_RUNTIME_SECONDS') or 0) or None
+CDEADMIN_MARIADB_BINLOG_REPLAY_ROOT = env('CDEADMIN_MARIADB_BINLOG_REPLAY_ROOT') or ''
+CDEADMIN_MARIADB_BINLOG_REPLAY_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_MARIADB_BINLOG_REPLAY_MAX_RUNTIME_SECONDS') or 0) or None
+
+# Operator-approved native SQLite libraries on this application host. Browser
+# requests select an entry; they cannot supply a library path or checksum.
+CDEADMIN_SQLITE_EXTENSION_MANIFEST = env('CDEADMIN_SQLITE_EXTENSION_MANIFEST') or ''
+
 # SQLITE_TIMEOUT will define how long to wait before throwing the error -
 # OperationError due to database lock. On slower system, you may need to change
 # this to some higher value.
@@ -418,12 +464,18 @@ MAIL_DEBUG = False
 CDEADMIN_REPORT_DELIVERY_PROFILES = {}
 CDEADMIN_REPORT_DELIVERY_RETENTION_DAYS = 90
 CDEADMIN_REPORT_DELIVERY_STALE_SECONDS = 600
+# MySQL collector notifications select fixed, owner-authorized JSON SMTP routes.
+# {'ops': {'label': 'Operations', 'owner_ids': [1], 'profile_id': 'smtp-ops',
+#          'target': {'recipients': ['ops@example.com']}}}
+CDEADMIN_MYSQL_ALERT_ROUTES = {}
 
 # Unattended report execution is fail-closed until an operator supplies an
 # AES-256-GCM key ring and active key ID. Values are base64-encoded 32-byte
 # keys supplied through config_local.py or its secret-injection mechanism.
 CDEADMIN_REPORT_WORKER_KEYS = {}
 CDEADMIN_REPORT_WORKER_ACTIVE_KEY_ID = None
+CDEADMIN_MYSQL_PHYSICAL_WORKER_KEYS = {}
+CDEADMIN_MYSQL_PHYSICAL_WORKER_ACTIVE_KEY_ID = None
 CDEADMIN_REPORT_WORKER_LEASE_SECONDS = 300
 CDEADMIN_REPORT_MAX_LATENESS_SECONDS = 3600
 CDEADMIN_REPORT_WORKER_POLL_INTERVAL = 0.1

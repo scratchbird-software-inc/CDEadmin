@@ -1,0 +1,52 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "view",
+  "resource_kinds": [
+    "view"
+  ],
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "ALGORITHM, SQL SECURITY, DEFINER, WITH CHECK OPTION, column alias list",
+      "reason": "view.create is name/parent/query only; MySQL exposes these (mysql_views) and MariaDB supports the same syntax",
+      "tracking": "MA-VIEW-OPTIONS"
+    },
+    {
+      "concept": "view.alter",
+      "reason": "only create/drop are supported; ALTER VIEW is needed for edit mode"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Database",
+      "tab": "General",
+      "control": "reference",
+      "required": false,
+      "help": "Use a qualified database or schema name where needed.",
+      "reference_kind": "database"
+    },
+    {
+      "field_id": "query",
+      "label": "View query",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "required": true,
+      "help": "One SELECT or WITH query; do not include the CREATE command.",
+      "record_key": "ddl",
+      "record_pattern": "\\bVIEW\\s+`[^`]+`\\s+AS\\s+(.*)$"
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database). Round-tripped against MariaDB 10.11 by tools/tests/test_ui_descriptor_roundtrip_mariadb.py (create, re-inspect pre-fill, alter where the engine supports it)."
+}

@@ -1,0 +1,209 @@
+"""Native external-content FTS reconstruction, settings, review and failure effects."""
+from contextlib import closing
+import json
+import sqlite3
+from unittest.mock import Mock
+
+import pytest
+
+from pgadmin.cdeadmin.providers.sqlite.provider import SQLiteProvider,_create_client,_resource_id
+from pgadmin.cdeadmin.providers.sqlite.fts_configuration import capture as configuration
+from pgadmin.cdeadmin.workspace.firebird_catalog_export import build_export
+from test_sqlite_schema_virtual_creation import Context,workspace
+from types import SimpleNamespace
+from copy import deepcopy
+
+CASES=[(module,'owner',failure) for module in ('fts4','fts5') for failure in (None,'stale','rollback','denied','lost_commit')]
+CASES += [(module,mode,None) for module in ('fts4','fts5') for mode in ('chain','rowid','unrelated')]
+CASES += [(module,mode,failure) for module in ('fts4','fts5') for mode in ('public','public-chain')
+          for failure in (None,'stale','rollback','denied','lost_commit')]
+CASES += [('fts4',mode,failure) for mode in ('language','language-chain')
+          for failure in (None,'stale','rollback','denied','lost_commit')]
+CASES += [(module,'control',failure) for module in ('fts4','fts5')
+          for failure in (None,'stale','rollback','denied','lost_commit')]
+CASES += [('fts5',mode,failure) for mode in ('public-function','public-function-chain')
+          for failure in (None,'stale','rollback','denied','lost_commit','runtime_unavailable')]
+CASES += [('fts5',mode,failure) for mode in ('public-function-derived','public-function-derived-chain')
+          for failure in (None,'stale','rollback','denied','lost_commit','runtime_unavailable')]
+
+
+@pytest.mark.parametrize('module,mode,failure',CASES)
+def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(tmp_path,monkeypatch,module,mode,failure):
+    path=tmp_path/'external.sqlite';owner="Owner'雪";search="search'雪";new_owner='renamed:雪';new_search='rebuilt:雪';wide=9007199254740993
+    language=mode.startswith('language')
+    quote=lambda value:'"'+value.replace('"','""')+'"'
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute('CREATE TABLE '+quote(owner)+'(id INTEGER PRIMARY KEY AUTOINCREMENT,body TEXT,extra TEXT'+(',lang INTEGER DEFAULT 3' if language else '')+')')
+        connection.executemany('INSERT INTO '+quote(owner)+'(id,body,extra) VALUES(?,?,?)',[(1,'native token','one'),(wide,'native 雪 token','two')])
+        connection.execute('CREATE VIRTUAL TABLE '+quote(search)+' USING "'+module+'"(body,content=\'owner\'\'雪\''+(",content_rowid='id'" if module=='fts5' else ",languageid='lang'" if language else '')+')')
+        connection.execute('INSERT INTO '+quote(search)+'('+quote(search)+") VALUES('rebuild')")
+        if module=='fts5':
+            for key,value in [('automerge',8),('usermerge',4),('crisismerge',10),('deletemerge',11),('pgsz',1024),('hashsize',16384),('rank','bm25(2.0)'),('secure-delete',1),('insttoken',1)]:
+                connection.execute('INSERT INTO '+quote(search)+'('+quote(search)+',rank) VALUES(?,?)',(key,value))
+        else:connection.execute('INSERT INTO '+quote(search)+'('+quote(search)+") VALUES('automerge=4')")
+        function='function' in mode;derived='derived' in mode
+        connection.execute('CREATE VIEW projection'+('(rowid,body)' if function and not derived else '')+' AS SELECT '+('s.rowid,s.body FROM '+quote(search)+"('native') AS s" if function else
+            'rowid,body FROM '+quote(search)+(' WHERE '+('lang=3 AND ' if language else '')+quote(search)+" MATCH 'native'" if language or mode=='control' else '')))
+        if function:
+            connection.execute('CREATE VIEW shadowed AS WITH '+quote(search)+"(body) AS (VALUES('body literal search')) SELECT body FROM "+quote(search))
+            connection.execute('CREATE VIEW dependent'+('' if derived else '(out_id,out_body)')+' AS SELECT rowid,body FROM projection')
+            if derived:
+                connection.execute('CREATE VIEW terminal(out_id,out_body) AS SELECT rowid,body FROM dependent')
+                connection.execute('CREATE VIEW writable AS SELECT rowid,body FROM dependent')
+                connection.execute('CREATE TRIGGER writable_insert INSTEAD OF INSERT ON writable BEGIN INSERT INTO '+quote(owner)+'(id,body) VALUES(new.rowid,new.body);END')
+        connection.commit()
+        if mode.startswith('public') or language or mode=='control':
+            connection.execute('CREATE TRIGGER maintain_search AFTER INSERT ON '+quote(owner)+' BEGIN INSERT INTO '+quote(search)+'(rowid,body'+(',lang' if language else '')+') VALUES(new.id,new.body'+(',new.lang' if language else '')+');END')
+            connection.commit()
+        original=connection.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()
+        saved=configuration(connection,'main',search,module)
+    provider=SQLiteProvider(Context(),SimpleNamespace(require=Mock()),_create_client());route={'database':str(path),'filesystem_root':str(tmp_path)}
+    try:
+        service=workspace(tmp_path,provider,route)
+        baseline=json.dumps(build_export(provider.capture_catalog(route,include_system=False)['resources'],endpoint_id='endpoint',target_id='file',generation='g',engine='sqlite')['snapshot'])
+        renames=([{'kind':'table','table':search,'to':new_search}] if mode=='control' else
+            [{'kind':'column','table':owner,'from':'lang','to':'intermediate:雪' if mode=='language-chain' else 'locale:雪'}] if language else
+            [{'kind':'column','table':owner,'from':'body','to':'text:雪'}] if mode.startswith('public') else
+            [{'kind':'table','table':owner,'to':new_owner}] if mode in {'owner','chain'} else
+            [{'kind':'column','table':owner,'from':'id' if mode=='rowid' else 'extra','to':'new_id' if mode=='rowid' else 'new_extra'}])
+        if mode=='chain':renames.append({'kind':'table','table':search,'to':new_search})
+        if mode in {'public-chain','public-function-chain','public-function-derived-chain'}:renames.extend([{'kind':'table','table':owner,'to':new_owner},{'kind':'table','table':search,'to':new_search}])
+        if mode=='language-chain':renames.extend([{'kind':'column','table':owner,'from':'intermediate:雪','to':'locale:雪'},{'kind':'table','table':owner,'to':new_owner},{'kind':'table','table':search,'to':new_search}])
+        required=mode in {'owner','chain','control'} or mode.startswith('public') or language or module=='fts5' and mode=='rowid'
+        selected=[_resource_id('fts-table',['main'],search)] if required else []
+        request={'database_target_id':'file','baseline':baseline,'renames':renames,'fts_rebindings':selected}
+        generated=service.sqlite_schema_rename_design('owned',request)
+        documents={**request,'desired':json.dumps(generated['snapshot'])}
+        displayed=service.sqlite_schema_plan('owned',documents);assert displayed['ready_for_review'],displayed
+        assert len(displayed['operations'][0]['fts_rebuilds'])==int(required)
+        with closing(sqlite3.connect(path)) as observer:
+            assert observer.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()==original
+            assert configuration(observer,'main',search,module)['commands']==saved['commands']
+        reviewed=service.sqlite_schema_application('owned','sqlite_schema_review',{**documents,'execution_sha256':displayed['execution_sha256']})
+        apply_request={'database_target_id':'file',**{key:reviewed[key] for key in ('review_id','review_digest')},'confirmed':True}
+        if failure=='runtime_unavailable':monkeypatch.setenv('CDEADMIN_SQLITE_BINARY',str(tmp_path/'missing-native-sqlite'))
+        if failure=='stale':
+            with closing(sqlite3.connect(path)) as observer:
+                observer.execute('INSERT INTO '+quote(search)+'('+quote(search)+(',rank) VALUES(\'automerge\',6)' if module=='fts5' else ") VALUES('automerge=6')"));observer.commit()
+                saved=configuration(observer,'main',search,module)
+        if failure in {'rollback','denied','lost_commit'}:
+            connect=provider.client._connect
+            class Injected:
+                def __init__(self,connection):
+                    self.connection=connection
+                    if failure=='denied':connection.set_authorizer(lambda action,*_args:sqlite3.SQLITE_DENY if action==sqlite3.SQLITE_DROP_VTABLE else sqlite3.SQLITE_OK)
+                def __getattr__(self,name):return getattr(self.connection,name)
+                def execute(self,source,*args):
+                    result=self.connection.execute(source,*args)
+                    if failure=='rollback' and source.startswith('CREATE VIRTUAL TABLE "main".'):
+                        self.connection.execute('SELECT * FROM owned_injected_missing_relation')
+                    return result
+                def commit(self):
+                    self.connection.commit()
+                    if failure=='lost_commit':raise ConnectionError('Owned loss after actual external-content reconstruction commit')
+            provider.client._connect=Mock(side_effect=lambda payload:Injected(connect(payload)))
+        result=service.sqlite_schema_application('owned','sqlite_schema_apply',apply_request)
+        expected='not_dispatched' if failure in {'stale','runtime_unavailable'} else 'rolled_back' if failure in {'rollback','denied'} else 'unknown_outcome' if failure=='lost_commit' else 'committed'
+        assert result['state']==expected,result
+        provider.client._connect=Mock(side_effect=AssertionError('external-content review was replayed'))
+        assert service.sqlite_schema_application('owned','sqlite_schema_apply',apply_request)['state']==expected
+        provider.client._connect.assert_not_called()
+        applied=failure in {None,'lost_commit'}
+        actual_owner=new_owner if applied and mode in {'owner','chain','public-chain','public-function-chain','public-function-derived-chain','language-chain'} else owner
+        actual_search=new_search if applied and mode in {'chain','public-chain','public-function-chain','public-function-derived-chain','language-chain','control'} else search
+        actual_field='text:雪' if applied and mode.startswith('public') else 'body'
+        actual_language='locale:雪' if applied and language else 'lang'
+        language_filter=' AND '+quote(actual_language)+'=3' if language else ''
+        with closing(sqlite3.connect(path)) as observer:
+            assert observer.execute('SELECT rowid,* FROM '+quote(actual_owner)+' ORDER BY rowid').fetchall()==[row+((3,) if language else ()) for row in [(1,1,'native token','one'),(wide,wide,'native 雪 token','two')]]
+            assert observer.execute('SELECT rowid,'+quote(actual_field)+' FROM '+quote(actual_search)+' WHERE '+quote(actual_search)+" MATCH 'native'"+language_filter+' ORDER BY rowid').fetchall()==[(1,'native token'),(wide,'native 雪 token')]
+            assert observer.execute('SELECT * FROM projection ORDER BY rowid').fetchall()==[(1,'native token'),(wide,'native 雪 token')]
+            if function:
+                assert observer.execute('SELECT * FROM dependent ORDER BY 1').fetchall()==[(1,'native token'),(wide,'native 雪 token')]
+                assert observer.execute('SELECT * FROM shadowed').fetchall()==[('body literal search',)]
+                if derived:
+                    assert observer.execute('SELECT * FROM terminal ORDER BY 1').fetchall()==[(1,'native token'),(wide,'native 雪 token')]
+            assert configuration(observer,'main',actual_search,module)['commands']==saved['commands']
+            if not applied:assert observer.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()==original
+            else:
+                observer.execute('INSERT INTO '+quote(actual_search)+'('+quote(actual_search)+(',rank) VALUES(\'integrity-check\',1)' if module=='fts5' else ") VALUES('integrity-check')"))
+                assert observer.execute('SELECT seq FROM sqlite_sequence WHERE name=?',(actual_owner,)).fetchone()==(wide,)
+                if mode.startswith('public') or language or mode=='control':
+                    observer.execute('INSERT INTO '+quote(actual_owner)+'('+quote(actual_field)+") VALUES('fresh native term')")
+                    assert observer.execute('SELECT '+quote(actual_field)+' FROM '+quote(actual_search)+' WHERE '+quote(actual_search)+" MATCH 'fresh'"+language_filter).fetchall()==[('fresh native term',)]
+                if derived:
+                    observer.execute('INSERT INTO writable VALUES(?,?)',(wide+2,'via native view'))
+                    assert observer.execute('SELECT '+quote(actual_field)+' FROM '+quote(actual_search)+' WHERE '+quote(actual_search)+" MATCH 'via'").fetchall()==[('via native view',)]
+    finally:provider.close()
+
+
+@pytest.mark.parametrize('module',['fts4','fts5'])
+def test_public_fts_rename_preserves_quoted_columns_and_unindexed_options(tmp_path,module):
+    path=tmp_path/'options.sqlite';former="Body '雪";renamed='renamed:雪'
+    quote=lambda value:'"'+value.replace('"','""')+'"'
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute('CREATE TABLE docs(id INTEGER PRIMARY KEY,'+quote(former)+',tag)')
+        constructor=(quote(former)+' TEXT,tag,notindexed='+quote(former) if module=='fts4'
+                     else quote(former)+' UNINDEXED,tag')
+        connection.execute('CREATE VIRTUAL TABLE search USING '+module+'('+constructor+",content='docs')")
+        connection.execute('CREATE VIEW projected AS SELECT '+quote(former)+' FROM search')
+        connection.execute('CREATE TRIGGER maintain_search AFTER INSERT ON docs BEGIN INSERT INTO search(rowid,'+quote(former)+',tag) VALUES(new.id,new.'+quote(former)+',new.tag);END')
+        connection.execute('INSERT INTO docs VALUES(1,?,?)',('unindexedvalue','indexedvalue'));connection.commit()
+    provider=SQLiteProvider(Context(),SimpleNamespace(require=Mock()),_create_client());route={'database':str(path),'filesystem_root':str(tmp_path)}
+    try:
+        service=workspace(tmp_path,provider,route)
+        baseline=json.dumps(build_export(provider.capture_catalog(route,include_system=False)['resources'],endpoint_id='endpoint',target_id='file',generation='g',engine='sqlite')['snapshot'])
+        request={'database_target_id':'file','baseline':baseline,
+                 'renames':[{'kind':'column','table':'docs','from':former,'to':renamed}],
+                 'fts_rebindings':[_resource_id('fts-table',['main'],'search')]}
+        generated=service.sqlite_schema_rename_design('owned',request)
+        documents={**request,'desired':json.dumps(generated['snapshot'])}
+        displayed=service.sqlite_schema_plan('owned',documents);assert displayed['ready_for_review'],displayed
+        reviewed=service.sqlite_schema_application('owned','sqlite_schema_review',{**documents,'execution_sha256':displayed['execution_sha256']})
+        result=service.sqlite_schema_application('owned','sqlite_schema_apply',{'database_target_id':'file',**{key:reviewed[key] for key in ('review_id','review_digest')},'confirmed':True})
+        assert result['state']=='committed',result
+        with closing(sqlite3.connect(path)) as observer:
+            assert observer.execute("SELECT rowid FROM search WHERE search MATCH 'indexedvalue'").fetchall()==[(1,)]
+            assert observer.execute("SELECT rowid FROM search WHERE search MATCH 'unindexedvalue'").fetchall()==[]
+            assert observer.execute('SELECT * FROM projected').fetchall()==[('unindexedvalue',)]
+            observer.execute('INSERT INTO docs VALUES(2,?,?)',('secondbody','secondtag'))
+            assert observer.execute("SELECT "+quote(renamed)+" FROM search WHERE search MATCH 'secondtag'").fetchall()==[('secondbody',)]
+    finally:provider.close()
+
+
+@pytest.mark.parametrize('unnormalized',[False,True])
+def test_native_fts_creation_preserves_settings_and_refuses_unreachable_catalog_values(tmp_path,unnormalized):
+    path,target=tmp_path/'live.sqlite',tmp_path/'desired.sqlite'
+    source='CREATE VIRTUAL TABLE "main"."added" USING "fts5"(body)'
+    for file in (path,target):
+        with closing(sqlite3.connect(file)) as connection:
+            connection.execute('CREATE TABLE owner(id INTEGER PRIMARY KEY)')
+            if file==target:
+                connection.execute(source)
+                for key,value in [('automerge',8),('pgsz',1024),('rank','bm25(2.0)'),('secure-delete',1)]:connection.execute('INSERT INTO added(added,rank) VALUES(?,?)',(key,value))
+            connection.commit()
+    provider=SQLiteProvider(Context(),SimpleNamespace(require=Mock()),_create_client());route={'database':str(path),'filesystem_root':str(tmp_path)}
+    try:
+        def capture(file):return build_export(provider.capture_catalog({**route,'database':str(file)},include_system=False)['resources'],endpoint_id='endpoint',target_id='file',generation='g',engine='sqlite',native_model=True)
+        baseline,template=capture(path),capture(target);desired=deepcopy(baseline)
+        for identity,row in template['rows'].items():
+            if row['path'][:2]==['main','added']:
+                desired['rows'][identity]=deepcopy(row)
+                if row['kind']=='fts-table':
+                    desired['rows'][identity]['native']['ddl']=source
+                    if unnormalized:desired['rows'][identity]['native']['fts_configuration']['commands'][0][1]='8'
+        def document(model):return json.dumps(build_export([{'resource_id':row['resource_id'],'resource_kind':row['kind'],'display_name':row['name'],'display_path':row['path'],'native':row['native']} for row in model['rows'].values()],endpoint_id='endpoint',target_id='file',generation='g',engine='sqlite')['snapshot'])
+        service=workspace(tmp_path,provider,route);documents={'database_target_id':'file','baseline':document(baseline),'desired':document(desired)}
+        displayed=service.sqlite_schema_plan('owned',documents)
+        if unnormalized:
+            assert not displayed['ready_for_review']
+            assert any('normalized' in item['reason'] for item in displayed['blockers'])
+            with closing(sqlite3.connect(path)) as observer:assert not observer.execute("SELECT name FROM sqlite_schema WHERE name='added'").fetchall()
+            return
+        assert displayed['ready_for_review'],displayed
+        reviewed=service.sqlite_schema_application('owned','sqlite_schema_review',{**documents,'execution_sha256':displayed['execution_sha256']})
+        result=service.sqlite_schema_application('owned','sqlite_schema_apply',{'database_target_id':'file',**{key:reviewed[key] for key in ('review_id','review_digest')},'confirmed':True})
+        assert result['state']=='committed' and result['outcome']['rediscovery_verified'],result
+        with closing(sqlite3.connect(path)) as observer:
+            assert configuration(observer,'main','added','fts5')['commands']==[['automerge',8],['pgsz',1024],['rank','bm25(2.0)'],['secure-delete',1]]
+    finally:provider.close()

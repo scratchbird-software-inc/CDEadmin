@@ -14,8 +14,25 @@ from pgadmin.cdeadmin.providers.mysql_family.provider import (
 from pgadmin.cdeadmin.sdk import RelationalClientConfig, RelationalClientError
 
 
+class Native(Mock):
+    def __setattr__(self, name, value):
+        super().__setattr__(name, value)
+        if name in {'autocommit', 'in_transaction'} and type(value) is bool:
+            status = self.__dict__.get('server_status', 0)
+            if type(status) is int:
+                bit = 2 if name == 'autocommit' else 1
+                status = (status | bit) if value else (status & ~bit)
+                super().__setattr__('server_status', status)
+                super().__setattr__('_cdeadmin_server_status',
+                    None if self.__dict__.get('lose_status_on_policy') else status)
+
+
 def factory():
-    return SimpleNamespace(connect=Mock(side_effect=lambda **kw: Mock()))
+    def connection(**options):
+        native = Native(connection_id=7, server_status=0, _cmysql=None)
+        native.cursor.return_value.fetchone.return_value = ('server-one', 7)
+        return native
+    return SimpleNamespace(connect=Mock(side_effect=connection))
 
 
 def test_reset_preference_does_not_enable_global_pool():
@@ -26,6 +43,27 @@ def test_reset_preference_does_not_enable_global_pool():
     assert a is not b
     assert module.connect.call_args_list[0].kwargs == {'host': 'one'}
     assert module.connect.call_args_list[1].kwargs == {'host': 'two'}
+
+
+def test_real_driver_identity_attribute_fits_native_limits_and_preserves_operator_attributes():
+    module = SimpleNamespace(__name__='mysql.connector', connect=Mock(side_effect=lambda **_options: Mock(_cmysql=None)))
+    owner = Connector(module)
+    attributes = {'application': 'operator supplied'}
+    first = owner(use_pure=True, conn_attrs=attributes)
+    second = owner(use_pure=True, conn_attrs=attributes)
+    assert attributes == {'application': 'operator supplied'}
+    values = []
+    for native, call in zip((first, second), module.connect.call_args_list):
+        supplied = call.kwargs['conn_attrs']
+        assert supplied['application'] == 'operator supplied'
+        added = set(supplied) - set(attributes)
+        assert len(added) == 1
+        key = added.pop(); value = supplied[key]
+        assert len(key) <= 32 and not key.startswith('_')
+        assert len(value) == 48 and bytes.fromhex(value).hex() == value
+        assert native._cdeadmin_observer_attribute == {'name': key, 'value': value}
+        values.append(value)
+    assert values[0] != values[1]
 
 
 def test_private_generation_rotation_and_outstanding_old_lease():
@@ -176,11 +214,11 @@ def test_failed_finality_is_unknown_even_when_cached_flags_are_idle(action):
     client.close()
 
 
-def test_dead_native_session_does_not_publish_cached_transaction_flags():
+def test_locally_closed_native_session_does_not_publish_cached_transaction_flags():
     client = make_client()
     handle = client.open_session({'route': {'host': 'one'}})
     handle.autocommit, handle.in_transaction = False, False
-    handle.ping.side_effect = RuntimeError('dead')
+    handle.connection_id = None
     result = client.describe_transaction(handle)
     assert result['state'] == 'unknown'
     assert result['connection_usable'] is False
@@ -208,11 +246,11 @@ def test_lost_autocommit_acknowledgement_quarantines_without_reconnect():
     client = make_client()
     handle = client.open_session({'route': {'host': 'one'}})
     handle.autocommit, handle.in_transaction = False, False
-    handle.ping.side_effect = [None, OSError('lost acknowledgement')]
+    handle.lose_status_on_policy = True
     with pytest.raises(RelationalClientError, match='acknowledgement'):
         client.control_transaction(handle, 'autocommit_on')
     assert client.describe_transaction(handle)['state'] == 'unknown'
     with pytest.raises(RelationalClientError, match='unknown'):
         client.control_transaction(handle, 'autocommit_on')
-    assert all(call.kwargs == {'reconnect': False} for call in handle.ping.call_args_list)
+    handle.ping.assert_not_called()
     client.close()

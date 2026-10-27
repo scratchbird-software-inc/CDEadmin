@@ -1,0 +1,409 @@
+{
+  "schema": "cdeadmin.ui-family.v1",
+  "family": "routine",
+  "title": "Routine",
+  "variants": [
+    "function",
+    "procedure",
+    "package",
+    "macro",
+    "scheduled",
+    "aggregate"
+  ],
+  "tabs": [
+    {
+      "tab": "General",
+      "primitive": "group",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "parent",
+          "label": "Schema / database",
+          "control": "reference",
+          "reference_kind": "schema"
+        },
+        {
+          "field_id": "routine_kind",
+          "label": "Kind",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "function",
+              "label": "Function"
+            },
+            {
+              "value": "procedure",
+              "label": "Procedure"
+            },
+            {
+              "value": "package",
+              "label": "Package"
+            },
+            {
+              "value": "macro",
+              "label": "Macro"
+            },
+            {
+              "value": "event",
+              "label": "Scheduled event"
+            }
+          ]
+        },
+        {
+          "field_id": "returns",
+          "label": "Returns",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "column_types"
+          ],
+          "visible_when": {
+            "field": "routine_kind",
+            "in": [
+              "function",
+              "macro"
+            ]
+          }
+        },
+        {
+          "field_id": "language",
+          "label": "Language",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "routine_languages"
+          ]
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "tab": "Parameters",
+      "primitive": "grid",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "mode",
+          "label": "Mode",
+          "control": "select",
+          "options": [
+            {
+              "value": "in",
+              "label": "In"
+            },
+            {
+              "value": "out",
+              "label": "Out"
+            },
+            {
+              "value": "inout",
+              "label": "In/out"
+            },
+            {
+              "value": "variadic",
+              "label": "Variadic"
+            }
+          ],
+          "default": "in"
+        },
+        {
+          "field_id": "type",
+          "label": "Type",
+          "control": "select",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "column_types"
+          ]
+        },
+        {
+          "field_id": "default",
+          "label": "Default",
+          "control": "text"
+        }
+      ],
+      "notes": "Output parameters are rows with mode out; no separate return_parameters field."
+    },
+    {
+      "tab": "Definition",
+      "primitive": "code",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "header",
+          "label": "Header / specification",
+          "control": "code",
+          "language": "sql",
+          "visible_when": {
+            "field": "routine_kind",
+            "equals": "package"
+          }
+        },
+        {
+          "field_id": "body",
+          "label": "Body",
+          "control": "code",
+          "language": "sql",
+          "required": true
+        }
+      ]
+    },
+    {
+      "tab": "Options",
+      "primitive": "group",
+      "required": false,
+      "fields": [
+        {
+          "field_id": "sql_security",
+          "label": "Security",
+          "control": "select",
+          "options": [
+            {
+              "value": "definer",
+              "label": "Definer"
+            },
+            {
+              "value": "invoker",
+              "label": "Invoker"
+            }
+          ]
+        },
+        {
+          "field_id": "deterministic",
+          "label": "Deterministic",
+          "control": "boolean"
+        },
+        {
+          "field_id": "data_access",
+          "label": "Data access",
+          "control": "select",
+          "options": [
+            {
+              "value": "contains_sql",
+              "label": "Contains SQL"
+            },
+            {
+              "value": "no_sql",
+              "label": "No SQL"
+            },
+            {
+              "value": "reads_sql_data",
+              "label": "Reads SQL data"
+            },
+            {
+              "value": "modifies_sql_data",
+              "label": "Modifies SQL data"
+            }
+          ]
+        },
+        {
+          "field_id": "volatility",
+          "label": "Volatility",
+          "control": "select",
+          "options": [
+            {
+              "value": "volatile",
+              "label": "Volatile"
+            },
+            {
+              "value": "stable",
+              "label": "Stable"
+            },
+            {
+              "value": "immutable",
+              "label": "Immutable"
+            }
+          ]
+        },
+        {
+          "field_id": "strict",
+          "label": "Strict (null on null input)",
+          "control": "boolean"
+        },
+        {
+          "field_id": "parallel",
+          "label": "Parallel",
+          "control": "select",
+          "options": [
+            {
+              "value": "unsafe",
+              "label": "Unsafe"
+            },
+            {
+              "value": "restricted",
+              "label": "Restricted"
+            },
+            {
+              "value": "safe",
+              "label": "Safe"
+            }
+          ]
+        },
+        {
+          "field_id": "cost",
+          "label": "Cost",
+          "control": "number"
+        },
+        {
+          "field_id": "rows",
+          "label": "Estimated rows",
+          "control": "number"
+        },
+        {
+          "field_id": "schedule",
+          "label": "Schedule",
+          "control": "text",
+          "visible_when": {
+            "field": "routine_kind",
+            "equals": "event"
+          }
+        },
+        {
+          "field_id": "enabled",
+          "label": "Enabled",
+          "control": "boolean",
+          "visible_when": {
+            "field": "routine_kind",
+            "equals": "event"
+          }
+        },
+        {
+          "field_id": "completion",
+          "label": "On completion",
+          "control": "select",
+          "options": [
+            {
+              "value": "preserve",
+              "label": "Preserve"
+            },
+            {
+              "value": "not_preserve",
+              "label": "Drop"
+            }
+          ],
+          "visible_when": {
+            "field": "routine_kind",
+            "equals": "event"
+          }
+        },
+        {
+          "field_id": "time_zone",
+          "label": "Time zone",
+          "control": "text",
+          "visible_when": {
+            "field": "routine_kind",
+            "equals": "event"
+          }
+        }
+      ]
+    },
+    {
+      "tab": "Engine",
+      "primitive": "group",
+      "required": false
+    },
+    {
+      "tab": "Security",
+      "primitive": "privileges",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "$resource_kind"
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "Dependencies",
+      "primitive": "readonly_grid",
+      "required": false,
+      "nested": [
+        {
+          "name": "Depends on",
+          "grid_columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "text",
+              "readonly": true
+            },
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        },
+        {
+          "name": "Dependents",
+          "grid_columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "text",
+              "readonly": true
+            },
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "SQL",
+      "primitive": "sql_preview",
+      "required": true,
+      "notes": "Read-only. Create mode: full native DDL from the provider plan. Alter mode: the ALTER set. Replaces the confirm-step preview."
+    }
+  ]
+}

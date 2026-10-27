@@ -3730,6 +3730,14 @@ def validate_asset_request(value, project_key, asset_key):
     asset_type = str(value.get('asset_type') or '').strip()
     schema_name = str(value.get('schema_name') or '').strip()
     content = value.get('content')
+    if asset_type == 'cdeadmin.sql-notebook.v1':
+        from .sql_notebooks import ASSET_TYPE, validate
+        if schema_name != ASSET_TYPE or value.get('schema_version', 1) != 1:
+            raise ProjectAssetError('Unsupported SQL notebook schema')
+        try:
+            content = validate(content)
+        except ValueError as exc:
+            raise ProjectAssetError(str(exc)) from None
     if value.get('schema') == 'cdeadmin.ddn-asset.v1':
         reference = value.get('assetRef') or {}
         if reference.get('projectId') != project_key or (

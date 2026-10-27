@@ -93,7 +93,7 @@
       "session_settings": 66,
       "statements": 45
     },
-    "authoritative_task_count": 32,
+    "authoritative_task_count": 38,
     "authoritative_task_ids": [
       "visual_admin.column.create",
       "visual_admin.column.drop",
@@ -110,6 +110,12 @@
       "visual_admin.database.wal_checkpoint",
       "visual_admin.fts-table.create",
       "visual_admin.fts-table.drop",
+      "visual_admin.fts-table.fts_delete_all",
+      "visual_admin.fts-table.fts_flush",
+      "visual_admin.fts-table.fts_integrity_check",
+      "visual_admin.fts-table.fts_merge",
+      "visual_admin.fts-table.fts_optimize",
+      "visual_admin.fts-table.fts_rebuild",
       "visual_admin.fts-table.rename",
       "visual_admin.index.create",
       "visual_admin.index.drop",
@@ -128,7 +134,7 @@
       "visual_admin.virtual-table.drop",
       "visual_admin.virtual-table.rename"
     ],
-    "implemented_task_count": 32,
+    "implemented_task_count": 38,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -11127,31 +11133,31 @@
       "sha256": "f416054fc12a6ab8d743ed1d98ba18ebdf9a3839653da3b2885097265578933e"
     },
     {
-      "artifact": "SQLITE_DIALECT_PROVIDER_LIVE_GATE.json",
+      "artifact": "sqlite-fts-maintenance-live-round296.json",
       "authority": "SQLite 3.53.0 runtime",
       "evidence_id": "sqlite-3.53.0-task-parser-acceptance",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "6143e30d90d55193fc0ed7cd061f0b7f5b109a7f745d58663ca2b17a7b376215"
+      "sha256": "92ee09a5132c47a56827013844c568825436f6b396266dd4d501787fa4efb56a"
     },
     {
-      "artifact": "SQLITE_DIALECT_PROVIDER_LIVE_GATE.json",
+      "artifact": "sqlite-fts-maintenance-live-round296.json",
       "authority": "SQLite 3.53.0 runtime",
       "evidence_id": "sqlite-3.53.0-task-live-execution",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "6143e30d90d55193fc0ed7cd061f0b7f5b109a7f745d58663ca2b17a7b376215"
+      "sha256": "92ee09a5132c47a56827013844c568825436f6b396266dd4d501787fa4efb56a"
     },
     {
-      "artifact": "_sqlite3.cpython-312-x86_64-linux-gnu.so",
+      "artifact": "_sqlite3.cpython-314-x86_64-linux-gnu.so",
       "authority": "Python Software Foundation",
       "evidence_id": "cpython-sqlite3-dbapi",
       "evidence_kind": "driver",
       "format": "CPython extension module dynamically linked to SQLite 3.53.0",
       "license_id": "PSF-2.0",
-      "sha256": "b30bc4b6a8fa3c80fa0ff79b752e811ffda985497155501691c1d169b289b238"
+      "sha256": "2aba6eeb59707b665575fd21811fed844e2b2e9044c8f79b3dc58437b950a5ed"
     }
   ],
   "provider_id": "org.cdeadmin.sqlite",
@@ -11393,10 +11399,10 @@
         "sqlite-3.53.0-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE VIRTUAL TABLE \"cde_editor_fts\" USING fts5 (\"content\", \"category\")",
+      "source": "CREATE VIRTUAL TABLE \"main\".\"cde_editor_fts_contentless\" USING fts5 (\"content\", content='')",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE VIRTUAL TABLE \"cde_editor_fts\" USING fts5 (\"content\", \"category\")"
+        "CREATE VIRTUAL TABLE \"main\".\"cde_editor_fts_contentless\" USING fts5 (\"content\", content='')"
       ],
       "task_id": "visual_admin.fts-table.create"
     },
@@ -11407,12 +11413,110 @@
         "sqlite-3.53.0-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP TABLE \"main\".\"cde_editor_fts_renamed\"",
+      "source": "DROP TABLE \"main\".\"cde_editor_fts_contentless\"",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP TABLE \"main\".\"cde_editor_fts_renamed\""
+        "DROP TABLE \"main\".\"cde_editor_fts_contentless\""
       ],
       "task_id": "visual_admin.fts-table.drop"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "sqlite-3.53.0-task-parser-acceptance",
+        "sqlite-3.53.0-task-live-execution"
+      ],
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "INSERT INTO \"main\".\"cde_editor_fts_contentless\"(\"cde_editor_fts_contentless\") VALUES('delete-all')",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "INSERT INTO \"main\".\"cde_editor_fts_contentless\"(\"cde_editor_fts_contentless\") VALUES('delete-all')"
+      ],
+      "task_id": "visual_admin.fts-table.fts_delete_all"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "sqlite-3.53.0-task-parser-acceptance",
+        "sqlite-3.53.0-task-live-execution"
+      ],
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\") VALUES('flush')",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\") VALUES('flush')"
+      ],
+      "task_id": "visual_admin.fts-table.fts_flush"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "sqlite-3.53.0-task-parser-acceptance",
+        "sqlite-3.53.0-task-live-execution"
+      ],
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2"
+      ],
+      "source": "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\",rank) VALUES('integrity-check',0)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\",rank) VALUES('integrity-check',0)"
+      ],
+      "task_id": "visual_admin.fts-table.fts_integrity_check"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "sqlite-3.53.0-task-parser-acceptance",
+        "sqlite-3.53.0-task-live-execution"
+      ],
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2"
+      ],
+      "source": "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\",rank) VALUES('merge',128)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\",rank) VALUES('merge',128)"
+      ],
+      "task_id": "visual_admin.fts-table.fts_merge"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "sqlite-3.53.0-task-parser-acceptance",
+        "sqlite-3.53.0-task-live-execution"
+      ],
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\") VALUES('optimize')",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\") VALUES('optimize')"
+      ],
+      "task_id": "visual_admin.fts-table.fts_optimize"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "sqlite-3.53.0-task-parser-acceptance",
+        "sqlite-3.53.0-task-live-execution"
+      ],
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\") VALUES('rebuild')",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\") VALUES('rebuild')"
+      ],
+      "task_id": "visual_admin.fts-table.fts_rebuild"
     },
     {
       "binding_style": "positional_question_mark",
@@ -11627,10 +11731,10 @@
         "sqlite-3.53.0-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE VIRTUAL TABLE \"cde_editor_rtree\" USING rtree (\"id\", \"min_x\", \"max_x\", \"min_y\", \"max_y\")",
+      "source": "CREATE VIRTUAL TABLE \"main\".\"cde_editor_rtree\" USING rtree (\"id\", \"min_x\", \"max_x\", \"min_y\", \"max_y\")",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE VIRTUAL TABLE \"cde_editor_rtree\" USING rtree (\"id\", \"min_x\", \"max_x\", \"min_y\", \"max_y\")"
+        "CREATE VIRTUAL TABLE \"main\".\"cde_editor_rtree\" USING rtree (\"id\", \"min_x\", \"max_x\", \"min_y\", \"max_y\")"
       ],
       "task_id": "visual_admin.virtual-table.create"
     },

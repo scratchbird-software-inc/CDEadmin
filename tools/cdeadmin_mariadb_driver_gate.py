@@ -165,6 +165,7 @@ def run(image, evidence, qualification=qualify, *, tls=False, fixture_mounts=())
     name = 'cdeadmin-mariadb-driver-' + secrets.token_hex(8)
     identity = _image_identity(image)
     started = False
+    fixture = {'image': identity, 'owned_server_stopped': False, 'engine_version': None}
     mounts, server_options, route_options = list(fixture_mounts), [], {}
     if tls:
         certificates = evidence.resolve() / 'certificates'
@@ -195,6 +196,16 @@ def run(image, evidence, qualification=qualify, *, tls=False, fixture_mounts=())
         ], check=True, capture_output=True)
         started = True
         port = _wait_until_ready('mariadb', name, 180)
+        import mariadb
+        check = mariadb.connect(host='127.0.0.1', port=port, user='root', connect_timeout=5)
+        try:
+            with check.cursor() as cursor:
+                cursor.execute('SELECT VERSION()')
+                fixture['engine_version'] = cursor.fetchone()[0].split('-')[0]
+                if fixture['engine_version'] != '12.2.2':
+                    raise ValueError('Owned native MariaDB version mismatch')
+        finally:
+            check.close()
         return qualification(
             {'host': '127.0.0.1', 'port': port, 'user': 'root',
              'connect_timeout': 5, **route_options}, evidence / 'native')
@@ -205,7 +216,9 @@ def run(image, evidence, qualification=qualify, *, tls=False, fixture_mounts=())
             (evidence / 'server.log').write_bytes(logs.stdout + logs.stderr)
             subprocess.run(['docker', 'rm', '-f', '-v', name], check=True,
                            capture_output=True)
+            fixture['owned_server_stopped'] = True
         (evidence / 'image.json').write_text(json.dumps(identity, indent=2))
+        (evidence / 'fixture.json').write_text(json.dumps(fixture, indent=2) + '\n')
 
 
 if __name__ == '__main__':

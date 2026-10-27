@@ -1,0 +1,191 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "sqlite",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "draft",
+  "engine_tab_title": "SQLite",
+  "omitted_tabs": [
+    {
+      "tab": "Authentication",
+      "reason": "embedded file engine: no credentials"
+    },
+    {
+      "tab": "SSL/TLS",
+      "reason": "embedded file engine: no network transport"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "server.attached_databases",
+      "reason": "provider control 'json' needs a typed control"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "uri_mode",
+      "label": "File open mode",
+      "tab": "Connection",
+      "control": "select",
+      "required": false,
+      "options": [
+        {
+          "value": "default",
+          "label": "Default"
+        },
+        {
+          "value": "ro",
+          "label": "Read only"
+        },
+        {
+          "value": "rw",
+          "label": "Read/write existing"
+        },
+        {
+          "value": "rwc",
+          "label": "Read/write/create"
+        }
+      ],
+      "default": "default"
+    },
+    {
+      "field_id": "timeout",
+      "label": "Busy timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "group": "Timeouts and utilities",
+      "required": false,
+      "default": 5,
+      "min": 0,
+      "max": 86400
+    },
+    {
+      "field_id": "attached_databases",
+      "label": "Attached databases",
+      "tab": "Engine",
+      "control": "text",
+      "required": false
+    },
+    {
+      "field_id": "uri_cache",
+      "label": "Shared-cache mode",
+      "tab": "Engine",
+      "control": "select",
+      "required": false,
+      "options": [
+        {
+          "value": "default",
+          "label": "Default"
+        },
+        {
+          "value": "shared",
+          "label": "Shared"
+        },
+        {
+          "value": "private",
+          "label": "Private"
+        }
+      ],
+      "default": "default"
+    },
+    {
+      "field_id": "uri_immutable",
+      "label": "Treat database file as immutable",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "uri_nolock",
+      "label": "Disable VFS locking",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "uri_vfs",
+      "label": "VFS implementation name",
+      "tab": "Engine",
+      "control": "text",
+      "required": false
+    },
+    {
+      "field_id": "detect_types",
+      "label": "Type detection",
+      "tab": "Engine",
+      "control": "select",
+      "required": false,
+      "options": [
+        {
+          "value": "none",
+          "label": "Disabled"
+        },
+        {
+          "value": "decltypes",
+          "label": "Declared types"
+        },
+        {
+          "value": "colnames",
+          "label": "Column names"
+        },
+        {
+          "value": "both",
+          "label": "Declared and column names"
+        }
+      ],
+      "default": "none"
+    },
+    {
+      "field_id": "isolation_level",
+      "label": "Implicit transaction mode",
+      "tab": "Engine",
+      "control": "select",
+      "required": false,
+      "options": [
+        {
+          "value": "legacy",
+          "label": "Driver legacy default"
+        },
+        {
+          "value": "deferred",
+          "label": "DEFERRED"
+        },
+        {
+          "value": "immediate",
+          "label": "IMMEDIATE"
+        },
+        {
+          "value": "exclusive",
+          "label": "EXCLUSIVE"
+        },
+        {
+          "value": "autocommit",
+          "label": "No implicit transaction"
+        }
+      ],
+      "default": "legacy"
+    },
+    {
+      "field_id": "cached_statements",
+      "label": "Prepared-statement cache size",
+      "tab": "Engine",
+      "control": "number",
+      "required": false,
+      "default": 128,
+      "min": 0,
+      "max": 100000
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for sqlite-native. Field ids are the registration contract's own. Review tab/group placement."
+}

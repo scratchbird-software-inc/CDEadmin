@@ -89,6 +89,12 @@ describe('CDEadmin provider hierarchy behavior', () => {
     expect(allowsSoleChildAutomation({cde_endpoint: true})).toBe(false);
   });
 
+  it('keeps connector expansion independent of an unconnected legacy server login', () => {
+    expect(allowsSoleChildAutomation({_type: 'engine_type', cde_endpoint: false})).toBe(false);
+    expect(allowsSoleChildAutomation({_type: 'engine_type'})).toBe(false);
+    expect(allowsSoleChildAutomation({_type: 'server', cde_endpoint: false, connected: true})).toBe(true);
+  });
+
   it('preserves inherited sole-child behavior outside provider trees', () => {
     expect(allowsSoleChildAutomation({cde_endpoint: false})).toBe(true);
     expect(allowsSoleChildAutomation({})).toBe(true);

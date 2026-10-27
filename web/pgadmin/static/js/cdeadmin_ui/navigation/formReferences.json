@@ -13,6 +13,7 @@
     "duckdb-test-data": {"reference": "SR-F-010005", "title": "DuckDB native test-data recipes"},
     "duckdb-copy": {"reference": "SR-F-010006", "title": "DuckDB native table COPY preview"},
     "duckdb-attachment": {"reference": "SR-F-010007", "title": "DuckDB session attachment preview"},
+    "duckdb-extensions": {"reference": "SR-F-010011", "title": "DuckDB original-session extension installation and loading"},
     "duckdb-server-catalog-ddn": {"reference": "SR-F-010008", "title": "DuckDB registered-file DDN catalog"},
     "workspace": {
       "reference": "SR-F-000001",
@@ -5701,6 +5702,26 @@
     "sqlite-test-data": {
       "reference": "SR-F-001422",
       "title": "SQLite native test-data recipe and SQL generation"
+    },
+    "postgresql-continuity": {
+      "reference": "SR-F-010009",
+      "title": "PostgreSQL physical backup, verification and chain reconstruction"
+    },
+    "firebird-eds-pool": {
+      "reference": "SR-F-010012",
+      "title": "Firebird native process external connection pool"
+    },
+    "sqlite-retained-schema": {
+      "reference": "SR-F-010013",
+      "title": "SQLite original-session DDN review, application and durable receipts"
+    },
+    "postgresql-replication-temporary": {
+      "reference": "SR-F-010014",
+      "title": "PostgreSQL retained replication slots and exported snapshots"
+    },
+    "sqlite-recovery": {
+      "reference": "SR-F-010010",
+      "title": "SQLite native file recovery and recovered-copy activation"
     }
   }
 }

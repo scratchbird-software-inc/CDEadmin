@@ -52,6 +52,7 @@ keyring==25.*
 ldap3==2.*
 libgravatar==1.0.*
 paramiko==3.5.1
+# Native development/packaging builds apply tools/driver_patches/pglast-8.5-native-options.patch.
 pglast==8.5
 psutil==7.2.*
 psycopg[c]==3.3.4

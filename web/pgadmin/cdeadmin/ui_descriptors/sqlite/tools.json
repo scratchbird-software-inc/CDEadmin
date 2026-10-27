@@ -1,0 +1,199 @@
+{
+  "schema": "cdeadmin.ui-tools.v1",
+  "engine": "sqlite",
+  "notes": "Tool, dashboard and registration openers that context_menu.py used to add with engine_id branches. Lifecycle entries come from the family forms, tier 2/3 operations from operations.json; keep only openers here.",
+  "tools": [
+    {
+      "command_id": "connector.sqlite.monitoring",
+      "scope": "connector",
+      "label": "SQLite engine dashboard...",
+      "handler": "open_sqlite_fleet",
+      "icon": "tool.dashboard",
+      "group": "information",
+      "priority": 5,
+      "when": {
+        "localhost_placeholder": false
+      }
+    },
+    {
+      "command_id": "connector.sqlite.dashboard_editor",
+      "scope": "connector",
+      "label": "Edit SQLite engine dashboard...",
+      "handler": "open_sqlite_dashboard_editor",
+      "icon": "action.edit",
+      "group": "information",
+      "priority": 6,
+      "mutation": "write",
+      "when": {
+        "localhost_placeholder": false
+      }
+    },
+    {
+      "command_id": "endpoint.sqlite.recovery",
+      "scope": "endpoint",
+      "label": "Recover SQLite file...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.restore",
+      "group": "database",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "sqlite-recovery"
+      },
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can recover its files."
+      }
+    },
+    {
+      "command_id": "endpoint.sqlite.monitoring",
+      "scope": "endpoint",
+      "label": "SQLite registered-file dashboard...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "arguments": {
+        "tab": "monitoring"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can monitor it."
+      }
+    },
+    {
+      "command_id": "endpoint.sqlite.catalog_ddn",
+      "scope": "endpoint",
+      "label": "Registered SQLite files and DDN...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.export",
+      "group": "database",
+      "arguments": {
+        "tab": "export",
+        "server_catalog": true
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can inspect it."
+      }
+    },
+    {
+      "command_id": "endpoint.sqlite.dashboard_editor",
+      "scope": "endpoint",
+      "label": "Edit SQLite dashboard...",
+      "handler": "open_sqlite_dashboard_editor",
+      "slot": "after_verify",
+      "icon": "action.edit",
+      "group": "availability",
+      "mutation": "write",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can edit it."
+      }
+    },
+    {
+      "command_id": "database.sqlite.recovery",
+      "scope": "database",
+      "label": "Recover SQLite file...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.restore",
+      "group": "database",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "sqlite-recovery"
+      }
+    },
+    {
+      "command_id": "database.sqlite.catalog_ddn",
+      "scope": "database",
+      "label": "SQLite metadata and DDN diagrams...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.export",
+      "group": "database",
+      "arguments": {
+        "tab": "export"
+      }
+    },
+    {
+      "command_id": "database.sqlite.test_data",
+      "scope": "database",
+      "label": "Generate SQLite test data...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.edit",
+      "group": "database",
+      "arguments": {
+        "tab": "sqlite-test-data"
+      }
+    },
+    {
+      "command_id": "database.sqlite.monitoring",
+      "scope": "database",
+      "label": "SQLite database dashboard...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "mutation": "read",
+      "arguments": {
+        "tab": "monitoring"
+      }
+    },
+    {
+      "command_id": "database.sqlite.monitoring_policy",
+      "scope": "database",
+      "label": "Configure SQLite monitoring collection...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "monitoring_policy"
+      }
+    },
+    {
+      "command_id": "database.sqlite.dashboard_editor",
+      "scope": "database",
+      "label": "Edit SQLite dashboard...",
+      "handler": "open_sqlite_dashboard_editor",
+      "slot": "post_tasks",
+      "icon": "action.edit",
+      "group": "availability",
+      "mutation": "write"
+    },
+    {
+      "command_id": "resource.sqlite.table.export_sql",
+      "scope": "resource",
+      "label": "Export SQLite table as native SQL...",
+      "handler": "open_workspace",
+      "slot": "after_data",
+      "icon": "action.export",
+      "group": "object",
+      "priority": 12,
+      "arguments": {
+        "tab": "export"
+      },
+      "when": {
+        "resource_kinds": [
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    }
+  ]
+}

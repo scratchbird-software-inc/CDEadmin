@@ -82,6 +82,9 @@ def build_export(resources, *, endpoint_id, target_id, generation,
         observed = native_metadata(databases[0], engine)
         provenance['catalog_identity'] = observed.get('catalog_row', {})
         provenance['definition_context'] = observed.get('definition_context', {})
+    if any(native_metadata(item, engine).get('observation_scope') == 'retained-session' for item in items):
+        provenance['observation_scope'] = 'retained-session'
+        provenance['consistency'] = 'retained native session; includes pending catalog changes'
     if native_model:
         # A host capture is already structured metadata, not imported notation.
         # Decode its JSON exactly like imported metadata, without a DDN detour.

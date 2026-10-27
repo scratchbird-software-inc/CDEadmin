@@ -42,6 +42,7 @@ class _Query:
     dispatch_allowed: bool = False
     script_plan: tuple | None = None
     script_execution: object = None
+    observer: object = None
 
 
 @dataclass
@@ -105,6 +106,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         self._server_handles = set()
         self._failed_initializations = set()
         self._queries = []
+        self._eds_pool_reviews = {}
         self._closed = False
         self._opening = 0
         self._native_operations = 0
@@ -167,6 +169,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         super()._forget_connection(handle)
         self._server_handles.discard(id(handle))
         self._failed_initializations.discard(id(handle))
+        for key in list(self._eds_pool_reviews):
+            if self._eds_pool_reviews[key]['connection'] is handle:self._eds_pool_reviews.pop(key)
 
     def _retain_failed_attachment(self, connection):
         self._connections.append(connection)
@@ -309,7 +313,9 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         finally:
             state.lock.release()
 
-    def submit_query(self, handle, request):
+    def submit_query(self, handle, request, *, observer=None):
+        if observer is not None and not callable(observer):
+            raise RelationalClientError('Native query observer must be callable')
         # Validation and a private copy precede the worker and native dispatch.
         source = request.get('source')
         if not isinstance(source, str) or not source.strip():
@@ -347,6 +353,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             plan = parse(source)
         with self._exclusive(handle) as state:
             query = _Query(handle)
+            query.observer = observer
             query.script_plan = plan
             query.worker = threading.Thread(
                 target=self._run_query, args=(query, state, payload),
@@ -446,6 +453,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     },
                 },
             }
+        self._notify_query_observer(query,native,'native_result')
         if statistics is not None:
             try:
                 if not statistics.cleanup_failed:
@@ -509,6 +517,15 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             query.result = native
             query.done = True
             state.query = None
+            self._notify_query_observer(query,native,'session_release')
+
+    @staticmethod
+    def _notify_query_observer(query,native,phase):
+        if query.observer is None:return
+        try:query.observer(copy.deepcopy(native),phase)
+        except BaseException as error:
+            native['payload']['native_receipt_persistence_failed']=True
+            native['payload']['native_receipt_error_type']=type(error).__name__
 
     def describe_result(self, token):
         if not isinstance(token, _Query):

@@ -42,6 +42,30 @@ describe('MySQL native DDN dashboards and trends', () => {
     expect(files['dashboard.ddn']).toContain('Alias one');
     expect(files['dashboard.ddn']).toContain('Alias two');
   });
+  it('keeps workload bindings tied to native identities and excludes private sample bindings', () => {
+    const native = sample();
+    native.groups.workload_digests = {status: 'available', rows: [{schema_name: 'demo', digest: 'a'.repeat(64),
+      sum_timer_wait: '9007199254740993', count_star: '7', sum_rows_examined: '9'}]};
+    const files = mysqlDashboardFiles(snapshot({samples: [native]}), 'database');
+    const clean = validatePublication(viewer, envelope(files), 'database', 'mysql');
+    expect(clean.files['dashboard.ddn']).not.toContain('9007199254740993');
+    const rebound = bindPublication(viewer, clean, 'database', files, 'mysql');
+    expect(rebound.files['dashboard.ddn']).toContain('9007199254740993');
+    expect(() => validatePublication(viewer, envelope(files), 'database', 'mariadb')).toThrow();
+    const source = files['dashboard.ddn'].replace('73756d5f74696d65725f77616974', '71756572795f73616d706c655f74657874');
+    expect(() => validatePublication(viewer, envelope({'dashboard.ddn': source}), 'database', 'mysql')).toThrow();
+  });
+  it('publishes read-only alert findings with stable admitted bindings and suppresses stale values', () => {
+    const live = snapshot({alerts: {rules: [{rule: {id: 'ops', metric: 'threads_running'}, state: 'firing', condition: 'threshold',
+      evidence: {value: '9007199254740993', source: 'native', observed_at: 'now'}}], events: [{rule_id: 'ops', delivery: {state: 'delivered'}}]}});
+    const files = mysqlDashboardFiles(live, 'database');
+    const clean = validatePublication(viewer, envelope(files), 'database', 'mysql');
+    expect(clean.files['dashboard.ddn']).not.toContain('9007199254740993');
+    expect(bindPublication(viewer, clean, 'database', files, 'mysql').files['dashboard.ddn']).toContain('9007199254740993');
+    expect(mysqlDashboardFiles({...live, sample_age_seconds: 100}, 'database')['dashboard.ddn']).not.toContain('9007199254740993');
+    expect(() => validatePublication(viewer, envelope({'dashboard.ddn': files['dashboard.ddn'].replace('mysql_alert_6f7073_value', 'mysql_alert_6f7073_password')}), 'database', 'mysql')).toThrow();
+    expect(() => validatePublication(viewer, envelope(files), 'engine', 'mysql')).toThrow();
+  });
   it('bounds engine publications and reports omitted scopes without parsing labels as page identities', () => {
     const publication = mysqlFleetPublication({registered_endpoints: 300, servers: Array.from({length: 300}, (_, index) => ({
       server_id: index + 1, name: 'Native view dashboard_page_999 ' + 'x'.repeat(1000), databases: [],

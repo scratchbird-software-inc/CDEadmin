@@ -36,6 +36,35 @@ brew install libpq openssl@3 krb5 pkg-config cmake bison icu4c libxml2 lz4 zstd 
 The clients stage builds an owned CPython 3.14.8 interpreter on macOS against
 the required SQLite library. It does not replace Apple's Python or SQLite.
 Windows loads the owned SQLite DLL before Python's `_sqlite3` extension.
+The owned macOS build enables CPython's loadable SQLite extension APIs. Native
+verification refuses an interpreter missing these APIs. Existing interpreter
+fingerprints must be rebuilt in a fresh owned runtime when this option changes.
+
+SQLite's query editor includes a session-local native library workflow. The
+application operator provisions trusted host libraries and sets
+`CDEADMIN_SQLITE_EXTENSION_MANIFEST` to an absolute JSON file, for example:
+
+```json
+{"format":"scratchrobin.sqlite.extensions@1","extensions":[
+  {"id":"approved-module","path":"/absolute/host/module.so","sha256":"<64 lowercase hex characters>","entrypoint":"sqlite3_extension_init"}
+]}
+```
+
+Use the platform's native library suffix. The entry point is optional; SQLite
+can select its native default. Approval includes native dependencies resolved
+by the application host loader. The application stages and verifies the main
+library bytes privately, then loads on explicit confirmation into the retained
+query session. Libraries that depend on files beside the original library need
+an installation with host-resolvable dependencies; the private copy changes
+that directory. Browser requests cannot submit host paths or new approvals.
+Pending transaction work blocks loading. SQL `load_extension()` stays disabled.
+Native initialization can have irreversible effects; a failed initialization
+blocks further session use and remains an unknown outcome. Read its receipt,
+then close the session. Closing ends the connection and attempts to remove its
+private staging. Extensions using SQLite's permanent-load facility may retain
+machine code or process-wide state. Closing does not undo external effects.
+Reopening does not automatically reload. Review and loading require native
+administration and filesystem permissions in addition to query execution.
 
 Clone the sister project beside CDEadmin and install its pinned dependencies:
 
@@ -115,7 +144,15 @@ successful screenshots.
 
 Native downloads are pinned by URL and SHA-256 in `native_assets.py`:
 
-- SQLite 3.53.0 with FTS5, R-tree, column metadata and threading.
+- SQLite 3.53.0 with FTS3/4/5, R-tree/Geopoly, DBSTAT/DBPAGE, math/percentile,
+  C array, session/preupdate facilities, column metadata and threading.
+  Runtime checks observe the native modules as well as the version. A changed
+  library fingerprint requires a fresh owned runtime. Enabling native C APIs
+  records engine availability; it does not certify every application adapter.
+  The clients stage also builds the public SQLite recovery API from the pinned
+  full source archive and links it to this same owned SQLite runtime. Its
+  library and adjacent provenance manifest are retained together. Native launch
+  environments set `CDEADMIN_SQLITE_RECOVERY_LIBRARY` to that platform library.
 - Firebird 5.0.4, including its native client and embedded engine runtime.
 - MariaDB Connector/C 3.4.8 and the project's patched Connector/Python 1.1.14.
 - PostgreSQL 18.3 Windows SDK and command-line tools; macOS uses native libpq.
@@ -317,3 +354,72 @@ See `docs/en_US/firebird_platform_release.rst` for the four-host release reconci
 source/artifact integrity rules and separately owned human/package/history gates.
 GitHub captures the DDN revision recorded by the candidate and disables Git line
 ending conversion on both checkouts so native source hashes can be reconciled.
+
+## SQLite native file recovery
+
+The SQLite registration and file context menus provide **Recover SQLite file**.
+This opens an offline filesystem workspace and can inspect retained receipts
+without attaching to the damaged database. Endpoint ownership and filesystem,
+backup and restore permissions still apply. Recovering a file does not mark its
+SQL runtime as verified. Registering and activating the completed copy performs
+the normal native connection verification against that new file.
+
+The recovery dependency uses `sqlite3_recover_init` and typed native values.
+Replaying the shell's `.recover` SQL is not used: the qualified shell path
+truncates embedded NUL text. The direct API preserves that text, native BLOBs,
+64-bit keys, storage classes and applicable native schema features. Recovered
+schema text is guarded against external database attachments, extension loading
+and temporary-directory redirection in the isolated worker.
+
+For a separately managed native installation, supply the complete unmodified
+SQLite 3.53.0 source distribution and matching headers/library, then build in an
+owned output directory:
+
+```text
+cmake -S tools/native/sqlite_recovery -B <owned-build-directory> -DCMAKE_BUILD_TYPE=Release -DSCRATCHROBIN_SQLITE_SOURCE=<sqlite-source-directory> -DSQLite3_INCLUDE_DIR=<sqlite-header-directory> -DSQLite3_LIBRARY=<sqlite-library-or-import-library>
+cmake --build <owned-build-directory> --config Release
+```
+
+Use the native `.dll`, `.dylib` or `.so` and its adjacent `.json` manifest.
+Windows requires the matching SQLite DLL; the C adapter keeps every handle on
+the runtime linked to the recovery library. Python's verification binding must
+also match the qualified SQLite source. The worker checks both identities.
+Set `CDEADMIN_SQLITE_RECOVERY_LIBRARY` in the launch environment or application
+configuration. Standard interpreter `bin`, `lib`, `DLLs` and the packaged
+`cdeadmin/native` directory are also searched. `CDEADMIN_SQLITE_RECOVERY_ROOT`
+selects private staged-image storage; `CDEADMIN_SQLITE_RECOVERY_MAX_RUNTIME_SECONDS`
+sets the host's job ceiling (one day by default).
+
+Choose a new output filename within the registration's filesystem root and
+confirm that writers are stopped or isolated. The application copies the main
+file and observed WAL/journal into private storage, rechecks identities and
+retains their hashes. SHM is recreated privately. This is salvage, not the online
+backup contract. The original is never opened by the native recovery API.
+Recovery and verification run independently of the viewer, with native-step and
+copy-byte observations, cancellation, deadlines and once-only durable claims.
+Publication refuses an existing destination. Missing publication replies remain
+unknown and can be reconciled by the expected artifact hash without replay.
+
+Native integrity and foreign-key observations are reported separately from
+application-data verification. A recovered copy may omit damaged records;
+freelist recovery can include deleted records. Inspect the copy before adopting
+its data. The workspace can register and activate a verified recovered file and
+remove its staged images while retaining the receipt and published copy.
+Windows/macOS build and workflow acceptance remain with the platform teams.
+
+## SQLite native schema binding utility
+
+Native client setup also builds the SQLite 3.53.0 CLI from the admitted
+amalgamation and sets `CDEADMIN_SQLITE_BINARY` in the launch environment. For a
+separately managed installation, set that variable (or application setting) to
+the matching native `sqlite3.exe` / `sqlite3`. The application verifies its
+version and exact source ID. The reviewed operation includes its executable
+hash, resolved path and execution host; changes require a new review.
+
+This utility handles FTS5 table-function dependencies during selected native
+schema renames. It runs with `-safe -batch -bail`, an empty initialization file,
+and an empty memory database in private temporary storage. Only schema is
+provided. Its version-specific internal rename helpers never run on a user's
+connection or registered file. Missing or incompatible utility availability
+is reported before migration dispatch. This setup wiring is separate from
+native Windows/macOS qualification by the platform teams.

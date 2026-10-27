@@ -1,0 +1,248 @@
+{
+  "schema": "cdeadmin.ui-options.v1",
+  "engine": "postgresql",
+  "dialect": {
+    "column_types": [
+      "smallint",
+      "integer",
+      "bigint",
+      "numeric",
+      "real",
+      "double precision",
+      "serial",
+      "bigserial",
+      "boolean",
+      "character varying",
+      "character",
+      "text",
+      "bytea",
+      "date",
+      "time",
+      "time with time zone",
+      "timestamp",
+      "timestamp with time zone",
+      "interval",
+      "uuid",
+      "json",
+      "jsonb",
+      "xml",
+      "inet",
+      "cidr",
+      "macaddr",
+      "money",
+      "point",
+      "tsvector",
+      "int4range",
+      "int8range",
+      "tsrange",
+      "daterange"
+    ],
+    "index_methods": [
+      "btree",
+      "hash",
+      "gist",
+      "spgist",
+      "gin",
+      "brin"
+    ],
+    "routine_languages": [
+      "sql",
+      "plpgsql",
+      "c",
+      "internal"
+    ],
+    "privileges": {
+      "table": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER",
+        "MAINTAIN"
+      ],
+      "view": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER"
+      ],
+      "sequence": [
+        "USAGE",
+        "SELECT",
+        "UPDATE"
+      ],
+      "routine": [
+        "EXECUTE"
+      ],
+      "function": [
+        "EXECUTE"
+      ],
+      "procedure": [
+        "EXECUTE"
+      ],
+      "database": [
+        "CREATE",
+        "CONNECT",
+        "TEMPORARY"
+      ],
+      "schema": [
+        "CREATE",
+        "USAGE"
+      ],
+      "type": [
+        "USAGE"
+      ]
+    },
+    "trigger_events": {
+      "table": [
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE"
+      ],
+      "view": [
+        "INSERT",
+        "UPDATE",
+        "DELETE"
+      ],
+      "ddl": [
+        "ddl_command_start",
+        "ddl_command_end",
+        "sql_drop",
+        "table_rewrite"
+      ]
+    },
+    "system_privileges": [
+      "SUPERUSER",
+      "CREATEDB",
+      "CREATEROLE",
+      "REPLICATION",
+      "BYPASSRLS"
+    ],
+    "auth_plugins": [
+      "scram-sha-256",
+      "md5"
+    ],
+    "grantable_kinds": [
+      "table",
+      "view",
+      "sequence",
+      "function",
+      "procedure",
+      "database",
+      "schema",
+      "type"
+    ],
+    "character_sets": [
+      "UTF8",
+      "SQL_ASCII",
+      "LATIN1",
+      "LATIN9",
+      "WIN1252",
+      "EUC_JP",
+      "EUC_KR",
+      "GBK",
+      "BIG5",
+      "ISO_8859_5",
+      "KOI8R"
+    ]
+  },
+  "catalog": {
+    "tablespaces": {
+      "resource_kind": "tablespace"
+    },
+    "databases": {
+      "resource_kind": "database"
+    },
+    "schemas": {
+      "resource_kind": "schema"
+    },
+    "tables": {
+      "resource_kind": "table"
+    },
+    "roles": {
+      "resource_kind": "role"
+    },
+    "collations": {
+      "resource_kind": "collation"
+    },
+    "extensions": {
+      "resource_kind": "extension"
+    },
+    "builtin_locales": {
+      "resource_kind": "locale"
+    },
+    "column_types": {
+      "resource_kind": "type"
+    },
+    "columns": {
+      "resource_kind": "column"
+    },
+    "composite_types": {
+      "resource_kind": "type"
+    },
+    "configuration_parameters": {
+      "resource_kind": "configuration-parameter"
+    },
+    "ctypes": {
+      "resource_kind": "locale"
+    },
+    "endpoint_profiles": {
+      "resource_kind": "endpoint-profile"
+    },
+    "event_trigger_functions": {
+      "resource_kind": "function"
+    },
+    "functions": {
+      "resource_kind": "function"
+    },
+    "geometry_types": {
+      "resource_kind": "type"
+    },
+    "icu_locales": {
+      "resource_kind": "locale"
+    },
+    "index_access_methods": {
+      "resource_kind": "access-method"
+    },
+    "indexes": {
+      "resource_kind": "index"
+    },
+    "languages": {
+      "resource_kind": "language"
+    },
+    "operator_classes": {
+      "resource_kind": "operator-class"
+    },
+    "operators": {
+      "resource_kind": "operator"
+    },
+    "relations": {
+      "resource_kind": "table"
+    },
+    "server_groups": {
+      "resource_kind": "server-group"
+    },
+    "support_functions": {
+      "resource_kind": "function"
+    },
+    "supported_servers": {
+      "resource_kind": "server-type"
+    },
+    "table_access_methods": {
+      "resource_kind": "access-method"
+    },
+    "trigger_functions": {
+      "resource_kind": "function"
+    },
+    "types": {
+      "resource_kind": "type"
+    }
+  },
+  "notes": "PostgreSQL is legacy_preserved: the pgAdmin dialogs fetch these lists from node URLs (get_types, get_oper_class, ...). The catalog entries map each list to the provider resource kind that will serve it once PostgreSQL moves onto the shared editor (phase 5); until then the legacy dialog supplies them."
+}

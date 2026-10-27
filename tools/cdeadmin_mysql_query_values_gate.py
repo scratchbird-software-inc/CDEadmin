@@ -124,6 +124,11 @@ def qualify(route, evidence, *, password=None):
         rows('INSERT INTO sample SELECT * FROM sample')
         assert client.describe_transaction(handle)['in_transaction'] is True
         cursor.execute(f'KILL CONNECTION {int(handle.connection_id)}')
+        assert client.describe_transaction(handle)['connection_health_checked'] is False
+        # A passive status observation cannot discover an unread disconnect.
+        # The next user command owns that transport failure; it is never replayed.
+        failed = collect(client, client.execute(handle, {'source': 'SELECT 1'}))
+        assert failed[-1]['payload']['session_reuse_blocked'] is True
         observed = client.describe_transaction(handle)
         assert observed['state'] == 'unknown'
         assert observed['connection_usable'] is False

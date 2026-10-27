@@ -146,3 +146,43 @@ def test_page_record_cap_and_metadata_version_boundaries(archive):
     rollups = query(archive, tier='rollup')['samples']
     assert len(rollups) == 2
     assert len({item['history_provenance']['metadata_revision'] for item in rollups}) == 2
+
+
+def test_mysql_native_identity_exact_row_rollups_and_metadata_boundaries(archive):
+    for index in range(3):
+        value = {**sample(str(index)), 'transaction_completed': True,
+                 'identity': {'server_uuid': 'native-instance', 'database_name': 'db', 'version': '9.7.0',
+                              'account': 'excluded-account', 'collector_id': 'excluded-connection'},
+                 'groups': {'status': {'rows': [{'variable_name': 'Bytes_sent', 'variable_value': '9007199254740993'}]},
+                            'settings': {'rows': [{'read_only': str(index % 2)}], 'observed_at': iso(NOW-index)}}}
+        archive.write(policy(), 'mysql', 'p', 'r', value)
+    result = archive.query(policy(), 'mysql', start=iso(NOW-10), end=iso(NOW+1))
+    assert len(result['samples']) == 3
+    assert result['samples'][0]['identity']['server_uuid'] == 'native-instance'
+    assert result['samples'][0]['transaction_completed'] is True
+    assert 'excluded-' not in json.dumps(result)
+    rollup = archive.query(policy(), 'mysql', start=iso(NOW-10), end=iso(NOW+1), tier='rollup')
+    assert len(rollup['samples']) == 2
+    measure = rollup['samples'][0]['history_provenance']['aggregation']['measures']['groups/status/rows/"Bytes_sent"/variable_value']
+    assert measure['min'] == measure['max'] == '9007199254740993'
+    assert not query(archive)['samples']
+
+
+def test_mariadb_native_identity_exact_row_rollups_and_metadata_boundaries(archive):
+    for index in range(3):
+        value = {**sample(str(index)), 'transaction_completed': True,
+                 'identity': {'server_uid': 'native-instance', 'database_name': 'db', 'version': '12.2.2',
+                              'account': 'excluded-account', 'collector_id': 'excluded-connection'},
+                 'groups': {'status': {'rows': [{'variable_name': 'Bytes_sent', 'variable_value': '9007199254740993'}]},
+                            'settings': {'rows': [{'read_only': str(index % 2)}], 'observed_at': iso(NOW-index)}}}
+        archive.write(policy(), 'mariadb', 'p', 'r', value)
+    result = archive.query(policy(), 'mariadb', start=iso(NOW-10), end=iso(NOW+1))
+    assert len(result['samples']) == 3
+    assert result['samples'][0]['identity']['server_uid'] == 'native-instance'
+    assert result['samples'][0]['transaction_completed'] is True
+    assert 'excluded-' not in json.dumps(result)
+    rollup = archive.query(policy(), 'mariadb', start=iso(NOW-10), end=iso(NOW+1), tier='rollup')
+    assert len(rollup['samples']) == 2
+    measure = rollup['samples'][0]['history_provenance']['aggregation']['measures']['groups/status/rows/"Bytes_sent"/variable_value']
+    assert measure['min'] == measure['max'] == '9007199254740993'
+    assert not query(archive)['samples']

@@ -9,23 +9,26 @@ from types import SimpleNamespace
 
 from tools.cdeadmin_mariadb_driver_gate import run
 from tools.cdeadmin_mariadb_execution_gate import collect
+from tools.mysql_driver_gate_support import provider_access
 from pgadmin.cdeadmin.providers.mysql_family.provider import MARIADB_PROFILE, _create_client
 
 
-def qualify(route, evidence):
+def qualify(route, evidence, *, password=None):
     import mariadb
     evidence.mkdir(parents=True, exist_ok=False)
     proof = {'complete': False, 'checks': [], 'binary_bytes': 1024 * 1024}
     schema = 'owned_lob_' + secrets.token_hex(8)
-    owner = mariadb.connect(**route, autocommit=True); cursor = owner.cursor()
-    client = _create_client(MARIADB_PROFILE, SimpleNamespace(acquire_secret=None),
+    owner = mariadb.connect(**route, autocommit=True,
+        **({'password': password} if password is not None else {})); cursor = owner.cursor()
+    native_route, permissions = provider_access(route, password)
+    client = _create_client(MARIADB_PROFILE, permissions,
                            SimpleNamespace(pool_namespace='owned-lob'))
     handle = None
     try:
         cursor.execute('CREATE DATABASE `' + schema + '`')
         cursor.execute('CREATE TABLE `' + schema + '`.lob_values '
                        '(id INT PRIMARY KEY, payload LONGBLOB, txt LONGTEXT CHARACTER SET utf8mb4)')
-        handle = client.open_session({'route': {**route, 'database': schema, 'autocommit': False}})
+        handle = client.open_session({'route': {**native_route, 'database': schema, 'autocommit': False}})
         binary = bytes(range(256)) * 4096
         text = '🔥é日本' * 50000
         def execute(source, parameters=()):

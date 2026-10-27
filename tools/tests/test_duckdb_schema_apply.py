@@ -67,6 +67,40 @@ def test_native_creation_commits_and_rediscovery_receipt_is_not_replayed(tmp_pat
         provider.client.close()
 
 
+@pytest.mark.parametrize('length',[350,4096],ids=['native-350-characters','native-4096-characters'])
+def test_native_long_quoted_names_survive_ddn_review_apply_and_independent_observation(tmp_path,length):
+    import duckdb
+    provider,route,baseline,_,_=fixture(tmp_path)
+    root=next(row['name'] for row in baseline['rows'].values() if row['kind']=='database')
+    schema='schema . " é '+('s'*length);table='table . " é '+('t'*length);column='column . " é '+('c'*length)
+    quote=lambda value:'"'+value.replace('"','""')+'"'
+    desired=deepcopy(baseline)
+    for kind,path,source in [
+        ('schema',[root,schema],'CREATE SCHEMA '+quote(root)+'.'+quote(schema)),
+        ('table',[root,schema,table],'CREATE TABLE '+'.'.join(map(quote,[root,schema,table]))+' ('+quote(column)+' INTEGER)')]:
+        identity=_resource_id(kind,path[:-1],path[-1])
+        desired['rows'][identity]={'resource_id':identity,'kind':kind,'name':path[-1],
+            'path':path,'system':'false','native':{'system_object':False,'catalog_metadata':{},'ddl':source}}
+    try:
+        preview=plan(baseline,desired,baseline)
+        assert preview['application_supported'],preview['blockers']
+        applications=DuckDBSchemaApplications(tmp_path/'long-native-identities.json')
+        prepared=applications.review(preview,baseline,desired,'owner','binding','file-1')
+        calls=[]
+        def execute(record):
+            calls.append(record['review_id']);return apply_review(provider,route,record)
+        outcome=applications.apply(request(prepared),'owner','binding',execute)
+        assert outcome['state']=='committed' and outcome['outcome']['rediscovery_verified']
+        observer=duckdb.connect(route['database'])
+        try:
+            assert observer.execute('SELECT table_name,column_name FROM duckdb_columns() WHERE schema_name=? AND table_name=?',[schema,table]).fetchall()==[(table,column)]
+            observer.execute('INSERT INTO '+'.'.join(map(quote,[root,schema,table]))+' VALUES (42)')
+            assert observer.execute('SELECT '+quote(column)+' FROM '+'.'.join(map(quote,[root,schema,table]))).fetchone()==(42,)
+        finally:observer.close()
+        assert applications.apply(request(prepared),'owner','binding',execute)==outcome and len(calls)==1
+    finally:provider.client.close()
+
+
 def test_intervening_table_refuses_native_dispatch(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, applications, receipt, _identity = review(tmp_path)

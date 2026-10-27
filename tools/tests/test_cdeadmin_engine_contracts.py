@@ -336,7 +336,7 @@ def test_duckdb_exact_dialect_inventory_activates_generated_tasks():
     checked = validate_dialect_contract(
         document, DUCKDB, DUCKDB_ADMINISTRATION.dialect_task_ids()
     )
-    assert checked['coverage']['authoritative_task_count'] == 35
+    assert checked['coverage']['authoritative_task_count'] == 44
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 489,
         'statements': 42,
@@ -380,12 +380,14 @@ def test_mysql_exact_dialect_inventory_activates_generated_tasks():
     checked = validate_dialect_contract(
         document, MYSQL_PROFILE, MYSQL_ADMINISTRATION.dialect_task_ids()
     )
-    assert checked['coverage']['authoritative_task_count'] == 105
+    expected = set(MYSQL_ADMINISTRATION.dialect_task_ids())
+    assert checked['coverage']['authoritative_task_count'] == len(expected)
+    assert {'visual_admin.table.assign_index_cache', 'visual_admin.table.preload_index_cache'} <= expected
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 760,
-        'statements': 143,
-        'commands': 987,
-        'data_types': 37,
+        'statements': 144,
+        'commands': 168,
+        'data_types': 79,
         'functions': 353,
         'operators': 65,
         'session_settings': 655,
@@ -507,7 +509,7 @@ def test_sqlite_exact_contracts_activate_generated_tasks_and_metrics():
     checked = validate_dialect_contract(
         dialect_document, SQLITE, SQLITE_ADMINISTRATION.dialect_task_ids()
     )
-    assert checked['coverage']['authoritative_task_count'] == 32
+    assert checked['coverage']['authoritative_task_count'] == 38
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 148,
         'statements': 45,
@@ -548,7 +550,8 @@ def test_provider_manifests_record_activation_without_promoting_experiments():
             activated.append(path.relative_to(WEB).as_posix())
         elif document['identity']['profile_id'] == 'postgresql-native':
             assert document['support_state'] == 'implemented'
-            assert gate == 'pending_exact_dialect_metrics_and_full_native_form_qualification'
+            assert gate == 'pending_full_native_form_and_platform_qualification'
+            assert document['provenance']['exact_engine_contracts']['state']=='qualified'
             incomplete.append(path.relative_to(WEB).as_posix())
         elif document['identity']['profile_id'] == 'firebird-embedded':
             assert document['support_state'] == 'experimental'

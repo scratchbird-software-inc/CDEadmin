@@ -1,0 +1,925 @@
+Six-engine remaining work
+*************************
+
+Status baseline: 2026-10-18, source ``ec52d652a``.
+
+This is the consolidated known remaining backlog for :doc:`six_engine_completion`.
+Every item below is open unless marked owner-deferred or externally owned.
+Completed scoped workflows and their native evidence remain recorded in the
+owning engine contracts. No engine has full product acceptance, and this list
+is not an overall completion percentage. Independent inventory reconciliation
+must expose additional missing native capabilities as explicit backlog items.
+
+Owner scope correction, 2026-10-20: the beta denominator includes open source
+and source available engine versions. Closed source Enterprise functionality is
+post beta, with its dependency and reason recorded below. Source interfaces or
+accepted syntax do not prove an available implementation. Missing adapters for
+available native implementations remain beta gaps.
+
+Work order and closure rules
+============================
+
+Owner direction, 2026-10-22: finish the current MySQL beta backlog and the
+eleven accepted comparison-derived items in :doc:`mysql_implementation_priorities`,
+then stop MySQL feature development and switch the implementation focus to
+MariaDB. These items extend the implementation scope; their lower priorities
+are sequencing choices, not deferrals. The handoff preserves the separately
+owned forms/platform evidence, deferred history testing and post-beta scope.
+
+1. Reconcile the native feature denominator for all six pinned profiles before
+   selecting further implementation work. Include native source/documentation,
+   actual build/edition, interfaces and installed components. Map each applicable
+   feature to its catalog destination, editor coverage, operation adapter,
+   complete application workflow and native receipt. Distinguish missing code,
+   missing qualification, denied privilege and uninstalled components.
+2. Close recovery, replication and lifecycle workflows against that inventory.
+   Keep review, dispatch, native acknowledgement, partial effects, cancellation,
+   unknown outcomes, restart reconciliation and independently observed effects
+   separate. Never recover an uncertain mutation by replaying it.
+3. Close remaining design/editor/capability cases, then reconcile all native
+   evidence against the final source. Platform and human-team signoffs retain
+   their separate owners. ScratchBird history testing remains deferred.
+
+A work item closes only when the native capability is discoverable, admitted,
+usable and observable in ScratchRobin, including its applicable failure and
+recovery paths. A generic SQL runner, declared task count or successful build
+cannot close a missing management workflow. Evidence qualifies its recorded
+installation and scope; it does not automatically cover another installed
+component, language mode, interface or operating system.
+
+Independent inventory
+=====================
+
+Owner clarification, 2026-10-24: NDB Cluster administration is a separate engine
+scope. It is not part of the current MySQL Server completion group. Record its
+source/runtime availability separately; do not relabel it as closed Enterprise
+functionality or infer NDB support from the MySQL Server receipts.
+
+The MySQL Server table-creation adapter now accepts native engine, storage,
+statistics, character-set/collation and MERGE options, with exact integer text
+and bound native values. FEDERATED uses the existing native foreign-server
+workflow and its own sensitive table connection field. Native 9.7 qualification
+through both connectors verifies remote reads/writes, unsigned 64-bit, Unicode
+and binary values, catalog/DDN preservation, and native InnoDB table options
+with an auto-increment value beyond JavaScript's exact integer range.
+
+Physical backup admits FEDERATED definitions without asserting remote-row
+backup. Recovery disables the engine by default and requires explicit reviewed
+remote-access opt-in; this choice persists into permanent deployment and is
+available for recurring startup drills. Actual native backup/prepare/copy-back,
+read-only and writable recovery prove the distinction between local recovered
+files and current remote rows. Native unavailable-reference errors and write
+protection remain visible. These receipts close that storage-engine gap, not
+the independent product inventory or the separately scoped NDB engine.
+
+* INV-MYSQL: Reconcile MySQL 9.7.0 core, installed plugins/components/storage
+  engines and native/Shell interfaces against the full product contract.
+  Source categories now distinguish 168 dispatch IDs, 144 grammar entries and
+  79 real SQL type spellings/aliases; comments and helper production names are
+  excluded. Native type parsing, declaration and completion receipts qualify
+  that scope. Installed capabilities and complete management workflows still
+  need their independent reconciliation; these counts are not a denominator.
+  Native prepared XA inspection and explicit branch resolution now have dedicated
+  server workflows and binary identity catalog exchange. Their native receipts
+  qualify branch operations, not a distributed transaction coordinator or global
+  recovery decision.
+* INV-MARIADB: Reconcile MariaDB 12.2.2 core, storage engines/plugins, normal and
+  Oracle modes, native utilities and optional physical-continuity components.
+* INV-POSTGRESQL: Reconcile PostgreSQL 18.3 core, server/database/session scopes,
+  utilities, installed extensions/languages and SQL/replication interfaces.
+* INV-DUCKDB: Reconcile DuckDB 1.5.2 core, retained/attached catalogs, installed
+  extensions, types, macros/functions, native file formats and runtime options.
+* INV-SQLITE: Reconcile SQLite 3.53.0 core/build flags and retained main/temp/
+  attached scopes, loaded modules/functions/collations and native public APIs.
+* INV-FIREBIRD: Reconcile Firebird 5.0.4 network and embedded independently,
+  including native catalog, PSQL, Services API, trace/profiling, events,
+  authentication and backup-chain capabilities beyond the parity checklist.
+  Native EDS process-pool catalog facts and retained editor controls are now
+  implemented; their owning workflow and qualification command are recorded in
+  :doc:`firebird_functional_completion`. This closes that adapter gap only;
+  the broader independent Firebird inventory remains open.
+
+These six items reconcile the independent denominator. Existing category and
+navigator gates provide evidence inputs; their own declarations do not define
+that denominator.
+
+Known implementation and qualification gaps
+===========================================
+
+MySQL
+-----
+
+All eleven accepted comparison priorities ``CMP-MY-01`` through ``CMP-MY-11``
+are implemented and Linux-qualified. Independent ``INV-MYSQL`` reconciliation
+remains required before the implementation handoff. The chronological evidence
+notes below retain their original qualification limits; current comparison
+status is owned by :doc:`mysql_implementation_priorities`. Notebook project assets now support
+explicit native execution, deliberately retained/redacted results, portable
+inert sharing/import and explicit connection binding; see
+:doc:`mysql_sql_notebooks` for qualification and privacy limits.
+:doc:`mysql_implementation_priorities` records their acceptance and maps
+them to the existing items below; overlapping recovery/lifecycle entries are
+one implementation scope and must not be counted as independent completion.
+
+* MY-CONTINUITY: Complete base-backup/log-chain recovery, selected recovery
+  targets, physical/log recovery acceptance and reviewed production cutover.
+  The :doc:`mysql_physical_backups` workspace now manages pinned native Linux
+  XtraBackup9.7.1-rc1 full backups, immutable prepare and isolated copy-back
+  artifacts over authenticated SSH. Independent supervision, exact file
+  verification, source archive holds and credential cleanup are implemented.
+  Native pure/C/API and production desktop checks include independent
+  disposable MySQL recovery. Managed private-socket native recovery startup and
+  shutdown now have separate reviewed supervision, immutable base copies, fresh
+  UUIDs, native SQL startup observations and process-descriptor control after
+  supervisor loss. A separately reviewed SSH connection now registers the
+  recovered instance for the native editor/catalog, with process/listener/UUID
+  binding, native pure/C drivers and explicit reattachment after app restart.
+  Separately reviewed writable startup and leased native raw-log replay now
+  cover selected native before/after/all boundaries. Independent original
+  decoder/client guardians now retain hash-verified private stdin and support
+  cancellation/termination observation after observer loss, scoped cleanup and
+  release of the matching parked lease without changing unknown database
+  outcomes. Native Shell extra connections/reconnects now use that original
+  route on POSIX application hosts. Independent guardian/native descriptor
+  inheritance retains its listener reservation after application loss; original
+  Shell cancellation and termination observations preserve unknown outcomes.
+  Original utility inspection/cancellation also works without SQL transport.
+  Confirmed termination releases only the stored owner/endpoint/recovery
+  reservation before separately reviewed reattachment; fresh SQL facts are
+  still required for target acknowledgement. Legacy missing-binding receipts
+  retain conservative protection.
+  Windows listener inheritance, missing/failed guardian and wider
+  lifecycle reconciliation, native
+  incremental/encrypted/external-path support, physical retention, selected
+  replay, post-replay acceptance and cutover remain open; ``CMP-MY-01`` retains
+  its open status and the comparison completion remains ten of eleven.
+  Separate logical-dump data acceptance now integrates native Shell checksums,
+  independent full row counts and table inventories under an explicitly
+  confirmed server read lock. It requires complete checksum coverage and stable
+  artifact/native identities. It does not establish physical recovery, object
+  definition equality, later log replay or production cutover.
+  Server-scoped native Shell instance dumps now have a dedicated reviewed job
+  workflow with selected schemas, native objects/data and optional accounts,
+  roles and grants. Durable outcomes, cancellation, explicit file adoption after
+  reply loss, downloads and protection are implemented. Separately reviewed
+  native instance loading now supports a confirmed recovery target, selected
+  native account/schema/data/GTID options, shared restore/replay fencing and
+  explicit uncertain-target observation/acknowledgement. Native qualification
+  includes GTID base installation followed by application log replay. Separate
+  instance-dump acceptance now checks complete exported table inventories and
+  row counts, native checksums, exact native schema SQL and exported account/
+  role/grant SQL under an explicitly confirmed server-wide read pause. It
+  preserves original restore outcomes and records unexported or unconfirmed
+  checks separately. Physical recovery, independent acceptance after later log
+  replay and cutover remain open, along with unobserved process/server-lock
+  cleanup after application interruption. New acceptance jobs can reconcile
+  their private SQL-lock teardown through admitted native thread/handshake and
+  unique ownership-marker evidence. Original unlock replies stay unchanged;
+  denied/disabled observations and unknown utility termination retain protection.
+  New managed instance backup/restore/acceptance utilities retain independently
+  supervised private completion receipts across application-worker loss, with
+  cancellation and explicit cleanup observation. Original native outcomes,
+  private SQL-lock cleanup, backup file adoption and uncertain-target
+  acknowledgement stay separate. Missing supervisor receipts, supervisor
+  failure and older untracked invocations remain unconfirmed.
+* MY-ARCHIVES: Complete backup/log-dependency-aware archive protection and
+  retention. Separate native source-log administration now exposes reviewed TO
+  and BEFORE purges, independent observations, durable acknowledgement and
+  explicit unknown-outcome reconciliation; it does not discover backup or
+  offline-replica dependencies or attest log-generation epochs.
+  A separate reviewed native binary-log/GTID reset now retains strict observed
+  state binding, independent connections, native refusals and durable unknown
+  outcomes. It requires an exclusive maintenance window and does not rebind old
+  archive chains to reused native filenames or establish recovery coverage.
+  Managed graphical dump intents now acquire durable application archive holds
+  before dispatch, with conservative source protection, offline inspection and
+  reviewed retirement. Missing replies retain protection. These scoped holds do
+  not calculate native recovery-chain edges or discover external/other-registration
+  backups, offline replicas or native log-generation epochs.
+  Managed physical clones now acquire durable holds before dispatch, including
+  conservative donor and recipient registration holds for remote clones whose
+  native protocol does not attest a source UUID. Returned SQL acknowledgements
+  remain separate from later observer/bookkeeping failures. These holds support
+  explicit inspection/retirement and leave physical clone files intact; they do
+  not close the remaining recovery-chain dependency calculation.
+  Scheduled age/count policies for exact native source/principal/role
+  are implemented with independent occurrence receipts, expiry, revocation,
+  restart and unresolved-outcome suspension. They preserve explicit pins and
+  do not discover base-backup dependencies or prove recoverability. Interrupted
+  private-input cleanup now has explicit offline reconciliation of its single
+  recorded pending removal; original lost acknowledgements remain visible and
+  unattempted files require a new review. Recovery from independently sealed receiver archive
+  checkpoints after the original native file is purged is implemented and
+  native/API/browser qualified, including native shutdown boundaries without
+  rotation events and checksum NONE. Explicit full recollection from an unresolved receiver's
+  available original log is implemented, with stopped-writer admission, native
+  source/GTID checks, a new receipt and no use of the uncertain cursor. Reviewed
+  Shell/raw archive retention,
+  explicit archive protection and durable interrupted-removal reconciliation
+  are implemented and native/API/browser qualified. Age/count policies retain
+  exact reviewed files and receipts; they do not infer backup/log recovery
+  coverage or purge native server logs. Backup/log-chain-aware retention remains
+  separate from the qualified age/count policies and operator-reviewed workflow.
+  Managed logical backups and ordered Shell archives now have reviewed recovery
+  dependency records. Native GTID subtraction/subset checks retain tagged GTIDs,
+  refuse prerequisite gaps and absent source GTIDs, and bind every selected
+  archive to its verified byte manifest. Active dependencies survive restart and
+  block manual, reviewed and scheduled removal. Retiring a broad backup hold is
+  separate from chain retirement, so selected archive edges stay protected.
+  Native source holds now also protect the same owner's registration aliases
+  under one admission/removal lock. This does not attest log-generation epochs,
+  discover external backups or offline replicas, or verify a recovered database.
+  Managed full-instance dump bases also retain their exact private backup files
+  while an active chain depends on them; broad-hold retirement does not release
+  those files or the chain's selected archives.
+* Native SQL server control now exposes reviewed SHUTDOWN/RESTART requests with
+  all-client disconnection consent and request-only acknowledgement. Native
+  supervision and privileges remain engine requirements. Separate owned fixture
+  process/data observations qualify those requests; they do not close host start,
+  service installation, upgrades or complete lifecycle acceptance.
+* MY-HA-LIFECYCLE: Complete independently observed topology/bootstrap/failover/
+  repair and authorized server-host configuration, lifecycle and upgrades.
+  The native AdminAPI adapter now exposes reviewed instance configuration and
+  core Cluster/ReplicaSet/ClusterSet operations through a dedicated workspace.
+  Native method-specific instance arguments, exact JSON integers, shared
+  known-member target fences and conservative clone-recovery archive holds are
+  implemented. Native/API/browser receipts qualify their recorded operations;
+  they do not close unreachable-member recovery or full topology failure/repair
+  acceptance. Native Router metadata/options and routing guideline creation,
+  active selection, editing, copying, renaming, removal and private-file JSON
+  import/export now have dedicated native method workflows for Cluster,
+  ReplicaSet and ClusterSet. Native document and Router configuration changes
+  invalidate stale reviews. Live Cluster Router listing, selected option
+  set/reset, stale-review refusal and metadata removal now have independent
+  native acceptance. Topology utility progress no longer depends on a binary-log
+  archive input reference. ReplicaSet and ClusterSet live Router metadata now
+  also have native set/reset and independent stored-value acceptance.
+  Actual Cluster complete outage, native forced recovery with an independently
+  unreachable member, and subsequent incremental rejoin now have separate
+  native data/replication acceptance. Topology guardian loss preserves original
+  progress identity for surviving server-work observations; target acknowledgement
+  remains blocked until independently observed member idleness and never
+  rewrites an unknown original reply.
+  Native Router
+  bootstrap/deployment and Linux service installation/control now use
+  independent SSH-host and original guardian authority; see
+  :doc:`mysql_router_hosts`. Actual Cluster primary crash/election, routed
+  transaction/data preservation, read-only routing and member rejoin are
+  qualified separately from host native upgrade acceptance and broader lifecycle
+  acceptance. Native ReplicaSet and ClusterSet primary crash, forced promotion,
+  original-primary rejoin and planned switchover now include TLS Router traffic,
+  exact committed values, pending rollback and independent new-write replication
+  observations. These scope-specific receipts retain native outcomes and do not
+  close the upgrade or wider inventory gates.
+  Reviewed installed-host upgrades now integrate native 9.7 Shell preflight,
+  private authentication, candidate configuration/unit validation, original
+  process stop and native AUTO upgrade. Explicit SSH/process/filesystem authority
+  permits the older source without admitting it to the normal 9.7 SQL profile.
+  Actual dispatcher loss preserves the unknown outcome and pending-stop
+  protection; independent completion allows acknowledgement and a new reviewed
+  original-service restart. Native three-member rolling upgrades now also cover
+  genuine 8.4 Shell metadata 2.2-to-2.4 migration, secondary-first service upgrades,
+  election during the last old primary's stop and reviewed promotion after all
+  members run 9.7. Independent checks preserve every original UUID and exact data,
+  and verify fresh-write replication after each step. Certificate-login and
+  explicit owned-primary execution from a secondary seed now have native
+  administrator/Router-account acceptance in all three topology families through
+  both connectors. Cutover and the broader inventory remain open.
+  Native local sandbox deploy/start/stop/kill/delete now have a separate
+  offline-capable execution-host workspace with explicit OS authority,
+  private dispatch passwords, native configuration/process identity checks,
+  stale-review refusal and durable cross-registration port fences. Native
+  method replies, uncertain-outcome acknowledgement and independent SQL/data
+  observations retain separate meanings. This does not close production host
+  installation/upgrades or broader topology/Router failure/repair acceptance.
+  Native administrator and Router account setup now has dedicated Cluster,
+  ReplicaSet and ClusterSet methods. These require the current writable primary
+  registration and bind native primary roles, account state and visible grants
+  to the review. Passwords are supplied privately at dispatch; native update,
+  dry-run, certificate and expiration options retain their native meaning.
+  Native instance configuration now also accepts private bootstrap administrator
+  passwords through its two configuration methods. Native account parsing,
+  selected-instance row/grant fingerprints, creation and existing-account
+  validation remain distinct from topology-primary account setup. Supplying a
+  password for an existing bootstrap account preserves the native error and
+  uncertain-outcome fence; explicit observation/acknowledgement is required
+  before another mutation. Broader production upgrade and recovery acceptance remain open; reviewed native
+  service creation/boot controls, option-file deployment and pre-SQL initialization are described in :doc:`mysql_functional_completion`.
+  Existing extra grants remain. The topology workspace now selects an owned
+  execution registration from a secondary seed, checks native membership for new
+  work, and binds account reviews to the current writable primary. Native
+  certificate-account login and password-only refusal pass independently in all
+  three topology families through both connectors.
+  Native SQL fanout now exposes each topology's ``execute`` method with native
+  contextual selectors, registered member arrays, exclusions, dry runs and
+  timeouts. Receipts and the desktop retain per-instance SQL errors separately
+  from the method return. Unknown SQL replies retain target protection until
+  independent original-session observations and explicit acknowledgement.
+  These observations do not attest arbitrary asynchronous SQL effects or full
+  application and HA readiness.
+  New topology jobs also retain admitted native utility/member ownership
+  evidence before dispatch. Uncertain clone recovery requires independent
+  original-client absence and idle server clone observations before explicit
+  target acknowledgement. Original unknown outcomes remain unknown; older
+  jobs, incomplete member witnesses, unavailable targets and denied/lost
+  instrumentation retain protection.
+  Pinned SSH host diagnostics now bind the actual MySQL host/data-directory UUID
+  and expose reviewed native configuration validation with durable remote
+  receipts. Selected option-file graphs now capture nested includes, directory
+  membership, resolved paths and native permission/depth rules, with review and
+  dispatch rechecks and a separate post-process observation. This does not freeze
+  concurrent configuration writers. Persisted settings/service arguments,
+  native upgrades and broader recovery remain separate work. Native Linux systemd start/stop/restart
+  now have exact unit/process association, prior owner/registration binding for
+  offline startup, durable manager-client outcomes and read-only reconciliation.
+  This does not establish SQL readiness, freeze external unit inputs or qualify
+  the separate Windows/macOS manager implementations and acceptance.
+* MY-LANGUAGE-CAPABILITIES: Close remaining procedural/future-state editor
+  checks and native operations for installed plugins/components/storage engines,
+  security and maintenance features identified by INV-MYSQL.
+  Graphical native MySQL JSON v1/v2 and TREE plans, including separate JSON/TREE
+  analysis actions and unchanged original text, are now implemented. Native
+  pure/C workspace/parser and built Linux desktop receipts qualify this
+  ``CMP-MY-04`` scope. They do not close the wider language/capability inventory.
+  The versioned native server grammar library now checks UTF-8 editor text in
+  an isolated process using the source-observed SQL mode, including compound
+  procedures and names that do not yet exist. It performs no SQL execution or
+  catalog/privilege binding, and separates optimizer-hint warnings from syntax
+  errors. Script previews now follow deterministic mode declarations using native
+  canonicalization on the private observer; retained execution rechecks each
+  statement's expected mode and stops on drift. Runtime-dependent future context
+  remains unconfirmed without executing submitted SQL. Remaining installed
+  capability reconciliation and catalog/privilege semantics require their work.
+  Native variable metadata now adds types, scopes, bounds and documentation,
+  including SESSION_ONLY definitions and installed component variables. Native
+  editor completion uses those definitions without variable values, separates
+  global/session assignment/reference scopes and preserves quoted component
+  identities. Explicit DOUBLE/NULL assignments and native runtime NULL DDN
+  checks are implemented. Native metadata does not expose sensitivity or
+  mutability. Persisted NULL and empty values now carry an explicit ambiguous
+  catalog state; native pure/C SET PERSIST/PERSIST_ONLY and DDN qualification
+  preserve ACK and presence without claiming typed identity from P_S text. These additions
+  do not close the wider installed-capability/editor inventory.
+  Installed native Rewriter rules now have dedicated inspect/create/edit/delete
+  and explicit reload actions, with native messages/digests/status, selected-row
+  locking, own-connection commits, changed-state refusal and separate partial
+  reload outcomes. The native installer is used by qualification; arbitrary-host
+  installer deployment remains under lifecycle work. This closes the installed
+  rule-management adapter gap, not INV-MYSQL. Source inspection also confirms
+  the Community ``components/mysqlbackup`` page-tracking UDF implementation and
+  its InnoDB handlers. Dedicated inspect/start/reset/stop/count, backup-ID,
+  export and purge actions now expose those native interfaces, including
+  native scalar failures, prior-index deletion on backup-ID assignment and
+  native host-file scope. They do not implement physical file copying,
+  incremental recovery or recovery-chain acceptance. Their presence does not
+  establish source availability of a complete Enterprise Backup utility.
+  Native MyISAM index-cache assignment and preloading now have typed reviewed
+  workflows, exact source/table/index rechecks and explicit native result-row
+  outcomes. These additions do not close the wider installed feature inventory.
+  Named-cache inspection, all four runtime settings and DEFAULT, and native
+  buffer release are also implemented with exact decimal observations, native
+  rounding/warnings, changed-state refusal and default-cache protection. Native
+  MySQL has no SHOW GLOBAL VARIABLES enumeration of named prefixes; that absence
+  is explicit, and all-zero observations do not assert native cache existence.
+  Native per-query attributes now have editor inputs, scoped native execution,
+  retained private script policies and installed runtime-UDF completion. The
+  pure connector corrects NULL metadata and negative TIME framing. Connector26.7
+  C attribute execution now requires the corrected native extension built from
+  pinned source with the matching SDK. The native patch covers TIME durations,
+  unsigned64, source-charset names, float64 and binding ownership. Native runtime
+  receipts and platform acceptance qualify their recorded scope; stock C builds
+  are refused before attribute dispatch. These corrections remain beta work,
+  separate from closed-source Enterprise scope.
+  All six Community ALTER INSTANCE actions now have reviewed owned-connection
+  workflows, native key rotation and redo-state receipts, TLS main/admin and
+  rollback options, changed-state refusal and explicit native ACK handling.
+  Host lifecycle, file/configuration deployment and remaining installed native
+  capabilities continue under their separate inventory and lifecycle work.
+* MY-DIAGNOSTICS: Audit and complete diagnostic preservation for other retained
+  editor/completion/catalog consumers and denied/disabled observer
+  profiles. Admitted Performance Schema profiles now use a separately
+  authenticated retained observer for current native language/charset facts in
+  parameter binding, script framing and C charset adaptation. Identity discovery,
+  cursor creation, decoded-error cleanup, empty script tails and automatic
+  transaction observation also preserve diagnostic state in their qualified
+  execution scope. Permission/connection loss refuses affected commands without
+  intrusive fallback; authenticated observer renewal does not reconnect the
+  original session or replay user SQL. Native C escape-mode acknowledgement
+  mismatches now borrow the private peer's stock C converter with independently
+  observed settings and verified private acknowledgement; unconfirmed private
+  context still refuses dispatch. Admitted native syntax checks now prepare on the private
+  same-instance peer using observed source mode/database context and preserve
+  source diagnostic state. This includes live database switches and denied
+  private parser context; original active-role/temporary-object binding remains
+  unqualified. Committed-catalog completion now uses that private peer with
+  source-observed database, mode and charset, preserving original diagnostic
+  areas and pending work. It marks source role/temporary-object overlays
+  incomplete and never substitutes an original read after private failure.
+  Denied-admission and disabled-Performance-Schema editor completion and syntax
+  checks now refuse without querying the original session. Their authenticated
+  API response gives fixed recovery guidance and the numeric native error,
+  without exposing SQL or native exception text. Restoring native SELECT access
+  to ``performance_schema.variables_by_thread``,
+  ``performance_schema.session_account_connect_attrs`` and
+  ``performance_schema.threads`` allows a denied candidate to be readmitted on
+  the same original connection. Disabled Performance Schema requires native
+  server configuration/restart and a new session. Candidate connections are
+  released with their owning session. Unadmitted parameter conversion, current-mode
+  script framing, query-attribute encoding and native C charset adaptation now
+  also refuse before dispatch, without source metadata queries. Authenticated
+  execution can readmit a denied private candidate after access restoration.
+  Native pure/C and API receipts verify unchanged source command counts,
+  diagnostic areas and pending savepoints. Source role/temporary-object overlays
+  and other retained consumers remain separate reconciliation work. These
+  refusals require the native dependency to be restored before affected SQL can
+  run; they do not claim executable support with Performance Schema disabled.
+  See :doc:`mysql_driver_development` for the execution scope;
+  these execution receipts do not close browser coverage or INV-MYSQL.
+
+The native inventory also confirms the GPL implementation of MySQL
+``keyring_udf`` and its shipped native library. Native plugin/function setup, current-principal key storage and generation,
+metadata inspection and removal are implemented and qualified through both
+connectors and authenticated plan/apply APIs. They ship with five typed Security
+operation descriptors. The owner resolved UI design Decision 10 as metadata-only for beta: inspection
+returns type and byte length. Raw-key retrieval/export is outside the current
+beta by owner scope, not an implementation blocker or Enterprise deferral. The descriptors remain draft/unsurfaced pending the
+front-end stream's shared operation-dialog and render acceptance. This native
+implementation is source available and is not deferred as closed Enterprise
+functionality.
+
+Native User/Role policies, exact identity rename/drop, role grants/defaults and
+available GPL socket second/third authentication factors are now implemented and
+qualified through both connectors and authenticated APIs. Their typed descriptors
+remain draft; the privilege variant now has typed native scopes and dedicated grant/revoke operations. Generated
+password delivery remains a separate protected-result gap; the metadata-only
+user-key ruling does not implicitly defer it. Registration-dependent
+plugins have no production implementor in the acquired Community source and are
+not emulated. These scoped receipts do not close the independent inventory.
+
+Native spatial-reference catalog, typed management and bounded selected-SRID
+server DDN exchange/migration are implemented. Captured SRID scope is explicit;
+large catalogs use separate selected batches under the existing byte bounds.
+Full native column facts and reviewed column policy assignment/removal are
+implemented and tested against community MySQL's native reference handling.
+Those receipts do not qualify working masking. Global policy installation,
+definition management and functioning masking depend on the closed source
+Enterprise component and are deferred as ``MY-POST-BETA-MASKING`` below.
+Foreign-server catalog, typed native
+management and credential-free server DDN migration generation/application are
+implemented. Server capture now includes every visible global variable and its native
+provenance. Persisted-only settings for unloaded components now retain their
+native identities and presence in navigation and server DDN, with withheld
+values and verified exact-name RESET PERSIST. Arbitrary installed components'
+runtime sensitivity classification and wider capability reconciliation remain
+open.
+
+MariaDB
+-------
+
+* MA-CONTINUITY: Complete native physical/incremental/PITR chains, recovery
+  targets, independent restored-data verification and production cutover.
+* MA-ARCHIVES: Complete unresolved receiver/checkpoint recovery, retention and
+  cleanup beyond published restart and stopped-tail adoption workflows.
+* MA-HA-LIFECYCLE: Complete topology/bootstrap/failover/repair, server-host
+  configuration/lifecycle and upgrades using independent native members.
+* MA-LANGUAGE-CAPABILITIES: Close wider procedural/Oracle-package scopes and
+  installed engines/plugins, security and maintenance findings from INV-MARIADB.
+
+Native BACKUP STAGE and table BACKUP LOCK/UNLOCK now have original-session
+reviewed controls, native execution/cancellation and separate acknowledgement
+receipts. Active transactions are refused before their native implicit commits;
+backup connections are physically discarded on close even with pool reset
+disabled. Physical file copying, verification and recovery-chain orchestration
+remain separate continuity gaps. Asynchronous replication-channel controls do not establish the
+Galera topology/bootstrap/repair workflows for installations that provide them.
+
+PostgreSQL
+----------
+
+* PG-RESTORE: Complete production restore/cutover and acceptance beyond the
+  implemented independent native recovery drills and recovery targets.
+* PG-ARCHIVES: Complete retention, interrupted-stream restart and log/archive
+  management beyond the qualified physical WAL and logical receiver captures.
+* PG-TEMP-PROTOCOL: Complete cross-registration and ordinary-SQL-principal
+  exported-snapshot consumers, destination orchestration/cutover beyond selected
+  native initial relation copies, and installed output-plugin qualification. Retained
+  original-backend logical streaming and temporary physical/logical creation,
+  export/no-export snapshot ownership and safe owned-slot removal now have a
+  separate reviewed replication-only resource. Existing SQL temporary-slot
+  controls and text/binary peek/get remain separate. A permanent-slot receiver
+  does not own another backend's temporary slot.
+* PG-REPLICATION-ADMISSION: Support applicable replication-only registrations
+  without requiring SQL admission and preserve the exact native principal.
+* PG-HA-LIFECYCLE: Complete standby synchronization, topology/bootstrap,
+  promotion/failover/repair, remote-host lifecycle/configuration and upgrades.
+* PG-LANGUAGE-CAPABILITIES: Close installed procedural-language/extension and
+  other native security/maintenance findings. Arbitrarily encoded catalog
+  identities remain separate from the qualified lossless SQL_ASCII payloads.
+
+Physical backup, WAL capture and known-name slot commands now offer explicit replication-only admission from the
+saved registration without borrowing or opening a SQL session. Native
+IDENTIFY_SYSTEM and SHOW bind the cluster, principal and WAL geometry; dispatch
+reauthenticates the reviewed peer. Credentials are withheld from durable jobs.
+Full and incremental backups stream native TAR files into private storage;
+requested plain output is materialized and verified independently. Native
+tablespace maps supply exact OIDs and source paths without opening those paths
+or claiming SQL catalog names. Verified artifacts support reconstruction and
+isolated recovery while the SQL registration remains disconnected. Native backup
+acknowledgement, TAR/flat-file verification and recovery remain separate facts.
+SQL role substitution is refused. Replication-only SSH now uses inspected or
+operator-supplied public host keys, independent pinned worker tunnels and native
+password/private-key authentication, including saved credentials. Remaining
+cross-registration and ordinary-SQL-principal snapshot-consumer workflows still
+require separate admission/workflow closure.
+Permanent physical-slot creation and known-name physical/logical-slot removal
+use the native utility without opening the SQL slot catalog. Prior existence,
+type and current identity remain unobserved. Native utility acknowledgement is
+saved before SSH release, separately from process cleanup and later catalog facts.
+Known-name logical stream capture also supports the registered database through
+native logical replication without SQL admission. Native IDENTIFY_SYSTEM binds
+the exact database and principal; the worker reauthenticates before dispatch.
+The SQL slot catalog, plugin, temporary status, active consumer and flush
+checkpoint remain unobserved. The native receiver governs refusal and feedback;
+its returned result and independently sealed payload bytes are separate facts.
+This path does not detect concurrent slot replacement/consumption or own another
+backend's temporary slot. The SQL-admitted path retains its stronger native
+catalog and checkpoint checks.
+
+Permanent logical slot creation now also has a registered replication-only
+workflow for native plugin, two-phase, failover and if-not-exists options.
+Utility acknowledgement remains separate from catalog state and prior existence.
+The native utility suppresses snapshot export. A separate retained native
+replication resource now owns temporary slots and exported snapshots without
+ordinary SQL admission. Status, review and acknowledgement pages do not send
+commands that would invalidate the export. Another command requires explicit
+invalidation confirmation. The original native database, backend and complete
+provider isolation scope bind command admission. Historical creation cannot
+authorize a drop after the name was released and reused elsewhere. Native error
+ends this owner; acknowledgements and later local close remain separate from
+unobserved catalog/health facts and no command automatically replays. This
+resource also supports native logical COPY BOTH capture on its original backend,
+reviewed bounds and optional fsynced-only flush feedback, exact frame delivery,
+inspection and removal. Native completion, artifact publication and unknown
+outcomes remain separate, with no automatic replay. Owned SNAPSHOT USE now starts
+a native read-only repeatable-read transaction, creates its slot as the first
+command, and supports explicit cancellable relation discovery/inspection and
+typed binary/text/CSV COPY on that original backend. Declared domain identities
+and their actual wire type/modifier remain separate. Native locks, current OID,
+column facts, SELECT permission and RLS bind the selected output. Materialized
+and foreign relations retain their native locking/snapshot rules. Native BEGIN,
+slot creation, COPY return, byte publication and transaction end have separate
+outcomes. Explicit commit/rollback retains session slots under native rules for
+later streaming; failed/uncertain commands end this owner. Exact private delivery,
+offline inspection and confirmed removal never replay a capture or promote an
+unknown operation. Independent application consumers now import a server-derived
+export on a separate same-registration native replication connection and
+transport. Native exporter identity is checked before and after import; BEGIN,
+import and verification retain separate acknowledgements. The imported read-only
+transaction can discover, inspect and copy selected relations after exporter
+release without acquiring its slot. Cross-registration and ordinary-SQL-principal
+consumers, destination orchestration/cutover, installed plugin acceptance and the
+independent PostgreSQL inventory remain open.
+
+DuckDB
+------
+
+* DU-DESIGN: Close remaining native schema/dependency transformations and their
+  complete DDN generation, reviewed application and postcondition workflows.
+* DU-EDITOR: Close computed/contextual member and projection binding cases,
+  preserving exact nested types, names and native positioned diagnostics.
+  Observed unshadowed core aggregate result shapes now preserve exact members,
+  container access, grouped FILTER/OVER results, DISTINCT/ALL arguments and
+  explicit CTE/derived aliases. Wider computed arguments, function families,
+  overloads and ordered aggregate arguments remain open; the native
+  qualification scope is recorded in :doc:`duckdb_driver_development`.
+* DU-CAPABILITIES: Close native installed-extension, file-format, storage,
+  configuration and lifecycle findings from INV-DUCKDB.
+
+Native object-comment editing is implemented for the pinned engine's supported
+families; see :doc:`duckdb_driver_development`. Full native extension facts and
+reviewed individual/all extension-file updates are also implemented. This does
+not close remote attachment options or broader installed-capability
+reconciliation. Original-session typed extension installation/loading includes
+local signed files, credential-free installation URLs, repository/directory selection, versions and FORCE;
+its read-only receipts now survive closing the original native instance and
+application restart, without permitting replay or inferring commit. Standard
+native file attachment mutation now has a reviewed original-session workflow,
+including file creation, conflict modes and native rollback distinctions.
+Database/schema comment syntax that the native runtime rejects
+as unimplemented must not be presented as a supported management operation.
+Reviewed attachments also expose native block/row-group sizes, storage version
+and authorized in-memory compression, with observed storage facts and caller
+transaction ownership. Native encrypted-file attachment uses privately bound,
+expiring keys, explicit discard, observed encryption/cipher facts and existing
+file-header semantics. Native database copy now has an original-session typed
+review/apply workflow for schema, data and schema-and-data, background phase
+receipts, cancellation, native partial/unknown outcomes and verified native
+catalog/row aggregates. Independent qualification additionally checks exact
+native data and committed file reopening. Attachment, extension and copy receipts
+have owner/endpoint/target-scoped durable storage, separate native release
+observations and read-only inspection without native admission. Extension-backed
+foreign catalog copies, remote attachments and broader storage transformations
+remain open. Native encrypt/decrypt/key-change-by-copy uses separately attached
+stores, reviewed native encryption/cipher facts, caller-owned commit/rollback,
+post-copy storage observations and independent correct/wrong-key file reopening.
+The pinned implementation has no in-place SQL REKEY operation; do not invent one
+or count it as an unmet native capability. Source replacement/cutover is not
+implied by successful copy acknowledgement.
+Native HTTP-secret source admission now records exact native selection and
+effective version/platform URL, with secret-read authority and revalidation
+before dispatch. Credentials stay inside DuckDB. Scope-specific HTTPS repository
+qualification does not establish functioning direct HTTPS INSTALL on the pinned
+build: ``DU-NATIVE-HTTPS-DIRECT`` records the independently reproduced native
+local-filesystem refusal. HTTPFS's native HTTP-repository-to-HTTPS transport is
+qualified separately. Secret constants now retain native scalars, scope lists and
+header maps, with private previews and a system-qualified map constructor.
+Borrowed query connections retain caller transaction decisions on administration
+refusal. Original-session secret management now distinguishes same-name storage
+identities, observes exact DROP targets, supports native persistence/conflict
+modes and default naming, and separately parses explicit private property
+expressions without executing them during review. Native persistent file effects
+can survive rollback and remain separate from current catalog state. Remote
+attachment and installed-capability reconciliation remain open; this scoped
+secret workflow does not establish independent INV-DUCKDB completeness.
+
+SQLite
+------
+
+* SQ-TRANSIENT-DESIGN: Generate and apply native DDN migrations on the original
+  authorized temporary/attached/uncommitted schema. Original-connection native
+  creation/removal, view/index/trigger replacement and structured column append
+  now have a separate reviewed workflow and durable receipts. Remaining
+  preservation/rebuild transformations, qualified module
+  transformations and large/partial-scope cases keep this item open. An
+  independent file migration must continue refusing retained-session provenance.
+  Native ordinary-table and column renames, column removal, named constraint
+  removal, NOT NULL changes and CHECK additions now also have property-driven
+  original-session DDN generation and reviewed native application. Native
+  dependency rewriting and existing-data refusal retain the original caller
+  transaction. External-content FTS identity/projection transformations still
+  require their preservation adapter; native pinned-runtime refusals for quoted
+  constraint lookup and TEMP-shadowed trigger renames remain explicit.
+* SQ-DEPENDENCIES: Close remaining attached/content-view alias-shadowing and
+  language-identity cases with preserved native FTS/document/row identities.
+* SQ-MODULES: Close remaining installed-module transformations and native
+  extension/function/collation/build-specific findings from INV-SQLITE.
+
+TEMP triggers now retain an identity in their native TEMP namespace, independent
+of a same-named table in another schema. Native nonexecuting declaration prepare
+can identify a qualified owner in main, TEMP or an attached database, while
+preserving the original connection's authorization policy. The owning relation
+and navigator destination retain that observed database. An unqualified owner
+with multiple visible candidates remains explicitly unavailable; a same-named
+TEMP table never supplies an invented parent. This is declaration binding, not
+proof that the existing trigger ran, and does not close retained DDN application.
+Retained Data Studio operations also require the original complete provider
+scope, including the selected registration target. A different target pointing
+to the same file cannot inspect, execute, roll back or close that session.
+
+Native catalog declaration generation now binds stored identifier
+spellings to exact namespaces and owners without rewriting SQL bodies. The
+independent registered-file path can consume those declarations. The separate
+original-session workflow now preserves its caller transaction and exact
+namespace/authorization scope for its admitted native stages; broader retained
+transformations remain open.
+
+Catalog-derived native main-file column additions now generate their own
+reviewed stages, preserving untyped/generated columns and dependencies. Native
+write-time checks distinguish empty and populated table capabilities; refusal
+rolls back earlier stages and is retained without replay. This closes that
+specific declaration-generation gap. It does not close original-session DDN
+application, broader module transformations or the independent SQLite inventory.
+Structured column-property controls now generate those DDN additions without
+requiring hand-written CREATE/ALTER commands. Installed custom module/function/
+collation preview adapters remain part of SQ-MODULES; unsupported reproduction
+is explicit and does not suppress the native capability from the denominator.
+
+Firebird network and embedded
+-----------------------------
+
+* FB-NATIVE: Implement and qualify findings from INV-FIREBIRD independently for
+  network and embedded modes. Preserve completed native administration, DDN,
+  data, diagnostics, collector/dashboard and desktop/lifecycle workflows.
+* FB-EVIDENCE: Reconcile the expanded native capability evidence with current
+  source. Existing FlameRobin parity/driver receipts retain their own scope.
+
+Post beta: closed source Enterprise functionality
+=================================================
+
+MY-POST-BETA-MASKING: MySQL dynamic masking policies
+---------------------------------------------------
+
+* Status: owner-deferred to post beta; excluded from beta completion blockers.
+* Native dependency: MySQL Enterprise ``object_policy`` component, its policy
+  storage and ``column_masking_policy_management`` /
+  ``column_masking_policy_retrieval`` service implementations.
+* Source evidence: the pinned MySQL 9.7.0 community tree provides
+  ``sql/sql_masking_policy.cc`` and
+  ``include/mysql/components/services/object_policy_service.h`` for the core SQL
+  hooks and service contracts. It contains no implementation of the required
+  component. Its ``mysql-test/t/masking_policy.test`` explicitly expects
+  component-unavailable errors for policy creation, deletion and lookup.
+  Oracle documents the dependency in the `MySQL 9.7 Enterprise masking guide
+  <https://dev.mysql.com/doc/refman/9.7/en/data-masking-dynamic-policies.html>`_.
+* Reason: the required closed source Enterprise implementation is unavailable
+  in the acquired source and falls outside the owner's beta edition scope.
+  Parser acceptance and successful column-reference assignment/removal cannot
+  establish working policy management or masked/unmasked query results.
+* Deferred work: component installation/lifecycle, policy catalog and definition
+  management, complete application workflows and positive native masking tests
+  with real users/roles and independently observed results on a supported
+  Enterprise installation after beta. Do not fabricate a replacement component
+  or claim execution success from mocked services.
+
+MY-POST-BETA-MLE: MySQL JavaScript execution and language validation
+------------------------------------------------------------------
+
+* Status: owner-deferred to post beta under the beta edition/source rule.
+* Native dependency: Enterprise ``file://component_mle`` and the implementations
+  of ``external_program_execution``, ``external_library`` and
+  ``external_library_ext``. Oracle identifies MLE as an Enterprise component in
+  its `MySQL 9.7 MLE documentation
+  <https://dev.mysql.com/doc/refman/9.7/en/mle-component.html>`_.
+* Source evidence: the pinned community source contains the contracts in
+  ``include/mysql/components/services/language_service.h`` and the consumers in
+  ``sql/sp_head.cc`` and ``sql/sql_cmd_ddl.cc``. The acquired ``components`` and
+  ``plugin`` implementation trees contain no provider of those services.
+  ``sp_head::init_external_routine`` reports an unavailable language component
+  when its execution service is absent.
+* Reason: the JavaScript parser/runtime implementation is unavailable in the
+  acquired source and is outside beta scope. Core SQL grammar acceptance,
+  opaque-body framing, library catalog preservation and successful declaration
+  management cannot establish JavaScript validity or functioning imports,
+  execution or MLE runtime diagnostics and metrics.
+* Beta scope retained: native community library catalog, CREATE, comment-only
+  ALTER, DROP, exact text/binary DDN exchange, SQL framing/formatting and existing
+  nonexecuting MySQL grammar checks. In this pinned source, library creation
+  warns when its external-library services are absent and still stores the
+  declaration; this does not prove the missing services work. Preserve those
+  native warnings and distinguish a later engine build's behavior.
+* Deferred work: MLE installation/lifecycle, JavaScript and imported-library
+  validation/execution, language completion, native diagnostics and MLE metrics,
+  with positive native Enterprise tests after beta. Do not supply an application
+  JavaScript runtime as a replacement. Open source SQL stored routines and
+  loadable-function implementations remain in the beta denominator.
+
+Shared acceptance
+=================
+
+* ALL-EVIDENCE: Reconcile current-source catalog, editor and complete operational
+  workflow receipts for the expanded native inventories. Record exact source,
+  refreshed paired DDN artifacts, engine/tool identities and platform scope.
+* HISTORY-QUALIFICATION: Owner-deferred. ScratchBird drivers and history
+  integrations remain wired. Do not run history tests or start/build ScratchBird
+  for history acceptance until the owner resumes qualification.
+* HUMAN-FORMS: Externally owned by the human form-validation team.
+* NATIVE-PLATFORMS: Externally owned by the Windows/macOS platform teams.
+  Their evidence is required for a cross-platform completion claim.
+
+MySQL registration lifecycle follow-up
+--------------------------------------
+
+The generic registration admission/release gap is implemented: retained native
+sessions, dedicated connections, opening connections, uncertain work, execution
+workers and synchronous utility operations prevent configuration changes.
+Independent recovery utility leases also block changes without a SQL provider
+binding. MySQL disconnect uses endpoint handling; explicit idle disconnect and
+removal retire the recovery transport and released native clients reject reuse.
+Owned Linux MySQL 9.7.0 qualification covers the actual workspace and disconnect
+routes with Python and C drivers, including transaction/savepoint/temporary-table
+and prepared-statement preservation. See the MySQL functional checklist and
+``tools/cdeadmin_mysql_registration_lifecycle_qualification.py``.
+
+This closes the generic registration follow-up only. Ten of eleven accepted
+comparison items are implemented; recovery/recoverability (``CMP-MY-01``),
+and remaining ``INV-MYSQL`` reconciliation still precede the MariaDB handoff. Platform-team acceptance,
+owner-deferred ScratchBird history tests and post-beta Enterprise features
+remain separately owned.
+
+MySQL individual physical artifact retention
+-------------------------------------------
+
+Native-host artifact pin/review/removal/reconciliation and exact-intent resume
+are implemented for full backups, prepared copies, copy-back and stopped managed
+recovery data/private logs. Application and host admission protect dependency
+edges, native process ownership and recovery registrations; unclaimed intent
+invalidation fences delayed deletion requests. Original native outcomes remain
+unchanged. Current Python/C and built desktop qualification is provided by
+``tools/cdeadmin_mysql_physical_replay_qualification.py --retention``.
+
+Reviewed age/count batches now preserve a minimum number of verified full-backup
+chains and execute a fixed set in dependency order. Native retained-file
+revalidation, current graph/reservation checks, pause, restart inspection,
+interrupted-item resume and unused-review invalidation are implemented.
+
+Scheduled physical retention uses explicitly confirmed, encrypted and expiring
+SSH delegation. Independent workers admit one fixed occurrence at a time and
+recheck current authority before each step. Revocation, expiry and interruption
+stop future admissions; original occurrences require independent handling.
+
+Recurring full-backup and optional native startup/stop drill policies now use
+encrypted SSH/SQL delegation, dedicated SQL connections and durable native job
+references. Unresolved work retains protection until explicit reconciliation;
+registration removal refuses enabled physical policies and protected jobs.
+Startup success does not establish full data/definition recovery acceptance.
+
+Manual expected-dump data/definition acceptance on managed physical recovery
+targets, including after native replay, now has separate native checks and
+interrupted-utility handling. Private-socket registrations preserve isolation
+without requiring TCP. Recurring expected-checkpoint acceptance now uses fresh private read-only
+recoveries, a selected sealed native dump, durable retention holds and original
+utility/server-generation end evidence. Unexported/system state, remaining
+backend admission and cutover stay open under
+``CMP-MY-01``. Remaining ``INV-MYSQL`` reconciliation still
+precede the MariaDB handoff. Linux evidence does not close platform-team gates;
+ScratchBird history qualification remains owner-deferred.
+
+
+MySQL native incremental recovery now records a full-rooted ordered chain,
+contiguous native LSNs, separate redo-only apply and final undo preparation.
+Both original inputs remain immutable and protected through application and
+host-side retention dependencies. Finalized chains feed the existing private
+recovery and independent expected-dump acceptance workflows. Remaining physical
+backend admission includes external paths and additional engines;
+unexported/system state, cutover and ``INV-MYSQL`` stay open.
+
+MySQL physical workflows now preserve registered native TLS policy and transfer
+client certificate material privately to the pinned host, with explicit server
+TLS provisioning for certificate-authenticated isolated recovery and recurring
+startup drills. ARCHIVE, BLACKHOLE, self-contained MRG_MYISAM and native MEMORY
+definition/restart behavior are admitted alongside InnoDB/MyISAM/CSV. MEMORY
+volatile-row loss is disclosed. Native MERGE absolute/escaping prefixes now
+resolve by final database/table identity, retaining complete MyISAM child payload
+and original metadata; recovered reads/writes remain separate from the source.
+Native GPL file-keyring provisioning now supports encrypted full/incremental
+chains, source key rotation, private native preparation and isolated native
+read-only/replay recovery with its own plugin/dependency/keyring copies.
+Durable opaque keys follow the protected backup chain; transient secrets are
+cleaned independently. Native SQL verifies the private keyring path and original
+encryption policy; recurring startup drills retain this admission after restart.
+External mappings, remaining engine
+inventory, unexported/system-state acceptance, legacy/guardian resolution and
+cutover remain implementation work. The comparison count is ten of
+eleven; Linux evidence does not close platform or owner-deferred history gates.
+
+MySQL external InnoDB per-table/general tablespaces now use separately reviewed
+native copy-back maps and private native filesystem aliases. The actual native
+process sees a read-only host and writable private data/workspace. Independent
+namespace, directory and mount observations protect editor admission while
+preserving original-process cancellation. Encrypted incremental recovery,
+external DDL, literal child paths and recurring drills share that admission.
+Missing original alias directories now use complete private parent projections,
+including a separately probed private root switch for missing top-level paths.
+The source SQL server can be offline; original directories remain absent in the
+base namespace. Executing-file identity survives replacement of its pathname,
+preserving independent original-process observation and cancellation.
+Retained native storage metadata now supports private preparation/copy-back and
+recovery of system files, default/user undo and empty configured scan roots.
+Encrypted incremental chains, literal system filenames, key rotation, recurring
+startup drills and source-offline recovery with missing parent/root directories
+have native evidence through both connectors. Relative homes/scan roots, nested
+directories and leading parent references now use native data-home/datadir
+resolution and retain original settings alongside effective paths. Circular
+paths now retain observed filesystem identities and original catalog spellings,
+including symbolic links followed by parent traversal. Encrypted incremental
+and source-offline recovery use the same sealed mapping through both connectors.
+Fixed/autoextended raw devices and multiple system files now have a corrected,
+source-qualified native reader, private copy-back and missing-device aliases.
+Remaining native version/layout inventory,
+and the remaining inventory/system-state/guardian/cutover work still precede
+handoff. Physical control now survives adapter/registration changes, missing
+duplicated bindings with matching original host facts, and native supervisor
+loss while source SQL is offline. Original unknown outcomes remain unknown;
+wider legacy utility/guardian coverage still requires its own evidence.
+
+
+Permanent recovered-service activation
+---------------------------------------
+
+The admitted Linux ``CMP-MY-01`` workflow now includes a permanent read-only
+service copied from an independently stopped recovery, followed by separately
+reviewed background writable activation. Native process/dictionary/namespace
+binding, normal registration/restart, independent expected-checkpoint acceptance
+and fresh locked data/account/public-system-table checks are qualified through
+both connectors. Original source-service inactivity/disablement also requires
+absence of an actual original dictionary holder, including a manually started
+server outside the unit. One durable startup claim, a cancellation boundary,
+unknown original replies and independent observations prevent automatic replay.
+The built Linux desktop qualifies the encrypted external-table case. All eleven
+comparison workflows are Linux-qualified; ``INV-MYSQL`` and its current native
+capability/diagnostic reconciliation remain separate. See
+:doc:`mysql_physical_backups` for the admitted version/layout, acceptance and
+cutover scope. Platform-team acceptance and owner-deferred ScratchBird history
+remain separately owned.
+
+Primary-engine attribute runtime scope
+=====================================
+
+* MY-POST-BETA-PRIMARY-ENGINE-ATTRIBUTES: the MySQL9.7 Community packet provides
+  SQL/dictionary hooks but no audited primary handlerton advertises
+  HTON_SUPPORTS_ENGINE_ATTRIBUTE. Debug simulation does not qualify a product
+  implementation. Primary table/index controls are excluded from this beta
+  profile; expose them only after obtaining the applicable implementation source
+  and native evidence. Closed-engine integration remains post beta. Secondary
+  attribute metadata and native tablespace attribute APIs retain their separate
+  qualified contracts. See :doc:`mysql_functional_completion`.

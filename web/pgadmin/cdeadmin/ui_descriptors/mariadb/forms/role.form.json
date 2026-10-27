@@ -1,0 +1,437 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "role",
+  "resource_kinds": [
+    "user",
+    "role",
+    "privilege"
+  ],
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "user.create.additional_authentication",
+      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
+      "tracking": "ui-unification"
+    },
+    {
+      "concept": "user.alter.additional_authentication",
+      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
+      "tracking": "ui-unification"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "user",
+          "label": "User"
+        },
+        {
+          "value": "role",
+          "label": "Role"
+        },
+        {
+          "value": "grant",
+          "label": "Grant"
+        }
+      ],
+      "ui_only": true
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "record_key": "user"
+    },
+    {
+      "field_id": "host",
+      "label": "Host match",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "default": "%",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    },
+    {
+      "field_id": "authentication_mode",
+      "label": "Primary authentication",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "PASSWORD",
+      "options": [
+        {
+          "value": "UNCHANGED",
+          "label": "Unchanged (keep current authentication)"
+        },
+        {
+          "value": "PASSWORD",
+          "label": "Password"
+        },
+        {
+          "value": "PLUGIN_PASSWORD",
+          "label": "Plugin Password"
+        },
+        {
+          "value": "PLUGIN_STRING",
+          "label": "Plugin String"
+        },
+        {
+          "value": "PLUGIN_ONLY",
+          "label": "Plugin Only"
+        },
+        {
+          "value": "NONE",
+          "label": "None"
+        }
+      ],
+      "group": "Authentication",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      },
+      "record_derive": {
+        "cases": [],
+        "default": "UNCHANGED"
+      },
+      "help": "On an existing account, Unchanged keeps the current authentication; pick a mode to replace it."
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "General",
+      "control": "password",
+      "required": false,
+      "help": "Used by IDENTIFIED BY or by an authentication plugin through USING PASSWORD(...).",
+      "group": "Authentication",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "plugin",
+      "label": "Authentication plugin",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "MariaDB plugin identifier used by IDENTIFIED VIA.",
+      "group": "Authentication",
+      "record_key": "authentication_plugin",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "authentication_string",
+      "label": "Plugin authentication string",
+      "tab": "General",
+      "control": "password",
+      "required": false,
+      "help": "Opaque MariaDB plugin authentication string used by USING.",
+      "group": "Authentication",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "tls_requirement",
+      "label": "TLS requirement",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "default": "NONE",
+      "options": [
+        {
+          "value": "NONE",
+          "label": "None"
+        },
+        {
+          "value": "SSL",
+          "label": "Ssl"
+        },
+        {
+          "value": "X509",
+          "label": "X509"
+        },
+        {
+          "value": "SPECIFIED",
+          "label": "Specified"
+        }
+      ],
+      "group": "TLS",
+      "record_derive": {
+        "cases": [
+          {
+            "key": "tls_requirement",
+            "equals": "SSL",
+            "value": "SSL"
+          },
+          {
+            "key": "tls_requirement",
+            "equals": "X509",
+            "value": "X509"
+          },
+          {
+            "key": "tls_requirement",
+            "equals": "SPECIFIED",
+            "value": "SPECIFIED"
+          }
+        ],
+        "default": "NONE"
+      },
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "tls_cipher",
+      "label": "Required TLS cipher",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "group": "TLS",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "x509_issuer",
+      "label": "Required X.509 issuer",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "group": "TLS",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "x509_subject",
+      "label": "Required X.509 subject",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "group": "TLS",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "max_queries_per_hour",
+      "label": "Queries per hour",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "group": "Limits",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "max_updates_per_hour",
+      "label": "Updates per hour",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "group": "Limits",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "max_connections_per_hour",
+      "label": "Connections per hour",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "group": "Limits",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "max_user_connections",
+      "label": "Concurrent user connections",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "group": "Limits",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "max_statement_time",
+      "label": "Maximum statement time (seconds)",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "group": "Limits",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "account_lock",
+      "label": "Account lock state",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "default": "UNLOCK",
+      "options": [
+        {
+          "value": "LOCK",
+          "label": "Lock"
+        },
+        {
+          "value": "UNLOCK",
+          "label": "Unlock"
+        }
+      ],
+      "group": "Authentication",
+      "record_derive": {
+        "cases": [
+          {
+            "key": "account_locked",
+            "truthy": true,
+            "value": "LOCK"
+          }
+        ],
+        "default": "UNLOCK"
+      },
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "password_expiration",
+      "label": "Password expiration",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "default": "DEFAULT",
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "Default"
+        },
+        {
+          "value": "NEVER",
+          "label": "Never"
+        },
+        {
+          "value": "NOW",
+          "label": "Now"
+        },
+        {
+          "value": "INTERVAL",
+          "label": "Interval"
+        }
+      ],
+      "group": "Authentication",
+      "record_derive": {
+        "cases": [
+          {
+            "key": "password_expired",
+            "equals": "Y",
+            "value": "NOW"
+          }
+        ],
+        "default": "DEFAULT"
+      },
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "password_expiration_days",
+      "label": "Password lifetime (days)",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "group": "Authentication",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "additional_authentication",
+      "label": "Additional authentication methods",
+      "tab": "Engine",
+      "control": "keyvalue",
+      "required": false,
+      "help": "Ordered OR-authentication methods. Each item declares a plugin and optionally password or authentication_string.",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "admin",
+      "label": "Role administrator",
+      "tab": "Engine",
+      "control": "text",
+      "required": false,
+      "help": "Optional MariaDB user or role named by WITH ADMIN.",
+      "group": "Role",
+      "visible_when": {
+        "field": "variant",
+        "equals": "role"
+      }
+    },
+    {
+      "field_id": "admin_kind",
+      "label": "Administrator type",
+      "tab": "Engine",
+      "control": "select",
+      "required": false,
+      "default": "USER",
+      "options": [
+        {
+          "value": "USER",
+          "label": "User"
+        },
+        {
+          "value": "ROLE",
+          "label": "Role"
+        }
+      ],
+      "group": "Role",
+      "visible_when": {
+        "field": "variant",
+        "equals": "role"
+      }
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. privilege: provider exposes no create form (grant, inspect, revoke) Round-tripped against MariaDB 10.11 by tools/tests/test_ui_descriptor_roundtrip_mariadb.py (create, re-inspect pre-fill, alter where the engine supports it)."
+}

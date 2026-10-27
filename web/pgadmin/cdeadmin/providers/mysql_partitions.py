@@ -76,17 +76,5 @@ def compile_operation(kind,operation,draft,target):
 
 def form(kind,operation,field):
     fields=[]
-    if operation=='exchange':fields += [field('exchange_database','Exchange database','text',True),field('exchange_table','Nonpartitioned exchange table','text',True),field('validation','Validate row placement','select',True,default='WITH VALIDATION',options=('WITH VALIDATION','WITHOUT VALIDATION'))]
-    if operation=='add_partitions':fields.append(field('mode','Native addition','select',True,default='DEFINITIONS',options=('DEFINITIONS','COUNT')))
-    if operation in {'add_partitions','coalesce_partitions'}:
-        value=field('count','Number of partitions','integer',operation=='coalesce_partitions')
-        if operation=='add_partitions':value['visible_when']={'field_id':'mode','equals':'COUNT'}
-        fields.append(value)
-    if operation=='reorganize':fields.append(field('partitions','Native partition names (blank uses selected partition)','json',default=[]))
-    if operation in {'add_partitions','reorganize'}:
-        value=field('definitions','Native PARTITION definitions','multiline',operation=='reorganize')
-        if operation=='add_partitions':value['visible_when']={'field_id':'mode','equals':'DEFINITIONS'}
-        fields.append(value)
-    if operation=='partition_by':fields.append(field('partition_clause','Native PARTITION BY clause','multiline',True))
     fields.append(field('confirmation','Confirmation','text',True))
     return {'form_id':'mysql.'+kind+'.'+operation,'title':operation.replace('_',' ').title()+' native MySQL partitioning','fields':fields}

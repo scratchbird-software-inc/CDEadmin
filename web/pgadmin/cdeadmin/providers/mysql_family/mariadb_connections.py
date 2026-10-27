@@ -148,6 +148,11 @@ class Connector:
     _POOL_ARGUMENTS = POOL_ARGUMENTS
 
     def __init__(self, module, pool_namespace=None):
+        if (getattr(module, '__name__', '') == 'mariadb' and
+                not hasattr(module._mariadb.cursor, 'cdeadmin_checked_fetch_errors')):
+            raise RelationalClientError(
+                'Rebuild the ScratchRobin MariaDB connector: native unbuffered '
+                'fetch error handling is required')
         self.module = module
         self._key = secrets.token_bytes(32)
         self._pools = {}

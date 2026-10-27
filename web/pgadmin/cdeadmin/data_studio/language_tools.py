@@ -41,6 +41,7 @@ def analyze(source, language, *, script=False, settings=None):
     settings = dict(settings or {})
     diagnostics = []
     statements = []
+    client_directives = []
 
     def issue(code, message, at=0):
         diagnostics.append({'code': code, 'message': message, 'severity': 'error',
@@ -49,7 +50,7 @@ def analyze(source, language, *, script=False, settings=None):
     digest = hashlib.sha256(source.encode()).hexdigest()
     result = {'language_profile': language, 'source_sha256': digest, 'diagnostics': diagnostics,
               'statements': statements, 'authority': capabilities(language)['validation_authority'],
-              'grammar_valid': None, 'script_ready': False}
+              'grammar_valid': None, 'script_ready': False, 'client_directives': client_directives}
     if language in COMBINED:
         issue('LANGUAGE_SELECTION_REQUIRED',
               'Select one exact language, not a combined profile.')
@@ -115,13 +116,18 @@ def analyze(source, language, *, script=False, settings=None):
             continue
         if quote:
             clean[i] = ' '
-            if c == '\\' and language in MYSQL and settings.get(
+            mysql_string = quote != '`' and not (
+                quote == '"' and settings.get('ansi_quotes') is True)
+            if c == '\\' and language in MYSQL and mysql_string and settings.get(
                     'no_backslash_escapes') is not True:
                 if settings.get('no_backslash_escapes') is None:
                     issue(
                         'SESSION_MODE_REQUIRED',
                         'Backslash quoting requires the observed NO_BACKSLASH_ESCAPES setting.',
                         i)
+                if quote == '"' and settings.get('ansi_quotes') is None:
+                    issue('SESSION_MODE_REQUIRED',
+                          'Double-quote framing requires the observed ANSI_QUOTES setting.', i)
                 if i + 1 < len(source):
                     clean[i + 1] = ' '
                 i += 2
@@ -142,7 +148,7 @@ def analyze(source, language, *, script=False, settings=None):
         if script and (i == 0 or source[i - 1] == '\n'):
             line = source[i:source.find(
                 '\n', i) if '\n' in source[i:] else len(source)]
-            directive = re.fullmatch(r'\s*DELIMITER\s+(\S+)\s*', line, re.I)
+            directive = re.fullmatch(r'\s*DELIMITER\s+(\S+)\s*', line, re.I | re.A)
             if directive and language in MYSQL:
                 if ''.join(clean[start:i]).strip():
                     issue(
@@ -150,6 +156,7 @@ def analyze(source, language, *, script=False, settings=None):
                         'DELIMITER must occur between statements.',
                         i)
                 delimiter = directive.group(1)
+                client_directives.append({'command':'DELIMITER','offset':i,'delimiter':delimiter})
                 if len(delimiter) > 16 or any(
                         x in delimiter for x in "'\"`\\"):
                     issue('DELIMITER_INVALID', 'Unsupported delimiter.', i)
@@ -193,6 +200,22 @@ def analyze(source, language, *, script=False, settings=None):
             clean[i] = ' '
             i += 1
             continue
+        if c == '$' and language == 'mysql-sql' and not source.startswith(delimiter, i):
+            from .mysql_quoting import marker_at, end_of_quote
+            marker = marker_at(source, i)
+            if marker and settings.get('mysql_dollar_quotes') is not False:
+                if settings.get('mysql_dollar_quotes') is not True:
+                    issue('NATIVE_VERSION_REQUIRED',
+                          'Dollar-quoted source requires the observed native MySQL parser revision.', i)
+                end = end_of_quote(source, i, marker)
+                if end is None:
+                    issue('UNTERMINATED', 'Unterminated native dollar-quoted text.', i)
+                    end = len(source)
+                # Retain a meaningful marker even if this literal is the whole
+                # statement. Only its contents hide client/script boundaries.
+                clean[i + 1:end] = [' '] * (end - i - 1)
+                i = end
+                continue
         if c == '$' and language in DOLLAR:
             match = re.match(r'\$(?:[A-Za-z_][A-Za-z_0-9]*)?\$', source[i:])
             if match:

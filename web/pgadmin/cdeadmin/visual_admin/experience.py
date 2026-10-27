@@ -57,7 +57,7 @@ GROUP_KINDS = {
         'type', 'user-defined-type', 'index', 'constraint', 'sequence',
         'partition', 'virtual-table', 'fts-table', 'foreign-table',
         'collation', 'conversion', 'rule', 'row-policy', 'operator',
-        'operator-class', 'operator-family', 'cast', 'language', 'access-method', 'transform',
+        'operator-class', 'operator-family', 'cast', 'language', 'access-method', 'transform', 'large-object',
     },
     'programmable': {
         'function', 'procedure', 'package', 'macro', 'trigger',

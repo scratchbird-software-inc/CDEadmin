@@ -1,0 +1,219 @@
+{
+  "schema": "cdeadmin.ui-options.v1",
+  "engine": "firebird",
+  "dialect": {
+    "column_types": [
+      "SMALLINT",
+      "INTEGER",
+      "BIGINT",
+      "INT128",
+      "NUMERIC",
+      "DECIMAL",
+      "FLOAT",
+      "DOUBLE PRECISION",
+      "DECFLOAT",
+      "BOOLEAN",
+      "DATE",
+      "TIME",
+      "TIME WITH TIME ZONE",
+      "TIMESTAMP",
+      "TIMESTAMP WITH TIME ZONE",
+      "CHAR",
+      "VARCHAR",
+      "BINARY",
+      "VARBINARY",
+      "BLOB",
+      "BLOB SUB_TYPE TEXT",
+      "BLOB SUB_TYPE BINARY"
+    ],
+    "index_methods": [
+      "ascending",
+      "descending"
+    ],
+    "routine_languages": [
+      "PSQL",
+      "external"
+    ],
+    "privileges": {
+      "table": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "REFERENCES"
+      ],
+      "view": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "REFERENCES"
+      ],
+      "procedure": [
+        "EXECUTE"
+      ],
+      "function": [
+        "EXECUTE"
+      ],
+      "package": [
+        "EXECUTE"
+      ],
+      "sequence": [
+        "USAGE"
+      ],
+      "exception": [
+        "USAGE"
+      ],
+      "domain": [
+        "USAGE"
+      ],
+      "database": [
+        "CREATE",
+        "ALTER",
+        "DROP"
+      ]
+    },
+    "trigger_events": {
+      "table": [
+        "INSERT",
+        "UPDATE",
+        "DELETE"
+      ],
+      "view": [
+        "INSERT",
+        "UPDATE",
+        "DELETE"
+      ],
+      "database": [
+        "CONNECT",
+        "DISCONNECT",
+        "TRANSACTION START",
+        "TRANSACTION COMMIT",
+        "TRANSACTION ROLLBACK"
+      ],
+      "ddl": [
+        "ANY DDL STATEMENT",
+        "CREATE TABLE",
+        "ALTER TABLE",
+        "DROP TABLE",
+        "CREATE PROCEDURE",
+        "ALTER PROCEDURE",
+        "DROP PROCEDURE",
+        "CREATE FUNCTION",
+        "ALTER FUNCTION",
+        "DROP FUNCTION",
+        "CREATE TRIGGER",
+        "ALTER TRIGGER",
+        "DROP TRIGGER",
+        "CREATE EXCEPTION",
+        "ALTER EXCEPTION",
+        "DROP EXCEPTION",
+        "CREATE VIEW",
+        "ALTER VIEW",
+        "DROP VIEW",
+        "CREATE DOMAIN",
+        "ALTER DOMAIN",
+        "DROP DOMAIN",
+        "CREATE ROLE",
+        "ALTER ROLE",
+        "DROP ROLE",
+        "CREATE SEQUENCE",
+        "ALTER SEQUENCE",
+        "DROP SEQUENCE",
+        "CREATE USER",
+        "ALTER USER",
+        "DROP USER",
+        "CREATE INDEX",
+        "ALTER INDEX",
+        "DROP INDEX",
+        "CREATE COLLATION",
+        "DROP COLLATION",
+        "ALTER CHARACTER SET",
+        "CREATE PACKAGE",
+        "ALTER PACKAGE",
+        "DROP PACKAGE",
+        "CREATE PACKAGE BODY",
+        "DROP PACKAGE BODY",
+        "CREATE MAPPING",
+        "ALTER MAPPING",
+        "DROP MAPPING"
+      ]
+    },
+    "system_privileges": [
+      "USER_MANAGEMENT",
+      "READ_RAW_PAGES",
+      "CREATE_USER_TYPES",
+      "USE_NBACKUP_UTILITY",
+      "CHANGE_SHUTDOWN_MODE",
+      "TRACE_ANY_ATTACHMENT",
+      "MONITOR_ANY_ATTACHMENT",
+      "ACCESS_SHUTDOWN_DATABASE",
+      "CREATE_DATABASE",
+      "DROP_DATABASE",
+      "USE_GBAK_UTILITY",
+      "USE_GSEC_UTILITY",
+      "USE_GFIX_UTILITY",
+      "IGNORE_DB_TRIGGERS",
+      "CHANGE_HEADER_SETTINGS",
+      "SELECT_ANY_OBJECT_IN_DATABASE",
+      "ACCESS_ANY_OBJECT_IN_DATABASE",
+      "MODIFY_ANY_OBJECT_IN_DATABASE",
+      "CHANGE_MAPPING_RULES",
+      "USE_GRANTED_BY_CLAUSE",
+      "GRANT_REVOKE_ON_ANY_OBJECT",
+      "GRANT_REVOKE_ANY_DDL_RIGHT",
+      "CREATE_PRIVILEGED_ROLES",
+      "GET_DBCRYPT_INFO",
+      "MODIFY_EXT_CONN_POOL",
+      "REPLICATE_INTO_DATABASE",
+      "PROFILE_ANY_ATTACHMENT"
+    ],
+    "auth_plugins": [
+      "Srp256",
+      "Srp",
+      "Legacy_Auth",
+      "Win_Sspi"
+    ],
+    "grantable_kinds": [
+      "table",
+      "view",
+      "procedure",
+      "function",
+      "package",
+      "sequence",
+      "exception",
+      "domain",
+      "database"
+    ],
+    "page_sizes": [
+      "4096",
+      "8192",
+      "16384",
+      "32768"
+    ]
+  },
+  "catalog": {
+    "tables": {
+      "resource_kind": "table"
+    },
+    "character_sets": {
+      "resource_kind": "character-set"
+    },
+    "collations": {
+      "resource_kind": "collation"
+    },
+    "domains": {
+      "resource_kind": "domain"
+    },
+    "users": {
+      "resource_kind": "user"
+    },
+    "roles": {
+      "resource_kind": "role"
+    },
+    "generators": {
+      "resource_kind": "sequence"
+    }
+  },
+  "notes": "Static dialect lists are drafts for the tested version; the engine stream verifies them against the dialect contract. catalog entries resolve at runtime from the endpoint's resources of the named kind."
+}

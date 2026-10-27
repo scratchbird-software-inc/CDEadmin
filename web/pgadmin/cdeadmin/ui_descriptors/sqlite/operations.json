@@ -1,0 +1,400 @@
+{
+  "schema": "cdeadmin.ui-operations.v1",
+  "engine": "sqlite",
+  "operations": [
+    {
+      "operation_id": "backup",
+      "resource_kind": "database",
+      "title": "Back up database",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "backup_path",
+          "label": "Absolute backup database filename",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "overwrite",
+          "label": "Replace an existing backup file",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "backup_timeout",
+          "label": "Backup deadline (seconds)",
+          "control": "number",
+          "required": false,
+          "default": 30
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "restore",
+      "resource_kind": "database",
+      "title": "Restore database",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "backup_path",
+          "label": "Absolute backup database filename",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "backup_timeout",
+          "label": "Backup deadline (seconds)",
+          "control": "number",
+          "required": false,
+          "default": 30
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "integrity_check",
+      "resource_kind": "database",
+      "title": "Integrity check",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "max_errors",
+          "label": "Maximum reported errors",
+          "control": "number",
+          "required": false,
+          "default": 100
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "quick_check",
+      "resource_kind": "database",
+      "title": "Quick check",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "max_errors",
+          "label": "Maximum reported errors",
+          "control": "number",
+          "required": false,
+          "default": 100
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "foreign_key_check",
+      "resource_kind": "database",
+      "title": "Check foreign keys",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "table",
+          "label": "Optional table name",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "vacuum",
+      "resource_kind": "database",
+      "title": "Vacuum",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "incremental_vacuum",
+      "resource_kind": "database",
+      "title": "Incremental vacuum",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "pages",
+          "label": "Maximum free-list pages (0 means all)",
+          "control": "number",
+          "required": false,
+          "default": 0
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "optimize",
+      "resource_kind": "database",
+      "title": "Optimize",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "analyze",
+      "resource_kind": "database",
+      "title": "Analyze",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "target",
+          "label": "Optional table or index name",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "reindex",
+      "resource_kind": "database",
+      "title": "Reindex",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "target",
+          "label": "Optional table or index name",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "wal_checkpoint",
+      "resource_kind": "database",
+      "title": "Checkpoint write-ahead log",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "mode",
+          "label": "Checkpoint mode",
+          "control": "select",
+          "required": false,
+          "default": "PASSIVE",
+          "options": [
+            {
+              "value": "PASSIVE",
+              "label": "Passive"
+            },
+            {
+              "value": "FULL",
+              "label": "Full"
+            },
+            {
+              "value": "RESTART",
+              "label": "Restart"
+            },
+            {
+              "value": "TRUNCATE",
+              "label": "Truncate"
+            }
+          ]
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_sqlite.py (dialog draft -> plan -> apply on a database file)."
+    },
+    {
+      "operation_id": "fts_optimize",
+      "resource_kind": "fts-table",
+      "title": "Optimize FTS index",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native operation timeout (seconds)",
+          "control": "number",
+          "required": true,
+          "default": 30
+        }
+      ]
+    },
+    {
+      "operation_id": "fts_rebuild",
+      "resource_kind": "fts-table",
+      "title": "Rebuild FTS index",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native operation timeout (seconds)",
+          "control": "number",
+          "required": true,
+          "default": 30
+        }
+      ]
+    },
+    {
+      "operation_id": "fts_integrity_check",
+      "resource_kind": "fts-table",
+      "title": "Check FTS integrity",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native operation timeout (seconds)",
+          "control": "number",
+          "required": true,
+          "default": 30
+        },
+        {
+          "field_id": "external_content",
+          "label": "Compare FTS5 external content",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "fts_merge",
+      "resource_kind": "fts-table",
+      "title": "Merge FTS segments",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native operation timeout (seconds)",
+          "control": "number",
+          "required": true,
+          "default": 30
+        },
+        {
+          "field_id": "pages",
+          "label": "Merge leaf-page budget (negative FTS5 values start a new merge)",
+          "control": "number",
+          "required": true,
+          "default": 128
+        },
+        {
+          "field_id": "minimum_segments",
+          "label": "FTS3/4 minimum segments",
+          "control": "number",
+          "required": false,
+          "default": 2
+        }
+      ]
+    },
+    {
+      "operation_id": "fts_delete_all",
+      "resource_kind": "fts-table",
+      "title": "Delete all FTS index entries",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native operation timeout (seconds)",
+          "control": "number",
+          "required": true,
+          "default": 30
+        }
+      ]
+    },
+    {
+      "operation_id": "fts_flush",
+      "resource_kind": "fts-table",
+      "title": "Flush session FTS terms",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native operation timeout (seconds)",
+          "control": "number",
+          "required": true,
+          "default": 30
+        }
+      ]
+    }
+  ]
+}

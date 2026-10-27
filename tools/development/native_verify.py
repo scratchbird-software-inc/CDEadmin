@@ -49,7 +49,12 @@ def child(name, evidence, port):
         import pyarrow
         import firebird.driver as firebird
         import mariadb
+        import _mysql_connector
+        assert getattr(_mysql_connector, 'CDEADMIN_QUERY_ATTRIBUTES_ABI', None) == 1, 'Build the corrected native MySQL connector'
+        from pglast import parser
+        assert getattr(parser, 'CDEADMIN_PARSE_OPTIONS_REVISION', None) == 2, 'Build the native PostgreSQL parser options patch'
         assert hasattr(mariadb._mariadb.cursor, 'cdeadmin_exact_temporals'), 'Stock MariaDB connector is insufficient'
+        assert hasattr(mariadb._mariadb.cursor, 'cdeadmin_checked_fetch_errors'), 'Rebuild MariaDB connector native fetch error handling'
         from pgadmin.cdeadmin.providers.firebird.provider import (
             _configure_client_library, _client_library_identity)
         _configure_client_library(firebird)
@@ -62,9 +67,29 @@ def child(name, evidence, port):
         assert pyarrow.__version__ == '25.0.1'
         assert sqlite3.sqlite_version == '3.53.0', sqlite3.sqlite_version
         with sqlite3.connect(':memory:') as connection:
+            assert callable(getattr(connection, 'load_extension', None)), 'SQLite extension loader is missing from CPython'
+            assert callable(getattr(connection, 'enable_load_extension', None)), 'Rebuild CPython with --enable-loadable-sqlite-extensions'
+            connection.setconfig(sqlite3.SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, True)
+            connection.setconfig(sqlite3.SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, False)
             connection.execute('CREATE VIRTUAL TABLE f USING fts5(value)')
+            connection.execute('CREATE VIRTUAL TABLE f3 USING fts3(value)')
+            connection.execute('CREATE VIRTUAL TABLE f4 USING fts4(value)')
             connection.execute('CREATE VIRTUAL TABLE r USING rtree(id, lo, hi)')
+            connection.execute('CREATE VIRTUAL TABLE g USING geopoly(label)')
             assert connection.execute("SELECT json_extract('{\"a\":1}', '$.a')").fetchone() == (1,)
+            for name in ('json_each', 'jsonb_each', 'dbstat', 'sqlite_dbpage', 'carray'):
+                assert connection.execute('SELECT * FROM pragma_table_xinfo(?)', (name,)).fetchall(), name
+            from pgadmin.cdeadmin.workspace.sqlite_native_rebind import rewrite
+            declarations = [
+                {'kind': 'table', 'name': 'bind_owner', 'native': {'ddl': 'CREATE TABLE bind_owner(id INTEGER PRIMARY KEY,body)'}},
+                {'kind': 'fts-table', 'name': 'bind_search', 'native': {'ddl': "CREATE VIRTUAL TABLE bind_search USING fts5(body,content='bind_owner')"}},
+                {'kind': 'view', 'name': 'bind_view', 'native': {'ddl': "CREATE VIEW bind_view AS SELECT s.body FROM bind_search('native') AS s"}}]
+            for row in declarations: connection.execute(row['native']['ddl'])
+            rewritten, runtime = rewrite(connection, declarations,
+                [{'kind': 'column', 'table': 'bind_owner', 'from': 'body', 'to': 'text'}],
+                [{'source_name': 'bind_search', 'column_renames': [{'from': 'body', 'to': 'text'}]}])
+            assert rewritten[0][1] == 'CREATE VIEW bind_view AS SELECT s."text" FROM bind_search(\'native\') AS s'
+            print(json.dumps(runtime, indent=2))
         return 0
     if name == 'http':
         import config
@@ -184,8 +209,12 @@ def verify(evidence):
         'duckdb-provider': [sys.executable, '-m', 'tools.cdeadmin_duckdb_driver_platform_gate', '--evidence', evidence / 'duckdb'],
         'firebird-embedded': [sys.executable, ROOT / 'tools/development/native_firebird.py', '--evidence', evidence / 'firebird'],
         'electron-desktop': [sys.executable, ROOT / 'tools/development/native_desktop.py', '--evidence', evidence / 'desktop', '--runs', '3'],
-        'python-contracts': [sys.executable, '-c', "import config,pytest; raise SystemExit(pytest.main(['tools/tests', '--junitxml=' + __import__('sys').argv[1]]))", evidence / 'python.xml'],
-        'javascript-contracts': ['corepack', 'yarn', 'exec', 'jest', '--maxWorkers=2', '--json', '--outputFile', evidence / 'javascript.json'],
+        # Owner deferral, 2026-10-16: wire ScratchBird clients, but do not run
+        # history qualification while its native engine is being developed.
+        'python-contracts': [sys.executable, '-c', "import config,pytest; raise SystemExit(pytest.main(['tools/tests', '-k', 'not history', '--junitxml=' + __import__('sys').argv[1]]))", evidence / 'python.xml'],
+        'javascript-contracts': ['corepack', 'yarn', 'exec', 'jest', '--maxWorkers=2',
+            '--testPathIgnorePatterns=[Hh]istory', '--testNamePattern=^(?!.*[Hh]istory)',
+            '--json', '--outputFile', evidence / 'javascript.json'],
         'identity': [sys.executable, '-m', 'tools.cdeadmin_product_identity', '--source', ROOT, '--skip-inventory', '--output', evidence / 'identity.json'],
     }
     for name, args in commands.items():
@@ -209,7 +238,7 @@ def verify(evidence):
     receipt = {'checks': checks, 'platform': platform.platform(),
                'complete': all(c['status'] == 'passed' for c in checks),
                'network_engine_qualification': 'not executed without owned server routes',
-               'scratchbird_history_qualification': 'requires native ScratchBird runtime'}
+               'scratchbird_history_qualification': 'deferred by owner, 2026-10-16; no history tests requested'}
     (evidence / 'receipt.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
     print(json.dumps(receipt, indent=2))
     return 0 if receipt['complete'] else 1

@@ -45,9 +45,13 @@ Exported documents are static data and do not authorize imported queries.
 
 The existing PostgreSQL driver qualification is recorded in
 ``postgresql_driver_development.rst``. This checklist is additional required
-work, not a claim that the full feature set has been qualified. Persistent
-monitoring history, a ScratchBird history backend and Windows/macOS qualification
-remain deferred or assigned to the platform teams.
+work, not a claim that the full feature set has been qualified. The owner's
+October 14/16 completion scope includes persistent monitoring history and the
+ScratchBird history backend. PostgreSQL archive integration is wired; the
+owner correction of October 16 defers ScratchBird history testing until explicitly
+resumed. Windows/macOS qualification belongs to the platform teams. The additional
+catalog, language and complete management-workflow acceptance requirements and
+current gaps are recorded in :doc:`six_engine_completion`.
 
 Acceptance obligations
 ======================
@@ -1289,3 +1293,198 @@ native estimated/analyzed parameterized JSON-plan and transactional INSERT
 qualification is retained in ``shared-editor-native-plan.log`` in the owner's
 temporary evidence area. The qualified parser remains pglast 8.5 / PostgreSQL
 18.6 and does not imply a server revision change.
+Retained temporary replication-slot resources
+---------------------------------------------
+
+The continuity workspace can open an independently owned SQL backend for
+temporary physical and logical slots. Native create/copy, physical WAL
+reservation, logical output-plugin/two-phase settings, advancement and removal
+use that same backend. Paged inventory includes only its temporary slots;
+permanent slots and temporary slots owned by another backend cannot be selected
+for mutation through this resource. Plugin names are checked in the database's
+encoding before PostgreSQL's name cast can silently truncate them.
+
+Resource and command reviews have separate confirmation and receipts. A durable
+owner-process channel supports requests admitted by other application workers.
+Native dispatch/return, later slot observation, local connection close and
+independent backend/slot cleanup remain separate facts. Duplicate requests do
+not redispatch a completed or uncertain command. Closing a viewer or selecting
+another database does not release the resource; explicit release or its reviewed
+lifetime closes the backend. WAL may be retained until PostgreSQL removes slots.
+
+Native SQL errors can remove every temporary slot on the resource's backend.
+Cancellation observers stop before later SQL/cleanup observations. Existing
+interactive query connections, pending SQL and savepoints stay separate. Native
+checks cover temporary create/copy/advance/drop, UTF-8/LATIN1 name widths, lost
+acknowledgement, native-error cleanup and asynchronous connection-close cleanup.
+Cross-process requests and cancellation of waiting logical initialization are
+qualified without settling a separate user transaction. Authenticated API and
+browser checks verify native slot lifetime, inventory, confirmation/scope
+refusals and later independent cleanup.
+
+Temporary logical text/binary peek/get now runs on this same retained backend.
+Ordered plugin options, exact WAL positions and native transaction thresholds
+are reviewed before dispatch. Text and base64 binary records stream to private
+JSONL artifacts; the native acknowledgement is saved before file publication.
+A failed publication cannot undo consumption, and recovery inspects captured
+bytes without replaying the command or promoting an uncertain command outcome.
+
+Owned artifacts have bounded previews, streamed browser downloads, independent
+checksum inspection and confirmed removal with retained receipts. Inspection
+and removal serialize across application workers. Artifacts remain accessible
+after resource release. Native text and binary output is compared against
+independent permanent slots, including large integer identities, Unicode and
+binary payloads; authenticated API and browser checks cover these controls.
+Replication-protocol streams and the wider product matrix remain open. History
+testing remains deferred and Windows/macOS qualification remains with the
+platform teams.
+
+Logical output in SQL_ASCII wire modes
+-------------------------------------
+
+When either the database or client encoding is SQL_ASCII, logical text output
+is converted to base64 inside PostgreSQL before client decoding. Captures label
+it ``base64-native-text`` and record both encodings. Binary output retains its
+separate ``base64`` label. Native WAL and transaction identities remain exact
+text even when the client returns metadata as bytes. No replacement characters
+or Python byte representations enter these artifacts.
+
+Independent permanent-slot comparisons qualify peek/get text and binary output
+for SQL_ASCII databases and UTF-8/LATIN1 databases with SQL_ASCII clients.
+SQL_ASCII databases with UTF-8 clients retain text output losslessly; pgoutput's
+native refusal of invalid UTF-8 bytes is preserved separately, including its
+removal of owned temporary slots. Uninterpreted payload bytes are preserved without
+guessing a character set. Identity metadata that is itself not representable
+as UTF-8 remains an explicit admission refusal and an open catalog limitation.
+
+Native logical replication receiver
+-----------------------------------
+
+The continuity workspace runs an independently owned ``pg_recvlogical`` receiver
+for an existing permanent logical slot in an explicit database. SQL-admitted review binds the
+native slot, confirmed position, authenticated principal, application host and
+utility/adapter hashes. Native start/end positions, ordered plugin options,
+status/fsync intervals and deadlines are preserved. Direct native authentication
+is required; an effective role is not silently replaced. Separate SQL slot
+controls create or remove slots. Temporary-slot protocol ownership remains open.
+
+The receiver always disables its reconnect loop. Cancellation supervises its
+owned process and preserves stopped output. Native return, file sealing and
+remote consumption are separate receipts; unknown outcomes are not replayed.
+Failed sealing can be reconciled offline without starting another receiver.
+A sealed file cannot silently acquire a replacement identity or checksum.
+Native newline-delimited payload files have exact byte previews and streamed
+browser downloads, without claiming transaction framing, replication apply or
+production recoverability. Native feedback is independently checked in tests.
+
+Plugin quoting follows the admitted native client revision: the 18.3/18.4
+adapter supplies quoting, while 18.6 performs it in the utility. Unqualified
+quoting revisions are refused explicitly. PostgreSQL 18.3 and 18.6 client checks
+compare complete text/binary output with independent SQL slots, including quoted
+Unicode database/publication names, cancellation, failed sealing and changed
+consumer positions. Authenticated API/browser checks cover review, start,
+preview and download. Retained temporary protocol streams, resumable archives and broader HA remain
+open. History and platform qualification retain their existing ownership.
+
+Server workspaces also admit a known slot name through the saved registration's
+logical replication database without opening a SQL session. IDENTIFY_SYSTEM
+provides the native database name and cluster identity; the authenticated startup
+principal, UTF8 database identity and selected transport are retained. Review,
+start and the independent worker reauthenticate that exact peer. Passwords stay
+private and are cleared from the dialog at dispatch. Pinned SSH transports use
+the same registered host-key and credential boundaries as physical admission.
+
+This admission does not observe SQL slot facts: prior existence, plugin,
+temporary status, active consumer, slot replacement and confirmed flush position
+are unknown. The native receiver may refuse a missing, active, physical or
+incompatible slot. Its acknowledgement, cancellation and exact sealed bytes
+remain separate receipts; no catalog preflight or new-slot creation is inferred.
+The SQL-admitted path keeps its stronger slot-identity and checkpoint checks.
+The registered database cannot be replaced with a browser-supplied database name
+or SQL database target. Temporary slots still require their owning backend.
+
+The continuity workspace also creates permanent logical slots through that
+registered native replication connection. It exposes native output-plugin
+identity, two-phase decoding, failover synchronization and if-not-exists.
+Native client revisions 18.3/18.4 require adapter identifier quoting; 18.6 quotes
+identifiers internally. Unqualified quoting revisions are refused. The native
+utility uses no-export-snapshot; exported snapshot ownership and temporary
+protocol resources remain separate work.
+The admitted quoting distinction follows the pinned 18.3 source and upstream
+`18.6 replication utility implementation
+<https://github.com/postgres/postgres/blob/REL_18_6/src/bin/pg_basebackup/streamutil.c>`_.
+The pinned 18.3 server replication scanner itself cannot consume an embedded
+double quote in a plugin identifier. Such names are refused before command
+dispatch and remain available through the separate native SQL logical-slot
+workflow. Spaces, Unicode, single quotes and backslashes retain their native
+protocol identities. Client-side quoting does not repair that server parser
+limitation, and the application does not emulate it.
+
+The reviewed peer, native utility and command adapter are bound before dispatch.
+The acknowledgement is durable before SSH release and never permits automatic
+replay. Prior existence and current catalog state remain unobserved. In
+particular, an if-not-exists acknowledgement can preserve another slot type,
+database or plugin unchanged; it does not prove new logical-slot creation.
+
+Replication-only physical backup, WAL and slot admission
+-------------------------------------------------------
+
+Native full/incremental backup, WAL capture and known-name slot commands can authenticate the registered principal through
+physical replication without a SQL database connection. The continuity dialog
+is available while the SQL registration is disconnected. IDENTIFY_SYSTEM and
+replication SHOW bind the native cluster, timeline, principal, version and WAL
+geometry. Start repeats admission and checks the reviewed identity; a changed
+peer refuses dispatch. Explicit passwords remain request-local and are omitted
+from durable reviews, jobs and status requests. Saved registration credentials
+and native libpq authentication are also admitted. Credentials cannot override
+the registered route. Duplicate starts read the existing receipt without
+authenticating or repeating a dispatched receiver.
+
+Permanent physical-slot creation and known-name physical/logical-slot removal
+use the native pg_receivewal command without requiring or opening a SQL slot
+catalog connection. Prior existence, slot type and current identity remain
+unobserved rather than being reported as absent. An if-not-exists success can
+retain an existing slot unchanged, including a logical slot. PostgreSQL governs
+duplicate creation, active slots and missing-slot refusal. The slot catalog
+control is disabled in replication-only mode; SQL-admitted registrations retain
+their independent catalog and SQL slot controls.
+
+Native slot utility and physical/logical receiver returns are recorded before SSH release. A successful native return
+remains acknowledged even if later process cleanup or tunnel release is
+unconfirmed. Those observations do not claim a later catalog state and never
+authorize automatic replay. Retained temporary and logical replication-protocol
+resources remain separate acceptance work.
+
+Physical replication cannot apply SQL SET ROLE. Register its authenticated
+principal directly. Replication-only SSH uses independently authenticated,
+pinned transports. The dialog can inspect the registered peer's public host key
+without sending credentials, or accept its expected OpenSSH public key.
+Native authentication occurs only after that key matches. Passwords and
+registered encrypted private keys can use explicit or saved passphrases;
+private-key bytes are read in the authorized request and sealed for the worker.
+Peer and client public-key fingerprints bind the review, while each job opens
+its own tunnel and preserves the database hostname for native TLS verification.
+Admission loopback ports and interactive SQL tunnels are never borrowed by jobs.
+Failed worker tunnel releases remain owned for explicit retry from the receipt,
+and application shutdown retries them. An unavailable original owner cannot
+claim release. Native backup acknowledgement is recorded before later tunnel
+release and remains unchanged by cleanup. Credentials are destroyed on close.
+
+Physical backup streams native TAR archives into private application-host
+storage. After native verification, its tablespace_map supplies exact OIDs and
+escaped source paths; source-host paths are never opened or used as output
+destinations. Native tablespace names remain unobserved. Plain output is a
+separately materialized, verified artifact with managed tablespace links. TAR
+verification does not claim WAL parsing; final plain verification records its
+own scope. Original TAR bytes remain with the job as diagnostic evidence.
+
+Full/incremental plain and compressed TAR inputs enter native reconstruction
+and independent recovery without SQL admission. Offline verification and recovery
+use retained owner-bound artifacts and need no live replication credentials.
+Native utility acknowledgement precedes metadata observation/materialization;
+a later failure does not erase that acknowledgement or replay the backup.
+Cancellation retains its diagnostic files. Logical replication and temporary
+protocol ownership retain their separate admission/workflow gaps. Native
+fixtures deny SQL in HBA for the replication principal and independently observe
+actual backup, reconstruction, recovery, WAL capture and cancellation.
+This scope does not establish full product completion.

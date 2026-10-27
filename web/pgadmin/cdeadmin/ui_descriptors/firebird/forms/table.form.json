@@ -1,0 +1,1090 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "table",
+  "resource_kinds": [
+    "table"
+  ],
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [
+    {
+      "tab": "Partitions",
+      "reason": "no partitioning"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Partitions tab",
+      "reason": "omit: Firebird has no partitioning; list under omitted_tabs when completed"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "table_type",
+      "label": "Table kind",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "PERSISTENT",
+      "options": [
+        {
+          "value": "PERSISTENT",
+          "label": "Persistent"
+        },
+        {
+          "value": "GLOBAL TEMPORARY",
+          "label": "Global Temporary"
+        },
+        {
+          "value": "EXTERNAL",
+          "label": "External"
+        }
+      ],
+      "record_derive": {
+        "cases": [
+          {
+            "key": "external_file",
+            "truthy": true,
+            "value": "EXTERNAL"
+          },
+          {
+            "key": "relation_type",
+            "equals": 4,
+            "value": "GLOBAL TEMPORARY"
+          },
+          {
+            "key": "relation_type",
+            "equals": 5,
+            "value": "GLOBAL TEMPORARY"
+          }
+        ],
+        "default": "PERSISTENT"
+      }
+    },
+    {
+      "field_id": "on_commit",
+      "label": "Temporary row retention",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "DELETE ROWS",
+      "options": [
+        {
+          "value": "DELETE ROWS",
+          "label": "Delete Rows"
+        },
+        {
+          "value": "PRESERVE ROWS",
+          "label": "Preserve Rows"
+        }
+      ],
+      "visible_when": {
+        "field": "table_type",
+        "equals": "GLOBAL TEMPORARY"
+      },
+      "record_derive": {
+        "cases": [
+          {
+            "key": "relation_type",
+            "equals": 4,
+            "value": "PRESERVE ROWS"
+          }
+        ],
+        "default": "DELETE ROWS"
+      }
+    },
+    {
+      "field_id": "external_file",
+      "label": "External filename on the server",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "The server must permit this path through ExternalFileAccess. This is not a client file upload. External row inserts cannot be rolled back. UPDATE and DELETE are unavailable; DROP leaves the file intact.",
+      "visible_when": {
+        "field": "table_type",
+        "equals": "EXTERNAL"
+      }
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns",
+      "tab": "Columns",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Column name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "column_mode",
+          "label": "Column mode",
+          "control": "select",
+          "required": true,
+          "default": "STORED",
+          "options": [
+            {
+              "value": "STORED",
+              "label": "Stored"
+            },
+            {
+              "value": "IDENTITY",
+              "label": "Identity"
+            },
+            {
+              "value": "COMPUTED",
+              "label": "Computed"
+            },
+            {
+              "value": "COMPUTED INFERRED",
+              "label": "Computed Inferred"
+            }
+          ],
+          "record_derive": {
+            "cases": [
+              {
+                "key": "computed_source",
+                "truthy": true,
+                "value": "COMPUTED"
+              },
+              {
+                "key": "identity_type",
+                "truthy": true,
+                "value": "IDENTITY"
+              }
+            ],
+            "default": "STORED"
+          }
+        },
+        {
+          "field_id": "has_default",
+          "label": "Set column default",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "column_mode",
+            "equals": "STORED"
+          },
+          "record_key": "default_source",
+          "record_truthy": true
+        },
+        {
+          "field_id": "default_kind",
+          "label": "Default value type",
+          "control": "select",
+          "required": true,
+          "default": "TEXT",
+          "options": [
+            {
+              "value": "TEXT",
+              "label": "Text"
+            },
+            {
+              "value": "BINARY",
+              "label": "Binary"
+            },
+            {
+              "value": "NUMBER",
+              "label": "Number"
+            },
+            {
+              "value": "NULL",
+              "label": "Null"
+            },
+            {
+              "value": "TRUE",
+              "label": "True"
+            },
+            {
+              "value": "FALSE",
+              "label": "False"
+            },
+            {
+              "value": "DATE",
+              "label": "Date"
+            },
+            {
+              "value": "TIME",
+              "label": "Time"
+            },
+            {
+              "value": "TIMESTAMP",
+              "label": "Timestamp"
+            },
+            {
+              "value": "CURRENT_USER",
+              "label": "Current User"
+            },
+            {
+              "value": "CURRENT_ROLE",
+              "label": "Current Role"
+            },
+            {
+              "value": "CURRENT_DATE",
+              "label": "Current Date"
+            },
+            {
+              "value": "CURRENT_TIME",
+              "label": "Current Time"
+            },
+            {
+              "value": "CURRENT_TIMESTAMP",
+              "label": "Current Timestamp"
+            },
+            {
+              "value": "LOCALTIME",
+              "label": "Localtime"
+            },
+            {
+              "value": "LOCALTIMESTAMP",
+              "label": "Localtimestamp"
+            },
+            {
+              "value": "CURRENT_CONNECTION",
+              "label": "Current Connection"
+            },
+            {
+              "value": "CURRENT_TRANSACTION",
+              "label": "Current Transaction"
+            }
+          ]
+        },
+        {
+          "field_id": "default_value",
+          "label": "Default value",
+          "control": "text",
+          "required": false,
+          "record_key": "default_source",
+          "record_pattern": "^\\s*DEFAULT\\s+(.*)$"
+        },
+        {
+          "field_id": "time_precision",
+          "label": "Time precision",
+          "control": "number",
+          "required": false,
+          "help": "Optional fractional digits, 0–3; empty uses the native default."
+        },
+        {
+          "field_id": "data_type",
+          "label": "Data type",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "SMALLINT",
+              "label": "Smallint"
+            },
+            {
+              "value": "INTEGER",
+              "label": "Integer"
+            },
+            {
+              "value": "BIGINT",
+              "label": "Bigint"
+            },
+            {
+              "value": "INT128",
+              "label": "Int128"
+            },
+            {
+              "value": "NUMERIC",
+              "label": "Numeric"
+            },
+            {
+              "value": "DECIMAL",
+              "label": "Decimal"
+            },
+            {
+              "value": "FLOAT",
+              "label": "Float",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "DOUBLE PRECISION",
+              "label": "Double Precision",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "DECFLOAT",
+              "label": "Decfloat",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "BOOLEAN",
+              "label": "Boolean",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "DATE",
+              "label": "Date",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "TIME",
+              "label": "Time",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "TIMESTAMP",
+              "label": "Timestamp",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "CHAR",
+              "label": "Char",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "VARCHAR",
+              "label": "Varchar",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "NCHAR",
+              "label": "Nchar",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "NCHAR VARYING",
+              "label": "Nchar Varying",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "BINARY",
+              "label": "Binary",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "VARBINARY",
+              "label": "Varbinary",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "BLOB",
+              "label": "Blob",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "COMPUTED"
+                ]
+              }
+            },
+            {
+              "value": "DOMAIN",
+              "label": "Domain",
+              "visible_when": {
+                "field_id": "column_mode",
+                "in": [
+                  "STORED",
+                  "IDENTITY"
+                ]
+              }
+            }
+          ],
+          "help": "Prefilled from native metadata when known. Otherwise choose the intended type explicitly; no type is assumed.",
+          "visible_when": {
+            "field": "column_mode",
+            "in": [
+              "STORED",
+              "IDENTITY",
+              "COMPUTED"
+            ]
+          },
+          "record_key": "type_editor.data_type"
+        },
+        {
+          "field_id": "domain",
+          "label": "Domain name",
+          "control": "text",
+          "required": true,
+          "help": "For DOMAIN only.",
+          "record_key": "type_editor.domain"
+        },
+        {
+          "field_id": "length",
+          "label": "Length",
+          "control": "number",
+          "required": true,
+          "default": 1,
+          "help": "Character/binary types only.",
+          "record_key": "type_editor.length"
+        },
+        {
+          "field_id": "precision",
+          "label": "Precision",
+          "control": "number",
+          "required": false,
+          "help": "NUMERIC/DECIMAL: 1–38; FLOAT: 1–53; DECFLOAT: 16 or 34.",
+          "record_key": "type_editor.precision"
+        },
+        {
+          "field_id": "scale",
+          "label": "Scale",
+          "control": "number",
+          "required": false,
+          "default": 0,
+          "help": "NUMERIC/DECIMAL only.",
+          "record_key": "type_editor.scale"
+        },
+        {
+          "field_id": "blob_subtype",
+          "label": "BLOB subtype",
+          "control": "number",
+          "required": false,
+          "default": 0,
+          "help": "0 binary, 1 text, or a native custom subtype.",
+          "record_key": "type_editor.blob_subtype"
+        },
+        {
+          "field_id": "segment_size",
+          "label": "BLOB segment size",
+          "control": "number",
+          "required": false,
+          "help": "Optional segment size, 0–65535.",
+          "record_key": "type_editor.segment_size"
+        },
+        {
+          "field_id": "character_set",
+          "label": "Character set",
+          "control": "text",
+          "required": false,
+          "help": "Optional for CHAR, VARCHAR and text BLOB.",
+          "record_key": "type_editor.character_set"
+        },
+        {
+          "field_id": "time_zone",
+          "label": "Time zone type",
+          "control": "select",
+          "required": false,
+          "default": "WITHOUT TIME ZONE",
+          "options": [
+            {
+              "value": "WITHOUT TIME ZONE",
+              "label": "Without Time Zone"
+            },
+            {
+              "value": "WITH TIME ZONE",
+              "label": "With Time Zone"
+            }
+          ],
+          "record_key": "type_editor.time_zone"
+        },
+        {
+          "field_id": "expression",
+          "label": "Computed expression",
+          "control": "code",
+          "language": "sql",
+          "required": true,
+          "visible_when": {
+            "field": "column_mode",
+            "in": [
+              "COMPUTED",
+              "COMPUTED INFERRED"
+            ]
+          },
+          "record_key": "computed_source",
+          "record_pattern": "^\\s*\\((.*?)\\s*\\)\\s*$"
+        },
+        {
+          "field_id": "generation",
+          "label": "Identity generation",
+          "control": "select",
+          "required": true,
+          "default": "BY DEFAULT",
+          "options": [
+            {
+              "value": "ALWAYS",
+              "label": "Always"
+            },
+            {
+              "value": "BY DEFAULT",
+              "label": "By Default"
+            }
+          ],
+          "visible_when": {
+            "field": "column_mode",
+            "equals": "IDENTITY"
+          },
+          "record_derive": {
+            "cases": [
+              {
+                "key": "identity_type",
+                "equals": "0",
+                "value": "ALWAYS"
+              },
+              {
+                "key": "identity_type",
+                "equals": "1",
+                "value": "BY DEFAULT"
+              }
+            ],
+            "default": "BY DEFAULT"
+          }
+        },
+        {
+          "field_id": "start_value",
+          "label": "Identity start (signed 64-bit)",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "column_mode",
+            "equals": "IDENTITY"
+          },
+          "record_key": "identity_initial_value"
+        },
+        {
+          "field_id": "increment",
+          "label": "Identity increment (signed 32-bit)",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "column_mode",
+            "equals": "IDENTITY"
+          },
+          "record_key": "identity_increment"
+        },
+        {
+          "field_id": "collation",
+          "label": "Collation",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "column_mode",
+            "in": [
+              "STORED",
+              "IDENTITY"
+            ]
+          }
+        },
+        {
+          "field_id": "dimensions",
+          "label": "Array dimensions",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "lower",
+              "label": "Lower bound",
+              "control": "number",
+              "required": true,
+              "default": 1
+            },
+            {
+              "field_id": "upper",
+              "label": "Upper bound",
+              "control": "number",
+              "required": true,
+              "default": 1
+            }
+          ],
+          "required": false,
+          "record_key": "array_dimensions"
+        },
+        {
+          "field_id": "constraints",
+          "label": "Column constraints",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "kind",
+              "label": "Constraint kind",
+              "control": "select",
+              "required": true,
+              "default": "NOT NULL",
+              "options": [
+                {
+                  "value": "NOT NULL",
+                  "label": "Not Null"
+                },
+                {
+                  "value": "CHECK",
+                  "label": "Check"
+                },
+                {
+                  "value": "UNIQUE",
+                  "label": "Unique"
+                },
+                {
+                  "value": "PRIMARY KEY",
+                  "label": "Primary Key"
+                },
+                {
+                  "value": "REFERENCES",
+                  "label": "References"
+                }
+              ]
+            },
+            {
+              "field_id": "name",
+              "label": "Constraint name (optional)",
+              "control": "text",
+              "required": false
+            },
+            {
+              "field_id": "expression",
+              "label": "Check expression",
+              "control": "code",
+              "language": "sql",
+              "required": true,
+              "visible_when": {
+                "field": "kind",
+                "in": [
+                  "CHECK"
+                ]
+              }
+            },
+            {
+              "field_id": "reference_table",
+              "label": "Referenced table",
+              "control": "text",
+              "required": true,
+              "visible_when": {
+                "field": "kind",
+                "in": [
+                  "REFERENCES"
+                ]
+              }
+            },
+            {
+              "field_id": "reference_column",
+              "label": "Referenced column (empty uses primary key)",
+              "control": "text",
+              "required": false,
+              "visible_when": {
+                "field": "kind",
+                "in": [
+                  "REFERENCES"
+                ]
+              }
+            },
+            {
+              "field_id": "on_update",
+              "label": "On update",
+              "control": "select",
+              "required": false,
+              "default": "UNCHANGED",
+              "options": [
+                {
+                  "value": "UNCHANGED",
+                  "label": "Unchanged"
+                },
+                {
+                  "value": "NO ACTION",
+                  "label": "No Action"
+                },
+                {
+                  "value": "CASCADE",
+                  "label": "Cascade"
+                },
+                {
+                  "value": "SET DEFAULT",
+                  "label": "Set Default"
+                },
+                {
+                  "value": "SET NULL",
+                  "label": "Set Null"
+                }
+              ],
+              "visible_when": {
+                "field": "kind",
+                "in": [
+                  "REFERENCES"
+                ]
+              }
+            },
+            {
+              "field_id": "on_delete",
+              "label": "On delete",
+              "control": "select",
+              "required": false,
+              "default": "UNCHANGED",
+              "options": [
+                {
+                  "value": "UNCHANGED",
+                  "label": "Unchanged"
+                },
+                {
+                  "value": "NO ACTION",
+                  "label": "No Action"
+                },
+                {
+                  "value": "CASCADE",
+                  "label": "Cascade"
+                },
+                {
+                  "value": "SET DEFAULT",
+                  "label": "Set Default"
+                },
+                {
+                  "value": "SET NULL",
+                  "label": "Set Null"
+                }
+              ],
+              "visible_when": {
+                "field": "kind",
+                "in": [
+                  "REFERENCES"
+                ]
+              }
+            },
+            {
+              "field_id": "index_name",
+              "label": "Backing index name (optional)",
+              "control": "text",
+              "required": false,
+              "visible_when": {
+                "field": "kind",
+                "in": [
+                  "UNIQUE",
+                  "PRIMARY KEY",
+                  "REFERENCES"
+                ]
+              }
+            },
+            {
+              "field_id": "index_direction",
+              "label": "Backing index direction",
+              "control": "select",
+              "required": false,
+              "default": "ASCENDING",
+              "options": [
+                {
+                  "value": "ASCENDING",
+                  "label": "Ascending"
+                },
+                {
+                  "value": "DESCENDING",
+                  "label": "Descending"
+                }
+              ],
+              "visible_when": {
+                "field": "kind",
+                "in": [
+                  "UNIQUE",
+                  "PRIMARY KEY",
+                  "REFERENCES"
+                ]
+              }
+            }
+          ],
+          "required": false,
+          "visible_when": {
+            "field": "column_mode",
+            "in": [
+              "STORED",
+              "IDENTITY"
+            ]
+          },
+          "record_derive": {
+            "cases": [
+              {
+                "key": "not_null",
+                "truthy": true,
+                "value": [
+                  {
+                    "kind": "NOT NULL"
+                  }
+                ]
+              }
+            ],
+            "default": []
+          }
+        }
+      ],
+      "required": true,
+      "help": "Define each native column and its constraints."
+    },
+    {
+      "field_id": "primary_key",
+      "label": "Primary key",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Primary key",
+      "backend_field_id": "constraints[kind=PRIMARY KEY]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ],
+          "record_key": "backing_index.segments",
+          "record_pluck": "field_name"
+        }
+      ],
+      "record_key": "constraints",
+      "record_filter": {
+        "key": "constraint_type",
+        "equals": "PRIMARY KEY"
+      }
+    },
+    {
+      "field_id": "unique_constraints",
+      "label": "Unique",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Unique",
+      "backend_field_id": "constraints[kind=UNIQUE]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ],
+          "record_key": "backing_index.segments",
+          "record_pluck": "field_name"
+        }
+      ],
+      "record_key": "constraints",
+      "record_filter": {
+        "key": "constraint_type",
+        "equals": "UNIQUE"
+      }
+    },
+    {
+      "field_id": "foreign_keys",
+      "label": "Foreign keys",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Foreign keys",
+      "backend_field_id": "constraints[kind=FOREIGN KEY]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ],
+          "record_key": "backing_index.segments",
+          "record_pluck": "field_name"
+        },
+        {
+          "field_id": "references_table",
+          "label": "Referenced table",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "table",
+          "record_key": "referenced_relation"
+        },
+        {
+          "field_id": "references_columns",
+          "label": "Referenced columns",
+          "control": "multiselect",
+          "required": true,
+          "help": "Columns of the referenced table, in key order."
+        }
+      ],
+      "record_key": "constraints",
+      "record_filter": {
+        "key": "constraint_type",
+        "equals": "FOREIGN KEY"
+      }
+    },
+    {
+      "field_id": "check_constraints",
+      "label": "Check",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Check",
+      "backend_field_id": "constraints[kind=CHECK]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "expression",
+          "label": "Expression",
+          "control": "code",
+          "required": true,
+          "language": "sql",
+          "record_key": "check_source",
+          "record_pattern": "^\\s*CHECK\\s*\\((.*)\\)\\s*$"
+        }
+      ],
+      "record_key": "constraints",
+      "record_filter": {
+        "key": "constraint_type",
+        "equals": "CHECK"
+      }
+    },
+    {
+      "field_id": "sql_security",
+      "label": "SQL security",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "default": "INHERIT",
+      "options": [
+        {
+          "value": "INHERIT",
+          "label": "Inherit"
+        },
+        {
+          "value": "DEFINER",
+          "label": "Definer"
+        },
+        {
+          "value": "INVOKER",
+          "label": "Invoker"
+        }
+      ],
+      "help": "INHERIT uses the database SQL security setting."
+    },
+    {
+      "field_id": "publication",
+      "label": "Publication membership",
+      "tab": "Engine",
+      "control": "select",
+      "required": false,
+      "default": "DEFAULT",
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "Default"
+        },
+        {
+          "value": "ENABLE",
+          "label": "Enable"
+        },
+        {
+          "value": "DISABLE",
+          "label": "Disable"
+        }
+      ],
+      "help": "Controls table membership in the default publication, not the database replica mode. DEFAULT follows the database auto-enable policy. Membership alone does not prove row replication.",
+      "visible_when": {
+        "field": "table_type",
+        "in": [
+          "PERSISTENT",
+          "EXTERNAL"
+        ]
+      },
+      "record_derive": {
+        "cases": [
+          {
+            "key": "publication_enabled",
+            "truthy": true,
+            "value": "ENABLE"
+          }
+        ],
+        "default": "DEFAULT"
+      }
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: constraints grid split into Primary key / Unique / Foreign keys / Check. Round-tripped against Firebird 5.0.3 by tools/tests/test_ui_descriptor_roundtrip_firebird.py (create, re-inspect pre-fill, alter)."
+}

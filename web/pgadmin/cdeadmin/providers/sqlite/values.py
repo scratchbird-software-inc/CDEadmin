@@ -61,6 +61,9 @@ def parameter(item):
                     return number
             except ValueError:
                 pass
+        if kind == 'carray' and set(item) == {'encoding', 'data'}:
+            from .array_bindings import ArrayReference
+            return ArrayReference(data)
         if kind == 'base64' and not set(item).difference({
                 'encoding', 'data', 'byte_length'}):
             try:
@@ -74,6 +77,15 @@ def parameter(item):
                 return result
     raise RelationalClientError(
         'SQLite parameter requires a native value or exact envelope')
+
+
+def archive_value(item):
+    """Preserve SQLite's dynamic storage class, including numeric TEXT."""
+    if type(item) is int and abs(item) > SAFE_INTEGER:
+        return {'encoding': 'integer', 'data': str(item)}
+    if type(item) is float:
+        return {'encoding': 'float64', 'data': repr(item)}
+    return value(item)
 
 
 def parameters(items):

@@ -4,6 +4,15 @@ import threading
 
 
 class CommitReplyLoss:
+    @staticmethod
+    def commit_request(body):
+        if body[:1] != b'\x03':
+            return False
+        source = body[1:]
+        if source.startswith(b'\x00\x01'):
+            source = source[2:]  # Zero query attributes, one parameter set.
+        return source.strip().upper() == b'COMMIT'
+
     def __init__(self, host, port):
         self.target = (host, port)
         self.listener = socket.socket()
@@ -33,8 +42,7 @@ class CommitReplyLoss:
                 header = self._exact(source, 4)
                 body = self._exact(
                     source, int.from_bytes(header[:3], 'little'))
-                if client and header[3] == 0 and body in (
-                        b'\x03COMMIT', b'\x03\x00\x01COMMIT'):
+                if client and header[3] == 0 and self.commit_request(body):
                     self.commit_sent.set()
                 if not client and self.commit_sent.is_set():
                     if body[:1] == b'\x00':

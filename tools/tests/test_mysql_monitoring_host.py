@@ -128,3 +128,37 @@ def test_same_runtime_reverification_does_not_revoke_browser_free_collector(tmp_
         server.endpoint_profile.runtime_identity.verified_runtime_version = 'changed'
         with pytest.raises(PermissionError): grant.require(grant.policy, 'collect')
     finally: shared.close()
+
+
+def test_history_without_collector_or_browser_credentials_reauthorizes_after_read(tmp_path, monkeypatch):
+    host, shared, server, permission = make_host(tmp_path, monkeypatch)
+    arguments = {'start': '2026-10-15T00:00:00Z', 'end': '2026-10-16T00:00:00Z'}
+    host.history = Mock(query=Mock(return_value={'history': 'scratchbird', 'samples': []}))
+    try:
+        assert 'history_enabled' in host.policy_fields
+        assert host.historical(1, 7, 'database', arguments)['history'] == 'scratchbird'
+        assert not host._admissions and not host._grants
+        permission.acquire_secret.assert_not_called()
+        with pytest.raises(PermissionError):
+            host.historical(2, 7, 'database', arguments)
+        with pytest.raises(PermissionError):
+            host.historical(1, 7, 'other', arguments)
+        def changed(*args, **kwargs):
+            server.endpoint_profile.database_targets[0].database = 'different'
+            return {'samples': [{'must_not_escape': True}]}
+        host.history.query.side_effect = changed
+        with pytest.raises(PermissionError):
+            host.historical(1, 7, 'database', arguments)
+    finally:
+        shared.close()
+
+
+def test_mysql_history_disabled_when_destination_unconfigured(tmp_path, monkeypatch):
+    host, shared, _server, _permission = make_host(tmp_path, monkeypatch)
+    try:
+        assert host.snapshot(1, 7, 'database')['history_available'] is False
+        with pytest.raises(ValueError):
+            host.enable(1, 7, 'database', {'history_enabled': True})
+        assert not host._grants
+    finally:
+        shared.close()

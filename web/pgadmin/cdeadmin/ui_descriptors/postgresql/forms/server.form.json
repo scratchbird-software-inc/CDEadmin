@@ -1,0 +1,714 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "draft",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [
+    {
+      "tab": "SSL/TLS",
+      "reason": "libpq SSL settings are rows of connection_params on the Engine tab (see gaps)."
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "SSL/TLS tab fields (ssl_mode, ssl_cert, ssl_key, ssl_ca)",
+      "reason": "pgAdmin stores sslmode/sslcert/sslkey/sslrootcert/sslcrl as rows of connection_params, not as separate fields; splitting them out needs a backend change to how connection_params is saved.",
+      "tracking": "ui_unified_design open decisions"
+    },
+    {
+      "concept": "Colour picker for bgcolor/fgcolor",
+      "reason": "pgAdmin uses a 'color' control; the descriptor control set has none, fields are typed text."
+    },
+    {
+      "concept": "db_res dynamic control",
+      "reason": "control switches between a creatable multi-select and an SQL editor on db_res_type; typed as text."
+    },
+    {
+      "concept": "rolvaliduntil-style dynamic visibility of profile route/secret fields",
+      "reason": "providerConnectionFields()/providerSecretFields() generate cde_route_*/cde_secret_* fields from endpoint profiles at runtime; they belong to the provider_endpoint profiles, not to this form."
+    },
+    {
+      "concept": "Connected-state read-only rules",
+      "reason": "readonly/disabled depend on state.connected, isShared and current_user; not expressible as visible_when."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "id",
+      "label": "ID",
+      "control": "number",
+      "tab": "Connection",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "control": "text",
+      "tab": "Connection",
+      "required": true
+    },
+    {
+      "field_id": "gid",
+      "label": "Server group",
+      "control": "select",
+      "tab": "Connection",
+      "option_values_path": [
+        "catalog",
+        "server_groups"
+      ],
+      "help": "Options are the pgAdmin server groups; hidden when registering through an engine profile."
+    },
+    {
+      "field_id": "cde_profile_id",
+      "label": "Engine / interface profile",
+      "control": "select",
+      "tab": "Connection",
+      "required": true,
+      "option_values_path": [
+        "catalog",
+        "endpoint_profiles"
+      ],
+      "modes": [
+        "create"
+      ],
+      "help": "Select the native interface used by this endpoint. Engines with multiple interfaces expose each interface as a separate protocol-owned profile. Changing it resets port, connect/verify switches and route defaults (depChange not expressible here)."
+    },
+    {
+      "field_id": "cde_registration_intent",
+      "label": "Registration action",
+      "control": "text",
+      "tab": "Connection",
+      "modes": [
+        "create"
+      ],
+      "help": "Hidden field set by the registration workflow (endpoint / create_database / register_existing)."
+    },
+    {
+      "field_id": "server_owner",
+      "label": "Shared Server Owner",
+      "control": "text",
+      "tab": "Connection",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "group": "Sharing",
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "server_type",
+      "label": "Server type",
+      "control": "select",
+      "tab": "Connection",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "option_values_path": [
+        "catalog",
+        "supported_servers"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "connected",
+      "label": "Connected?",
+      "control": "boolean",
+      "tab": "Connection",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "version",
+      "label": "Version",
+      "control": "text",
+      "tab": "Connection",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background",
+      "control": "text",
+      "tab": "Connection",
+      "group": "Colour",
+      "help": "Hex colour (pgAdmin 'color' control; no colour control in the descriptor set, see gaps). Disabled while connected."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground",
+      "control": "text",
+      "tab": "Connection",
+      "group": "Colour",
+      "help": "Hex colour (pgAdmin 'color' control). Disabled while connected."
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now?",
+      "control": "boolean",
+      "tab": "Connection",
+      "modes": [
+        "create"
+      ],
+      "default": true,
+      "help": "Shown for legacy_preserved profiles; provider_endpoint profiles show 'Verify endpoint now?' instead."
+    },
+    {
+      "field_id": "cde_verify_now",
+      "label": "Verify endpoint now?",
+      "control": "boolean",
+      "tab": "Connection",
+      "modes": [
+        "create"
+      ],
+      "help": "Shown for provider_endpoint profiles only (visibility depends on the profile workflow, not on a field)."
+    },
+    {
+      "field_id": "shared",
+      "label": "Shared?",
+      "control": "boolean",
+      "tab": "Connection",
+      "group": "Sharing",
+      "help": "Visible only to admins in pgAdmin server mode; read-only when the server is owned by another user."
+    },
+    {
+      "field_id": "shared_username",
+      "label": "Shared Username",
+      "control": "text",
+      "tab": "Connection",
+      "group": "Sharing",
+      "help": "Visible only to admins in server mode; defaults to the username when sharing is switched on."
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "control": "text",
+      "tab": "Connection"
+    },
+    {
+      "field_id": "connection_string",
+      "label": "Connection String",
+      "control": "text",
+      "tab": "Connection",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "host",
+      "label": "Host name/address",
+      "control": "text",
+      "tab": "Connection",
+      "required": true,
+      "help": "Hidden for embedded-file profiles. Either host or service must be given. Changing it on a connected server requires disconnect/reconnect."
+    },
+    {
+      "field_id": "port",
+      "label": "Port",
+      "control": "number",
+      "tab": "Connection",
+      "required": true,
+      "min": 1,
+      "max": 65535,
+      "default": 5432,
+      "help": "Hidden for embedded-file profiles."
+    },
+    {
+      "field_id": "db",
+      "label": "Database / file",
+      "control": "text",
+      "tab": "Connection",
+      "default": "postgres",
+      "help": "Initial database used to establish the PostgreSQL connection. Use an existing database that this user can access. Read-only while connected or shared."
+    },
+    {
+      "field_id": "service",
+      "label": "Service",
+      "control": "text",
+      "tab": "Connection",
+      "help": "pg_service.conf service name; read-only while connected or shared."
+    },
+    {
+      "field_id": "username",
+      "label": "Username",
+      "control": "text",
+      "tab": "Authentication",
+      "help": "Hidden for embedded-file profiles."
+    },
+    {
+      "field_id": "kerberos_conn",
+      "label": "Kerberos authentication?",
+      "control": "boolean",
+      "tab": "Authentication",
+      "help": "When on, the password fields are disabled."
+    },
+    {
+      "field_id": "gss_authenticated",
+      "label": "GSS authenticated?",
+      "control": "boolean",
+      "tab": "Authentication",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "gss_encrypted",
+      "label": "GSS encrypted?",
+      "control": "boolean",
+      "tab": "Authentication",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "control": "password",
+      "tab": "Authentication",
+      "help": "In edit mode the password field is enabled only if Save Password is set to true. Hidden when the profile declares typed secret fields."
+    },
+    {
+      "field_id": "save_password",
+      "label": "Save password?",
+      "control": "boolean",
+      "tab": "Authentication",
+      "help": "Disabled when the pgAdmin configuration forbids saving passwords or Kerberos is on."
+    },
+    {
+      "field_id": "role",
+      "label": "Role",
+      "control": "text",
+      "tab": "Authentication",
+      "native_keyword": "SET ROLE",
+      "help": "Read-only while connected."
+    },
+    {
+      "field_id": "use_ssh_tunnel",
+      "label": "Use SSH tunneling",
+      "control": "boolean",
+      "tab": "Authentication",
+      "group": "SSH tunnel",
+      "help": "Disabled when the pgAdmin build has no SSH tunnel support; read-only while connected."
+    },
+    {
+      "field_id": "tunnel_host",
+      "label": "Tunnel host",
+      "control": "text",
+      "tab": "Authentication",
+      "group": "SSH tunnel",
+      "visible_when": {
+        "field": "use_ssh_tunnel",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "tunnel_port",
+      "label": "Tunnel port",
+      "control": "number",
+      "tab": "Authentication",
+      "group": "SSH tunnel",
+      "max": 65535,
+      "default": 22,
+      "visible_when": {
+        "field": "use_ssh_tunnel",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "tunnel_username",
+      "label": "Username",
+      "control": "text",
+      "tab": "Authentication",
+      "group": "SSH tunnel",
+      "visible_when": {
+        "field": "use_ssh_tunnel",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "tunnel_authentication",
+      "label": "Authentication",
+      "control": "radio",
+      "tab": "Authentication",
+      "group": "SSH tunnel",
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "label": "Password"
+        },
+        {
+          "value": true,
+          "label": "Identity file"
+        }
+      ],
+      "visible_when": {
+        "field": "use_ssh_tunnel",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "tunnel_identity_file",
+      "label": "Identity file",
+      "control": "file",
+      "tab": "Authentication",
+      "group": "SSH tunnel",
+      "visible_when": {
+        "field": "tunnel_authentication",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "tunnel_password",
+      "label": "Password",
+      "control": "password",
+      "tab": "Authentication",
+      "group": "SSH tunnel",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "use_ssh_tunnel",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "tunnel_prompt_password",
+      "label": "Prompt for identity file password?",
+      "control": "boolean",
+      "tab": "Authentication",
+      "group": "SSH tunnel",
+      "visible_when": {
+        "field": "tunnel_authentication",
+        "equals": true
+      },
+      "help": "Enable to be prompted for the identity file's passphrase at connection time, if the file is passphrase-protected. This setting applies only to identity-file authentication. When using password authentication for the SSH tunnel, leave the SSH password field empty to be prompted on connection."
+    },
+    {
+      "field_id": "save_tunnel_password",
+      "label": "Save password?",
+      "control": "boolean",
+      "tab": "Authentication",
+      "group": "SSH tunnel",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "connect_now",
+        "truthy": true
+      },
+      "help": "Disabled when the pgAdmin configuration forbids saving tunnel passwords."
+    },
+    {
+      "field_id": "tunnel_keep_alive",
+      "label": "Keep alive (seconds)",
+      "control": "number",
+      "tab": "Authentication",
+      "group": "SSH tunnel",
+      "min": 0,
+      "default": 0,
+      "visible_when": {
+        "field": "use_ssh_tunnel",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "db_res_type",
+      "label": "DB restriction type",
+      "control": "radio",
+      "tab": "Advanced",
+      "default": "databases",
+      "options": [
+        {
+          "value": "databases",
+          "label": "Databases"
+        },
+        {
+          "value": "sql",
+          "label": "SQL"
+        }
+      ],
+      "help": "Read-only while connected or shared."
+    },
+    {
+      "field_id": "db_res",
+      "label": "DB restriction",
+      "control": "text",
+      "tab": "Advanced",
+      "help": "pgAdmin switches the control on db_res_type: a creatable multi-select of database names, or an SQL editor returning names. The descriptor exposes it as text (see gaps)."
+    },
+    {
+      "field_id": "passexec_cmd",
+      "label": "Password exec command",
+      "control": "text",
+      "tab": "Advanced",
+      "help": "The server hostname, port, and username can be passed as variables by using the placeholders %HOSTNAME%, %PORT%, and %USERNAME%, which will be replaced with the corresponding server connection information. Disabled when the server configuration forbids it."
+    },
+    {
+      "field_id": "passexec_expiration",
+      "label": "Password exec expiration (seconds)",
+      "control": "number",
+      "tab": "Advanced",
+      "visible_when": {
+        "field": "passexec_cmd",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "prepare_threshold",
+      "label": "Prepare threshold",
+      "control": "number",
+      "tab": "Advanced",
+      "help": "If it is set to 0, every query is prepared the first time it is executed. If it is set to blank, prepared statements are disabled on the connection."
+    },
+    {
+      "field_id": "post_connection_sql",
+      "label": "Post Connection SQL",
+      "control": "code",
+      "tab": "Advanced",
+      "language": "sql",
+      "help": "Any query specified in the control below will be executed with autocommit mode enabled for each connection to any database on this server. Read-only while connected."
+    },
+    {
+      "field_id": "connection_params",
+      "label": "Connection Parameters",
+      "control": "grid",
+      "tab": "Engine",
+      "group": "libpq connection parameters",
+      "native_keyword": "libpq keywords",
+      "help": "libpq keywords (sslmode, connect_timeout, sslcert, ... see options). Defaults: sslmode=prefer, connect_timeout=10. Rows cannot be added or removed while connected. The value cell type follows the keyword's vartype (string/file/enum/integer/bool/password); version-gated keywords show a 'Supported version >= N' placeholder.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "hostaddr",
+              "label": "Host address"
+            },
+            {
+              "value": "passfile",
+              "label": "Password file"
+            },
+            {
+              "value": "channel_binding",
+              "label": "Channel binding"
+            },
+            {
+              "value": "connect_timeout",
+              "label": "Connection timeout (seconds)"
+            },
+            {
+              "value": "client_encoding",
+              "label": "Client encoding"
+            },
+            {
+              "value": "options",
+              "label": "Options"
+            },
+            {
+              "value": "application_name",
+              "label": "Application name"
+            },
+            {
+              "value": "fallback_application_name",
+              "label": "Fallback application name"
+            },
+            {
+              "value": "keepalives",
+              "label": "Keepalives"
+            },
+            {
+              "value": "keepalives_idle",
+              "label": "Keepalives idle (seconds)"
+            },
+            {
+              "value": "keepalives_interval",
+              "label": "Keepalives interval (seconds)"
+            },
+            {
+              "value": "keepalives_count",
+              "label": "Keepalives count"
+            },
+            {
+              "value": "tcp_user_timeout",
+              "label": "TCP user timeout (milliseconds)"
+            },
+            {
+              "value": "tty",
+              "label": "TTY"
+            },
+            {
+              "value": "replication",
+              "label": "Replication"
+            },
+            {
+              "value": "gssencmode",
+              "label": "GSS encmode"
+            },
+            {
+              "value": "sslmode",
+              "label": "SSL mode"
+            },
+            {
+              "value": "sslcompression",
+              "label": "SSL compression?"
+            },
+            {
+              "value": "sslcert",
+              "label": "Client certificate"
+            },
+            {
+              "value": "sslkey",
+              "label": "Client certificate key"
+            },
+            {
+              "value": "sslpassword",
+              "label": "SSL password"
+            },
+            {
+              "value": "sslrootcert",
+              "label": "Root certificate"
+            },
+            {
+              "value": "sslcrl",
+              "label": "Certificate revocation list"
+            },
+            {
+              "value": "sslcrldir",
+              "label": "Certificate revocation list directory"
+            },
+            {
+              "value": "sslsni",
+              "label": "Server name indication"
+            },
+            {
+              "value": "requirepeer",
+              "label": "Require peer"
+            },
+            {
+              "value": "ssl_min_protocol_version",
+              "label": "SSL min protocol version"
+            },
+            {
+              "value": "ssl_max_protocol_version",
+              "label": "SSL max protocol version"
+            },
+            {
+              "value": "krbsrvname",
+              "label": "Kerberos service name"
+            },
+            {
+              "value": "gsslib",
+              "label": "GSS library"
+            },
+            {
+              "value": "target_session_attrs",
+              "label": "Target session attribute"
+            },
+            {
+              "value": "load_balance_hosts",
+              "label": "Load balance hosts"
+            },
+            {
+              "value": "gssdelegation",
+              "label": "GSS delegation?"
+            },
+            {
+              "value": "require_auth",
+              "label": "Require authentication"
+            },
+            {
+              "value": "sslnegotiation",
+              "label": "SSL negotiation"
+            },
+            {
+              "value": "sslkeylogfile",
+              "label": "SSL Key Logfile"
+            },
+            {
+              "value": "min_protocol_version",
+              "label": "Min protocol version"
+            },
+            {
+              "value": "max_protocol_version",
+              "label": "Max protocol version"
+            },
+            {
+              "value": "oauth_issuer",
+              "label": "OAuth issuer"
+            },
+            {
+              "value": "oauth_client_id",
+              "label": "OAuth client id"
+            },
+            {
+              "value": "oauth_client_secret",
+              "label": "OAuth client secret"
+            },
+            {
+              "value": "oauth_scope",
+              "label": "OAuth scope"
+            }
+          ]
+        },
+        {
+          "field_id": "keyword",
+          "label": "Keyword",
+          "control": "text",
+          "readonly": true,
+          "help": "Mirrors name; sent to the backend."
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "control": "grid",
+      "tab": "Tags",
+      "help": "Maximum count comes from pgAdmin's max_server_tags_allowed; colour is random on add.",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Text",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Color",
+          "control": "text"
+        }
+      ]
+    }
+  ],
+  "notes": "Fields map 1:1 onto the legacy pgAdmin dialog (workflow legacy_preserved): field ids are the BaseUISchema ids and are served by the existing SQL templates. Source: web/pgadmin/browser/server_groups/servers/static/js/server.ui.js (ServerSchema, TagsSchema, getConnectionParameters) and static/js/variable.ui.js. pgAdmin groups: General->Connection (no General tab on the server family), Connection->Connection (host/port/db/service) and Authentication (username/password/role/kerberos), SSH Tunnel->Authentication, Advanced + Post Connection SQL->Advanced, Parameters->Engine (libpq keyword grid), Tags->Tags. Not a DDL object: no SQL tab. Field ids are checked against the pgAdmin *.ui.js schema ids by tools/tests/test_ui_descriptor_postgresql_schema_ids.py (the schema id gate); the form stays draft until phase 5 routes it to the SQL templates and ports the ui.spec expectations."
+}

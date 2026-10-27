@@ -1,0 +1,21 @@
+{
+  "engine": "sqlite",
+  "omitted": [
+    {
+      "family": "sequence",
+      "reason": "No sequences"
+    },
+    {
+      "family": "type",
+      "reason": "No user-defined types"
+    },
+    {
+      "family": "role",
+      "reason": "SQLite has no users or roles"
+    },
+    {
+      "family": "routine",
+      "reason": "No stored routines (native functions are read-only)"
+    }
+  ]
+}

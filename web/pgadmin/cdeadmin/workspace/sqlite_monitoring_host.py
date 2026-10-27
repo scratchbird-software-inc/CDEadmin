@@ -52,7 +52,7 @@ class SQLiteMonitoringHost(DuckDBMonitoringHost):
                 if previous is not None:
                     previous.require(policy, 'configure')
                     self.runtime.enable(policy, previous.open_source,
-                                        previous.require)
+                                        previous.require, history_writer=self._history_writer(previous))
                 else:
                     self.ownership.acquire()
                     grant = SQLiteFileGrant(policy, scope['route'],
@@ -60,7 +60,7 @@ class SQLiteMonitoringHost(DuckDBMonitoringHost):
                         self._authorizer(owner, sid, target))
                     try:
                         self.runtime.enable(policy, grant.open_source,
-                                            grant.require)
+                                            grant.require, history_writer=self._history_writer(grant))
                     except BaseException:
                         grant.revoke()
                         raise

@@ -1,0 +1,71 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "database",
+  "resource_kinds": [
+    "database"
+  ],
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "MariaDB database name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "or_replace",
+      "label": "Replace an existing database",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "if_not_exists",
+      "label": "Do not fail if it already exists",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "comment",
+      "label": "Database comment",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "record_key": "schema_comment"
+    },
+    {
+      "field_id": "character_set",
+      "label": "Default character set",
+      "tab": "Options",
+      "control": "text",
+      "required": false,
+      "record_key": "default_character_set"
+    },
+    {
+      "field_id": "collation",
+      "label": "Default collation",
+      "tab": "Options",
+      "control": "text",
+      "required": false,
+      "record_key": "default_collation"
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Round-tripped against MariaDB 10.11 by tools/tests/test_ui_descriptor_roundtrip_mariadb.py (create, re-inspect pre-fill, alter where the engine supports it)."
+}

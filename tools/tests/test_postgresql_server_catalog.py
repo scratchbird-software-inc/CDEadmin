@@ -34,3 +34,19 @@ def test_native_connection_failure_is_redacted_and_not_retried(monkeypatch):
     assert 'Secret' not in str(result)
     provider.open_session.assert_called_once_with({'route': {'server_id': 1, 'database_id': 42}}, _resolved_database=' spaced name ')
     assert result['databases'][0]['database_oid'] == 42
+
+
+def test_server_only_native_document_preserves_properties_without_database_expansion():
+    from pgadmin.cdeadmin.workspace.firebird_catalog_import import read_catalog
+    import json
+    server = {'resources': [{'resource_id':'postgresql:pg_authid:42','resource_kind':'role',
+        'display_name':'Quoted / ü','display_path':['1','roles','Quoted / ü'],
+        'native':{'system_object':False,'catalog_row':{'oid':42,'rolname':'Quoted / ü','rolcanlogin':True}}}],
+        'observations':[{'section':'authentication-rules','available':False,'sqlstate':'42501'}],
+        'warnings':['Credentials are redacted.'],'coverage':{'state':'partial'},'generation':'g'}
+    result = module.export_inventory(server, 'endpoint', 1)
+    model = read_catalog(json.dumps(result['snapshot']), engine='postgresql')
+    assert model['provenance']['database_target_id'] == 'postgresql-server:1'
+    assert model['provenance']['coverage'] == 'partial'
+    assert model['rows']['postgresql:pg_authid:42']['native']['catalog_row']['rolcanlogin'] is True
+    assert len(model['rows']) == 2

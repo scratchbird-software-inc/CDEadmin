@@ -1,0 +1,1440 @@
+{
+  "schema": "cdeadmin.ui-operations.v1",
+  "engine": "mariadb",
+  "operations": [
+    {
+      "operation_id": "check_upgrade_required",
+      "resource_kind": "server",
+      "title": "Check whether this server requires upgrade",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "analyze_tables",
+      "resource_kind": "database",
+      "title": "Analyze tables and persistent statistics",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "tables",
+          "label": "Native table names (JSON array)",
+          "control": "keyvalue",
+          "required": true
+        },
+        {
+          "field_id": "binlog_mode",
+          "label": "Binary-log mode",
+          "control": "select",
+          "required": false,
+          "default": "DEFAULT",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "Server default"
+            },
+            {
+              "value": "NO_WRITE_TO_BINLOG",
+              "label": "Do not write to binary log"
+            },
+            {
+              "value": "LOCAL",
+              "label": "Local only"
+            }
+          ]
+        },
+        {
+          "field_id": "persistent_for",
+          "label": "Persistent statistics",
+          "control": "select",
+          "required": false,
+          "default": "NONE",
+          "options": [
+            {
+              "value": "NONE",
+              "label": "Do not collect persistent statistics"
+            },
+            {
+              "value": "ALL",
+              "label": "All columns and indexes"
+            },
+            {
+              "value": "SPECIFIED",
+              "label": "Specified columns and indexes"
+            }
+          ]
+        },
+        {
+          "field_id": "persistent_columns",
+          "label": "Persistent-statistics columns (JSON array, empty means none)",
+          "control": "keyvalue",
+          "required": false
+        },
+        {
+          "field_id": "persistent_indexes",
+          "label": "Persistent-statistics indexes (JSON array, empty means none)",
+          "control": "keyvalue",
+          "required": false
+        }
+      ],
+      "notes": "typed_from_json: database.analyze_tables.tables, database.analyze_tables.persistent_columns, database.analyze_tables.persistent_indexes"
+    },
+    {
+      "operation_id": "check_objects",
+      "resource_kind": "database",
+      "title": "Check tables or views",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "object_type",
+          "label": "Object type",
+          "control": "select",
+          "required": true,
+          "default": "TABLE",
+          "options": [
+            {
+              "value": "TABLE",
+              "label": "Tables"
+            },
+            {
+              "value": "VIEW",
+              "label": "Views"
+            }
+          ]
+        },
+        {
+          "field_id": "objects",
+          "label": "Native object names (JSON array)",
+          "control": "keyvalue",
+          "required": true
+        },
+        {
+          "field_id": "check_options",
+          "label": "Check options",
+          "control": "multiselect",
+          "required": false,
+          "options": [
+            {
+              "value": "QUICK",
+              "label": "Quick"
+            },
+            {
+              "value": "FAST",
+              "label": "Fast"
+            },
+            {
+              "value": "MEDIUM",
+              "label": "Medium"
+            },
+            {
+              "value": "EXTENDED",
+              "label": "Extended"
+            },
+            {
+              "value": "CHANGED",
+              "label": "Changed since last check"
+            },
+            {
+              "value": "FOR UPGRADE",
+              "label": "For upgrade"
+            }
+          ]
+        }
+      ],
+      "notes": "typed_from_json: database.check_objects.objects"
+    },
+    {
+      "operation_id": "optimize_tables",
+      "resource_kind": "database",
+      "title": "Optimize tables",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "tables",
+          "label": "Native table names (JSON array)",
+          "control": "keyvalue",
+          "required": true
+        },
+        {
+          "field_id": "binlog_mode",
+          "label": "Binary-log mode",
+          "control": "select",
+          "required": false,
+          "default": "DEFAULT",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "Server default"
+            },
+            {
+              "value": "NO_WRITE_TO_BINLOG",
+              "label": "Do not write to binary log"
+            },
+            {
+              "value": "LOCAL",
+              "label": "Local only"
+            }
+          ]
+        },
+        {
+          "field_id": "lock_wait_mode",
+          "label": "Metadata-lock wait",
+          "control": "select",
+          "required": false,
+          "default": "DEFAULT",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "Server default"
+            },
+            {
+              "value": "WAIT",
+              "label": "Wait for a fixed number of seconds"
+            },
+            {
+              "value": "NOWAIT",
+              "label": "Do not wait"
+            }
+          ]
+        },
+        {
+          "field_id": "lock_wait_seconds",
+          "label": "Lock-wait seconds",
+          "control": "number",
+          "required": false,
+          "default": 0
+        }
+      ],
+      "notes": "typed_from_json: database.optimize_tables.tables"
+    },
+    {
+      "operation_id": "repair_objects",
+      "resource_kind": "database",
+      "title": "Repair tables or views",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "object_type",
+          "label": "Object type",
+          "control": "select",
+          "required": true,
+          "default": "TABLE",
+          "options": [
+            {
+              "value": "TABLE",
+              "label": "Tables"
+            },
+            {
+              "value": "VIEW",
+              "label": "Views"
+            }
+          ]
+        },
+        {
+          "field_id": "objects",
+          "label": "Native object names (JSON array)",
+          "control": "keyvalue",
+          "required": true
+        },
+        {
+          "field_id": "binlog_mode",
+          "label": "Binary-log mode",
+          "control": "select",
+          "required": false,
+          "default": "DEFAULT",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "Server default"
+            },
+            {
+              "value": "NO_WRITE_TO_BINLOG",
+              "label": "Do not write to binary log"
+            },
+            {
+              "value": "LOCAL",
+              "label": "Local only"
+            }
+          ]
+        },
+        {
+          "field_id": "repair_options",
+          "label": "Repair options",
+          "control": "multiselect",
+          "required": false,
+          "options": [
+            {
+              "value": "QUICK",
+              "label": "Quick"
+            },
+            {
+              "value": "EXTENDED",
+              "label": "Extended"
+            },
+            {
+              "value": "USE_FRM",
+              "label": "Use FRM file"
+            },
+            {
+              "value": "FORCE",
+              "label": "Force"
+            },
+            {
+              "value": "FOR UPGRADE",
+              "label": "View: for upgrade"
+            },
+            {
+              "value": "FROM MYSQL",
+              "label": "View: migrate from MySQL"
+            }
+          ]
+        }
+      ],
+      "notes": "typed_from_json: database.repair_objects.objects"
+    },
+    {
+      "operation_id": "checksum_tables",
+      "resource_kind": "database",
+      "title": "Checksum tables",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "tables",
+          "label": "Native table names (JSON array)",
+          "control": "keyvalue",
+          "required": true
+        },
+        {
+          "field_id": "checksum_type",
+          "label": "Checksum method",
+          "control": "select",
+          "required": false,
+          "default": "DEFAULT",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "Engine default"
+            },
+            {
+              "value": "QUICK",
+              "label": "Quick"
+            },
+            {
+              "value": "EXTENDED",
+              "label": "Extended"
+            }
+          ]
+        }
+      ],
+      "notes": "typed_from_json: database.checksum_tables.tables"
+    },
+    {
+      "operation_id": "backup_logical",
+      "resource_kind": "database",
+      "title": "Back up database",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "path",
+          "label": "New SQL dump file below the endpoint tool workspace",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "include_schema",
+          "label": "Include database and object definitions",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "include_data",
+          "label": "Include table data",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "single_transaction",
+          "label": "Use one consistent transaction for transactional tables",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "lock_all_tables",
+          "label": "Hold a global read lock for the entire dump",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "add_drop_database",
+          "label": "Include DROP DATABASE before CREATE DATABASE",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "add_drop_table",
+          "label": "Include DROP TABLE before each table",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "routines",
+          "label": "Include stored functions and procedures",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "events",
+          "label": "Include events",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "triggers",
+          "label": "Include triggers",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "dump_history",
+          "label": "Include system-versioned table history",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "as_of",
+          "label": "Dump system-versioned rows as of this timestamp",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "hex_blob",
+          "label": "Write binary values in hexadecimal",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "order_by_primary",
+          "label": "Write rows in primary-key order",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "extended_insert",
+          "label": "Use multi-row INSERT statements",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "complete_insert",
+          "label": "Include column names in INSERT statements",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "comments",
+          "label": "Include dump comments",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "dump_date",
+          "label": "Include completion date",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "default_character_set",
+          "label": "Dump connection character set",
+          "control": "text",
+          "required": false,
+          "default": "utf8mb4"
+        },
+        {
+          "field_id": "tz_utc",
+          "label": "Normalize timestamp columns to UTC",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "flush_logs",
+          "label": "Flush server logs before the dump",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "replication_position",
+          "label": "Replication coordinates",
+          "control": "select",
+          "required": false,
+          "default": "NONE",
+          "options": [
+            {
+              "value": "NONE",
+              "label": "Do not emit CHANGE MASTER"
+            },
+            {
+              "value": "COMMENTED",
+              "label": "Emit commented coordinates"
+            },
+            {
+              "value": "EXECUTABLE",
+              "label": "Emit executable coordinates"
+            }
+          ]
+        },
+        {
+          "field_id": "gtid",
+          "label": "Use GTID coordinates with replication position",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "compress_connection",
+          "label": "Compress the client/server connection",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "max_allowed_packet",
+          "label": "Maximum packet bytes",
+          "control": "number",
+          "required": false,
+          "default": 1073741824
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "restore_logical",
+      "resource_kind": "database",
+      "title": "Restore database",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "path",
+          "label": "CDEadmin SQL dump file below the endpoint tool workspace",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "abort_on_error",
+          "label": "Abort at the first SQL error",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "binary_mode",
+          "label": "Preserve binary input and disable unsafe client commands",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "default_character_set",
+          "label": "Restore connection character set",
+          "control": "text",
+          "required": false,
+          "default": "utf8mb4"
+        },
+        {
+          "field_id": "compress_connection",
+          "label": "Compress the client/server connection",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "max_allowed_packet",
+          "label": "Maximum packet bytes",
+          "control": "number",
+          "required": false,
+          "default": 1073741824
+        },
+        {
+          "field_id": "show_warnings",
+          "label": "Return server warnings in the redacted observation",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "dry_run",
+          "label": "Validate artifact metadata and checksum without restoring",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "add_partitions",
+      "resource_kind": "table",
+      "title": "Add Partitions",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "mode",
+          "label": "Native addition",
+          "control": "select",
+          "required": true,
+          "default": "DEFINITIONS",
+          "options": [
+            {
+              "value": "DEFINITIONS",
+              "label": "Definitions"
+            },
+            {
+              "value": "COUNT",
+              "label": "Count"
+            }
+          ]
+        },
+        {
+          "field_id": "count",
+          "label": "Number of partitions",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "mode",
+            "equals": "COUNT"
+          }
+        },
+        {
+          "field_id": "definitions",
+          "label": "Native PARTITION definitions",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "mode",
+            "equals": "DEFINITIONS"
+          }
+        }
+      ]
+    },
+    {
+      "operation_id": "coalesce_partitions",
+      "resource_kind": "table",
+      "title": "Coalesce Partitions",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "count",
+          "label": "Number of partitions",
+          "control": "number",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "convert_from_table",
+      "resource_kind": "table",
+      "title": "Convert From Table",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "exchange_database",
+          "label": "Standalone table database",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "exchange_table",
+          "label": "Standalone table name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "validation",
+          "label": "Validate row placement",
+          "control": "select",
+          "required": true,
+          "default": "WITH VALIDATION",
+          "options": [
+            {
+              "value": "WITH VALIDATION",
+              "label": "With Validation"
+            },
+            {
+              "value": "WITHOUT VALIDATION",
+              "label": "Without Validation"
+            }
+          ]
+        },
+        {
+          "field_id": "definitions",
+          "label": "Native PARTITION definition",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "partition_by",
+      "resource_kind": "table",
+      "title": "Partition By",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "partition_clause",
+          "label": "Native PARTITION BY clause",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "remove_partitioning",
+      "resource_kind": "table",
+      "title": "Remove Partitioning",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "create_body",
+      "resource_kind": "package",
+      "title": "Create package body",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "sql_mode",
+          "label": "Package SQL mode",
+          "control": "select",
+          "required": true,
+          "default": "stored",
+          "options": [
+            {
+              "value": "stored",
+              "label": "Stored"
+            },
+            {
+              "value": "current",
+              "label": "Current"
+            },
+            {
+              "value": "oracle",
+              "label": "Oracle"
+            }
+          ]
+        },
+        {
+          "field_id": "definition",
+          "label": "Declaration or body fragment",
+          "control": "code",
+          "language": "sql",
+          "required": true,
+          "help": "Enter the fragment after the qualified package name, including END; native MariaDB validates grammar."
+        }
+      ]
+    },
+    {
+      "operation_id": "create_specification",
+      "resource_kind": "package",
+      "title": "Create package declaration",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "name",
+          "label": "Package name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "sql_mode",
+          "label": "Package SQL mode",
+          "control": "select",
+          "required": true,
+          "default": "current",
+          "options": [
+            {
+              "value": "current",
+              "label": "Current"
+            },
+            {
+              "value": "oracle",
+              "label": "Oracle"
+            }
+          ]
+        },
+        {
+          "field_id": "definition",
+          "label": "Declaration or body fragment",
+          "control": "code",
+          "language": "sql",
+          "required": true,
+          "help": "Enter the fragment after the qualified package name, including END; native MariaDB validates grammar."
+        }
+      ]
+    },
+    {
+      "operation_id": "drop_body",
+      "resource_kind": "package",
+      "title": "Drop package body",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "replace_body",
+      "resource_kind": "package",
+      "title": "Replace package body",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "sql_mode",
+          "label": "Package SQL mode",
+          "control": "select",
+          "required": true,
+          "default": "stored",
+          "options": [
+            {
+              "value": "stored",
+              "label": "Stored"
+            },
+            {
+              "value": "current",
+              "label": "Current"
+            },
+            {
+              "value": "oracle",
+              "label": "Oracle"
+            }
+          ]
+        },
+        {
+          "field_id": "definition",
+          "label": "Declaration or body fragment",
+          "control": "code",
+          "language": "sql",
+          "required": true,
+          "help": "Enter the fragment after the qualified package name, including END; native MariaDB validates grammar."
+        }
+      ]
+    },
+    {
+      "operation_id": "replace_specification",
+      "resource_kind": "package",
+      "title": "Replace package declaration",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "sql_mode",
+          "label": "Package SQL mode",
+          "control": "select",
+          "required": true,
+          "default": "stored",
+          "options": [
+            {
+              "value": "stored",
+              "label": "Stored"
+            },
+            {
+              "value": "current",
+              "label": "Current"
+            },
+            {
+              "value": "oracle",
+              "label": "Oracle"
+            }
+          ]
+        },
+        {
+          "field_id": "definition",
+          "label": "Declaration or body fragment",
+          "control": "code",
+          "language": "sql",
+          "required": true,
+          "help": "Enter the fragment after the qualified package name, including END; native MariaDB validates grammar."
+        }
+      ]
+    },
+    {
+      "operation_id": "analyze",
+      "resource_kind": "partition",
+      "title": "Analyze",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "check",
+      "resource_kind": "partition",
+      "title": "Check",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "convert_to_table",
+      "resource_kind": "partition",
+      "title": "Convert To Table",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "exchange_database",
+          "label": "Standalone table database",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "exchange_table",
+          "label": "Standalone table name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "validation",
+          "label": "Validate row placement",
+          "control": "select",
+          "required": true,
+          "default": "WITH VALIDATION",
+          "options": [
+            {
+              "value": "WITH VALIDATION",
+              "label": "With Validation"
+            },
+            {
+              "value": "WITHOUT VALIDATION",
+              "label": "Without Validation"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "exchange",
+      "resource_kind": "partition",
+      "title": "Exchange",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "exchange_database",
+          "label": "Exchange database",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "exchange_table",
+          "label": "Nonpartitioned exchange table",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "validation",
+          "label": "Validate row placement",
+          "control": "select",
+          "required": true,
+          "default": "WITH VALIDATION",
+          "options": [
+            {
+              "value": "WITH VALIDATION",
+              "label": "With Validation"
+            },
+            {
+              "value": "WITHOUT VALIDATION",
+              "label": "Without Validation"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "optimize",
+      "resource_kind": "partition",
+      "title": "Optimize",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "rebuild",
+      "resource_kind": "partition",
+      "title": "Rebuild",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "reorganize",
+      "resource_kind": "partition",
+      "title": "Reorganize",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "partitions",
+          "label": "Native partition names (blank uses selected partition)",
+          "control": "keyvalue",
+          "required": false
+        },
+        {
+          "field_id": "definitions",
+          "label": "Native PARTITION definitions",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "notes": "typed_from_json: partition.reorganize.partitions"
+    },
+    {
+      "operation_id": "repair",
+      "resource_kind": "partition",
+      "title": "Repair",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "set_default",
+      "resource_kind": "role",
+      "title": "Set default role",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "member",
+          "label": "User or role receiving the role",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "member_kind",
+          "label": "Member type",
+          "control": "select",
+          "required": true,
+          "default": "USER",
+          "options": [
+            {
+              "value": "USER",
+              "label": "User"
+            },
+            {
+              "value": "ROLE",
+              "label": "Role"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "start",
+      "resource_kind": "replication-channel",
+      "title": "Start replication channel",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "thread",
+          "label": "Replication thread",
+          "control": "select",
+          "required": false,
+          "default": "ALL",
+          "options": [
+            {
+              "value": "ALL",
+              "label": "All"
+            },
+            {
+              "value": "IO_THREAD",
+              "label": "Io Thread"
+            },
+            {
+              "value": "SQL_THREAD",
+              "label": "Sql Thread"
+            }
+          ]
+        },
+        {
+          "field_id": "until_mode",
+          "label": "Stop condition",
+          "control": "select",
+          "required": false,
+          "default": "NONE",
+          "options": [
+            {
+              "value": "NONE",
+              "label": "None"
+            },
+            {
+              "value": "MASTER_POSITION",
+              "label": "Master Position"
+            },
+            {
+              "value": "RELAY_POSITION",
+              "label": "Relay Position"
+            },
+            {
+              "value": "MASTER_GTID_POS",
+              "label": "Master Gtid Pos"
+            },
+            {
+              "value": "SQL_AFTER_GTIDS",
+              "label": "Sql After Gtids"
+            },
+            {
+              "value": "SQL_BEFORE_GTIDS",
+              "label": "Sql Before Gtids"
+            }
+          ]
+        },
+        {
+          "field_id": "until_log_file",
+          "label": "Log file",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "until_log_position",
+          "label": "Log position",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "until_gtid",
+          "label": "GTID position",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "operation_id": "stop",
+      "resource_kind": "replication-channel",
+      "title": "Stop replication channel",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "thread",
+          "label": "Replication thread",
+          "control": "select",
+          "required": false,
+          "default": "ALL",
+          "options": [
+            {
+              "value": "ALL",
+              "label": "All"
+            },
+            {
+              "value": "IO_THREAD",
+              "label": "Io Thread"
+            },
+            {
+              "value": "SQL_THREAD",
+              "label": "Sql Thread"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "reset",
+      "resource_kind": "replication-channel",
+      "title": "Reset replication channel",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "delete_connection",
+          "label": "Delete the channel connection definition",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        }
+      ]
+    },
+    {
+      "operation_id": "terminate_query",
+      "resource_kind": "session",
+      "title": "Terminate running query",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "termination_mode",
+          "label": "Termination mode",
+          "control": "select",
+          "required": true,
+          "default": "SOFT",
+          "options": [
+            {
+              "value": "SOFT",
+              "label": "Soft"
+            },
+            {
+              "value": "HARD",
+              "label": "Hard"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "terminate_connection",
+      "resource_kind": "session",
+      "title": "Terminate connection",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "termination_mode",
+          "label": "Termination mode",
+          "control": "select",
+          "required": true,
+          "default": "SOFT",
+          "options": [
+            {
+              "value": "SOFT",
+              "label": "Soft"
+            },
+            {
+              "value": "HARD",
+              "label": "Hard"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "set_global",
+      "resource_kind": "system-variable",
+      "title": "Set global system variable",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "value_mode",
+          "label": "Value source",
+          "control": "select",
+          "required": true,
+          "default": "VALUE",
+          "options": [
+            {
+              "value": "VALUE",
+              "label": "Specified value"
+            },
+            {
+              "value": "DEFAULT",
+              "label": "Compiled default"
+            }
+          ]
+        },
+        {
+          "field_id": "value",
+          "label": "Global value",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "VALUE"
+          }
+        }
+      ]
+    },
+    {
+      "operation_id": "purge_before",
+      "resource_kind": "binary-log",
+      "title": "Purge binary logs before selected file",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "rotate",
+      "resource_kind": "binary-log-status",
+      "title": "Rotate binary log",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": []
+    }
+  ]
+}

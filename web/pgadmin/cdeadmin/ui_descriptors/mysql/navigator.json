@@ -1,0 +1,26 @@
+{
+ "schema": "cdeadmin.ui-navigator.v1",
+ "engine": "mysql",
+ "sort": "alphabetical",
+ "groups": [
+ {"group_id":"servers","title":"Servers","kinds":["server"],"icon_key":"object.server"},
+ {"group_id":"databases","title":"Databases","kinds":["database"],"icon_key":"object.database"},
+ {"group_id":"tables","title":"Tables","kinds":["table","column","index","constraint","partition"],"icon_key":"object.table"},
+ {"group_id":"views","title":"Views","kinds":["view","materialized-view"],"icon_key":"object.view"},
+ {"group_id":"routines","title":"Routines","kinds":["procedure","function","trigger","library","loadable-function"],"icon_key":"object.function"},
+ {"group_id":"events","title":"Events","kinds":["event"],"icon_key":"object.event"},
+ {"group_id":"storage","title":"Storage","kinds":["tablespace","storage-engine"],"icon_key":"object.tablespace"},
+ {"group_id":"security","title":"Security","kinds":["user","role","privilege"],"icon_key":"object.user"},
+ {"group_id":"extensions","title":"Extensions","kinds":["plugin","component"],"icon_key":"object.plugin"},
+ {"group_id":"federation","title":"Federation","kinds":["server-link"],"icon_key":"object.server"},
+ {"group_id":"replication","title":"Replication","kinds":["replication-channel","group-replication","group-replication-member"],"icon_key":"object.server"},
+ {"group_id":"configuration","title":"Configuration","kinds":["system-variable","resource-group"],"icon_key":"object.setting"},
+ {"group_id":"characters","title":"Character sets and collations","kinds":["character-set","collation"],"icon_key":"object.type"},
+ {"group_id":"spatial","title":"Spatial reference systems","kinds":["spatial-reference-system"],"icon_key":"object.type"},
+ {"group_id":"activity","title":"Activity","kinds":["session","metric"],"icon_key":"object.session"},
+ {"group_id":"system","title":"System objects","kinds":[],"icon_key":"object.table"}
+ ],
+ "kind_icons": {"character-set":"object.type","collation":"object.type","column":"object.column","component":"object.component","constraint":"object.constraint","database":"object.database","event":"object.event","function":"object.function","group-replication":"object.server","group-replication-member":"object.server","index":"object.index","library":"object.function","loadable-function":"object.function","materialized-view":"object.view","metric":"object.statistics","partition":"object.partition","plugin":"object.plugin","privilege":"object.role","procedure":"object.function","replication-channel":"object.server","resource-group":"object.role","role":"object.role","server":"object.server","server-link":"object.server","session":"object.session","spatial-reference-system":"object.type","storage-engine":"object.tablespace","system-variable":"object.setting","table":"object.table","tablespace":"object.tablespace","trigger":"object.trigger","user":"object.user","view":"object.view"},
+ "system_object_group": "system",
+ "resource_children": {"table":["column","index","trigger","constraint","partition"],"view":["column"],"materialized-view":["column"]}
+}

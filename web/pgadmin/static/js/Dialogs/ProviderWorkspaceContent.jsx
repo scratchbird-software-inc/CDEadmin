@@ -1,6 +1,7 @@
 import {requestedAdministrationResource} from '../cdeadmin_ui/navigation/postgresqlAdministration';
 import PostgresqlTestData from './PostgresqlTestData';
 import MySQLQueryOptions from '../cdeadmin_ui/editors/MySQLQueryOptions';
+import SQLNotebook from '../cdeadmin_ui/projects/SQLNotebook';
 import {QueryToolFrame, QueryToolToolbar, QueryToolAction} from '../cdeadmin_ui/editors/QueryToolControls';
 import useNativeRowPages from '../cdeadmin_ui/data/useNativeRowPages';
 /////////////////////////////////////////////////////////////
@@ -29,16 +30,31 @@ import FirebirdServerCatalog from './FirebirdServerCatalog';
 import FirebirdExport from './FirebirdExport';
 import PostgresqlCatalog from './PostgresqlCatalog';
 import MySQLCatalog from './MySQLCatalog';
+import MySQLQueryPlan from './MySQLQueryPlan';
 import MariaDBCatalog from './MariaDBCatalog';
 import DuckDBCatalog from './DuckDBCatalog';
 import SQLiteCatalog from './SQLiteCatalog';
+import SQLiteExtensions from './SQLiteExtensions';
+import SQLiteNativeSessions from './SQLiteNativeSessions';
+import SQLiteNativeArrays from './SQLiteNativeArrays';
+import SQLitePreupdate from './SQLitePreupdate';
+import SQLiteSessionFTS from './SQLiteSessionFTS';
+import SQLiteRetainedSchema from './SQLiteRetainedSchema';
 import DuckDBServerCatalog from './DuckDBServerCatalog';
 import DuckDBTestData from './DuckDBTestData';
 import DuckDBCopy from './DuckDBCopy';
 import DuckDBAttachment from './DuckDBAttachment';
+import DuckDBDatabaseCopy from './DuckDBDatabaseCopy';
+import DuckDBOperationReceipts from './DuckDBOperationReceipts';
+import MariaDBBackupStages from './MariaDBBackupStages';
+import FirebirdEDSPool from './FirebirdEDSPool';
+import DuckDBExtensions from './DuckDBExtensions';
+import DuckDBSessionSecrets from './DuckDBSessionSecrets';
 import MySQLServerCatalog from './MySQLServerCatalog';
 import MySQLTestData from './MySQLTestData';
 import PostgresqlServerCatalog from './PostgresqlServerCatalog';
+import PostgresqlContinuity from './PostgresqlContinuity';
+import PostgresqlLargeObjectFiles from './PostgresqlLargeObjectFiles';
 import FirebirdFormLayout from './FirebirdFormLayout';
 import MissingForm from '../cdeadmin_ui/navigation/MissingForm';
 import LanguageSourceEditor from '../cdeadmin_ui/editors/LanguageSourceEditor';
@@ -47,6 +63,7 @@ import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {administrationResourceLabel} from '../cdeadmin_ui/navigation/resourceLabels';
 import FirebirdQueryHistory from './FirebirdQueryHistory';
 import FirebirdProfiler from './FirebirdProfiler';
+import {PostgresqlBinaryField} from './PostgresqlBinaryChunk';
 import NativeNavigation from '../cdeadmin_ui/navigation/NativeNavigation';
 import {
   Fragment, createContext, useContext, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
@@ -63,7 +80,6 @@ import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
 import getApiInstance from '../api_instance';
 import BaseChart from '../chartjs';
 import { ModalContent, ModalFooter } from '../components/ModalContent';
-import ContextMenu from '../components/ContextMenu';
 import DataGrid from 'sources/cdeadmin_ui/data/DataGrid';
 import ProviderTransactionObservation from './ProviderTransactionObservation';
 import FirebirdSessionTraps from './FirebirdSessionTraps';
@@ -75,14 +91,17 @@ import {isProviderRegistrationWorkspace} from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput';
 import ProviderAdministrationResult from './ProviderAdministrationResult';
+import {mysqlQueryAttributes} from '../cdeadmin_ui/editors/mysqlQueryAttributes';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
 import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
 
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
+  'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal','postgresql_large_object_start',
+  'postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact',
   'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture',
   'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
-  'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
+  'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_fts_configuration_design', 'sqlite_schema_rename_design', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
   'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture',
   'firebird_design_read', 'firebird_design_save',
   'firebird_relational_review',
@@ -187,320 +206,34 @@ function deliveryRequestId() {
       value.toString(16).padStart(2, '0')}`).join('');
 }
 
-function resourceHierarchy(groups, expanded, filtering) {
-  const rows = [];
-  groups.forEach((group) => {
-    const groupId = `group:${group.group_id}`;
-    rows.push({
-      id: groupId, parentId: null, level: 1, expandable: true,
-      expanded: filtering || expanded.has(groupId), title: group.title,
-      kind: 'group', group,
-    });
-    if (!filtering && !expanded.has(groupId)) return;
-    const root = {children: new Map(), resources: []};
-    group.items.forEach((resource) => {
-      const sourcePath = resource.display_path?.length ?
-        resource.display_path : resource.authority_path || [];
-      const path = [...sourcePath];
-      if (path[path.length - 1] === resource.display_name) path.pop();
-      let parent = root;
-      let parentId = groupId;
-      path.forEach((segment) => {
-        const title = String(segment);
-        const id = `${parentId}/path:${encodeURIComponent(title)}`;
-        if (!parent.children.has(title)) {
-          parent.children.set(title, {
-            id, parentId, title, children: new Map(), resources: [],
-          });
-        }
-        parent = parent.children.get(title);
-        parentId = id;
-      });
-      parent.resources.push({resource, parentId});
-    });
-    const visit = (node, level) => {
-      [...node.children.values()].sort((left, right) =>
-        left.title.localeCompare(right.title)).forEach((branch) => {
-        const isOpen = filtering || expanded.has(branch.id);
-        rows.push({
-          ...branch, level, kind: 'branch', expandable: true,
-          expanded: isOpen,
-        });
-        if (isOpen) visit(branch, level + 1);
-      });
-      node.resources.sort((left, right) =>
-        left.resource.display_name.localeCompare(
-          right.resource.display_name
-        )).forEach(({resource, parentId}) => rows.push({
-        id: `resource:${resource.resource_id}`, parentId, level,
-        expandable: false, expanded: false, title: resource.display_name,
-        kind: 'resource', resource,
-      }));
-    };
-    visit(root, 2);
-  });
-  return rows;
-}
-
-function ResourceExplorer({catalog, page, selectedResourceId, onSelect,
-  onOpenAdministration, onOpenData, onLoadMore, onRefresh, loadingMore}) {
-  const items = page?.items || [];
-  const [filter, setFilter] = useState('');
-  const [expanded, setExpanded] = useState(new Set());
-  const [activeId, setActiveId] = useState(null);
-  const [context, setContext] = useState(null);
-  const rowRefs = useRef(new Map());
-  const objectDescriptors = useMemo(() => Object.fromEntries(
-    (catalog?.objects || []).map((item) => [item.resource_kind, item])
-  ), [catalog]);
-  const groups = useMemo(() => {
-    const admitted = items.filter((item) => {
-      const needle = filter.trim().toLocaleLowerCase();
-      if (!needle) return true;
-      return [item.display_name, item.resource_kind,
-        ...(item.display_path || []), ...(item.authority_path || [])]
-        .some((value) => String(value || '').toLocaleLowerCase()
-          .includes(needle));
-    });
-    const declared = catalog?.navigator?.groups || [];
-    const result = declared.map((group) => ({...group, items: []}));
-    const byId = Object.fromEntries(result.map((group) =>
-      [group.group_id, group]));
-    admitted.forEach((item) => {
-      const groupId = objectDescriptors[item.resource_kind]?.navigator
-        ?.group_id || 'operations';
-      if (!byId[groupId]) {
-        byId[groupId] = {
-          group_id: groupId,
-          title: gettext('Other provider objects'),
-          order: result.length,
-          items: [],
-        };
-        result.push(byId[groupId]);
-      }
-      byId[groupId].items.push(item);
-    });
-    return result.filter((group) => group.items.length > 0);
-  }, [catalog, filter, items, objectDescriptors]);
-  const filtering = Boolean(filter.trim());
-  const rows = useMemo(
-    () => resourceHierarchy(groups, expanded, filtering),
-    [expanded, filtering, groups]
-  );
-  const selected = items.find((item) =>
-    item.resource_id === selectedResourceId);
-  const selectedDescriptor = selected ?
-    objectDescriptors[selected.resource_kind] : null;
-  const canOpenData = selectedDescriptor?.editor?.sections?.includes('data');
-  const contextDescriptor = context?.resource ?
-    objectDescriptors[context.resource.resource_kind] : null;
-  const contextCanOpenData = contextDescriptor?.editor?.sections
-    ?.includes('data');
-  const contextOperations = (contextDescriptor?.operations || []).filter(
-    (operation) => operation.native_supported !== false
-  );
-  const contextCanInspect = contextOperations.some(
-    (operation) => operation.operation_id === 'inspect'
-  );
-  const contextProviderOperations = contextOperations.filter(
-    (operation) => operation.operation_id !== 'inspect'
-  ).map((operation) => ({
-    id: `${context?.resource?.resource_kind}-${operation.operation_id}`,
-    label: operation.title || operation.operation_id,
-    iconKey: operation.mutation_class === 'destructive' ?
-      'action.delete' : operation.operation_id === 'create' ?
-        'action.create' : 'action.edit',
-    intent: operation.mutation_class || 'admin',
-    enabled: operation.execution_available === true &&
-      operation.graphical_ready !== false,
-    disabledReason: (operation.blockers || []).join(', '),
-    requiresConfirmation: operation.confirmation_required === true,
-    execute: () => {
-      onSelect(context.resource);
-      onOpenAdministration(context.resource, operation.operation_id);
-      setContext(null);
-    },
-  }));
-  const contextMenuItems = context?.resource ? [
-    ...(contextCanInspect ? [{
-      id: 'provider-object-inspect', label: gettext('Inspect object'),
-      iconKey: 'action.view', intent: 'read', enabled: true,
-      execute: () => {
-        onSelect(context.resource);
-        onOpenAdministration(context.resource, 'inspect');
-        setContext(null);
-      },
-    }] : []), ...(contextCanOpenData ? [{
-      id: 'provider-object-data', label: gettext('Open object data'),
-      iconKey: 'action.edit', intent: 'read', enabled: true,
-      execute: () => {
-        onSelect(context.resource);
-        onOpenData(context.resource);
-        setContext(null);
-      },
-    }] : []), ...(contextProviderOperations.length ? [{
-      id: 'provider-object-operations', label: gettext('Provider operations'),
-      iconKey: 'action.settings', intent: 'admin', enabled: true,
-      children: contextProviderOperations,
-    }] : []),
-  ] : [];
-
-  useEffect(() => {
-    setExpanded((current) => {
-      const next = new Set(current);
-      groups.forEach((group) => next.add(`group:${group.group_id}`));
-      return next.size === current.size ? current : next;
-    });
-  }, [groups]);
-
-  useEffect(() => {
-    if (activeId && rows.some((row) => row.id === activeId)) return;
-    setActiveId(rows[0]?.id || null);
-  }, [activeId, rows]);
-
-  const toggle = (id, force) => setExpanded((current) => {
-    const next = new Set(current);
-    const shouldExpand = force ?? !next.has(id);
-    if (shouldExpand) next.add(id);
-    else next.delete(id);
-    return next;
-  });
-  const focusRow = (id) => {
-    if (!id) return;
-    setActiveId(id);
-    setTimeout(() => rowRefs.current.get(id)?.focus(), 0);
-  };
-  const keyDown = (event, row, index) => {
-    let destination = null;
-    if (event.key === 'ArrowDown') destination = rows[index + 1]?.id;
-    if (event.key === 'ArrowUp') destination = rows[index - 1]?.id;
-    if (event.key === 'Home') destination = rows[0]?.id;
-    if (event.key === 'End') destination = rows[rows.length - 1]?.id;
-    if (event.key === 'ArrowRight' && row.expandable) {
-      if (!row.expanded) toggle(row.id, true);
-      else destination = rows.find((item) => item.parentId === row.id)?.id;
-    }
-    if (event.key === 'ArrowLeft') {
-      if (row.expandable && row.expanded) toggle(row.id, false);
-      else destination = row.parentId;
-    }
-    if (event.key === 'Enter' || event.key === ' ') {
-      if (row.kind === 'resource') onSelect(row.resource);
-      else if (row.expandable) toggle(row.id);
-    }
-    if (destination || ['ArrowRight', 'ArrowLeft', 'Enter', ' ']
-      .includes(event.key)) {
-      event.preventDefault();
-      focusRow(destination);
-    }
-  };
+/**
+ * The Object Explorer tree is the navigator (unified design, phase 2): the
+ * workspace no longer carries its own object list. This tab only points at the
+ * tree and offers a catalog refresh.
+ */
+function TreeHandoff({page, onLoadMore, onRefresh, loadingMore}) {
+  const count = page?.items?.length || 0;
   return (
-    <Box sx={{overflow: 'auto', flex: 1, p: 2}}
-      aria-label={gettext('Provider resource explorer')}>
-      <TextField fullWidth size="small" value={filter}
-        label={gettext('Filter provider objects')}
-        onChange={(event) => setFilter(event.target.value)} />
-      {selected && <Box component="nav" aria-label={gettext('Selected object breadcrumb')}
-        sx={{display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 1}}>
-        {(selected.display_path || selected.authority_path || []).map(
-          (part, index) => <Box component="span" key={`${part}:${index}`}>
-            {index > 0 && <Box component="span" aria-hidden="true"> / </Box>}
-            {String(part)}
-          </Box>)}
-        <Box sx={{display: 'flex', gap: 1, width: '100%', mt: 0.5}}>
-          <Button size="small" onClick={() => onOpenAdministration(
-            selected, 'inspect'
-          )}>
-            {gettext('Open object editor')}
-          </Button>
-          <Button size="small" onClick={() => onOpenData(selected)}
-            disabled={!canOpenData}>
-            {gettext('Open object data')}
-          </Button>
+    <Box sx={{p: 2}} role="region" aria-label={gettext('Object navigation')}
+      data-cdeadmin-qa-key="workspace.resources.tree-handoff">
+      <Alert severity="info">
+        {gettext('Objects for this connection are listed in the Object Explorer tree. Expand the server node to browse them; edit, create and run operations from an object\'s context menu.')}
+      </Alert>
+      <Box sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mt: 1}}>
+        <Box component="span" sx={{fontSize: '0.8125rem', color: 'text.secondary'}}>
+          {count ? gettext('%s objects in the current catalog page.', count) : gettext('No catalog page loaded.')}
         </Box>
-      </Box>}
-      <Box role="tree"
-        aria-label={catalog?.navigator?.navigator_id ||
-          gettext('Provider resource navigator')}
-        sx={{mt: 1, border: 1, borderColor: 'divider'}}>
-        {rows.map((row, index) => {
-          const descriptor = row.resource ?
-            objectDescriptors[row.resource.resource_kind] : null;
-          return <Box key={row.id} role="treeitem" aria-level={row.level}
-            aria-expanded={row.expandable ? row.expanded : undefined}
-            aria-selected={row.kind === 'resource' ?
-              selectedResourceId === row.resource.resource_id : undefined}
-            tabIndex={activeId === row.id ? 0 : -1}
-            ref={(element) => {
-              if (element) rowRefs.current.set(row.id, element);
-              else rowRefs.current.delete(row.id);
-            }}
-            onFocus={() => setActiveId(row.id)}
-            onKeyDown={(event) => keyDown(event, row, index)}
-            onContextMenu={(event) => {
-              if (row.kind !== 'resource') return;
-              event.preventDefault();
-              onSelect(row.resource);
-              setContext({
-                x: event.clientX, y: event.clientY,
-                resource: row.resource,
-              });
-            }}
-            onClick={() => row.kind === 'resource' ?
-              onSelect(row.resource) : toggle(row.id)}
-            sx={{
-              display: 'flex', alignItems: 'center', gap: 1, py: 0.5,
-              px: 1, pl: `${8 + (row.level - 1) * 18}px`, cursor: 'pointer',
-              bgcolor: row.kind === 'resource' &&
-                selectedResourceId === row.resource.resource_id ?
-                'action.selected' : undefined,
-              '&:focus-visible': {outline: '2px solid', outlineColor: 'primary.main'},
-            }}>
-            <Box component="span" aria-hidden="true" sx={{width: 14}}>
-              {row.expandable ? (row.expanded ? '▾' : '▸') : '•'}
-            </Box>
-            <Box component="span" aria-hidden="true" title={
-              descriptor?.title || row.kind
-            } data-icon-id={descriptor?.navigator?.icon_id}
-            sx={{fontWeight: 700, minWidth: 18}}>
-              {row.kind === 'resource' ?
-                row.resource.resource_kind.slice(0, 1).toUpperCase() : '◇'}
-            </Box>
-            <Box component="span" sx={{fontWeight:
-              row.kind === 'group' ? 700 : 400}}>{row.title}</Box>
-            {row.kind === 'resource' && <Box component="small"
-              sx={{ml: 'auto', color: 'text.secondary'}}>
-              {row.resource.resource_kind}
-            </Box>}
-          </Box>;
-        })}
-      </Box>
-      {items.length === 0 && <Box sx={{mt: 2}}>
-        {gettext('No resources returned.')}
-      </Box>}
-      {items.length > 0 && groups.length === 0 && <Box sx={{mt: 2}}>
-        {gettext('No provider objects match the filter.')}
-      </Box>}
-      <Box sx={{display: 'flex', gap: 1, mt: 1}}>
-        {page?.next_cursor && <Button disabled={loadingMore}
+        {page?.next_cursor && <Button size="small" disabled={loadingMore}
           onClick={onLoadMore}>{gettext('Load more provider objects')}</Button>}
-        <Button disabled={loadingMore || !page?.generation}
+        <Button size="small" disabled={loadingMore || !page?.generation}
           onClick={onRefresh}>{gettext('Refresh provider objects')}</Button>
       </Box>
-      <ContextMenu menuItems={contextMenuItems} position={context}
-        label={gettext('Provider object actions')}
-        onClose={() => setContext(null)} />
     </Box>
   );
 }
 
-ResourceExplorer.propTypes = {
-  catalog: PropTypes.object,
+TreeHandoff.propTypes = {
   page: PropTypes.object,
-  selectedResourceId: PropTypes.string,
-  onSelect: PropTypes.func.isRequired,
-  onOpenAdministration: PropTypes.func.isRequired,
-  onOpenData: PropTypes.func.isRequired,
   onLoadMore: PropTypes.func.isRequired,
   onRefresh: PropTypes.func.isRequired,
   loadingMore: PropTypes.bool,
@@ -622,6 +355,10 @@ export function VisualAdminField({field, value, onChange, disabled=false}) {
     value={[record]} onChange={(records) => onChange(records[0])} />;
   }
   const admittedValue = value ?? initialFieldValue(field);
+  if (field.field_id === 'large_object_data_base64' && field.control === 'multiline') {
+    return <PostgresqlBinaryField field={field} value={admittedValue}
+      disabled={disabled} onChange={onChange} />;
+  }
   if (field.array_editor) {
     return <RecordListAdminField disabled={disabled} field={field} value={admittedValue}
       onChange={onChange} />;
@@ -1459,7 +1196,9 @@ export function VisualAdministration({catalog, resources, selectedResource, post
       });
       setResult(applied);
       setPlan(null);
-      if (onMutationApplied) {
+      if (applied?.provider_result?.catalog_refresh_deferred === true) {
+        setRefreshWarning(gettext('Automatic metadata refresh is deferred for this server control request. Reconnect and refresh after the server is available. Do not repeat the request.'));
+      } else if (onMutationApplied) {
         try {
           await onMutationApplied({targetResource: selectedTarget,
             operationId, result: applied});
@@ -1617,7 +1356,7 @@ export function VisualAdministration({catalog, resources, selectedResource, post
                     changedFieldDraft(allFields, current, field.field_id, value, inspectedResource));
                 }} />} /> : <Box sx={{display: 'grid', gap: 1,
               gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 24rem))'}}>
-              {fields.map((field) => <Box key={field.field_id} sx={{minWidth: 0,
+              {fields.map((field) => <Box key={`${resourceKind}:${operationId}:${targetResource?.resource_id || ''}:${field.field_id}`} sx={{minWidth: 0,
                 gridColumn: field.array_editor || field.object_editor ||
                     ['code', 'multiline', 'json', 'multiselect'].includes(field.control) ? '1 / -1' : undefined}}>
                 <VisualAdminField disabled={working || inspecting} field={field} value={draft[field.field_id]}
@@ -7074,8 +6813,13 @@ export default function ProviderWorkspaceContent({
   const workspace = loadedWorkspace?.context === workspaceContext ?
     loadedWorkspace.value : null;
   const [source, setSource] = useState('');
+  const [notebookOpen, setNotebookOpen] = useState(false);
+  const [notebookMounted, setNotebookMounted] = useState(false);
+  const [notebookDirty, setNotebookDirty] = useState(false);
+  const [notebookExecutedSource, setNotebookExecutedSource] = useState(null);
   const [languageProfile, setLanguageProfile] = useState('');
   const [parameterSource, setParameterSource] = useState('{}');
+  const [mysqlAttributeSource, setMySQLAttributeSource] = useState('{}');
   const [maximumRows, setMaximumRows] = useState('1000');
   const [bufferRows, setBufferRows] = useState(500);
   const [queryStreamActive, setQueryStreamActive] = useState(false);
@@ -7091,6 +6835,7 @@ export default function ProviderWorkspaceContent({
   const [firebirdPlan, setFirebirdPlan] = useState(null);
   const [nativePage, setNativePage] = useState(null);
   const [requestedPlan, setRequestedPlan] = useState(false);
+  const [mysqlAnalyzeRequested, setMySQLAnalyzeRequested] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [occurrenceId, setOccurrenceId] = useState(null);
   const [rendered, setRendered] = useState(null);
@@ -7103,8 +6848,11 @@ export default function ProviderWorkspaceContent({
   const managedAutocommit = languageProfile === 'postgresql-sql' ||
     (['mysql-sql', 'mariadb-sql'].includes(languageProfile) && workspace?.languages?.find(
       item => item.language_profile === languageProfile)?.transaction_actions?.includes('autocommit_on'));
+  const diagnosticPolicyUnknown = ['mysql-sql', 'mariadb-sql'].includes(languageProfile) &&
+    transaction?.provider_payload?.connection_usable === true &&
+    transaction?.provider_payload?.status_current === false;
   const sessionPolicyUnknown = managedAutocommit &&
-    Boolean(sessionId) && sessionAutocommit === null;
+    Boolean(sessionId) && sessionAutocommit === null && !diagnosticPolicyUnknown;
   const observeTransaction = (observation) => {
     setTransaction(observation);
     const policy = observation.provider_payload?.autocommit;
@@ -7458,18 +7206,24 @@ export default function ProviderWorkspaceContent({
         database_target_id: queryDatabaseTargetId,
       });
       querySessionIdRef.current = opened.session_id;
-      setSessionId(opened.session_id);
-      if (language === 'postgresql-sql' || (['mysql-sql', 'mariadb-sql'].includes(language) && managedAutocommit)) {
-        const observed = await post({action: 'transaction', session_id: opened.session_id,
-          database_target_id: queryDatabaseTargetId});
-        setTransaction(observed);
-        const policy = observed.provider_payload?.autocommit;
-        setSessionAutocommit(typeof policy === 'boolean' ? policy : null);
-        if (typeof policy !== 'boolean' || observed.provider_payload?.session_reuse_blocked) {
-          throw new Error(gettext('Refresh the native transaction state before executing.'));
+      try {
+        if (language === 'postgresql-sql' || (['mysql-sql', 'mariadb-sql'].includes(language) && managedAutocommit)) {
+          const observed = await post({action: 'transaction', session_id: opened.session_id,
+            database_target_id: queryDatabaseTargetId});
+          setTransaction(observed);
+          const policy = observed.provider_payload?.autocommit;
+          setSessionAutocommit(typeof policy === 'boolean' ? policy : null);
+          if (typeof policy !== 'boolean' || observed.provider_payload?.session_reuse_blocked) {
+            throw new Error(gettext('Refresh the native transaction state before executing.'));
+          }
         }
+        return opened.session_id;
+      } finally {
+        // Publish the session with its initial policy observation. An interim
+        // unknown-policy render invalidates the completion that opened it.
+        // Failed observations still expose the session for explicit refresh.
+        setSessionId(opened.session_id);
       }
-      return opened.session_id;
     })();
     querySessionOpeningRef.current = opening;
     try { return await opening; }
@@ -7587,7 +7341,7 @@ export default function ProviderWorkspaceContent({
     return () => clearTimeout(timer);
   }, [languageProfile, occurrenceId, busy, queryPollingPaused, poll, workspace]);
 
-  const execute = async (executionSource=source, presentation='native', sessionCommand=false, scriptMode=false, planMode=false, profileMode=false) => {
+  const execute = async (executionSource=source, presentation='native', sessionCommand=false, scriptMode=false, planMode=false, profileMode=false, analyzeRequested=false, notebookRun=false) => {
     if (querySessionBlocked || scriptLocked || queryStreamActive) return;
     if (!Number.isInteger(bufferRows) || bufferRows < 1 || bufferRows > 500) {
       setError(gettext('Result buffer rows must be an integer from 1 to 500.')); return;
@@ -7596,6 +7350,7 @@ export default function ProviderWorkspaceContent({
     setBusy(true);
     setError(null);
     setRendered(null);
+    setNotebookExecutedSource(null);
     setFetchObservation(null);
     setScriptResult(null);
     setFirebirdPlan(null);
@@ -7603,6 +7358,7 @@ export default function ProviderWorkspaceContent({
     setRequestedPlan(false);
     setResultPresentation(presentation);
     setRequestedPlan(presentation === 'plan');
+    setMySQLAnalyzeRequested(languageProfile === 'mysql-sql' && presentation === 'plan' && analyzeRequested);
     setProfileReport(null);
     setQueryStatistics(null);
     try {
@@ -7613,7 +7369,7 @@ export default function ProviderWorkspaceContent({
         }
         rowPolicy = {max_rows: Number(maximumRows) || null};
       }
-      const parameters = sessionCommand || (planMode && languageProfile === 'firebird-sql') ? [] : JSON.parse(
+      const parameters = notebookRun ? [] : sessionCommand || (planMode && languageProfile === 'firebird-sql') ? [] : JSON.parse(
         parameterSource || defaultParameterSource(activeLanguage));
       const expectsArray = sessionCommand || activeLanguage?.parameter_shape === 'array';
       const permitsEither = !sessionCommand && activeLanguage?.parameter_shape === 'object-or-array';
@@ -7624,12 +7380,15 @@ export default function ProviderWorkspaceContent({
           gettext('This provider requires a JSON parameter object.'));
       }
       if (scriptMode && parameters.length) throw new Error(gettext('Scripts do not accept parameter bindings. Clear the parameter array first.'));
+      const attributes=languageProfile==='mysql-sql' && !sessionCommand && !notebookRun ? mysqlQueryAttributes(mysqlAttributeSource) : {};
+      if(languageProfile === 'mysql-sql' && !sessionCommand && !scriptMode && !planMode && !Object.keys(parameters).length && !Object.keys(attributes).length) setNotebookExecutedSource({source: executionSource, context: endpointUrl + ':' + queryDatabaseTargetId});
       const activeSession = sessionCommand ? sessionId : await ensureSession();
       // A previous observation is no longer current once execution begins.
       setTransaction(null);
       const occurrence = await post({
         action: 'execute', session_id: activeSession, source: executionSource,
         parameters,
+        ...(Object.keys(attributes).length ? {mysql_query_attributes:attributes} : {}),
         ...(scriptMode ? {script_mode: true} : {}),
         ...(planMode ? {plan_mode: true} : {}),
         ...(profileMode ? {profile_mode: true} : {}),
@@ -7790,11 +7549,6 @@ export default function ProviderWorkspaceContent({
     setTab('object');
   };
 
-  const openResourceData = (resource) => {
-    if (resource) setSelectedResource(resource);
-    setTab('data');
-  };
-
   const activeLanguage = workspace?.languages?.find((item) =>
     item.language_profile === languageProfile) || workspace?.languages?.[0];
   const activePlanTemplates = queryPlanTemplates(activeLanguage);
@@ -7889,11 +7643,13 @@ export default function ProviderWorkspaceContent({
           'firebird-templates': gettext('Native Code Templates'),
           'firebird-test-data': gettext('Generate Test Data'),
           'postgresql-test-data': gettext('PostgreSQL Test Data'),
+          'postgresql-large-object-files': gettext('PostgreSQL Large-object Files'),
           'mysql-test-data': gettext('MySQL Test Data'),
           'mariadb-test-data': gettext('MariaDB Test Data'),
           'duckdb-test-data': gettext('DuckDB Test Data'),
           'duckdb-copy': gettext('DuckDB Native COPY'),
           'duckdb-attachment': gettext('DuckDB Attachment'),
+          'duckdb-extensions': gettext('DuckDB Extension Sources'),
           'firebird-isql': gettext('External Firebird ISQL'),
           object: gettext('Object Browser'),
           resources: gettext('Resource Explorer'),
@@ -7936,6 +7692,7 @@ export default function ProviderWorkspaceContent({
         key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
         languageProfile={languageProfile} resources={resourcePage?.items || []} />}
       {workspace && queryDatabaseTargetId && workspace.endpoint?.profile_id === 'postgresql-native' && tab === 'postgresql-test-data' && <PostgresqlTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+      {workspace && queryDatabaseTargetId && workspace.endpoint?.profile_id === 'postgresql-native' && tab === 'postgresql-large-object-files' && <PostgresqlLargeObjectFiles key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} endpointUrl={endpointUrl} />}
       {workspace && tab === 'firebird-isql' && <FirebirdIsql post={post}
         databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'metadata-search' && <FirebirdMetadataSearch
@@ -7958,13 +7715,7 @@ export default function ProviderWorkspaceContent({
         onOpen={openNativeObject} onOperation={openResourceAdministration}
         onRefresh={refreshResources} />}
       {workspace && tab === 'resources' &&
-        <ResourceExplorer catalog={workspace.visual_admin}
-          page={resourcePage}
-          selectedResourceId={selectedResource?.resource_id}
-          onSelect={setSelectedResource}
-          onOpenAdministration={openResourceAdministration}
-          onOpenData={openResourceData}
-          onLoadMore={loadMoreResources} onRefresh={refreshResources}
+        <TreeHandoff page={resourcePage} onLoadMore={loadMoreResources} onRefresh={refreshResources}
           loadingMore={loadingMore} />}
       {workspace && tab === 'properties' &&
         <DatabasePropertiesWorkspace endpoint={workspace.endpoint}
@@ -7993,6 +7744,7 @@ export default function ProviderWorkspaceContent({
         sx={{p: 0, flex: 1, display: tab === 'studio' ? 'flex' : 'none', flexDirection: 'column',
           minHeight: 0, minWidth: 0, overflow: 'auto'}}>
         <QueryToolToolbar aria-label="SQL execution toolbar">
+          {languageProfile === 'mysql-sql' && queryDatabaseTargetId && <Button onClick={() => {setNotebookMounted(true); setNotebookOpen(!notebookOpen);}}>SQL notebook</Button>}
           <QueryToolAction action="execute" title={gettext('Run')} disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId || !source.trim()}
             onClick={() => execute()} />
           {languageProfile === 'firebird-sql' && <QueryToolAction action="explain" title={gettext('Explain / query plan')}
@@ -8001,7 +7753,8 @@ export default function ProviderWorkspaceContent({
           {activePlanTemplates.map((template, index) =>
             <QueryToolAction action={index === 0 ? 'explain' : 'analyze'} title={languageProfile === 'mysql-sql' ? template.label : index === 0 ? gettext('Explain / query plan') : template.label} key={template.label} disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId || !source.trim()}
               onClick={() => execute(
-                template.source_template.replace('{source}', source), 'plan', false, false, languageProfile === 'postgresql-sql'
+                template.source_template.replace('{source}', source), 'plan', false, false, languageProfile === 'postgresql-sql', false,
+                /^EXPLAIN\s+ANALYZE\b/i.test(template.source_template)
               )} />)}
           <QueryToolAction action="refresh" title={gettext('Poll')} disabled={busy || !occurrenceId || Boolean(rendered?.page?.next_cursor)} onClick={() => poll(occurrenceId)} />
           <QueryToolAction action="cancel" title={gettext('Cancel request')} disabled={busy || !occurrenceId} onClick={cancel} />
@@ -8009,7 +7762,7 @@ export default function ProviderWorkspaceContent({
           {managedAutocommit && <FormControlLabel
             control={<Checkbox checked={sessionAutocommit === true}
               indeterminate={sessionAutocommit === null}
-              disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId}
+              disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || diagnosticPolicyUnknown || !!occurrenceId}
               onChange={(_event, checked) => controlTransaction(checked ? 'autocommit_on' : 'autocommit_off')} />}
             label={gettext('Autocommit')} />}
           {(activeLanguage?.transaction_actions || []).filter(action => !action.startsWith('autocommit_')).map((action) =>
@@ -8019,7 +7772,7 @@ export default function ProviderWorkspaceContent({
             onClick={releaseQuerySession} />
           <TextField select size="small" sx={{width: 200, ml: 1}}
             label={gettext('Provider language')} value={languageProfile}
-            disabled={busy || queryStreamActive || !!occurrenceId || scriptLocked}
+            disabled={busy || queryStreamActive || !!occurrenceId || scriptLocked || notebookDirty}
             onChange={(event) => selectLanguage(event.target.value)}>
             {(workspace.languages || []).map((language) => <MenuItem
               key={language.language_profile} value={language.language_profile}>
@@ -8033,6 +7786,15 @@ export default function ProviderWorkspaceContent({
             title={gettext('Rows per browser buffer (1–500). Native fetch limits are separate. Close the query session to change this after a result.')} />
           {busy && <CircularProgress size={24} />}
         </QueryToolToolbar>
+        {notebookMounted && languageProfile === 'mysql-sql' && <Box sx={{display: notebookOpen ? 'block' : 'none', maxHeight: '55%', overflow: 'auto', flexShrink: 0}}>
+          <SQLNotebook key={endpointUrl + ':' + queryDatabaseTargetId}
+            scope={{engine: 'mysql', endpoint_id: String(workspace.endpoint.endpoint_id), database_target_id: queryDatabaseTargetId}}
+            editorSource={source} rendered={rendered} executedSource={notebookExecutedSource?.context === endpointUrl + ':' + queryDatabaseTargetId ? notebookExecutedSource.source : null}
+            onDirty={setNotebookDirty}
+            disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId}
+            onLoad={value => {setSource(value); setParameterSource('[]'); setMySQLAttributeSource('{}');}}
+            onRun={value => {setSource(value); setParameterSource('[]'); setMySQLAttributeSource('{}'); execute(value, 'native', false, false, false, false, false, true);}} />
+        </Box>}
         {sourcePresets(activeLanguage).length === 0 &&
           !defaultSource(activeLanguage).trim() && !source.trim() &&
           <Alert severity="info" sx={{mb: 1}}>
@@ -8042,7 +7804,7 @@ export default function ProviderWorkspaceContent({
           language={activeLanguage} source={source} onChange={setSource}
           resources={resourcePage?.items}
           onExecute={(preparedSource, scriptMode) => execute(preparedSource, 'native', false, scriptMode)}
-          post={post} ensureSession={ensureSession} databaseTargetId={queryDatabaseTargetId} parameterSource={parameterSource}
+          post={post} ensureSession={ensureSession} databaseTargetId={queryDatabaseTargetId} parameterSource={parameterSource} mysqlAttributeSource={mysqlAttributeSource}
           disabled={busy || Boolean(occurrenceId) || querySessionBlocked || sessionPolicyUnknown}
           onScriptLock={setScriptLocked} historySensitive={historySensitive} clientSqlDialect={clientSqlDialect} />
         <Box aria-label="SQL results and diagnostics" sx={{flex: 1, minHeight: 120, overflow: 'auto'}}>
@@ -8093,6 +7855,11 @@ export default function ProviderWorkspaceContent({
             helperText={activeLanguage?.parameter_hint ||
             gettext('Use a JSON object of parameter names and values.')}
             onChange={(event) => setParameterSource(event.target.value)} />
+          {languageProfile==='mysql-sql' && <TextField multiline minRows={2} maxRows={6}
+            value={mysqlAttributeSource} disabled={busy || scriptLocked || Boolean(occurrenceId)} sx={{mt:1}}
+            label={gettext('MySQL query attributes (JSON object)')}
+            helperText={gettext('Sent with each submitted query. Uses the exact-value encodings shown for query parameters.')}
+            onChange={event=>setMySQLAttributeSource(event.target.value)} />}
           {languageProfile === 'firebird-sql' && <TextField select
             size="small" sx={{mt: 1}} label={gettext('Statement SQL dialect')}
             value={clientSqlDialect} disabled={busy || querySessionBlocked || !!occurrenceId}
@@ -8131,6 +7898,55 @@ export default function ProviderWorkspaceContent({
             key={sessionId || 'no-session'} sessionId={sessionId}
             disabled={busy || querySessionBlocked || !!occurrenceId}
             onExecute={(command) => execute(command, 'native', true)} />}
+          {languageProfile === 'firebird-sql' && queryDatabaseTargetId && <FirebirdEDSPool
+            key={'eds:' + queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+            sessionId={sessionId} ensureSession={ensureSession}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)} />}
+          {languageProfile === 'duckdb-sql' && <DuckDBExtensions
+            key={'extensions:' + queryDatabaseTargetId} post={post} ensureSession={ensureSession}
+            sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)} />}
+          {languageProfile === 'duckdb-sql' && queryDatabaseTargetId && <DuckDBSessionSecrets
+            post={post} ensureSession={ensureSession} sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
+            catalog={workspace.visual_admin} disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)}
+            renderAdministration={props => <VisualAdministration {...props} />} />}
+          {languageProfile === 'duckdb-sql' && queryDatabaseTargetId && <DuckDBOperationReceipts
+            post={post} databaseTargetId={queryDatabaseTargetId} />}
+          {languageProfile === 'sqlite-sql' && <SQLiteExtensions
+            key={queryDatabaseTargetId} post={post} ensureSession={ensureSession}
+            sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)} />}
+          {languageProfile === 'sqlite-sql' && <SQLitePreupdate
+            key={'preupdate:' + queryDatabaseTargetId} post={post} ensureSession={ensureSession}
+            sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy} />}
+          {languageProfile === 'sqlite-sql' && <SQLiteNativeArrays
+            key={'native-arrays:' + queryDatabaseTargetId} post={post} ensureSession={ensureSession}
+            sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
+            onLoad={({source: renderedSource,parameters}) => {
+              setSource(renderedSource);setParameterSource(JSON.stringify(parameters));setTab('studio');
+            }} />}
+          {languageProfile === 'sqlite-sql' && <SQLiteNativeSessions
+            key={'native-captures:' + queryDatabaseTargetId} post={post} ensureSession={ensureSession}
+            sessionId={sessionId} databaseTargetId={queryDatabaseTargetId} endpointUrl={endpointUrl}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy} />}
+          {languageProfile === 'sqlite-sql' && <SQLiteSessionFTS
+            key={'fts:' + queryDatabaseTargetId} post={post} ensureSession={ensureSession}
+            sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
+            catalog={workspace.visual_admin}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)}
+            renderAdministration={props => <VisualAdministration {...props} />} />}
+          {languageProfile === 'sqlite-sql' && queryDatabaseTargetId && <SQLiteRetainedSchema
+            key={'retained-ddl:'+queryDatabaseTargetId} post={post} ensureSession={ensureSession}
+            sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={()=>setQuerySessionBlocked(true)} />}
           </Box></Box>
           {languageProfile === 'dolt-sql' && <Alert severity="info" sx={{mt: 1}}>
             {gettext('SQL commit does not create a Dolt version-control commit. Cancelling aborts this connection and may leave an unknown outcome.')}
@@ -8154,6 +7970,10 @@ export default function ProviderWorkspaceContent({
           {nativePage?.native?.bulk_errors && <Alert severity="warning">
             {gettext('Some bulk items failed. Other items may have succeeded; inspect each item before retrying.')}
           </Alert>}
+          {languageProfile==='mysql-sql' && nativePage?.error?.query_dispatch==='partially_started' &&
+            <Alert severity="warning" aria-label="MySQL partial execution">
+              {gettext('Earlier commands ran. The next command was not sent. Review the completed results and transaction state before running the script again.')}
+            </Alert>}
           {fetchObservation && <Alert severity={fetchObservation.limit_reached ? 'warning' : 'info'}
             sx={{mt: 1}} aria-label={gettext('Firebird fetch observation')}>
             {fetchObservation.limit_reached ?
@@ -8176,7 +7996,11 @@ export default function ProviderWorkspaceContent({
           </Box>
           <Box role="tabpanel" aria-label="Explain" hidden={resultPresentation !== 'plan'}>
             {languageProfile === 'firebird-sql' && <FirebirdQueryPlan result={firebirdPlan} />}
-            {rendered && requestedPlan && activePlanTemplates.length > 0 && <QueryPlanView rendered={rendered} />}
+            {rendered && requestedPlan && languageProfile === 'mysql-sql' && <MySQLQueryPlan
+              key={rendered.result_id || rendered.descriptor?.result_id || source}
+              rendered={rendered} analyzeRequested={mysqlAnalyzeRequested}
+              pending={Boolean(occurrenceId)} failed={Boolean(nativePage?.error || querySessionBlocked)} />}
+            {rendered && requestedPlan && languageProfile !== 'mysql-sql' && activePlanTemplates.length > 0 && <QueryPlanView rendered={rendered} />}
             {!requestedPlan && languageProfile !== 'firebird-sql' && <Alert severity="info">
               {gettext('No plan requested for this execution. Use Explain or explicitly run Explain Analyze.')}
             </Alert>}
@@ -8230,14 +8054,20 @@ export default function ProviderWorkspaceContent({
           focused={Boolean(initialContext.operation_id &&
             initialContext.resource_kind)} />}
       {workspace && tab === 'operations' &&
-        <OperationalWorkspace workspace={workspace.operational_workspace}
+        <><OperationalWorkspace workspace={workspace.operational_workspace}
           endpoint={workspace.endpoint}
           catalog={workspace.visual_admin}
           resources={resourcePage?.items || []}
           resourceGeneration={resourcePage?.generation}
           onRefresh={refreshResources} refreshing={loadingMore}
           onMutationApplied={reloadAfterAdministration}
-          post={post} setError={setError} />}
+          post={post} setError={setError} />
+        {workspace.endpoint?.profile_id === 'postgresql-native' && <PostgresqlContinuity post={post} databaseTargetId={queryDatabaseTargetId} endpointUrl={endpointUrl} />}
+        {workspace.endpoint?.profile_id === 'mariadb-native' && queryDatabaseTargetId &&
+          <MariaDBBackupStages key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+            ensureSession={ensureSession} sessionId={sessionId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
+            onBlocked={() => setQuerySessionBlocked(true)} />}</>}
       {workspace && tab === 'semantic' &&
         <SemanticModelWorkspace semantic={workspace.semantic_models}
           resources={resourcePage?.items || []}
@@ -8256,7 +8086,29 @@ export default function ProviderWorkspaceContent({
       {workspace && tab === 'duckdb-copy' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
         <DuckDBCopy key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} resourceId={initialContext.resource_id} />}
       {workspace && tab === 'duckdb-attachment' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
-        <DuckDBAttachment key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+        <Box aria-label="DuckDB attachment and copy workspace" sx={{overflow: 'auto', flex: 1, minHeight: 0, minWidth: 0}}>
+          <DuckDBAttachment key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+            ensureSession={ensureSession} sessionId={sessionId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
+            onBlocked={() => setQuerySessionBlocked(true)} />
+          <DuckDBDatabaseCopy key={'copy-' + queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+            ensureSession={ensureSession} sessionId={sessionId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
+            onBlocked={() => setQuerySessionBlocked(true)} />
+          <DuckDBOperationReceipts post={post} databaseTargetId={queryDatabaseTargetId} /></Box>}
+      {workspace && tab === 'duckdb-extensions' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
+        <Box sx={{overflow: 'auto', flex: 1, minHeight: 0, minWidth: 0}}>
+          <DuckDBSessionSecrets post={post} ensureSession={ensureSession} sessionId={sessionId}
+            databaseTargetId={queryDatabaseTargetId} catalog={workspace.visual_admin}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)}
+            renderAdministration={props => <VisualAdministration {...props} />} />
+          <DuckDBExtensions key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+            ensureSession={ensureSession} sessionId={sessionId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
+            onBlocked={() => setQuerySessionBlocked(true)} />
+          <DuckDBOperationReceipts post={post} databaseTargetId={queryDatabaseTargetId} />
+        </Box>}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'duckdb-native' &&
         (initialContext.server_catalog || !queryDatabaseTargetId ? <DuckDBServerCatalog post={post} /> :
           <DuckDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />)}
@@ -8365,7 +8217,7 @@ ProviderWorkspaceContent.propTypes = {
     'object',
     'properties', 'resources', 'studio', 'data', 'administration', 'operations',
     'semantic', 'movement', 'streams', 'connections', 'export',
-    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'postgresql-test-data', 'mysql-test-data', 'mariadb-test-data', 'duckdb-test-data', 'duckdb-copy', 'duckdb-attachment',
+    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'postgresql-test-data', 'mysql-test-data', 'mariadb-test-data', 'duckdb-test-data', 'duckdb-copy', 'duckdb-attachment', 'duckdb-extensions',
     'firebird-recovery',
   ]),
   initialContext: PropTypes.object,

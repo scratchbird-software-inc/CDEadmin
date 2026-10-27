@@ -1,0 +1,620 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "database",
+  "resource_kinds": [
+    "database"
+  ],
+  "status": "draft",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Privilege grid in table-like privileges for PG17 (code 'm' MAINTAIN)",
+      "reason": "deftblacl uses getPrivilegesForTableAndLikeObjects(version): 'm' only on 17+; the descriptor cannot version-gate a single option inside a multiselect."
+    },
+    {
+      "concept": "Locale fields clear on provider change",
+      "reason": "depChange resets datcollate/datctype/daticulocale/daticurules/datbuiltinlocale when datlocaleprovider changes; visible_when hides them but does not clear the value."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Database",
+      "control": "text",
+      "tab": "General",
+      "required": true
+    },
+    {
+      "field_id": "did",
+      "label": "OID",
+      "control": "text",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "datoid",
+      "label": "OID",
+      "control": "number",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "min": 16384,
+      "version": {
+        "minimum": "15"
+      },
+      "native_keyword": "OID"
+    },
+    {
+      "field_id": "datowner",
+      "label": "Owner",
+      "control": "reference",
+      "tab": "General",
+      "reference_kind": "role",
+      "native_keyword": "OWNER"
+    },
+    {
+      "field_id": "is_sys_obj",
+      "label": "System database?",
+      "control": "boolean",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "comments",
+      "label": "Comment",
+      "control": "text",
+      "tab": "General",
+      "native_keyword": "COMMENT ON DATABASE"
+    },
+    {
+      "field_id": "template",
+      "label": "Template",
+      "control": "select",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "option_values_path": [
+        "catalog",
+        "databases"
+      ],
+      "native_keyword": "TEMPLATE"
+    },
+    {
+      "field_id": "encoding",
+      "label": "Encoding",
+      "control": "select",
+      "tab": "Options",
+      "option_values_path": [
+        "dialect",
+        "character_sets"
+      ],
+      "native_keyword": "ENCODING",
+      "default": "UTF8",
+      "help": "Read-only after create."
+    },
+    {
+      "field_id": "spcname",
+      "label": "Tablespace",
+      "control": "select",
+      "tab": "Options",
+      "option_values_path": [
+        "catalog",
+        "tablespaces"
+      ],
+      "native_keyword": "TABLESPACE"
+    },
+    {
+      "field_id": "datcollate",
+      "label": "Collation",
+      "control": "select",
+      "tab": "Options",
+      "option_values_path": [
+        "catalog",
+        "collations"
+      ],
+      "native_keyword": "LC_COLLATE",
+      "visible_when": {
+        "field": "datlocaleprovider",
+        "equals": "libc"
+      },
+      "help": "Read-only after create."
+    },
+    {
+      "field_id": "datctype",
+      "label": "Character type",
+      "control": "select",
+      "tab": "Options",
+      "option_values_path": [
+        "catalog",
+        "ctypes"
+      ],
+      "native_keyword": "LC_CTYPE",
+      "visible_when": {
+        "field": "datlocaleprovider",
+        "equals": "libc"
+      },
+      "help": "Read-only after create."
+    },
+    {
+      "field_id": "datconnlimit",
+      "label": "Connection limit",
+      "control": "number",
+      "tab": "Options",
+      "min": -1,
+      "default": -1,
+      "native_keyword": "CONNECTION LIMIT"
+    },
+    {
+      "field_id": "is_template",
+      "label": "Template?",
+      "control": "boolean",
+      "tab": "Options",
+      "native_keyword": "IS_TEMPLATE",
+      "help": "Note: When the preferences setting 'show template databases' is set to false, then template databases won't be displayed in the object explorer. Read-only for system databases."
+    },
+    {
+      "field_id": "datallowconn",
+      "label": "Allow connections?",
+      "control": "boolean",
+      "tab": "Options",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "datstrategy",
+      "label": "Strategy",
+      "control": "select",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "version": {
+        "minimum": "15"
+      },
+      "native_keyword": "STRATEGY",
+      "options": [
+        {
+          "value": "wal_log",
+          "label": "WAL Log"
+        },
+        {
+          "value": "file_copy",
+          "label": "File Copy"
+        }
+      ]
+    },
+    {
+      "field_id": "datlocaleprovider",
+      "label": "Locale Provider",
+      "control": "select",
+      "tab": "Engine",
+      "group": "Locale",
+      "version": {
+        "minimum": "15"
+      },
+      "native_keyword": "LOCALE_PROVIDER",
+      "default": "libc",
+      "options": [
+        {
+          "value": "icu",
+          "label": "icu"
+        },
+        {
+          "value": "libc",
+          "label": "libc"
+        },
+        {
+          "value": "builtin",
+          "label": "builtin"
+        }
+      ],
+      "help": "'builtin' is offered on PostgreSQL 17+. Read-only after create."
+    },
+    {
+      "field_id": "daticulocale",
+      "label": "ICU Locale",
+      "control": "select",
+      "tab": "Engine",
+      "group": "Locale",
+      "version": {
+        "minimum": "15"
+      },
+      "option_values_path": [
+        "catalog",
+        "icu_locales"
+      ],
+      "native_keyword": "ICU_LOCALE",
+      "visible_when": {
+        "field": "datlocaleprovider",
+        "equals": "icu"
+      },
+      "help": "Read-only after create."
+    },
+    {
+      "field_id": "daticurules",
+      "label": "ICU Rules",
+      "control": "text",
+      "tab": "Engine",
+      "group": "Locale",
+      "version": {
+        "minimum": "16"
+      },
+      "native_keyword": "ICU_RULES",
+      "visible_when": {
+        "field": "datlocaleprovider",
+        "equals": "icu"
+      },
+      "help": "Read-only after create."
+    },
+    {
+      "field_id": "datbuiltinlocale",
+      "label": "Builtin Locale",
+      "control": "select",
+      "tab": "Engine",
+      "group": "Locale",
+      "version": {
+        "minimum": "17"
+      },
+      "option_values_path": [
+        "catalog",
+        "builtin_locales"
+      ],
+      "native_keyword": "BUILTIN_LOCALE",
+      "visible_when": {
+        "field": "datlocaleprovider",
+        "equals": "builtin"
+      },
+      "help": "Required when the provider is builtin. Read-only after create."
+    },
+    {
+      "field_id": "datcollversion",
+      "label": "Collation Version",
+      "control": "text",
+      "tab": "Engine",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "group": "Locale",
+      "version": {
+        "minimum": "15"
+      },
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "schema_res",
+      "label": "Schema restriction",
+      "control": "multiselect",
+      "tab": "Engine",
+      "group": "Browser",
+      "help": "pgAdmin-side list of schema names shown in the tree (creatable, free text). Note: Changes to the schema restriction will require the Schemas node in the browser to be refreshed before they will be shown."
+    },
+    {
+      "field_id": "acl",
+      "label": "Privileges",
+      "control": "text",
+      "tab": "Security",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "tblacl",
+      "label": "Default TABLE privileges",
+      "control": "text",
+      "tab": "Security",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "group": "Default privileges",
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "seqacl",
+      "label": "Default SEQUENCE privileges",
+      "control": "text",
+      "tab": "Security",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "group": "Default privileges",
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "funcacl",
+      "label": "Default FUNCTION privileges",
+      "control": "text",
+      "tab": "Security",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "group": "Default privileges",
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "typeacl",
+      "label": "Default TYPE privileges",
+      "control": "text",
+      "tab": "Security",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "group": "Default privileges",
+      "version": {
+        "minimum": "9.2"
+      },
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "datacl",
+      "label": "Privileges",
+      "control": "privileges",
+      "tab": "Security",
+      "native_keyword": "GRANT",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "database"
+          ]
+        },
+        {
+          "field_id": "grantor",
+          "label": "Grantor",
+          "control": "reference",
+          "reference_kind": "role",
+          "readonly": true
+        }
+      ],
+      "help": "Privilege codes accepted by the backend: C, T, c. Grantee list comes from the role catalog plus PUBLIC; grantor is read-only and defaults to the connected user."
+    },
+    {
+      "field_id": "seclabels",
+      "label": "Security labels",
+      "control": "grid",
+      "tab": "Security",
+      "native_keyword": "SECURITY LABEL",
+      "columns": [
+        {
+          "field_id": "provider",
+          "label": "Provider",
+          "control": "text"
+        },
+        {
+          "field_id": "label",
+          "label": "Security label",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "version": {
+        "minimum": "9.2"
+      }
+    },
+    {
+      "field_id": "deftblacl",
+      "label": "Default privileges: tables",
+      "control": "privileges",
+      "tab": "Security",
+      "native_keyword": "GRANT",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "table"
+          ]
+        },
+        {
+          "field_id": "grantor",
+          "label": "Grantor",
+          "control": "reference",
+          "reference_kind": "role",
+          "readonly": true
+        }
+      ],
+      "group": "Default privileges",
+      "modes": [
+        "alter"
+      ],
+      "help": "Privilege codes accepted by the backend: a, r, w, d, D, x, t, m. Grantee list comes from the role catalog plus PUBLIC; grantor is read-only and defaults to the connected user."
+    },
+    {
+      "field_id": "defseqacl",
+      "label": "Default privileges: sequences",
+      "control": "privileges",
+      "tab": "Security",
+      "native_keyword": "GRANT",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "sequence"
+          ]
+        },
+        {
+          "field_id": "grantor",
+          "label": "Grantor",
+          "control": "reference",
+          "reference_kind": "role",
+          "readonly": true
+        }
+      ],
+      "group": "Default privileges",
+      "modes": [
+        "alter"
+      ],
+      "help": "Privilege codes accepted by the backend: r, w, U. Grantee list comes from the role catalog plus PUBLIC; grantor is read-only and defaults to the connected user."
+    },
+    {
+      "field_id": "deffuncacl",
+      "label": "Default privileges: functions",
+      "control": "privileges",
+      "tab": "Security",
+      "native_keyword": "GRANT",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "function"
+          ]
+        },
+        {
+          "field_id": "grantor",
+          "label": "Grantor",
+          "control": "reference",
+          "reference_kind": "role",
+          "readonly": true
+        }
+      ],
+      "group": "Default privileges",
+      "modes": [
+        "alter"
+      ],
+      "help": "Privilege codes accepted by the backend: X. Grantee list comes from the role catalog plus PUBLIC; grantor is read-only and defaults to the connected user."
+    },
+    {
+      "field_id": "deftypeacl",
+      "label": "Default privileges: types",
+      "control": "privileges",
+      "tab": "Security",
+      "native_keyword": "GRANT",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "type"
+          ]
+        },
+        {
+          "field_id": "grantor",
+          "label": "Grantor",
+          "control": "reference",
+          "reference_kind": "role",
+          "readonly": true
+        }
+      ],
+      "group": "Default privileges",
+      "modes": [
+        "alter"
+      ],
+      "version": {
+        "minimum": "9.2"
+      },
+      "help": "Privilege codes accepted by the backend: U. Grantee list comes from the role catalog plus PUBLIC; grantor is read-only and defaults to the connected user."
+    },
+    {
+      "field_id": "variables",
+      "label": "Parameters",
+      "control": "grid",
+      "tab": "Parameters",
+      "native_keyword": "ALTER ... SET",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "select",
+          "required": true,
+          "option_values_path": [
+            "catalog",
+            "configuration_parameters"
+          ],
+          "help": "pgAdmin loads the list from the node's vopts endpoint (pg_settings); the value cell type follows the parameter's vartype (bool/enum/integer/real/string)."
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "role",
+          "label": "Role",
+          "control": "reference",
+          "reference_kind": "role"
+        }
+      ]
+    }
+  ],
+  "notes": "Fields map 1:1 onto the legacy pgAdmin dialog (workflow legacy_preserved): field ids are the BaseUISchema ids and are served by the existing SQL templates. Source: web/pgadmin/browser/server_groups/servers/databases/static/js/database.ui.js (DatabaseSchema, DefaultPrivSchema), static/js/variable.ui.js, static/js/sec_label.ui.js, static/js/privilege.ui.js. pgAdmin Definition fields are mapped by match: encoding/tablespace/collation/ctype/connection limit/template flag->Options, template->General, strategy and locale provider family->Engine; Default Privileges nested tab->Security group; Advanced (schema_res)->Engine; Parameters->Parameters. Field ids are checked against the pgAdmin *.ui.js schema ids by tools/tests/test_ui_descriptor_postgresql_schema_ids.py (the schema id gate); the form stays draft until phase 5 routes it to the SQL templates and ports the ui.spec expectations."
+}

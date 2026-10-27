@@ -638,6 +638,11 @@ def _column_comments(identity, before, after, live):
 
 def build_plan(baseline, desired, current):
     for document in (baseline, desired, current):
+        if (document['provenance'].get('observation_scope') == 'retained-session' or
+                any(row.get('native', {}).get('observation_scope') == 'retained-session' or
+                    row.get('native', {}).get('catalog_row', {}).get('relpersistence') == 't'
+                    for row in document['rows'].values())):
+            raise ValueError('Retained-session catalog observations cannot be applied as independent database migrations')
         if document['provenance'].get('mapping') != 'scratchrobin.postgresql.catalog@1':
             raise ValueError('PostgreSQL native mapping is required')
         for field in ('endpoint_id', 'database_target_id'):

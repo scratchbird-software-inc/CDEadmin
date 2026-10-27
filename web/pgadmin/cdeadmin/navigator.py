@@ -38,6 +38,8 @@ _KIND_LABELS = {
     'external-function': 'External functions',
     'blob-filter': 'BLOB filters',
     'function': 'Functions',
+    'native-function': 'Native callable functions',
+    'compile-option': 'Runtime compile options',
     'index': 'Indexes',
     'package': 'Packages',
     'partition': 'Partitions',
@@ -394,7 +396,7 @@ def _prepared_resources(resources, state):
     prepared = []
     for item in values:
         path = item['display_path']
-        if prefix:
+        if prefix and resource_native(item['_source']).get('navigator_scope') != 'server':
             if path[:len(prefix)] != prefix:
                 owner = next((kind for database_path, kind in
                               database_prefixes if tuple(

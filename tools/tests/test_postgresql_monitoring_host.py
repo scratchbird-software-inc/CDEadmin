@@ -53,6 +53,17 @@ def test_disabled_read_does_not_connect_or_lock(tmp_path, monkeypatch):
     finally: shared.close()
 
 
+def test_saved_binary_ssh_credentials_remain_fingerprintable_and_revoke_the_grant(tmp_path,monkeypatch):
+    host,shared,server=make_host(tmp_path,monkeypatch)
+    try:
+        server.tunnel_password=b'encrypted-binary-credential'
+        host.enable(1,7,None,{})
+        assert host.snapshot(1,7,None)['state']!='disabled'
+        server.tunnel_password=b'rotated-encrypted-binary-credential'
+        with pytest.raises(PermissionError):host.snapshot(1,7,None)
+    finally:shared.close()
+
+
 def test_grant_survives_without_browser_credentials_and_route_changes_revoke(tmp_path, monkeypatch):
     host, shared, server = make_host(tmp_path, monkeypatch)
     try:
@@ -79,6 +90,18 @@ def test_only_native_policy_fields_and_owned_cleanup(tmp_path, monkeypatch):
         assert shared.close()
         assert host.ownership.fd is None
     finally: shared.close()
+
+
+def test_native_family_policy_requires_known_sources_and_is_frozen_in_the_grant(tmp_path, monkeypatch):
+    host, shared, _ = make_host(tmp_path, monkeypatch)
+    try:
+        with pytest.raises(ValueError):
+            host.enable(1, 7, None, {'native_metric_sources':['pg_stat_unknown']})
+        assert not host._grants
+        host.enable(1, 7, None, {'native_metric_sources':['pg_stat_wal','pg_stat_io']})
+        assert host._grants[(1,7,None)].policy.native_metric_sources==('pg_stat_wal','pg_stat_io')
+    finally:
+        shared.close()
 
 
 def test_fleet_reads_only_owned_collectors_and_discards_revoked_samples(tmp_path, monkeypatch):

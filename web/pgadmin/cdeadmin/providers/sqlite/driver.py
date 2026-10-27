@@ -4,6 +4,7 @@ import json
 import os
 import queue
 import re
+import shutil
 import sqlite3
 import threading
 import time
@@ -32,6 +33,53 @@ def uncertain_error(exc):
         sqlite3.SQLITE_INTERNAL,
         sqlite3.SQLITE_MISUSE,
     }
+
+
+class SQLiteConnection(sqlite3.Connection):
+    """Retain authorization policy so editor compilation can compose it."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._cdeadmin_authorizer = None
+        self._cdeadmin_progress_handler = (None, 0)
+        self._cdeadmin_extension_directories = []
+        self._cdeadmin_internal_sql = threading.local()
+        self._cdeadmin_session_api = None
+        self._cdeadmin_array_api = None
+        self._cdeadmin_preupdate_api = None
+        self._cdeadmin_trace_callback = None
+
+    def close(self):
+        if self._cdeadmin_preupdate_api is not None:
+            self._cdeadmin_preupdate_api.close_all()
+        if self._cdeadmin_array_api is not None:
+            self._cdeadmin_array_api.close_all()
+        if self._cdeadmin_session_api is not None:
+            self._cdeadmin_session_api.close_all()
+        super().close()
+        self._cdeadmin_session_api = None
+        self._cdeadmin_array_api = None
+        self._cdeadmin_preupdate_api = None
+        for directory in self._cdeadmin_extension_directories:
+            shutil.rmtree(directory, ignore_errors=True)
+        self._cdeadmin_extension_directories.clear()
+
+    def set_trace_callback(self, callback):
+        if callback is not None and not callable(callback):
+            raise TypeError('SQLite trace callback must be callable or None')
+        self._cdeadmin_trace_callback = callback
+        def trace(source):
+            if not getattr(self._cdeadmin_internal_sql, 'session_api', False) and not getattr(self._cdeadmin_internal_sql, 'array_api', False) and not getattr(self._cdeadmin_internal_sql, 'preupdate_api', False):
+                return callback(source)
+        super().set_trace_callback(None if callback is None else trace)
+
+    def set_authorizer(self, callback):
+        super().set_authorizer(callback)
+        self._cdeadmin_authorizer = callback
+
+    def set_progress_handler(self, callback, n):
+        super().set_progress_handler(callback, n)
+        self._cdeadmin_progress_handler = (callback, n) if callback is not None and n > 0 else (None, 0)
 
 
 class Execution:
@@ -203,13 +251,33 @@ class SQLiteClient(RelationalDBAPIClient):
             self._busy.add(id(handle))
         try:
             statement = source.strip()
-            if not re.match(r'^EXPLAIN\b', statement, re.I):
+            leading = re.sub(r'^(?:(?:[\s\ufeff]+)|(?:--[^\r\n]*(?:\r?\n|$))|(?:/\*[\s\S]*?\*/))*', '', statement)
+            if not re.match(r'^EXPLAIN\b', leading, re.I):
                 statement = 'EXPLAIN ' + statement
+            if not isinstance(handle, SQLiteConnection):
+                return {'grammar_valid': None, 'scope': 'SQLite editor authorization policy is unavailable; compilation was not attempted.'}
+            previous = handle._cdeadmin_authorizer
+            suppressed = False
+            def authorize(action, first, second, database, context):
+                nonlocal suppressed
+                admitted = (previous(action, first, second, database, context)
+                    if previous is not None else sqlite3.SQLITE_OK)
+                if admitted != sqlite3.SQLITE_OK:
+                    return admitted
+                if action == sqlite3.SQLITE_PRAGMA:
+                    # pragma.c checks authorization before settings changes or
+                    # SQLITE_FCNTL_PRAGMA callbacks. IGNORE parses native SQL
+                    # syntax while suppressing those prepare-time effects.
+                    suppressed = True
+                    return sqlite3.SQLITE_IGNORE
+                return sqlite3.SQLITE_OK
             cursor = handle.cursor()
+            handle.set_authorizer(authorize)
             try:
                 cursor.execute(statement)
                 cursor.fetchone()
-                return {'grammar_valid': True, 'scope': 'SQLite native EXPLAIN compilation; no submitted statement VM was executed.'}
+                return {'grammar_valid': True, 'pragma_preparation_suppressed': suppressed,
+                    'scope': 'SQLite native EXPLAIN compilation; PRAGMA settings and VFS callbacks are suppressed; no submitted statement VM was executed.'}
             except sqlite3.ProgrammingError as error:
                 if 'binding' in str(error).lower():
                     return {'grammar_valid': None,
@@ -224,7 +292,14 @@ class SQLiteClient(RelationalDBAPIClient):
                     'diagnostic': {'code': 'SQLITE_NATIVE_SYNTAX' if syntax else 'SQLITE_NATIVE_CONTEXT',
                         'message': message[:400], 'severity': 'error' if syntax else 'warning'}}
             finally:
-                cursor.close()
+                try:
+                    handle.set_authorizer(previous)
+                except Exception:
+                    with self._lock:
+                        self._uncertain.add(id(handle))
+                    raise RelationalClientError('SQLite editor authorization cleanup is unconfirmed; close this session') from None
+                finally:
+                    cursor.close()
         finally:
             with self._lock:
                 self._busy.discard(id(handle))
@@ -236,6 +311,8 @@ class SQLiteClient(RelationalDBAPIClient):
         bound = parameters(request.get('parameters'))
         with self._lock:
             self._require_idle(handle)
+            from .array_bindings import bind_arrays
+            source,bound=bind_arrays(handle,source,bound)
             token = Execution(handle, source, bound)
             token.worker.start()
             self._executions.append(token)

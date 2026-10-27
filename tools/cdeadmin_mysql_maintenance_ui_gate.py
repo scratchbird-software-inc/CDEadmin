@@ -180,12 +180,20 @@ def arguments(argv=None):
         '--font-scale', type=int, choices=(100, 150, 200, 300), default=100,
     )
     parser.add_argument('--timeout', type=int, default=90)
+    parser.add_argument('--functional-only', action='store_true',
+                        help='Qualify native effects; human form validation is separate')
     parser.add_argument('--browser-binary')
     return parser.parse_args(argv)
 
 
 def _operations():
     catalog = json.loads(CATALOG_PATH.read_text(encoding='utf-8'))
+    # These legacy presentation helpers must not silently bind the empty
+    # portfolio fallback after the descriptor cutover. Shared OperationDialog
+    # round trips remain a separate gate (design Decision12).
+    required = {case['operation_id'] for case in CASES}
+    if not all('mysql_'+operation in catalog['forms'] for operation in required):
+        raise RuntimeError('Legacy MySQL form gate retired; qualify the shared descriptor dialog under Decision12')
     forms = catalog['forms']
     operations = {
         item['operation_id']: {**item, 'form': forms[item['form_id']]}
@@ -449,19 +457,21 @@ def _run_case(driver, wait, options, actions, operations, case, password):
     )
     initial = directory / f'initial-{suffix}.png'
     initial_hash = screenshot(driver, initial)
-    close_workspace_with_keyboard(driver, wait)
-    cancellation = cancellation_observation(driver)
     cancelled = directory / f'cancelled-{suffix}.png'
-    cancelled_hash = screenshot(driver, cancelled)
-
-    _open_form(driver, wait, options, action, operation, password)
-    assert_form_controls(wait, operation['form']['fields'])
-    validation = _validation_observation(driver, wait, operation)
     validation_path = directory / f'validation-error-{suffix}.png'
-    validation_hash = screenshot(driver, validation_path)
-    close_workspace(driver, wait)
-
-    _open_form(driver, wait, options, action, operation, password)
+    cancellation = {'dialog_dismissed': False, 'state': 'excluded'}
+    validation = {'state': 'excluded'}
+    cancelled_hash = validation_hash = None
+    if not options.functional_only:
+        close_workspace_with_keyboard(driver, wait)
+        cancellation = cancellation_observation(driver)
+        cancelled_hash = screenshot(driver, cancelled)
+        _open_form(driver, wait, options, action, operation, password)
+        assert_form_controls(wait, operation['form']['fields'])
+        validation = _validation_observation(driver, wait, operation)
+        validation_hash = screenshot(driver, validation_path)
+        close_workspace(driver, wait)
+        _open_form(driver, wait, options, action, operation, password)
     assert_form_controls(wait, operation['form']['fields'])
     _fill_case(driver, wait, operation, case['values'])
     plan = _preview(driver, wait, case)
@@ -502,10 +512,9 @@ def _run_case(driver, wait, options, actions, operations, case, password):
         },
         'screenshots': {
             'initial': {'path': str(initial), 'sha256': initial_hash},
-            'cancelled': {'path': str(cancelled), 'sha256': cancelled_hash},
-            'validation_error': {
+            **({'cancelled': {'path': str(cancelled), 'sha256': cancelled_hash}, 'validation_error': {
                 'path': str(validation_path), 'sha256': validation_hash,
-            },
+            }} if not options.functional_only else {}),
             'plan_preview': {'path': str(preview), 'sha256': preview_hash},
             'completed': {'path': str(completed), 'sha256': completed_hash},
         },
@@ -570,7 +579,8 @@ def run(options):
                 item['cancellation']['dialog_dismissed']
                 for item in completed
             ),
-            'validation_observed_form_count': len(completed),
+            'validation_observed_form_count': sum(item['validation']['state'] == 'observed' for item in completed),
+            'human_form_validation': 'excluded' if options.functional_only else 'automated-contract-observations',
             'accessibility_observed_form_count': sum(
                 item['accessibility']['state'] == 'observed'
                 for item in completed

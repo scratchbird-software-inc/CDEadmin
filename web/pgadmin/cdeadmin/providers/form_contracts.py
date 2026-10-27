@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import copy
 
+from .mysql_descriptor_contract import database_fields as mysql_database_fields
+
 
 class ProviderFormContractError(ValueError):
     """An active provider does not own a complete form contract."""
@@ -84,28 +86,9 @@ _DATABASE_SPECS = {
     'mysql-native': {
         'engine_id': 'mysql', 'noun': 'database',
         'identity_label': 'MySQL database name',
-        'create_fields': (
-            _field('name', 'MySQL database name', required=True),
-            _field('if_not_exists', 'Do not fail if it already exists',
-                   'boolean', default=False),
-            _field('character_set', 'Default character set'),
-            _field('collation', 'Default collation'),
-            _field('encryption', 'Default encryption', 'select',
-                   options=('Y', 'N')),
-        ),
-        'alter_fields': (
-            _field('character_set', 'Default character set'),
-            _field('collation', 'Default collation'),
-            _field('encryption', 'Default encryption', 'select',
-                   options=('Y', 'N')),
-            _field('read_only', 'Database read-only state', 'select',
-                   options=('ON', 'OFF')),
-        ),
-        'drop_fields': (
-            _field('confirmation',
-                   'Type the exact MySQL database name to confirm',
-                   required=True),
-        ),
+        'create_fields': mysql_database_fields('create'),
+        'alter_fields': mysql_database_fields('alter'),
+        'drop_fields': (_CONFIRM,),
         'connection_fields': (
             _field('charset', 'Default character set'),
             _field('collation', 'Default collation'),

@@ -29,6 +29,7 @@ def test_only_native_server_errors_include_bounded_diagnostic_text():
 def harness(sets):
     class Cursor:
         cdeadmin_exact_temporals = False
+        cdeadmin_checked_fetch_errors = True
         metadata = {}
 
         def __init__(self):
@@ -71,10 +72,12 @@ def harness(sets):
     identity.fetchone.return_value = ('server-one', 7)
     connection = SimpleNamespace(
         cursor=lambda **kw: native if kw else identity,
-        python_charset='utf8', ping=Mock())
+        connection_id=7, python_charset='utf8', ping=Mock())
     client = SimpleNamespace(_uncertain_sessions=set(),
                              _require_usable_session=Mock())
-    return Executions(client), connection, native
+    owner = Executions(client)
+    owner.sessions.register(connection)
+    return owner, connection, native
 
 
 def drain(executions, token):
@@ -204,3 +207,26 @@ def test_failed_dispatch_retains_timing_and_never_replays():
     assert payload['error'] == {'type': 'OSError'}
     assert payload['session_reuse_blocked'] is True
     native.execute.assert_called_once()
+
+
+def test_original_identity_is_reused_without_another_observation_command():
+    owner, connection, native = harness([[1]])
+    factory = connection.cursor
+    def query_cursor(**options):
+        assert options, 'Execution sent an identity observation on the user session'
+        return factory(**options)
+    connection.cursor = query_cursor
+    pages = drain(owner, owner.execute(connection, {'source': 'SELECT ROW_COUNT()'}, {}))
+    assert pages[-1]['payload']['error'] is None
+    connection.ping.assert_not_called()
+
+
+def test_changed_native_identity_refuses_dispatch_and_quarantines_session():
+    owner, connection, native = harness([[1]])
+    connection.connection_id = 8
+    native.execute = Mock()
+    with pytest.raises(RelationalClientError, match='identity changed'):
+        owner.execute(connection, {'source': 'must not dispatch'}, {})
+    native.execute.assert_not_called()
+    assert id(connection) in owner.client._uncertain_sessions
+    assert not owner.tokens

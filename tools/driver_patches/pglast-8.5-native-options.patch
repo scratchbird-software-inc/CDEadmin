@@ -1,0 +1,170 @@
+--- a/setup.py
++++ b/setup.py
+@@ -12,6 +12,7 @@
+ import sys
+ 
+ from setuptools import Extension, setup
++from Cython.Build import cythonize
+ from setuptools.command.build_ext import build_ext
+ 
+ 
+@@ -39,13 +40,15 @@
+ 
+ setup(
+     cmdclass={'build_ext': BuildLibPgQueryFirst},
+-    ext_modules=[
++    ext_modules=cythonize([
+         Extension(
+             'pglast.parser',
+-            sources=['pglast/parser.c'],
++            sources=['pglast/parser.pyx'],
+             libraries=['pg_query'],
+             include_dirs=[fspath(p) for p in include_dirs],
+-            library_dirs=[fspath(libpg_query_dir)]
++            library_dirs=[fspath(libpg_query_dir)],
++            extra_compile_args=['/FI' + fspath(here / 'cdeadmin_pglast_python.h')]
++            if sys.platform == 'win32' else [],
+         ),
+-    ],
++    ], language_level=3),
+ )
+--- /dev/null
++++ b/cdeadmin_pglast_python.h
+@@ -0,0 +1,17 @@
++/* MSVC: PostgreSQL's internal headers must precede Python's CRT headers.
++ * The library keeps its native build; only the Cython translation unit uses
++ * this forced include, following PostgreSQL's PL/Python include ordering.
++ */
++#ifndef CDEADMIN_PGLAST_PYTHON_H
++#define CDEADMIN_PGLAST_PYTHON_H
++#include "postgres.h"
++#ifdef _MSC_VER
++#pragma push_macro("errcode")
++#undef errcode
++#define errcode cdeadmin_python_errcode
++#endif
++#include <Python.h>
++#ifdef _MSC_VER
++#pragma pop_macro("errcode")
++#endif
++#endif
+--- a/pglast/parser.pyx
++++ b/pglast/parser.pyx
+@@ -128,12 +128,14 @@
+         PgQueryError *error
+ 
+     PgQueryParseResult pg_query_parse(const char* input)
++    PgQueryParseResult pg_query_parse_opts(const char* input, int parser_options)
+     void pg_query_free_parse_result(PgQueryParseResult result)
+ 
+     PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input)
+     void pg_query_free_protobuf_parse_result(PgQueryProtobufParseResult result)
+ 
+     PgQueryPlpgsqlParseResult pg_query_parse_plpgsql(const char* input)
++    PgQueryPlpgsqlParseResult pg_query_parse_plpgsql_opts(const char* input, int parser_options, int body_options)
+     void pg_query_free_plpgsql_parse_result(PgQueryPlpgsqlParseResult result)
+ 
+     PgQueryFingerprintResult pg_query_fingerprint(const char* input)
+@@ -281,7 +283,9 @@
+         pg_query_exit_memory_context(mctx);
+ 
+ 
+-def parse_sql_json(str query):
++CDEADMIN_PARSE_OPTIONS_REVISION = 2
++
++def parse_sql_json(str query, int parser_options=0):
+     "Parse the given ``SQL`` `query` and return its ``JSON`` encoded syntax tree."
+ 
+     cdef PgQueryParseResult parsed
+@@ -291,7 +295,7 @@
+     cstring = utf8
+ 
+     with nogil:
+-        parsed = pg_query_parse(cstring)
++        parsed = pg_query_parse_opts(cstring, parser_options)
+ 
+     try:
+         if parsed.error:
+@@ -330,7 +334,7 @@
+             pg_query_free_protobuf_parse_result(parsed)
+ 
+ 
+-def parse_plpgsql_json(str query):
++def parse_plpgsql_json(str query, int parser_options=0, int body_options=-1):
+     "Parse the given ``pgpgsql`` `query` and return its ``JSON`` encoded syntax tree."
+ 
+     cdef PgQueryPlpgsqlParseResult parsed
+@@ -340,7 +344,7 @@
+     cstring = utf8
+ 
+     with nogil:
+-        parsed = pg_query_parse_plpgsql(cstring)
++        parsed = pg_query_parse_plpgsql_opts(cstring, parser_options, parser_options if body_options < 0 else body_options)
+ 
+     try:
+         if parsed.error:
+--- a/libpg_query/pg_query.h
++++ b/libpg_query/pg_query.h
+@@ -171,6 +171,7 @@
+ PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input);
+ PgQueryProtobufParseResult pg_query_parse_protobuf_opts(const char* input, int parser_options);
+ PgQueryPlpgsqlParseResult pg_query_parse_plpgsql(const char* input);
++PgQueryPlpgsqlParseResult pg_query_parse_plpgsql_opts(const char* input, int parser_options, int body_options);
+ 
+ PgQueryFingerprintResult pg_query_fingerprint(const char* input);
+ PgQueryFingerprintResult pg_query_fingerprint_opts(const char* input, int parser_options, int fingerprint_options);
+--- a/libpg_query/src/pg_query_parse_plpgsql.c
++++ b/libpg_query/src/pg_query_parse_plpgsql.c
+@@ -15,6 +15,7 @@
+ #include <nodes/parsenodes.h>
+ #include <nodes/nodeFuncs.h>
+ #include <parser/parse_type.h>
++#include <parser/parser.h>
+ #include <utils/builtins.h>
+ #include <utils/lsyscache.h>
+ #include <utils/syscache.h>
+@@ -603,7 +604,7 @@
+ 	return result;
+ }
+ 
+-PgQueryPlpgsqlParseResult pg_query_parse_plpgsql(const char* input)
++static PgQueryPlpgsqlParseResult pg_query_parse_plpgsql_inner(const char* input, int parser_options, int body_options)
+ {
+ 	MemoryContext ctx = NULL;
+ 	PgQueryPlpgsqlParseResult result = {0};
+@@ -613,7 +614,10 @@
+ 
+ 	ctx = pg_query_enter_memory_context();
+ 
+-	parse_result = pg_query_raw_parse(input, PG_QUERY_PARSE_DEFAULT);
++	parse_result = pg_query_raw_parse(input, parser_options);
++	standard_conforming_strings = !(body_options & PG_QUERY_DISABLE_STANDARD_CONFORMING_STRINGS);
++	backslash_quote = (body_options & PG_QUERY_DISABLE_BACKSLASH_QUOTE) ? BACKSLASH_QUOTE_OFF : BACKSLASH_QUOTE_SAFE_ENCODING;
++	escape_string_warning = !(body_options & PG_QUERY_DISABLE_ESCAPE_STRING_WARNING);
+ 	result.error = parse_result.error;
+ 	if (result.error != NULL) {
+ 		pg_query_exit_memory_context(ctx);
+@@ -682,6 +686,23 @@
+ 	return result;
+ }
+ 
++PgQueryPlpgsqlParseResult pg_query_parse_plpgsql_opts(const char* input, int parser_options, int body_options)
++{
++    bool previous_strings = standard_conforming_strings;
++    int previous_quote = backslash_quote;
++    bool previous_warning = escape_string_warning;
++    PgQueryPlpgsqlParseResult result = pg_query_parse_plpgsql_inner(input, parser_options, body_options);
++    standard_conforming_strings = previous_strings;
++    backslash_quote = previous_quote;
++    escape_string_warning = previous_warning;
++    return result;
++}
++
++PgQueryPlpgsqlParseResult pg_query_parse_plpgsql(const char* input)
++{
++    return pg_query_parse_plpgsql_opts(input, PG_QUERY_PARSE_DEFAULT, PG_QUERY_PARSE_DEFAULT);
++}
++
+ void pg_query_free_plpgsql_parse_result(PgQueryPlpgsqlParseResult result)
+ {
+ 	if (result.error) {

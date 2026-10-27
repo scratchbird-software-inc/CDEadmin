@@ -80,7 +80,7 @@ class PostgreSQLMonitor:
     """One dedicated attachment. The host owns scheduling and authorization."""
     def __init__(self, permissions, route, *, scope='database',
                  connect=None, monotonic_ns=time.monotonic_ns,
-                 metadata_interval_seconds=60):
+                 metadata_interval_seconds=60,native_metric_sources=()):
         if scope not in ('database', 'server') or not route.get('database'):
             raise ValueError('PostgreSQL monitoring requires an explicit connection database')
         if type(metadata_interval_seconds) is not int or not 60 <= metadata_interval_seconds <= 3600:
@@ -91,6 +91,8 @@ class PostgreSQLMonitor:
                                        not 1 <= route['database_oid'] <= 4294967295):
             raise ValueError('Invalid monitoring database identity')
         self.scope = scope
+        from .metrics import select_sources
+        self._native_metric_sources=select_sources(native_metric_sources)
         self.route = copy.deepcopy(route)
         self.permissions = permissions
         self._connect = connect
@@ -257,6 +259,11 @@ class PostgreSQLMonitor:
                         self._group(result, 'tables', TABLE_SQL)
                     self._group(result, 'replication', REPLICATION_SQL, scope='server', limited=not all_stats)
                     self._group(result, 'io', IO_SQL, scope='server')
+                    if self._native_metric_sources:
+                        from .metrics import read_sources
+                        result['groups']['native_metrics']=read_sources(self._connection,self._native_metric_sources,
+                            scope=self.scope,database_oid=database_oid)
+                        result['groups']['native_metrics']['statistics_visibility']='all' if all_stats else 'permission-limited'
                     if (self._settings is None or self._settings_at is None or
                             start - self._settings_at >= self._metadata_interval_ns):
                         self._group(result, 'settings', SETTINGS_SQL, scope='connection')

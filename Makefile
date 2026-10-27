@@ -42,7 +42,7 @@ bundle-dev:
 linter:
 	cd web && yarn run linter
 
-check: install-node bundle linter check-pep8 cdeadmin-contracts-check cdeadmin-architecture-gate cdeadmin-endpoint-persistence-test cdeadmin-provider-registry-test cdeadmin-postgresql-provider-test cdeadmin-mongodb-provider-test cdeadmin-resource-explorer-test cdeadmin-data-studio-test cdeadmin-result-renderer-test cdeadmin-semantic-model-test cdeadmin-operation-bus-test cdeadmin-security-isolation-test cdeadmin-quality-infrastructure-test cdeadmin-product-identity-test cdeadmin-product-identity-check cdeadmin-profile-migration-test cdeadmin-transport-foundations-test cdeadmin-transport-gate cdeadmin-actual-engine-pilots-test cdeadmin-actual-engine-gate cdeadmin-reference-corpus-test cdeadmin-reference-corpus-gate cdeadmin-parity-test cdeadmin-parity-gate cdeadmin-workspace-shell-test cdeadmin-workspace-shell-gate cdeadmin-scratchbird-consumer-test cdeadmin-scratchbird-consumer-gate cdeadmin-upstream-acceptance-test cdeadmin-upstream-acceptance-gate cdeadmin-quality-gate cdeadmin-bundle-regression-gate
+check: install-node bundle linter check-pep8 cdeadmin-contracts-check cdeadmin-architecture-gate ui-descriptors-check cdeadmin-endpoint-persistence-test cdeadmin-provider-registry-test cdeadmin-postgresql-provider-test cdeadmin-mongodb-provider-test cdeadmin-resource-explorer-test cdeadmin-data-studio-test cdeadmin-result-renderer-test cdeadmin-semantic-model-test cdeadmin-operation-bus-test cdeadmin-security-isolation-test cdeadmin-quality-infrastructure-test cdeadmin-product-identity-test cdeadmin-product-identity-check cdeadmin-profile-migration-test cdeadmin-transport-foundations-test cdeadmin-transport-gate cdeadmin-actual-engine-pilots-test cdeadmin-actual-engine-gate cdeadmin-reference-corpus-test cdeadmin-reference-corpus-gate cdeadmin-parity-test cdeadmin-parity-gate cdeadmin-workspace-shell-test cdeadmin-workspace-shell-gate cdeadmin-scratchbird-consumer-test cdeadmin-scratchbird-consumer-gate cdeadmin-upstream-acceptance-test cdeadmin-upstream-acceptance-gate cdeadmin-quality-gate cdeadmin-bundle-regression-gate
 	cd web && yarn run test:js-once && python regression/runtests.py
 
 check-audit:
@@ -92,6 +92,10 @@ cdeadmin-baseline:
 
 cdeadmin-baseline-test:
 	python3 -m unittest discover -s tools/tests -p 'test_cdeadmin_*.py'
+
+ui-descriptors-check:
+	python3 tools/validate_ui_descriptors.py --counts --enforce-counts tools/ui_lint_maximums.json
+	python3 -m pytest -q -p no:cacheprovider tools/tests/test_ui_descriptor_service.py tools/tests/test_ui_descriptor_tools.py tools/tests/test_ui_descriptor_postgresql_schema_ids.py tools/tests/test_ui_descriptor_roundtrip_sqlite.py tools/tests/test_ui_descriptor_roundtrip_duckdb.py tools/tests/test_ui_descriptor_operations_sqlite.py tools/tests/test_ui_descriptor_operations_duckdb.py tools/tests/test_ui_descriptor_roundtrip_firebird.py tools/tests/test_ui_descriptor_roundtrip_mariadb.py
 
 cdeadmin-architecture-gate:
 	python3 tools/cdeadmin_architecture_gate.py --source . \

@@ -1,0 +1,215 @@
+diff --git a/storage/innobase/fil/fil0fil.cc b/storage/innobase/fil/fil0fil.cc
+index 2780f989..c0b7dda1 100644
+--- a/storage/innobase/fil/fil0fil.cc
++++ b/storage/innobase/fil/fil0fil.cc
+@@ -4148,7 +4148,13 @@ bool fil_node_open_file(fil_node_t *file) {
+ 
+   shard->mutex_acquire();
+ 
++#ifdef XTRABACKUP
++  /* A parallel raw-file cursor may already have opened the first system
++  file to populate the native space-header extent. Check under the shard lock. */
++  bool res = file->is_open || shard->open_file(file);
++#else
+   bool res = shard->open_file(file);
++#endif
+ 
+   shard->mutex_release();
+ 
+diff --git a/storage/innobase/fsp/fsp0sysspace.cc b/storage/innobase/fsp/fsp0sysspace.cc
+index 58882f39..69e47a40 100644
+--- a/storage/innobase/fsp/fsp0sysspace.cc
++++ b/storage/innobase/fsp/fsp0sysspace.cc
+@@ -478,6 +478,7 @@ dberr_t SysTablespace::open_file(Datafile &file) {
+     case SRV_OLD_RAW:
+       srv_start_raw_disk_in_use = true;
+ 
++#ifndef XTRABACKUP
+       if (srv_read_only_mode && !m_ignore_read_only) {
+         ib::error(ER_IB_MSG_443)
+             << "Can't open a raw device '" << file.m_filepath
+@@ -486,6 +487,7 @@ dberr_t SysTablespace::open_file(Datafile &file) {
+ 
+         return (DB_ERROR);
+       }
++#endif
+ 
+       [[fallthrough]];
+ 
+diff --git a/storage/innobase/xtrabackup/src/backup_copy.cc b/storage/innobase/xtrabackup/src/backup_copy.cc
+index d5c84258..59d80625 100644
+--- a/storage/innobase/xtrabackup/src/backup_copy.cc
++++ b/storage/innobase/xtrabackup/src/backup_copy.cc
+@@ -2118,7 +2118,13 @@ bool should_skip_file_on_copy_back(const char *filepath) {
+   /* skip innodb data files */
+   for (auto iter(srv_sys_space.files_begin()), end(srv_sys_space.files_end());
+        iter != end; ++iter) {
+-    if (strcmp(iter->name(), filename) == 0) {
++    char numbered_name[64];
++    if (xb_system_file_numbers) {
++      unsigned index = 0;
++      for (auto entry = srv_sys_space.files_begin(); entry != iter; ++entry) ++index;
++      snprintf(numbered_name, sizeof(numbered_name), "sr-system-%u.ibdata", index);
++    }
++    if (strcmp(xb_system_file_numbers ? numbered_name : base_name(iter->name()), filename) == 0) {
+       return true;
+     }
+   }
+@@ -2403,10 +2409,20 @@ bool copy_back(int argc, char **argv) {
+ 
+   for (auto iter(srv_sys_space.files_begin()), end(srv_sys_space.files_end());
+        iter != end; ++iter) {
++    char numbered_name[64];
+     const char *filename = base_name(iter->name());
++    if (xb_system_file_numbers) {
++      snprintf(numbered_name, sizeof(numbered_name), "sr-system-%u.ibdata",
++               static_cast<unsigned>(std::distance(srv_sys_space.files_begin(), iter)));
++      filename = numbered_name;
++    }
+ 
++    /* Only the first system file starts with an FSP header. Later files
++    start at a nonzero logical page, so their payload must not be parsed
++    as page-size/encryption metadata. System files are not compressed or
++    individually encrypted; retain their prepared native bytes exactly. */
+     if (!(ret = copy_or_move_file(filename, iter->name(), dst_dir, 1,
+-                                  FILE_PURPOSE_DATAFILE))) {
++                                  FILE_PURPOSE_OTHER))) {
+       goto cleanup;
+     }
+   }
+diff --git a/storage/innobase/xtrabackup/src/fil_cur.cc b/storage/innobase/xtrabackup/src/fil_cur.cc
+index db04712e..cf73134a 100644
+--- a/storage/innobase/xtrabackup/src/fil_cur.cc
++++ b/storage/innobase/xtrabackup/src/fil_cur.cc
+@@ -23,11 +23,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ /* Source file cursor implementation */
+ 
+ #include <my_base.h>
++#include <limits>
+ 
+ #include <fil0fil.h>
+ #include <fsp0sysspace.h>
+ #include <srv0start.h>
+ #include <trx0sys.h>
++#include <trx0purge.h>
+ #include <univ.i>
+ 
+ #include "common.h"
+@@ -139,6 +141,24 @@ xb_fil_cur_result_t xb_fil_cur_open(
+   strncpy(cursor->rel_path, xb_get_relative_path(node->space, cursor->abs_path),
+           sizeof(cursor->rel_path) - 1);
+ 
++  if (srv_backup_mode && cursor->is_system && xb_system_file_numbers) {
++    unsigned index = 0;
++    for (const auto &file : node->space->files) {
++      if (&file == node) break;
++      ++index;
++    }
++    snprintf(cursor->rel_path, sizeof(cursor->rel_path),
++             "sr-system-%u.ibdata", index);
++  }
++
++  if (srv_backup_mode && fsp_is_undo_tablespace(node->space->id) &&
++      undo::id2num(node->space->id) > FSP_IMPLICIT_UNDO_TABLESPACES) {
++    /* Explicit undo files can share a basename in different directories.
++    The native undo number is unique and survives space-ID rotation. */
++    snprintf(cursor->rel_path, sizeof(cursor->rel_path), "sr-undo-%u.ibu",
++             static_cast<unsigned>(undo::id2num(node->space->id)));
++  }
++
+   /* In the backup mode we should already have a tablespace handle created
+   by fil_load_single_table_tablespace() unless it is a system
+   tablespace or srv_close_files is true. Otherwise we open the file here.
+@@ -170,6 +190,48 @@ xb_fil_cur_result_t xb_fil_cur_open(
+     return (XB_FIL_CUR_ERROR);
+   }
+ 
++#ifdef __linux__
++  if (S_ISBLK(cursor->statinfo.st_mode)) {
++    /* Linux reports st_size == 0 for block devices. Copy the configured
++    system-space extent, bounded by the opened device's actual capacity.
++    os_file_get_size preserves the descriptor's current position. */
++    const auto capacity = os_file_get_size(cursor->file);
++    const uint64_t page_bytes = univ_page_size.physical();
++    uint64_t pages = node->size;
++    if (cursor->is_system && srv_sys_space.can_auto_extend_last_file() &&
++        node == &node->space->files.back()) {
++      auto *first = &node->space->files.front();
++      if (node->space->size_in_header == 0 && !fil_node_open_file(first)) {
++        xb::error() << "Cannot read the native raw system-space header";
++        xb_fil_cur_close(cursor);
++        return (XB_FIL_CUR_ERROR);
++      }
++      uint64_t preceding_pages = 0;
++      for (const auto &file : node->space->files) {
++        if (&file == node) break;
++        preceding_pages += file.size;
++      }
++      const uint64_t total_pages = node->space->size_in_header;
++      if (total_pages < preceding_pages + pages) {
++        xb::error() << "Native raw system-space extent is smaller than its configuration";
++        xb_fil_cur_close(cursor);
++        return (XB_FIL_CUR_ERROR);
++      }
++      pages = total_pages - preceding_pages;
++    }
++    const auto maximum = std::numeric_limits<decltype(cursor->statinfo.st_size)>::max();
++    if (capacity == static_cast<os_offset_t>(-1) || pages == 0 ||
++        page_bytes == 0 || pages > static_cast<uint64_t>(maximum) / page_bytes ||
++        pages * page_bytes > capacity) {
++      xb::error() << "Invalid configured raw system-space size or device capacity: "
++                  << cursor->abs_path;
++      xb_fil_cur_close(cursor);
++      return (XB_FIL_CUR_ERROR);
++    }
++    cursor->statinfo.st_size = static_cast<decltype(cursor->statinfo.st_size)>(pages * page_bytes);
++  }
++#endif
++
+   if (srv_unix_file_flush_method == SRV_UNIX_O_DIRECT ||
+       srv_unix_file_flush_method == SRV_UNIX_O_DIRECT_NO_FSYNC) {
+     os_file_set_nocache(cursor->file.m_file, node->name, "OPEN");
+diff --git a/storage/innobase/xtrabackup/src/xtrabackup.cc b/storage/innobase/xtrabackup/src/xtrabackup.cc
+index 2daf0093..eea38682 100644
+--- a/storage/innobase/xtrabackup/src/xtrabackup.cc
++++ b/storage/innobase/xtrabackup/src/xtrabackup.cc
+@@ -156,6 +156,7 @@ char xtrabackup_real_target_dir[FN_REFLEN] = "./xtrabackup_backupfiles/";
+ char *xtrabackup_target_dir = xtrabackup_real_target_dir;
+ bool xtrabackup_version = false;
+ bool xtrabackup_backup = false;
++bool xb_system_file_numbers = false;
+ bool xtrabackup_prepare = false;
+ bool xtrabackup_copy_back = false;
+ bool xtrabackup_move_back = false;
+@@ -746,6 +747,7 @@ enum options_xtrabackup {
+   OPT_DEFAULTS_GROUP,
+   OPT_OPEN_FILES_LIMIT,
+   OPT_CLOSE_FILES,
++  OPT_SR_SYSTEM_FILE_NUMBERS,
+   OPT_CORE_FILE,
+ 
+   OPT_ROCKSDB_DATADIR,
+@@ -1033,6 +1035,11 @@ struct my_option xb_client_options[] = {
+      (G_PTR *)&xtrabackup_incremental_force_scan, 0, GET_BOOL, NO_ARG, 0, 0, 0,
+      0, 0, 0},
+ 
++    {"scratchrobin-system-file-numbers", OPT_SR_SYSTEM_FILE_NUMBERS,
++     "Use native system-file ordinals for private backup names.",
++     (G_PTR *)&xb_system_file_numbers, (G_PTR *)&xb_system_file_numbers,
++     0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
++
+     {"close_files", OPT_CLOSE_FILES,
+      "do not keep files opened. Use at your own "
+      "risk.",
+diff --git a/storage/innobase/xtrabackup/src/xtrabackup.h b/storage/innobase/xtrabackup/src/xtrabackup.h
+index d2ae0a23..05e5d746 100644
+--- a/storage/innobase/xtrabackup/src/xtrabackup.h
++++ b/storage/innobase/xtrabackup/src/xtrabackup.h
+@@ -141,6 +141,7 @@ inline xb_uncomp_bytes *xb_global_track_uncomp_bytes() {
+ }
+ 
+ extern bool xtrabackup_backup;
++extern bool xb_system_file_numbers;
+ extern bool xtrabackup_prepare;
+ extern bool xtrabackup_apply_log_only;
+ extern bool xtrabackup_copy_back;

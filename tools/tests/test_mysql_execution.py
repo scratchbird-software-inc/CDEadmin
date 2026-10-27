@@ -7,6 +7,7 @@ import pytest
 from tools.tests.test_cdeadmin_relational_providers import MYSQL_PROFILE  # noqa
 from pgadmin.cdeadmin.providers.mysql_family.mysql_execution import Executions
 from pgadmin.cdeadmin.sdk import RelationalClientError
+from pgadmin.cdeadmin.providers.mysql_family.mysql_values import MySQLParameterAdmissionError
 from mysql.connector.constants import FieldType
 
 
@@ -52,7 +53,7 @@ def harness(sets):
     identity.fetchone.return_value = ('server-one', 7)
     connection = SimpleNamespace(
         cursor=lambda **kw: native if kw else identity,
-        python_charset='utf8', ping=Mock(), server_host='winning-endpoint',
+        connection_id=7, python_charset='utf8', ping=Mock(), server_host='winning-endpoint',
         server_port=3306, unix_socket=None)
     control = Mock()
     control.cursor.return_value.fetchone.return_value = ('server-one',)
@@ -61,7 +62,9 @@ def harness(sets):
         module=SimpleNamespace(connect=Mock()),
         _invoke_connector=Mock(return_value=control),
         _safe_close=lambda obj: obj.close() if obj is not None else None)
-    return Executions(client), connection, native
+    owner = Executions(client)
+    owner.sessions.register(connection)
+    return owner, connection, native
 
 
 def drain(executions, token):
@@ -87,6 +90,19 @@ def test_multiple_results_keep_metadata_and_empty_set():
     assert native.closed
     with pytest.raises(RelationalClientError):
         owner.describe(token)
+
+
+def test_parameter_admission_failure_does_not_quarantine_or_replay_user_sql():
+    owner, connection, native = harness([[1]])
+    native.execute = Mock(side_effect=MySQLParameterAdmissionError('private input'))
+    pages = drain(owner, owner.execute(connection, {'source':'native query'}, {}))
+    assert pages[-1]['payload']['error'] == {
+        'type':'MySQLParameterAdmissionError','query_dispatch':'not_started',
+        'commands_dispatched':0}
+    assert not pages[-1]['payload']['session_reuse_blocked']
+    assert id(connection) not in owner.client._uncertain_sessions
+    assert native.execute.call_count == 1 and native.closed
+    connection.ping.assert_not_called()
 
 
 def test_backpressure_blocks_native_fetch_and_second_execution():
@@ -117,15 +133,16 @@ def test_shutdown_releases_unconsumed_result_backpressure():
     assert token.finished.is_set() and native.closed and not owner.tokens
 
 
-def test_shutdown_during_identity_read_prevents_dispatch():
+def test_shutdown_before_cursor_construction_prevents_dispatch():
     import threading
     owner, connection, native = harness([[1]])
     entered, release = threading.Event(), threading.Event()
-    identity = connection.cursor()
-    def read_identity():
-        entered.set(); release.wait(2)
-        return ('server-one', 7)
-    identity.fetchone.side_effect = read_identity
+    factory = connection.cursor
+    def delayed_cursor(**options):
+        if options.get('raw'):
+            entered.set(); release.wait(2)
+        return factory(**options)
+    connection.cursor = delayed_cursor
     native.execute = Mock()
     token = owner.execute(connection, {'source': 'native rows'}, {})
     assert entered.wait(1)
@@ -280,5 +297,42 @@ def test_failed_native_dispatch_retains_timing_and_diagnostic_without_replay():
     assert metrics['dispatch_ms'] >= 0
     assert metrics['prepare_ms'] is metrics['execute_ms'] is metrics['plan'] is None
     native.execute.assert_called_once()
-    connection.ping.assert_called_once_with(reconnect=False)
+    connection.ping.assert_not_called()
     assert native.closed and not owner.client._uncertain_sessions
+
+
+def test_original_identity_is_reused_without_another_observation_command():
+    owner, connection, native = harness([[1]])
+    factory = connection.cursor
+    def query_cursor(**options):
+        assert options, 'Execution sent an identity observation on the user session'
+        return factory(**options)
+    connection.cursor = query_cursor
+    pages = drain(owner, owner.execute(connection, {'source': 'SELECT ROW_COUNT()'}, {}))
+    assert pages[-1]['payload']['error'] is None
+    connection.ping.assert_not_called()
+
+
+def test_changed_native_identity_refuses_dispatch_and_quarantines_session():
+    owner, connection, native = harness([[1]])
+    connection.connection_id = 8
+    native.execute = Mock()
+    with pytest.raises(RelationalClientError, match='identity changed'):
+        owner.execute(connection, {'source': 'must not dispatch'}, {})
+    native.execute.assert_not_called()
+    assert id(connection) in owner.client._uncertain_sessions
+    assert not owner.tokens
+
+
+def test_missing_source_identity_during_authenticated_observer_renewal_prevents_worker_start(monkeypatch):
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_session_variables import SourceIdentityUnavailable
+    owner, connection, native = harness([[1]])
+    native.execute = Mock()
+    def unavailable(_handle):
+        raise SourceIdentityUnavailable('Original source identity is unavailable')
+    monkeypatch.setattr('pgadmin.cdeadmin.providers.mysql_family.mysql_session_variables.prepare', unavailable)
+    with pytest.raises(SourceIdentityUnavailable):
+        owner.execute(connection, {'source': 'must not dispatch'}, {})
+    native.execute.assert_not_called()
+    connection.ping.assert_not_called()
+    assert id(connection) in owner.client._uncertain_sessions and not owner.tokens

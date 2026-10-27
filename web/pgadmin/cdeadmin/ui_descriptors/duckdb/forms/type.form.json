@@ -1,0 +1,112 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "duckdb",
+  "family": "type",
+  "resource_kinds": [
+    "type"
+  ],
+  "status": "complete",
+  "engine_tab_title": "DuckDB",
+  "omitted_tabs": [
+    {
+      "tab": "Security",
+      "reason": "no users or privileges"
+    }
+  ],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "type_kind",
+      "label": "Type kind",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "ALIAS",
+      "options": [
+        {
+          "value": "ALIAS",
+          "label": "Alias"
+        },
+        {
+          "value": "ENUM",
+          "label": "Enum"
+        },
+        {
+          "value": "STRUCT",
+          "label": "Struct"
+        },
+        {
+          "value": "UNION",
+          "label": "Union"
+        }
+      ]
+    },
+    {
+      "field_id": "base_type",
+      "label": "Alias base type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "ALIAS"
+      }
+    },
+    {
+      "field_id": "enum_values",
+      "label": "Enum values",
+      "tab": "Constraints",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Enum values",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": true,
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "ENUM"
+      },
+      "item_kind": "string"
+    },
+    {
+      "field_id": "fields",
+      "label": "Struct/union fields",
+      "tab": "Constraints",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Member name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Native type",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": true,
+      "visible_when": {
+        "field": "type_kind",
+        "in": [
+          "STRUCT",
+          "UNION"
+        ]
+      }
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: enum_values as a string list. Round trip verified in-process (create, re-inspect) on DuckDB 2.0.0 (profile pins 1.5.2) by tools/tests/test_ui_descriptor_roundtrip_duckdb.py. Native qualification on the pinned version remains with the platform teams."
+}

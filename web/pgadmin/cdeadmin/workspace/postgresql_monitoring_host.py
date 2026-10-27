@@ -14,7 +14,7 @@ class PostgreSQLMonitoringHost(MonitoringHost):
     engine = 'postgresql'
     policy_fields = frozenset({'interval_seconds', 'retain_samples', 'lease_seconds',
                               'heartbeat_enabled', 'heartbeat_timeout_seconds',
-                              'metadata_interval_seconds'})
+                              'metadata_interval_seconds','native_metric_sources'})
 
     def __init__(self, app, shared_host):
         super().__init__(app, shared_host.endpoints)
@@ -56,6 +56,10 @@ class PostgreSQLMonitoringHost(MonitoringHost):
         values['ssh_configuration'] = {name: getattr(server, name, None) for name in (
             'tunnel_host', 'tunnel_port', 'tunnel_username', 'tunnel_authentication',
             'tunnel_identity_file', 'tunnel_keep_alive', 'tunnel_password')}
+        # Saved encrypted credentials can be bytes (including immediately
+        # after native registration). Fingerprint their revision consistently
+        # with the database credential without serializing the binary value.
+        values['ssh_configuration']['tunnel_password'] = str(getattr(server, 'tunnel_password', None))
         return route_fingerprint(values)
 
     def _scope(self, owner, sid, target):
@@ -223,6 +227,9 @@ class PostgreSQLMonitoringHost(MonitoringHost):
         database_oid(target)
         if not isinstance(body, dict) or set(body) - (self.policy_fields | {'credentials'}):
             raise ValueError('Unsupported PostgreSQL monitoring fields')
+        if 'native_metric_sources' in body:
+            from ..providers.postgresql.metrics import select_sources
+            select_sources(body['native_metric_sources'])
         key = owner, sid, target
         with self._lock:
             if key not in self._grants:
@@ -245,11 +252,27 @@ class PostgreSQLMonitoringHost(MonitoringHost):
             grant = self._grants.get((owner, sid, target))
             if grant is None:
                 return {'state': 'disabled', 'samples': [], 'history': 'volatile',
-                        'collection_available': self.available, 'navigation': navigation}
+                        'collection_available': self.available, 'navigation': navigation,
+                        'history_available': self.history is not None}
             current = self._authorizer(owner, sid, target)
             result = self.runtime.snapshot(grant.policy, lambda policy, purpose:
                 current(policy, purpose, grant.generation, grant.route_digest))
-            return {**result, 'authentication': dict(grant.authentication), 'navigation': navigation}
+            return {**result, 'authentication': dict(grant.authentication), 'navigation': navigation,
+                    'history_available': self.history is not None,
+                    'policy': {field: getattr(grant.policy, field) for field in self.policy_fields}}
+
+    def _historical_scope(self, owner, sid, target):
+        # Historical owner/OID scope survives collector shutdown and does not
+        # borrow or reconnect an interactive attachment. Configuration changes
+        # during destination I/O invalidate the response.
+        database_oid(target)
+        with self.app.app_context():
+            server = self._owned_server(owner, sid)
+            return server.endpoint_profile.id, self._configuration(server)
+
+    def historical(self, owner, sid, target, arguments):
+        from .mysql_monitoring_host import MySQLMonitoringHost
+        return MySQLMonitoringHost.historical(self, owner, sid, target, arguments)
 
     def disable(self, owner, sid, target):
         database_oid(target)
@@ -341,6 +364,31 @@ def init_app(app, shared_host):
     from flask_security import current_user
     from pgadmin.user_login_check import pga_login_required
     api = Blueprint('cdeadmin_postgresql_monitoring', __name__)
+
+    @api.route('/cdeadmin/api/monitoring/postgresql/sources',methods=['GET'])
+    @pga_login_required
+    def sources():
+        if not current_user.is_authenticated:
+            return jsonify(success=0,errormsg='Native metric sources require authentication'),403
+        from ..providers.postgresql.metrics import source_catalog
+        response=jsonify(success=1,data=source_catalog())
+        response.headers['Cache-Control']='no-store'
+        return response
+
+    @api.route('/cdeadmin/api/monitoring/postgresql/<int:sid>/history', methods=['GET'])
+    @pga_login_required
+    def history(sid):
+        try:
+            data = host.historical(current_user.id, sid, request.args.get('target_id'), request.args)
+            response = jsonify(success=1, data=data)
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except PermissionError:
+            return jsonify(success=0, errormsg='History scope is not authorized'), 403
+        except (ValueError, TypeError):
+            return jsonify(success=0, errormsg='Invalid history query'), 400
+        except Exception:
+            return jsonify(success=0, errormsg='Monitoring history is unavailable'), 503
 
     @api.route('/cdeadmin/api/monitoring/postgresql/definition', methods=['GET', 'PUT', 'POST'])
     @pga_login_required

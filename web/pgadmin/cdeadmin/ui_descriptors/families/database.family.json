@@ -1,0 +1,173 @@
+{
+  "schema": "cdeadmin.ui-family.v1",
+  "family": "database",
+  "title": "Database",
+  "tabs": [
+    {
+      "tab": "General",
+      "primitive": "group",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true,
+          "help": "Database name, or file path / alias on embedded engines"
+        },
+        {
+          "field_id": "owner",
+          "label": "Owner",
+          "control": "reference",
+          "reference_kind": "role"
+        },
+        {
+          "field_id": "template",
+          "label": "Template",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "databases"
+          ]
+        },
+        {
+          "field_id": "if_not_exists",
+          "label": "Skip if it exists",
+          "control": "boolean"
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "tab": "Options",
+      "primitive": "group",
+      "required": false,
+      "fields": [
+        {
+          "field_id": "character_set",
+          "label": "Character set / encoding",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "character_sets"
+          ]
+        },
+        {
+          "field_id": "collation",
+          "label": "Collation",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "collations"
+          ]
+        },
+        {
+          "field_id": "page_size",
+          "label": "Page size",
+          "control": "select",
+          "option_values_path": [
+            "dialect",
+            "page_sizes"
+          ]
+        },
+        {
+          "field_id": "sql_dialect",
+          "label": "SQL dialect",
+          "control": "select"
+        },
+        {
+          "field_id": "read_only",
+          "label": "Read only",
+          "control": "boolean"
+        },
+        {
+          "field_id": "encryption",
+          "label": "Encryption",
+          "control": "select"
+        },
+        {
+          "field_id": "tablespace",
+          "label": "Tablespace",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "tablespaces"
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "Engine",
+      "primitive": "group",
+      "required": false
+    },
+    {
+      "tab": "Security",
+      "primitive": "privileges",
+      "required": false,
+      "grid_columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "$resource_kind"
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "Parameters",
+      "primitive": "keyvalue",
+      "required": false,
+      "fields": [
+        {
+          "field_id": "parameters",
+          "label": "Settings",
+          "control": "keyvalue",
+          "help": "Per-database settings: PG variables, DuckDB config, settable SQLite pragmas"
+        }
+      ]
+    },
+    {
+      "tab": "Statistics",
+      "primitive": "readonly_groups",
+      "required": false,
+      "notes": "Existing read-only property groups (e.g. Firebird storage / MGA / attachment) move here."
+    },
+    {
+      "tab": "SQL",
+      "primitive": "sql_preview",
+      "required": true,
+      "notes": "Read-only. Create mode: full native DDL from the provider plan. Alter mode: the ALTER set. Replaces the confirm-step preview."
+    }
+  ]
+}

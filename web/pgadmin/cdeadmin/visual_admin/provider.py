@@ -39,9 +39,20 @@ class VisualAdminError(RuntimeError):
 class VisualAdminValidationError(VisualAdminError):
     """A draft does not satisfy its provider-declared form."""
 
+    code = 'VISUAL_ADMIN_INVALID_DRAFT'
+    status = 422
+
+    def __init__(self, message, errors=()):
+        super().__init__(message)
+        self.errors = copy.deepcopy(errors)
+
 
 class VisualAdminAccessError(VisualAdminError):
     """An operation is unavailable or is not admitted for this endpoint."""
+
+    def __init__(self, message, code='VISUAL_ADMIN_ACCESS_REFUSED', status=403):
+        super().__init__(message)
+        self.code, self.status = code, status
 
 
 class VisualAdminExecutionError(VisualAdminError):
@@ -237,7 +248,7 @@ class ProviderVisualAdministration:
                 'the selected operation requires a target resource'
             )
         draft = _mapping(payload.get('draft', {}), 'draft')
-        fields = operation['form']['fields']
+        fields = self._operation_fields(resource, operation, draft)
         known = {field['field_id'] for field in fields}
         unknown = sorted(set(draft).difference(known))
         errors = []
@@ -341,7 +352,7 @@ class ProviderVisualAdministration:
         validation = self.validate(payload, retain_sensitive=True)
         if not validation['valid']:
             raise VisualAdminValidationError(
-                'visual administration draft is invalid'
+                'visual administration draft is invalid', validation['errors']
             )
         planner = self._planner_callback()
         plan_id = str(uuid.uuid4())
@@ -361,7 +372,7 @@ class ProviderVisualAdministration:
             ),
             'target_resource': copy.deepcopy(payload.get('target_resource')),
             'draft': self._redact_sensitive(
-                operation['form']['fields'], admitted_draft
+                self._operation_fields(resource, operation, admitted_draft), admitted_draft
             ),
         }
         session_id = payload.get('session_id')
@@ -387,7 +398,12 @@ class ProviderVisualAdministration:
             provider_request['_provider_route'] = _mapping(
                 route, 'provider route'
             )
-        native = _mapping(planner(provider_request), 'native plan')
+        from pgadmin.cdeadmin.sdk import RelationalClientError
+        try:
+            native = _mapping(planner(provider_request), 'native plan')
+        except RelationalClientError:
+            raise VisualAdminValidationError('Native review is unavailable',
+                [{'field_id': None, 'code': 'native_review_refused'}]) from None
         command_preview = native.get('command_preview')
         if command_preview is not None and not isinstance(
             command_preview, (str, Mapping, list)
@@ -434,21 +450,21 @@ class ProviderVisualAdministration:
             stored = self._plans.pop(plan_id, None)
         if stored is None or stored.digest != digest:
             raise VisualAdminAccessError(
-                'visual administration plan is absent, stale or changed'
+                'visual administration plan is absent, stale or changed', 'VISUAL_ADMIN_PLAN_STALE', 409
             )
         presentation = stored.presentation
         expected_session_id = presentation.get('session_id')
         supplied_session_id = payload.get('session_id')
         if expected_session_id != supplied_session_id:
             raise VisualAdminAccessError(
-                'visual administration session binding changed'
+                'visual administration session binding changed', 'VISUAL_ADMIN_SESSION_CHANGED', 409
             )
         execution_context = execution_context or {}
         if expected_session_id is not None and (
                 execution_context.get('session_id') != expected_session_id or
                 execution_context.get('session_handle') is None):
             raise VisualAdminAccessError(
-                'visual administration provider session is unavailable'
+                'visual administration provider session is unavailable', 'VISUAL_ADMIN_SESSION_UNAVAILABLE', 409
             )
         mutation_class = presentation['mutation_class']
         self._require_mutation(mutation_class)
@@ -456,7 +472,7 @@ class ProviderVisualAdministration:
             self.permissions.require(permission, 'endpoint')
         if presentation.get('confirmation_required') and not confirmed:
             raise VisualAdminAccessError(
-                'visual administration operation requires confirmation'
+                'visual administration operation requires confirmation', 'VISUAL_ADMIN_CONFIRMATION_REQUIRED', 409
             )
         if self.context.runtime_verification_state != 'verified':
             raise VisualAdminAccessError(
@@ -1071,6 +1087,27 @@ class ProviderVisualAdministration:
                     ),
                 }
             return copy.deepcopy(value), None
+        if control in {'grid', 'keyvalue', 'reference'}:
+            if control == 'grid' and isinstance(value, str):
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError:
+                    value = None
+            if control == 'grid':
+                valid = isinstance(value, list)
+            elif control == 'keyvalue':
+                valid = isinstance(value, Mapping)
+            else:
+                valid = isinstance(value, str) or (
+                    isinstance(value, list) and
+                    all(isinstance(part, str) for part in value))
+            if not valid:
+                return None, {'field_id': field_id, 'code': 'type',
+                    'message': f'{label} has an invalid structured value.'}
+            # The provider validates native record identities and semantics.
+            # A grid may retain a provider's existing scalar-list API while
+            # its descriptor introduces typed records for the shared UI.
+            return copy.deepcopy(value), None
         if control == 'json':
             if isinstance(value, str):
                 try:
@@ -1080,6 +1117,11 @@ class ProviderVisualAdministration:
                         'field_id': field_id, 'code': 'json',
                         'message': f'{label} must contain valid JSON.',
                     }
+            if field.get('json_type') == 'scalar':
+                if type(value) not in {str, bool, int}:
+                    return None, {'field_id': field_id, 'code': 'type',
+                                  'message': f'{label} requires text, boolean or integer.'}
+                return value, None
             if isinstance(value, (Mapping, list)):
                 if field.get('object_editor'):
                     if not isinstance(value, Mapping):
@@ -1222,6 +1264,33 @@ class ProviderVisualAdministration:
 
     def _validation_callback(self):
         return self._callback('validate_admin_operation')
+
+    def _operation_fields(self, resource, operation, draft=None):
+        """Admit provider fields without rebuilding the frozen UI catalog."""
+        fields = operation['form']['fields']
+        callback = self._callback('admin_operation_field_contract')
+        if callback is None:
+            return fields
+        provided = callback({
+            'resource_kind': resource['resource_kind'],
+            'operation_id': operation['operation_id'],
+            'legacy_fields': copy.deepcopy(fields),
+            'draft': copy.deepcopy(draft or {}),
+        })
+        if provided is None:
+            return fields
+        if not isinstance(provided, Mapping) or not isinstance(
+                provided.get('fields'), list):
+            raise VisualAdminValidationError('Provider field contract is invalid')
+        fields = provided['fields']
+        if any(not isinstance(field, Mapping) or
+               not isinstance(field.get('field_id'), str) or
+               not isinstance(field.get('label'), str) or
+               not isinstance(field.get('control'), str) or
+               not isinstance(field.get('required'), bool)
+               for field in fields) or len({field['field_id'] for field in fields}) != len(fields):
+            raise VisualAdminValidationError('Provider field contract is invalid')
+        return copy.deepcopy(fields)
 
     def _planner_callback(self):
         return self._planner or self._callback('plan_admin_operation')

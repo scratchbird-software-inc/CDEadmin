@@ -31,8 +31,22 @@ class MonitoringPolicy:
     max_backup_state_seconds: int = 0
     require_wire_encryption: bool = False
     expected_encryption_state: int | None = None
+    native_metric_sources: tuple[str,...] = ()
+    mysql_alert_rules: tuple = ()
 
     def __post_init__(self):
+        if self.mysql_alert_rules:
+            from .mysql_alerts import rules
+            object.__setattr__(self, 'mysql_alert_rules', rules(self.mysql_alert_rules))
+        elif not isinstance(self.mysql_alert_rules, (tuple, list)):
+            raise ValueError('Invalid MySQL alert rules')
+        else:
+            object.__setattr__(self, 'mysql_alert_rules', ())
+        sources=self.native_metric_sources
+        if (not isinstance(sources,(list,tuple)) or len(sources)>128 or
+            any(not isinstance(value,str) or not value or len(value)>63 for value in sources) or len(set(sources))!=len(sources)):
+            raise ValueError('Invalid native metric source selection')
+        object.__setattr__(self,'native_metric_sources',tuple(sources))
         if type(self.owner_id) is not int or self.owner_id <= 0:
             raise ValueError('Monitoring policy requires an owner')
         if not isinstance(self.endpoint_id, str) or not self.endpoint_id:
@@ -96,7 +110,7 @@ class MonitoringRuntime:
         self._lock = threading.RLock()
         self._closed = False
 
-    def enable(self, policy, source_factory, authorize, *, history_writer=None):
+    def enable(self, policy, source_factory, authorize, *, history_writer=None, observation_factory=None):
         # Invocation is itself an explicit policy change, never a viewer GET.
         if authorize(policy, 'configure') is not True:
             raise PermissionError('Monitoring policy is not authorized')
@@ -112,7 +126,7 @@ class MonitoringRuntime:
                 raise ValueError('Monitoring policy capacity reached')
             if policy.history_enabled and history_writer is None:
                 raise ValueError("ScratchBird history is not configured")
-            job = _Job(policy, source_factory, authorize, self._clock, history_writer)
+            job = _Job(policy, source_factory, authorize, self._clock, history_writer, observation_factory)
             self._jobs[policy.key] = job
             job.thread.start()
             return job.revision
@@ -125,6 +139,15 @@ class MonitoringRuntime:
             if job is None:
                 return {'state': 'disabled', 'samples': [], 'history': 'volatile'}
             return job.snapshot()
+
+    def silence(self, policy, authorize, rule_id, seconds):
+        if authorize(policy, 'configure') is not True:
+            raise PermissionError('Monitoring policy is not authorized')
+        with self._lock:
+            job = self._jobs.get(policy.key)
+        if job is None or job.observer is None or job.stop.is_set() or self._clock() >= job.deadline:
+            raise ValueError('MySQL alert policy is not active')
+        return job.observer.silence(rule_id, seconds)
 
     def inspect_statement(self, policy, authorize, reference):
         if authorize(policy, 'view') is not True:
@@ -244,7 +267,7 @@ class MonitoringRuntime:
 
 
 class _Job:
-    def __init__(self, policy, factory, authorize, clock, history_writer=None):
+    def __init__(self, policy, factory, authorize, clock, history_writer=None, observation_factory=None):
         self.policy = policy
         self.history_writer = history_writer
         self.history_gap = 0
@@ -266,6 +289,7 @@ class _Job:
         self.last_heartbeat_at = None
         self.last_probe = 'unknown'
         self.last_sample_clock = None
+        self.observer = observation_factory() if observation_factory is not None else None
         self.thread = threading.Thread(
             target=self.run, name='cde-monitor-' + self.revision[:8], daemon=True)
 
@@ -282,6 +306,7 @@ class _Job:
                     max(0, self.clock() - self.last_sample_clock)),
                 'stale_after_seconds': max(15, self.policy.interval_seconds * 3),
                 'heartbeat': self.heartbeat(),
+                **({'alerts': self.observer.snapshot()} if self.observer is not None else {}),
             })
 
     def heartbeat(self):
@@ -308,6 +333,8 @@ class _Job:
 
     def release(self):
         with self.lock:
+            if self.observer is not None:
+                self.observer.close()
             if self.source is None:
                 return True
             try:
@@ -370,6 +397,12 @@ class _Job:
                     sample['runtime_elapsed_seconds'] = max(0, self.clock() - self.started_clock)
                     from .monitoring_findings import findings
                     sample['findings'] = findings(self.policy, sample, list(self.samples))
+                    if self.observer is not None:
+                        # `failures` is the preceding observation's count and
+                        # therefore describes the delay just completed. Permit
+                        # scheduled failure backoff, not arbitrary stalled gaps.
+                        gap = max(15, min(300, self.policy.interval_seconds * 2**min(failures, 6)) * 3)
+                        sample['findings'].extend(self.observer.observe(sample, maximum_gap_seconds=gap))
                     self.samples.append(sample)
                     self.last_sample_clock = self.clock()
                     self.state = 'collecting'

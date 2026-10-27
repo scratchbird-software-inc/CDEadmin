@@ -1,0 +1,13 @@
+{
+  "engine": "duckdb",
+  "omitted": [
+    {
+      "family": "trigger",
+      "reason": "DuckDB has no triggers"
+    },
+    {
+      "family": "role",
+      "reason": "No users or roles; secrets are an Engine object"
+    }
+  ]
+}

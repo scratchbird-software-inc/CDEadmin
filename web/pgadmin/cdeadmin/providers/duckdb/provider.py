@@ -17,6 +17,8 @@ from ..relational_admin import (
 )
 from .administration import DuckDBAdministration
 from .driver import DuckDBClient
+from .object_metadata import KINDS as COMMENT_KINDS
+from ..native_editor import NativeEditorProvider
 from ..embedded_route import duckdb_arguments
 from ..embedded_route import contained_database
 
@@ -113,11 +115,12 @@ ADMINISTRATION = DuckDBAdministration(RelationalAdminDialect(
             )
         },
     },
-    supported={
+    supported={kind: operations | (frozenset({'comment'}) if kind in COMMENT_KINDS else frozenset())
+               for kind, operations in {
         'database': frozenset({
             'inspect', 'create', 'drop', 'checkpoint',
             'force_checkpoint', 'vacuum', 'analyze',
-            'export_database', 'import_database',
+            'export_database', 'import_database', 'update_extensions',
         }),
         'attached-database': frozenset({'inspect'}),
         'schema': frozenset({
@@ -136,18 +139,120 @@ ADMINISTRATION = DuckDBAdministration(RelationalAdminDialect(
         'macro': frozenset({'inspect', 'create', 'alter', 'drop'}),
         'function': frozenset({'inspect'}),
         'secret': frozenset({'inspect', 'create', 'drop'}),
-        'extension': frozenset({'inspect', 'execute'}),
+        'extension': frozenset({'inspect', 'execute', 'update'}),
         'materialization': frozenset({'create'}),
-    },
+    }.items()},
 ))
 
 
-class DuckDBPilotProvider(ActualEnginePilotProvider):
+class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
+
+    def bind_receipt_archive(self, request, archive, route):
+        self._require('execute')
+        if request.get('language_profile')!='duckdb-sql':
+            raise RelationalClientError('Native DuckDB query session required')
+        handle=self._editor_session(request)
+        self.client.bind_receipt_archive(handle,archive,route)
+
+    def attachment_action(self, request, route):
+        from .attachments import action
+        self._require('execute')
+        if request.get('language_profile') != 'duckdb-sql':
+            raise RelationalClientError('Native DuckDB query session required')
+        if request.get('operation') not in {'inventory', 'receipt'}:
+            self._require('administer', 'resource')
+            self._require('filesystem')
+        handle = self._editor_session(request)
+        with self.client._lock:
+            retained = self.client._attachment_reviews.get(request.get('review_id'))
+            reading = request.get('operation') in {'receipt', 'discard'} or (
+                request.get('operation') == 'apply' and retained is not None and retained['state'] != 'reviewed')
+            if not reading:
+                self.client._require_idle(handle)
+                self.client._busy.add(id(handle))
+            try:
+                result=action(self.client, handle, route, {key: value for key, value in request.items()
+                    if key not in {'session_id', 'language_profile'}})
+                if result.get('review_id'):self.client.publish_receipt(handle,'attachments',result)
+                return result
+            except (ValueError, RelationalClientError):
+                raise
+            except Exception as error:
+                from .driver import uncertain
+                try:
+                    self.client._observe(handle, blocked=uncertain(error))
+                except Exception:
+                    self.client._observe(handle, blocked=True)
+                raise RelationalClientError('Native DuckDB attachment workflow failed (' +
+                    type(error).__name__ + ')') from None
+            finally:
+                if not reading:
+                    self.client._busy.discard(id(handle))
+
+    def database_copy_action(self, request, route):
+        from .database_copy import action
+        self._require('execute')
+        self._require('data_read', 'resource')
+        if request.get('language_profile') != 'duckdb-sql':
+            raise RelationalClientError('Native DuckDB query session required')
+        if request.get('operation') not in {'inventory', 'receipt'}:
+            self._require('administer', 'resource')
+            self._require('data_write', 'resource')
+            self._require('filesystem')
+        handle = self._editor_session(request)
+        try:
+            result=action(self.client, handle, route, {key: value for key, value in request.items()
+                if key not in {'session_id', 'language_profile'}})
+            if result.get('review_id') and result.get('phase')=='finished':
+                self.client.publish_receipt(handle,'database_copy',result)
+            return result
+        except (ValueError, RelationalClientError):
+            raise
+        except Exception as error:
+            with self.client._lock:
+                self.client._states[id(handle)]['session_reuse_blocked'] = True
+            raise RelationalClientError('Native DuckDB database-copy workflow failed (' +
+                type(error).__name__ + ')') from None
+
+    def extension_action(self, request, route):
+        from .extension_actions import action
+        self._require('execute')
+        self._require('data_read', 'resource')
+        if request.get('language_profile')!='duckdb-sql':
+            raise RelationalClientError('Native DuckDB query session required')
+        if request.get('operation') not in {'inventory','receipt'}:
+            self._require('administer','resource');self._require('filesystem')
+        handle=self._editor_session(request)
+        with self.client._lock:
+            retained=self.client._extension_reviews.get(request.get('review_id'))
+            reading=request.get('operation')=='receipt' or (request.get('operation')=='apply' and retained is not None and retained['state']!='reviewed')
+            if not reading:self.client._require_idle(handle);self.client._busy.add(id(handle))
+            try:
+                result=action(self.client,handle,route,{key:value for key,value in request.items() if key not in {'session_id','language_profile'}},
+                    authorize_secret=self._require_native_http_secret)
+                if result.get('review_id'):self.client.publish_receipt(handle,'extensions',result)
+                return result
+            except (ValueError,RelationalClientError):raise
+            except Exception as error:
+                from .driver import uncertain
+                try:self.client._observe(handle,blocked=uncertain(error))
+                except Exception:self.client._observe(handle,blocked=True)
+                raise RelationalClientError('Native DuckDB extension workflow failed ('+type(error).__name__+')') from None
+            finally:
+                if not reading:self.client._busy.discard(id(handle))
+
+    def _require_native_http_secret(self):
+        # Missing optional authority is an ordinary operation refusal. Calling
+        # require for a permission known to be absent would quarantine the
+        # provider for violating its SDK admission contract.
+        if not self.permissions.allows('secret_read'):
+            raise RelationalClientError('Native HTTP credentials require secret-read authority')
+        self._require('secret_read')
 
     def script_statement_outcome(self, occurrence):
         from pgadmin.cdeadmin.data_studio.scripts import retained_outcome
@@ -166,8 +271,16 @@ class DuckDBPilotProvider(ActualEnginePilotProvider):
         session = self._sessions.get(request.get('session_id'))
         if session is None:
             raise RelationalClientError('DuckDB session is unavailable')
-        self.client._require_idle(session.handle)
-        return analyze(request.get('source'), script=request.get('script', False))
+        from ..native_editor import session_access
+        from .driver import uncertain
+        def observed_error(error):
+            if uncertain(error):
+                self.client._observe(session.handle, blocked=True)
+        with session_access(self.client, session.handle, 'duckdb'):
+            result = analyze(request.get('source'), script=request.get('script', False),
+                parser=session.handle.extract_statements, on_native_error=observed_error)
+            result['session_reuse_blocked'] = bool(self.client._states.get(id(session.handle), {}).get('session_reuse_blocked'))
+            return result
 
     def capture_catalog(self, route, *, include_system=False,
                         include_macro_source=False):
@@ -200,7 +313,7 @@ def _route_arguments(route):
 def _resource_id(kind, path, name, discriminator=None):
     identity = [kind, *[str(part) for part in path], str(name)]
     if discriminator is not None:
-        identity.append({'native_index': discriminator})
+        identity.append(discriminator if kind == 'secret' else {'native_index': discriminator})
     return 'duckdb:' + json.dumps(identity, ensure_ascii=False, separators=(',', ':'))
 
 
@@ -208,6 +321,8 @@ def _resources(connection, request):
     cursor = connection
     generation = str(request.get('capability_generation') or 'current')
     resources = {}
+    database_filter="NOT internal OR database_name='temp'" if request.get('session_catalog') else 'NOT internal'
+    schema_filter="NOT d.internal OR d.database_name='temp'" if request.get('session_catalog') else 'NOT d.internal'
 
     def qualified(parts):
         return '.'.join('"' + str(part).replace('"', '""') + '"' for part in parts)
@@ -251,7 +366,7 @@ def _resources(connection, request):
     cursor.execute(
         'SELECT database_name, database_oid, path, comment, tags, type, '
         'readonly, encrypted, cipher, options FROM duckdb_databases() '
-        'WHERE NOT internal ORDER BY database_name'
+        'WHERE '+database_filter+' ORDER BY database_name'
     )
     databases = cursor.fetchall()
     for row in databases:
@@ -282,7 +397,7 @@ def _resources(connection, request):
         'SELECT s.database_name, s.schema_name, s.oid, s.comment, '
         's.tags, s.sql FROM duckdb_schemas() s '
         'JOIN duckdb_databases() d USING (database_name) '
-        'WHERE NOT d.internal ORDER BY 1, 2'
+        'WHERE '+schema_filter+' ORDER BY 1, 2'
     )
     for database, schema, oid, comment, tags, sql in cursor.fetchall():
         native = {
@@ -369,6 +484,7 @@ def _resources(connection, request):
             parent_id = _resource_id('view', [database, schema], parent)
         if parent_id in resources:
             native['navigator_parent_resource_id'] = parent_id
+            native['catalog_metadata']['owner_oid'] = resources[parent_id]['native']['catalog_metadata']['oid']
             resources[parent_id]['native']['columns'].append({
                 'resource_id': column['resource_id'],
                 'name': str(name),
@@ -558,14 +674,21 @@ def _resources(connection, request):
                 'varargs': item['catalog_metadata'].get('varargs'),
                 'definition': item.get('definition'),
             }, sort_keys=True, default=str)))
-    cursor.execute(
-        'SELECT extension_name, loaded, installed, extension_version '
-        'FROM duckdb_extensions() ORDER BY extension_name'
-    )
-    for name, loaded, installed, version in cursor.fetchall():
-        add('extension', [], name, {
-            'loaded': loaded, 'installed': installed, 'version': version,
+    from .extension_updates import inventory as extension_inventory, context as extension_context
+    native_extensions = extension_inventory(connection)
+    native_extension_context = extension_context(connection)
+    for record in native_extensions:
+        add('extension', [], record['extension_name'], {
+            'loaded': record['loaded'], 'installed': record['installed'],
+            'version': record['extension_version'], 'catalog_metadata': record,
+            'extension_update_context': native_extension_context,
+            **({'administration': {'allowed_operations': ['inspect', 'execute']}}
+               if not record['installed'] or record['install_mode'] == 'STATICALLY_LINKED' else {}),
         })
+    for resource in resources.values():
+        if resource['resource_kind'] == 'database':
+            resource['native'].update(extension_inventory=native_extensions,
+                extension_update_context=native_extension_context)
     cursor.execute(
         'SELECT name, type, provider, persistent, storage, scope '
         'FROM duckdb_secrets() ORDER BY name'
@@ -577,7 +700,7 @@ def _resources(connection, request):
             'type': kind, 'provider': provider,
             'persistent': persistent, 'storage': storage,
             'scope': scope,
-        })
+        }, discriminator={'storage': storage, 'persistent': persistent})
     for resource in resources.values():
         path = resource['display_path']
         if resource['resource_kind'] == 'schema':

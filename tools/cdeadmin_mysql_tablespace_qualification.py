@@ -26,6 +26,8 @@ def qualify(options, output, require_encryption=False):
         assert not MYSQL_ADMINISTRATION.validate(request)['errors']
         statement=MYSQL_ADMINISTRATION._compile(request)['statements'][0]
         cursor.execute(statement['source'],statement['parameters'] or None)
+        from tools.mysql_task_evidence import record
+        record(proof, request)
         proof['statements'].setdefault(operation,statement['source'])
     def state():
         cursor.execute('SELECT STATE FROM information_schema.INNODB_TABLESPACES WHERE NAME=%s',(undo,))

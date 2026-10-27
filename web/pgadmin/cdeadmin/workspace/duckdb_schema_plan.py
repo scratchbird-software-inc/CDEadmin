@@ -21,12 +21,17 @@ _MAX_REBUILD_COLUMNS = 20_000  # Native catalog capture rejects more than 20,000
 
 
 def _quote(value):
-    if not isinstance(value, str) or not value or '\x00' in value or len(value.encode('utf8')) > 256:
-        raise ValueError('Native identifier is empty or exceeds 256 bytes')
+    if not isinstance(value, str) or not value or '\x00' in value:
+        raise ValueError('Native identifier must be nonempty text without NUL')
+    # Native DuckDB names are not limited to 256 bytes. Catalog, source and
+    # durable-review bounds constrain the complete operation instead.
     return '"' + value.replace('"', '""') + '"'
 
 
 def _root(model):
+    if model.get('provenance',{}).get('observation_scope')=='retained-session' or any(
+            row.get('native',{}).get('observation_scope')=='retained-session' for row in model.get('rows',{}).values()):
+        raise ValueError('Retained-session observations cannot authorize an independent DuckDB migration')
     if model['provenance'].get('mapping') != 'scratchrobin.duckdb.catalog@1':
         raise ValueError('Native DuckDB DDN catalog is required')
     roots = [row for row in model['rows'].values() if row['kind'] == 'database']
@@ -63,10 +68,13 @@ def _definition(row):
     native = row['native']
     indexes = native.get('indexes')
     catalog = {key: value for key, value in native.get('catalog_metadata', {}).items()
-               if key not in {'oid', 'last_value'}}
+               if key not in {'oid', 'owner_oid', 'last_value'}}
     return {'ddl': native.get('ddl'),
             'catalog': catalog,
-            'columns': native.get('columns') if row['kind'] in {'table', 'view'} else None,
+            'columns': ([{key: value for key, value in column.items() if key != 'owner_oid'}
+                if isinstance(column, dict) else column for column in native['columns']]
+                if isinstance(native.get('columns'), list) else native.get('columns'))
+                if row['kind'] in {'table', 'view'} else None,
             'constraints': native.get('constraints') if row['kind'] == 'table' else None,
             'indexes': ([{key: value for key, value in item.items() if key != 'oid'}
                 if isinstance(item, dict) else item for item in indexes]

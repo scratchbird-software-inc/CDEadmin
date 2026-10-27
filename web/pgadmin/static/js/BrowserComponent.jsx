@@ -9,6 +9,9 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppMenuBar from './AppMenuBar';
+import SQLNotebook from './cdeadmin_ui/projects/SQLNotebook';
+import {NOTEBOOK_TYPE} from './cdeadmin_ui/projects/SQLNotebookModel';
+import {createCloseGuardRegistry, ModalCloseGuardContext} from './helpers/ModalCloseGuard';
 import ObjectBreadcrumbs from './components/ObjectBreadcrumbs';
 import {
   getDefaultGroup,
@@ -385,6 +388,16 @@ function Layouts({browser, platform}) {
   }, [ensureSurfaceHost, pgAdmin]);
   const openAsset = async (project, asset) => {
     try {
+      if(asset.asset_type === NOTEBOOK_TYPE) {
+        const guards = createCloseGuardRegistry();
+        const id = `sql-notebook-${project.project_id}-${asset.asset_id}`;
+        pgAdmin.Browser.docker.default_workspace.openTab({id, title: asset.name,
+          closable: true, floatable: true, beforeClose: guards.beforeClose,
+          content: <ModalCloseGuardContext.Provider value={guards.register}>
+            <SQLNotebook client={platform.projectAssets} initialProjectId={project.project_id} initialAssetId={asset.asset_id} />
+          </ModalCloseGuardContext.Provider>}, BROWSER_PANELS.MAIN, 'middle', true);
+        return;
+      }
       ensureSurfaceHost();
       const candidates = platform.modules.surfaces.list({
         assetType: asset.asset_type,

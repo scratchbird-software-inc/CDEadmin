@@ -1,0 +1,7 @@
+{
+  "schema": "cdeadmin.ui-navigator.v1",
+  "engine": "postgresql",
+  "sort": "alphabetical",
+  "groups": [],
+  "kind_icons": {}
+}

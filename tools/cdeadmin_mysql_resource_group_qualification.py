@@ -1,5 +1,6 @@
 """Qualify native MySQL resource-group plans without exposing credentials."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import secrets
@@ -11,15 +12,27 @@ import mysql.connector
 from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_ADMINISTRATION
 
 
-def qualify(connection_options, output):
+def qualify(connection_options, output, descriptor_inputs=False):
     output.mkdir(parents=True, exist_ok=True)
     connection = mysql.connector.connect(**{**connection_options, 'autocommit': True})
     recipient = mysql.connector.connect(**{**connection_options, 'autocommit': True})
     cursor, assigned = connection.cursor(), recipient.cursor()
     name = 'sr_group_' + secrets.token_hex(6) + '`é'
     proof = {'passed': False, 'statements': {}, 'checks': []}
+    root=Path(__file__).resolve().parents[1]
+    proof.update(descriptor_inputs=descriptor_inputs,actual_operation_dialog_qualified=False,
+        source_sha256={name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in (
+            'web/pgadmin/cdeadmin/providers/mysql_resource_groups.py',
+            'web/pgadmin/cdeadmin/ui_descriptors/mysql/operations.json',
+            str(Path(__file__).relative_to(root)))})
+    if descriptor_inputs:
+        from ui_descriptor_roundtrip import backend_draft,engine_operations,operation_draft
+        declaration=engine_operations('mysql')['assign@resource-group']
     created = False
     def execute(operation, draft):
+        if descriptor_inputs and operation=='assign':
+            values={'thread_ids':[{'value':str(value)} for value in draft['thread_ids']]}
+            draft=backend_draft({'tabs':[{'fields':declaration['fields']}]},operation_draft(declaration,values,name))
         request = {'resource_kind': 'resource-group', 'operation_id': operation,
                    'target_resource': {'resource_kind': 'resource-group', 'display_name': name},
                    'draft': draft, '_provider_route': {'host': connection_options.get('host', 'localhost')}}
@@ -27,6 +40,8 @@ def qualify(connection_options, output):
         assert not errors, errors
         source = MYSQL_ADMINISTRATION.plan(request)['command_preview']['statements'][0]['source']
         cursor.execute(source)
+        from tools.mysql_task_evidence import record
+        record(proof, request)
         proof['statements'].setdefault(operation, source)
     try:
         cursor.execute('SELECT VERSION()')
@@ -69,5 +84,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--connection-json', required=True, type=Path)
     parser.add_argument('--output-root', required=True, type=Path)
+    parser.add_argument('--descriptor-inputs',action='store_true')
     options = parser.parse_args()
-    qualify(json.loads(options.connection_json.read_text()), options.output_root)
+    qualify(json.loads(options.connection_json.read_text()), options.output_root,options.descriptor_inputs)

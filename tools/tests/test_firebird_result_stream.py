@@ -364,9 +364,9 @@ def test_stream_boundary_uses_admitted_session_not_request_override(
     )
     from pgadmin.cdeadmin.data_studio import DataStudioAccessError
     ctx, provider, _registry, service = harness()
-    service.open_session(ctx, endpoint_payload(ctx), 'example-sql')
-    provider.query_stream = Mock(return_value={'rows': []})
     native_ctx = replace(ctx, provider_id=provider_id)
+    service.open_session(native_ctx, endpoint_payload(native_ctx), 'example-sql')
+    provider.query_stream = Mock(return_value={'rows': []})
     result = service.query_stream(native_ctx, 'session-one', {
         'stream_action': 'next', 'session_id': 'injected',
     })
@@ -375,7 +375,7 @@ def test_stream_boundary_uses_admitted_session_not_request_override(
     assert admitted['session_id'] == 'session-one'
     with pytest.raises(DataStudioAccessError, match='another endpoint'):
         service.query_stream(context('other'), 'session-one', {})
-    with pytest.raises(DataStudioAccessError, match='not admitted'):
+    with pytest.raises(DataStudioAccessError, match='provider scope'):
         service.query_stream(ctx, 'session-one', {})
     with pytest.raises(DataStudioAccessError, match='unavailable'):
         service.query_stream(native_ctx, 'missing', {})

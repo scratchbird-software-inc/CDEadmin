@@ -1,6 +1,7 @@
 """SQLite 3.53.0 exact-version native provider."""
 
 import json
+from copy import deepcopy
 import os
 import re
 import sqlite3
@@ -15,8 +16,10 @@ from pgadmin.cdeadmin.sdk import (
     RelationalClientConfig,
     RelationalClientError,
 )
-from .driver import SQLiteClient
+from .driver import SQLiteClient, SQLiteConnection
+from ..native_editor import NativeEditorProvider
 from .values import text as native_text
+from .modules import family as virtual_family,declaration as module_declaration
 from .backup import database_operation as _sqlite_database_operation
 from ..relational_admin import (
     RelationalAdministration,
@@ -31,7 +34,7 @@ PROFILE = PilotProfile(
     'sqlite-native-transaction', 'tabular',
     ('database', 'attached-database', 'table', 'column', 'view', 'index',
      'constraint', 'trigger', 'virtual-table', 'fts-table', 'pragma',
-     'extension', 'metric'),
+     'extension', 'metric', 'native-function', 'collation', 'compile-option'),
     ('sqlite-shell', 'backup', 'integrity-check', 'vacuum'),
     ('embedded_runtime', 'filesystem'),
     semantic_sql_dialect={
@@ -68,6 +71,129 @@ PROFILE = PilotProfile(
 
 
 class SQLiteAdministration(RelationalAdministration):
+    def catalog(self, catalog):
+        from .fts_maintenance import OPERATIONS, TITLES
+        value = deepcopy(catalog)
+        for resource in value.get('objects', []):
+            if resource['resource_kind'] == 'fts-table':
+                resource['operations'].extend({
+                    'operation_id': operation, 'title': TITLES[operation],
+                    'mutation_class': 'destructive' if operation == 'fts_delete_all' else 'admin',
+                    'target_required': True, 'confirmation_required': True,
+                    'long_running': True, 'cancellable': True, 'post_state_required': False,
+                } for operation in OPERATIONS)
+        return super().catalog(value)
+
+    def _form(self, kind, operation):
+        from .virtual_tables import KINDS, form
+        from .fts_maintenance import OPERATIONS, form as maintenance_form
+        if kind == 'fts-table' and operation in OPERATIONS:
+            return maintenance_form(operation, self._field)
+        if kind in KINDS and operation == 'create':
+            return form(self._field, kind)
+        return super()._form(kind, operation)
+
+    def _normalize_draft(self, kind, operation, draft):
+        from .virtual_tables import KINDS
+        if kind in KINDS and operation == 'create' and isinstance(draft, Mapping):
+            draft = dict(draft)
+            if 'options' in draft and not isinstance(draft['options'], Mapping):
+                raise RelationalClientError('create options must be an object')
+            if 'module_options' in draft:
+                options = draft.get('options', {})
+                if not isinstance(options, Mapping):
+                    raise RelationalClientError('create options must be an object')
+                draft['options'] = {**options, 'module_options': draft.pop('module_options')}
+        return super()._normalize_draft(kind, operation, draft)
+
+    def validate(self, request):
+        from .virtual_tables import KINDS
+        from .fts_maintenance import OPERATIONS, compile_operation
+        if request.get('resource_kind') == 'fts-table' and request.get('operation_id') in OPERATIONS:
+            try:
+                compile_operation(request)
+                return {'errors': []}
+            except (RelationalClientError, OSError, ValueError) as error:
+                return {'errors': [{'field_id': None, 'code': 'invalid_sqlite_fts_maintenance', 'message': str(error)}]}
+        result = super().validate(request)
+        if request.get('resource_kind') in KINDS and request.get('operation_id') == 'create':
+            try:
+                normalized = {**request, 'draft': self._normalize_draft(
+                    request['resource_kind'], 'create', request.get('draft', {}))}
+                self._compile_create(normalized)
+            except (RelationalClientError, KeyError) as error:
+                result['errors'].append({'field_id': 'module_options',
+                    'code': 'invalid_sqlite_virtual_constructor', 'message': str(error)})
+        return result
+
+    def _compile_create(self, request):
+        from .virtual_tables import KINDS, arguments
+        if request['resource_kind'] not in KINDS:
+            return super()._compile_create(request)
+        draft = request['draft']
+        options = draft.get('options') or {}
+        if not isinstance(options, Mapping):
+            raise RelationalClientError('create options must be an object')
+        if set(options) - {'parent', 'database', 'schema', 'module', 'columns', 'module_options'}:
+            raise RelationalClientError('Unknown SQLite virtual-table create option')
+        name = self._identifier(draft['name'])
+        parent = options.get('parent') or options.get('schema') or options.get('database') or 'main'
+        path = self._path_value(parent)
+        if len(path) != 1:
+            raise RelationalClientError('SQLite virtual-table database must be a single path component')
+        module = options.get('module')
+        args = arguments(module, options.get('columns'), options.get('module_options', {}), schema=path[0])
+        qualified = self._new_object_name(name, {**options, 'parent': path})
+        return [{'source': f'CREATE VIRTUAL TABLE {qualified} USING {module}' +
+                 (' (' + args + ')' if args else ''), 'parameters': ()}]
+
+    def _compile(self, request):
+        from .virtual_tables import KINDS
+        from .fts_maintenance import OPERATIONS, compile_operation
+        if request['resource_kind'] == 'fts-table' and request['operation_id'] in OPERATIONS:
+            return compile_operation(request)
+        result = super()._compile(request)
+        if request['resource_kind'] in KINDS and request['operation_id'] == 'create':
+            options = request['draft'].get('options') or {}
+            parent = options.get('parent') or options.get('schema') or options.get('database') or 'main'
+            result['sqlite_virtual_constructor'] = {
+                'schema': self._path_value(parent)[0], 'name': request['draft']['name'],
+                'module': options['module'],
+            }
+            result['warnings'] = [
+                'SQLite checks installed modules, tokenizer availability and native constructor constraints at execution.',
+                'TEMP and attached database objects require the retained session. Session operations remain staged until its transaction is committed.',
+                'External-content indexes require explicit population and synchronization with their content table.',
+            ]
+        return result
+
+    def apply(self, client, request, connection=None):
+        from .virtual_tables import apply_creation
+        compiled = (request.get('provider_payload') or {}).get('compiled') or {}
+        if 'sqlite_fts_maintenance' in compiled:
+            from .fts_maintenance import apply
+            return apply(client, request, connection)
+        if 'sqlite_virtual_constructor' in compiled:
+            with client._lock:
+                return apply_creation(client, request, connection)
+        return super().apply(client, request, connection)
+
+    def validate_operation_post_state(self, client, request):
+        from .virtual_tables import observe_creation
+        compiled = (request.get('provider_payload') or {}).get('compiled') or {}
+        if 'sqlite_virtual_constructor' in compiled:
+            with client._lock:
+                return observe_creation(client, request)
+        return {'confirmed': False, 'reason': 'provider_post_state_validator_unavailable'}
+
+    def inspect_operation(self, client, request):
+        from .fts_maintenance import observe
+        return observe(client, request)
+
+    def cancel_operation(self, client, request):
+        from .fts_maintenance import observe
+        return observe(client, request, cancel=True)
+
     @staticmethod
     def _validate_sqlite_database_operation(operation, draft, route):
         validate = RelationalAdministration._validate_sqlite_database_operation
@@ -123,19 +249,80 @@ ADMINISTRATION = SQLiteAdministration(RelationalAdminDialect(
         }),
         'fts-table': frozenset({
             'inspect', 'create', 'rename', 'drop',
+            'fts_optimize', 'fts_rebuild', 'fts_integrity_check', 'fts_merge',
+            'fts_delete_all', 'fts_flush',
         }),
         'pragma': frozenset({'inspect'}),
         'extension': frozenset({'inspect'}),
+        'native-function': frozenset({'inspect'}),
+        'collation': frozenset({'inspect'}),
+        'compile-option': frozenset({'inspect'}),
     },
 ))
 
 
-class SQLiteProvider(ActualEnginePilotProvider):
+class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
+
+    def extension_action(self, request, manifest):
+        from .extensions import action
+        self._require('execute')
+        if request.get('operation') in {'review', 'load'}:
+            self._require('administer')
+            self._require('filesystem')
+        handle = self._editor_session(request)
+        with self.client._lock:
+            # A receipt is readable after an uncertain initialization has
+            # blocked further use of this connection.
+            if request.get('operation') != 'receipt':
+                self.client._require_idle(handle)
+            return action(self.client, handle, {key: value for key, value in request.items()
+                if key not in {'session_id', 'language_profile'}}, manifest)
+
+    def native_session_action(self, request, library):
+        from .session_actions import action
+        self._require('execute')
+        if request.get('operation')!='inventory':self._require('administer')
+        handle=self._editor_session(request)
+        with self.client._lock:
+            self.client._require_idle(handle)
+            self.client._busy.add(id(handle))
+        try:
+            return action(self.client,handle,{key:value for key,value in request.items()
+                if key not in {'session_id','language_profile'}},library)
+        finally:
+            with self.client._lock:self.client._busy.discard(id(handle))
+
+    def native_array_action(self, request, library, max_bytes=None):
+        from .array_actions import action
+        self._require('execute')
+        handle=self._editor_session(request)
+        with self.client._lock:
+            self.client._require_idle(handle)
+            self.client._busy.add(id(handle))
+        try:
+            return action(self.client,handle,{key:value for key,value in request.items()
+                if key not in {'session_id','language_profile'}},library,max_bytes)
+        finally:
+            with self.client._lock:self.client._busy.discard(id(handle))
+
+    def native_preupdate_action(self, request, library):
+        from .preupdate_actions import action
+        self._require('execute')
+        if request.get('operation')!='inventory':self._require('administer')
+        handle=self._editor_session(request)
+        with self.client._lock:
+            self.client._require_idle(handle)
+            self.client._busy.add(id(handle))
+        try:
+            return action(self.client,handle,{key:value for key,value in request.items()
+                if key not in {'session_id','language_profile'}},library)
+        finally:
+            with self.client._lock:self.client._busy.discard(id(handle))
 
     def validate_source_without_execution(self, request):
         from pgadmin.cdeadmin.data_studio.language_tools import analyze
@@ -150,8 +337,10 @@ class SQLiteProvider(ActualEnginePilotProvider):
         if result['diagnostics'] or not result['statements']:
             return result
         all_valid = True
+        pragma_suppressed = False
         for statement in result['statements']:
             native = self.client.validate_parse_only(session.handle, statement['source'])
+            pragma_suppressed = pragma_suppressed or native.get('pragma_preparation_suppressed', False)
             if native['grammar_valid'] is False:
                 result['diagnostics'].append({**native['diagnostic'],
                     'offset': statement['start'],
@@ -170,7 +359,10 @@ class SQLiteProvider(ActualEnginePilotProvider):
         result['authority'] = 'sqlite-native-explain-compile'
         result['scope'] = ('SQLite native compilation against the retained session; '
                            'EXPLAIN does not execute the submitted SQL. '
+                           'PRAGMA settings and VFS callbacks are suppressed during preparation. '
                            'Context or parameter binding errors leave grammar unconfirmed.')
+        if pragma_suppressed:
+            result['pragma_context_evaluated'] = False
         if all_valid is False:
             result['syntax_valid'] = False
             result['script_ready'] = False
@@ -200,6 +392,14 @@ class SQLiteProvider(ActualEnginePilotProvider):
                     (file_info.st_dev, file_info.st_ino) !=
                     (initial_info.st_dev, initial_info.st_ino)):
                 raise RelationalClientError('SQLite registered file changed during capture')
+            unavailable=[]
+            for row in resources:
+                if (row['native'].get('column_observation',{}).get('available') is False or
+                        row['native'].get('view_binding_observation',{}).get('available') is False or
+                        row['native'].get('module_observation',{}).get('available') is False or
+                        row['native'].get('fts_configuration',{}).get('available') is False or
+                        row['native'].get('table_function_observation',{}).get('observation_complete') is False):
+                    unavailable.append(row)
             for item in resources:
                 if item['resource_kind'] in {'database',
                                              'attached-database'}:
@@ -207,7 +407,7 @@ class SQLiteProvider(ActualEnginePilotProvider):
                         item['native']['registered_file_identity'] = [
                             file_info.st_dev, file_info.st_ino]
                     item['native']['catalog_observations'] = [{
-                        'source': 'sqlite_schema/table_list/table_xinfo/index_list/index_xinfo/foreign_key_list',
+                        'source': 'sqlite_schema/table_list/table_xinfo/index_list/index_xinfo/foreign_key_list/function_list/native-table-functions/collation_list/compile_options/pragma_list',
                         'available': True,
                     }]
                     item['native']['coverage_complete'] = False
@@ -215,6 +415,12 @@ class SQLiteProvider(ActualEnginePilotProvider):
                         'CHECK expressions and all table options remain in exact native CREATE SQL; they are not separately decomposed.',
                         'Connection-local objects and uncommitted changes on other handles are outside this capture.',
                     ]
+                    missing=[row['resource_id'] for row in unavailable if row['display_path'][0]==item['display_name'] or
+                             row['native'].get('scope')=='connection']
+                    if missing:
+                        item['native']['catalog_observations'].append({'source':'native-relation-columns-binding-and-fts-settings',
+                            'available':False,'unavailable_resource_ids':missing})
+                        item['native']['catalog_warnings'].append('Some relation columns, bindings, FTS settings or table-function observations are unavailable. Their native definitions and identities are retained; inspect the affected observations before migration.')
             if len(resources) > 20_000:
                 raise RelationalClientError(
                     'SQLite catalog exceeds the 20,000-resource limit')
@@ -224,7 +430,7 @@ class SQLiteProvider(ActualEnginePilotProvider):
             return {'resources': resources,
                     'generation': resources[0]['generation'] if resources else str(uuid.uuid4()),
                     'consistency': 'owned-native-read-transaction',
-                    'complete': True}
+                    'complete': not unavailable}
         except BaseException:
             if connection.in_transaction:
                 try:
@@ -248,7 +454,7 @@ class SQLiteProvider(ActualEnginePilotProvider):
 
 
 def _route_arguments(route):
-    return sqlite_arguments(route)
+    return {**sqlite_arguments(route), 'factory': SQLiteConnection}
 
 
 def _metric_records():
@@ -327,8 +533,8 @@ def _resources(connection, request):
             physical_bytes = None
             if database_path and os.path.isfile(database_path):
                 physical_bytes = os.path.getsize(database_path)
-            cursor.execute('SELECT sqlite_version(), sqlite_source_id()')
-            runtime = cursor.fetchone()
+            from .table_functions import native_runtime
+            runtime = native_runtime()
             return {
                 'database_name': database_path,
                 'schema_name': schema_name,
@@ -401,9 +607,7 @@ def _resources(connection, request):
                 if kind == 'table' and re.match(
                         r'^\s*CREATE\s+VIRTUAL\s+TABLE',
                         str(source or ''), re.I):
-                    kind = ('fts-table' if re.search(
-                        r'\bUSING\s+fts\d?\b', str(source), re.I)
-                        else 'virtual-table')
+                    kind = virtual_family(source)
                 if kind in {'table', 'view', 'fts-table', 'virtual-table'}:
                     relation_kinds[(schema_name, str(name))] = kind
                     relation_system[(schema_name, str(name))] = (
@@ -418,11 +622,7 @@ def _resources(connection, request):
                 if native_kind == 'table' and re.match(
                     r'^\s*CREATE\s+VIRTUAL\s+TABLE', source_value, re.I
                 ):
-                    kind = (
-                        'fts-table' if re.search(
-                            r'\bUSING\s+fts\d?\b', source_value, re.I
-                        ) else 'virtual-table'
-                    )
+                    kind = virtual_family(source_value)
                 if kind not in {
                     'table', 'view', 'index', 'trigger', 'virtual-table',
                     'fts-table',
@@ -453,18 +653,46 @@ def _resources(connection, request):
                     native.update({'columns': [], 'triggers': []})
                 owner_path = ([schema_name, str(table_name)]
                               if kind in {'index', 'trigger'} and
+                              not (kind == 'trigger' and schema_name == 'temp') and
                               (schema_name, str(table_name)) in relation_kinds
                               else [schema_name])
                 resource = add(kind, owner_path, name, native)
+                if kind in {'fts-table','virtual-table'}:
+                    declared=module_declaration(source_value)
+                    resource['native']['module_observation']={'available':declared is not None,
+                        'authority':'native-nonexecuting-create-vtable-authorization',
+                        'module':declared[1] if declared else None}
+                    if declared and declared[1].lower() in {'fts3','fts4','fts5'}:
+                        from .fts_configuration import capture as capture_fts_configuration
+                        from .fts_maintenance import allowed_operations
+                        resource['native']['fts_configuration']=capture_fts_configuration(connection,schema_name,name,declared[1])
+                        resource['native']['administration'] = {'allowed_operations': allowed_operations(source_value, declared[1].lower())}
                 if native_kind in {'table', 'view'}:
                     relation_system[(schema_name, name)] = system_object
                     relation_names.append((name, resource['resource_id']))
             for table_name, relation_id in relation_names:
-                cursor.execute(
-                    f'PRAGMA {quote(schema_name)}.table_xinfo('
-                    f'{quote(table_name)})'
-                )
-                columns = cursor.fetchall()
+                relation=resources[relation_id]
+                is_view=relation['resource_kind']=='view'
+                def view_error(error):
+                    code=getattr(error,'sqlite_errorcode',None)
+                    virtual=relation['resource_kind'] in {'fts-table','virtual-table'}
+                    if type(code) is not int or not (virtual or code & 255 in {sqlite3.SQLITE_ERROR,sqlite3.SQLITE_AUTH}):
+                        raise error
+                    return {'available':False,'native_error_code':code,'native_error_name':getattr(error,'sqlite_errorname',None)}
+                try:
+                    cursor.execute(f'PRAGMA {quote(schema_name)}.table_xinfo({quote(table_name)})')
+                    columns = cursor.fetchall()
+                    relation['native']['column_observation']={'available':True}
+                except sqlite3.Error as error:
+                    relation['native']['column_observation']=view_error(error)
+                    columns=[]
+                if is_view:
+                    try:
+                        cursor.execute('EXPLAIN SELECT * FROM '+quote(schema_name)+'.'+quote(table_name)+' LIMIT 0')
+                        cursor.fetchone()
+                        relation['native']['view_binding_observation']={'available':True,'authority':'native-nonexecuting-prepare'}
+                    except sqlite3.Error as error:
+                        relation['native']['view_binding_observation']={**view_error(error),'authority':'native-nonexecuting-prepare'}
                 primary = []
                 for _cid, name, data_type, not_null, default, pk, hidden in (
                     columns
@@ -509,8 +737,20 @@ def _resources(connection, request):
                         'name': f'pk_{table_name}',
                         **constraint['native']['catalog_metadata'],
                     })
+                for item in resources.values():
+                    if (
+                        item['resource_kind'] == 'trigger' and
+                        item['display_path'][0] == schema_name and
+                        item['native']['catalog_metadata']['table_name'] ==
+                        table_name
+                    ):
+                        resources[relation_id]['native']['triggers'].append({
+                            'resource_id': item['resource_id'],
+                            'name': item['display_name'],
+                            'ddl': item['native'].get('ddl'),
+                        })
                 # Views expose columns but do not admit table-only PRAGMAs.
-                if resources[relation_id]['resource_kind'] == 'view':
+                if resources[relation_id]['resource_kind'] == 'view' or relation['native'].get('column_observation',{}).get('available') is False:
                     continue
                 cursor.execute(
                     f'PRAGMA {quote(schema_name)}.foreign_key_list('
@@ -615,25 +855,45 @@ def _resources(connection, request):
                                 'name': constraint_name,
                                 **constraint['native']['catalog_metadata'],
                             })
-                for item in resources.values():
-                    if (
-                        item['resource_kind'] == 'trigger' and
-                        item['native']['catalog_metadata']['table_name'] ==
-                        table_name
-                    ):
-                        resources[relation_id]['native']['triggers'].append({
-                            'resource_id': item['resource_id'],
-                            'name': item['display_name'],
-                            'ddl': item['native'].get('ddl'),
-                        })
-        for name in (
-            'application_id', 'auto_vacuum', 'cache_size', 'foreign_keys',
-            'journal_mode', 'page_size', 'query_only', 'synchronous',
-            'user_version',
-        ):
-            add('pragma', [], name)
-        cursor.execute('SELECT name FROM pragma_module_list ORDER BY name')
+        from .trigger_owners import reconcile as reconcile_trigger_owners
+        reconcile_trigger_owners(connection, resources)
+        cursor.execute('PRAGMA pragma_list')
         for (name,) in cursor.fetchall():
+            add('pragma', [], name, {'native_name': name, 'scope': 'connection',
+                                     'observation': 'supported pragma name; not executed'})
+        cursor.execute('PRAGMA function_list')
+        for name, builtin, kind, encoding, arity, flags in cursor.fetchall():
+            identity = json.dumps([name, builtin, kind, encoding, arity], ensure_ascii=False, separators=(',', ':'))
+            item = add('native-function', [], identity, {
+                'name': name, 'builtin': bool(builtin), 'function_type': kind,
+                'encoding': encoding, 'argument_count': arity, 'flags': flags,
+                'loaded_in_connection': True, 'scope': 'connection',
+                'system_object': bool(builtin)})
+            item['display_name'] = f'{name} ({arity}; {encoding}; {kind})'
+        from .table_functions import discover
+        for function in discover(cursor, [str(row[1]) for row in databases], relation_kinds):
+            name = function['name']
+            identity = json.dumps([name, 'table-function'], ensure_ascii=False, separators=(',', ':'))
+            item = add('native-function', [], identity, {'name': name, 'function_type': 'table',
+                'scope': 'connection', 'system_object': True, 'table_function_observation': function})
+            item['display_name'] = name + ' (table function)'
+        cursor.execute('PRAGMA collation_list')
+        for ordinal, name in cursor.fetchall():
+            add('collation', [], name, {'native_name': name, 'ordinal': ordinal,
+                                       'scope': 'connection', 'loaded_in_connection': True})
+        cursor.execute('PRAGMA compile_options')
+        for (option,) in cursor.fetchall():
+            add('compile-option', [], option, {'native_option': option, 'scope': 'runtime'})
+        cursor.execute('PRAGMA module_list')
+        module_names=sorted(row[0] for row in cursor.fetchall())
+        fold=str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')
+        registered={name.translate(fold) for name in module_names}
+        for resource in resources.values():
+            observation=resource['native'].get('module_observation')
+            if observation is not None:
+                module=observation.get('module')
+                observation['registered_in_session']=module is not None and module.translate(fold) in registered
+        for name in module_names:
             add('extension', [], name, {
                 'extension_kind': 'virtual-table-module',
                 'loaded_in_connection': True,

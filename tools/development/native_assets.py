@@ -13,17 +13,28 @@ import urllib.error
 import urllib.request
 import zipfile
 
-from native import ROOT, STATE, command
+if __package__:
+    from .native import ROOT, STATE, command
+else:
+    from native import ROOT, STATE, command
 
 ASSETS = {
     'python': ('https://www.python.org/ftp/python/3.14.8/Python-3.14.8.tar.xz',
                'c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73'),
     'sqlite': ('https://www.sqlite.org/2026/sqlite-amalgamation-3530000.zip',
                'bf3733d7c71b3ab0f6fd8a9ea0052ad87fa037d94333e14ce09878ba3492c3b0'),
+    'sqlite-recovery': ('https://www.sqlite.org/2026/sqlite-src-3530000.zip',
+                        'fbc30cdbfcfa42c78fe7bddd3fd37ab8995369a31d39097a5d0633296c0b6e65'),
     'mariadb-c': ('https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.4.8.tar.gz',
                   'ced7e5063c91fe2bfafd9d63a759490fe53e81df80599a9abad01c570c202f0c'),
+    'mysql-python': ('https://files.pythonhosted.org/packages/f2/ce/a53b169388f8c6a595cfa9a653138381f3afef1d2af60f5c1972d015f52f/mysql_connector_python-26.7.0.tar.gz',
+                     'd8ff5ee236ea46661ee639336323e124ed868e37f3ea991bdc5de5a146f39fd5'),
     'mariadb-python': ('https://files.pythonhosted.org/packages/c4/ba/cedef19833be88e07bfff11964441cda8a998f1628dd3b2fa3e7751d36e0/mariadb-1.1.14.tar.gz',
                        'e6d702a53eccf20922e47f2f45cfb5c7a0c2c6c0a46e4ee2d8a80d0ff4a52f34'),
+    'pglast': ('https://files.pythonhosted.org/packages/62/b1/8f87ff97d3ebb6f6635f96e67f33863952ba73354890f77280dd371540c7/pglast-8.5.tar.gz',
+               '3c560e38c28dc868b5a6efa9fd9e5dc83725dd21d7262968a7f9fa3f7446f31a'),
+    'libpg-query': ('https://codeload.github.com/pganalyze/libpg_query/tar.gz/776c2ac5efa2a736f45bc7f18e1fd06cb9c6504e',
+                    '2d8755e8544f65e3fe66c06be9bf658e1ba1c004765d332037e046332690b410'),
     'postgres-windows': ('https://get.enterprisedb.com/postgresql/postgresql-18.3-1-windows-x64-binaries.zip',
                          '4da1a93cbc69e99936616d53c34466f79e4295fc56134ce4a395e88351213d60'),
     'kerberos-windows': ('https://web.mit.edu/kerberos/dist/kfw/4.1/kfw-4.1-amd64.msi',
@@ -110,7 +121,7 @@ def kerberos_libraries():
 
 def paths(env):
     selected = dict(env)
-    additions = [STATE / 'mariadb-c/bin', STATE / 'mariadb-c/lib',
+    additions = [STATE / 'mysql/bin', STATE / 'mysql/lib', STATE / 'mariadb-c/bin', STATE / 'mariadb-c/lib',
                  STATE / 'postgres/pgsql/bin', STATE / 'firebird']
     kerberos = STATE / 'kerberos'
     if kerberos.exists():
@@ -128,17 +139,56 @@ def paths(env):
             'BINLOG': 'mariadb-binlog', 'ADMIN': 'mariadb-admin'}.items():
         selected.setdefault('CDEADMIN_MARIADB_' + variable + '_BINARY', str(STATE / 'mariadb/bin' / (executable + extension)))
     selected.setdefault('CDEADMIN_MYSQLSH_BINARY', str(STATE / 'mysql-shell/bin' / ('mysqlsh' + extension)))
+    recovery_name = ('cdeadmin_sqlite_recovery.dll' if os.name == 'nt' else
+                     'libcdeadmin_sqlite_recovery.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_recovery.so')
+    recovery_library = STATE / 'sqlite' / recovery_name
+    if recovery_library.is_file(): selected.setdefault('CDEADMIN_SQLITE_RECOVERY_LIBRARY', str(recovery_library))
+    session_name = ('cdeadmin_sqlite_sessions.dll' if os.name == 'nt' else
+                    'libcdeadmin_sqlite_sessions.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_sessions.so')
+    session_library = STATE / 'sqlite' / session_name
+    if session_library.is_file(): selected.setdefault('CDEADMIN_SQLITE_SESSION_LIBRARY', str(session_library))
+    array_name = ('cdeadmin_sqlite_arrays.dll' if os.name == 'nt' else
+                  'libcdeadmin_sqlite_arrays.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_arrays.so')
+    array_library = STATE / 'sqlite' / array_name
+    if array_library.is_file(): selected.setdefault('CDEADMIN_SQLITE_ARRAY_LIBRARY', str(array_library))
+    preupdate_name = ('cdeadmin_sqlite_preupdate.dll' if os.name == 'nt' else
+                  'libcdeadmin_sqlite_preupdate.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_preupdate.so')
+    preupdate_library = STATE / 'sqlite' / preupdate_name
+    if preupdate_library.is_file(): selected.setdefault('CDEADMIN_SQLITE_PREUPDATE_LIBRARY', str(preupdate_library))
+    sqlite_shell = STATE / 'sqlite' / ('sqlite3' + extension)
+    if sqlite_shell.is_file(): selected.setdefault('CDEADMIN_SQLITE_BINARY', str(sqlite_shell))
+    candidates=[STATE/'mysql-shell/bin'/('mysqlbinlog'+extension),
+                STATE/'mysql-shell/libexec/mysqlsh'/('mysqlbinlog'+extension)]
+    available_binlog=next((path for path in candidates if path.is_file()),None)
+    if available_binlog is not None:selected.setdefault('CDEADMIN_MYSQL_BINLOG_BINARY',str(available_binlog))
+    mysql_client=STATE/'mysql/bin'/('mysql'+extension)
+    if mysql_client.is_file():selected.setdefault('CDEADMIN_MYSQL_CLIENT_BINARY',str(mysql_client))
     if platform.system() == 'Windows':
         selected.setdefault('CDEADMIN_FIREBIRD_CLIENT_LIBRARY', str(firebird / 'fbclient.dll'))
     else:
         selected.setdefault('CDEADMIN_FIREBIRD_CLIENT_LIBRARY', str(firebird / 'lib/libfbclient.dylib'))
         selected.setdefault('FIREBIRD', str(firebird))
         selected['DYLD_LIBRARY_PATH'] = os.pathsep.join([
+            str(STATE / 'mysql/lib'), str(STATE / 'mysql/lib/private'),
             str(STATE / 'sqlite'), str(STATE / 'mariadb-c/lib/mariadb'),
             str(STATE / 'mariadb-c/lib'),
             str(firebird / 'lib'), str(firebird),
             selected.get('DYLD_LIBRARY_PATH', '')])
     return selected
+
+
+def mysql_capi():
+    """Provision the pinned native SDK kit without starting a server."""
+    if __package__:
+        from .native_servers import SERVER_ASSETS, unpack
+    else:
+        from native_servers import SERVER_ASSETS, unpack
+    if platform.system() not in ('Windows', 'Darwin'):
+        raise RuntimeError('Use a native MySQL 9.7.0 development kit on this platform')
+    ASSETS.update(SERVER_ASSETS)
+    suffix = 'windows' if platform.system() == 'Windows' else 'macos-' + ('arm64' if platform.machine() == 'arm64' else 'x64')
+    unpack('mysql-' + suffix, STATE / 'mysql')
+    return STATE / 'mysql'
 
 
 def firebird_kit(evidence):
@@ -210,6 +260,11 @@ def clients(evidence, env):
                 env=env, log=evidence / 'connector-install.log')
         (prefix / '.cdeadmin-complete').write_text(ASSETS['mariadb-c'][1], encoding='utf-8')
     build_sqlite(evidence, env)
+    build_sqlite_shell(evidence, env)
+    build_sqlite_recovery(evidence, env)
+    build_sqlite_sessions(evidence, env)
+    build_sqlite_arrays(evidence, env)
+    build_sqlite_preupdate(evidence, env)
     (evidence / 'assets.json').write_text(json.dumps(ASSETS, indent=2), encoding='utf-8')
     if platform.system() == 'Darwin':
         build_macos_python(evidence, env)
@@ -222,8 +277,12 @@ def build_sqlite(evidence, env):
         with zipfile.ZipFile(download('sqlite')) as archive:
             for name in ('sqlite3.c', 'sqlite3.h', 'sqlite3ext.h'):
                 (sqlite / name).write_bytes(archive.read('sqlite-amalgamation-3530000/' + name))
-    defines = ['SQLITE_THREADSAFE=1', 'SQLITE_ENABLE_FTS5', 'SQLITE_ENABLE_RTREE',
-               'SQLITE_ENABLE_COLUMN_METADATA']
+    defines = ['SQLITE_THREADSAFE=1', 'SQLITE_ENABLE_FTS3', 'SQLITE_ENABLE_FTS4',
+               'SQLITE_ENABLE_FTS5', 'SQLITE_ENABLE_RTREE', 'SQLITE_ENABLE_GEOPOLY',
+               'SQLITE_ENABLE_COLUMN_METADATA', 'SQLITE_ENABLE_DBSTAT_VTAB',
+               'SQLITE_ENABLE_DBPAGE_VTAB', 'SQLITE_ENABLE_MATH_FUNCTIONS',
+               'SQLITE_ENABLE_PERCENTILE', 'SQLITE_ENABLE_CARRAY',
+               'SQLITE_ENABLE_PREUPDATE_HOOK', 'SQLITE_ENABLE_SESSION']
     inputs = {'source': ASSETS['sqlite'][1], 'defines': defines,
               'system': platform.system(), 'machine': platform.machine()}
     target = sqlite / ('sqlite3.dll' if os.name == 'nt' else 'libsqlite3.0.dylib')
@@ -253,12 +312,192 @@ def build_sqlite(evidence, env):
     marker.write_text(json.dumps({'inputs': inputs, 'sha256': actual}, indent=2), encoding='utf-8')
 
 
+def build_sqlite_shell(evidence, env):
+    """Ship the same pinned native CLI for isolated schema AST binding."""
+    sqlite = STATE / 'sqlite'
+    source = sqlite / 'shell.c'
+    with zipfile.ZipFile(download('sqlite')) as archive:
+        admitted = archive.read('sqlite-amalgamation-3530000/shell.c')
+    if source.exists() and source.read_bytes() != admitted:
+        raise RuntimeError('Preserved a modified native SQLite shell source')
+    if not source.exists(): source.write_bytes(admitted)
+    core = sqlite / ('sqlite3.dll' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    inputs = {'archive': ASSETS['sqlite'][1], 'source': sha(source), 'core': sha(core),
+              'system': platform.system(), 'machine': platform.machine()}
+    target = sqlite / ('sqlite3.exe' if os.name == 'nt' else 'sqlite3')
+    marker = sqlite / 'shell-build.json'
+    if marker.is_file():
+        previous = json.loads(marker.read_text(encoding='utf8'))
+        if previous.get('inputs') == inputs and target.is_file() and previous.get('sha256') == sha(target): return
+        raise RuntimeError('Native SQLite shell build changed; use a fresh owned runtime')
+    if target.exists(): raise RuntimeError('Preserved an unknown native SQLite shell')
+    if os.name == 'nt':
+        command(['cl.exe', '/nologo', '/O2', '/MD', 'shell.c', 'sqlite3.lib',
+                 '/link', '/OUT:sqlite3.exe', 'advapi32.lib', 'user32.lib'], cwd=sqlite, env=env,
+                log=evidence / 'sqlite-shell-build.log')
+    else:
+        command(['cc', '-O2', 'shell.c', '-I.', '-L.', '-lsqlite3',
+                 '-Wl,-rpath,' + str(sqlite), '-o', 'sqlite3'], cwd=sqlite, env=env,
+                log=evidence / 'sqlite-shell-build.log')
+    command([target, '-safe', '-batch', '-bail', ':memory:', 'SELECT sqlite_version(),sqlite_source_id();'],
+            env=env, log=evidence / 'sqlite-shell-runtime.log')
+    marker.write_text(json.dumps({'inputs': inputs, 'sha256': sha(target)}, indent=2), encoding='utf8')
+
+
+def build_sqlite_recovery(evidence, env):
+    """Link the public recovery API to the same owned native SQLite runtime."""
+    sqlite = STATE / 'sqlite'
+    name = ('cdeadmin_sqlite_recovery.dll' if os.name == 'nt' else
+            'libcdeadmin_sqlite_recovery.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_recovery.so')
+    core = sqlite / ('sqlite3.dll' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    project = ROOT / 'tools/native/sqlite_recovery'
+    sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    inputs = {'source': ASSETS['sqlite-recovery'][1], 'core': sha(core),
+        'cmake': sha(project / 'CMakeLists.txt'), 'provenance': sha(project / 'provenance.cmake'),
+        'adapter': sha(project / 'api.c'),
+        'system': platform.system(), 'machine': platform.machine()}
+    target, marker = sqlite / name, sqlite / 'recovery-build.json'
+    if marker.is_file():
+        previous = json.loads(marker.read_text(encoding='utf8'))
+        if (previous.get('inputs') == inputs and target.is_file() and
+                previous.get('sha256') == sha(target) and Path(str(target) + '.json').is_file() and
+                previous.get('provenance_sha256') == sha(Path(str(target) + '.json'))): return
+        raise RuntimeError('Native SQLite recovery build changed; stop apps and use a fresh owned runtime')
+    if target.exists(): raise RuntimeError('Preserved an unknown native SQLite recovery library')
+    source = STATE / 'sqlite-recovery-source'; recovery = source / 'ext/recover'
+    recovery.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(download('sqlite-recovery')) as archive:
+        for filename in ('sqlite3recover.c', 'sqlite3recover.h', 'dbdata.c'):
+            destination = recovery / filename
+            value = archive.read('sqlite-src-3530000/ext/recover/' + filename)
+            if destination.exists() and destination.read_bytes() != value:
+                raise RuntimeError('Preserved a modified native SQLite recovery source')
+            if not destination.exists(): destination.write_bytes(value)
+    build = STATE / 'sqlite-recovery-build'
+    library = sqlite / ('sqlite3.lib' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    command(['cmake', '-S', project, '-B', build, '-DCMAKE_BUILD_TYPE=Release',
+        '-DSCRATCHROBIN_SQLITE_SOURCE=' + str(source), '-DSQLite3_INCLUDE_DIR=' + str(sqlite),
+        '-DSQLite3_LIBRARY=' + str(library), *(['-A', 'x64'] if os.name == 'nt' else [])],
+        env=env, log=evidence / 'sqlite-recovery-configure.log')
+    command(['cmake', '--build', build, '--config', 'Release', '--parallel', '3'],
+        env=env, log=evidence / 'sqlite-recovery-build.log')
+    built = next((path for path in (build / name, build / 'Release' / name) if path.is_file()), None)
+    if built is None: raise RuntimeError('Native recovery build did not produce its platform library')
+    shutil.copy2(built, target); shutil.copy2(str(built) + '.json', str(target) + '.json')
+    marker.write_text(json.dumps({'inputs': inputs, 'sha256': sha(target),
+        'provenance_sha256': sha(Path(str(target) + '.json'))}, indent=2), encoding='utf8')
+
+
+def build_sqlite_sessions(evidence, env):
+    """Own session bridge links the same native library as the Python driver."""
+    sqlite = STATE / 'sqlite'
+    name = ('cdeadmin_sqlite_sessions.dll' if os.name == 'nt' else
+            'libcdeadmin_sqlite_sessions.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_sessions.so')
+    core = sqlite / ('sqlite3.dll' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    project = ROOT / 'tools/native/sqlite_sessions'
+    provenance = ROOT / 'tools/native/sqlite_recovery/provenance.cmake'
+    sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    inputs = {'core': sha(core), 'cmake': sha(project / 'CMakeLists.txt'),
+        'adapter': sha(project / 'api.c'), 'hook_ownership': sha(ROOT / 'tools/native/sqlite_hook_ownership.h'), 'provenance': sha(provenance),
+        'system': platform.system(), 'machine': platform.machine()}
+    target, marker = sqlite / name, sqlite / 'sessions-build.json'
+    if marker.is_file():
+        previous = json.loads(marker.read_text(encoding='utf8'))
+        if (previous.get('inputs') == inputs and target.is_file() and
+                previous.get('sha256') == sha(target) and Path(str(target) + '.json').is_file() and
+                previous.get('provenance_sha256') == sha(Path(str(target) + '.json'))): return
+        raise RuntimeError('Native SQLite session build changed; stop apps and use a fresh owned runtime')
+    if target.exists(): raise RuntimeError('Preserved an unknown native SQLite session library')
+    build = STATE / 'sqlite-sessions-build'
+    library = sqlite / ('sqlite3.lib' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    command(['cmake', '-S', project, '-B', build, '-DCMAKE_BUILD_TYPE=Release',
+        '-DSQLite3_INCLUDE_DIR=' + str(sqlite), '-DSQLite3_LIBRARY=' + str(library),
+        *(['-A', 'x64'] if os.name == 'nt' else [])], env=env, log=evidence / 'sqlite-sessions-configure.log')
+    command(['cmake', '--build', build, '--config', 'Release', '--parallel', '3'],
+        env=env, log=evidence / 'sqlite-sessions-build.log')
+    built = next((path for path in (build / name, build / 'Release' / name) if path.is_file()), None)
+    if built is None: raise RuntimeError('Native session build did not produce its platform library')
+    shutil.copy2(built, target); shutil.copy2(str(built) + '.json', str(target) + '.json')
+    marker.write_text(json.dumps({'inputs': inputs, 'sha256': sha(target),
+        'provenance_sha256': sha(Path(str(target) + '.json'))}, indent=2), encoding='utf8')
+
+
+def build_sqlite_arrays(evidence, env):
+    """Own array bridge links the same native library as the Python driver."""
+    sqlite = STATE / 'sqlite'
+    name = ('cdeadmin_sqlite_arrays.dll' if os.name == 'nt' else
+            'libcdeadmin_sqlite_arrays.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_arrays.so')
+    core = sqlite / ('sqlite3.dll' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    project = ROOT / 'tools/native/sqlite_arrays'
+    provenance = ROOT / 'tools/native/sqlite_recovery/provenance.cmake'
+    sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    inputs = {'core': sha(core), 'cmake': sha(project / 'CMakeLists.txt'),
+        'adapter': sha(project / 'api.c'), 'provenance': sha(provenance),
+        'system': platform.system(), 'machine': platform.machine()}
+    target, marker = sqlite / name, sqlite / 'arrays-build.json'
+    if marker.is_file():
+        previous = json.loads(marker.read_text(encoding='utf8'))
+        if (previous.get('inputs') == inputs and target.is_file() and
+                previous.get('sha256') == sha(target) and Path(str(target) + '.json').is_file() and
+                previous.get('provenance_sha256') == sha(Path(str(target) + '.json'))): return
+        raise RuntimeError('Native SQLite array build changed; stop apps and use a fresh owned runtime')
+    if target.exists(): raise RuntimeError('Preserved an unknown native SQLite array library')
+    build = STATE / 'sqlite-arrays-build'
+    library = sqlite / ('sqlite3.lib' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    command(['cmake', '-S', project, '-B', build, '-DCMAKE_BUILD_TYPE=Release',
+        '-DSQLite3_INCLUDE_DIR=' + str(sqlite), '-DSQLite3_LIBRARY=' + str(library),
+        *(['-A', 'x64'] if os.name == 'nt' else [])], env=env, log=evidence / 'sqlite-arrays-configure.log')
+    command(['cmake', '--build', build, '--config', 'Release', '--parallel', '3'],
+        env=env, log=evidence / 'sqlite-arrays-build.log')
+    built = next((path for path in (build / name, build / 'Release' / name) if path.is_file()), None)
+    if built is None: raise RuntimeError('Native array build did not produce its platform library')
+    shutil.copy2(built, target); shutil.copy2(str(built) + '.json', str(target) + '.json')
+    marker.write_text(json.dumps({'inputs': inputs, 'sha256': sha(target),
+        'provenance_sha256': sha(Path(str(target) + '.json'))}, indent=2), encoding='utf8')
+
+
+def build_sqlite_preupdate(evidence, env):
+    """Own preupdate bridge links the same native library as the Python driver."""
+    sqlite = STATE / 'sqlite'
+    name = ('cdeadmin_sqlite_preupdate.dll' if os.name == 'nt' else
+            'libcdeadmin_sqlite_preupdate.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_preupdate.so')
+    core = sqlite / ('sqlite3.dll' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    project = ROOT / 'tools/native/sqlite_preupdate'
+    provenance = ROOT / 'tools/native/sqlite_recovery/provenance.cmake'
+    sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    inputs = {'core': sha(core), 'cmake': sha(project / 'CMakeLists.txt'),
+        'adapter': sha(project / 'api.c'), 'hook_ownership': sha(ROOT / 'tools/native/sqlite_hook_ownership.h'), 'provenance': sha(provenance),
+        'system': platform.system(), 'machine': platform.machine()}
+    target, marker = sqlite / name, sqlite / 'preupdate-build.json'
+    if marker.is_file():
+        previous = json.loads(marker.read_text(encoding='utf8'))
+        if (previous.get('inputs') == inputs and target.is_file() and
+                previous.get('sha256') == sha(target) and Path(str(target) + '.json').is_file() and
+                previous.get('provenance_sha256') == sha(Path(str(target) + '.json'))): return
+        raise RuntimeError('Native SQLite preupdate build changed; stop apps and use a fresh owned runtime')
+    if target.exists(): raise RuntimeError('Preserved an unknown native SQLite preupdate library')
+    build = STATE / 'sqlite-preupdate-build'
+    library = sqlite / ('sqlite3.lib' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    command(['cmake', '-S', project, '-B', build, '-DCMAKE_BUILD_TYPE=Release',
+        '-DSQLite3_INCLUDE_DIR=' + str(sqlite), '-DSQLite3_LIBRARY=' + str(library),
+        *(['-A', 'x64'] if os.name == 'nt' else [])], env=env, log=evidence / 'sqlite-preupdate-configure.log')
+    command(['cmake', '--build', build, '--config', 'Release', '--parallel', '3'],
+        env=env, log=evidence / 'sqlite-preupdate-build.log')
+    built = next((path for path in (build / name, build / 'Release' / name) if path.is_file()), None)
+    if built is None: raise RuntimeError('Native preupdate build did not produce its platform library')
+    shutil.copy2(built, target); shutil.copy2(str(built) + '.json', str(target) + '.json')
+    marker.write_text(json.dumps({'inputs': inputs, 'sha256': sha(target),
+        'provenance_sha256': sha(Path(str(target) + '.json'))}, indent=2), encoding='utf8')
+
+
 def build_macos_python(evidence, env):
     """Own CPython build links the required SQLite, never Apple's system copy."""
     prefix = STATE / 'python'
     marker = prefix / '.cdeadmin-complete'
     fingerprint = json.dumps({'python': ASSETS['python'][1], 'sqlite': ASSETS['sqlite'][1],
                               'machine': platform.machine(),
+                              'loadable_sqlite_extensions': True,
                               'rpaths': [str(STATE / 'sqlite'), str(STATE / 'firebird')]}, sort_keys=True)
     if marker.is_file():
         if marker.read_text(encoding='utf-8') == fingerprint:
@@ -279,12 +518,16 @@ def build_macos_python(evidence, env):
     build.mkdir(exist_ok=True)
     command([source / 'Python-3.14.8/configure', '--prefix=' + str(prefix),
              '--with-openssl=' + openssl, '--with-openssl-rpath=auto',
-             '--with-ensurepip=install'], cwd=build, env=selected,
+             '--with-ensurepip=install', '--enable-loadable-sqlite-extensions'], cwd=build, env=selected,
             log=evidence / 'python-configure.log')
     command(['make', '-j3'], cwd=build, env=selected, log=evidence / 'python-build.log')
     command(['make', 'install'], cwd=build, env=selected, log=evidence / 'python-install.log')
     command([prefix / 'bin/python3.14', '-c',
-             'import sqlite3,ssl; assert sqlite3.sqlite_version == "3.53.0"; print(ssl.OPENSSL_VERSION)'],
+             'import sqlite3,ssl; assert sqlite3.sqlite_version == "3.53.0"; '
+             'c=sqlite3.connect(":memory:"); '
+             'assert callable(c.load_extension); '
+             'c.enable_load_extension(True); c.enable_load_extension(False); '
+             'c.close(); print(ssl.OPENSSL_VERSION)'],
             env=selected, log=evidence / 'python-runtime.log')
     marker.write_text(fingerprint, encoding='utf-8')
 

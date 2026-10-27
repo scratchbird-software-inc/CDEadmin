@@ -1,0 +1,287 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "draft",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Server host or address",
+      "tab": "Connection",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "port",
+      "label": "Server port",
+      "tab": "Connection",
+      "control": "number",
+      "required": true,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "username",
+      "label": "User or principal",
+      "tab": "Authentication",
+      "control": "text",
+      "required": false
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "Authentication",
+      "control": "password",
+      "required": false
+    },
+    {
+      "field_id": "save_password",
+      "label": "Save default connection credentials",
+      "tab": "Authentication",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "help": "Store the credentials for the default user in CDEadmin. Credentials entered while connecting as another user are never stored as the default credentials."
+    },
+    {
+      "field_id": "ssl",
+      "label": "Require TLS",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "ssl_ca",
+      "label": "Certificate authority file",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "required": false
+    },
+    {
+      "field_id": "ssl_capath",
+      "label": "Certificate authority directory",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "required": false
+    },
+    {
+      "field_id": "ssl_cert",
+      "label": "Client certificate",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "required": false
+    },
+    {
+      "field_id": "ssl_key",
+      "label": "Client key",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "required": false
+    },
+    {
+      "field_id": "ssl_crlpath",
+      "label": "Certificate revocation list",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "required": false
+    },
+    {
+      "field_id": "ssl_cipher",
+      "label": "TLS cipher list",
+      "tab": "SSL/TLS",
+      "control": "text",
+      "required": false
+    },
+    {
+      "field_id": "ssl_verify_cert",
+      "label": "Verify server certificate",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "tls_version",
+      "label": "TLS versions (comma separated)",
+      "tab": "SSL/TLS",
+      "control": "text",
+      "required": false
+    },
+    {
+      "field_id": "transaction_isolation",
+      "label": "Transaction isolation",
+      "tab": "Advanced",
+      "control": "select",
+      "group": "Transaction defaults",
+      "required": false,
+      "options": [
+        {
+          "value": "READ UNCOMMITTED",
+          "label": "Read uncommitted"
+        },
+        {
+          "value": "READ COMMITTED",
+          "label": "Read committed"
+        },
+        {
+          "value": "REPEATABLE READ",
+          "label": "Repeatable read"
+        },
+        {
+          "value": "SERIALIZABLE",
+          "label": "Serializable"
+        }
+      ]
+    },
+    {
+      "field_id": "tool_workspace",
+      "label": "MariaDB backup and restore workspace",
+      "tab": "Advanced",
+      "control": "text",
+      "group": "Timeouts and utilities",
+      "required": false,
+      "help": "Absolute non-root directory explicitly granted to MariaDB logical backup artifacts."
+    },
+    {
+      "field_id": "tool_timeout",
+      "label": "MariaDB tool timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "group": "Timeouts and utilities",
+      "required": false,
+      "default": 3600,
+      "min": 1,
+      "max": 3600
+    },
+    {
+      "field_id": "unix_socket",
+      "label": "Unix socket",
+      "tab": "Engine",
+      "control": "file",
+      "required": false
+    },
+    {
+      "field_id": "connection_timeout",
+      "label": "Connect timeout (seconds)",
+      "tab": "Engine",
+      "control": "number",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 600
+    },
+    {
+      "field_id": "read_timeout",
+      "label": "Read timeout (seconds)",
+      "tab": "Engine",
+      "control": "number",
+      "required": false,
+      "min": 1,
+      "max": 86400
+    },
+    {
+      "field_id": "write_timeout",
+      "label": "Write timeout (seconds)",
+      "tab": "Engine",
+      "control": "number",
+      "required": false,
+      "min": 1,
+      "max": 86400
+    },
+    {
+      "field_id": "local_infile",
+      "label": "Permit LOAD DATA LOCAL INFILE",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "compress",
+      "label": "Protocol compression",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "init_command",
+      "label": "Initial/reconnect session command",
+      "tab": "Engine",
+      "control": "code",
+      "language": "text",
+      "required": false
+    },
+    {
+      "field_id": "default_file",
+      "label": "Client option file",
+      "tab": "Engine",
+      "control": "file",
+      "required": false
+    },
+    {
+      "field_id": "default_group",
+      "label": "Client option group",
+      "tab": "Engine",
+      "control": "text",
+      "required": false
+    },
+    {
+      "field_id": "plugin_dir",
+      "label": "Authentication plugin directory",
+      "tab": "Engine",
+      "control": "file",
+      "required": false
+    },
+    {
+      "field_id": "autocommit",
+      "label": "Autocommit",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "pool_size",
+      "label": "Connection pool size",
+      "tab": "Engine",
+      "control": "number",
+      "required": false,
+      "min": 1,
+      "max": 64
+    },
+    {
+      "field_id": "pool_reset_connection",
+      "label": "Reset sessions on pool return",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "pool_validation_interval",
+      "label": "Pool validation interval (ms)",
+      "tab": "Engine",
+      "control": "number",
+      "required": false,
+      "default": 500,
+      "min": 0,
+      "max": 3600000
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for mariadb-native. Field ids are the registration contract's own. Review tab/group placement."
+}

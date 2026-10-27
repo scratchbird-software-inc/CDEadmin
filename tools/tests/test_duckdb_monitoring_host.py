@@ -44,7 +44,7 @@ def test_host_enable_requires_file_target_and_never_accepts_password_fields(tmp_
     server = SimpleNamespace(endpoint_profile=endpoint)
     endpoints = SimpleNamespace(workspace=Mock(return_value=(context, {'route': route}, None)))
     shared = SimpleNamespace(endpoints=endpoints, ownership=Mock(), keys=Mock())
-    app = SimpleNamespace(config={'CDEADMIN_MONITORING_PROCESS_MODE': 'single',
+    app = SimpleNamespace(extensions={}, config={'CDEADMIN_MONITORING_PROCESS_MODE': 'single',
         'CDEADMIN_MONITORING_LOCK_PATH': '/tmp/unused'}, app_context=lambda: nullcontext())
     host = DuckDBMonitoringHost(app, shared)
     host._owned_server = Mock(return_value=server)
@@ -73,6 +73,7 @@ def test_server_dashboard_aggregates_only_registered_file_collectors():
     host._grants = {}
     host._admissions = {}
     host.admitted = True
+    host.history = None
     host.ownership = Mock()
     result = host.snapshot(7, 9, None)
     assert result['state'] == 'aggregate'

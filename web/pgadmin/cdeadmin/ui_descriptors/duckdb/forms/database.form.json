@@ -1,0 +1,51 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "duckdb",
+  "family": "database",
+  "resource_kinds": [
+    "database",
+    "attached-database"
+  ],
+  "status": "complete",
+  "engine_tab_title": "DuckDB",
+  "omitted_tabs": [
+    {
+      "tab": "Security",
+      "reason": "no users or privileges"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "database.create.config",
+      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
+      "tracking": "ui-unification"
+    },
+    {
+      "concept": "database.alter",
+      "reason": "only create/drop; settable options are session/config values and belong on the Parameters tab (keyvalue config already present)"
+    },
+    {
+      "concept": "ATTACH / DETACH as Database tier-2 operations",
+      "reason": "attached-database is inspect-only; the DuckDBAttachment panel performs attach/detach and must become operations.json entries"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Database filename",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "Created below the endpoint-approved root; .duckdb is added when omitted."
+    },
+    {
+      "field_id": "config",
+      "label": "DuckDB creation configuration",
+      "tab": "Parameters",
+      "control": "keyvalue",
+      "required": false,
+      "help": "Named scalar options passed to DuckDB 1.5.2 while opening the new file."
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. attached-database: provider exposes no create form (inspect) Round-tripped by tools/tests/test_ui_descriptor_roundtrip_duckdb.py (create a file with configuration)."
+}

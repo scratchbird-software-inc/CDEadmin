@@ -1,0 +1,176 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "routine",
+  "resource_kinds": [
+    "procedure",
+    "function",
+    "package",
+    "event"
+  ],
+  "status": "draft",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "procedure.create.return_parameters",
+      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
+      "tracking": "ui-unification"
+    },
+    {
+      "concept": "function.create.return_parameters",
+      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
+      "tracking": "ui-unification"
+    },
+    {
+      "concept": "Routine options (SQL SECURITY, DETERMINISTIC, data access, COMMENT, DEFINER)",
+      "reason": "procedure/function expose create/drop only; MySQL has an alter form with these"
+    },
+    {
+      "concept": "Routine parameters and body on re-open",
+      "reason": "MariaDB inventory (mysql_family provider) reports only the return data type; parameters and the body are not reported. Backend ask for the mysql_family inventory owner."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "procedure",
+          "label": "Procedure"
+        },
+        {
+          "value": "function",
+          "label": "Function"
+        },
+        {
+          "value": "package",
+          "label": "Package"
+        },
+        {
+          "value": "scheduled",
+          "label": "Scheduled"
+        }
+      ],
+      "ui_only": true
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Database",
+      "tab": "General",
+      "control": "reference",
+      "required": false,
+      "help": "Use a qualified database or schema name where needed.",
+      "reference_kind": "database"
+    },
+    {
+      "field_id": "returns",
+      "label": "Return type",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "record_key": "data_type"
+    },
+    {
+      "field_id": "schedule",
+      "label": "Schedule expression",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "For example: EVERY 1 DAY or AT CURRENT_TIMESTAMP.",
+      "group": "Scheduled",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "preserve",
+      "label": "Preserve after completion",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "group": "Scheduled",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "enabled",
+      "label": "Enabled",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": true,
+      "group": "Scheduled",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "parameters",
+      "label": "Input parameters",
+      "tab": "Parameters",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Parameter name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Native data type",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "field_id": "return_parameters",
+      "label": "Output parameters",
+      "tab": "Parameters",
+      "control": "keyvalue",
+      "required": false
+    },
+    {
+      "field_id": "body",
+      "label": "Procedure body",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "required": true,
+      "help": "Enter only the procedure body, not a CREATE command."
+    },
+    {
+      "field_id": "header",
+      "label": "Package specification",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "required": true,
+      "help": "Declarations only; do not include the CREATE PACKAGE prefix.",
+      "group": "Package",
+      "visible_when": {
+        "field": "variant",
+        "equals": "package"
+      }
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database). Create path round-tripped against MariaDB 10.11 (tools/tests/test_ui_descriptor_roundtrip_mariadb.py); stays draft until the inventory reports the body/parameters so a re-opened object shows its definition."
+}

@@ -26,9 +26,11 @@ def execute(engine, specification, evidence):
         if executable:
             directory = str(Path(executable).parent)
             config.DEFAULT_BINARY_PATHS.update({'pg': directory, 'pg-18': directory})
-    allowed = {'route', 'password_env', 'database_directory', 'path_style'}
+    allowed = {'route', 'password_env', 'database_directory', 'path_style', 'server_file_tests'}
     if set(specification) - allowed:
         raise ValueError('Unknown network gate settings; keep credentials outside JSON')
+    if 'server_file_tests' in specification and (engine != 'postgresql' or type(specification['server_file_tests']) is not bool):
+        raise ValueError('Server file qualification requires an explicit PostgreSQL boolean')
     route = specification['route']
     if not isinstance(route, dict) or any('password' in name.lower() for name in route):
         raise ValueError('Network route must not contain passwords')
@@ -59,12 +61,28 @@ def execute(engine, specification, evidence):
         connector.connect = observed_connect
     module = importlib.import_module('tools.cdeadmin_' + engine + '_driver_platform_gate')
     if engine == 'postgresql':
-        receipt = module.qualify(route, password, evidence)
+        receipt = module.qualify(route, password, evidence, server_files=specification.get('server_file_tests',False))
     elif engine == 'firebird':
         receipt = module.run(route, specification['database_directory'], evidence,
                              password=password, path_style=specification.get('path_style', 'posix'))
     else:
         receipt = module.run(route, evidence, password=password)
+    if engine in {'mysql','mariadb'}:
+        # Collect product failures even when the driver proof failed. Each
+        # consumer gate owns and removes its uniquely named native objects.
+        for name in ('completion', 'extended'):
+            try:
+                product = importlib.import_module('tools.cdeadmin_' + engine + '_' + name + '_gate')
+                proof = product.qualify(route, evidence / name, password=password)
+                if proof['complete']:
+                    receipt.setdefault('checks', []).append(name)
+                else:
+                    receipt.setdefault('failures', []).append({'scope': name, 'type': 'NativeQualificationFailed'})
+                    receipt['complete'] = False
+            except Exception as error:
+                receipt.setdefault('failures', []).append({'scope': name, 'type': type(error).__name__})
+                receipt['complete'] = False
+        (evidence / 'summary.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
     print(json.dumps({'engine': engine, 'complete': receipt['complete'],
                       'checks': receipt.get('checks', []),
                       'failures': receipt.get('failures', [])}, indent=2))

@@ -81,8 +81,6 @@ def form(operation, field):
                    field('priority', 'Native thread priority', 'integer', help_text='USER: 0 to 19; SYSTEM: -20 to 0. Blank preserves the native value.')]
         if operation == 'create': fields.append(field('enabled', 'Enabled', 'boolean', default=True))
         else: fields.append(field('state', 'Enabled state', 'select', default='UNCHANGED', options=('UNCHANGED', 'ENABLE', 'DISABLE')))
-    if operation == 'assign':
-        fields.append(field('thread_ids', 'Native performance_schema thread IDs', 'json', True, default=[], help_text='JSON array of decimal strings or safe integers. These are THREAD_ID values, not connection/process IDs.'))
     if operation in {'alter', 'drop'}: fields.append(field('force', 'Force assigned threads to default group', 'boolean', default=False))
     if operation != 'create': fields.append(field('confirmation', 'Confirmation', 'text', True))
     return {'form_id': 'mysql.resource-group.' + operation, 'title': operation.title() + ' MySQL resource group', 'fields': fields}

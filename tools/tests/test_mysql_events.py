@@ -17,7 +17,8 @@ def test_comment_only_alter_does_not_reset_any_native_state():
     result=compile('alter',{'comment':"owner's note"})
     assert result['statements']==[{'source':'ALTER EVENT `d``é`.`e``é` COMMENT %s','parameters':("owner's note",)}]
     assert result['mysql_owned_event_scope']
-    fields=next(op['form']['fields'] for row in MYSQL_ADMINISTRATION.catalog(catalog_for_engine('mysql'))['objects'] if row['resource_kind']=='event' for op in row['operations'] if op['operation_id']=='alter')
+    from pgadmin.cdeadmin.providers.mysql_family.descriptor_contracts import routine_contract
+    fields=routine_contract('event','alter')['fields']
     assert {field['field_id']:field.get('default') for field in fields if field['field_id'] in {'status','completion'}}=={'status':'UNCHANGED','completion':'UNCHANGED'}
 
 

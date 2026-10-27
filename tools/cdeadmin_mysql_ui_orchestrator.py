@@ -376,10 +376,10 @@ def run(options):
             environment = os.environ.copy()
             environment['CONFIG_DISTRO_FILE_PATH'] = str(config_file)
             environment['CDEADMIN_MYSQL_UI_GATE_PASSWORD'] = mysql_password
-            environment['CDEADMIN_MYSQLSH_BINARY'] = str(
+            environment.setdefault('CDEADMIN_MYSQLSH_BINARY', str(
                 ROOT / 'tools/reference_engine_demos/runtime/bin/'
                 'cdeadmin-mysqlsh-9.7'
-            )
+            ))
             options.server_log.parent.mkdir(parents=True, exist_ok=True)
             cdeadmin_output = options.server_log.open('wb')
             cdeadmin_process = subprocess.Popen(
@@ -412,6 +412,7 @@ def run(options):
                     sys.executable,
                     str(ROOT /
                         'tools/cdeadmin_mysql_database_lifecycle_ui_gate.py'),
+                    '--functional-only',
                     '--url', f'http://127.0.0.1:{web_port}',
                     '--config-db', str(config_database),
                     '--database', DATABASE, '--host', '127.0.0.1',
@@ -484,6 +485,7 @@ def run(options):
                     sys.executable,
                     str(ROOT /
                         'tools/cdeadmin_mysql_maintenance_ui_gate.py'),
+                    '--functional-only',
                     '--url', f'http://127.0.0.1:{web_port}',
                     '--server', 'localhost', '--database', DATABASE,
                     '--host', '127.0.0.1', '--port', str(mysql_port),

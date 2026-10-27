@@ -1,5 +1,5 @@
 // Data-only DDN publications; identifiers are adapter-owned, values are quoted.
-const quoted = (value) => JSON.stringify(String(value ?? 'Unavailable').trim());
+const quoted = (value) => JSON.stringify(String(value ?? 'Unavailable'));
 
 export function dashboardPanelFiles(panels, title, moduleName) {
   const recordId = (panel, row, index) => {

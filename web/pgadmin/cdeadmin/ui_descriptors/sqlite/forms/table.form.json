@@ -1,0 +1,354 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "sqlite",
+  "family": "table",
+  "resource_kinds": [
+    "table",
+    "virtual-table",
+    "fts-table"
+  ],
+  "status": "complete",
+  "engine_tab_title": "SQLite",
+  "omitted_tabs": [
+    {
+      "tab": "Partitions",
+      "reason": "no partitioning"
+    },
+    {
+      "tab": "Security",
+      "reason": "no users or privileges"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "virtual-table.create.module_options",
+      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
+      "tracking": "ui-unification"
+    },
+    {
+      "concept": "fts-table.create.module_options",
+      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
+      "tracking": "ui-unification"
+    },
+    {
+      "concept": "WITHOUT ROWID and STRICT",
+      "reason": "read back as catalog flags (sqlite/provider.py) but not accepted on create; add as Options checkboxes"
+    },
+    {
+      "concept": "Column grid depth",
+      "reason": "column records carry only name/type/nullable/default/unique/primary_key; add collation, generated columns, autoincrement, check"
+    },
+    {
+      "concept": "Table rebuild on alter",
+      "reason": "SQLiteAlterDesign/SQLiteColumnDesign perform the copy-rebuild; the alter path must surface the rebuild plan on the SQL tab"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Table kind",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "default",
+          "label": "Ordinary"
+        },
+        {
+          "value": "virtual",
+          "label": "Virtual (module)"
+        },
+        {
+          "value": "fts",
+          "label": "Full-text search"
+        }
+      ],
+      "default": "default",
+      "ui_only": true
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Database",
+      "tab": "General",
+      "control": "reference",
+      "required": false,
+      "help": "Use a qualified database or schema name where needed.",
+      "reference_kind": "database"
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns",
+      "tab": "Columns",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Column name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Native data type",
+          "control": "text",
+          "required": true,
+          "record_key": "data_type"
+        },
+        {
+          "field_id": "nullable",
+          "label": "Nullable",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "default",
+          "label": "Default expression",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "unique",
+          "label": "Unique",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "primary_key",
+          "label": "Primary key",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "record_key": "primary_key_position",
+          "record_truthy": true
+        }
+      ],
+      "required": true,
+      "help": "Array of name, type, nullable, default, unique and primary_key properties.",
+      "visible_when": {
+        "field": "variant",
+        "equals": "default"
+      }
+    },
+    {
+      "field_id": "module_columns",
+      "label": "Module columns",
+      "control": "grid",
+      "tab": "Columns",
+      "backend_field_id": "columns",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "virtual",
+          "fts"
+        ]
+      },
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "unindexed",
+          "label": "Unindexed (FTS5)",
+          "control": "boolean"
+        }
+      ],
+      "help": "FTS and spatial column names; geopoly lists auxiliary columns."
+    },
+    {
+      "field_id": "primary_key",
+      "label": "Primary key",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Primary key",
+      "backend_field_id": "constraints[kind=PRIMARY KEY]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ]
+    },
+    {
+      "field_id": "unique_constraints",
+      "label": "Unique",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Unique",
+      "backend_field_id": "constraints[kind=UNIQUE]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ]
+    },
+    {
+      "field_id": "foreign_keys",
+      "label": "Foreign keys",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Foreign keys",
+      "backend_field_id": "constraints[kind=FOREIGN KEY]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        },
+        {
+          "field_id": "references_table",
+          "label": "Referenced table",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "table"
+        },
+        {
+          "field_id": "references_columns",
+          "label": "Referenced columns",
+          "control": "multiselect",
+          "required": true,
+          "help": "Columns of the referenced table, in key order."
+        }
+      ]
+    },
+    {
+      "field_id": "check_constraints",
+      "label": "Check",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Check",
+      "backend_field_id": "constraints[kind=CHECK]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "expression",
+          "label": "Expression",
+          "control": "code",
+          "required": true,
+          "language": "sql"
+        }
+      ]
+    },
+    {
+      "field_id": "module",
+      "label": "Native module",
+      "tab": "Engine",
+      "control": "select",
+      "required": true,
+      "default": "fts5",
+      "options": [
+        {
+          "value": "fts3",
+          "label": "Fts3"
+        },
+        {
+          "value": "fts4",
+          "label": "Fts4"
+        },
+        {
+          "value": "fts5",
+          "label": "Fts5"
+        },
+        {
+          "value": "rtree",
+          "label": "Rtree"
+        },
+        {
+          "value": "rtree_i32",
+          "label": "Rtree I32"
+        },
+        {
+          "value": "geopoly",
+          "label": "Geopoly"
+        },
+        {
+          "value": "fts4aux",
+          "label": "Fts4Aux"
+        },
+        {
+          "value": "fts5vocab",
+          "label": "Fts5Vocab"
+        },
+        {
+          "value": "fts3tokenize",
+          "label": "Fts3Tokenize"
+        },
+        {
+          "value": "dbstat",
+          "label": "Dbstat"
+        }
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "virtual",
+          "fts"
+        ]
+      }
+    },
+    {
+      "field_id": "module_options",
+      "label": "Native constructor options",
+      "tab": "Engine",
+      "control": "keyvalue",
+      "required": false,
+      "help": "FTS: {\"tokenizer\":{\"name\":\"unicode61\",\"arguments\":[\"remove_diacritics\",\"2\"]},\"prefix\":[2,3]}. FTS4 tokenizer arguments use [\"remove_diacritics=2\"]. FTS4 also accepts content, languageid, matchinfo, compress/uncompress, order and notindexed. FTS5 accepts content, content_rowid, columnsize, detail, contentless_delete, contentless_unindexed, tokendata and locale. RTree: {\"auxiliary_columns\":[\"label\"]}. FTS4aux/FTS5vocab: {\"table\":\"search\",\"database\":\"main\",\"mode\":\"row\"} (mode only for FTS5vocab; cross-database sources require TEMP). Tokenizer: {\"tokenizer\":{\"name\":\"unicode61\",\"arguments\":[\"remove_diacritics=2\"]}}. Dbstat: {\"database\":\"main\"}. Installed modules and all constructor constraints are checked by SQLite.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "virtual",
+          "fts"
+        ]
+      }
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: constraints grid split into Primary key / Unique / Foreign keys / Check; parent picker (database); virtual/FTS variants get a module_columns grid. Reviewed by tools/review_ui_descriptors.py: column grid record keys. Round trip verified in-process (create, re-inspect, alter via the Columns grid diff) on SQLite 3.53.1 (profile pins 3.53.0) by tools/tests/test_ui_descriptor_roundtrip_sqlite.py. Native qualification on the pinned version remains with the platform teams."
+}

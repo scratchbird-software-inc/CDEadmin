@@ -39,6 +39,33 @@ def test_create_plan_is_qualified_parsed_and_never_executes():
     assert not result['executed'] and result['native_grammar_validated']
 
 
+def test_durable_definitions_preserve_column_facts_without_transient_owner_oids():
+    from pgadmin.cdeadmin.workspace.duckdb_schema_plan import _definition
+    table=row('table',['file','main','facts'],ddl='CREATE TABLE facts(id INTEGER)')
+    table['native']['catalog_metadata']={'oid':1,'comment':'kept'}
+    table['native']['columns']=[{'name':'id','data_type':'INTEGER','owner_oid':1,'comment':'column kept'}]
+    rebound=deepcopy(table);rebound['native']['catalog_metadata']['oid']=2
+    rebound['native']['columns'][0]['owner_oid']=2
+    assert _definition(table)==_definition(rebound)
+    assert table['native']['columns'][0]['owner_oid']==1
+    rebound['native']['columns'][0]['comment']='changed'
+    assert _definition(table)!=_definition(rebound)
+    column=row('column',['file','main','facts','id'])
+    column['native']['catalog_metadata']={'owner_oid':1,'data_type':'INTEGER'}
+    rebound=deepcopy(column);rebound['native']['catalog_metadata']['owner_oid']=2
+    assert _definition(column)==_definition(rebound)
+
+
+def test_rebuilt_column_observation_must_belong_to_the_actual_new_table():
+    from pgadmin.cdeadmin.providers.duckdb.schema_application import _table_columns_match
+    before=[{'name':'id','resource_id':'id','data_type':'INTEGER','owner_oid':1}]
+    after=[{**before[0],'owner_oid':2}]
+    assert _table_columns_match(after,before,[],owner_oid=2)
+    assert not _table_columns_match(after,before,[],owner_oid=3)
+    after[0]['data_type']='VARCHAR'
+    assert not _table_columns_match(after,before,[],owner_oid=2)
+
+
 @pytest.mark.parametrize('action', ['create', 'drop', 'set-default', 'rename'])
 def test_view_columns_cannot_be_reviewed_as_table_column_mutations(action):
     pytest.importorskip('duckdb')

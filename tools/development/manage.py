@@ -114,6 +114,8 @@ def main(argv=None):
             run([sys.executable, '-m', 'venv', ROOT / '.venv'])
         run([PYTHON, '-m', 'pip', 'install', '-r', ROOT / 'requirements.txt',
              '-r', DEMO / 'requirements.txt'])
+        run([PYTHON, '-B', '-m', 'tools.cdeadmin_install_mysql_driver',
+             '--receipt', ROOT / '.devstate/mysql-driver.json'])
         run([PYTHON, '-m', 'pip', 'check'])
     elif args.action == 'frontend':
         run(['corepack', 'yarn', 'install', '--immutable'], ROOT / 'web')

@@ -6,10 +6,11 @@ from .mysql_statement_encoding import statement_context
 import hashlib
 
 
-def apply_review(connection, record):
+def apply_review(connection, record, runtime=None):
     dispatched = acknowledged = locked = False
     advisory = None
     cursor = None
+    selected = None
     result = {'state': 'not_dispatched', 'rediscovery_verified': False,
               'automatic_retry': False, 'transactional_rollback_available': False}
     try:
@@ -21,6 +22,10 @@ def apply_review(connection, record):
                 plan['execution_sha256'] != digest(operations) or not plan.get('native_grammar_validated')):
             raise ValueError('Exact native-validated single-object plan is required')
         operation = operations[0]
+        from ..workspace.mysql_online_policy import policy, statement, advisory as online_lock, structural_definition
+        selected=policy(operation.get('execution'))
+        if selected and (operation['kind']!='table' or operation['operation']!='alter' or runtime is None):
+            raise ValueError('Controlled ALTER requires its owned asynchronous execution job')
         key = operation['resource_id']
         before, after = record['baseline']['rows'].get(key), record['desired']['rows'][key]
         database = plan['database']
@@ -68,6 +73,7 @@ def apply_review(connection, record):
             compiled = 'DROP TABLE ' + target
         else:
             raise ValueError('Unsupported native application operation')
+        compiled=statement(compiled,selected)
         if (compiled != operation['source'] or
                 (digest(schema(before)) if before is not None else None) != operation['baseline_schema_sha256'] or
                 digest(schema(after)) != operation['desired_schema_sha256']):
@@ -77,7 +83,7 @@ def apply_review(connection, record):
         if 'time_zone' in context:connection.time_zone=context['time_zone']
         connection.set_charset_collation(charset='utf8mb4', collation='utf8mb4_0900_ai_ci')
         cursor = connection.cursor()
-        cursor.execute('SET SESSION lock_wait_timeout=2')
+        cursor.execute('SET SESSION lock_wait_timeout='+str(selected['lock_wait_seconds'] if selected else 2))
         cursor.execute('SET SESSION sql_quote_show_create=1')
         cursor.execute('SELECT VERSION(), @@server_uuid, DATABASE()')
         identity = cursor.fetchone()
@@ -96,14 +102,14 @@ def apply_review(connection, record):
             else:
                 raise ValueError('Native creation target already exists')
         else:
-            if after['kind'] in {'view','library','event','procedure','function','trigger','database','materialized-view'}:
-                advisory=('sr-ddn-'+after['kind']+':'+hashlib.sha256(target.encode('utf8')).hexdigest()[:48])[:64]
+            if selected or after['kind'] in {'view','library','event','procedure','function','trigger','database','materialized-view'}:
+                advisory=online_lock(database,after['name']) if selected else ('sr-ddn-'+after['kind']+':'+hashlib.sha256(target.encode('utf8')).hexdigest()[:48])[:64]
                 cursor.execute('SELECT GET_LOCK(%s,2)',(advisory,))
                 if cursor.fetchone()[0]!=1:
                     advisory=None
                     raise ValueError('Native object advisory lock is unavailable')
                 result['concurrent_external_ddl_fenced']=False
-                result['concurrency_warning']='View/library/event/routine baseline is observational; external DDL can change the object before dispatch'
+                result['concurrency_warning']='Controlled ALTER baseline is observational; prevent external DDL during execution' if selected else 'View/library/event/routine baseline is observational; external DDL can change the object before dispatch'
             else:
                 from ..workspace.mysql_foreign_key_locks import lock_source
                 cursor.execute(lock_source(before,after,context['sql_mode']))
@@ -116,7 +122,11 @@ def apply_review(connection, record):
                 cursor.execute('SELECT EVENT_OBJECT_SCHEMA,EVENT_OBJECT_TABLE,ACTION_TIMING,EVENT_MANIPULATION,ACTION_ORDER FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=%s AND TRIGGER_NAME=%s',(database,after['name']))
                 facts=cursor.fetchone()
                 observed_schema['trigger_identity']=dict(zip(('database','table','timing','event','action_order'),facts)) if facts else None
-            if not observed or digest(observed_schema) != operation['baseline_schema_sha256']:
+            if selected and observed:
+                same=(structural_definition(observed_schema['definition'],context['sql_mode'])==
+                    structural_definition(before['native']['definition'],context['sql_mode']))
+            else:same=digest(observed_schema)==operation['baseline_schema_sha256']
+            if not observed or not same:
                 raise ValueError('Locked native object changed since review')
             if after['kind'] in {'procedure','function','trigger'} and (len(observed)<6 or any(
                     before['native'].get('definition_context',{}).get(field)!=observed[index]
@@ -134,10 +144,23 @@ def apply_review(connection, record):
                     for field,index in [('character_set_client',2),('collation_connection',3)])):
                 raise ValueError('Locked native view creation context changed since review')
         with statement_context(connection, cursor, compiled, context) as encoded:
+            if runtime is not None:
+                runtime.checkpoint()
+                runtime.event('baseline-revalidated',concurrent_external_ddl_fenced=False)
+            if selected and selected['method']=='pt-online-schema-change':
+                # The admitted native utility connection owns the cooperating
+                # lock across application-worker loss. Its pre-create gate
+                # revalidates the source again after this handoff.
+                cursor.execute('SELECT RELEASE_LOCK(%s)',(advisory,));cursor.fetchone();advisory=None
             dispatched = True
-            cursor.execute(encoded)
+            if runtime is None:cursor.execute(encoded)
+            else:runtime.execute(cursor,encoded,record)
             acknowledged = True
             result['state'] = 'committed'
+            if selected and selected['method']=='pt-online-schema-change':
+                result.update(native_copy_cutover_acknowledged=runtime.copy_swapped,
+                    utility_cleanup_confirmed=getattr(runtime,'copy_cleanup_confirmed',False))
+            if runtime is not None:runtime.event('native-acknowledged')
         if operation['operation'] == 'drop':
             try:
                 cursor.execute(show_source)
@@ -158,7 +181,10 @@ def apply_review(connection, record):
         # An error after dispatch may be a lost acknowledgement. Never infer
         # rollback or retry from a native error, broken link or process restart.
         result['state'] = 'committed' if acknowledged else 'unknown_outcome' if dispatched else 'not_dispatched'
-        result.update(error_type=type(error).__name__, error_code=getattr(error, 'errno', None))
+        result.update(error_type=type(error).__name__, error_code=getattr(error, 'errno', None),sqlstate=getattr(error,'sqlstate',None))
+        if selected:
+            result.update(native_error_reply_received=getattr(error,'errno',None) is not None,
+                execution_policy=selected)
         if not dispatched and isinstance(error, ValueError):
             result['rejection_reason'] = str(error)
     finally:

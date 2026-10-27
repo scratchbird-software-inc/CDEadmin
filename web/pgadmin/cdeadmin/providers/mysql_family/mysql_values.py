@@ -2,6 +2,7 @@
 import base64
 import binascii
 import codecs
+import datetime
 from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
@@ -164,6 +165,19 @@ def parameter(item):
             return raw
         if set(item) != {'encoding', 'data'}:
             raise RelationalClientError('MySQL numeric parameter is invalid')
+        try:
+            if encoding=='date' and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}',data):
+                return datetime.date.fromisoformat(data)
+            if encoding=='datetime' and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?',data):
+                return datetime.datetime.fromisoformat(data)
+            if encoding=='time':
+                value=re.fullmatch(r'(-?)([0-9]{1,12}):([0-5][0-9]):([0-5][0-9])(?:\.([0-9]{1,6}))?',data)
+                if value:
+                    duration=datetime.timedelta(hours=int(value[2]),minutes=int(value[3]),seconds=int(value[4]),
+                        microseconds=int((value[5] or '').ljust(6,'0') or '0'))
+                    return -duration if value[1] else duration
+        except (ValueError,OverflowError):
+            raise RelationalClientError('MySQL temporal parameter is invalid') from None
         if encoding == 'integer' and re.fullmatch(r'-?[0-9]{1,65}', data):
             return int(data)
         if encoding == 'decimal' and len(data) <= 1024:
@@ -189,22 +203,257 @@ def parameters(items):
     raise RelationalClientError('MySQL parameters must be an object or array')
 
 
+class MySQLParameterAdmissionError(RelationalClientError):
+    """The current command was refused by native language/metadata admission."""
+    commands_dispatched = 0
+
+
+def observed_language(connection):
+    """Read the retained native language without changing session policy."""
+    from .mysql_session_variables import require_observation
+    observed = require_observation(connection)
+    version, mode = observed['version'], observed['variables']['sql_mode']
+    # Synchronize the client's cache only. No native language setting changes.
+    connection._sql_mode = mode
+    return version, mode
+
+
+CLIENT_DELIMITER = re.compile(r'^[ \t]*DELIMITER[ \t]+', re.I | re.M | re.A)
+
+
+def framed_source(source, version, mode):
+    from ...data_studio.mysql_quoting import available
+    modes = set(mode.split(','))
+    if CLIENT_DELIMITER.search(source):
+        from ...data_studio.language_tools import analyze
+        framed = analyze(source, 'mysql-sql', script=True, settings={
+            'ansi_quotes':'ANSI_QUOTES' in modes, 'no_backslash_escapes':'NO_BACKSLASH_ESCAPES' in modes,
+            'mysql_dollar_quotes':available(version)})
+        if framed['client_directives']:
+            if not framed['script_ready']:
+                raise MySQLParameterAdmissionError('MySQL client script framing is unconfirmed before query dispatch')
+            source = ';\n'.join(item['source'] for item in framed['statements'])
+    return source
+
+
+def unbound_source(connection, source):
+    if CLIENT_DELIMITER.search(source):
+        source = framed_source(source, *observed_language(connection))
+    try: return source.encode(connection.python_charset)
+    except (UnicodeError, LookupError):
+        raise MySQLParameterAdmissionError('MySQL command encoding failed before dispatch') from None
+
+
+def bound_source(connection, cursor, source, params):
+    """Bind only lexical markers, using the selected driver's native literals."""
+    from ...data_studio.mysql_quoting import available, parameter_spans
+    version, mode = observed_language(connection)
+    source = framed_source(source, version, mode)
+    modes = set(mode.split(','))
+    spans = list(parameter_spans(source, modes, dollar_quotes=available(version)))
+    named = isinstance(params, Mapping)
+    if ((named and any(name is None or name not in params for _start, _end, name in spans)) or
+            (not named and (not isinstance(params, (list, tuple)) or len(params) != len(spans) or
+                            any(name is not None for _start, _end, name in spans)))):
+        raise MySQLParameterAdmissionError('MySQL parameter bindings do not match the native source markers')
+    try:
+        # This lexical port bypasses native cursor.execute(), including the
+        # charset adapter used there. Keep both entry points on the same exact
+        # MySQL latin1 mapping before asking the driver to escape its values.
+        from .mysql_charsets import parameter_values
+        native_params = parameter_values(dict(params) if named else params,
+                                         connection.charset)
+        previous_mode = getattr(connection, '_cdeadmin_parameter_sql_mode', None)
+        connection._cdeadmin_parameter_sql_mode = mode
+        try:
+            if getattr(connection, '_cmysql', None) is not None:
+                from mysql.connector.constants import ServerFlag
+                from .mysql_session_variables import SessionVariables, SourceIdentityUnavailable
+                observer = getattr(connection, '_cdeadmin_session_variable_observer', None)
+                separate = False
+                if isinstance(observer, SessionVariables):
+                    native_no_backslash = bool(connection._cmysql.st_server_status() & ServerFlag.STATUS_NO_BACKSLASH_ESCAPES)
+                    if native_no_backslash != ('NO_BACKSLASH_ESCAPES' in modes):
+                        try:
+                            converted = observer.native_literals(native_params, mode)
+                        except Exception as error:
+                            failure = MySQLParameterAdmissionError('Private native C parameter conversion is unavailable; the user command was not dispatched')
+                            failure.original_session_identity_unconfirmed = isinstance(error, SourceIdentityUnavailable)
+                            failure.original_diagnostics_preserved = not failure.original_session_identity_unconfirmed
+                            failure.native_observer_errno = getattr(error, 'errno', None)
+                            failure.native_observer_error_type = type(error).__name__
+                            raise failure from None
+                        separate = True
+                if not separate:
+                    converted = connection.prepare_for_mysql(native_params)
+            elif named:
+                converted = cursor._process_params_dict(native_params)
+            else:
+                converted = cursor._process_params(native_params)
+        finally:
+            connection._cdeadmin_parameter_sql_mode = previous_mode
+        pieces = []; previous = 0
+        for index, (start, end, name) in enumerate(spans):
+            pieces.append(source[previous:start].encode(connection.python_charset))
+            literal = converted[name.encode()] if named else converted[index]
+            if not isinstance(literal, (bytes, bytearray)):
+                raise TypeError('Native parameter conversion did not return statement bytes')
+            pieces.append(bytes(literal)); previous = end
+        pieces.append(source[previous:].encode(connection.python_charset))
+        return b''.join(pieces)
+    except MySQLParameterAdmissionError:
+        raise
+    except Exception:
+        raise MySQLParameterAdmissionError('MySQL parameter conversion failed before query dispatch') from None
+
+
 class Cursor:
     """Convert raw query rows independently from catalog reads."""
 
-    def __init__(self, connection):
+    def __init__(self, connection, *, cancel_requested=None, before_command=None):
+        self.connection = connection
+        self.cancel_requested = cancel_requested
+        self.before_command = before_command
         self.native = connection.cursor(raw=True)
         self.encoding = connection.python_charset
         self._native_c_api = getattr(connection, '_cmysql', None)
+        self._script = None
+        self._commands_dispatched = 0
 
-    def execute(self, *args, **kwargs):
+    def execute(self, operation, params=None, *args, **kwargs):
+        self._script = None
+        self._commands_dispatched = 0
+        changes_context = isinstance(operation, str) and re.search(
+            r'\b(?:SET|CALL)\b|^[ \t]*DELIMITER[ \t]+', operation, re.I | re.M | re.A) is not None
+        if ((bool(params) or changes_context) and isinstance(operation, str) and not args and
+                not (set(kwargs) - {'map_results'}) and not kwargs.get('map_results', False)):
+            from .mysql_script import Statements
+            if params and not isinstance(params, (Mapping, list, tuple)):
+                raise MySQLParameterAdmissionError('MySQL parameters must be an object or array')
+            self._script = Statements(operation)
+            self._parameters = params if params else None
+            self._parameter_position = 0
+            self._next_command()
+            return None
+        return self._execute(operation, params, *args, **kwargs)
+
+    def _next_command(self):
+        from .mysql_script import MySQLScriptFramingError
+        try:
+            if self.cancel_requested is not None and self.cancel_requested():
+                raise MySQLParameterAdmissionError('MySQL query cancelled before command dispatch')
+            from ...data_studio.mysql_quoting import available, parameter_spans
+            # Finishing a script must not send a metadata command after its
+            # last native response: that would replace ROW_COUNT/diagnostics.
+            # Empty tails have no next command in any supported quote mode.
+            # A meaningful or ambiguous tail still gets its own current-mode
+            # admission below; do not guess its language from an earlier SET.
+            finished = self._commands_dispatched and all(
+                not self._script.has_next(self._framing_version, candidate)
+                for candidate in ('', 'ANSI_QUOTES', 'NO_BACKSLASH_ESCAPES',
+                                  'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'))
+            if finished:
+                source = None
+            else:
+                version, mode = observed_language(self.connection)
+                self._framing_version = version
+                source = self._script.next(version, mode)
+            if source is None:
+                if self._parameters is not None and not isinstance(self._parameters, Mapping) and self._parameter_position != len(self._parameters):
+                    raise MySQLParameterAdmissionError('Unused MySQL query parameters remain after the dispatched commands')
+                self._script = None
+                return False
+            spans = list(parameter_spans(source, set(mode.split(',')), dollar_quotes=available(version))) if self._parameters is not None else []
+            if self._parameters is None:
+                selected = None
+            elif isinstance(self._parameters, Mapping):
+                if any(name is None or name not in self._parameters for _start, _end, name in spans):
+                    raise MySQLParameterAdmissionError('MySQL parameters do not match this native command')
+                selected = {name:self._parameters[name] for _start, _end, name in spans}
+            else:
+                count = len(spans)
+                remaining = self._parameters[self._parameter_position:]
+                selected = remaining[:count] if self._script.has_next(version, mode) else remaining
+                self._parameter_position += len(selected)
+                if len(selected) != count:
+                    raise MySQLParameterAdmissionError('MySQL parameters do not match this native command')
+            # Empty selections still require lexical admission: a later command
+            # can contain a named marker missing from the supplied mapping.
+            if isinstance(selected, Mapping) or selected:
+                self._execute(source, selected)
+            else:
+                self._execute(source)
+            self.encoding = self.connection.python_charset
+            return True
+        except MySQLParameterAdmissionError as error:
+            self._script = None
+            error.commands_dispatched = self._commands_dispatched
+            raise
+        except MySQLScriptFramingError:
+            self._script = None
+            error = MySQLParameterAdmissionError('MySQL client command framing failed before this command was dispatched')
+            error.commands_dispatched = self._commands_dispatched
+            raise error from None
+        except BaseException:
+            self._script = None
+            raise
+
+    def nextset(self):
+        try: value = self.native.nextset()
+        except BaseException:
+            self._script = None
+            raise
+        if value or self._script is None: return value
+        if self.cancel_requested is not None and self.cancel_requested(): return None
+        return True if self._next_command() else None
+
+    def _execute(self, operation, params=None, *args, **kwargs):
+        if self.cancel_requested is not None and self.cancel_requested():
+            raise MySQLParameterAdmissionError('MySQL query cancelled before dispatch')
+        native_bound = (bool(params) and isinstance(operation, str) and not args and
+            not (set(kwargs) - {'map_results'}) and not kwargs.get('map_results', False))
+        native_direct = native_bound or (not params and isinstance(operation, str) and not args and
+            not (set(kwargs) - {'map_results'}) and not kwargs.get('map_results', False) and
+            (self._script is not None or re.search(r'DELIMITER', operation, re.I | re.A) is not None))
+        if native_bound:
+            operation = bound_source(self.connection, self.native, operation, params)
+            params = None
+        elif native_direct:
+            operation = unbound_source(self.connection, operation)
+        if self.cancel_requested is not None and self.cancel_requested():
+            raise MySQLParameterAdmissionError('MySQL query cancelled before dispatch')
+        if self.before_command is not None:self.before_command()
         if self._native_c_api is not None:
             # Connector/Python 26.7's C query path returns early for an OK
             # response before applying raw=True. A following SELECT in that
             # batch would otherwise inherit the last catalog cursor's mode.
             # This changes client conversion only; no SQL is dispatched here.
             self._native_c_api.raw(True)
-        return self.native.execute(*args, **kwargs)
+        if native_direct:
+            # The native COM_QUERY port retains result ownership in the same
+            # driver cursor. Its client script preprocessor must not interpret
+            # DELIMITER words inside already converted values or native bodies.
+            self.connection.handle_unread_result()
+            self.native._reset_result()
+            self.native._executed = operation
+            options = ({'raw':True,'buffered':False,'raw_as_string':False}
+                if self._native_c_api is not None else
+                {'read_timeout':self.native._read_timeout,'write_timeout':self.native._write_timeout})
+            self._commands_dispatched += 1
+            from .mysql_session_variables import invalidate
+            try:
+                self.native._handle_result(self.connection.cmd_query(operation, **options))
+            finally:
+                invalidate(self.connection)
+            return None
+        self._commands_dispatched += 1
+        from .mysql_session_variables import invalidate
+        try:
+            if params is None:
+                return self.native.execute(operation, *args, **kwargs)
+            return self.native.execute(operation, params, *args, **kwargs)
+        finally:
+            invalidate(self.connection)
 
     def __getattr__(self, name):
         return getattr(self.native, name)

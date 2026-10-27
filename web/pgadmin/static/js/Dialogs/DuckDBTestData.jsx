@@ -2,6 +2,7 @@ import {useEffect, useId, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, MenuItem, TextField, Table, TableBody, TableCell, TableHead, TableRow, TablePagination} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import RecipeRevisions from '../cdeadmin_ui/editors/RecipeRevisions';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
 const initial = engine => JSON.stringify({format: `scratchrobin.${engine}.test-data@1`, scope: null, seed: 1, tables: []}, null, 2);
@@ -60,6 +61,8 @@ export default function DuckDBTestData({post, databaseTargetId, engine = 'duckdb
     <FormReference formKey={engine === 'sqlite' ? 'sqlite-test-data' : 'duckdb-test-data'} />
     <Alert severity="info">Generate and review SQL, then open the saved script in the shared Query Tool on this database. Generation executes no SQL writes. The Query Tool owns autocommit, commit and rollback.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
+    <RecipeRevisions post={post} engine={engine} databaseTargetId={databaseTargetId}
+      source={source} onChange={change} disabled={busy} />
     <Box sx={{display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', my: 1}}>
       <Button disabled={busy} onClick={() => run(false)}>Load native tables</Button>
       <TextField select size="small" label="Native table" value={selected} disabled={busy || !tables.length} onChange={event => setSelected(event.target.value)} sx={{minWidth: 260}}>

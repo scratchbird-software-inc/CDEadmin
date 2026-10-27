@@ -69,7 +69,7 @@ class MonitoringHost:
         self.endpoints = endpoint_service
         self.runtime = MonitoringRuntime()
         self.history = None
-        if self.engine == 'firebird':
+        if self.engine in {'firebird', 'mysql', 'mariadb', 'postgresql', 'duckdb', 'sqlite'}:
             from .monitoring_history import configured_history
             if 'cdeadmin_monitoring_history' not in app.extensions:
                 app.extensions['cdeadmin_monitoring_history'] = configured_history(app)
@@ -160,7 +160,7 @@ class MonitoringHost:
                     raise ValueError('Stop collection before replacing credentials')
                 previous.require(policy, 'configure')
                 self.runtime.enable(policy, previous.open_source, previous.require,
-                    history_writer=self._history_writer(previous))
+                    history_writer=self._history_writer(previous), observation_factory=self._observation_factory(previous))
                 return self._grant_snapshot(previous)
             self.ownership.acquire()
             if embedded:
@@ -174,12 +174,15 @@ class MonitoringHost:
                     credentials=body.get('credentials'), engine=self.engine)
             try:
                 self.runtime.enable(policy, grant.open_source, grant.require,
-                    history_writer=self._history_writer(grant))
+                    history_writer=self._history_writer(grant), observation_factory=self._observation_factory(grant))
             except BaseException:
                 grant.revoke()
                 raise
             self._grants[key] = grant
             return self._grant_snapshot(grant)
+
+    def _observation_factory(self, grant):
+        return None
 
     def _history_writer(self, grant):
         if self.history is None:

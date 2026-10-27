@@ -1,0 +1,1689 @@
+{
+  "schema": "cdeadmin.ui-operations.v1",
+  "engine": "firebird",
+  "operations": [
+    {
+      "operation_id": "backup_logical",
+      "resource_kind": "database",
+      "title": "Logical backup (gbak)",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "split_backup",
+          "label": "Split backup across volumes",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "backup_file",
+          "label": "Backup filename on the Firebird server",
+          "control": "text",
+          "required": true,
+          "visible_when": {
+            "field": "split_backup",
+            "equals": false
+          }
+        },
+        {
+          "field_id": "backup_volumes",
+          "label": "Ordered backup volumes",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "filename",
+              "label": "Volume filename",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "size_bytes",
+              "label": "Capacity in bytes (empty for last volume)",
+              "control": "number",
+              "required": false
+            }
+          ],
+          "required": true,
+          "help": "Add at least two distinct server filenames in order. Set the byte capacity of every volume except the last; leave the last capacity empty. Moving a volume also moves its capacity. Paths refer to the Firebird server, not this browser.",
+          "visible_when": {
+            "field": "split_backup",
+            "equals": true
+          }
+        },
+        {
+          "field_id": "backup_flags",
+          "label": "Backup options",
+          "control": "multiselect",
+          "required": false,
+          "options": [
+            {
+              "value": "IGNORE_CHECKSUMS",
+              "label": "Ignore checksums"
+            },
+            {
+              "value": "IGNORE_LIMBO",
+              "label": "Ignore limbo transactions"
+            },
+            {
+              "value": "METADATA_ONLY",
+              "label": "Metadata only"
+            },
+            {
+              "value": "NO_GARBAGE_COLLECT",
+              "label": "No garbage collection"
+            },
+            {
+              "value": "OLD_DESCRIPTIONS",
+              "label": "Use old metadata descriptions"
+            },
+            {
+              "value": "NON_TRANSPORTABLE",
+              "label": "Non-transportable"
+            },
+            {
+              "value": "CONVERT",
+              "label": "Convert external tables to internal tables"
+            },
+            {
+              "value": "EXPAND",
+              "label": "Create an uncompressed backup"
+            },
+            {
+              "value": "NO_TRIGGERS",
+              "label": "Disable database triggers"
+            },
+            {
+              "value": "ZIP",
+              "label": "Compressed backup"
+            },
+            {
+              "value": "DIRECT_IO",
+              "label": "Direct I/O"
+            }
+          ]
+        },
+        {
+          "field_id": "skip_data",
+          "label": "Skip data for tables matching",
+          "control": "text",
+          "required": false,
+          "help": "Native Firebird case-insensitive SIMILAR TO pattern: % matches any sequence and _ one character; backslash escapes pattern characters. Skip takes precedence over include. Table metadata is retained."
+        },
+        {
+          "field_id": "include_data",
+          "label": "Include data for tables matching",
+          "control": "text",
+          "required": false,
+          "help": "Native Firebird SIMILAR TO pattern, not a Python regular expression. May be combined with skip: data must match include and must not match skip. Metadata-only mode excludes all data regardless of either filter."
+        },
+        {
+          "field_id": "parallel_workers",
+          "label": "Parallel workers",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "statistics",
+          "label": "Statistics letters (T, D, W, R)",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "verbose",
+          "label": "Verbose service output",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "verbose_interval",
+          "label": "Verbose output interval",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "key_holder",
+          "label": "Key-holder plugin",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "key_name",
+          "label": "Encryption key name",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "crypt_plugin",
+          "label": "Backup encryption plugin",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "restore_logical",
+      "resource_kind": "database",
+      "title": "Logical restore (gbak)",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "backup_file",
+          "label": "Backup filename on the Firebird server",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "additional_backup_files",
+          "label": "Additional backup volumes in order",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Additional backup volumes in order",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "required": false,
+          "help": "For split backups, add every remaining volume after the first backup filename, in original backup order."
+        },
+        {
+          "field_id": "restore_database",
+          "label": "Restored database filename on the Firebird server",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "multiple_database_files",
+          "label": "Restore database across multiple files",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "primary_file_pages",
+          "label": "Primary database file allocation (pages)",
+          "control": "number",
+          "required": true,
+          "default": 256,
+          "help": "The primary filename above stays fixed. Firebird reserves at least 255 pages in this file even if a smaller allocation is requested. Allocations are pages, not bytes.",
+          "visible_when": {
+            "field": "multiple_database_files",
+            "equals": true
+          }
+        },
+        {
+          "field_id": "database_file_volumes",
+          "label": "Secondary database files in order",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "filename",
+              "label": "Database filename",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "pages",
+              "label": "Page allocation (empty for last file)",
+              "control": "number",
+              "required": false
+            }
+          ],
+          "required": true,
+          "help": "These are database storage files, not backup volumes. Add distinct server-side filenames. Moving a file also moves its page allocation. Leave the final file allocation empty; all earlier files need a positive allocation.",
+          "visible_when": {
+            "field": "multiple_database_files",
+            "equals": true
+          }
+        },
+        {
+          "field_id": "replace_existing",
+          "label": "Replace an existing database",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "restore_flags",
+          "label": "Restore options",
+          "control": "multiselect",
+          "required": false,
+          "options": [
+            {
+              "value": "METADATA_ONLY",
+              "label": "Metadata only"
+            },
+            {
+              "value": "DEACTIVATE_IDX",
+              "label": "Deactivate indexes"
+            },
+            {
+              "value": "NO_SHADOW",
+              "label": "Do not restore shadows"
+            },
+            {
+              "value": "NO_VALIDITY",
+              "label": "Do not restore validity constraints"
+            },
+            {
+              "value": "ONE_AT_A_TIME",
+              "label": "Commit each table"
+            },
+            {
+              "value": "USE_ALL_SPACE",
+              "label": "Use all page space"
+            },
+            {
+              "value": "NO_TRIGGERS",
+              "label": "Disable database triggers"
+            },
+            {
+              "value": "DIRECT_IO",
+              "label": "Direct I/O"
+            }
+          ]
+        },
+        {
+          "field_id": "page_size",
+          "label": "Restored page size",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "4096",
+              "label": "4096"
+            },
+            {
+              "value": "8192",
+              "label": "8192"
+            },
+            {
+              "value": "16384",
+              "label": "16384"
+            },
+            {
+              "value": "32768",
+              "label": "32768"
+            }
+          ]
+        },
+        {
+          "field_id": "page_buffers",
+          "label": "Default page buffers",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "access_mode",
+          "label": "Database access mode",
+          "control": "select",
+          "required": false,
+          "default": "READ_WRITE",
+          "options": [
+            {
+              "value": "READ_WRITE",
+              "label": "Read/write"
+            },
+            {
+              "value": "READ_ONLY",
+              "label": "Read only"
+            }
+          ]
+        },
+        {
+          "field_id": "replica_mode",
+          "label": "Restored database replica mode",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "NONE",
+              "label": "Not a replica"
+            },
+            {
+              "value": "READ_ONLY",
+              "label": "Read-only replica"
+            },
+            {
+              "value": "READ_WRITE",
+              "label": "Read/write replica"
+            }
+          ]
+        },
+        {
+          "field_id": "parallel_workers",
+          "label": "Parallel workers",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "statistics",
+          "label": "Statistics letters (T, D, W, R)",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "verbose",
+          "label": "Verbose service output",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "verbose_interval",
+          "label": "Verbose output interval",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "skip_data",
+          "label": "Skip data for tables matching",
+          "control": "text",
+          "required": false,
+          "help": "Native Firebird case-insensitive SIMILAR TO pattern: % matches any sequence and _ one character; backslash escapes pattern characters. Skip takes precedence over include. Table metadata is retained."
+        },
+        {
+          "field_id": "include_data",
+          "label": "Include data for tables matching",
+          "control": "text",
+          "required": false,
+          "help": "Native Firebird SIMILAR TO pattern, not a Python regular expression. May be combined with skip: data must match include and must not match skip. Metadata-only mode excludes all data regardless of either filter."
+        },
+        {
+          "field_id": "key_holder",
+          "label": "Key-holder plugin",
+          "control": "text",
+          "required": false,
+          "help": "Installed on the Firebird server; supplies the key material needed to read the backup and encrypt the restored database."
+        },
+        {
+          "field_id": "key_name",
+          "label": "Encryption key name",
+          "control": "text",
+          "required": false,
+          "help": "Selects the restored database's key; leave empty to inherit the backup header's key name. The key holder must supply both the backup key and any new destination key. Native gbak inserts this name into an SQL KEY clause without quoting. Restore errors can leave a partial destination database."
+        },
+        {
+          "field_id": "crypt_plugin",
+          "label": "Restored database encryption plugin",
+          "control": "text",
+          "required": false,
+          "help": "Leave empty to inherit the backup header's plugin. An override selects the restored database's plugin, not the plugin used to read the backup. Both plugins must be installed on the Firebird server."
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "backup_physical",
+      "resource_kind": "database",
+      "title": "Physical backup (nbackup)",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "backup_file",
+          "label": "Physical backup filename on the Firebird server",
+          "control": "text",
+          "required": true,
+          "help": "Physical backup requires a writable database. Use logical backup for a read-only database."
+        },
+        {
+          "field_id": "backup_level",
+          "label": "Incremental backup level",
+          "control": "number",
+          "required": false,
+          "default": 0,
+          "help": "0 creates a full backup. A positive level requires the preceding level in backup history. Restore the complete chain in order."
+        },
+        {
+          "field_id": "database_guid",
+          "label": "Database backup GUID (overrides level)",
+          "control": "text",
+          "required": false,
+          "help": "Enter a hyphenated UUID, with or without braces. The native request always uses braces so it cannot be mistaken for a backup level."
+        },
+        {
+          "field_id": "direct_io_mode",
+          "label": "Backup read I/O policy",
+          "control": "select",
+          "required": true,
+          "default": "NATIVE",
+          "options": [
+            {
+              "value": "NATIVE",
+              "label": "Native default"
+            },
+            {
+              "value": "ON",
+              "label": "Direct reads ON"
+            },
+            {
+              "value": "OFF",
+              "label": "Direct reads OFF"
+            }
+          ],
+          "help": "Default: ON on Windows servers, OFF elsewhere. Direct reads require filesystem support."
+        },
+        {
+          "field_id": "backup_flags",
+          "label": "Physical backup options",
+          "control": "multiselect",
+          "required": false,
+          "options": [
+            {
+              "value": "NO_TRIGGERS",
+              "label": "Disable database triggers"
+            }
+          ]
+        },
+        {
+          "field_id": "clean_history",
+          "label": "Clean backup history after backup",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "help": "Removes native backup-history records, not backup files. Older level/GUID lookup may no longer be possible; keep an independently verified restore chain."
+        },
+        {
+          "field_id": "history_keep_unit",
+          "label": "Keep backup history by",
+          "control": "select",
+          "required": true,
+          "default": "ROWS",
+          "options": [
+            {
+              "value": "ROWS",
+              "label": "Newest rows (timestamp cutoff)"
+            },
+            {
+              "value": "DAYS",
+              "label": "Calendar days including today"
+            }
+          ],
+          "help": "Pruning can remove level/GUID lookup records. Backup files are kept.",
+          "visible_when": {
+            "field": "clean_history",
+            "equals": true
+          }
+        },
+        {
+          "field_id": "history_keep_value",
+          "label": "History retention count",
+          "control": "number",
+          "required": true,
+          "default": 1,
+          "visible_when": {
+            "field": "clean_history",
+            "equals": true
+          }
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "restore_physical",
+      "resource_kind": "database",
+      "title": "Physical restore (nbackup)",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "backup_files",
+          "label": "Ordered backup files",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Ordered backup files",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "required": true,
+          "help": "New restore: full backup, then increments in order. In-place: increments only."
+        },
+        {
+          "field_id": "restore_database",
+          "label": "Restored database filename on the Firebird server",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "restore_flags",
+          "label": "Physical restore options",
+          "control": "multiselect",
+          "required": false,
+          "options": [
+            {
+              "value": "IN_PLACE",
+              "label": "Apply increments to an existing offline database"
+            },
+            {
+              "value": "SEQUENCE",
+              "label": "Preserve database GUID and replication counter"
+            }
+          ],
+          "help": "Default: new database GUID and replication counter reset to zero. In-place requires an offline destination and leaves it read-only; this form does not secure exclusive server-wide access."
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "validate_database",
+      "resource_kind": "database",
+      "title": "Validate database",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "include_table",
+          "label": "Include table regex",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "exclude_table",
+          "label": "Exclude table regex",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "include_index",
+          "label": "Include index regex",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "exclude_index",
+          "label": "Exclude index regex",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "lock_timeout",
+          "label": "Lock timeout in seconds",
+          "control": "number",
+          "required": false,
+          "default": 10
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "repair_database",
+      "resource_kind": "database",
+      "title": "Repair database (gfix)",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "repair_action",
+          "label": "Repair action",
+          "control": "select",
+          "required": true,
+          "default": "VALIDATE_DB",
+          "options": [
+            {
+              "value": "VALIDATE_DB",
+              "label": "Page validation (may update)"
+            },
+            {
+              "value": "MEND_DB",
+              "label": "Mend for backup (may discard damaged records)"
+            },
+            {
+              "value": "CORRUPTION_CHECK",
+              "label": "Full check, no update, ignore checksums (preset)"
+            },
+            {
+              "value": "REPAIR",
+              "label": "Mend for backup, ignore checksums (preset)"
+            },
+            {
+              "value": "KILL_SHADOWS",
+              "label": "Kill unavailable shadows"
+            },
+            {
+              "value": "ICU",
+              "label": "Update ICU dependencies"
+            },
+            {
+              "value": "UPGRADE_DB",
+              "label": "Upgrade database"
+            }
+          ]
+        },
+        {
+          "field_id": "repair_modifiers",
+          "label": "Native validation modifiers",
+          "control": "multiselect",
+          "required": false,
+          "options": [
+            {
+              "value": "FULL",
+              "label": "Full record-fragment validation"
+            },
+            {
+              "value": "CHECK_DB",
+              "label": "No-update validation"
+            },
+            {
+              "value": "IGNORE_CHECKSUM",
+              "label": "Ignore checksum errors"
+            }
+          ],
+          "help": "These modifiers only affect validation or mend. ODS upgrade rejects them; ICU and shadow cleanup do not apply them. Presets retain their stated modifiers; selecting additional modifiers does not remove preset flags. Mend implies full validation and does not guarantee data recovery. Preserve a recoverable backup before changing database structures."
+        },
+        {
+          "field_id": "parallel_workers",
+          "label": "ICU parallel workers requested",
+          "control": "number",
+          "required": false,
+          "help": "Only applies to the ICU action. Leave blank to use native defaults. Zero omits the native worker DPB setting; positive requests are limited by Firebird MaxParallelWorkers. This does not report how many workers actually ran."
+        },
+        {
+          "field_id": "no_linger",
+          "label": "Do not linger after this maintenance task",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "help": "Requests native gfix -nolinger for this attachment. Does not permanently change the database LINGER setting or disconnect other active sessions. Effects can occur before a later native error."
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "sweep_database",
+      "resource_kind": "database",
+      "title": "Sweep database",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "parallel_workers",
+          "label": "Parallel workers",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "database_statistics",
+      "resource_kind": "database",
+      "title": "Database statistics (gstat)",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "statistics_flags",
+          "label": "Statistics sections",
+          "control": "multiselect",
+          "required": true,
+          "default": [
+            "HDR_PAGES"
+          ],
+          "options": [
+            {
+              "value": "DATA_PAGES",
+              "label": "Data pages"
+            },
+            {
+              "value": "DB_LOG",
+              "label": "Database log"
+            },
+            {
+              "value": "HDR_PAGES",
+              "label": "Header pages"
+            },
+            {
+              "value": "IDX_PAGES",
+              "label": "Index pages"
+            },
+            {
+              "value": "SYS_RELATIONS",
+              "label": "System relations"
+            },
+            {
+              "value": "RECORD_VERSIONS",
+              "label": "Record versions"
+            },
+            {
+              "value": "NOCREATION",
+              "label": "Suppress creation metadata"
+            },
+            {
+              "value": "ENCRYPTION",
+              "label": "Encryption statistics"
+            }
+          ]
+        },
+        {
+          "field_id": "tables",
+          "label": "Restrict to tables (JSON array)",
+          "control": "keyvalue",
+          "required": false
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true,
+      "notes": "typed_from_json: database.database_statistics.tables"
+    },
+    {
+      "operation_id": "shutdown_database",
+      "resource_kind": "database",
+      "title": "Shut down database",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "mode",
+          "label": "Shutdown mode",
+          "control": "select",
+          "required": true,
+          "default": "FULL",
+          "options": [
+            {
+              "value": "MULTI",
+              "label": "Multi-user maintenance"
+            },
+            {
+              "value": "SINGLE",
+              "label": "Single-user maintenance"
+            },
+            {
+              "value": "FULL",
+              "label": "Full shutdown"
+            }
+          ]
+        },
+        {
+          "field_id": "method",
+          "label": "Shutdown method",
+          "control": "select",
+          "required": true,
+          "default": "DENY_ATTACHMENTS",
+          "options": [
+            {
+              "value": "FORCED",
+              "label": "Force shutdown"
+            },
+            {
+              "value": "DENY_ATTACHMENTS",
+              "label": "Deny new attachments"
+            },
+            {
+              "value": "DENY_TRANSACTIONS",
+              "label": "Deny new transactions"
+            }
+          ]
+        },
+        {
+          "field_id": "shutdown_timeout",
+          "label": "Timeout in seconds",
+          "control": "number",
+          "required": true,
+          "default": 0,
+          "help": "Firebird accepts 0 through 32767 seconds. Attachment/transaction denial can fail when existing work does not finish before the timeout. Forced shutdown terminates affected attachments and pending work."
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "bring_online",
+      "resource_kind": "database",
+      "title": "Bring database online",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "mode",
+          "label": "Online mode",
+          "control": "select",
+          "required": true,
+          "default": "NORMAL",
+          "options": [
+            {
+              "value": "NORMAL",
+              "label": "Normal"
+            },
+            {
+              "value": "MULTI",
+              "label": "Multi-user"
+            },
+            {
+              "value": "SINGLE",
+              "label": "Single-user"
+            }
+          ]
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "set_page_cache_size",
+      "resource_kind": "database",
+      "title": "Set database page cache size",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "page_buffers",
+          "label": "Default page buffers",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "set_sweep_interval",
+      "resource_kind": "database",
+      "title": "Set automatic sweep interval",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "sweep_interval",
+          "label": "Sweep interval (transactions; 0 disables automatic sweep)",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "set_space_reservation",
+      "resource_kind": "database",
+      "title": "Set page space reservation",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "mode",
+          "label": "Page space policy",
+          "control": "select",
+          "required": true,
+          "default": "RESERVE",
+          "options": [
+            {
+              "value": "RESERVE",
+              "label": "Reserve space for record versions"
+            },
+            {
+              "value": "USE_FULL",
+              "label": "Use full data pages"
+            }
+          ]
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "set_write_mode",
+      "resource_kind": "database",
+      "title": "Set database write mode",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "mode",
+          "label": "Write mode",
+          "control": "select",
+          "required": true,
+          "default": "SYNC",
+          "options": [
+            {
+              "value": "SYNC",
+              "label": "Synchronous forced writes"
+            },
+            {
+              "value": "ASYNC",
+              "label": "Asynchronous writes"
+            }
+          ]
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "set_access_mode",
+      "resource_kind": "database",
+      "title": "Set database access mode",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "mode",
+          "label": "Access mode",
+          "control": "select",
+          "required": true,
+          "default": "READ_WRITE",
+          "options": [
+            {
+              "value": "READ_WRITE",
+              "label": "Read/write"
+            },
+            {
+              "value": "READ_ONLY",
+              "label": "Read only"
+            }
+          ]
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "set_sql_dialect",
+      "resource_kind": "database",
+      "title": "Set database SQL dialect",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "sql_dialect",
+          "label": "Database SQL dialect",
+          "control": "select",
+          "required": true,
+          "default": "3",
+          "options": [
+            {
+              "value": "1",
+              "label": "Dialect 1"
+            },
+            {
+              "value": "3",
+              "label": "Dialect 3"
+            }
+          ]
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "activate_shadow",
+      "resource_kind": "database",
+      "title": "Activate a database shadow",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "shadow_filename",
+          "label": "First shadow filename",
+          "control": "text",
+          "required": true,
+          "help": "This promotes the first shadow file into an independent database in place. Stop or isolate the original database before recovery; do not operate both copies as the same database. The target must be an active shadow, not the original database or a secondary shadow file. Native header verification is performed immediately before activation, but cannot prevent another server administrator replacing a file. Coordinate exclusive control of the recovery files. Firebird 5.0.4 may activate a shadow before rejecting insufficient utility privileges. An authorization error is not proof that the shadow is unchanged: inspect its native header before any further recovery attempt."
+        },
+        {
+          "field_id": "original_isolated",
+          "label": "The original database is stopped or isolated",
+          "control": "boolean",
+          "required": true,
+          "default": false,
+          "help": "This promotes the first shadow file into an independent database in place. Stop or isolate the original database before recovery; do not operate both copies as the same database. The target must be an active shadow, not the original database or a secondary shadow file. Native header verification is performed immediately before activation, but cannot prevent another server administrator replacing a file. Coordinate exclusive control of the recovery files. Firebird 5.0.4 may activate a shadow before rejecting insufficient utility privileges. An authorization error is not proof that the shadow is unchanged: inspect its native header before any further recovery attempt."
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false,
+          "help": "Optional native service role. Whitespace in role names cannot be safely transported by Firebird 5.0.4 Services API utility dispatch."
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "remove_linger",
+      "resource_kind": "database",
+      "title": "Remove database linger for the next attachment",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "fixup_database",
+      "resource_kind": "database",
+      "title": "Fix up database after a filesystem copy",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "fixup_flags",
+          "label": "Fixup options",
+          "control": "multiselect",
+          "required": false,
+          "options": [
+            {
+              "value": "SEQUENCE",
+              "label": "Preserve database GUID and replication counter"
+            }
+          ],
+          "help": "Default: new database GUID and replication counter reset to zero. The copied database must be offline; this form does not secure exclusive server-wide access."
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "set_replica_mode",
+      "resource_kind": "database",
+      "title": "Set database replica mode",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "mode",
+          "label": "Replica mode",
+          "control": "select",
+          "required": true,
+          "default": "NONE",
+          "options": [
+            {
+              "value": "NONE",
+              "label": "Not a replica"
+            },
+            {
+              "value": "READ_ONLY",
+              "label": "Read-only replica"
+            },
+            {
+              "value": "READ_WRITE",
+              "label": "Read/write replica"
+            }
+          ]
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "upgrade_database",
+      "resource_kind": "database",
+      "title": "Upgrade database ODS",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "role",
+          "label": "SQL role",
+          "control": "text",
+          "required": false,
+          "help": "Leave empty to inherit the connection role. This override applies only to this service task; native Firebird determines upgrade privileges."
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "commit_limbo_local",
+      "resource_kind": "database",
+      "title": "Commit a local prepared transaction",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "transaction_id",
+          "label": "Local transaction ID",
+          "control": "text",
+          "required": true,
+          "help": "Recovery changes only the selected database participant. It does not establish a global distributed outcome. Review the coordinator decision and every participating database before choosing commit or rollback. Stored participant paths are historical metadata, not verified endpoints or permission to reuse credentials. A lost response is not proof of rollback; never automatically replay a recovery decision."
+        },
+        {
+          "field_id": "database_confirmation",
+          "label": "Confirm database filename or alias",
+          "control": "text",
+          "required": true,
+          "help": "Repeat the exact selected database target."
+        },
+        {
+          "field_id": "coordinator_reviewed",
+          "label": "Coordinator and participant states reviewed",
+          "control": "boolean",
+          "required": true,
+          "default": false,
+          "help": "Recovery changes only the selected database participant. It does not establish a global distributed outcome. Review the coordinator decision and every participating database before choosing commit or rollback. Stored participant paths are historical metadata, not verified endpoints or permission to reuse credentials. A lost response is not proof of rollback; never automatically replay a recovery decision."
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role for this attachment",
+          "control": "text",
+          "required": false,
+          "help": "Blank uses the connection profile role. This does not change the saved profile."
+        }
+      ]
+    },
+    {
+      "operation_id": "inspect_limbo",
+      "resource_kind": "database",
+      "title": "Inspect prepared transactions",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "role",
+          "label": "SQL role for this attachment",
+          "control": "text",
+          "required": false,
+          "help": "Blank uses the connection profile role. This does not change the saved profile."
+        }
+      ]
+    },
+    {
+      "operation_id": "rollback_limbo_local",
+      "resource_kind": "database",
+      "title": "Roll back a local prepared transaction",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "transaction_id",
+          "label": "Local transaction ID",
+          "control": "text",
+          "required": true,
+          "help": "Recovery changes only the selected database participant. It does not establish a global distributed outcome. Review the coordinator decision and every participating database before choosing commit or rollback. Stored participant paths are historical metadata, not verified endpoints or permission to reuse credentials. A lost response is not proof of rollback; never automatically replay a recovery decision."
+        },
+        {
+          "field_id": "database_confirmation",
+          "label": "Confirm database filename or alias",
+          "control": "text",
+          "required": true,
+          "help": "Repeat the exact selected database target."
+        },
+        {
+          "field_id": "coordinator_reviewed",
+          "label": "Coordinator and participant states reviewed",
+          "control": "boolean",
+          "required": true,
+          "default": false,
+          "help": "Recovery changes only the selected database participant. It does not establish a global distributed outcome. Review the coordinator decision and every participating database before choosing commit or rollback. Stored participant paths are historical metadata, not verified endpoints or permission to reuse credentials. A lost response is not proof of rollback; never automatically replay a recovery decision."
+        },
+        {
+          "field_id": "role",
+          "label": "SQL role for this attachment",
+          "control": "text",
+          "required": false,
+          "help": "Blank uses the connection profile role. This does not change the saved profile."
+        }
+      ]
+    },
+    {
+      "operation_id": "add_difference_file",
+      "resource_kind": "database",
+      "title": "Define backup difference file",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "filename",
+          "label": "Difference filename",
+          "control": "text",
+          "required": true,
+          "help": "A server path, not a browser path. Firebird rejects a second definition until the existing definition is removed."
+        }
+      ]
+    },
+    {
+      "operation_id": "add_files",
+      "resource_kind": "database",
+      "title": "Add database files",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "files",
+          "label": "Additional database files",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "filename",
+              "label": "Server filename",
+              "control": "text",
+              "required": true,
+              "help": "The path is literal, including whitespace."
+            },
+            {
+              "field_id": "start",
+              "label": "Starting page",
+              "control": "number",
+              "required": false,
+              "help": "Pages, not bytes. Empty leaves the native default."
+            },
+            {
+              "field_id": "length",
+              "label": "File length",
+              "control": "number",
+              "required": false,
+              "help": "Pages, not bytes. Empty leaves the native default."
+            }
+          ],
+          "required": true,
+          "help": "Ordered files on the engine host. Page positions are resolved by Firebird against the existing allocation. There is no native DROP FILE or rename-file task."
+        }
+      ]
+    },
+    {
+      "operation_id": "begin_backup",
+      "resource_kind": "database",
+      "title": "Begin physical backup mode",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "confirm_difference_overwrite",
+          "label": "I confirm the difference-file path may be overwritten",
+          "control": "boolean",
+          "required": true,
+          "default": false,
+          "help": "Use only a dedicated difference-file path. This is not a backup destination and must not identify another database or user file."
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "drop_difference_file",
+      "resource_kind": "database",
+      "title": "Remove backup difference-file definition",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "end_backup",
+      "resource_kind": "database",
+      "title": "End physical backup mode",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "reorder_columns",
+      "resource_kind": "table",
+      "title": "Reorder columns",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "column_order",
+          "label": "Column order",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Column order",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "required": true,
+          "help": "Move existing columns into the desired order. Preview shows native POSITION statements."
+        }
+      ]
+    },
+    {
+      "operation_id": "set_current",
+      "resource_kind": "sequence",
+      "title": "Set current generator value",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "current",
+          "label": "Current generator value",
+          "control": "text",
+          "required": true,
+          "help": "SET GENERATOR sets the current value, not the next value. Signed 64-bit integer. Other attachments may consume values concurrently. Ordinary consumption of committed sequences is not reclaimed by row rollback. Pending sequence DDL can use transaction-local values. Current-value assignment and next-value restart are different native operations; commit the task before treating restarted values as globally published."
+        }
+      ]
+    },
+    {
+      "operation_id": "create_body",
+      "resource_kind": "package",
+      "title": "Create package body",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "body",
+          "label": "Package body",
+          "control": "code",
+          "language": "sql",
+          "required": true,
+          "help": "Enter the complete BEGIN ... END package body, including any private declarations and routine implementations. This changes the package body, not its public header. Do not include CREATE, AS or SET TERM."
+        }
+      ]
+    },
+    {
+      "operation_id": "drop_body",
+      "resource_kind": "package",
+      "title": "Drop package body",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "replace_body",
+      "resource_kind": "package",
+      "title": "Recreate package body",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "body",
+          "label": "Package body",
+          "control": "code",
+          "language": "sql",
+          "required": true,
+          "help": "Enter the complete BEGIN ... END package body, including any private declarations and routine implementations. This changes the package body, not its public header. Do not include CREATE, AS or SET TERM."
+        }
+      ]
+    },
+    {
+      "operation_id": "configure_admin_mapping",
+      "resource_kind": "role",
+      "title": "Configure Windows administrator mapping",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "mapping_action",
+          "label": "Windows administrator mapping",
+          "control": "select",
+          "required": true,
+          "default": "SET",
+          "options": [
+            {
+              "value": "SET",
+              "label": "Set"
+            },
+            {
+              "value": "DROP",
+              "label": "Drop"
+            }
+          ],
+          "help": "RDB$ADMIN only. SET creates or replaces the reserved AutoAdminImplementationMapping using Win_Sspi in this database; DROP removes that mapping. This does not enable the authentication plugin or verify Windows login. No global mapping is changed."
+        }
+      ]
+    }
+  ]
+}

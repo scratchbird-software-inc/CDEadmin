@@ -20,16 +20,10 @@ from tools.cdeadmin_mysql_maintenance_ui_gate import (
 
 class MySQLMaintenanceUIGateTests(unittest.TestCase):
 
-    def test_every_case_has_a_provider_owned_form(self):
-        operations = _operations()
+    def test_retired_legacy_gate_cannot_claim_the_empty_fallback_is_a_form(self):
+        with self.assertRaisesRegex(RuntimeError, 'Decision12'):
+            _operations()
         self.assertEqual(9, len(CASES))
-        self.assertEqual(
-            {case['operation_id'] for case in CASES},
-            set(operations).intersection({
-                'analyze_tables', 'check_tables', 'optimize_tables',
-                'repair_tables', 'checksum_tables',
-            }),
-        )
 
     def test_using_data_uses_canonical_server_document(self):
         template = next(

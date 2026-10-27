@@ -49,7 +49,7 @@ def test_host_policy_admission_is_file_scoped(tmp_path):
     endpoints = SimpleNamespace(workspace=Mock(return_value=(
         context, {'route': route}, None)))
     shared = SimpleNamespace(endpoints=endpoints, ownership=Mock(), keys=Mock())
-    app = SimpleNamespace(config={'CDEADMIN_MONITORING_PROCESS_MODE': 'single',
+    app = SimpleNamespace(extensions={}, config={'CDEADMIN_MONITORING_PROCESS_MODE': 'single',
         'CDEADMIN_MONITORING_LOCK_PATH': '/tmp/unused'},
         app_context=lambda: nullcontext())
     host = SQLiteMonitoringHost(app, shared)

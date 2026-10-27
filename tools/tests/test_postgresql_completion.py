@@ -139,3 +139,68 @@ def test_search_path_update_preserves_raw_names_and_schema_literals():
     assert completion.search_path == [name, 'public']
     literal = completion.escape_schema(completion.escape_name(name))
     assert parse_sql('SELECT '+literal)[0].stmt.targetList[0].val.val.sval == name
+
+
+@pytest.mark.parametrize('context,word,using,expected', [
+    (None, '', False, {'id','ctid'}), (None, '*', False, {'id'}),
+    ('insert', '', False, {'id'}), ('update', '', False, {'id'}),
+    ('ddl', '', False, {'id'}), (None, '', True, {'id'}),
+])
+def test_system_columns_are_read_expressions_not_star_or_target_columns(context, word, using, expected):
+    from collections import OrderedDict
+    from types import SimpleNamespace
+    from pgadmin.utils.sqlautocomplete.autocomplete import SQLAutoComplete
+    from pgadmin.utils.sqlautocomplete.parseutils.meta import ColumnMetadata
+    from pgadmin.utils.sqlautocomplete.parseutils.tables import TableReference
+    from pgadmin.utils.sqlautocomplete.sqlcompletion import Column
+    connection = Mock(); connection.connected.return_value = False
+    completion = SQLAutoComplete(conn=connection, manager=SimpleNamespace(version=180003))
+    completion.search_path = ['public']
+    completion.fetch_schema_objects = Mock()
+    completion.dbmetadata['tables'] = {'public': {'t': OrderedDict([
+        ('id',ColumnMetadata('id','integer')), ('ctid',ColumnMetadata('ctid','tid',system_column=True))])}}
+    refs = (TableReference(None,'t',None,False),)
+    if using: refs += (TableReference(None,'t','other',False),)
+    matches = completion.get_column_matches(Column(table_refs=refs,context=context,require_last_table=using),word)
+    if word == '*':
+        assert matches[0].completion.text == 'id'
+    else:
+        assert {match.completion.text for match in matches} == expected
+
+
+def test_native_completion_returns_exact_insertion_and_utf16_replacement_range():
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from pgadmin.utils.sqlautocomplete.autocomplete import SQLAutoComplete,Match
+    from pgadmin.utils.sqlautocomplete.completion import Completion
+    from pgadmin.utils.sqlautocomplete.sqlcompletion import Keyword
+    connection = Mock(); connection.connected.return_value = False
+    completion = SQLAutoComplete(conn=connection, manager=SimpleNamespace(version=180003))
+    completion.get_word_before_cursor = Mock(return_value='"Mi')
+    completion.suggestion_matchers = {Keyword: lambda *_: [Match(Completion('"Mixed"',-3,display='Mixed',display_meta='column'),(1,))]}
+    source = 'SELECT 😀."Mi'
+    with patch('pgadmin.utils.sqlautocomplete.autocomplete.suggest_type',return_value=(Keyword(),)):
+        result = completion.get_completions(source,source)
+    assert result == {'Mixed': {'object_type':'column','insert_text':'"Mixed"','replacement_start':10}}
+
+
+def test_system_metadata_flag_preserves_legacy_column_tuple_callers():
+    from collections import OrderedDict
+    from pgadmin.utils.sqlautocomplete.autocomplete import SQLAutoComplete
+    completion = object.__new__(SQLAutoComplete)
+    completion.dbmetadata = {'tables': {'public': {'t': OrderedDict()}}}
+    completion.escaped_names = lambda values: values
+    completion.all_completions = set()
+    completion.extend_columns([('public','t','id','int',False,None),
+                               ('public','t','ctid','tid',False,None,True)],'tables')
+    assert not completion.dbmetadata['tables']['public']['t']['id'].system_column
+    assert completion.dbmetadata['tables']['public']['t']['ctid'].system_column
+
+
+def test_fuzzy_case_fold_does_not_change_the_native_replacement_length():
+    from types import SimpleNamespace
+    from pgadmin.utils.sqlautocomplete.autocomplete import SQLAutoComplete
+    connection = Mock(); connection.connected.return_value = False
+    completion = SQLAutoComplete(conn=connection, manager=SimpleNamespace(version=180003))
+    matches = completion.find_matches('İ',['İnfo'],meta='column')
+    assert matches and matches[0].completion.start_position == -1

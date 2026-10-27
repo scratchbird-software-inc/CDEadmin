@@ -31,6 +31,7 @@ ARG INSTALL_DEMO_REQUIREMENTS=0
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential \
+        git \
         pkg-config \
         libpq-dev \
         libkrb5-dev \
@@ -46,17 +47,21 @@ RUN apt-get update \
 WORKDIR /cdeadmin
 
 COPY requirements.txt /cdeadmin/requirements.txt
+COPY tools/cdeadmin_build_postgresql_parser.py tools/install_postgresql_parser.py /build/postgresql-parser/tools/
+COPY tools/driver_patches/pglast-8.5-native-options.patch /build/postgresql-parser/tools/driver_patches/
 COPY tools/reference_engine_demos/requirements.txt \
     /cdeadmin/tools/reference_engine_demos/requirements.txt
 
 RUN python3 -m venv /cdeadmin/.venv \
     && /cdeadmin/.venv/bin/pip install --no-cache-dir -U pip \
     && /cdeadmin/.venv/bin/pip install --no-cache-dir -r /cdeadmin/requirements.txt \
+    && /cdeadmin/.venv/bin/python -B /build/postgresql-parser/tools/install_postgresql_parser.py --output /tmp/postgresql-parser \
     && if [ "${INSTALL_DEMO_REQUIREMENTS}" = "1" ]; then \
          /cdeadmin/.venv/bin/pip install --no-cache-dir \
            -r /cdeadmin/tools/reference_engine_demos/requirements.txt; \
        fi \
-    && /cdeadmin/.venv/bin/pip check
+    && /cdeadmin/.venv/bin/pip check \
+    && rm -rf /tmp/postgresql-parser /tmp/postgresql-parser-downloads /build/postgresql-parser
 
 COPY --from=frontend /cdeadmin/web /cdeadmin/web
 COPY --from=frontend /cdeadmin/web/pgadmin/static/js/generated /cdeadmin/frontend-generated

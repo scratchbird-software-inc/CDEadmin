@@ -10,6 +10,7 @@
 import _ from 'lodash';
 import gettext from 'sources/gettext';
 import pgAdmin from 'sources/pgadmin';
+import {familyEditorContextActions, tryOpenFamilyEditor} from './ProviderObjectEditor';
 
 const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
@@ -17,6 +18,7 @@ const SAFE_HANDLERS = new Set([
   'forget_endpoint', 'open_workspace', 'open_firebird_fleet', 'open_mysql_fleet', 'open_mysql_dashboard_editor', 'open_postgresql_fleet', 'open_postgresql_dashboard_editor', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
   'open_mariadb_fleet', 'open_mariadb_dashboard_editor', 'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
   'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
+  'open_mysql_host', 'open_mysql_routers', 'open_mysql_physical', 'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mysql_instance_backups', 'open_mysql_instance_restores', 'open_mysql_topologies', 'open_mysql_sandboxes', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
   'register_endpoint', 'verify_endpoint', 'disconnect_endpoint',
 ]);
 
@@ -90,6 +92,32 @@ function dispatch(action, args, context) {
   const serverNode = pgAdmin.Browser.Nodes.server;
   const endpoint = serverSelection(item);
   switch(action.handler) {
+  case 'open_mysql_host':
+    return serverNode.callbacks.open_mysql_host.call(serverNode,{item:endpoint.item});
+  case 'open_mysql_routers':
+    return serverNode.callbacks.open_mysql_routers.call(serverNode,{item:endpoint.item});
+  case 'open_mysql_physical':
+    return serverNode.callbacks.open_mysql_physical.call(serverNode,{item:endpoint.item});
+  case 'open_mysql_local_clone':
+    return serverNode.callbacks.open_mysql_local_clone.call(serverNode,{item:endpoint.item});
+  case 'open_mysql_raw_binlogs':
+    return serverNode.callbacks.open_mysql_raw_binlogs.call(serverNode,{item:endpoint.item});
+  case 'open_mysql_binlog_replay':
+    return serverNode.callbacks.open_mysql_binlog_replay.call(serverNode,{item:endpoint.item});
+  case 'open_mariadb_binlog_replay':
+    return serverNode.callbacks.open_mariadb_binlog_replay.call(serverNode,{item:endpoint.item});
+  case 'open_mysql_binlogs':
+    return serverNode.callbacks.open_mysql_binlogs.call(serverNode,{item:endpoint.item});
+  case 'open_mysql_instance_backups':
+    return serverNode.callbacks.open_mysql_instance_backups.call(serverNode,{item:endpoint.item});
+  case 'open_mysql_instance_restores':
+    return serverNode.callbacks.open_mysql_instance_restores.call(serverNode,{item:endpoint.item});
+  case 'open_mysql_sandboxes':
+    return serverNode.callbacks.open_mysql_sandboxes.call(serverNode,{item:endpoint.item});
+  case 'open_mysql_topologies':
+    return serverNode.callbacks.open_mysql_topologies.call(serverNode,{item:endpoint.item});
+  case 'open_mariadb_binlogs':
+    return serverNode.callbacks.open_mariadb_binlogs.call(serverNode,{item:endpoint.item});
   case 'open_firebird_dashboard_editor':
     return import('sources/Dialogs').then(({showFirebirdDashboardEditor}) =>
       showFirebirdDashboardEditor(endpoint.data ? Number(endpoint.data._id ?? endpoint.data.id) : undefined,
@@ -221,7 +249,11 @@ function executeProviderAction(menu, itemData, item) {
   );
 }
 
-export function openProviderObject(itemData, item) {
+export async function openProviderObject(itemData, item) {
+  // Descriptor-driven family editor first (design phase 2); the legacy
+  // provider workspace remains the fallback until every kind has an editor.
+  const opened = await tryOpenFamilyEditor(itemData, item);
+  if (opened) return opened;
   const menu = providerContextMenuItems(itemData, item)?.find(
     (candidate) => candidate.commandId.endsWith('.browse')
   );
@@ -236,7 +268,18 @@ export function providerTreeContextActions(itemData, item=null) {
   const menus = providerContextMenuItems(itemData, item);
   if(menus === null) return null;
   const grouped = new Map();
+  // Descriptor-driven entries (family editor, create, tier 2/3 operations)
+  // merge into the same categories; legacy entries with the same operation
+  // id yield to them.
+  const descriptorEntries = familyEditorContextActions(itemData, item);
+  const descriptorOperationIds = new Set(descriptorEntries.map((entry) => entry.id.replace(/^descriptor-op-/, '')));
+  descriptorEntries.forEach((entry) => {
+    if(!grouped.has(entry.category)) grouped.set(entry.category, []);
+    grouped.get(entry.category).push({providerId: itemData?.cde_provider_id || '', objectTypes: [itemData?._type || 'object'],
+      ...entry});
+  });
   menus.forEach((menu)=>{
+    if(descriptorOperationIds.has(String(menu.commandId).split('.').at(-1))) return;
     const category = menu.category || 'object';
     if(!grouped.has(category)) grouped.set(category, []);
     grouped.get(category).push({

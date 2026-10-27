@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
+import NativeDataImport from './NativeDataImport';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
 import FirebirdCatalogDesigner from './FirebirdCatalogDesigner';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
@@ -96,6 +97,7 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
   };
   return <Box sx={{...compactFormSx, p: 1, overflow: 'auto', flex: 1}}>
     <FormReference formKey="duckdb-catalog-ddn" />
+    <NativeDataImport post={post} databaseTargetId={databaseTargetId} engine="duckdb" objects={result?.objects} />
     {error && <Alert severity="error">{error}</Alert>}
     <Alert severity="info">DuckDB metadata is captured on a separate native connection. Temporary objects and uncommitted work on other connections are outside this view. Comparison is documentary.</Alert>
     <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>

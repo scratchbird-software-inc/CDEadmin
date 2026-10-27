@@ -7,6 +7,28 @@ const snapshot = {format: 'ddn-workspace@1', entry: 'catalog.ddn', view: 'invent
 const document = {snapshot, views: [{id: 'inventory_1', label: 'Inventory'}], provenance: {warnings: ['No password hashes']}};
 
 describe('PostgreSQL server DDN capture', () => {
+  it('inspects and downloads server metadata without selecting databases, preserving denied sections', async () => {
+    const post = jest.fn().mockResolvedValue({document, databases: [], coverage: {state:'partial', unavailable_sections:['authentication-rules']},
+      resources:[{resource_id:'postgresql:pg_roles:42',resource_kind:'role',display_name:'Native reader',display_path:['1','roles','Native reader'],
+        native:{native_identity:'42',catalog_row:{rolcanlogin:true}}}]});
+    render(<Component post={post} />);
+    fireEvent.click(screen.getByRole('button', {name:'Load server inventory'}));
+    fireEvent.click(await screen.findByRole('button', {name:'Inspect PostgreSQL role Native reader'}));
+    expect(screen.getByLabelText('PostgreSQL native server object properties')).toHaveTextContent('rolcanlogin');
+    expect(screen.getByText('Unavailable native sections: authentication-rules')).toBeInTheDocument();
+    expect(screen.getByText('Server catalog captured.')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name:'Download server DDN bundle'})).toBeEnabled();
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith({action:'postgresql_server_catalog',request:{}});
+  });
+  it('discards the previous server inventory when the endpoint changes', async () => {
+    const post = jest.fn().mockResolvedValue({databases:[], resources:[{resource_id:'old', resource_kind:'role', display_name:'Previous private role', display_path:['1','roles','Previous private role'], native:{}}]});
+    const mounted = render(<Component post={post} />);
+    fireEvent.click(screen.getByRole('button', {name:'Load server inventory'}));
+    await screen.findByText('Previous private role');
+    mounted.rerender(<Component post={jest.fn()} />);
+    expect(screen.queryByText('Previous private role')).not.toBeInTheDocument();
+  });
   it('requires explicit selection, disables inaccessible databases and sends exact native OIDs', async () => {
     const post = jest.fn().mockResolvedValue({databases: [
       {oid: 42, name: ' chosen ', allows_connections: true, connect_privilege: true, template: false},

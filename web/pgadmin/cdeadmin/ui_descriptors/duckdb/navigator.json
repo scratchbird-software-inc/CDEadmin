@@ -1,0 +1,92 @@
+{
+  "schema": "cdeadmin.ui-navigator.v1",
+  "engine": "duckdb",
+  "sort": "alphabetical",
+  "groups": [
+    {
+      "group_id": "namespaces",
+      "title": "Databases and schemas",
+      "kinds": [
+        "database",
+        "attached-database",
+        "schema"
+      ],
+      "order": 1
+    },
+    {
+      "group_id": "analytics",
+      "title": "Analytics",
+      "kinds": [
+        "table",
+        "column",
+        "view",
+        "function",
+        "materialization"
+      ],
+      "order": 2
+    },
+    {
+      "group_id": "relations",
+      "title": "Tables and views",
+      "kinds": [
+        "index",
+        "constraint",
+        "sequence",
+        "type"
+      ],
+      "order": 3
+    },
+    {
+      "group_id": "programmable",
+      "title": "Routines and triggers",
+      "kinds": [
+        "macro"
+      ],
+      "order": 4
+    },
+    {
+      "group_id": "security",
+      "title": "Security",
+      "kinds": [
+        "secret"
+      ],
+      "order": 5
+    },
+    {
+      "group_id": "operations",
+      "title": "Administration",
+      "kinds": [
+        "extension"
+      ],
+      "order": 6
+    }
+  ],
+  "resource_children": {
+    "table": [
+      "column",
+      "index",
+      "trigger",
+      "constraint"
+    ],
+    "view": [
+      "column"
+    ]
+  },
+  "kind_icons": {
+    "database": "object.database",
+    "attached-database": "object.attached-database",
+    "schema": "object.schema",
+    "table": "object.table",
+    "column": "object.column",
+    "index": "object.index",
+    "constraint": "object.constraint",
+    "view": "object.view",
+    "sequence": "object.sequence",
+    "type": "object.type",
+    "macro": "object.macro",
+    "function": "object.function",
+    "secret": "object.secret",
+    "extension": "object.extension",
+    "materialization": "object.materialization"
+  }
+}

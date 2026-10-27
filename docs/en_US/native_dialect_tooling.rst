@@ -4,6 +4,9 @@ Native language and script tooling contract
 Status and scope
 ----------------
 
+The six required SQL engines also follow :doc:`six_engine_completion`, which
+records the current editor gaps and full product acceptance obligations.
+
 This contract defines required ScratchRobin language-tool behavior. It does not
 certify current full-language implementation. Engine inventories, keyword lists,
 wire compatibility, successful native execution and individual administration
@@ -369,6 +372,45 @@ Plans are bounded to 32, each source to 2 MiB and each script to 1000 statements
 They live in the owning application process, not durable recovery storage. A
 worker restart or loss of the owning browser context requires native outcome
 reconciliation; the application must not replay source automatically. HTTP retry
-safety is scoped to a retained plan in that process. Parameterized script batches,
-full native grammar validators, and additional client-language adapters require
-further provider-specific work; they are not implied by lexical support.
+safety is scoped to a retained plan in that process. Parameterized script batches
+and additional client-language adapters require further provider-specific work;
+they are not implied by lexical support.
+
+Six-engine native editor adapters
+---------------------------------
+
+MySQL/MariaDB use native preparation without executing the submitted statement.
+Firebird uses native DSQL/PSQL preparation, the selected statement dialect and
+its separate native script executor. DuckDB uses its pinned native parser on
+the original retained session, including that instance's parser configuration;
+SQLite uses native compilation and reports unresolved binding errors honestly.
+SQLite compilation composes the connection's existing authorizer and suppresses
+PRAGMA preparation through native ``SQLITE_IGNORE``. PRAGMA syntax is parsed,
+but its settings and VFS callbacks are not evaluated. This matters because some
+PRAGMAs change settings during preparation even under ``EXPLAIN``. The original
+authorization policy is restored; unconfirmed cleanup blocks session reuse.
+PostgreSQL uses a pinned offline SQL/PL/pgSQL parser with observed native string
+settings. Provider tooling metadata identifies these stronger adapters instead
+of describing them as the lexical fallback. A native preparation failure caused
+by catalog context or privileges is not reported as confirmed syntax success.
+
+PostgreSQL native bootstrap builds pglast 8.5 with parse-options revision 2.
+The build verifies both upstream archive hashes and the exact libpg_query
+submodule revision, then verifies overlapping source files before restoring
+headers/build files omitted from the upstream source archive. Routine-body
+settings are separate from outer SQL settings. Its PostgreSQL 18.6 parser and
+the target PostgreSQL 18.3 server remain distinct qualification identities.
+Native Windows/macOS setup and Docker builds use this dependency build.
+
+For an existing environment installed directly from requirements, run its Python
+with ``-B tools/install_postgresql_parser.py --output <fresh-external-directory>``.
+Use a fresh build directory outside the repository. The installer preserves
+source/build/install receipts there; it does not start a database server. A
+parser without the qualified options patch refuses nonstandard string-mode
+checking instead of assuming standard quoting.
+
+The shared editor uses the selected engine's formatter, protects native tokens,
+and checks the formatted result before replacing source. Incremental diagnostics
+are opt-in through **Check while typing**. Source, connection and execution-scope
+changes invalidate asynchronous replies. Positioned errors retain approximate
+native ranges when the engine does not supply an exact character position.

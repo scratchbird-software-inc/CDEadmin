@@ -1,0 +1,417 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "form.schema.json",
+  "title": "Engine form for one object family",
+  "type": "object",
+  "required": [
+    "schema",
+    "engine",
+    "family",
+    "resource_kinds",
+    "status",
+    "fields"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "cdeadmin.ui-form.v1"
+    },
+    "engine": {
+      "type": "string"
+    },
+    "family": {
+      "type": "string"
+    },
+    "resource_kinds": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "description": "provider resource_kind values this form edits"
+    },
+    "variant": {
+      "type": "string",
+      "description": "family variant this form covers, e.g. materialized, package, scheduled"
+    },
+    "form_reference": {
+      "type": "string",
+      "pattern": "^SR-F-[0-9]{6}$",
+      "description": "stable reference from formReferences.json; allocate, never reuse"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "draft",
+        "complete"
+      ],
+      "description": "pending = skeleton only; draft = fields listed, not yet wired; complete = plan/validate/apply verified"
+    },
+    "engine_tab_title": {
+      "type": "string",
+      "description": "Label of the Engine tab, e.g. MySQL"
+    },
+    "omitted_tabs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "tab",
+          "reason"
+        ],
+        "properties": {
+          "tab": {
+            "enum": [
+              "General",
+              "Definition",
+              "Columns",
+              "Constraints",
+              "Indexes",
+              "Triggers",
+              "Parameters",
+              "Partitions",
+              "Options",
+              "Engine",
+              "Security",
+              "Dependencies",
+              "Statistics",
+              "Data",
+              "SQL",
+              "Membership",
+              "Privileges",
+              "Connection",
+              "Authentication",
+              "SSL/TLS",
+              "Advanced",
+              "Tags"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Canonical tabs this engine omits because the concept does not exist; each needs a reason"
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "concept",
+          "reason"
+        ],
+        "properties": {
+          "concept": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "tracking": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Native concepts the engine has that the provider does not expose yet. Recorded, never faked."
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/field"
+      }
+    },
+    "notes": {
+      "type": "string"
+    },
+    "record_children": {
+      "type": "object",
+      "description": "Pre-fill a grid field from child resources of the inspected object (engines whose catalog lists columns/indexes as separate resources): {field_id: {resource_kind}}. Each child becomes a row {name: display_name, ...native}.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "resource_kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "resource_kind"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "version_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minimum": {
+          "type": "string"
+        },
+        "maximum_exclusive": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "visible_when": {
+      "type": "object",
+      "required": [
+        "field"
+      ],
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "equals": {},
+        "in": {
+          "type": "array"
+        },
+        "truthy": {
+          "type": "boolean"
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": [
+        "field_id",
+        "label",
+        "control"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "field_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "label": {
+          "type": "string",
+          "description": "Names the thing. No 'exact native ... reference' phrasing."
+        },
+        "tab": {
+          "enum": [
+            "General",
+            "Definition",
+            "Columns",
+            "Constraints",
+            "Indexes",
+            "Triggers",
+            "Parameters",
+            "Partitions",
+            "Options",
+            "Engine",
+            "Security",
+            "Dependencies",
+            "Statistics",
+            "Data",
+            "SQL",
+            "Membership",
+            "Privileges",
+            "Connection",
+            "Authentication",
+            "SSL/TLS",
+            "Advanced",
+            "Tags"
+          ]
+        },
+        "group": {
+          "type": "string",
+          "description": "Optional field group heading inside the tab"
+        },
+        "control": {
+          "enum": [
+            "text",
+            "number",
+            "boolean",
+            "select",
+            "multiselect",
+            "radio",
+            "password",
+            "secret-reference",
+            "code",
+            "grid",
+            "keyvalue",
+            "privileges",
+            "reference",
+            "file"
+          ]
+        },
+        "language": {
+          "type": "string",
+          "description": "for control=code: sql, psql, plpgsql, js, ..."
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          },
+          "description": "for control=grid: one field per grid column"
+        },
+        "reorderable": {
+          "type": "boolean"
+        },
+        "reference_kind": {
+          "type": "string",
+          "description": "for control=reference: resource_kind to pick"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "value",
+              "label"
+            ],
+            "properties": {
+              "value": {},
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "option_values_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "path into the provider catalog/dialect for dynamic options"
+        },
+        "default": {},
+        "default_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "readonly": {
+          "type": "boolean"
+        },
+        "editable_after_create": {
+          "type": "boolean"
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "create",
+              "alter"
+            ]
+          },
+          "description": "omit for both"
+        },
+        "version": {
+          "$ref": "#/$defs/version_gate"
+        },
+        "visible_when": {
+          "$ref": "#/$defs/visible_when"
+        },
+        "native_keyword": {
+          "type": "string",
+          "description": "the engine's own term, shown in help"
+        },
+        "help": {
+          "type": "string"
+        },
+        "backend_field_id": {
+          "type": "string",
+          "description": "existing provider field id when it differs from field_id; keeps plan/validate/apply unchanged"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "placeholder": {
+          "type": "string"
+        },
+        "record_key": {
+          "type": "string",
+          "description": "Key (or dotted path, e.g. type_editor.data_type) in the inspected record or grid row that pre-fills this field when it differs from field_id"
+        },
+        "record_truthy": {
+          "type": "boolean",
+          "description": "Pre-fill as true when the record value is non-zero/non-empty (e.g. primary_key_position)"
+        },
+        "item_kind": {
+          "enum": [
+            "record",
+            "string"
+          ],
+          "description": "for control=grid: 'string' means the provider takes a plain list of the single column's values, not records"
+        },
+        "wrap_list": {
+          "type": "boolean",
+          "description": "send the single selected value as a one-item list (provider takes a list but the engine admits one value)"
+        },
+        "ui_only": {
+          "type": "boolean",
+          "description": "never sent to the provider (variant switches, confirmations the shell handles)"
+        },
+        "record_derive": {
+          "type": "object",
+          "description": "Pre-fill from a rule over the record row: first matching case wins, else default",
+          "properties": {
+            "cases": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "truthy": {
+                    "type": "boolean"
+                  },
+                  "equals": {},
+                  "value": {},
+                  "matches": {
+                    "type": "string",
+                    "description": "regular expression (case-insensitive) the record text must match"
+                  }
+                },
+                "required": [
+                  "key",
+                  "value"
+                ]
+              }
+            },
+            "default": {}
+          },
+          "required": [
+            "cases"
+          ]
+        },
+        "record_filter": {
+          "type": "object",
+          "description": "for control=grid: keep only record rows whose key equals the value (reverse of backend_field_id list[kind=X])",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "equals": {}
+          },
+          "required": [
+            "key",
+            "equals"
+          ]
+        },
+        "record_pluck": {
+          "type": "string",
+          "description": "when the record value is a list of objects, pre-fill with this key of each item"
+        },
+        "record_pattern": {
+          "type": "string",
+          "description": "regular expression applied to the record text; the first group pre-fills the field (e.g. strip a DEFAULT keyword)"
+        }
+      }
+    }
+  }
+}

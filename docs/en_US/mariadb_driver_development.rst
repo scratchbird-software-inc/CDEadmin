@@ -115,3 +115,80 @@ path-restricted import setting is not advertised for this connector. Native
 administrative executables remain separately installed MariaDB tools and keep
 their existing grants/workspace restrictions. These driver receipts do not claim
 blanket console, management workflow or platform UX acceptance.
+
+Original-session diagnostics and passive status
+-----------------------------------------------
+
+Session opening captures the native server UID and connection ID once. Query
+execution checks the connector's local connection ID without an identity query
+on the user's session. Cancellation retains its separate authenticated control
+connection and instance check. A decoded native ERR ends its command without a
+recovery PING; transport/local protocol failures continue to block reuse.
+
+Automatic transaction observations use native protocol status without PING or
+SQL getters. They do not check present server availability. ERR packets lack
+fresh policy flags, including when a routine changes autocommit before failing.
+The editor keeps that policy unknown and disables its toggle, but permits native
+diagnostic SQL on the usable original session. A later acknowledged command
+supplies fresh status. Explicit transaction changes remain serialized with query
+execution; uncertain finality is never replayed.
+
+The pinned MariaDB 1.1.14 connector patch checks native text and binary fetch
+return codes. Native error packets are raised with their real errno/SQLSTATE
+by fetchone, fetchmany and fetchall; they are not successful end-of-rows. The
+driver advertises the read-only ``cdeadmin_checked_fetch_errors`` cursor
+capability. Provider admission and native environment verification require it.
+Existing development environments must rebuild/install the connector with
+``tools/cdeadmin_build_mariadb_driver.py`` or rerun the native environment setup;
+an older wheel with only exact-temporal support is insufficient. The shared
+build path applies the source patch on each native platform. Linux qualification
+does not establish Windows/macOS acceptance.
+
+``tools/cdeadmin_mysql_family_session_diagnostics_qualification.py --engine mariadb``
+checks original-session unbound and bound ROW_COUNT, GET DIAGNOSTICS, error and
+warning areas, failed-routine policy, explicit rollback, cancellation and unread
+disconnects through the authenticated API. This scope does not establish that
+every other catalog/editor/session operation preserves native diagnostic state.
+
+Native backup stages and table backup locks
+-------------------------------------------
+
+The database context menu's Backup / Native MariaDB backup stages action opens
+the operations workspace with native BACKUP STAGE START, FLUSH,
+BLOCK_DDL, BLOCK_COMMIT and END, plus BACKUP LOCK database.table and BACKUP
+UNLOCK. These are implemented by the acquired 12.2.2 community source in
+``sql/backup.cc``. They require no closed source Enterprise component.
+
+Review binds the original connection ID, server UID, authenticated/effective
+principals, active role, SQL mode and transaction/autocommit flags. Both native
+command families perform implicit commits (``CF_AUTO_COMMIT_TRANS`` in
+``sql/sql_parse.cc``), so the workflow refuses an already active transaction
+before review and again before dispatch. It never commits or rolls back pending
+user work to admit a backup command. Lock waits use native SET STATEMENT scope
+and the complete native integer range 0..31536000, restoring the session's
+ordinary lock timeout after the command.
+
+The existing MariaDB execution owner supplies background completion, native
+diagnostics, bounded result delivery and cancellation through its independently
+authenticated, server-verified KILL QUERY connection. Reviews expire and are
+one-use. Repeated apply calls read the original receipt. A known acknowledgement
+remains acknowledged when subsequent observation fails; an uncertain mutation
+reply is not replayed. Native stage ordering and forward jumps are enforced by
+the server rather than a fabricated application stage catalog.
+
+Locks belong to the original native connection. END releases backup stages;
+UNLOCK releases the table backup lock. BACKUP LOCK releases a previous table
+backup lock before acquiring its replacement, including when that acquisition
+fails. Cancelling or failing a transition does not promise release of earlier
+stage locks. Explicit session close physically discards a connection used for
+these commands, including pooled sessions configured without reset, so backup
+locks cannot be inherited by a later pool borrower.
+
+Receipts identify command acknowledgements and explicitly do not infer current
+global lock ownership or successful physical backup files. They are scoped to
+the live original session. Durable receipt retention, physical file-copy,
+prepare/restore and recovery-chain orchestration remain separate acceptance
+items. ``tools/cdeadmin_mariadb_backup_stages_qualification.py`` exercises both
+normal/Oracle SQL modes, independent native DDL blocking, cancellation, native
+RELOAD refusal, transaction preservation and pooled connection release on an
+owned MariaDB fixture.

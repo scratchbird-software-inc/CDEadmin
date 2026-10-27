@@ -68,47 +68,6 @@
         {"field_id": "options", "label": "Engine-specific options", "control": "json", "required": false, "default": {}}
       ]
     },
-    "mysql_analyze_tables": {
-      "title": "Analyze MySQL tables and histograms",
-      "fields": [
-        {"field_id": "tables", "label": "Native table names (JSON array)", "control": "json", "required": true, "default": []},
-        {"field_id": "no_write_to_binlog", "label": "Do not write this maintenance statement to the binary log", "control": "boolean", "required": false, "default": false},
-        {"field_id": "histogram_action", "label": "Histogram action", "control": "select", "required": false, "default": "NONE", "options": [{"value": "NONE", "label": "Do not change histograms"}, {"value": "UPDATE", "label": "Update histogram"}, {"value": "DROP", "label": "Drop histogram"}]},
-        {"field_id": "histogram_columns", "label": "Histogram column names (JSON array)", "control": "json", "required": false, "default": []},
-        {"field_id": "histogram_buckets", "label": "Histogram buckets", "control": "number", "required": false, "default": 100, "minimum": 1, "maximum": 1024},
-        {"field_id": "histogram_auto_update", "label": "Automatically update the histogram", "control": "boolean", "required": false, "default": false},
-        {"field_id": "histogram_data", "label": "Exact histogram JSON data", "control": "json", "required": false}
-      ]
-    },
-    "mysql_check_tables": {
-      "title": "Check MySQL tables",
-      "fields": [
-        {"field_id": "tables", "label": "Native table names (JSON array)", "control": "json", "required": true, "default": []},
-        {"field_id": "check_options", "label": "Check options", "control": "multiselect", "required": false, "default": [], "options": [{"value": "QUICK", "label": "Quick"}, {"value": "FAST", "label": "Fast"}, {"value": "MEDIUM", "label": "Medium"}, {"value": "EXTENDED", "label": "Extended"}, {"value": "CHANGED", "label": "Changed since last check"}, {"value": "FOR UPGRADE", "label": "For upgrade"}]}
-      ]
-    },
-    "mysql_optimize_tables": {
-      "title": "Optimize MySQL tables",
-      "fields": [
-        {"field_id": "tables", "label": "Native table names (JSON array)", "control": "json", "required": true, "default": []},
-        {"field_id": "no_write_to_binlog", "label": "Do not write this maintenance statement to the binary log", "control": "boolean", "required": false, "default": false}
-      ]
-    },
-    "mysql_repair_tables": {
-      "title": "Repair MySQL tables",
-      "fields": [
-        {"field_id": "tables", "label": "Native MyISAM, ARCHIVE, or CSV table names (JSON array)", "control": "json", "required": true, "default": []},
-        {"field_id": "no_write_to_binlog", "label": "Do not write this maintenance statement to the binary log", "control": "boolean", "required": false, "default": false},
-        {"field_id": "repair_options", "label": "Repair options", "control": "multiselect", "required": false, "default": [], "options": [{"value": "QUICK", "label": "Quick"}, {"value": "EXTENDED", "label": "Extended"}, {"value": "USE_FRM", "label": "Use FRM file"}]}
-      ]
-    },
-    "mysql_checksum_tables": {
-      "title": "Checksum MySQL tables",
-      "fields": [
-        {"field_id": "tables", "label": "Native table names (JSON array)", "control": "json", "required": true, "default": []},
-        {"field_id": "checksum_type", "label": "Checksum method", "control": "select", "required": false, "default": "DEFAULT", "options": [{"value": "DEFAULT", "label": "Engine default"}, {"value": "QUICK", "label": "Quick"}, {"value": "EXTENDED", "label": "Extended"}]}
-      ]
-    },
     "mariadb_analyze_tables": {
       "title": "Analyze MariaDB tables and persistent statistics",
       "fields": [
@@ -194,94 +153,6 @@
         {"field_id": "max_allowed_packet", "label": "Maximum packet bytes", "control": "number", "required": false, "default": 1073741824, "minimum": 4096, "maximum": 1073741824},
         {"field_id": "show_warnings", "label": "Return server warnings in the redacted observation", "control": "boolean", "required": false, "default": true},
         {"field_id": "dry_run", "label": "Validate artifact metadata and checksum without restoring", "control": "boolean", "required": false, "default": false}
-      ]
-    },
-    "mysql_backup_logical": {
-      "title": "Back up MySQL database with MySQL Shell 9.7",
-      "fields": [
-        {"field_id": "path", "label": "New dump directory below the endpoint tool workspace", "control": "text", "required": true, "max_length": 4096},
-        {"field_id": "consistent", "label": "Create a consistent dump", "control": "boolean", "required": false, "default": true},
-        {"field_id": "skip_consistency_checks", "label": "Skip extra consistency checks", "control": "boolean", "required": false, "default": false},
-        {"field_id": "ddl_only", "label": "Dump definitions only", "control": "boolean", "required": false, "default": false},
-        {"field_id": "data_only", "label": "Dump data only", "control": "boolean", "required": false, "default": false},
-        {"field_id": "events", "label": "Include events", "control": "boolean", "required": false, "default": true},
-        {"field_id": "routines", "label": "Include routines", "control": "boolean", "required": false, "default": true},
-        {"field_id": "libraries", "label": "Include libraries", "control": "boolean", "required": false, "default": true},
-        {"field_id": "triggers", "label": "Include triggers", "control": "boolean", "required": false, "default": true},
-        {"field_id": "checksum", "label": "Write dump checksums", "control": "boolean", "required": false, "default": true},
-        {"field_id": "chunking", "label": "Split table data into chunks", "control": "boolean", "required": false, "default": true},
-        {"field_id": "bytes_per_chunk", "label": "Approximate bytes per chunk", "control": "text", "required": false, "default": "64M"},
-        {"field_id": "threads", "label": "Dump threads", "control": "number", "required": false, "default": 4, "minimum": 1, "maximum": 1024},
-        {"field_id": "max_rate", "label": "Maximum data read rate per thread", "control": "text", "required": false},
-        {"field_id": "compression", "label": "Dump compression", "control": "text", "required": false, "default": "zstd;level=1", "help": "Use none, gzip, gzip;level=0..9, zstd, or zstd;level=1..22."},
-        {"field_id": "default_character_set", "label": "Dump metadata character set", "control": "text", "required": false, "default": "utf8mb4"},
-        {"field_id": "tz_utc", "label": "Normalize timestamps to UTC", "control": "boolean", "required": false, "default": true},
-        {"field_id": "show_progress", "label": "Report progress", "control": "boolean", "required": false, "default": true},
-        {"field_id": "include_tables", "label": "Included schema.table names (JSON array)", "control": "json", "required": false},
-        {"field_id": "exclude_tables", "label": "Excluded schema.table names (JSON array)", "control": "json", "required": false},
-        {"field_id": "include_events", "label": "Included schema.event names (JSON array)", "control": "json", "required": false},
-        {"field_id": "exclude_events", "label": "Excluded schema.event names (JSON array)", "control": "json", "required": false},
-        {"field_id": "include_routines", "label": "Included schema.routine names (JSON array)", "control": "json", "required": false},
-        {"field_id": "exclude_routines", "label": "Excluded schema.routine names (JSON array)", "control": "json", "required": false},
-        {"field_id": "include_libraries", "label": "Included schema.library names (JSON array)", "control": "json", "required": false},
-        {"field_id": "exclude_libraries", "label": "Excluded schema.library names (JSON array)", "control": "json", "required": false},
-        {"field_id": "include_triggers", "label": "Included schema.table.trigger names (JSON array)", "control": "json", "required": false},
-        {"field_id": "exclude_triggers", "label": "Excluded schema.table.trigger names (JSON array)", "control": "json", "required": false},
-        {"field_id": "partitions", "label": "Included partitions by schema.table (JSON object)", "control": "json", "required": false},
-        {"field_id": "where", "label": "Table row filters by schema.table (JSON object)", "control": "json", "required": false},
-        {"field_id": "compatibility", "label": "Compatibility transformations (JSON array)", "control": "json", "required": false},
-        {"field_id": "target_version", "label": "Target MySQL version", "control": "text", "required": false},
-        {"field_id": "skip_upgrade_checks", "label": "Skip upgrade compatibility checks", "control": "boolean", "required": false, "default": false},
-        {"field_id": "dry_run", "label": "Validate without writing the dump", "control": "boolean", "required": false, "default": false}
-      ]
-    },
-    "mysql_restore_logical": {
-      "title": "Restore MySQL database with MySQL Shell 9.7",
-      "fields": [
-        {"field_id": "path", "label": "Completed dump directory below the endpoint tool workspace", "control": "text", "required": true, "max_length": 4096},
-        {"field_id": "confirmation", "label": "Type the exact target database name to confirm restore", "control": "text", "required": true, "max_length": 64},
-        {"field_id": "load_ddl", "label": "Load definitions", "control": "boolean", "required": false, "default": true},
-        {"field_id": "load_data", "label": "Load table data", "control": "boolean", "required": false, "default": true},
-        {"field_id": "load_indexes", "label": "Create indexes", "control": "boolean", "required": false, "default": true},
-        {"field_id": "load_users", "label": "Load users", "control": "boolean", "required": false, "default": false},
-        {"field_id": "checksum", "label": "Verify dump checksums", "control": "boolean", "required": false, "default": true},
-        {"field_id": "threads", "label": "Restore threads", "control": "number", "required": false, "default": 4, "minimum": 1, "maximum": 1024},
-        {"field_id": "background_threads", "label": "Background index threads", "control": "number", "required": false, "default": 4, "minimum": 0, "maximum": 1024},
-        {"field_id": "analyze_tables", "label": "Analyze restored tables", "control": "select", "required": false, "default": "off", "options": [{"value": "off", "label": "Off"}, {"value": "on", "label": "On"}, {"value": "histogram", "label": "Update histograms"}]},
-        {"field_id": "defer_table_indexes", "label": "Deferred index creation", "control": "select", "required": false, "default": "fulltext", "options": [{"value": "off", "label": "Do not defer"}, {"value": "fulltext", "label": "Defer full-text indexes"}, {"value": "all", "label": "Defer all secondary indexes"}]},
-        {"field_id": "create_invisible_pks", "label": "Create invisible primary keys when required", "control": "boolean", "required": false, "default": false},
-        {"field_id": "disable_bulk_load", "label": "Disable MySQL bulk-load extension", "control": "boolean", "required": false, "default": false},
-        {"field_id": "enable_local_infile", "label": "Temporarily enable the trusted server local_infile setting", "control": "boolean", "required": false, "default": false, "help": "MySQL Shell requires local_infile. CDEadmin restores its prior global value after the operation; this requires SYSTEM_VARIABLES_ADMIN."},
-        {"field_id": "drop_existing_objects", "label": "Drop conflicting existing objects", "control": "boolean", "required": false, "default": false},
-        {"field_id": "ignore_existing_objects", "label": "Ignore conflicting existing objects", "control": "boolean", "required": false, "default": false},
-        {"field_id": "ignore_version", "label": "Ignore dump/server version incompatibility", "control": "boolean", "required": false, "default": false},
-        {"field_id": "handle_grant_errors", "label": "Grant error handling", "control": "select", "required": false, "default": "abort", "options": [{"value": "abort", "label": "Abort"}, {"value": "drop_account", "label": "Drop affected account"}, {"value": "ignore", "label": "Ignore"}]},
-        {"field_id": "update_gtid_set", "label": "GTID_PURGED handling", "control": "select", "required": false, "default": "off", "options": [{"value": "off", "label": "Off"}, {"value": "replace", "label": "Replace"}, {"value": "append", "label": "Append"}]},
-        {"field_id": "skip_binlog", "label": "Disable binary logging during restore", "control": "boolean", "required": false, "default": false},
-        {"field_id": "reset_progress", "label": "Discard saved load progress", "control": "boolean", "required": false, "default": false},
-        {"field_id": "progress_file", "label": "Progress-state file below tool workspace", "control": "text", "required": false},
-        {"field_id": "max_bytes_per_transaction", "label": "Maximum bytes per transaction", "control": "text", "required": false},
-        {"field_id": "character_set", "label": "Input character set override", "control": "text", "required": false},
-        {"field_id": "schema", "label": "Target schema override", "control": "text", "required": false},
-        {"field_id": "session_init_sql", "label": "Per-session initialization statements (JSON array)", "control": "json", "required": false},
-        {"field_id": "include_schemas", "label": "Included schemas (JSON array)", "control": "json", "required": false},
-        {"field_id": "exclude_schemas", "label": "Excluded schemas (JSON array)", "control": "json", "required": false},
-        {"field_id": "include_tables", "label": "Included schema.table names (JSON array)", "control": "json", "required": false},
-        {"field_id": "exclude_tables", "label": "Excluded schema.table names (JSON array)", "control": "json", "required": false},
-        {"field_id": "include_events", "label": "Included schema.event names (JSON array)", "control": "json", "required": false},
-        {"field_id": "exclude_events", "label": "Excluded schema.event names (JSON array)", "control": "json", "required": false},
-        {"field_id": "include_routines", "label": "Included schema.routine names (JSON array)", "control": "json", "required": false},
-        {"field_id": "exclude_routines", "label": "Excluded schema.routine names (JSON array)", "control": "json", "required": false},
-        {"field_id": "include_libraries", "label": "Included schema.library names (JSON array)", "control": "json", "required": false},
-        {"field_id": "exclude_libraries", "label": "Excluded schema.library names (JSON array)", "control": "json", "required": false},
-        {"field_id": "include_triggers", "label": "Included schema.table.trigger names (JSON array)", "control": "json", "required": false},
-        {"field_id": "exclude_triggers", "label": "Excluded schema.table.trigger names (JSON array)", "control": "json", "required": false},
-        {"field_id": "include_users", "label": "Included accounts (JSON array)", "control": "json", "required": false},
-        {"field_id": "exclude_users", "label": "Excluded accounts (JSON array)", "control": "json", "required": false},
-        {"field_id": "show_metadata", "label": "Show dump metadata", "control": "boolean", "required": false, "default": false},
-        {"field_id": "show_progress", "label": "Report progress", "control": "boolean", "required": false, "default": true},
-        {"field_id": "wait_dump_timeout", "label": "Wait for an in-progress dump (seconds)", "control": "number", "required": false, "default": 0, "minimum": 0, "maximum": 86400, "integer": false},
-        {"field_id": "dry_run", "label": "Validate without changing the server", "control": "boolean", "required": false, "default": false}
       ]
     },
     "firebird_database_create": {
@@ -698,13 +569,14 @@
       {"operation_id": "create", "title": "Create database", "mutation_class": "admin", "form_id": "create", "target_required": false},
       {"operation_id": "alter", "title": "Alter database", "mutation_class": "admin", "form_id": "alter", "target_required": true},
       {"operation_id": "drop", "title": "Drop database", "mutation_class": "destructive", "form_id": "drop", "target_required": true, "confirmation_required": true},
-      {"operation_id": "analyze_tables", "title": "Analyze tables and histograms", "mutation_class": "admin", "form_id": "mysql_analyze_tables", "target_required": true, "required_permissions": ["maintenance_admin"]},
-      {"operation_id": "check_tables", "title": "Check tables", "mutation_class": "read", "form_id": "mysql_check_tables", "target_required": true, "required_permissions": ["data_read"]},
-      {"operation_id": "optimize_tables", "title": "Optimize tables", "mutation_class": "admin", "form_id": "mysql_optimize_tables", "target_required": true, "required_permissions": ["maintenance_admin"]},
-      {"operation_id": "repair_tables", "title": "Repair tables", "mutation_class": "admin", "form_id": "mysql_repair_tables", "target_required": true, "required_permissions": ["maintenance_admin"]},
-      {"operation_id": "checksum_tables", "title": "Checksum tables", "mutation_class": "read", "form_id": "mysql_checksum_tables", "target_required": true, "required_permissions": ["data_read"]},
-      {"operation_id": "backup_logical", "title": "Logical backup (MySQL Shell)", "mutation_class": "admin", "form_id": "mysql_backup_logical", "target_required": true, "required_permissions": ["backup_admin"]},
-      {"operation_id": "restore_logical", "title": "Logical restore (MySQL Shell)", "mutation_class": "destructive", "form_id": "mysql_restore_logical", "target_required": true, "confirmation_required": true, "required_permissions": ["restore_admin"]}
+      {"operation_id": "analyze_tables", "title": "Analyze tables and histograms", "mutation_class": "admin", "form_id": "inspect", "target_required": true, "required_permissions": ["maintenance_admin"]},
+      {"operation_id": "check_tables", "title": "Check tables", "mutation_class": "read", "form_id": "inspect", "target_required": true, "required_permissions": ["data_read"]},
+      {"operation_id": "optimize_tables", "title": "Optimize tables", "mutation_class": "admin", "form_id": "inspect", "target_required": true, "required_permissions": ["maintenance_admin"]},
+      {"operation_id": "repair_tables", "title": "Repair tables", "mutation_class": "admin", "form_id": "inspect", "target_required": true, "required_permissions": ["maintenance_admin"]},
+      {"operation_id": "checksum_tables", "title": "Checksum tables", "mutation_class": "read", "form_id": "inspect", "target_required": true, "required_permissions": ["data_read"]},
+      {"operation_id": "backup_logical", "title": "Logical backup (MySQL Shell)", "mutation_class": "admin", "form_id": "inspect", "target_required": true, "required_permissions": ["backup_admin"]},
+      {"operation_id": "verify_logical", "title": "Verify restored dump data (MySQL Shell)", "mutation_class": "admin", "form_id": "inspect", "target_required": true, "required_permissions": ["restore_admin", "data_read"]},
+      {"operation_id": "restore_logical", "title": "Logical restore (MySQL Shell)", "mutation_class": "destructive", "form_id": "inspect", "target_required": true, "confirmation_required": true, "required_permissions": ["restore_admin"]}
     ],
     "mariadb_database": [
       {"operation_id": "inspect", "title": "Database properties", "mutation_class": "read", "form_id": "inspect", "target_required": true},
@@ -1196,7 +1068,7 @@
       "engine_id": "mysql", "engine_name": "MySQL", "reference_profile": "9.7.0", "model_family": "relational",
       "objects": [
         {"resource_kind": "server", "title": "Server", "operation_profile": "topology"},
-        {"resource_kind": "database", "title": "Database", "operation_profile": "mysql_database", "operation_forms": {"analyze_tables": "mysql_analyze_tables", "check_tables": "mysql_check_tables", "optimize_tables": "mysql_optimize_tables", "repair_tables": "mysql_repair_tables", "checksum_tables": "mysql_checksum_tables", "backup_logical": "mysql_backup_logical", "restore_logical": "mysql_restore_logical"}},
+        {"resource_kind": "database", "title": "Database", "operation_profile": "mysql_database"},
         {"resource_kind": "table", "title": "Table", "operation_profile": "data_container"},
         {"resource_kind": "column", "title": "Column", "operation_profile": "definition"},
         {"resource_kind": "index", "title": "Index", "operation_profile": "definition"},

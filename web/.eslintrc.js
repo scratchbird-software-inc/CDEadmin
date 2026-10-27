@@ -134,6 +134,10 @@ module.exports = [
     files: [
       'pgadmin/cdeadmin/**/*.{js,jsx,ts,tsx}',
       'pgadmin/browser/server_groups/engine_types/**/*.{js,jsx,ts,tsx}',
+      // Descriptor-driven shell (docs/en_US/ui_unified_design.rst, phase 2):
+      // composes cdeadmin_ui primitives only, never the implementation libraries.
+      'pgadmin/static/js/cdeadmin_ui/objects/**/*.{js,jsx,ts,tsx}',
+      'pgadmin/browser/static/js/ProviderObjectEditor.jsx',
     ],
     rules: {
       'no-restricted-imports': ['error', {

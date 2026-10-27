@@ -733,7 +733,7 @@ class ProviderWorkspaceService:
     def mysql_server_catalog(self, server, request):
         from ..providers.mysql_family.provider import MySQLPilotProvider
         from .firebird_catalog_export import build_export, MAX_BYTES
-        if not isinstance(request, dict) or set(request) - {'targets', 'include_system'}:
+        if not isinstance(request, dict) or set(request) - {'targets', 'include_system', 'spatial_reference_ids'}:
             raise ProviderWorkspaceError('Invalid MySQL server catalog request')
         self._principal_id(server)
         if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) != 'mysql-native':
@@ -750,7 +750,9 @@ class ProviderWorkspaceService:
         if context.profile_id != 'mysql-native' or not isinstance(provider, MySQLPilotProvider):
             raise ProviderWorkspaceError('Select a native MySQL endpoint')
         try:
-            captured = provider.capture_server_catalog(endpoint['route'])
+            from ..providers.mysql_family.mysql_server_catalog import spatial_ids
+            selection = spatial_ids(request.get('spatial_reference_ids', []))
+            captured = provider.capture_server_catalog(endpoint['route'], spatial_reference_ids=selection) if selection else provider.capture_server_catalog(endpoint['route'])
             result = build_export(captured['resources'], endpoint_id=str(context.endpoint_id),
                 target_id='server:' + captured['server_uuid'], generation=captured['generation'],
                 include_system=include_system, refreshed=True, engine='mysql')
@@ -769,11 +771,170 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def _mariadb_server_context(self, server):
+        from ..providers.mariadb_family.provider import MariaDBPilotProvider
+        self._principal_id(server)
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) != 'mariadb-native':
+            raise ProviderWorkspaceError('Select an owned native MariaDB server')
+        context, endpoint, _ = self.endpoint_service.workspace(server)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if context.profile_id != 'mariadb-native' or not isinstance(provider, MariaDBPilotProvider):
+            raise ProviderWorkspaceError('Select a native MariaDB endpoint')
+        return context, endpoint, provider
+
+    def mariadb_server_plan(self, server, request):
+        from .firebird_catalog_import import read_catalog
+        from .firebird_catalog_export import build_export
+        from .mariadb_server_plan import plan
+        if not isinstance(request, dict) or set(request) != {'baseline', 'source'}:
+            raise ProviderWorkspaceError('Server preview requires baseline and desired DDN')
+        context, endpoint, provider = self._mariadb_server_context(server)
+        try:
+            baseline, desired = [read_catalog(request[key], engine='mariadb') for key in ('baseline', 'source')]
+            if any(document['provenance']['endpoint_id'] != str(context.endpoint_id) for document in (baseline, desired)):
+                raise ValueError('Server DDN belongs to another registered endpoint')
+            acquired = provider.capture_server_catalog(endpoint['route'])
+            live = build_export(acquired['resources'], endpoint_id=str(context.endpoint_id),
+                target_id='server:' + acquired['server_uid'], generation=acquired['generation'],
+                include_system=True, refreshed=True, engine='mariadb', native_model=True)
+            result = plan(baseline, desired, live)
+            result['endpoint_id'] = str(context.endpoint_id)
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_server_application(self, server, action, request):
+        from dataclasses import asdict
+        from .mariadb_server_apply import MariaDBServerApplications
+        from .firebird_schema_plan import digest
+        from .firebird_catalog_import import read_catalog
+        from ..operations.store import JsonOperationStore
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid server application request')
+        context, endpoint, provider = self._mariadb_server_context(server)
+        provider._require('administer', 'resource')
+        provider._require('execute')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Server application requires durable receipt storage')
+        applications = MariaDBServerApplications(str(store.path) + '.mariadb-server-applications.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'scope': 'mariadb-server'})
+        try:
+            if action == 'review':
+                if set(request) != {'baseline', 'source', 'execution_sha256'}:
+                    raise ValueError('Invalid server review request')
+                preview = self.mariadb_server_plan(server, {key: value for key, value in request.items() if key != 'execution_sha256'})
+                if preview['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('Displayed native server plan changed; preview again')
+                return applications.review(preview, read_catalog(request['baseline'], engine='mariadb'),
+                    read_catalog(request['source'], engine='mariadb'), owner, binding)
+            if action == 'receipts' and not request:
+                return {'receipts': applications.recent(owner, binding)}
+            if action == 'receipt' and set(request) == {'review_id'}:
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'apply':
+                raise ValueError('Invalid server application action')
+            def execute(record, operation):
+                fresh_context, fresh_endpoint, fresh_provider = self._mariadb_server_context(server)
+                if digest({'context': asdict(fresh_context), 'route': fresh_endpoint['route'], 'scope': 'mariadb-server'}) != binding:
+                    raise ValueError('Server registration changed before dispatch')
+                result = fresh_provider.apply_server_operation(fresh_endpoint['route'], record, operation)
+                if result['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(fresh_context)
+                    except Exception as error:
+                        result['explorer_refresh_error_type'] = type(error).__name__
+                return result
+            return applications.apply(request, owner, binding, execute)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def _mysql_server_context(self, server):
+        from ..providers.mysql_family.provider import MySQLPilotProvider
+        self._principal_id(server)
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) != 'mysql-native':
+            raise ProviderWorkspaceError('Select an owned native MySQL server')
+        context, endpoint, _ = self.endpoint_service.workspace(server)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if context.profile_id != 'mysql-native' or not isinstance(provider, MySQLPilotProvider):
+            raise ProviderWorkspaceError('Select a native MySQL endpoint')
+        return context, endpoint, provider
+
+    def mysql_server_plan(self, server, request):
+        from .firebird_catalog_import import read_catalog
+        from .firebird_catalog_export import build_export
+        from .mysql_server_plan import plan, spatial_selection
+        if not isinstance(request, dict) or set(request) != {'baseline', 'source'}:
+            raise ProviderWorkspaceError('Server preview requires baseline and desired DDN')
+        context, endpoint, provider = self._mysql_server_context(server)
+        try:
+            baseline, desired = [read_catalog(request[key], engine='mysql') for key in ('baseline', 'source')]
+            if any(document['provenance']['endpoint_id'] != str(context.endpoint_id) for document in (baseline, desired)):
+                raise ValueError('Server DDN belongs to another registered endpoint')
+            selection = spatial_selection(baseline, desired)
+            acquired = provider.capture_server_catalog(endpoint['route'], spatial_reference_ids=selection) if selection else provider.capture_server_catalog(endpoint['route'])
+            live = build_export(acquired['resources'], endpoint_id=str(context.endpoint_id),
+                target_id='server:' + acquired['server_uuid'], generation=acquired['generation'],
+                include_system=True, refreshed=True, engine='mysql', native_model=True)
+            result = plan(baseline, desired, live)
+            result['endpoint_id'] = str(context.endpoint_id)
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mysql_server_application(self, server, action, request):
+        from dataclasses import asdict
+        from .mysql_server_apply import MySQLServerApplications
+        from .firebird_schema_plan import digest
+        from .firebird_catalog_import import read_catalog
+        from ..operations.store import JsonOperationStore
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid server application request')
+        context, endpoint, provider = self._mysql_server_context(server)
+        provider._require('administer', 'resource')
+        provider._require('execute')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Server application requires durable receipt storage')
+        applications = MySQLServerApplications(str(store.path) + '.mysql-server-applications.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'scope': 'mysql-server'})
+        try:
+            if action == 'review':
+                if set(request) != {'baseline', 'source', 'execution_sha256'}:
+                    raise ValueError('Invalid server review request')
+                preview = self.mysql_server_plan(server, {key: value for key, value in request.items() if key != 'execution_sha256'})
+                if preview['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('Displayed native server plan changed; preview again')
+                return applications.review(preview, read_catalog(request['baseline'], engine='mysql'),
+                    read_catalog(request['source'], engine='mysql'), owner, binding)
+            if action == 'receipts' and not request:
+                return {'receipts': applications.recent(owner, binding)}
+            if action == 'receipt' and set(request) == {'review_id'}:
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'apply':
+                raise ValueError('Invalid server application action')
+            def execute(record, operation):
+                fresh_context, fresh_endpoint, fresh_provider = self._mysql_server_context(server)
+                if digest({'context': asdict(fresh_context), 'route': fresh_endpoint['route'], 'scope': 'mysql-server'}) != binding:
+                    raise ValueError('Server registration changed before dispatch')
+                result = fresh_provider.apply_server_operation(fresh_endpoint['route'], record, operation)
+                if result['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(fresh_context)
+                    except Exception as error:
+                        result['explorer_refresh_error_type'] = type(error).__name__
+                return result
+            return applications.apply(request, owner, binding, execute)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mysql_schema_plan(self, server, request, *, validate=False):
         from .firebird_catalog_export import build_export
         from .firebird_catalog_import import read_catalog
         from .mysql_schema_plan import plan
-        if not isinstance(request, dict) or set(request) != {'database_target_id', 'baseline', 'source'}:
+        if not isinstance(request, dict) or set(request)-{'database_target_id', 'baseline', 'source','execution'} or not {'database_target_id','baseline','source'}<=set(request):
             raise ProviderWorkspaceError('Native MySQL preview requires baseline and desired DDN')
         target = request.get('database_target_id')
         context, endpoint, provider = self._mysql_catalog_context(server, target)
@@ -787,7 +948,17 @@ class ProviderWorkspaceService:
             captured = provider.capture_catalog(endpoint['route'])
             live = build_export(captured['resources'], endpoint_id=str(context.endpoint_id), target_id=target,
                 generation=captured['generation'], refreshed=True, engine='mysql', native_model=True)
-            result = plan(baseline, desired, live)
+            result = plan(baseline, desired, live,execution=request.get('execution'))
+            if result['ready_for_review'] and (request.get('execution') or {}).get('method')=='pt-online-schema-change':
+                from ..providers.mysql_online_copy import admission
+                connection=provider.client._connect({'route':{**endpoint['route'],'autocommit':True}})
+                try:
+                    from .mysql_online_replicas import admission as admit_replicas
+                    replicas=admit_replicas(self,self._principal_id(server),request['execution'].get('replicas',[]),result['server_uuid'])
+                    result['operations'][0]['copy_admission']=admission(connection,result,replicas=replicas)
+                finally:provider.client._discard_failed_session(connection)
+                from .firebird_schema_plan import digest
+                result['execution_sha256']=digest(result['operations'])
             if validate:
                 result.update(provider.validate_schema_plan(endpoint['route'], result))
             return result
@@ -830,7 +1001,7 @@ class ProviderWorkspaceService:
         binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
         try:
             if action == 'mysql_schema_review':
-                if set(request) != {'baseline', 'source', 'execution_sha256', 'database_target_id'}:
+                if set(request)-{'baseline', 'source', 'execution_sha256', 'database_target_id','execution'} or not {'baseline','source','execution_sha256','database_target_id'}<=set(request):
                     raise ValueError('Invalid MySQL schema review request')
                 preview = self.mysql_schema_plan(server, {key: value for key, value in request.items()
                     if key != 'execution_sha256'}, validate=True)
@@ -844,6 +1015,9 @@ class ProviderWorkspaceService:
                 return applications.get(request['review_id'], owner, binding)
             if action != 'mysql_schema_apply':
                 raise ValueError('Unknown MySQL schema application action')
+            reviewed=applications.get(request.get('review_id'),owner,binding)
+            if any(op.get('execution') for op in reviewed['plan']['operations']):
+                raise ValueError('Dispatch controlled table ALTER through its asynchronous DDN job')
             def execute(record):
                 result = provider.apply_schema_review(endpoint['route'], record)
                 if result['state'] != 'not_dispatched':
@@ -857,6 +1031,15 @@ class ProviderWorkspaceService:
                 if key != 'database_target_id'}, owner, binding, execute)
         except (ValueError, RecursionError) as error:
             raise ProviderWorkspaceError(str(error)) from None
+
+    def mysql_online_ddl(self, server, operation, request):
+        from .mysql_online_service import action
+        from ..sdk.relational import RelationalClientError
+        from mysql.connector import Error as NativeError
+        try:return action(self,server,operation,request)
+        except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
+        except (RelationalClientError,NativeError,KeyError,TypeError):
+            raise ProviderWorkspaceError('Controlled ALTER input or native connection admission is unavailable') from None
 
     def mariadb_schema_plan(self, server, request, *, validate=False):
         from .firebird_catalog_export import build_export
@@ -966,14 +1149,167 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
-    def mysql_data_capture(self, server, request):
-        if not isinstance(request, dict) or set(request) - {'database_target_id', 'resource_id', 'mode', 'row_limit'}:
-            raise ProviderWorkspaceError('Invalid MariaDB relation data request')
-        context, endpoint, provider = self._mariadb_catalog_context(server, request.get('database_target_id'))
+    def mariadb_recipe_asset(self, server, action, request):
+        from .assets import ProjectAssetError
+        from .mysql_recipe_assets import MySQLRecipeAssets
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid MariaDB recipe request')
+        context, _endpoint, _provider = self._mariadb_catalog_context(server, request.get('database_target_id'))
+        assets = self.firebird_design_assets.assets
         try:
-            return provider.capture_data(endpoint['route'], request.get('resource_id'),
-                endpoint_id=str(context.endpoint_id), target_id=request['database_target_id'],
-                mode=request.get('mode', 'sample'), row_limit=request.get('row_limit', 100))
+            if action == 'save':
+                # Validate native identities and generators without executing the script.
+                self.mariadb_test_data(server, {'database_target_id': request.get('database_target_id'), 'recipe': request.get('recipe')})
+            return MySQLRecipeAssets(assets, engine='mariadb').apply(self._principal_id(server), {
+                'endpoint_id': str(context.endpoint_id), 'database_target_id': request['database_target_id']}, action, request)
+        except ProjectAssetError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except (IntegrityError, StaleDataError):
+            assets.repository.rollback()
+            raise ProviderWorkspaceError('Recipe changed concurrently; reload before saving') from None
+
+    def mariadb_data_plan(self, server, request):
+        from .mariadb_data_import import preview
+        from .firebird_catalog_export import build_export
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'source', 'table', 'allow_nontransactional'}:
+            raise ProviderWorkspaceError('Invalid native data import request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mariadb_catalog_context(server, target)
+        provider._require('data_write', 'resource')
+        try:
+            acquired = provider.capture_catalog(endpoint['route'])
+            live = build_export(acquired['resources'], endpoint_id=str(context.endpoint_id), target_id=target,
+                generation=acquired['generation'], refreshed=True, engine='mariadb', native_model=True)
+            return preview(request.get('source'), live, table=request.get('table'),
+                allow_nontransactional=request.get('allow_nontransactional', False),
+                node=getattr(self, 'ddn_node', 'node'))
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_data_application(self, server, action, request):
+        from dataclasses import asdict
+        from .mariadb_data_import import MariaDBDataApplications
+        from .firebird_schema_plan import digest
+        from ..operations.store import JsonOperationStore
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid native data application request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mariadb_catalog_context(server, target)
+        provider._require('data_write', 'resource')
+        provider._require('execute')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Data imports require durable receipt storage')
+        applications = MariaDBDataApplications(str(store.path) + '.mariadb-data-imports.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        try:
+            if action == 'review':
+                if set(request) - {'database_target_id', 'source', 'table', 'allow_nontransactional', 'execution_sha256'}:
+                    raise ValueError('Invalid native data review request')
+                plan = self.mariadb_data_plan(server, {key: value for key, value in request.items() if key != 'execution_sha256'})
+                if request.get('execution_sha256') != plan['execution_sha256']:
+                    raise ValueError('Displayed data import changed; preview again')
+                return applications.review(plan, owner, binding)
+            if action == 'receipts' and set(request) == {'database_target_id'}:
+                return {'receipts': applications.recent(owner, binding)}
+            if action == 'receipt' and set(request) == {'database_target_id', 'review_id'}:
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'apply':
+                raise ValueError('Invalid native data application action')
+            def execute(record):
+                result = provider.apply_data_import(endpoint['route'], record)
+                if result['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(context)
+                    except Exception as error:
+                        result['explorer_refresh_error_type'] = type(error).__name__
+                return result
+            return applications.apply({key: value for key, value in request.items() if key != 'database_target_id'}, owner, binding, execute)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mysql_recipe_asset(self, server, action, request):
+        from .assets import ProjectAssetError
+        from .mysql_recipe_assets import MySQLRecipeAssets
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid MySQL recipe request')
+        context, _endpoint, _provider = self._mysql_catalog_context(server, request.get('database_target_id'))
+        assets = self.firebird_design_assets.assets
+        try:
+            if action == 'save':
+                # Validate native identities and generators without executing the script.
+                self.mysql_test_data(server, {'database_target_id': request.get('database_target_id'), 'recipe': request.get('recipe')})
+            return MySQLRecipeAssets(assets).apply(self._principal_id(server), {
+                'endpoint_id': str(context.endpoint_id), 'database_target_id': request['database_target_id']}, action, request)
+        except ProjectAssetError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except (IntegrityError, StaleDataError):
+            assets.repository.rollback()
+            raise ProviderWorkspaceError('Recipe changed concurrently; reload before saving') from None
+
+    def mysql_data_plan(self, server, request):
+        from .mysql_data_import import preview
+        from .firebird_catalog_export import build_export
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'source', 'table', 'allow_nontransactional'}:
+            raise ProviderWorkspaceError('Invalid native data import request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mysql_catalog_context(server, target)
+        provider._require('data_write', 'resource')
+        try:
+            acquired = provider.capture_catalog(endpoint['route'])
+            live = build_export(acquired['resources'], endpoint_id=str(context.endpoint_id), target_id=target,
+                generation=acquired['generation'], refreshed=True, engine='mysql', native_model=True)
+            return preview(request.get('source'), live, table=request.get('table'),
+                allow_nontransactional=request.get('allow_nontransactional', False),
+                node=getattr(self, 'ddn_node', 'node'))
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mysql_data_application(self, server, action, request):
+        from dataclasses import asdict
+        from .mysql_data_import import MySQLDataApplications
+        from .firebird_schema_plan import digest
+        from ..operations.store import JsonOperationStore
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid native data application request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mysql_catalog_context(server, target)
+        provider._require('data_write', 'resource')
+        provider._require('execute')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Data imports require durable receipt storage')
+        applications = MySQLDataApplications(str(store.path) + '.mysql-data-imports.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        try:
+            if action == 'review':
+                if set(request) - {'database_target_id', 'source', 'table', 'allow_nontransactional', 'execution_sha256'}:
+                    raise ValueError('Invalid native data review request')
+                plan = self.mysql_data_plan(server, {key: value for key, value in request.items() if key != 'execution_sha256'})
+                if request.get('execution_sha256') != plan['execution_sha256']:
+                    raise ValueError('Displayed data import changed; preview again')
+                return applications.review(plan, owner, binding)
+            if action == 'receipts' and set(request) == {'database_target_id'}:
+                return {'receipts': applications.recent(owner, binding)}
+            if action == 'receipt' and set(request) == {'database_target_id', 'review_id'}:
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'apply':
+                raise ValueError('Invalid native data application action')
+            def execute(record):
+                result = provider.apply_data_import(endpoint['route'], record)
+                if result['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(context)
+                    except Exception as error:
+                        result['explorer_refresh_error_type'] = type(error).__name__
+                return result
+            return applications.apply({key: value for key, value in request.items() if key != 'database_target_id'}, owner, binding, execute)
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
@@ -1136,6 +1472,99 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def native_recipe_asset(self, server, engine, action, request):
+        from .assets import ProjectAssetError
+        from .mysql_recipe_assets import MySQLRecipeAssets
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.duckdb.provider import DuckDBPilotProvider
+        from ..providers.sqlite.provider import SQLiteProvider
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        providers = {'postgresql': PostgreSQLProvider, 'duckdb': DuckDBPilotProvider,
+                     'sqlite': SQLiteProvider}
+        if engine not in providers or not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid native recipe request')
+        target = request.get('database_target_id')
+        if not isinstance(target, str) or not target:
+            raise ProviderWorkspaceError('Select an explicit native database')
+        context, _endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, providers[engine]):
+            raise ProviderWorkspaceError('Recipe engine differs from the native endpoint')
+        assets = self.firebird_design_assets.assets
+        try:
+            if action == 'save':
+                getattr(self, engine + '_test_data')(server, {
+                    'database_target_id': target, 'recipe': request.get('recipe')})
+            return MySQLRecipeAssets(assets, engine=engine).apply(self._principal_id(server), {
+                'endpoint_id': str(context.endpoint_id), 'database_target_id': target}, action, request)
+        except ProjectAssetError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except (IntegrityError, StaleDataError):
+            assets.repository.rollback()
+            raise ProviderWorkspaceError('Recipe changed concurrently; reload before saving') from None
+
+    def _native_data_context(self, server, engine, request):
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.duckdb.provider import DuckDBPilotProvider
+        from ..providers.sqlite.provider import SQLiteProvider
+        providers = {'postgresql': PostgreSQLProvider, 'duckdb': DuckDBPilotProvider, 'sqlite': SQLiteProvider}
+        if engine not in providers or not isinstance(request, dict) or not isinstance(request.get('database_target_id'), str) or not request['database_target_id']:
+            raise ProviderWorkspaceError('Select an explicit native data destination')
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=request['database_target_id'])
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, providers[engine]):
+            raise ProviderWorkspaceError('Data import engine differs from the selected endpoint')
+        provider.permissions.require('data_write', 'resource')
+        provider.permissions.require('execute')
+        return context, endpoint, provider
+
+    def native_data_plan(self, server, engine, request):
+        from .native_data_import import preview
+        context, endpoint, provider = self._native_data_context(server, engine, request)
+        if set(request) != {'database_target_id', 'source', 'resource_id'}:
+            raise ProviderWorkspaceError('Invalid native data preview request')
+        try:
+            return preview(provider, endpoint['route'], engine, request['source'], request['resource_id'],
+                endpoint_id=str(context.endpoint_id), target_id=request['database_target_id'], node=getattr(self, 'ddn_node', 'node'))
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def native_data_application(self, server, engine, action, request):
+        from dataclasses import asdict
+        from .native_data_import import NativeDataApplications, apply
+        from .firebird_schema_plan import digest
+        from ..operations.store import JsonOperationStore
+        context, endpoint, provider = self._native_data_context(server, engine, request)
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Data imports require durable operation storage')
+        applications = NativeDataApplications(str(store.path) + '.' + engine + '-data-imports.json', engine)
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': request['database_target_id']})
+        try:
+            if action == 'review':
+                if set(request) != {'database_target_id', 'source', 'resource_id', 'execution_sha256'}:
+                    raise ValueError('Invalid native data review request')
+                plan = self.native_data_plan(server, engine, {key: value for key, value in request.items() if key != 'execution_sha256'})
+                if request['execution_sha256'] != plan['execution_sha256']:
+                    raise ValueError('Displayed native data import changed; preview again')
+                return applications.review(plan, owner, binding)
+            if action == 'receipts' and set(request) == {'database_target_id'}:
+                return {'receipts': applications.recent(owner, binding)}
+            if action == 'receipt' and set(request) == {'database_target_id', 'review_id'}:
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'apply': raise ValueError('Invalid native data application action')
+            def execute(record):
+                outcome = apply(provider, endpoint['route'], engine, record)
+                if outcome['state'] != 'not_dispatched':
+                    try: self.resource_service.invalidate(context)
+                    except Exception as error: outcome['explorer_refresh_error_type'] = type(error).__name__
+                return outcome
+            return applications.apply({key: value for key, value in request.items() if key != 'database_target_id'}, owner, binding, execute)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def postgresql_test_data(self, server, request):
         from ..providers.postgresql.provider import PostgreSQLProvider
         from ..providers.postgresql.connection_target import database_oid
@@ -1177,18 +1606,291 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def postgresql_continuity(self, server, operation, request):
+        from .postgresql_continuity_service import action
+        from ..providers.postgresql.continuity import ContinuityError
+        try:
+            return action(self, server, operation, request)
+        except ContinuityError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_temporary_slots(self,server,operation,request):
+        from psycopg import Error as NativeError
+        from .postgresql_temporary_slot_service import action
+        from ..providers.postgresql.continuity import ContinuityError
+        from ..providers.postgresql.provider import PostgreSQLProviderError
+        try:return action(self,server,operation,request)
+        except (ValueError,ContinuityError,PostgreSQLProviderError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:raise ProviderWorkspaceError('Native temporary-slot admission failed ('+(error.sqlstate or type(error).__name__)+')') from None
+        except OSError:raise ProviderWorkspaceError('The owned temporary-slot store or artifact is unavailable') from None
+
+    def postgresql_replication_temporary(self, server, operation, request):
+        from psycopg import Error as NativeError
+        from ..providers.postgresql.continuity import ContinuityError
+        from .postgresql_replication_temporary_service import action
+        try:
+            return action(self, server, operation, request)
+        except (ValueError, ContinuityError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:
+            raise ProviderWorkspaceError('Native temporary replication admission failed (' +
+                (error.sqlstate or type(error).__name__) + ')') from None
+        except OSError:
+            raise ProviderWorkspaceError('The owned replication resource store is unavailable') from None
+
+    def mysql_spatial(self, server, operation, request):
+        from .mysql_spatial_service import action
+        from ..providers.mysql_family.mysql_spatial import Error
+        from mysql.connector import Error as NativeError
+        from ..sdk.relational import RelationalClientError
+        try:return action(self,server,operation,request)
+        except Error as error:raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:
+            raise ProviderWorkspaceError('Native MySQL spatial inspection failed ('+str(error.errno)+', '+str(error.sqlstate)+')') from None
+        except (RelationalClientError,ValueError,TypeError,KeyError):
+            raise ProviderWorkspaceError('Native spatial input or observer admission is unavailable') from None
+
+    def mysql_drift(self, server, operation, request):
+        from .mysql_drift_service import action
+        from ..providers.mysql_family.mysql_drift import Error
+        from mysql.connector import Error as NativeError
+        from ..sdk.relational import RelationalClientError
+        try:return action(self,server,operation,request)
+        except Error as error:raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:
+            raise ProviderWorkspaceError('Native MySQL comparison failed ('+str(error.errno)+', '+str(error.sqlstate)+')') from None
+        except (RelationalClientError,ValueError,TypeError,KeyError):
+            raise ProviderWorkspaceError('Native comparison input or observer admission is unavailable') from None
+
+    def mysql_content_search(self, server, operation, request):
+        from .mysql_content_search_service import action
+        from ..providers.mysql_family.mysql_content_search import SearchError
+        from ..sdk.relational import RelationalClientError
+        from mysql.connector import Error as NativeError
+        try:
+            return action(self, server, operation, request)
+        except SearchError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:
+            raise ProviderWorkspaceError('Native MySQL content search failed ('+
+                str(error.errno)+', '+str(error.sqlstate)+')') from None
+        except (RelationalClientError, ValueError, TypeError, KeyError):
+            raise ProviderWorkspaceError('Native content-search input or observer admission is unavailable') from None
+
+    def mysql_workload(self, server, operation, request):
+        from .mysql_workload_service import action
+        from ..providers.mysql_family.mysql_workload import WorkloadError
+        from ..sdk.relational import RelationalClientError
+        from mysql.connector import Error as NativeError
+        try:
+            return action(self, server, operation, request)
+        except WorkloadError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:
+            raise ProviderWorkspaceError('Native MySQL workload inspection failed (' +
+                str(error.errno) + ', ' + str(error.sqlstate) + ')') from None
+        except (RelationalClientError, UnicodeError, ValueError, KeyError, TypeError):
+            raise ProviderWorkspaceError('Native workload input, encoding or observer admission is unavailable') from None
+
+    def mysql_host(self, server, operation, request):
+        from .mysql_host_service import action
+        from ..providers.mysql_family.mysql_host_transport import HostError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..providers.mysql_family.mysql_clone import CloneError
+        from ..sdk.relational import RelationalClientError
+        from mysql.connector import Error as NativeError
+        try:return action(self, server, operation, request)
+        except (HostError, BinlogArchiveError, CloneError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:raise ProviderWorkspaceError('Native MySQL host identity observation failed ('+str(error.errno)+', '+str(error.sqlstate)+')') from None
+        except RelationalClientError:raise ProviderWorkspaceError('Native host credential or client admission is unavailable') from None
+        except OSError:raise ProviderWorkspaceError('Native host receipt storage is unavailable') from None
+
+    def mysql_router(self, server, operation, request):
+        from .mysql_router_service import action
+        from ..providers.mysql_family.mysql_router_transport import HostError
+        from ..providers.mysql_family.mysql_router_worker import Refused
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..sdk.relational import RelationalClientError
+        from mysql.connector import Error as NativeError
+        try:return action(self,server,operation,request)
+        except (HostError,Refused,BinlogArchiveError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:raise ProviderWorkspaceError('Native Router source observation failed ('+str(error.errno)+', '+str(error.sqlstate)+')') from None
+        except RelationalClientError:raise ProviderWorkspaceError('Native Router credential or client admission is unavailable') from None
+        except OSError:raise ProviderWorkspaceError('Native Router receipt storage is unavailable') from None
+        except (ValueError,TypeError,KeyError):raise ProviderWorkspaceError('Native Router input or original receipt is unavailable') from None
+
+    def mysql_physical(self, server, operation, request):
+        from .mysql_physical_service import action
+        from ..providers.mysql_family.mysql_host_transport import HostError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..providers.mysql_family.mysql_clone import CloneError
+        from ..sdk.relational import RelationalClientError
+        from mysql.connector import Error as NativeError
+        try: return action(self, server, operation, request)
+        except (HostError, BinlogArchiveError, CloneError) as error: raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error: raise ProviderWorkspaceError('Native physical source admission failed (' + str(error.errno) + ', ' + str(error.sqlstate) + ')') from None
+        except RelationalClientError: raise ProviderWorkspaceError('Native physical database credentials or provider admission are unavailable') from None
+        except OSError: raise ProviderWorkspaceError('Native physical receipt storage is unavailable') from None
+
+    def mysql_clone(self, server, operation, request):
+        from .mysql_clone_service import action
+        from ..providers.mysql_family.mysql_clone import CloneError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        try:return action(self,server,operation,request)
+        except (CloneError,BinlogArchiveError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except OSError:raise ProviderWorkspaceError('Native clone receipt or backup protection storage is unavailable') from None
+
+    def mysql_instance_backup(self, server, operation, request):
+        from .mysql_instance_backup_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..sdk.relational import RelationalClientError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        try: return action(self, server, operation, request)
+        except (BinlogArchiveError, ProviderToolError, RelationalClientError) as error: raise ProviderWorkspaceError(str(error)) from None
+        except OSError: raise ProviderWorkspaceError('Native instance backup storage is unavailable') from None
+
+    def mysql_instance_restore(self, server, operation, request):
+        from .mysql_instance_restore_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..sdk.relational import RelationalClientError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..providers.mysql_family.mysql_clone import CloneError
+        try: return action(self, server, operation, request)
+        except (BinlogArchiveError, CloneError, ProviderToolError, RelationalClientError) as error: raise ProviderWorkspaceError(str(error)) from None
+        except OSError: raise ProviderWorkspaceError('Native instance restore storage is unavailable') from None
+
+    def mysql_instance_acceptance(self, server, operation, request):
+        from .mysql_instance_acceptance_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..sdk.relational import RelationalClientError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..providers.mysql_family.mysql_clone import CloneError
+        try: return action(self, server, operation, request)
+        except (BinlogArchiveError, CloneError, ProviderToolError, RelationalClientError) as error: raise ProviderWorkspaceError(str(error)) from None
+        except OSError: raise ProviderWorkspaceError('Native instance acceptance storage is unavailable') from None
+
+    def mysql_sandbox(self, server, operation, request):
+        from .mysql_sandbox_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        try: return action(self, server, operation, request)
+        except (BinlogArchiveError, ProviderToolError) as error: raise ProviderWorkspaceError(str(error)) from None
+        except (OSError, ValueError): raise ProviderWorkspaceError('Native sandbox host state or storage is unavailable') from None
+
+    def mysql_topology(self, server, operation, request):
+        from .mysql_topology_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..sdk.relational import RelationalClientError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        try: return action(self, server, operation, request)
+        except (BinlogArchiveError, ProviderToolError, RelationalClientError) as error: raise ProviderWorkspaceError(str(error)) from None
+        except OSError: raise ProviderWorkspaceError('Native topology receipt storage is unavailable') from None
+
+    def mysql_binlog(self,server,operation,request):
+        from .mysql_binlog_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..providers.mysql_family.mysql_binlog_integrity import BinlogIntegrityError
+        try:return action(self,server,operation,request)
+        except (BinlogArchiveError,BinlogIntegrityError,ProviderToolError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except OSError:raise ProviderWorkspaceError('Native archive storage is unavailable') from None
+
+    def mysql_raw_binlog(self,server,operation,request):
+        from .mysql_raw_binlog_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..sdk.relational import RelationalClientError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..providers.mysql_family.mysql_binlog_integrity import BinlogIntegrityError
+        from ..providers.mysql_family.mysql_clone import CloneError
+        try:return action(self,server,operation,request)
+        except (BinlogArchiveError,BinlogIntegrityError,CloneError,ProviderToolError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except RelationalClientError:raise ProviderWorkspaceError('Native raw archive client or credential binding is unavailable') from None
+        except OSError:raise ProviderWorkspaceError('Native raw archive storage is unavailable') from None
+
+    def continuous_binlog(self,server,operation,request,family):
+        from .continuous_binlog_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..sdk.relational import RelationalClientError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..providers.mysql_family.mysql_binlog_integrity import BinlogIntegrityError
+        from ..providers.mysql_family.mysql_clone import CloneError
+        try:return action(self,server,operation,request,family)
+        except (BinlogArchiveError,BinlogIntegrityError,CloneError,ProviderToolError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except RelationalClientError:raise ProviderWorkspaceError('Native receiver client or credential binding is unavailable') from None
+        except OSError:raise ProviderWorkspaceError('Native receiver storage is unavailable') from None
+
+    def sqlite_capture_export(self,server,operation,request):
+        from .sqlite_capture_service import action
+        from ..data_studio.models import DataStudioError
+        from ..sdk import RelationalClientError
+        try:return action(self,server,operation,request)
+        except (ValueError,OSError,DataStudioError,RelationalClientError) as error:raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_changeset(self,server,operation,request):
+        import sqlite3
+        from .sqlite_changeset_service import action
+        from ..data_studio.models import DataStudioError
+        from ..sdk import RelationalClientError
+        try:return action(self,server,operation,request)
+        except (ValueError,OSError,DataStudioError,RelationalClientError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except sqlite3.Error:raise ProviderWorkspaceError('Native SQLite connection or metadata could not be inspected') from None
+
+    def mysql_binlog_replay(self,server,operation,request):
+        from .mysql_binlog_replay_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..sdk.relational import RelationalClientError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..providers.mysql_family.mysql_binlog_integrity import BinlogIntegrityError
+        from ..providers.mysql_family.mysql_clone import CloneError
+        try:return action(self,server,operation,request)
+        except (BinlogArchiveError,BinlogIntegrityError,CloneError,ProviderToolError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except RelationalClientError:raise ProviderWorkspaceError('Native replay client or credential binding is unavailable') from None
+        except OSError:raise ProviderWorkspaceError('Native replay storage is unavailable') from None
+
+    def mariadb_binlog_replay(self,server,operation,request):
+        from .mariadb_binlog_replay_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..sdk.relational import RelationalClientError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..providers.mysql_family.mysql_binlog_integrity import BinlogIntegrityError
+        from ..providers.mysql_family.mysql_clone import CloneError
+        try:return action(self,server,operation,request)
+        except (BinlogArchiveError,BinlogIntegrityError,CloneError,ProviderToolError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except RelationalClientError:raise ProviderWorkspaceError('Native replay client or credential binding is unavailable') from None
+        except OSError:raise ProviderWorkspaceError('Native replay storage is unavailable') from None
+
+    def mariadb_binlog(self,server,operation,request):
+        from .mariadb_binlog_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..providers.mysql_family.mysql_binlog_integrity import BinlogIntegrityError
+        try:return action(self,server,operation,request)
+        except (BinlogArchiveError,BinlogIntegrityError,ProviderToolError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except OSError:raise ProviderWorkspaceError('Native archive storage is unavailable') from None
+
+    def postgresql_large_object_file(self,server,operation,request):
+        from .postgresql_large_object_service import action
+        from ..providers.postgresql.large_object_files import LargeObjectFileError
+        try:return action(self,server,operation,request)
+        except LargeObjectFileError as error:raise ProviderWorkspaceError(str(error)) from None
+
     def postgresql_server_catalog(self, server, request):
         from ..providers.postgresql.provider import PostgreSQLProvider
-        from ..providers.postgresql.server_catalog import inventory, bundle
+        from ..providers.postgresql.server_catalog import inventory, bundle, export_inventory
         if not isinstance(request, dict) or set(request) - {'database_ids', 'include_system'}:
             raise ProviderWorkspaceError('Invalid PostgreSQL server catalog request')
+        if type(request.get('include_system', False)) is not bool:
+            raise ProviderWorkspaceError('PostgreSQL system-object inclusion must be boolean')
         context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=None)
         provider = self.endpoint_service.provider_registry.resolve(context).instance
         if not isinstance(provider, PostgreSQLProvider):
             raise ProviderWorkspaceError('Select a native PostgreSQL server')
         try:
             if 'database_ids' not in request:
-                return inventory(provider, endpoint['route'])
+                result = inventory(provider, endpoint['route'])
+                result['document'] = export_inventory(result, context.endpoint_id, endpoint['route']['server_id'],
+                    include_system=request.get('include_system', False))
+                return result
             return bundle(provider, endpoint['route'], context.endpoint_id, request['database_ids'],
                           include_system=request.get('include_system', False))
         except ValueError as error:
@@ -1273,6 +1975,13 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def sqlite_recovery(self, server, operation, request):
+        from .sqlite_recovery_service import action
+        try:
+            return action(self, server, operation, request)
+        except (ValueError, TypeError, KeyError, OSError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def sqlite_data_capture(self, server, request):
         from .sqlite_catalog_service import data
         try:
@@ -1299,6 +2008,25 @@ class ProviderWorkspaceService:
         try:
             return schema_plan(self, server, request)
         except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_fts_configuration_design(self, server, request):
+        from .sqlite_catalog_service import fts_configuration_design
+        try:
+            return fts_configuration_design(self, server, request)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_schema_column_design(self,server,request):
+        from .sqlite_catalog_service import column_design
+        try:return column_design(self,server,request)
+        except (ValueError,TypeError,KeyError) as error:raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_schema_rename_design(self, server, request):
+        from .sqlite_catalog_service import schema_plan
+        try:
+            return schema_plan(self,server,request,generate_renames=True)
+        except (ValueError,TypeError,KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
     def sqlite_schema_application(self, server, action, request):
@@ -1339,7 +2067,7 @@ class ProviderWorkspaceService:
                 'target': target, 'file_identity': [info.st_dev, info.st_ino]})
             if action == 'sqlite_schema_review':
                 if (not {'database_target_id', 'baseline', 'desired', 'execution_sha256'} <= set(request) or
-                        set(request) - {'database_target_id', 'baseline', 'desired', 'execution_sha256', 'deletions', 'rebuilds', 'column_renames'}):
+                        set(request) - {'database_target_id', 'baseline', 'desired', 'execution_sha256', 'deletions', 'rebuilds', 'column_renames', 'renames', 'fts_rebindings'}):
                     raise ValueError('Invalid SQLite schema review request')
                 preview = self.sqlite_schema_plan(server, {key: value for key, value in request.items()
                     if key != 'execution_sha256'})
@@ -2037,12 +2765,32 @@ class ProviderWorkspaceService:
     def plan_visual_admin(self, server, request):
         return self._visual_admin_call(server, 'plan_visual_admin', request)
 
+    def protected_password_result(self, server, request):
+        from ..security.generated_passwords import for_app
+        from flask import current_app
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Select a protected result action')
+        request = dict(request)
+        target = request.pop('database_target_id', Ellipsis)
+        context, _endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        results = for_app(current_app._get_current_object(), context)
+        if request.get('operation') == 'recover' and set(request) == {'operation', 'plan_id'}:
+            return results.recover(request['plan_id'])
+        if request.get('operation') == 'reveal' and set(request) == {'operation', 'reference_id', 'confirmed'} and request['confirmed'] is True:
+            from ..security import service_for_app
+            service = service_for_app(current_app).secrets
+            with service.acquire(request['reference_id'], context, results.principal, 'reveal', expected_kind='password') as lease:
+                return {'password': lease.use(lambda value: bytes(value).decode('utf8')), 'protected_result': True}
+        raise ProviderWorkspaceError('Select recovery by plan or an explicitly confirmed password reveal')
+
     def apply_visual_admin(self, server, request):
         context, callback, payload = self._prepare_visual_admin_call(
             server, 'apply_visual_admin', request
         )
         try:
-            result = callback(payload)
+            from .mysql_backup_protection import capture_scope
+            with capture_scope(self, context, self._principal_id(server)):
+                result = callback(payload)
         except VisualAdminExecutionError as exc:
             self._record_visual_admin_audit(
                 server, context, exc.operation
@@ -2549,6 +3297,7 @@ class ProviderWorkspaceService:
         self, server, session_id, source, parameters=None,
         database_target_id=Ellipsis, *, max_rows=None, client_sql_dialect=None,
         script_mode=False, plan_mode=False, history_sensitive=False, profile_mode=False, statistics_mode=False,
+        mysql_query_attributes=None,
     ):
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
@@ -2561,6 +3310,12 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError(
                 'query parameters must be an object or array')
         policy = {'redact_keys': []}
+        if mysql_query_attributes is not None:
+            if context.provider_id!='org.cdeadmin.mysql':
+                raise ProviderWorkspaceError('Query attributes are only admitted for native MySQL')
+            from ..providers.mysql_family.mysql_query_attributes import request_value
+            try:policy['mysql_query_attributes']=request_value(mysql_query_attributes)
+            except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
         if context.provider_id in {'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'} and not script_mode and not plan_mode:
             policy['firebird_statement_metrics'] = True
         if type(profile_mode) is not bool or profile_mode and (script_mode or plan_mode or context.provider_id not in {
@@ -2622,25 +3377,102 @@ class ProviderWorkspaceService:
             source, history_sensitive, 'script' if script_mode else 'statement', execute)
 
     def language_tool_action(self, server, action, data):
-        context, _endpoint, _root = self.endpoint_service.workspace(
+        if action in {'sqlite_retained_schema','sqlite_retained_schema_receipts'}:
+            from .sqlite_retained_service import serve
+            try:return serve(self,server,action,data)
+            except (ValueError,KeyError,TypeError) as error:raise ProviderWorkspaceError(str(error)) from None
+        if action in {'firebird_eds_pool','firebird_eds_pool_receipts'}:
+            from .firebird_eds_pool_receipts import for_workspace
+            if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native Firebird EDS request')
+            try:
+                archive=for_workspace(self,server,data.get('database_target_id'))
+                request=data['request']
+                if action=='firebird_eds_pool_receipts':
+                    if set(request)=={'operation','review_id'} and request['operation']=='receipt':return {**archive.get(request['review_id']),'archived_read_only':True}
+                    if set(request)=={'operation','review_id','review_digest','confirmed'} and request['operation']=='remove':
+                        admitted=self.endpoint_service.provider_registry.admitted_permissions(self.endpoint_service._context(server.endpoint_profile,()))
+                        if 'administer' not in admitted:raise ValueError('Native EDS receipt removal permission is unavailable')
+                        return archive.remove(request['review_id'],request['review_digest'],request['confirmed'])
+                    if request.get('operation')=='list' and not set(request)-{'operation','offset','limit'}:
+                        return archive.recent(request.get('offset',0),request.get('limit',25))
+                    raise ValueError('Select a read-only native EDS receipt request')
+            except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
+        context, endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=data.get('database_target_id'))
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
+            if action=='firebird_eds_pool':
+                return self.studio_service.firebird_eds_pool_action(context,data.get('session_id'),data['request'],archive)
+            if action in {'duckdb_session_receipts','duckdb_database_copy','duckdb_extensions','duckdb_attachments'}:
+                from .duckdb_session_receipts import for_workspace,action as archived_action
+                if not isinstance(data.get('request'),dict):
+                    raise ProviderWorkspaceError('Select a native DuckDB operation request')
+                try:archive=for_workspace(self,server,context,data.get('database_target_id'))
+                except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
+                if action=='duckdb_session_receipts':
+                    admitted=self.endpoint_service.provider_registry.admitted_permissions(context)
+                    if not {'execute','data_read'}<=set(admitted):
+                        raise ProviderWorkspaceError('Native DuckDB receipt access is unavailable')
+                    try:return archived_action(archive,data['request'])
+                    except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
+                self.studio_service.bind_duckdb_receipt_archive(context,data.get('session_id'),archive,endpoint['route'])
+            if action == 'mariadb_backup_stages':
+                if (not isinstance(data.get('request'), dict) or
+                        not isinstance(data.get('database_target_id'), str) or not data['database_target_id']):
+                    raise ProviderWorkspaceError('Select a native MariaDB backup-stage request')
+                return self.studio_service.mariadb_backup_stage_action(context, data.get('session_id'), data['request'])
+            if action == 'duckdb_database_copy':
+                if (not isinstance(data.get('request'), dict) or
+                        not isinstance(data.get('database_target_id'), str) or not data['database_target_id']):
+                    raise ProviderWorkspaceError('Select a native DuckDB database-copy request')
+                return self.studio_service.duckdb_database_copy_action(context, data.get('session_id'),
+                    data['request'], endpoint['route'])
+            if action=='duckdb_extensions':
+                if not isinstance(data.get('request'),dict) or not isinstance(data.get('database_target_id'),str) or not data['database_target_id']:
+                    raise ProviderWorkspaceError('Select a native DuckDB extension request')
+                return self.studio_service.duckdb_extension_action(context,data.get('session_id'),data['request'],endpoint['route'])
+            if action == 'duckdb_attachments':
+                if (not isinstance(data.get('request'), dict) or
+                        not isinstance(data.get('database_target_id'), str) or not data['database_target_id']):
+                    raise ProviderWorkspaceError('Select a native DuckDB attachment request')
+                return self.studio_service.duckdb_attachment_action(context, data.get('session_id'),
+                    data['request'], endpoint['route'])
+            if action=='sqlite_native_preupdate':
+                if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native SQLite preupdate request')
+                return self.studio_service.sqlite_native_preupdate_action(context,data.get('session_id'),data['request'])
+            if action=='sqlite_native_arrays':
+                if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native SQLite array request')
+                return self.studio_service.sqlite_native_array_action(context,data.get('session_id'),data['request'])
+            if action=='sqlite_native_sessions':
+                if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native SQLite capture request')
+                return self.studio_service.sqlite_native_session_action(context,data.get('session_id'),data['request'])
+            if action == 'sqlite_extensions':
+                if not isinstance(data.get('request'), dict):
+                    raise ProviderWorkspaceError('Invalid native extension request')
+                return self.studio_service.sqlite_extension_action(context, data.get('session_id'), data['request'])
+            if action == 'source_catalog':
+                return self.studio_service.session_catalog(context, data.get('session_id'),
+                    include_system=data.get('include_system', False))
             if action == 'source_complete':
                 source, prefix = data.get('source'), data.get('source_before_cursor')
                 if (not isinstance(source, str) or not isinstance(prefix, str) or
                         len(source.encode('utf8')) > 1024 * 1024 or not source.startswith(prefix)):
                     raise ProviderWorkspaceError('Completion requires bounded source and its exact cursor prefix')
-                return self.studio_service.complete(context, data.get('session_id'), source, prefix)
+                options = {'client_sql_dialect': data['client_sql_dialect']} if 'client_sql_dialect' in data else {}
+                return self.studio_service.complete(context, data.get('session_id'), source, prefix, **options)
             if action == 'source_validate':
-                return self.studio_service.validate_source(context, data.get('session_id'), data.get('source'))
+                options = {'client_sql_dialect': data['client_sql_dialect']} if 'client_sql_dialect' in data else {}
+                if 'script' in data:
+                    options['script'] = data['script']
+                return self.studio_service.validate_source(context, data.get('session_id'), data.get('source'), **options)
             if action == 'native_script_prepare':
                 parameters = data.get('parameters', {})
                 if not isinstance(parameters, (dict, list)) or parameters:
                     raise ProviderWorkspaceError('Retained scripts require empty parameter bindings')
                 return self._record_query_request(server, data.get('database_target_id'), data.get('client_sql_dialect'),
                     data.get('source'), data.get('history_sensitive', False), 'script-prepared',
-                    lambda: self.studio_service.scripts.prepare(context, data.get('session_id'), data.get('source')))
+                    lambda: self.studio_service.scripts.prepare(context, data.get('session_id'), data.get('source'),
+                        **({'mysql_query_attributes':data['mysql_query_attributes']} if 'mysql_query_attributes' in data else {})))
             if action == 'native_script_advance':
                 return self.studio_service.scripts.advance(context, data.get('plan_id'), data.get('revision'))
             if action == 'native_script_stop':
@@ -2971,6 +3803,14 @@ def init_app(
     import atexit
     atexit.register(service.firebird_events.close)
     app.extensions[APP_EXTENSION_KEY] = service
+    from .mysql_retention_schedule import init_app as init_mysql_retention_schedule
+    init_mysql_retention_schedule(app, service)
+    from .mysql_physical_retention_schedule import init_app as init_mysql_physical_schedule
+    init_mysql_physical_schedule(app, service)
+    from .mysql_physical_check_schedule import init_app as init_mysql_check_schedule
+    init_mysql_check_schedule(app, service)
+    from .mysql_physical_backup_schedule import init_app as init_mysql_backup_schedule
+    init_mysql_backup_schedule(app,service)
     return service
 
 

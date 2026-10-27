@@ -1,0 +1,216 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "duckdb",
+  "family": "table",
+  "resource_kinds": [
+    "table"
+  ],
+  "status": "complete",
+  "engine_tab_title": "DuckDB",
+  "omitted_tabs": [
+    {
+      "tab": "Partitions",
+      "reason": "no partitioning"
+    },
+    {
+      "tab": "Triggers",
+      "reason": "no triggers"
+    },
+    {
+      "tab": "Security",
+      "reason": "no users or privileges"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Column grid depth",
+      "reason": "column records carry only name/type/nullable/default/unique/primary_key; add collation, generated columns, comment"
+    },
+    {
+      "concept": "Partitions tab",
+      "reason": "omit: DuckDB has no table partitioning; list under omitted_tabs when the form is completed"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "required": false,
+      "help": "Use a qualified database or schema name where needed.",
+      "reference_kind": "schema"
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns",
+      "tab": "Columns",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Column name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Native data type",
+          "control": "text",
+          "required": true,
+          "record_key": "data_type"
+        },
+        {
+          "field_id": "nullable",
+          "label": "Nullable",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "default",
+          "label": "Default expression",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "unique",
+          "label": "Unique",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "primary_key",
+          "label": "Primary key",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "record_key": "primary_key_position",
+          "record_truthy": true
+        }
+      ],
+      "required": true,
+      "help": "Array of name, type, nullable, default, unique and primary_key properties."
+    },
+    {
+      "field_id": "primary_key",
+      "label": "Primary key",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Primary key",
+      "backend_field_id": "constraints[kind=PRIMARY KEY]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ]
+    },
+    {
+      "field_id": "unique_constraints",
+      "label": "Unique",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Unique",
+      "backend_field_id": "constraints[kind=UNIQUE]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ]
+    },
+    {
+      "field_id": "foreign_keys",
+      "label": "Foreign keys",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Foreign keys",
+      "backend_field_id": "constraints[kind=FOREIGN KEY]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        },
+        {
+          "field_id": "references_table",
+          "label": "Referenced table",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "table"
+        },
+        {
+          "field_id": "references_columns",
+          "label": "Referenced columns",
+          "control": "multiselect",
+          "required": true,
+          "help": "Columns of the referenced table, in key order."
+        }
+      ]
+    },
+    {
+      "field_id": "check_constraints",
+      "label": "Check",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Check",
+      "backend_field_id": "constraints[kind=CHECK]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "expression",
+          "label": "Expression",
+          "control": "code",
+          "required": true,
+          "language": "sql"
+        }
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: constraints grid split into Primary key / Unique / Foreign keys / Check; parent picker (schema). Reviewed by tools/review_ui_descriptors.py: column grid record keys. Round trip verified in-process (create, re-inspect, alter via the Columns grid diff) on DuckDB 2.0.0 (profile pins 1.5.2) by tools/tests/test_ui_descriptor_roundtrip_duckdb.py. Native qualification on the pinned version remains with the platform teams."
+}

@@ -294,12 +294,64 @@ replay. MySQL DDL implicit commits and nontransactional table behavior are not
 changed. These actions are not added to MariaDB or MySQL-wire engines by analogy.
 
 Completed MySQL statements refresh the checkbox's observation on the same idle
-connection, so explicit SET autocommit SQL is reflected. Failed observation
-blocks further execution until refresh succeeds. Query messages expose bounded
+connection using the last native protocol status, so explicit SET autocommit SQL
+is reflected without a PING or SQL getter. This observation does not check the
+server's present availability. A decoded ERR has no fresh policy flags: the
+checkbox becomes unknown and cannot change policy, while the original usable
+session remains available for diagnostic SQL. A later complete native response
+supplies fresh flags. A failed policy request or uncertain transport outcome
+still blocks execution. Query messages expose bounded
 native server error text with errno/SQLSTATE, but not local connector exception
 text. Client dispatch timing covers cursor.execute only: it includes transport
 and the first native response, not subsequent result fetching, browser waits,
 or isolated server execution/preparation time.
+
+Original-session diagnostic state
+---------------------------------
+
+Retained session opening captures the native instance and connection identity
+once. Subsequent query dispatch checks the connector's local connection ID;
+it does not send an identity query on the user's connection. Cancellation still
+verifies the instance on its separate control connection. Constructing a MySQL
+cursor checks local closure without the connector factory's implicit PING.
+Explicit health probes outside cursor construction retain their native behavior.
+Decoded server errors establish a command boundary without a recovery PING.
+Finishing a framed script does not send an extra language observation for an
+empty or comment-only tail, including after a statement terminator.
+
+For admitted MySQL Performance Schema profiles, parameter binding, script
+framing and C charset adaptation read the original thread's variables through
+a separately authenticated retained connection. Admission binds the native
+instance, authenticated principal, exact connection/thread IDs and a random
+handshake attribute. Complete current SQL mode and charset facts are required;
+no diagnostic function is emulated or rewritten. The original connection's
+transaction status continues to come from its own native protocol responses.
+The observer's status is an admission fact, not an original-session health probe.
+
+The account needs SELECT on ``performance_schema.variables_by_thread`` and
+``performance_schema.session_account_connect_attrs``; the original connection's
+handshake attribute must be visible. The observer is closed with its query
+session and is not borrowed from the user's pool. Loss or denial after admission
+refuses the affected command without an original-session metadata fallback. A
+later authenticated execution request can renew a lost observer, without
+reconnecting the original session or replaying a command. Denied/disabled
+admission retains the existing intrusive path and is explicitly unqualified for
+diagnostic preservation. A native C escaping-mode flag that disagrees with the
+observed SQL mode refuses binding rather than guessing.
+An unconfirmed original handshake identity quarantines that source session;
+an independent observer connection failure alone does not establish its loss.
+
+``tools/cdeadmin_mysql_family_session_diagnostics_qualification.py --engine mysql``
+accepts ``--mysql-interface pure`` and ``--mysql-interface c``. It exercises
+native ROW_COUNT, GET DIAGNOSTICS, error/warning areas, parameter and script
+framing, charset changes, observer permission/connection loss, a routine that
+changes autocommit before failing, cancellation and unread disconnects through
+the authenticated original-session API. Native source-session command capture
+checks that these admitted execution paths do not substitute language/charset
+queries or PINGs. Other retained editor/catalog/native-validation consumers and
+unqualified admission profiles remain open under ``MY-DIAGNOSTICS``. This receipt
+does not establish browser diagnostics coverage or close the independent native
+inventory.
 
 DDN to native metadata export
 -----------------------------
@@ -999,12 +1051,15 @@ its owning lifecycle. No native library is downloaded, fabricated or silently
 substituted. A successful registration does not prove the library's own runtime
 services are configured; ordinary SQL exposes native execution diagnostics.
 
-The reference 9.7 source also parses masking policy statements, but its community
-runtime requires an unavailable object-policy component to implement policy DDL.
-Grammar presence alone must not expose a working masking-policy administration
-feature or claim successful policy deployment. Native SQL diagnostics remain
-available; support for an admitted policy component needs its exact native
-catalog/operation contract and qualification rather than a placeholder.
+The reference 9.7 source also parses global masking policy definitions. Their
+CREATE, DROP and definition lookup require an admitted object-policy component
+and native management privilege. The required Enterprise ``object_policy``
+implementation is absent from the acquired community source. Under the owner's
+2026-10-20 open source/source available beta scope, component installation,
+global policy administration and functioning masking are post beta
+(``MY-POST-BETA-MASKING`` in :doc:`six_engine_remaining_work`). Column policy
+references have separate open source native support, described below; their
+successful assignment does not prove that policy execution is available.
 
 Reviewed DDN library deployment
 -------------------------------
@@ -1018,6 +1073,19 @@ SHOW CREATE/SQL-mode comparison. External DDL is not fenced, so a guaranteed
 exclusive change requires an operator-controlled DDL maintenance window.
 Native acknowledgements, uncertain outcomes, restart and non-replay follow the
 same per-operation durable receipt rules as table/view deployment.
+
+These community declaration receipts do not qualify JavaScript parsing or
+execution. The pinned core source stores a library declaration with a warning
+when ``external_library`` / ``external_library_ext`` are unavailable. External
+routine execution separately requires ``external_program_execution``. The
+acquired source contains their service contracts and core consumers, but no MLE
+service implementation in its component/plugin trees. Oracle's `MLE component
+documentation <https://dev.mysql.com/doc/refman/9.7/en/mle-component.html>`_
+identifies ``component_mle`` as Enterprise. Its JavaScript runtime, imports,
+language validation and corresponding complete workflows are post beta under
+``MY-POST-BETA-MLE`` in :doc:`six_engine_remaining_work`. Existing open source
+catalog, native declaration management and exact DDN support keep their recorded
+scope; do not equate SQL PREPARE success with JavaScript validity.
 
 Reviewed DDN events and time zones
 ----------------------------------
@@ -1211,3 +1279,177 @@ comparing identity; newly emitted target names use escaped backticks, which rema
 valid under ANSI_QUOTES. Complete bodies and literals are retained under their
 recorded SQL mode. A change in SQL mode must never reinterpret a stored identifier
 as a string literal or discard a native body.
+Native foreign-server definitions
+---------------------------------
+
+MySQL discovers all visible ``mysql.servers`` definitions independently of
+whether the FEDERATED storage engine is loaded. The Server links navigator
+branch exposes native create, partial alter and drop, including IF EXISTS.
+Typed controls preserve wrapper, host, database, user, socket, owner and exact
+native port. Names containing punctuation and backticks retain their identity.
+The catalog and documentary server DDN exclude passwords. Creating a definition
+does not establish a remote connection or enable a storage engine.
+
+Review and dispatch use independent attachments and verify exact version,
+server UUID, authenticated/effective principal and active roles. Existing-target
+operations compare all visible definition fields. A private, per-review salted
+credential comparison also refuses an external password change; neither the
+password nor that comparison value appears in previews or receipts. Alter only
+changes explicitly selected options, preserving omitted credentials and native
+fields. Native errors, warnings, dispatch and acknowledgement remain separate;
+an observation failure after acknowledgement never authorizes replay. Catalog
+and review require visibility of ``mysql.servers``; mutation requires native
+SUPER authority.
+
+The server DDN planner also admits explicit credential-free foreign-server
+create, partial alter and drop instructions. Imported identity and wrapper must
+match the native target; altering or dropping requires exact confirmation.
+Application rechecks the captured native baseline before dispatch and verifies
+all selected attributes plus preserved omitted fields afterward. Missing DDN
+selections never request removal. Configure remote passwords separately through
+the native object controls; DDN instructions and durable reviews exclude them.
+Native acknowledgement, verified rediscovery and an unknown outcome remain
+separate, and repeated requests read the durable receipt without redispatch.
+
+``tools/cdeadmin_mysql_foreign_server_ddn_qualification.py`` exercises paired DDN
+export/import, generated native create/alter/drop, omitted credential
+preservation, changed-baseline refusal and receipt restart with both connector
+implementations and SQL modes. This extends the server exchange scope without
+claiming a consistent server backup or fencing external administration.
+
+Server capture now discovers every visible global variable, with persisted value,
+source, file, bounds and last-set provenance where MySQL exposes them. It retains
+the existing fact, byte and time bounds and reports privilege denial explicitly.
+``tools/cdeadmin_mysql_foreign_server_qualification.py`` independently compares
+the full runtime variable set and all foreign-server fields with both connector
+implementations and SQL modes, exercises credential changes and omitted-option
+preservation, and verifies native refusal without SUPER. These receipts qualify
+their installed runtime and scope.
+
+Installed component variables use their exact native dotted names, such as
+``validate_password.length``, in the configuration controls. GLOBAL, PERSIST,
+PERSIST_ONLY and RESET PERSIST preserve that identity and keep values out of
+command previews. ``tools/cdeadmin_mysql_component_variables_qualification.py``
+installs the native validation component and verifies discovery and all four
+operations with both connectors and SQL modes, independently checking runtime
+and persisted values.
+
+Configuration discovery unions the native runtime and persisted identities, so
+settings survive discovery after their component is unloaded. Facts distinguish
+``global_present``, ``persisted_present`` and ``persisted_value_redacted``. The
+persisted table does not identify sensitivity; persisted-only values are withheld
+even for a privileged caller, while exact names remain available in navigation
+and server DDN. Native privilege denial remains an unavailable observation.
+This does not classify arbitrary installed components' runtime values.
+
+RESET PERSIST uses the exact native name and can remove an unloaded component's
+override. Its review binds the observed identity and presence; a withheld value
+is not a value comparison or protection against concurrent external changes.
+Postconditions check persistence presence, including authoritative disappearance
+of the last native row. A withheld value cannot prove a successful SET. Durable
+DDN receipts distinguish acknowledgement from rediscovery and never redispatch
+after restart. ``tools/cdeadmin_mysql_persisted_variables_qualification.py``
+qualifies both connectors/modes, real component unload, independent observation,
+restricted discovery/denial and receipt reuse on an owned MySQL 9.7.0 server.
+
+Native spatial reference systems
+--------------------------------
+
+MySQL 9.7 exposes a server-scoped spatial-reference-system catalog with exact
+SRIDs, names, organizations, organization coordinate-system IDs, native WKT and
+descriptions. Native catalog facts retain all six fields. SRIDs are object
+identities; equal human-readable names do not merge systems. This family is
+specific to the MySQL profile and is not advertised by the MariaDB adapter.
+
+Typed create, IF NOT EXISTS, complete replacement and drop operations use the
+existing provider review/apply interface. Text attributes use native driver
+bindings in the selected SQL mode. Both numeric IDs use the native unsigned
+32-bit range. Replacement preserves its exact target ID and requires explicit
+confirmation. Review binds the native version, instance UUID, authenticated and
+effective principals and active roles; application rechecks that identity and
+the reviewed definition before dispatch. Native in-use and privilege refusals
+remain failures. DDL executes on a dedicated connection because MySQL owns its
+implicit transaction decision. An interactive session is never repurposed.
+Native warnings are captured before subsequent catalog queries, including
+IF NOT EXISTS acknowledgement without replacement.
+
+``tools/cdeadmin_mysql_spatial_reference_qualification.py`` compares the full
+observed native catalog independently and exercises pure/C extension drivers,
+normal and ANSI/NO_BACKSLASH_ESCAPES modes, all attributes, changed reviews,
+in-use spatial columns and restricted-user refusal. The recovery/lifecycle and
+product-inventory requirements remain separate.
+
+Server DDN also supports spatial-reference capture and explicit native create,
+complete replacement and drop. Select up to 128 distinct SRIDs in the server
+metadata workspace. Every selected definition retains all six native fields;
+captures record their exact SRID scope, including selected IDs that are absent.
+Omitted IDs are not observed absence or deletion intent. Large installations
+can exchange separate selected batches under the existing 8 MiB limits.
+
+Preview and application independently reobserve the SRIDs used by the imported
+baseline and desired metadata. Native IDs, imported resource addresses and
+confirmation must agree. Review binds the native instance, principals, active
+roles and SQL mode. Application checks every resulting native field, captures
+native warnings and preserves durable receipts without replaying a mutation.
+Native in-use and privilege refusals remain explicit failures. The qualification
+tool ``tools/cdeadmin_mysql_spatial_ddn_qualification.py`` exercises paired DDN
+roundtrip, both connectors and SQL modes, create/replacement/drop, stale reviews,
+in-use data preservation, native authority and receipt restart.
+
+Native column facts and masking references
+------------------------------------------
+
+MySQL column discovery retains every native INFORMATION_SCHEMA.COLUMNS field,
+alongside the existing display metadata and exact SHOW CREATE declaration.
+The masking-policy name is parsed from the native column clause, preserving
+quoted names, SQL mode, literal defaults and comments. A disagreement between
+the declaration and native EXTRA marker is reported as unavailable evidence.
+
+Typed assign/remove controls use ALTER COLUMN SET/DROP MASKING POLICY. Review
+records the exact column, all native fields, version, instance, principals,
+active roles and SQL mode. Apply rechecks that baseline on an independent
+connection, then verifies the resulting policy reference and preservation of
+every other column attribute. Native warnings, refusal, acknowledgement and
+post-acknowledgement observation failure remain distinct; mutations never replay
+automatically or decide the interactive session's transaction.
+
+The community fixture accepts column references while its policy component is
+unavailable. Review explicitly reports native error 6561 for definition lookup;
+reading the masked column also fails natively until the reference is removed.
+Removing it preserves the stored data. This state is not a successful masking
+deployment. ``tools/cdeadmin_mysql_column_masking_qualification.py`` verifies all
+22 observed column fields, quoted identities, both connectors and SQL modes,
+stale-review refusal, native ALTER authority and preserved data. These are
+community column-reference and refusal tests, not positive masking tests.
+The community source's own ``mysql-test/t/masking_policy.test`` likewise expects
+component-unavailable errors for policy CREATE/DROP/SHOW. The tree includes core
+SQL handling and service interfaces but no implementation of the required
+Enterprise policy component. Positive definition/execution qualification and
+the complete policy administration workflow are therefore post beta, excluded
+from beta completion blockers, with the dependency and reason recorded under
+``MY-POST-BETA-MASKING``. No replacement masking implementation is in scope.
+
+Unadmitted execution observations
+--------------------------------
+
+Retained sessions now also refuse parameter binding, current-mode script
+framing, query-attribute encoding and C-driver text conversion when independent
+session-variable observation was not admitted. They send no substitute metadata
+query on the user's connection. The original native diagnostic area, row count
+and pending work remain available; refusal is not successful execution. Ordinary
+operations that need these facts require the registered account's native
+Performance Schema access. A disabled Performance Schema requires reviewed
+configuration/restart and a new session.
+
+After restoring native access, an authenticated execution or editor request can
+readmit the private candidate on the same original connection. Credential
+acquisition never moves into the SQL worker. Native runtime identity is captured
+during session initialization and subsequently checked against the retained
+connection identity without another VERSION query. Pool release forgets that
+observation. Native pure/C and authenticated API qualification uses denied and
+disabled servers and a server general-log command-count oracle; it checks
+warning/error areas, ROW_COUNT, pending savepoints and access restoration.
+
+This is dependency-aware refusal, not an assertion of executable SQL support
+without the required private observation. Exact source active-role and temporary
+object overlays and other catalog consumers retain their separate scope.

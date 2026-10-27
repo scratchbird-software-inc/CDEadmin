@@ -17,6 +17,7 @@ transaction payload as opaque.
 from __future__ import annotations
 
 import copy
+import json
 import uuid
 import threading
 from contextlib import ExitStack, contextmanager
@@ -54,7 +55,7 @@ from .native_admin import (
 )
 from .catalog_capture import CAPTURE_RESOURCE_KINDS
 from .preserved_surface import (
-    SURFACE_ID, adapt_catalog, concept_declarations, preserved_operations,
+    SURFACE_ID, adapt_catalog, concept_declarations, administration_operations,
 )
 
 
@@ -66,7 +67,7 @@ LEGACY_DRIVER_TYPE = 'psycopg3'
 APPROVED_DRIVER_VERSIONS = frozenset({'3.2.13', '3.3.4'})
 EVIDENCE_REFERENCE = 'cde-prep-050:postgresql-preservation-20260831'
 CATALOG_KINDS = frozenset({'database', 'schema', 'table', 'conversion',
-                           'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate'})
+                           'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object'})
 TABULAR_RENDER_CAPABILITY = 'postgresql.result.tabular.render'
 
 TOOL_DISPOSITIONS = {
@@ -80,7 +81,7 @@ TOOL_DISPOSITIONS = {
 POSTGRESQL_CONCEPT_DECLARATIONS = {
     'relational': concept_declarations(),
 }
-POSTGRESQL_ADMIN_OPERATIONS = preserved_operations()
+POSTGRESQL_ADMIN_OPERATIONS = administration_operations()
 
 
 class PostgreSQLProviderError(RuntimeError):
@@ -193,7 +194,7 @@ class PostgreSQLCatalogSource:
             return self._databases(manager, object_id)
         database_id = _required_int(route, 'database_id')
         connection = manager.connection(did=database_id)
-        if catalog_kind in {'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate'}:
+        if catalog_kind in {'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object'}:
             return self._advanced(connection, catalog_kind, route, object_id)
         if catalog_kind == 'schema':
             return self._schemas(manager, connection, route, object_id)
@@ -203,6 +204,8 @@ class PostgreSQLCatalogSource:
         if not connection.connected():
             raise PostgreSQLProviderError('Connect to the selected database before browsing objects')
         queries = {
+            'large-object': ('SELECT c.oid,c.oid::text AS name,pg_catalog.pg_get_userbyid(c.lomowner) AS owner '
+                'FROM pg_catalog.pg_largeobject_metadata c', None),
             'aggregate': ('SELECT c.oid, c.proname AS name, n.nspname AS schema, '
                 'pg_catalog.pg_get_function_identity_arguments(c.oid) AS identity_arguments '
                 ', (pg_catalog.pg_identify_object(\'pg_catalog.pg_proc\'::regclass,c.oid,0)).identity AS sql_identity '
@@ -325,6 +328,12 @@ class PostgreSQLProvider:
         )
 
     @staticmethod
+    def engine_contract_descriptor():
+        from ...engine_contracts import contract_descriptor
+        from .contracts import PROFILE,dialect_task_ids
+        return contract_descriptor(PROFILE,__name__,dialect_task_ids())
+
+    @staticmethod
     def visual_admin_catalog(catalog):
         """Expose only operations routed to the preserved PostgreSQL UI."""
         return adapt_catalog(catalog)
@@ -358,15 +367,20 @@ class PostgreSQLProvider:
             'route': self._native_admin_route(request),
             'statement': compiled['statement'],
             'read_only': compiled['read_only'],
+            **{key: compiled[key] for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation') if key in compiled},
         }
         return {
             'command_preview': {
                 'language': 'postgresql-sql',
                 'statement': compiled['statement'],
                 'provider_owned': True,
+                **({'verification_statement': compiled['post_statement']} if 'post_statement' in compiled else {}),
             },
             'provider_payload': payload,
-            'warnings': [],
+            'warnings': (['File paths refer to the database server host. Native function privileges and OS file access apply.'] +
+                         (['Export can overwrite the selected file. SQL rollback does not undo server filesystem output.']
+                          if compiled.get('server_file_operation') == 'export' else []))
+                        if compiled.get('server_file_operation') else [],
             'receipt': {
                 'provider_owned': True,
                 'automatic_mutation_retry': False,
@@ -382,7 +396,11 @@ class PostgreSQLProvider:
         route = payload.get('route') or {}
         statement = _required_text(payload.get('statement'), 'statement')
         compiled = self._compile_native_admin(payload)
-        if compiled != {'statement': statement, 'read_only': payload.get('read_only')}:
+        expected = {'statement': statement, 'read_only': payload.get('read_only')}
+        for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation'):
+            if key in compiled:
+                expected[key] = payload.get(key)
+        if compiled != expected:
             raise PostgreSQLProviderError('Retained administrative statement changed')
         self.permissions.require('data_read' if compiled['read_only'] else 'administer')
         self.permissions.require('execute')
@@ -391,6 +409,7 @@ class PostgreSQLProvider:
         state = self._sessions[session['session_id']]
         response = None
         committing = False
+        file_export_dispatched = False
         try:
             self._ensure_native_connection(state)
             connection = state.connection
@@ -407,10 +426,23 @@ class PostgreSQLProvider:
                 'SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database()')
             if not status or identity.get('rows') != [{'oid': database_id}]:
                 raise PostgreSQLProviderError('Selected administrative database identity changed')
-            status, result = (connection.execute_dict(statement) if compiled['read_only']
+            file_export_dispatched = compiled.get('server_file_operation') == 'export'
+            status, result = (connection.execute_dict(statement) if compiled['read_only'] or compiled.get('returns_rows')
                               else connection.execute_void(statement))
             if not status:
                 raise PostgreSQLProviderError('PostgreSQL rejected the administrative statement')
+            if compiled.get('server_file_operation'):
+                rows = result.get('rows', [])
+                if (len(rows) != 1 or
+                        compiled['server_file_operation'] == 'export' and rows[0].get('native_result') != 1 or
+                        compiled['server_file_operation'] == 'import' and
+                        (type(rows[0].get('oid')) is not int or not 1 <= rows[0]['oid'] <= 2**32-1)):
+                    raise PostgreSQLProviderError('Native PostgreSQL server-file acknowledgement is unavailable')
+            if compiled.get('post_statement'):
+                status, result = connection.execute_dict(compiled['post_statement'])
+                if (not status or len(result.get('rows', [])) != 1 or
+                        result['rows'][0].get('observed_sha256') != compiled['expected_sha256']):
+                    raise PostgreSQLProviderError('PostgreSQL large-object write verification failed before commit')
             committing = True
             status, command = native_control(connection.conn, 'COMMIT')
             if not status or command != 'COMMIT':
@@ -421,17 +453,27 @@ class PostgreSQLProvider:
                 'result': copy.deepcopy(result), 'automatic_retry_performed': False,
                 'common_finality_inference': False,
             }
+            if compiled.get('server_file_operation'):
+                response['file_effects'] = {'host':'database-server','operation':compiled['server_file_operation'],
+                    'native_function_acknowledged':True,'independent_file_verification':False,
+                    'filesystem_write_rolled_back_by_sql':False}
         except Exception:
             if committing:
                 state.uncertain = True
                 raise PostgreSQLProviderError(
-                    'PostgreSQL administrative commit outcome is unknown; do not replay') from None
+                    'PostgreSQL administrative commit outcome is unknown; do not replay' +
+                    ('. Database-server file output may already exist and is not undone by SQL rollback'
+                     if file_export_dispatched else '')) from None
+            if file_export_dispatched:
+                raise PostgreSQLProviderError('PostgreSQL server-file export outcome is unconfirmed; SQL rollback does not undo file output. Inspect the destination before retrying') from None
             raise
         finally:
             try:
                 self.close_session(session)
             except Exception:
                 if response is None:
+                    if file_export_dispatched:
+                        raise PostgreSQLProviderError('PostgreSQL server-file export outcome and connection release remain unconfirmed; SQL rollback does not undo file output. Inspect the destination before retrying') from None
                     raise PostgreSQLProviderError('Administrative connection release remains unconfirmed') from None
                 response.update(release_status='unconfirmed',
                                 release_pending_session_id=session['session_id'])
@@ -642,7 +684,15 @@ class PostgreSQLProvider:
 
     @staticmethod
     def _studio_complete(binding, request):
-        return binding.instance.complete(request)
+        provider = binding.instance
+        with provider._state_lock:
+            state = provider._require_idle_session(request.get('session_id'))
+            with state.lock:
+                completions = provider.complete(request)
+                context = provider._editor_context(state, request.get('full_source', ''))
+        return {'completions': dict(list(completions.items())[:1000]), 'editor_context': {
+            'context': context, 'truncated': len(completions) > 1000,
+            'coverage': 'Authorized PostgreSQL session completion', 'completion_count': len(completions)}}
 
     @classmethod
     def data_studio_contributions(cls):
@@ -1031,6 +1081,26 @@ class PostgreSQLProvider:
         finally:
             self.close_session(opened)
 
+    @_session_serialized
+    def capture_session_catalog(self, request):
+        self.permissions.require('data_read', 'resource')
+        payload = _mapping(request)
+        if payload.get('language_profile') != 'postgresql-sql' or type(payload.get('include_system', False)) is not bool:
+            raise PostgreSQLProviderError('Invalid PostgreSQL session catalog selection')
+        state = self._require_idle_session(payload.get('session_id'))
+        self._ensure_native_connection(state)
+        from .session_catalog import observe
+        try:
+            return observe(state, include_system=payload.get('include_system', False))
+        except ValueError as error:
+            raise PostgreSQLProviderError(str(error)) from None
+        except Exception:
+            if state.connection.conn.closed or state.connection.conn.broken:
+                state.uncertain = True
+            raise PostgreSQLProviderError('Session catalog capture failed; ' +
+                ('cleanup is unconfirmed, close this session without replay' if state.uncertain else
+                 'pending work and session settings were preserved')) from None
+
     def _resolve_delegated_database(self, route, database_id):
         # A fresh delegated manager has no interactive db_info cache. Resolve
         # through its own authenticated attachment, never a guessed DB name.
@@ -1090,6 +1160,14 @@ class PostgreSQLProvider:
                 'PostgreSQL delegated connection failed'
             )
 
+    def source_tooling(self, language_profile):
+        if language_profile != 'postgresql-sql':
+            raise PostgreSQLProviderError('PostgreSQL SQL language binding required')
+        return {'validation_authority': 'postgresql-offline-grammar',
+                'native_validation_available': True, 'nonexecuting': True,
+                'session_catalog': True,
+                'parser_binding': 'pglast 8.5; PostgreSQL 18.6; native options revision 2'}
+
     @_session_serialized
     def validate_source_without_execution(self, request):
         from .language import analyze
@@ -1099,11 +1177,20 @@ class PostgreSQLProvider:
         state = self._require_idle_session(payload.get('session_id'))
         self._ensure_native_connection(state)
         connection = state.connection.conn
+        context = self._editor_context(state, payload.get('source'))
         result = analyze(payload.get('source'), script=payload.get('script', False),
-                         standard_strings=connection.info.parameter_status(
-                             'standard_conforming_strings'))
+                         standard_strings=context['standard_conforming_strings'],
+                         backslash_quote=context['backslash_quote'])
         result['server_version'] = connection.info.server_version
         return result
+
+    @staticmethod
+    def _editor_context(state, source):
+        from .editor_context import observe
+        try:
+            return observe(state)
+        except RuntimeError as error:
+            raise PostgreSQLProviderError(str(error)) from None
 
     def _require_idle_session(self, session_id):
         state = self._sessions.get(session_id)
@@ -1284,24 +1371,36 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError('PostgreSQL session is unavailable')
         self._require_idle_session(session_id)
         self._ensure_native_connection(state)
-        adapter = self._completion_adapters.get(session_id)
-        if adapter is None:
-            # Import lazily so provider registration does not make the legacy
-            # Query Tool completion dependency part of common app startup.
-            from pgadmin.utils.sqlautocomplete.autocomplete import (
-                SQLAutoComplete,
-            )
-            adapter = SQLAutoComplete(
-                sid=state.server_id,
-                did=state.database_id,
-                conn=state.connection,
-                manager=state.manager,
-            )
-            self._completion_adapters[session_id] = adapter
-        return adapter.get_completions(
-            str(payload.get('full_source', '')),
-            str(payload.get('source_before_cursor', '')),
-        )
+        from .editor_context import read_scope
+        from psycopg.pq import TransactionStatus
+        try:
+            with read_scope(state):
+                adapter = self._completion_adapters.get(session_id)
+                if adapter is None:
+                    # Import lazily so provider registration does not make the legacy
+                    # Query Tool completion dependency part of common app startup.
+                    from pgadmin.utils.sqlautocomplete.autocomplete import (
+                        SQLAutoComplete,
+                    )
+                    adapter = SQLAutoComplete(
+                        sid=state.server_id,
+                        did=state.database_id,
+                        conn=state.connection,
+                        manager=state.manager,
+                    )
+                    # Rebuild native metadata for each request. The legacy adapter
+                    # extends cached objects and can retain dropped objects, revoked
+                    # visibility or a previous search_path when reused indefinitely.
+                    # Session ownership remains cached; catalog suggestions do not.
+                result = adapter.get_completions(
+                    str(payload.get('full_source', '')),
+                    str(payload.get('source_before_cursor', '')),
+                )
+                if state.connection.conn.info.transaction_status != TransactionStatus.INTRANS:
+                    raise PostgreSQLProviderError('Native completion metadata is unavailable')
+                return result
+        except (ValueError, RuntimeError) as error:
+            raise PostgreSQLProviderError(str(error)) from None
 
     @_session_serialized
     def execute(self, request):

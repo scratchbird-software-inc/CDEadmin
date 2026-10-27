@@ -9,6 +9,7 @@ from psycopg.rows import tuple_row
 
 from .execution import value, control
 from ...results.ddn_export import export_workspace
+from ..native_data_layout import inspect_relation
 
 MAX_ROWS = 6000
 MAX_BYTES = 4 * 1024 * 1024
@@ -54,6 +55,7 @@ def capture(provider, route, endpoint_id, resource_id, *, mode='sample', row_lim
                 if relation is None:
                     raise ValueError('Selected relation is unavailable or has no admitted data capture')
                 schema, name, kind = relation
+                layout = inspect_relation(connection, 'postgresql', resource_id, route)
                 qualified = sql.Identifier(schema, name)
                 # DECLARE acquires the query's relation locks, including on a
                 # materialized view (which LOCK TABLE does not support).
@@ -72,6 +74,7 @@ def capture(provider, route, endpoint_id, resource_id, *, mode='sample', row_lim
                         raise ValueError('DDN data capture supports at most 256 columns')
                     if columns is None:
                         columns = [{'name': result.fname(i).decode(connection.info.encoding),
+                            'native_name': result.fname(i).decode(connection.info.encoding), 'native_type': layout['native_columns'][i]['native_type'],
                             'key': str(i), 'pos': i, 'type_code': result.ftype(i),
                             'format': 'postgresql-text', 'table_oid': result.ftable(i),
                             'table_column': result.ftablecol(i)} for i in range(result.nfields)]
@@ -99,14 +102,16 @@ def capture(provider, route, endpoint_id, resource_id, *, mode='sample', row_lim
                                   'TimeZone': 'UTC', 'bytea_output': 'hex', 'extra_float_digits': 3},
                 'visibility': 'native SELECT privileges and row-security rules; attachment-visible rows only',
                 'value_encoding': 'PostgreSQL text protocol with native type OIDs; NULL retained'}
+            acquisition.update(engine_id='postgresql', native_version=layout['native_version'], native_columns=layout['native_columns'], native_layout=layout)
             metadata = {'schema': {'columns': columns or []}, 'complete': acquisition['selection_complete'],
                 'acquisition': acquisition, 'export_coverage': acquisition,
                 'value_encoding': acquisition['value_encoding'],
                 'consistency': acquisition['consistency'], 'title': 'Selected PostgreSQL relation data'}
-            snapshot = json.loads(export_workspace(metadata, rows))
             status, command = control(connection, 'COMMIT')
             if not status or command != 'COMMIT':
                 raise ValueError('Data capture transaction did not complete successfully')
+            acquisition['transaction_completed'] = True
+            snapshot = json.loads(export_workspace(metadata, rows))
             return {'snapshot': snapshot, 'coverage': acquisition,
                 'views': [{'id': 'result_' + str(i), 'entry': filename, 'label': 'Data page ' + str(i)}
                           for i, filename in enumerate(snapshot['files'], 1)]}

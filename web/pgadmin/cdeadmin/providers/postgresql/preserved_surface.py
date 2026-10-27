@@ -393,9 +393,15 @@ def preserved_operations():
     }
 
 
+def administration_operations():
+    """Preserved operations plus separately implemented native product features."""
+    from .large_objects import OPERATIONS
+    return {**preserved_operations(), 'large-object': OPERATIONS}
+
+
 def adapt_catalog(catalog):
     """Bind the common catalog to exact preserved-surface operations."""
-    admitted_operations = preserved_operations()
+    admitted_operations = administration_operations()
     result = copy.deepcopy(catalog)
     resources = {
         resource['resource_kind']: resource
@@ -409,9 +415,11 @@ def adapt_catalog(catalog):
         'grant': 'admin', 'revoke': 'admin',
         'delete': 'destructive', 'drop': 'destructive',
         'refresh': 'admin',
+        'read': 'read', 'write': 'write', 'truncate': 'destructive',
+        'import-server-file': 'admin', 'export-server-file': 'destructive',
     }
     native_form_kinds = {
-        'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate',
+        'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
     }
 
     def native_form(kind, operation_id, title):
@@ -423,6 +431,9 @@ def adapt_catalog(catalog):
                 'required': required, **extra,
             }
 
+        if kind == 'large-object':
+            from .large_objects import form
+            return form(operation_id, field)
         if operation_id == 'inspect':
             fields = []
         elif kind == 'aggregate' and operation_id == 'create':
@@ -548,9 +559,9 @@ def adapt_catalog(catalog):
                 'title': operation_id.replace('-', ' ').title(),
                 'mutation_class': mutation_classes[operation_id],
                 'form_id': 'postgresql-preserved-route',
-                'target_required': operation_id != 'create',
+                'target_required': operation_id not in {'create', 'import-server-file'},
                 'confirmation_required': operation_id in {
-                    'delete', 'drop',
+                    'delete', 'drop', 'truncate', 'export-server-file',
                 },
             })
             if kind in native_form_kinds:

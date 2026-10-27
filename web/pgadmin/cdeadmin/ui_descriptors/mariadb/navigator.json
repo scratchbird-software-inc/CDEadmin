@@ -1,0 +1,175 @@
+{
+  "schema": "cdeadmin.ui-navigator.v1",
+  "engine": "mariadb",
+  "sort": "alphabetical",
+  "groups": [
+    {
+      "group_id": "topology",
+      "title": "Topology",
+      "kinds": [
+        "server"
+      ],
+      "order": 1
+    },
+    {
+      "group_id": "namespaces",
+      "title": "Databases and schemas",
+      "kinds": [
+        "database"
+      ],
+      "order": 2
+    },
+    {
+      "group_id": "relations",
+      "title": "Tables and views",
+      "kinds": [
+        "table",
+        "column",
+        "index",
+        "constraint",
+        "view",
+        "sequence",
+        "partition"
+      ],
+      "order": 3
+    },
+    {
+      "group_id": "programmable",
+      "title": "Routines and triggers",
+      "kinds": [
+        "trigger",
+        "procedure",
+        "function",
+        "package"
+      ],
+      "order": 4
+    },
+    {
+      "group_id": "scheduling",
+      "title": "Scheduled events",
+      "kinds": [
+        "event"
+      ],
+      "order": 5
+    },
+    {
+      "group_id": "storage",
+      "title": "Storage",
+      "kinds": [
+        "tablespace"
+      ],
+      "order": 6
+    },
+    {
+      "group_id": "security",
+      "title": "Security",
+      "kinds": [
+        "user",
+        "role",
+        "privilege"
+      ],
+      "order": 7
+    },
+    {
+      "group_id": "ingest",
+      "title": "Plugins",
+      "kinds": [
+        "plugin"
+      ],
+      "order": 8
+    },
+    {
+      "group_id": "replication",
+      "title": "Replication",
+      "kinds": [
+        "replication-channel"
+      ],
+      "order": 9
+    },
+    {
+      "group_id": "operations",
+      "title": "Administration",
+      "kinds": [
+        "server-link",
+        "loadable-function",
+        "session",
+        "system-variable",
+        "lock-wait",
+        "table-storage",
+        "binary-log",
+        "binary-log-event",
+        "binary-log-status",
+        "log-configuration",
+        "general-log-entry",
+        "slow-query",
+        "tls-configuration"
+      ],
+      "order": 10
+    },
+    {
+      "group_id": "keys",
+      "title": "Locks",
+      "kinds": [
+        "lock"
+      ],
+      "order": 11
+    },
+    {
+      "group_id": "analytics",
+      "title": "Analytics",
+      "kinds": [
+        "metric"
+      ],
+      "order": 12
+    }
+  ],
+  "resource_children": {
+    "table": [
+      "column",
+      "index",
+      "trigger",
+      "constraint",
+      "partition"
+    ],
+    "view": [
+      "column"
+    ]
+  },
+  "kind_icons": {
+    "server": "object.server",
+    "database": "object.database",
+    "table": "object.table",
+    "column": "object.column",
+    "index": "object.index",
+    "constraint": "object.constraint",
+    "view": "object.view",
+    "sequence": "object.sequence",
+    "trigger": "object.trigger",
+    "event": "object.event",
+    "procedure": "object.procedure",
+    "function": "object.function",
+    "package": "object.package",
+    "partition": "object.partition",
+    "tablespace": "object.tablespace",
+    "user": "object.user",
+    "role": "object.role",
+    "privilege": "object.privilege",
+    "plugin": "object.plugin",
+    "replication-channel": "object.replication-channel",
+    "server-link": "object.server-link",
+    "loadable-function": "object.loadable-function",
+    "session": "object.session",
+    "system-variable": "object.system-variable",
+    "lock": "object.lock",
+    "lock-wait": "object.lock-wait",
+    "table-storage": "object.table-storage",
+    "binary-log": "object.binary-log",
+    "binary-log-event": "object.binary-log-event",
+    "binary-log-status": "object.binary-log-status",
+    "log-configuration": "object.log-configuration",
+    "general-log-entry": "object.general-log-entry",
+    "slow-query": "object.slow-query",
+    "metric": "object.metric",
+    "tls-configuration": "object.tls-configuration"
+  }
+}

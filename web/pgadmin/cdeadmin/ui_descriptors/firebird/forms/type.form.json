@@ -1,0 +1,79 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "type",
+  "resource_kinds": [
+    "domain"
+  ],
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "data_type",
+      "label": "Base data type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "record_key": "type_sql"
+    },
+    {
+      "field_id": "default",
+      "label": "Default expression",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "record_key": "default_source",
+      "record_pattern": "^\\s*DEFAULT\\s+(.*)$"
+    },
+    {
+      "field_id": "not_null",
+      "label": "Not null",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "record_truthy": true
+    },
+    {
+      "field_id": "check",
+      "label": "Check expression",
+      "tab": "Constraints",
+      "control": "text",
+      "required": false,
+      "record_key": "validation_source",
+      "record_pattern": "^\\s*CHECK\\s*\\((.*)\\)\\s*$"
+    },
+    {
+      "field_id": "drop_constraint",
+      "label": "Drop check constraint",
+      "tab": "Constraints",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "drop_default",
+      "label": "Drop default",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Round-tripped against Firebird 5.0.3 by tools/tests/test_ui_descriptor_roundtrip_firebird.py (create, re-inspect pre-fill, alter)."
+}

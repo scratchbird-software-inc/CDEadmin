@@ -1,0 +1,263 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "table",
+  "resource_kinds": [
+    "table"
+  ],
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Table options (ENGINE, CHARACTER SET, COLLATE, ROW_FORMAT, AUTO_INCREMENT, COMMENT, TRANSACTIONAL, PAGE_CHECKSUM, ENCRYPTED)",
+      "reason": "table.create exposes only name/parent/columns/constraints; MariaDB needs the equivalent of mysql_table_options.py",
+      "tracking": "MA-TABLE-OPTIONS"
+    },
+    {
+      "concept": "System-versioned tables (WITH SYSTEM VERSIONING, period columns)",
+      "reason": "not a resource kind or field today; appears only in schema validation/data application",
+      "tracking": "MA-SYSTEM-VERSIONING"
+    },
+    {
+      "concept": "Partitions tab",
+      "reason": "partition_by/add_partitions/coalesce_partitions/remove_partitioning exist as operations; fold into the Partitions tab per design 6.1",
+      "tracking": "MA-PARTITIONS"
+    },
+    {
+      "concept": "Column grid depth",
+      "reason": "column records carry only name/type/nullable/default/unique/primary_key; add length/precision/scale, unsigned, charset/collation, auto_increment, generated expression, comment"
+    },
+    {
+      "concept": "Constraint columns / column keys on re-open",
+      "reason": "MariaDB inventory (mysql_family provider) lists this as a separate resource with positional details only; constraint columns, column uniqueness and primary-key membership are not reported, so re-opened grids show names and types only. Backend ask for the mysql_family inventory owner."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Database",
+      "tab": "General",
+      "control": "reference",
+      "required": false,
+      "help": "Use a qualified database or schema name where needed.",
+      "reference_kind": "database"
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns",
+      "tab": "Columns",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Column name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Native data type",
+          "control": "text",
+          "required": true,
+          "record_key": "details.0"
+        },
+        {
+          "field_id": "nullable",
+          "label": "Nullable",
+          "control": "boolean",
+          "required": false,
+          "default": true,
+          "record_derive": {
+            "cases": [
+              {
+                "key": "details.1",
+                "equals": "YES",
+                "value": true
+              }
+            ],
+            "default": false
+          }
+        },
+        {
+          "field_id": "default",
+          "label": "Default expression",
+          "control": "text",
+          "required": false,
+          "record_key": "details.2",
+          "record_pattern": "^(?!NULL$)(.*)$"
+        },
+        {
+          "field_id": "unique",
+          "label": "Unique",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "primary_key",
+          "label": "Primary key",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "record_key": "primary_key_position",
+          "record_truthy": true
+        }
+      ],
+      "required": true,
+      "help": "Array of name, type, nullable, default, unique and primary_key properties."
+    },
+    {
+      "field_id": "primary_key",
+      "label": "Primary key",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Primary key",
+      "backend_field_id": "constraints[kind=PRIMARY KEY]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ],
+      "record_filter": {
+        "key": "details.0",
+        "equals": "PRIMARY KEY"
+      }
+    },
+    {
+      "field_id": "unique_constraints",
+      "label": "Unique",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Unique",
+      "backend_field_id": "constraints[kind=UNIQUE]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        }
+      ],
+      "record_filter": {
+        "key": "details.0",
+        "equals": "UNIQUE"
+      }
+    },
+    {
+      "field_id": "foreign_keys",
+      "label": "Foreign keys",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Foreign keys",
+      "backend_field_id": "constraints[kind=FOREIGN KEY]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ]
+        },
+        {
+          "field_id": "references_table",
+          "label": "Referenced table",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "table"
+        },
+        {
+          "field_id": "references_columns",
+          "label": "Referenced columns",
+          "control": "multiselect",
+          "required": true,
+          "help": "Columns of the referenced table, in key order."
+        }
+      ],
+      "record_filter": {
+        "key": "details.0",
+        "equals": "FOREIGN KEY"
+      }
+    },
+    {
+      "field_id": "check_constraints",
+      "label": "Check",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Check",
+      "backend_field_id": "constraints[kind=CHECK]",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "expression",
+          "label": "Expression",
+          "control": "code",
+          "required": true,
+          "language": "sql"
+        }
+      ],
+      "record_filter": {
+        "key": "details.0",
+        "equals": "CHECK"
+      }
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: constraints grid split into Primary key / Unique / Foreign keys / Check; parent picker (database). Reviewed by tools/review_ui_descriptors.py: column grid record keys. Round-tripped against MariaDB 10.11 by tools/tests/test_ui_descriptor_roundtrip_mariadb.py (create, re-inspect pre-fill, alter where the engine supports it).",
+  "record_children": {
+    "columns": {
+      "resource_kind": "column"
+    },
+    "primary_key": {
+      "resource_kind": "constraint"
+    },
+    "unique_constraints": {
+      "resource_kind": "constraint"
+    },
+    "foreign_keys": {
+      "resource_kind": "constraint"
+    },
+    "check_constraints": {
+      "resource_kind": "constraint"
+    }
+  }
+}

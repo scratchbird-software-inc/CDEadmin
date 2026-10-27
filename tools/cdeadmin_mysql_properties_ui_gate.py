@@ -172,8 +172,12 @@ def run(options):
             driver, 'Database observations'
         )
         rendered_server = _rendered_group(driver, 'Server observations')
-        expected_database = _expected(native['database'])
-        expected_server = _expected(native['server'])
+        coverage = {'state': 'queried', 'complete_native_inventory': False,
+                    'failed_query_count': 0, 'failures': []}
+        expected_database = _expected({**native['database'], 'definition': native['database'],
+            'catalog_coverage': coverage, 'property_sections': ['properties', 'definition', 'operations']})
+        expected_server = _expected({**native['server'], 'state': native['server'],
+            'catalog_coverage': coverage, 'property_sections': ['properties', 'state', 'operations']})
         differences = {
             'database': _differences(
                 rendered_database or {}, expected_database

@@ -17,7 +17,18 @@ def serialized_execution(method):
         plan_id = kwargs.pop('_script_plan_id', None)
         with self.scripts.lock:
             self.scripts.check_execution(session_id, plan_id)
-            return method(self, context, session_id, *args, **kwargs)
+            try:
+                return method(self, context, session_id, *args, **kwargs)
+            finally:
+                session=getattr(self,'_sessions',{}).get(session_id)
+                request=args[0] if args and isinstance(args[0],dict) else kwargs.get('request',{})
+                operation=request.get('operation') if isinstance(request,dict) else None
+                mutating=(method.__name__ in {'execute','control_transaction','sqlite_transform_binding','sqlite_capture_binding'} or
+                    method.__name__ in {'sqlite_extension_action','sqlite_native_session_action','sqlite_native_array_action','sqlite_native_preupdate_action'} and
+                    operation not in {'inventory','status','receipt','events'})
+                if (mutating and session is not None and session.language_profile=='sqlite-sql' and
+                        session.provider_isolation_key is not None and session.provider_isolation_key==context.isolation_key):
+                    session.native_work_revision+=1
     return call
 
 
@@ -33,6 +44,7 @@ class ScriptCoordinator:
     def __init__(self, studio):
         self.studio = studio
         self.plans = {}
+        self.execution_policies = {}
         self.lock = threading.RLock()
 
     def check_execution(self, session_id, plan_id=None):
@@ -47,10 +59,20 @@ class ScriptCoordinator:
         with self.lock:
             self.plans = {key: plan for key, plan in self.plans.items()
                           if plan['session_id'] != session_id}
+            self.execution_policies = {key:value for key,value in self.execution_policies.items() if key in self.plans}
 
-    def prepare(self, context, session_id, source):
+    def prepare(self, context, session_id, source, *, mysql_query_attributes=None):
         session, binding = self.studio._operational_session(
             context, session_id)
+        execution_policy={}
+        if mysql_query_attributes is not None:
+            if session.language_profile!='mysql-sql':
+                raise DataStudioAccessError('Query attributes are only admitted for native MySQL')
+            from ..providers.mysql_family.mysql_query_attributes import request_value
+            try:execution_policy['mysql_query_attributes']=request_value(mysql_query_attributes)
+            except ValueError as error:raise DataStudioAccessError(str(error)) from None
+        if session.language_profile == 'firebird-sql':
+            raise DataStudioAccessError('Use the Firebird native script workflow for its dialect and client settings')
         if not callable(
                 getattr(binding.instance, 'script_statement_outcome', None)):
             raise DataStudioAccessError(
@@ -70,8 +92,10 @@ class ScriptCoordinator:
             plan = {'plan_id': str(uuid.uuid4()), 'session_id': session_id,
                     'endpoint_id': context.endpoint_id, 'language_profile': session.language_profile,
                     'source_sha256': checked['source_sha256'], 'statements': checked['statements'],
+                    'syntax_context': {key: checked[key] for key in ('syntax_settings', 'sql_mode', 'client_sql_dialect') if key in checked},
                     'state': 'ready', 'revision': 0, 'next_statement': 0, 'occurrence_id': None, 'history': []}
             self.plans[plan['plan_id']] = plan
+            self.execution_policies[plan['plan_id']]=execution_policy
             return copy.deepcopy(plan)
 
     def _owned(self, context, plan_id):
@@ -131,12 +155,20 @@ class ScriptCoordinator:
             validator = getattr(binding.instance, 'validate_source_without_execution', None)
             if callable(validator):
                 session, _ = self.studio._operational_session(context, plan['session_id'])
+                statement=plan['statements'][plan['next_statement']]
+                native_statement_context=session.language_profile=='mysql-sql' and statement.get('syntax_context_statement') is True
                 checked = validator({
                     'session_id': session.provider_session['session_id'],
-                    'language_profile': session.language_profile, 'script': True,
-                    'source': plan['statements'][plan['next_statement']]['source'],
+                    'language_profile': session.language_profile, 'script': not native_statement_context,
+                    'source': statement['source'],
                 })
-                if not checked['script_ready']:
+                context_changed = any(
+                    any(observed is not None and observed != value.get(name)
+                        for name, observed in checked.get(key, {}).items())
+                    if key == 'syntax_settings' else checked.get(key) != value
+                    for key, value in (statement.get('syntax_context',{}) if native_statement_context else plan.get('syntax_context', {})).items())
+                ready=checked.get('grammar_valid') is True if native_statement_context else checked['script_ready']
+                if not ready or context_changed:
                     plan.update(state='stopped', stop_reason='source-validation-changed',
                                 validation=checked, revision=plan['revision'] + 1)
                     return copy.deepcopy(plan)
@@ -144,10 +176,11 @@ class ScriptCoordinator:
             plan['state'] = 'submitting'
             plan['revision'] += 1
             try:
+                options={'output_policy':copy.deepcopy(self.execution_policies[plan_id])} if self.execution_policies.get(plan_id) else {}
                 occurrence = self.studio.execute(context, plan['session_id'],
                                                  plan['statements'][plan['next_statement']
                                                                     ]['source'],
-                                                 _script_plan_id=plan_id)
+                                                 _script_plan_id=plan_id, **options)
             except Exception:
                 plan['unresolved'] = True
                 plan['state'] = 'stopped'
@@ -178,6 +211,7 @@ class ScriptCoordinator:
                 raise DataStudioAccessError(
                     'Retain the plan while a statement outcome is unresolved')
             del self.plans[plan_id]
+            self.execution_policies.pop(plan_id,None)
             return {'discarded': True}
 
 

@@ -32,6 +32,7 @@
   "permissions": [
     {"permission_id": "network", "granted": true, "scope": ["endpoint"]},
     {"permission_id": "secret_read", "granted": true, "scope": ["endpoint"]},
+    {"permission_id": "backup_admin", "granted": true, "scope": ["endpoint", "resource"]},
     {"permission_id": "data_read", "granted": true, "scope": ["endpoint", "resource"]},
     {"permission_id": "data_write", "granted": true, "scope": ["endpoint", "resource"]},
     {"permission_id": "administer", "granted": true, "scope": ["endpoint", "resource"]},
@@ -59,7 +60,14 @@
     "driver_authority": "web/pgadmin/utils/driver/psycopg3",
     "transaction_authority": "PostgreSQL provider-native behavior",
     "runtime_state": "native_driver_and_scoped_components_qualified_full_surface_in_progress",
-    "activation_gate": "pending_exact_dialect_metrics_and_full_native_form_qualification",
+    "activation_gate": "pending_full_native_form_and_platform_qualification",
+    "exact_engine_contracts": {
+      "state": "qualified",
+      "reference_version": "18.3",
+      "qualification_scope": "37 generated native SQL compiler tasks; 52 core statistics/diagnostic families and 604 native columns; preserved HTTP forms and full product/platform acceptance remain separate",
+      "native_receipt_sha256": "ab3b54d93a4ec927c18cd1e351d94a689213222f77f1fec6a1ad6e6f858f7412",
+      "metrics_receipt_sha256": "ba7671f65287536b2adfcee26c645d00a78920052f6b53b50d03b63807bc91e2"
+    },
     "live_evidence_reference": "cde-rel-live:postgresql-18.3:20260910",
     "object_experience_gate": "requires_requalification",
     "historical_evidence_scope": "The retained hashes identify earlier evidence. Preserved asset inventory and direct SQL smoke do not qualify all native form operations; these hashes do not authorize current full-surface completion.",

@@ -1,0 +1,2181 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "table",
+  "resource_kinds": [
+    "table",
+    "partition",
+    "foreign-table"
+  ],
+  "status": "draft",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Column data type selector",
+      "reason": "pgAdmin's cltype select carries per-type length/precision ranges (min_val/max_val) and the edit-mode cast filter (edit_types); the descriptor select cannot carry those and the hidden min_val_attlen/max_val_attlen/min_val_attprecision/max_val_attprecision fields are omitted."
+    },
+    {
+      "concept": "Foreign table variant (resource_kind foreign-table)",
+      "reason": "foreign_tables/static/js/foreign_table.ui.js (server/options/columns) is a different field set and was not transcribed into this form.",
+      "tracking": "phase 5"
+    },
+    {
+      "concept": "Cross-field synchronisation",
+      "reason": "pgAdmin depChange keeps columns.is_primary_key, primary_key.columns, foreign_key/unique column renames and partition key resets in sync, confirms before 'Of type' or access-method changes and fetches inherited columns; none of this is expressible as visible_when."
+    },
+    {
+      "concept": "Partition value editability by partition type",
+      "reason": "values_from/to (range), values_in (list), values_modulus/remainder (hash) are enabled by the parent's partition_type, not by a field of the row."
+    },
+    {
+      "concept": "PG17 MAINTAIN privilege code 'm'",
+      "reason": "only offered on 17+ by getPrivilegesForTableAndLikeObjects; a single multiselect option cannot be version-gated."
+    },
+    {
+      "concept": "Partition note texts",
+      "reason": "partition_key_note and partition_note are static notes; folded into help text."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "control": "text",
+      "tab": "General",
+      "required": true
+    },
+    {
+      "field_id": "oid",
+      "label": "OID",
+      "control": "text",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "relowner",
+      "label": "Owner",
+      "control": "reference",
+      "tab": "General",
+      "reference_kind": "role",
+      "required": true,
+      "native_keyword": "OWNER"
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "control": "reference",
+      "tab": "General",
+      "reference_kind": "schema",
+      "required": true
+    },
+    {
+      "field_id": "is_sys_table",
+      "label": "System table?",
+      "control": "boolean",
+      "tab": "General",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "relpersistence",
+      "label": "Unlogged?",
+      "control": "boolean",
+      "tab": "General",
+      "native_keyword": "UNLOGGED",
+      "help": "Corresponds to the family's table_type=unlogged variant. Read-only once the table exists."
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "control": "text",
+      "tab": "General",
+      "native_keyword": "COMMENT ON TABLE"
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns",
+      "control": "grid",
+      "tab": "Columns",
+      "required": true,
+      "reorderable": true,
+      "help": "Reorder is allowed in create mode only. Rows inherited from a parent table (inheritedfrom set) cannot be edited or deleted; adding is disabled while 'Of type' is set. Grid columns shown inline: name, cltype, attlen, attprecision, attnotnull, is_primary_key, defval; the rest open in the row editor.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "is_primary_key",
+          "label": "Primary key?",
+          "control": "boolean",
+          "default": false,
+          "help": "Only shown while creating a table; toggling it maintains the Primary key constraint row."
+        },
+        {
+          "field_id": "attnum",
+          "label": "Position",
+          "control": "text",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "cltype",
+          "label": "Data type",
+          "control": "select",
+          "required": true,
+          "option_values_path": [
+            "catalog",
+            "column_types"
+          ],
+          "help": "pgAdmin loads get_types; in edit mode the list is filtered to the column's edit_types (implicit casts). Custom type selector not expressible (see gaps)."
+        },
+        {
+          "field_id": "inheritedid",
+          "label": "Inherited id",
+          "control": "text",
+          "help": "Hidden; parent table OID sent to the backend."
+        },
+        {
+          "field_id": "inheritedfrom",
+          "label": "Inherited from table",
+          "control": "text",
+          "readonly": true,
+          "help": "Only shown while creating a table."
+        },
+        {
+          "field_id": "inheritedfromtype",
+          "label": "Inherited from type",
+          "control": "text",
+          "help": "Hidden tracking field (OF TYPE columns)."
+        },
+        {
+          "field_id": "inheritedfromtable",
+          "label": "Inherited from table",
+          "control": "text",
+          "help": "Hidden tracking field (parent tables)."
+        },
+        {
+          "field_id": "original_defval",
+          "label": "Original Default",
+          "control": "text",
+          "help": "Hidden; original DEFAULT from the composite type."
+        },
+        {
+          "field_id": "original_attnotnull",
+          "label": "Original NOT NULL",
+          "control": "boolean",
+          "help": "Hidden; original NOT NULL from the composite type."
+        },
+        {
+          "field_id": "geometry",
+          "label": "Geometry Type",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "geometry_types"
+          ],
+          "visible_when": {
+            "field": "cltype",
+            "in": [
+              "geometry",
+              "geography"
+            ]
+          }
+        },
+        {
+          "field_id": "srid",
+          "label": "SRID",
+          "control": "number",
+          "visible_when": {
+            "field": "cltype",
+            "in": [
+              "geometry",
+              "geography"
+            ]
+          }
+        },
+        {
+          "field_id": "attlen",
+          "label": "Length/Precision",
+          "control": "number",
+          "help": "Enabled only for types with a length; min/max come from the type list (min_val/max_val)."
+        },
+        {
+          "field_id": "attprecision",
+          "label": "Scale",
+          "control": "number",
+          "help": "Enabled only for types with a precision; PostgreSQL allows negative precision."
+        },
+        {
+          "field_id": "attcompression",
+          "label": "Compression",
+          "control": "select",
+          "version": {
+            "minimum": "14"
+          },
+          "native_keyword": "COMPRESSION",
+          "options": [
+            {
+              "value": "pglz",
+              "label": "PGLZ"
+            },
+            {
+              "value": "lz4",
+              "label": "LZ4"
+            }
+          ],
+          "help": "Enabled for variable-length types only."
+        },
+        {
+          "field_id": "collspcname",
+          "label": "Collation",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "collations"
+          ],
+          "native_keyword": "COLLATE",
+          "help": "Enabled only when the type is collatable."
+        },
+        {
+          "field_id": "attstattarget",
+          "label": "Statistics",
+          "control": "number",
+          "modes": [
+            "alter"
+          ],
+          "native_keyword": "SET STATISTICS"
+        },
+        {
+          "field_id": "attstorage",
+          "label": "Storage",
+          "control": "select",
+          "native_keyword": "SET STORAGE",
+          "options": [
+            {
+              "value": "p",
+              "label": "PLAIN"
+            },
+            {
+              "value": "m",
+              "label": "MAIN"
+            },
+            {
+              "value": "e",
+              "label": "EXTERNAL"
+            },
+            {
+              "value": "x",
+              "label": "EXTENDED"
+            },
+            {
+              "value": "d",
+              "label": "DEFAULT"
+            }
+          ],
+          "help": "'DEFAULT' exists on PostgreSQL 16+; before 16 the field is only shown in edit mode."
+        },
+        {
+          "field_id": "defval",
+          "label": "Default",
+          "control": "text",
+          "native_keyword": "DEFAULT",
+          "help": "Disabled for serial types and when the column is identity/generated."
+        },
+        {
+          "field_id": "attnotnull",
+          "label": "Not NULL?",
+          "control": "boolean",
+          "default": false,
+          "native_keyword": "NOT NULL",
+          "help": "Forced on for identity columns."
+        },
+        {
+          "field_id": "colconstype",
+          "label": "Type",
+          "control": "radio",
+          "version": {
+            "minimum": "10"
+          },
+          "default": "n",
+          "options": [
+            {
+              "value": "n",
+              "label": "NONE"
+            },
+            {
+              "value": "i",
+              "label": "IDENTITY"
+            },
+            {
+              "value": "g",
+              "label": "GENERATED"
+            }
+          ],
+          "help": "GENERATED needs PostgreSQL 12+ and cannot be applied to an existing column."
+        },
+        {
+          "field_id": "attidentity",
+          "label": "Identity",
+          "control": "select",
+          "version": {
+            "minimum": "10"
+          },
+          "default": "a",
+          "options": [
+            {
+              "value": "a",
+              "label": "ALWAYS"
+            },
+            {
+              "value": "d",
+              "label": "BY DEFAULT"
+            }
+          ],
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          },
+          "native_keyword": "GENERATED ... AS IDENTITY"
+        },
+        {
+          "field_id": "seqincrement",
+          "label": "Increment",
+          "control": "number",
+          "min": 1,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqstart",
+          "label": "Start",
+          "control": "number",
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqmin",
+          "label": "Minimum",
+          "control": "number",
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqmax",
+          "label": "Maximum",
+          "control": "number",
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqcache",
+          "label": "Cache",
+          "control": "number",
+          "min": 1,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqcycle",
+          "label": "Cycled",
+          "control": "boolean",
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "genexpr",
+          "label": "Expression",
+          "control": "code",
+          "language": "sql",
+          "version": {
+            "minimum": "12"
+          },
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "g"
+          },
+          "native_keyword": "GENERATED ALWAYS AS ... STORED",
+          "help": "Read-only once the column exists."
+        },
+        {
+          "field_id": "is_pk",
+          "label": "Primary key?",
+          "control": "boolean",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "is_fk",
+          "label": "Foreign key?",
+          "control": "boolean",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "is_inherited",
+          "label": "Inherited?",
+          "control": "boolean",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "tbls_inherited",
+          "label": "Inherited from table(s)",
+          "control": "text",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "is_sys_column",
+          "label": "System column?",
+          "control": "boolean",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "description",
+          "label": "Comment",
+          "control": "text",
+          "native_keyword": "COMMENT ON COLUMN"
+        },
+        {
+          "field_id": "attoptions",
+          "label": "Variables",
+          "control": "grid",
+          "native_keyword": "SET (n_distinct)",
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Name",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "n_distinct",
+                  "label": "n_distinct"
+                },
+                {
+                  "value": "n_distinct_inherited",
+                  "label": "n_distinct_inherited"
+                }
+              ]
+            },
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "attacl",
+          "label": "Privileges",
+          "control": "privileges",
+          "native_keyword": "GRANT",
+          "columns": [
+            {
+              "field_id": "grantee",
+              "label": "Grantee",
+              "control": "reference",
+              "reference_kind": "role",
+              "required": true
+            },
+            {
+              "field_id": "privileges",
+              "label": "Privileges",
+              "control": "multiselect",
+              "required": true,
+              "option_values_path": [
+                "dialect",
+                "privileges",
+                "column"
+              ]
+            },
+            {
+              "field_id": "grantor",
+              "label": "Grantor",
+              "control": "reference",
+              "reference_kind": "role",
+              "readonly": true
+            }
+          ],
+          "modes": [
+            "alter"
+          ],
+          "help": "Privilege codes accepted by the backend: a, r, w, x. Grantee list comes from the role catalog plus PUBLIC; grantor is read-only and defaults to the connected user."
+        },
+        {
+          "field_id": "seclabels",
+          "label": "Security labels",
+          "control": "grid",
+          "native_keyword": "SECURITY LABEL",
+          "columns": [
+            {
+              "field_id": "provider",
+              "label": "Provider",
+              "control": "text"
+            },
+            {
+              "field_id": "label",
+              "label": "Security label",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "version": {
+            "minimum": "9.1"
+          }
+        }
+      ]
+    },
+    {
+      "field_id": "primary_key",
+      "label": "Primary key",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Primary key",
+      "native_keyword": "PRIMARY KEY",
+      "help": "At most one row; a row can be added once any column has a name. Disabled on partitioned tables before PostgreSQL 11.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "help": "Required in edit mode."
+        },
+        {
+          "field_id": "oid",
+          "label": "OID",
+          "control": "text",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "is_sys_obj",
+          "label": "System primary key?",
+          "control": "boolean",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text",
+          "help": "Enabled once the constraint has a name."
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ],
+          "help": "Read-only once the constraint exists; disabled when an existing index is chosen."
+        },
+        {
+          "field_id": "include",
+          "label": "Include columns",
+          "control": "multiselect",
+          "version": {
+            "minimum": "11"
+          },
+          "option_values_path": [
+            "draft",
+            "columns"
+          ],
+          "native_keyword": "INCLUDE"
+        },
+        {
+          "field_id": "spcname",
+          "label": "Tablespace",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "tablespaces"
+          ],
+          "native_keyword": "USING INDEX TABLESPACE"
+        },
+        {
+          "field_id": "index",
+          "label": "Index",
+          "control": "select",
+          "modes": [
+            "create"
+          ],
+          "option_values_path": [
+            "catalog",
+            "indexes"
+          ],
+          "native_keyword": "USING INDEX",
+          "help": "Only offered on an existing table (not inside table create)."
+        },
+        {
+          "field_id": "fillfactor",
+          "label": "Fill factor",
+          "control": "number",
+          "min": 10,
+          "max": 100,
+          "native_keyword": "WITH (FILLFACTOR)",
+          "help": "Disabled when an existing index is chosen."
+        },
+        {
+          "field_id": "condeferrable",
+          "label": "Deferrable?",
+          "control": "boolean",
+          "native_keyword": "DEFERRABLE"
+        },
+        {
+          "field_id": "condeferred",
+          "label": "Deferred?",
+          "control": "boolean",
+          "native_keyword": "INITIALLY DEFERRED",
+          "visible_when": {
+            "field": "condeferrable",
+            "truthy": true
+          }
+        }
+      ]
+    },
+    {
+      "field_id": "foreign_key",
+      "label": "Foreign keys",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Foreign keys",
+      "native_keyword": "FOREIGN KEY",
+      "help": "Rows can be added once any column has a name. Disabled on partitioned tables before PostgreSQL 11. Grid columns shown inline: name, columns, references_table_name.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "oid",
+          "label": "OID",
+          "control": "text",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "is_sys_obj",
+          "label": "System foreign key?",
+          "control": "boolean",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text",
+          "help": "Enabled once the constraint has a name."
+        },
+        {
+          "field_id": "condeferrable",
+          "label": "Deferrable?",
+          "control": "boolean",
+          "native_keyword": "DEFERRABLE"
+        },
+        {
+          "field_id": "condeferred",
+          "label": "Deferred?",
+          "control": "boolean",
+          "native_keyword": "INITIALLY DEFERRED",
+          "visible_when": {
+            "field": "condeferrable",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "confmatchtype",
+          "label": "Match type",
+          "control": "radio",
+          "default": false,
+          "native_keyword": "MATCH",
+          "options": [
+            {
+              "value": true,
+              "label": "FULL"
+            },
+            {
+              "value": false,
+              "label": "SIMPLE"
+            }
+          ]
+        },
+        {
+          "field_id": "convalidated",
+          "label": "Validated?",
+          "control": "boolean",
+          "native_keyword": "NOT VALID",
+          "help": "Read-only once an existing constraint is validated."
+        },
+        {
+          "field_id": "autoindex",
+          "label": "Auto FK index?",
+          "control": "boolean",
+          "default": true,
+          "help": "Create mode only; forced off while creating the whole table (pgAdmin). Read-only when an index exists."
+        },
+        {
+          "field_id": "coveringindex",
+          "label": "Covering index",
+          "control": "text",
+          "visible_when": {
+            "field": "autoindex",
+            "truthy": true
+          },
+          "help": "Defaults to fki_<name>; required when Auto FK index is on."
+        },
+        {
+          "field_id": "references_table_name",
+          "label": "Referenced Table",
+          "control": "text",
+          "readonly": true,
+          "help": "Hidden; joined from the column rows."
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "grid",
+          "required": true,
+          "help": "pgAdmin header form: Local column / References (table) / Referencing (column). Rows can only be added or removed while the constraint is new; after the first row the referenced table is locked.",
+          "columns": [
+            {
+              "field_id": "local_column",
+              "label": "Local",
+              "control": "select",
+              "required": true,
+              "option_values_path": [
+                "draft",
+                "columns"
+              ]
+            },
+            {
+              "field_id": "references",
+              "label": "References",
+              "control": "reference",
+              "reference_kind": "table",
+              "required": true
+            },
+            {
+              "field_id": "referenced",
+              "label": "Referenced",
+              "control": "select",
+              "required": true,
+              "option_values_path": [
+                "catalog",
+                "columns"
+              ],
+              "help": "Columns of the referenced table (get_columns?tid=references)."
+            },
+            {
+              "field_id": "references_table_name",
+              "label": "Referenced Table",
+              "control": "text",
+              "readonly": true
+            }
+          ]
+        },
+        {
+          "field_id": "confupdtype",
+          "label": "On update",
+          "control": "select",
+          "default": "a",
+          "options": [
+            {
+              "value": "a",
+              "label": "NO ACTION"
+            },
+            {
+              "value": "r",
+              "label": "RESTRICT"
+            },
+            {
+              "value": "c",
+              "label": "CASCADE"
+            },
+            {
+              "value": "n",
+              "label": "SET NULL"
+            },
+            {
+              "value": "d",
+              "label": "SET DEFAULT"
+            }
+          ],
+          "native_keyword": "ON UPDATE"
+        },
+        {
+          "field_id": "confdeltype",
+          "label": "On delete",
+          "control": "select",
+          "default": "a",
+          "options": [
+            {
+              "value": "a",
+              "label": "NO ACTION"
+            },
+            {
+              "value": "r",
+              "label": "RESTRICT"
+            },
+            {
+              "value": "c",
+              "label": "CASCADE"
+            },
+            {
+              "value": "n",
+              "label": "SET NULL"
+            },
+            {
+              "value": "d",
+              "label": "SET DEFAULT"
+            }
+          ],
+          "native_keyword": "ON DELETE"
+        }
+      ]
+    },
+    {
+      "field_id": "check_constraint",
+      "label": "Check",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Check",
+      "native_keyword": "CHECK",
+      "help": "Grid columns shown inline: name, consrc.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "oid",
+          "label": "OID",
+          "control": "text",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "is_sys_obj",
+          "label": "System check constraint?",
+          "control": "boolean",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text",
+          "help": "Enabled once the constraint has a name."
+        },
+        {
+          "field_id": "consrc",
+          "label": "Check",
+          "control": "code",
+          "language": "sql",
+          "required": true,
+          "help": "Read-only once the constraint exists."
+        },
+        {
+          "field_id": "connoinherit",
+          "label": "No inherit?",
+          "control": "boolean",
+          "version": {
+            "minimum": "9.2"
+          },
+          "native_keyword": "NO INHERIT",
+          "help": "Read-only once the constraint exists."
+        },
+        {
+          "field_id": "convalidated",
+          "label": "Don't validate?",
+          "control": "boolean",
+          "version": {
+            "minimum": "9.2"
+          },
+          "native_keyword": "NOT VALID",
+          "help": "Read-only once an existing constraint is validated."
+        }
+      ]
+    },
+    {
+      "field_id": "unique_constraint",
+      "label": "Unique",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Unique",
+      "native_keyword": "UNIQUE",
+      "help": "Rows can be added once any column has a name. Disabled on partitioned tables before PostgreSQL 11.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "help": "Required in edit mode."
+        },
+        {
+          "field_id": "oid",
+          "label": "OID",
+          "control": "text",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "is_sys_obj",
+          "label": "System unique constraint?",
+          "control": "boolean",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text",
+          "help": "Enabled once the constraint has a name."
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "columns"
+          ],
+          "help": "Read-only once the constraint exists; disabled when an existing index is chosen."
+        },
+        {
+          "field_id": "include",
+          "label": "Include columns",
+          "control": "multiselect",
+          "version": {
+            "minimum": "11"
+          },
+          "option_values_path": [
+            "draft",
+            "columns"
+          ],
+          "native_keyword": "INCLUDE"
+        },
+        {
+          "field_id": "spcname",
+          "label": "Tablespace",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "tablespaces"
+          ],
+          "native_keyword": "USING INDEX TABLESPACE"
+        },
+        {
+          "field_id": "index",
+          "label": "Index",
+          "control": "select",
+          "modes": [
+            "create"
+          ],
+          "option_values_path": [
+            "catalog",
+            "indexes"
+          ],
+          "native_keyword": "USING INDEX",
+          "help": "Only offered on an existing table (not inside table create)."
+        },
+        {
+          "field_id": "fillfactor",
+          "label": "Fill factor",
+          "control": "number",
+          "min": 10,
+          "max": 100,
+          "native_keyword": "WITH (FILLFACTOR)",
+          "help": "Disabled when an existing index is chosen."
+        },
+        {
+          "field_id": "condeferrable",
+          "label": "Deferrable?",
+          "control": "boolean",
+          "native_keyword": "DEFERRABLE"
+        },
+        {
+          "field_id": "condeferred",
+          "label": "Deferred?",
+          "control": "boolean",
+          "native_keyword": "INITIALLY DEFERRED",
+          "visible_when": {
+            "field": "condeferrable",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "indnullsnotdistinct",
+          "label": "NULLs not distinct?",
+          "control": "boolean",
+          "version": {
+            "minimum": "15"
+          },
+          "native_keyword": "NULLS NOT DISTINCT"
+        }
+      ]
+    },
+    {
+      "field_id": "exclude_constraint",
+      "label": "Exclude",
+      "control": "grid",
+      "tab": "Constraints",
+      "group": "Exclude",
+      "native_keyword": "EXCLUDE",
+      "help": "Rows can be added once any column has a name. Grid columns shown inline: name, columns, constraint.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "oid",
+          "label": "OID",
+          "control": "text",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "is_sys_obj",
+          "label": "System exclusion constraint?",
+          "control": "boolean",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text",
+          "help": "Enabled once the constraint has a name."
+        },
+        {
+          "field_id": "spcname",
+          "label": "Tablespace",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "tablespaces"
+          ],
+          "native_keyword": "USING INDEX TABLESPACE"
+        },
+        {
+          "field_id": "amname",
+          "label": "Access method",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "index_access_methods"
+          ],
+          "native_keyword": "USING",
+          "help": "Changing it clears the column rows (pgAdmin confirms first)."
+        },
+        {
+          "field_id": "fillfactor",
+          "label": "Fill factor",
+          "control": "number",
+          "native_keyword": "WITH (FILLFACTOR)"
+        },
+        {
+          "field_id": "condeferrable",
+          "label": "Deferrable?",
+          "control": "boolean",
+          "native_keyword": "DEFERRABLE"
+        },
+        {
+          "field_id": "condeferred",
+          "label": "Deferred?",
+          "control": "boolean",
+          "native_keyword": "INITIALLY DEFERRED",
+          "visible_when": {
+            "field": "condeferrable",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "indconstraint",
+          "label": "Constraint",
+          "control": "code",
+          "language": "sql",
+          "native_keyword": "WHERE",
+          "help": "Predicate; read-only once the constraint exists."
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns/Expressions",
+          "control": "grid",
+          "required": true,
+          "help": "pgAdmin header form: Is expression / Column / Expression. Operator list depends on the column type (get_operator?col_type); operator classes depend on the access method.",
+          "columns": [
+            {
+              "field_id": "is_exp",
+              "label": "Is expression",
+              "control": "boolean",
+              "default": false
+            },
+            {
+              "field_id": "column",
+              "label": "Col/Exp",
+              "control": "text",
+              "required": true,
+              "help": "Column name (picked from the draft columns) or the expression text."
+            },
+            {
+              "field_id": "oper_class",
+              "label": "Operator class",
+              "control": "select",
+              "option_values_path": [
+                "catalog",
+                "operator_classes"
+              ]
+            },
+            {
+              "field_id": "order",
+              "label": "Order",
+              "control": "select",
+              "options": [
+                {
+                  "value": true,
+                  "label": "ASC"
+                },
+                {
+                  "value": false,
+                  "label": "DESC"
+                }
+              ]
+            },
+            {
+              "field_id": "nulls_order",
+              "label": "NULLs order",
+              "control": "select",
+              "options": [
+                {
+                  "value": true,
+                  "label": "FIRST"
+                },
+                {
+                  "value": false,
+                  "label": "LAST"
+                }
+              ]
+            },
+            {
+              "field_id": "operator",
+              "label": "Operator",
+              "control": "select",
+              "required": true,
+              "option_values_path": [
+                "catalog",
+                "operators"
+              ]
+            }
+          ]
+        },
+        {
+          "field_id": "include",
+          "label": "Include columns",
+          "control": "multiselect",
+          "version": {
+            "minimum": "11"
+          },
+          "option_values_path": [
+            "draft",
+            "columns"
+          ],
+          "native_keyword": "INCLUDE"
+        }
+      ]
+    },
+    {
+      "field_id": "is_partitioned",
+      "label": "Partitioned table?",
+      "control": "boolean",
+      "tab": "Partitions",
+      "version": {
+        "minimum": "10"
+      },
+      "default": false,
+      "native_keyword": "PARTITION BY",
+      "help": "Read-only once the table exists."
+    },
+    {
+      "field_id": "partition_type",
+      "label": "Partition Type",
+      "control": "select",
+      "tab": "Partitions",
+      "modes": [
+        "create"
+      ],
+      "version": {
+        "minimum": "10"
+      },
+      "default": "range",
+      "options": [
+        {
+          "value": "range",
+          "label": "Range"
+        },
+        {
+          "value": "list",
+          "label": "List"
+        },
+        {
+          "value": "hash",
+          "label": "Hash"
+        }
+      ],
+      "visible_when": {
+        "field": "is_partitioned",
+        "truthy": true
+      },
+      "help": "Hash needs PostgreSQL 11+."
+    },
+    {
+      "field_id": "partition_keys",
+      "label": "Partition Keys",
+      "control": "grid",
+      "tab": "Partitions",
+      "modes": [
+        "create"
+      ],
+      "version": {
+        "minimum": "10"
+      },
+      "visible_when": {
+        "field": "is_partitioned",
+        "truthy": true
+      },
+      "columns": [
+        {
+          "field_id": "key_type",
+          "label": "Key type",
+          "control": "select",
+          "required": true,
+          "default": "column",
+          "options": [
+            {
+              "value": "column",
+              "label": "Column"
+            },
+            {
+              "value": "expression",
+              "label": "Expression"
+            }
+          ]
+        },
+        {
+          "field_id": "pt_column",
+          "label": "Column",
+          "control": "select",
+          "option_values_path": [
+            "draft",
+            "columns"
+          ],
+          "visible_when": {
+            "field": "key_type",
+            "equals": "column"
+          }
+        },
+        {
+          "field_id": "expression",
+          "label": "Expression",
+          "control": "code",
+          "language": "sql",
+          "visible_when": {
+            "field": "key_type",
+            "equals": "expression"
+          }
+        },
+        {
+          "field_id": "collationame",
+          "label": "Collation",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "collations"
+          ]
+        },
+        {
+          "field_id": "op_class",
+          "label": "Operator class",
+          "control": "select",
+          "option_values_path": [
+            "catalog",
+            "operator_classes"
+          ]
+        }
+      ],
+      "help": "Partition table supports two types of keys: Column (any column from the list) or Expression (e.g. extract(YEAR from saledate)). List partitioning accepts a single key. At least one key is required."
+    },
+    {
+      "field_id": "partition_scheme",
+      "label": "Partition Scheme",
+      "control": "text",
+      "tab": "Partitions",
+      "modes": [
+        "alter"
+      ],
+      "readonly": true,
+      "version": {
+        "minimum": "10"
+      },
+      "help": "Existing PARTITION BY clause (pgAdmin note control)."
+    },
+    {
+      "field_id": "partitions",
+      "label": "Partitions",
+      "control": "grid",
+      "tab": "Partitions",
+      "version": {
+        "minimum": "10"
+      },
+      "visible_when": {
+        "field": "is_partitioned",
+        "truthy": true
+      },
+      "help": "Create a table: multiple partitions can be created while creating a new partitioned table (Operation switch disabled). Edit existing table: create/attach/detach partitions; attach picks from the list of suitable tables. Default: stores rows that fall in no other partition. From/To/In: values must be single-quoted; several partition key values are comma separated. From/To for range, In for list, Modulus/Remainder for hash. Deleting a row detaches the partition.",
+      "columns": [
+        {
+          "field_id": "oid",
+          "label": "OID",
+          "control": "text",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "help": "Read-only property shown by pgAdmin in properties mode only."
+        },
+        {
+          "field_id": "is_attach",
+          "label": "Operation",
+          "control": "select",
+          "default": false,
+          "options": [
+            {
+              "value": true,
+              "label": "Attach"
+            },
+            {
+              "value": false,
+              "label": "Create"
+            }
+          ],
+          "help": "Editable only when adding a partition to an existing table."
+        },
+        {
+          "field_id": "partition_name",
+          "label": "Name",
+          "control": "text",
+          "required": true,
+          "help": "When attaching, pgAdmin offers the suitable tables (get_attach_tables) instead of free text."
+        },
+        {
+          "field_id": "amname",
+          "label": "Access Method",
+          "control": "select",
+          "version": {
+            "minimum": "12"
+          },
+          "option_values_path": [
+            "catalog",
+            "table_access_methods"
+          ],
+          "native_keyword": "USING",
+          "help": "Disabled when sub-partitioned; alterable only on PostgreSQL 15+."
+        },
+        {
+          "field_id": "is_default",
+          "label": "Default",
+          "control": "boolean",
+          "version": {
+            "minimum": "11"
+          },
+          "native_keyword": "DEFAULT",
+          "help": "Range and list partitions only."
+        },
+        {
+          "field_id": "values_from",
+          "label": "From",
+          "control": "text",
+          "help": "Range partitions; quoted literal(s)."
+        },
+        {
+          "field_id": "values_to",
+          "label": "To",
+          "control": "text",
+          "help": "Range partitions; quoted literal(s)."
+        },
+        {
+          "field_id": "values_in",
+          "label": "In",
+          "control": "text",
+          "help": "List partitions; comma separated quoted literals."
+        },
+        {
+          "field_id": "values_modulus",
+          "label": "Modulus",
+          "control": "number",
+          "help": "Hash partitions."
+        },
+        {
+          "field_id": "values_remainder",
+          "label": "Remainder",
+          "control": "number",
+          "help": "Hash partitions."
+        },
+        {
+          "field_id": "is_sub_partitioned",
+          "label": "Partitioned table?",
+          "control": "boolean",
+          "default": false,
+          "help": "Not available when attaching."
+        },
+        {
+          "field_id": "sub_partition_type",
+          "label": "Partition Type",
+          "control": "select",
+          "default": "range",
+          "options": [
+            {
+              "value": "range",
+              "label": "Range"
+            },
+            {
+              "value": "list",
+              "label": "List"
+            },
+            {
+              "value": "hash",
+              "label": "Hash"
+            }
+          ],
+          "visible_when": {
+            "field": "is_sub_partitioned",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "sub_partition_keys",
+          "label": "Partition Keys",
+          "control": "grid",
+          "visible_when": {
+            "field": "is_sub_partitioned",
+            "truthy": true
+          },
+          "columns": [
+            {
+              "field_id": "key_type",
+              "label": "Key type",
+              "control": "select",
+              "required": true,
+              "default": "column",
+              "options": [
+                {
+                  "value": "column",
+                  "label": "Column"
+                },
+                {
+                  "value": "expression",
+                  "label": "Expression"
+                }
+              ]
+            },
+            {
+              "field_id": "pt_column",
+              "label": "Column",
+              "control": "select",
+              "option_values_path": [
+                "draft",
+                "columns"
+              ],
+              "visible_when": {
+                "field": "key_type",
+                "equals": "column"
+              }
+            },
+            {
+              "field_id": "expression",
+              "label": "Expression",
+              "control": "code",
+              "language": "sql",
+              "visible_when": {
+                "field": "key_type",
+                "equals": "expression"
+              }
+            },
+            {
+              "field_id": "collationame",
+              "label": "Collation",
+              "control": "select",
+              "option_values_path": [
+                "catalog",
+                "collations"
+              ]
+            },
+            {
+              "field_id": "op_class",
+              "label": "Operator class",
+              "control": "select",
+              "option_values_path": [
+                "catalog",
+                "operator_classes"
+              ]
+            }
+          ]
+        },
+        {
+          "field_id": "sub_partition_scheme",
+          "label": "Partition Scheme",
+          "control": "text",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ]
+        }
+      ]
+    },
+    {
+      "field_id": "spcname",
+      "label": "Tablespace",
+      "control": "select",
+      "tab": "Options",
+      "option_values_path": [
+        "catalog",
+        "tablespaces"
+      ],
+      "native_keyword": "TABLESPACE",
+      "help": "pg_global is excluded."
+    },
+    {
+      "field_id": "fillfactor",
+      "label": "Fill factor",
+      "control": "number",
+      "tab": "Options",
+      "min": 10,
+      "max": 100,
+      "native_keyword": "WITH (fillfactor)",
+      "help": "Disabled for partitioned tables."
+    },
+    {
+      "field_id": "coll_inherits",
+      "label": "Inherited from table(s)",
+      "control": "multiselect",
+      "tab": "Engine",
+      "group": "Inheritance",
+      "option_values_path": [
+        "catalog",
+        "tables"
+      ],
+      "native_keyword": "INHERITS",
+      "help": "Selecting a parent copies its columns into the Columns grid; disabled when 'Of type' is set or the table is partitioned. Properties mode shows the same id as text."
+    },
+    {
+      "field_id": "inherited_tables_cnt",
+      "label": "Inherited tables count",
+      "control": "text",
+      "tab": "Engine",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "group": "Inheritance",
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "relhassubclass",
+      "label": "Is inherited?",
+      "control": "boolean",
+      "tab": "Engine",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "group": "Inheritance",
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "typname",
+      "label": "Of type",
+      "control": "select",
+      "tab": "Engine",
+      "group": "Inheritance",
+      "option_values_path": [
+        "catalog",
+        "composite_types"
+      ],
+      "native_keyword": "OF",
+      "help": "Disabled when inheriting from tables; changing it replaces the column definitions (pgAdmin confirms first) and clears constraints and partition keys."
+    },
+    {
+      "field_id": "rlspolicy",
+      "label": "RLS Policy?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Row level security",
+      "version": {
+        "minimum": "9.6"
+      },
+      "native_keyword": "ENABLE ROW LEVEL SECURITY",
+      "help": "Please check if any policy exists. If no policy exists for the table, a default-deny policy is used, meaning that no rows are visible or can be modified by other users."
+    },
+    {
+      "field_id": "forcerlspolicy",
+      "label": "Force RLS Policy?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Row level security",
+      "version": {
+        "minimum": "9.6"
+      },
+      "native_keyword": "FORCE ROW LEVEL SECURITY",
+      "visible_when": {
+        "field": "rlspolicy",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "replica_identity",
+      "label": "Replica Identity",
+      "control": "text",
+      "tab": "Engine",
+      "group": "Replication",
+      "modes": [
+        "alter"
+      ],
+      "native_keyword": "REPLICA IDENTITY"
+    },
+    {
+      "field_id": "amname",
+      "label": "Access Method",
+      "control": "select",
+      "tab": "Engine",
+      "group": "Storage",
+      "version": {
+        "minimum": "12"
+      },
+      "option_values_path": [
+        "catalog",
+        "table_access_methods"
+      ],
+      "native_keyword": "USING",
+      "help": "Disabled for partitioned tables; alterable only on PostgreSQL 15+."
+    },
+    {
+      "field_id": "toast_tuple_target",
+      "label": "Toast tuple target",
+      "control": "number",
+      "tab": "Engine",
+      "group": "Storage",
+      "min": 128,
+      "version": {
+        "minimum": "11"
+      },
+      "native_keyword": "toast_tuple_target",
+      "help": "Disabled for partitioned tables."
+    },
+    {
+      "field_id": "parallel_workers",
+      "label": "Parallel workers",
+      "control": "number",
+      "tab": "Engine",
+      "group": "Storage",
+      "version": {
+        "minimum": "9.6"
+      },
+      "native_keyword": "parallel_workers",
+      "help": "Disabled for partitioned tables."
+    },
+    {
+      "field_id": "relhasoids",
+      "label": "Has OIDs?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Storage",
+      "native_keyword": "WITH OIDS",
+      "help": "Disabled on PostgreSQL 12+ (OIDs removed) and in catalogs."
+    },
+    {
+      "field_id": "conname",
+      "label": "Primary key",
+      "control": "text",
+      "tab": "Engine",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "group": "Storage",
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "vacuum_settings_str",
+      "label": "Storage settings",
+      "control": "text",
+      "tab": "Engine",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "group": "Storage",
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "like_relation",
+      "label": "Relation",
+      "control": "select",
+      "tab": "Engine",
+      "group": "Like",
+      "modes": [
+        "create"
+      ],
+      "option_values_path": [
+        "catalog",
+        "relations"
+      ],
+      "native_keyword": "LIKE",
+      "help": "Disabled when 'Of type' is set. The With ... switches reset when the relation is cleared."
+    },
+    {
+      "field_id": "like_default_value",
+      "label": "With default values?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Like",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "INCLUDING DEFAULTS",
+      "visible_when": {
+        "field": "like_relation",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "like_constraints",
+      "label": "With constraints?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Like",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "INCLUDING CONSTRAINTS",
+      "visible_when": {
+        "field": "like_relation",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "like_indexes",
+      "label": "With indexes?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Like",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "INCLUDING INDEXES",
+      "visible_when": {
+        "field": "like_relation",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "like_storage",
+      "label": "With storage?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Like",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "INCLUDING STORAGE",
+      "visible_when": {
+        "field": "like_relation",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "like_comments",
+      "label": "With comments?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Like",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "INCLUDING COMMENTS",
+      "visible_when": {
+        "field": "like_relation",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "like_compression",
+      "label": "With compression?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Like",
+      "modes": [
+        "create"
+      ],
+      "version": {
+        "minimum": "14"
+      },
+      "native_keyword": "INCLUDING COMPRESSION",
+      "visible_when": {
+        "field": "like_relation",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "like_generated",
+      "label": "With generated?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Like",
+      "modes": [
+        "create"
+      ],
+      "version": {
+        "minimum": "12"
+      },
+      "native_keyword": "INCLUDING GENERATED",
+      "visible_when": {
+        "field": "like_relation",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "like_identity",
+      "label": "With identity?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Like",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "INCLUDING IDENTITY",
+      "visible_when": {
+        "field": "like_relation",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "like_statistics",
+      "label": "With statistics?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Like",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "INCLUDING STATISTICS",
+      "visible_when": {
+        "field": "like_relation",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "autovacuum_custom",
+      "label": "Custom auto-vacuum?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "Autovacuum",
+      "help": "Disabled for partitioned tables."
+    },
+    {
+      "field_id": "autovacuum_enabled",
+      "label": "Autovacuum Enabled?",
+      "control": "radio",
+      "tab": "Engine",
+      "group": "Autovacuum",
+      "default": "x",
+      "options": [
+        {
+          "value": "x",
+          "label": "Not set"
+        },
+        {
+          "value": "t",
+          "label": "Yes"
+        },
+        {
+          "value": "f",
+          "label": "No"
+        }
+      ],
+      "native_keyword": "autovacuum_enabled",
+      "visible_when": {
+        "field": "autovacuum_custom",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "vacuum_table",
+      "label": "Autovacuum settings",
+      "control": "grid",
+      "tab": "Engine",
+      "group": "Autovacuum",
+      "help": "Fixed rows (one per autovacuum_* storage parameter from the vacuum settings endpoint); only Value is editable.",
+      "visible_when": {
+        "field": "autovacuum_custom",
+        "truthy": true
+      },
+      "columns": [
+        {
+          "field_id": "label",
+          "label": "Label",
+          "control": "text",
+          "readonly": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "number"
+        },
+        {
+          "field_id": "setting",
+          "label": "Default",
+          "control": "text",
+          "readonly": true
+        }
+      ]
+    },
+    {
+      "field_id": "toast_autovacuum",
+      "label": "Custom auto-vacuum?",
+      "control": "boolean",
+      "tab": "Engine",
+      "group": "TOAST autovacuum",
+      "help": "Enabled when the table has a TOAST table (or while creating)."
+    },
+    {
+      "field_id": "toast_autovacuum_enabled",
+      "label": "Autovacuum Enabled?",
+      "control": "radio",
+      "tab": "Engine",
+      "group": "TOAST autovacuum",
+      "default": "x",
+      "options": [
+        {
+          "value": "x",
+          "label": "Not set"
+        },
+        {
+          "value": "t",
+          "label": "Yes"
+        },
+        {
+          "value": "f",
+          "label": "No"
+        }
+      ],
+      "native_keyword": "toast.autovacuum_enabled",
+      "visible_when": {
+        "field": "toast_autovacuum",
+        "truthy": true
+      }
+    },
+    {
+      "field_id": "vacuum_toast",
+      "label": "TOAST autovacuum settings",
+      "control": "grid",
+      "tab": "Engine",
+      "group": "TOAST autovacuum",
+      "help": "Fixed rows (toast.autovacuum_* parameters); only Value is editable.",
+      "visible_when": {
+        "field": "toast_autovacuum",
+        "truthy": true
+      },
+      "columns": [
+        {
+          "field_id": "label",
+          "label": "Label",
+          "control": "text",
+          "readonly": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "number"
+        },
+        {
+          "field_id": "setting",
+          "label": "Default",
+          "control": "text",
+          "readonly": true
+        }
+      ]
+    },
+    {
+      "field_id": "relacl_str",
+      "label": "Privileges",
+      "control": "text",
+      "tab": "Security",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "relacl",
+      "label": "Privileges",
+      "control": "privileges",
+      "tab": "Security",
+      "native_keyword": "GRANT",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "reference",
+          "reference_kind": "role",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "privileges",
+            "table"
+          ]
+        },
+        {
+          "field_id": "grantor",
+          "label": "Grantor",
+          "control": "reference",
+          "reference_kind": "role",
+          "readonly": true
+        }
+      ],
+      "help": "Privilege codes accepted by the backend: a, r, w, d, D, x, t, m. Grantee list comes from the role catalog plus PUBLIC; grantor is read-only and defaults to the connected user."
+    },
+    {
+      "field_id": "seclabels",
+      "label": "Security labels",
+      "control": "grid",
+      "tab": "Security",
+      "native_keyword": "SECURITY LABEL",
+      "columns": [
+        {
+          "field_id": "provider",
+          "label": "Provider",
+          "control": "text"
+        },
+        {
+          "field_id": "label",
+          "label": "Security label",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "version": {
+        "minimum": "9.1"
+      }
+    },
+    {
+      "field_id": "reltuples",
+      "label": "Rows (estimated)",
+      "control": "text",
+      "tab": "Statistics",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read-only property shown by pgAdmin in properties mode only."
+    },
+    {
+      "field_id": "rows_cnt",
+      "label": "Rows (counted)",
+      "control": "text",
+      "tab": "Statistics",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Counted on demand (Count rows); shows 0 until then."
+    }
+  ],
+  "notes": "Fields map 1:1 onto the legacy pgAdmin dialog (workflow legacy_preserved): field ids are the BaseUISchema ids and are served by the existing SQL templates. Sources: web/pgadmin/browser/server_groups/servers/databases/schemas/tables/static/js/table.ui.js (TableSchema, ConstraintsSchema, LikeSchema), partition.utils.ui.js (PartitionKeysSchema, PartitionsSchema), columns/static/js/column.ui.js, constraints/index_constraint/static/js/{primary_key,unique_constraint}.ui.js, constraints/foreign_key/static/js/foreign_key.ui.js, constraints/check_constraint/static/js/check_constraint.ui.js, constraints/exclusion_constraint/static/js/exclusion_constraint.ui.js, static/js/vacuum.ui.js, static/js/privilege.ui.js, static/js/sec_label.ui.js. Mapping: General->General; Columns->Columns (coll_inherits->Engine); Constraints nested tab->Constraints groups Primary key/Foreign keys/Check/Unique/Exclude; Partitions->Partitions; Advanced: spcname/fillfactor->Options, typname/coll_inherits/rlspolicy/replica identity/access method/toast/parallel/oids/Like->Engine, reltuples/rows_cnt->Statistics; Parameters (vacuum nested tab)->Engine groups Autovacuum/TOAST autovacuum; Security->Security. The partition resource kind (partitions/static/js/partition.ui.js) is the same field set minus Columns/Like/typname. Field ids are checked against the pgAdmin *.ui.js schema ids by tools/tests/test_ui_descriptor_postgresql_schema_ids.py (the schema id gate); the form stays draft until phase 5 routes it to the SQL templates and ports the ui.spec expectations."
+}

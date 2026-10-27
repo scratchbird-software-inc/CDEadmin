@@ -1,0 +1,73 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "duckdb",
+  "family": "view",
+  "resource_kinds": [
+    "view"
+  ],
+  "status": "complete",
+  "engine_tab_title": "DuckDB",
+  "omitted_tabs": [
+    {
+      "tab": "Triggers",
+      "reason": "no triggers"
+    },
+    {
+      "tab": "Security",
+      "reason": "no users or privileges"
+    }
+  ],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "required": false,
+      "help": "Use a qualified database or schema name where needed.",
+      "reference_kind": "schema"
+    },
+    {
+      "field_id": "query",
+      "label": "View query",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "required": true,
+      "help": "One SELECT or WITH query; do not include the CREATE command."
+    },
+    {
+      "field_id": "complete_definition_confirmed",
+      "label": "I reviewed the complete replacement definition",
+      "tab": "Options",
+      "control": "boolean",
+      "required": true,
+      "modes": [
+        "alter"
+      ],
+      "group": "Replace confirmation",
+      "help": " Required by the provider before it replaces the definition."
+    },
+    {
+      "field_id": "metadata_reset_acknowledged",
+      "label": "I accept that native replacement clears comments and tags",
+      "tab": "Options",
+      "control": "boolean",
+      "required": true,
+      "modes": [
+        "alter"
+      ],
+      "group": "Replace confirmation",
+      "help": " Required by the provider before it replaces the definition."
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: DuckDB replace acknowledgements grouped under Options; parent picker (schema). Round trip verified in-process (create, re-inspect) on DuckDB 2.0.0 (profile pins 1.5.2) by tools/tests/test_ui_descriptor_roundtrip_duckdb.py. Native qualification on the pinned version remains with the platform teams."
+}

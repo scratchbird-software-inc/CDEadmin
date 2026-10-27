@@ -18,6 +18,7 @@ import { unix } from 'path-fx';
 import getApiInstance, { parseApiError } from '../api_instance';
 
 export class ManageTreeNodes {
+  private childLoads = new WeakMap();
   constructor() {
     this.tree = {};
     this.tempTree = new TreeNode(undefined, {});
@@ -78,9 +79,26 @@ export class ManageTreeNodes {
     res(treeNode);
   });
 
-  public readNode = async (_path: string) => {
-    let temp_tree_path = _path;
+  public readNode = (_path: string) => {
     const node = this.findNode(_path);
+    if (!node) return Promise.resolve([]);
+    const metadata = node.metadata?.data;
+    const pending = this.childLoads.get(node);
+    if (pending && pending.children === node.children && pending.metadata === metadata) {
+      return pending.promise;
+    }
+    const entry = {children: node.children, metadata, promise: null};
+    entry.promise = this.loadNode(_path, node, entry.children, metadata);
+    this.childLoads.set(node, entry);
+    const release = () => {
+      if (this.childLoads.get(node) === entry) this.childLoads.delete(node);
+    };
+    entry.promise.then(release, release);
+    return entry.promise;
+  };
+
+  private loadNode = async (_path: string, node, originalChildren, originalMetadata) => {
+    let temp_tree_path = _path;
     const base_url = pgAdmin.Browser.URL;
     const api = getApiInstance();
 
@@ -196,6 +214,15 @@ export class ManageTreeNodes {
         }
         return [];
       }
+    }
+
+    // A refresh can replace a parent or its route while its GET is pending.
+    // Publish only the current hierarchy; do not append an old endpoint's
+    // response to a replacement and return the detached parent's empty list.
+    const current = this.findNode(_path);
+    if (current !== node || current.children !== originalChildren ||
+        current.metadata?.data !== originalMetadata) {
+      return current ? this.readNode(_path) : [];
     }
 
     for (const idx in treeData) {
