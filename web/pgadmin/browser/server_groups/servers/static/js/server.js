@@ -16,7 +16,9 @@ import getApiInstance, { parseApiError } from '../../../../../static/js/api_inst
 import { AllPermissionTypes } from '../../../../static/js/constants';
 import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
 import {openProviderObject} from '../../../../static/js/ProviderContextMenu';
-import {tryOpenServerForm} from '../../../../static/js/ProviderObjectEditor';
+import {
+  LEGACY_REGISTRATION_RETIRED, reportServerEditorFailure, tryOpenServerForm,
+} from '../../../../static/js/ProviderObjectEditor';
 import {
   beforeOpenProviderDatabase, providerEndpointSessionReady,
   isProviderRegistrationWorkspace,
@@ -412,10 +414,21 @@ define('pgadmin.node.server', [
             legacy();
             return false;
           }
+          // Retired engines (see LEGACY_REGISTRATION_RETIRED): no legacy fallback, report instead.
+          // LEGACY-FALLBACK (restore by uncommenting and removing the engine from the set):
+          //   .then((opened) => { if(!opened) legacy(); }).catch(() => legacy());
+          const retired = LEGACY_REGISTRATION_RETIRED.has(profile.engine_id);
           tryOpenServerForm({
             item, mode: 'create', engine: profile.engine_id, profileId: profile.profile_id,
             initialData, intent: registrationIntent, verifyNow: initialData.cde_verify_now, panelTitle,
-          }).then((opened) => { if(!opened) legacy(); }).catch(() => legacy());
+          }).then((opened) => {
+            if(opened) return;
+            if(retired) reportServerEditorFailure(profile.engine_id, gettext('server form unavailable'));
+            else legacy();
+          }).catch((error) => {
+            if(retired) reportServerEditorFailure(profile.engine_id, error?.message || String(error));
+            else legacy();
+          });
           return false;
         },
         browse_cde_endpoint: function(args) {

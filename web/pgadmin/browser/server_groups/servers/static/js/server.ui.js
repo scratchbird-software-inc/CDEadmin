@@ -12,6 +12,14 @@ import _ from 'lodash';
 import BaseUISchema from 'sources/SchemaView/base_schema.ui';
 import pgAdmin from 'sources/pgadmin';
 import {default as supportedServers} from 'pgadmin.server.supported_servers';
+/*
+ * LEGACY-REGISTRATION (partly retired 2026-10-28). For MariaDB, Firebird, DuckDB and SQLite the
+ * "Register server" and "Edit endpoint" actions no longer open this SchemaView form; they open the
+ * descriptor Server editor. This file is deliberately left intact because PostgreSQL, MySQL and the
+ * create_database / register_existing intents still use it. Do not delete the provider_endpoint
+ * branches (cde_route_* / cde_secret_* fields) until docs/en_US/ui_server_editor_retirement.rst
+ * lists the browser smoke test as passed.
+ */
 import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
 import current_user from 'pgadmin.user_management.current_user';
 import { isEmptyString } from 'sources/validators';

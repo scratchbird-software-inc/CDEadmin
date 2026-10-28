@@ -203,8 +203,8 @@ verbatim, so they need a design decision (separate operation ids mapped to
 shell routing remains phase 5. Descriptor counts: operations 0 -> 5, kinds
 23 -> 24.
 
-Server editor wired into the tree (2026-10-28)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Server editor wired into the tree (2026-10-28; legacy retired, unverified)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 "Register server" (endpoint intent) and "Edit endpoint" open the descriptor
 Server editor (``ServerRegistrationHost``) for engines whose ``server`` form is
@@ -219,6 +219,10 @@ on any bundle error). Not yet exercised in a running browser; the Jest specs
 cover payloads and the edit-only-changed rule. ``confirm``-type operations that
 carry a typed ``confirmation`` field (Firebird limbo and shadow tasks) were
 checked: the field is an ordinary required field and reaches the draft.
+
+Owner decision 2026-10-28: the legacy dialog is retired for these four engines
+without a browser test (fallback commented out, errors reported instead). Risk,
+trace and restore steps: :ref:`ui_server_editor_retirement`.
 
 Firebird and MariaDB operation round trips (2026-10-28)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

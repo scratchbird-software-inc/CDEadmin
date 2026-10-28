@@ -10,7 +10,10 @@
 import _ from 'lodash';
 import gettext from 'sources/gettext';
 import pgAdmin from 'sources/pgadmin';
-import {familyEditorContextActions, tryOpenFamilyEditor, tryOpenServerForm} from './ProviderObjectEditor';
+import {
+  LEGACY_REGISTRATION_RETIRED, familyEditorContextActions, reportServerEditorFailure, tryOpenFamilyEditor,
+  tryOpenServerForm,
+} from './ProviderObjectEditor';
 
 const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
@@ -187,9 +190,20 @@ function dispatch(action, args, context) {
     );
     const engine = endpoint.data?.cde_engine_id;
     if(!engine) return legacy();
+    // Retired engines (see LEGACY_REGISTRATION_RETIRED): no legacy fallback, report instead.
+    // LEGACY-FALLBACK (restore by uncommenting and removing the engine from the set):
+    //   .then((opened) => opened || legacy()).catch(() => legacy());
+    const retired = LEGACY_REGISTRATION_RETIRED.has(engine);
     return tryOpenServerForm({item: endpoint.item, mode: 'alter', engine, profileId: endpoint.data.cde_profile_id,
       panelTitle: gettext('Edit %s', endpoint.data.label || endpoint.data._label)})
-      .then((opened) => opened || legacy()).catch(() => legacy());
+      .then((opened) => {
+        if(opened) return opened;
+        if(retired) return reportServerEditorFailure(engine, gettext('server form unavailable'));
+        return legacy();
+      }).catch((error) => {
+        if(retired) return reportServerEditorFailure(engine, error?.message || String(error));
+        return legacy();
+      });
   }
   case 'clear_credentials':
     return serverNode.callbacks.clear_saved_password.call(serverNode, {

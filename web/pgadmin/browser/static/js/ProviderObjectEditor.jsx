@@ -31,6 +31,24 @@ import {generateNodeUrl} from './node_ajax';
 
 let editorSequence = 0;
 
+/*
+ * LEGACY REGISTRATION RETIRED (2026-10-28) for these engines. Their Server form in
+ * ui_descriptors/<engine>/forms/server.form.json is `complete`, and register / edit now go only
+ * through tryOpenServerForm -> ServerRegistrationHost. The legacy SchemaView dialog
+ * (servers/static/js/server.ui.js) is NOT removed, only unreachable for them: the fallback calls
+ * in server.js `register_engine_server` and ProviderContextMenu.js `edit_endpoint` are commented
+ * out and marked "LEGACY-FALLBACK". Full trace and restore steps: docs/en_US/ui_server_editor_retirement.rst
+ * To restore one engine, delete it from this set (the fallback then applies to it again) and
+ * uncomment the LEGACY-FALLBACK lines.
+ */
+export const LEGACY_REGISTRATION_RETIRED = new Set(['mariadb', 'firebird', 'duckdb', 'sqlite']);
+
+/** Tell the user the new editor failed and where to look; replaces the retired legacy fallback. */
+export function reportServerEditorFailure(engine, reason) {
+  pgAdmin.Browser.notifier.errorText(gettext(
+    'The %s server editor could not open (%s). See docs ui_server_editor_retirement for how to trace it.', engine, reason));
+}
+
 function serverFor(item) {
   const tree = pgAdmin.Browser.tree;
   let current = item;
