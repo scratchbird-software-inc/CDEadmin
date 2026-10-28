@@ -13,9 +13,9 @@ from .firebird_catalog_import import read_catalog, _decode, _equal, _SLOTS
 # Native relation kinds each engine's *_erd.py publishes with a resource_id.
 _KINDS = {
     'firebird': {'table', 'view', 'column', 'constraint'},
-    'postgresql': {'table', 'partitioned-table', 'foreign-table', 'view', 'materialized-view', 'constraint'},
-    'sqlite': {'table', 'view', 'virtual-table', 'fts-table'},
-    'duckdb': {'table', 'view'},
+    'postgresql': {'table', 'partitioned-table', 'foreign-table', 'view', 'materialized-view', 'constraint', 'index'},
+    'sqlite': {'table', 'view', 'virtual-table', 'fts-table', 'index'},
+    'duckdb': {'table', 'view', 'index'},
 }
 
 
@@ -31,7 +31,23 @@ def _exact_json(value):
     return _json(value)
 
 
+_DRAFTS = {}
+
+
+def _draft_key(snapshot, engine):
+    return engine, hashlib.sha256(_json(snapshot).encode('utf-8')).hexdigest()
+
+
 def read_relations(snapshot, *, engine="firebird"):
+    rows, drafts = _read(snapshot, engine)
+    # Physical-schema drafts (new indexes/constraints) are kept beside the rows for handoff().
+    if len(_DRAFTS) > 8:
+        _DRAFTS.clear()
+    _DRAFTS[_draft_key(snapshot, engine)] = drafts
+    return rows
+
+
+def _read(snapshot, engine):
     if engine not in {"firebird", "postgresql", "mysql", "mariadb", "sqlite", "duckdb"}:
         raise ValueError("Unsupported relational engine")
     encoded = ddn.validate_workspace(snapshot, 'relational')
@@ -52,7 +68,8 @@ def read_relations(snapshot, *, engine="firebird"):
         for row in rows:
             if engine in {'firebird', 'postgresql', 'mysql', 'mariadb', 'sqlite', 'duckdb'}:
                 row['fields'] = {field['uid']: {**field['properties'], '_label': field['label'],
-                    '_property_names': field['property_names']} for field in parsed['field_records']
+                    '_property_names': field['property_names'], '_physical': field.get('physical', {})}
+                                 for field in parsed['field_records']
                                  if field['parent_resource_id'] == row['resource_id']}
             row['native'] = _decode(row['native_json'])
             if not isinstance(row['native'], dict):
@@ -76,11 +93,35 @@ def read_relations(snapshot, *, engine="firebird"):
         combined = rows + children
         if len({row['resource_id'] for row in combined}) != len(combined):
             raise ValueError('Duplicate relational native identity')
-        return {row['resource_id']: row for row in combined}
+        return {row['resource_id']: row for row in combined}, parsed.get('physical_drafts', [])
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ValueError('Relational reader unavailable') from error
     finally:
         _SLOTS.release()
+
+
+def _insert_rows(snapshot, engine, current, rows):
+    """Append new native catalog records beside their owning table's record.
+
+    Only the desired document gains them: the baseline never contained these objects."""
+    import re
+    provenance = current['provenance']
+    for item in rows:
+        owner = current['rows'][item['owner']]['source_location']
+        local = 'o_' + hashlib.sha256(item['resource_id'].encode()).hexdigest()
+        metadata = {'resource_id': item['resource_id'], 'kind': item['kind'], 'path_json': _json(item['path']),
+                    'system': item['system'], 'native_json': _exact_json(item['native'])}
+        uid = engine + ':' + provenance['endpoint_id'] + ':' + provenance['database_target_id'] + ':' + item['resource_id']
+        snapshot['files'][owner['file']] += '\n' + ddn.record_definition(
+            local, item['name'], metadata, module=f'scratchrobin.{engine}.catalog',
+            block=owner['definition_id'].rsplit('.', 1)[0], uid=uid)
+    counted = [(name, match) for name, text in snapshot['files'].items()
+               for match in re.finditer(r'""objects"":([0-9]+)', text)]
+    if len(counted) != 1:
+        raise ValueError('Catalog provenance object count is unavailable')
+    name, match = counted[0]
+    text = snapshot['files'][name]
+    snapshot['files'][name] = text[:match.start(1)] + str(int(match.group(1)) + len(rows)) + text[match.end(1):]
 
 
 def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new_columns=False, allow_column_renames=False, allow_foreign_keys=False, allow_temporal_history=False):
@@ -95,6 +136,18 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
     constraint_changes = {}
     current = read_catalog(_json(catalog_snapshot), engine=engine)
     before, after = read_relations(original, engine=engine), read_relations(desired, engine=engine)
+    before_drafts = _DRAFTS.get(_draft_key(original, engine), [])
+    after_drafts = _DRAFTS.get(_draft_key(desired, engine), [])
+    known = {item['uid'] for item in before_drafts}
+    drafts = {}
+    for item in after_drafts:
+        if item['uid'] not in known:
+            drafts.setdefault(item['parent_resource_id'], []).append(item)
+    if drafts and engine not in {'postgresql', 'sqlite', 'duckdb'}:
+        raise ValueError('New physical-schema objects are not admitted for this engine')
+    new_rows = []
+    if set(drafts) - set(after):
+        raise ValueError('A physical draft names a parent outside the edited relations')
     if engine in {"mysql", "mariadb"}:
         def relationships(rows):
             values = [edge for row in rows.values() for edge in row.get('graphical_relationships', [])]
@@ -134,8 +187,14 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
             facts[1] = merge_fields(old, row, current)
         if engine == 'postgresql':
             from .postgresql_relational_fields import merge_fields
+            from .postgresql_physical import merge_physical
             facts[1] = merge_fields(old, row)
+            facts[1] = merge_physical({**old, 'native': facts[0]}, {**row, 'native': facts[1]}, live, current,
+                                      drafts.get(identity, []))
         if engine in {'sqlite', 'duckdb'}:
+            from .embedded_physical import merge as merge_index
+            facts[1], created = merge_index(engine, old, row, live, current, drafts.get(identity, []))
+            new_rows.extend(created)
             # Column rows are separate native resources; a graphical field edit
             # must not silently diverge from them.
             for uid, fields in row.get('fields', {}).items():
@@ -169,6 +228,9 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
             encoded = snapshot['files'][edit['file']].encode('utf-16-le')
             snapshot['files'][edit['file']] = (encoded[:edit['start'] * 2] + edit['text'].encode('utf-16-le') +
                 encoded[edit['end'] * 2:]).decode('utf-16-le')
+        if snapshot is proposed and new_rows:
+            _insert_rows(snapshot, engine, current, new_rows)
         read_catalog(_json(snapshot), engine=engine)
+    changed.extend(item['resource_id'] for item in new_rows)
     return {'baseline': _json(baseline), 'desired': _json(proposed), 'changed_resource_ids': changed,
             'status': 'prepared-for-native-preview', 'executed': False}

@@ -3,6 +3,7 @@ import hashlib
 import json
 from . import ddn_source as ddn
 from .firebird_catalog_export import MAX_BYTES, MAX_DDN_UNITS, native_metadata
+from . import embedded_physical
 
 
 def build_diagram(resources, provenance):
@@ -17,6 +18,7 @@ def build_diagram(resources, provenance):
     if len(by_path) != len(relations): raise ValueError('Ambiguous native DuckDB relation paths')
     prefix = 'duckdb:' + provenance['endpoint_id'] + ':' + provenance['database_target_id'] + ':'
     declarations, edges, warnings, mapping = [], [], [], {}
+    indexes = embedded_physical.forward('duckdb', resources)
     for row in relations:
         identity = row['resource_id']; native = native_metadata(row, 'duckdb')
         fields = []
@@ -27,8 +29,16 @@ def build_diagram(resources, provenance):
             fields.append(ddn.native_field(key(cid), column['name'], prefix + cid, properties))
             mapping[key(cid)] = cid
         label = '.'.join(row['display_path'])
+        children = []
+        for item in indexes.get(identity, []) if row['resource_kind'] == 'table' else []:
+            child = item['row']['resource_id']
+            children.append({'identity': key(child), 'title': item['row']['display_name'], 'role': 'index',
+                'uid': prefix + child, 'values': {'resource_id': child, 'native_kind': 'index',
+                    'native_json': quote(native_metadata(item['row'], 'duckdb')), **item['values']}})
+            mapping[key(child)] = child
         declarations.append(ddn.relation_object(key(identity), label, row['resource_kind'], prefix + identity,
-            {'resource_id': identity, 'native_kind': row['resource_kind'], 'native_json': quote(native)}, fields, module))
+            {'resource_id': identity, 'native_kind': row['resource_kind'], 'native_json': quote(native)}, fields, module,
+            children))
         mapping[key(identity)] = identity
         for constraint in native.get('constraints', []):
             if constraint['constraint_type'] != 'FOREIGN KEY': continue

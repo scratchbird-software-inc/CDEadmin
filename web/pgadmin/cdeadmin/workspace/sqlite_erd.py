@@ -5,6 +5,7 @@ import json
 from . import ddn_source as ddn
 
 from .firebird_catalog_export import MAX_BYTES, MAX_DDN_UNITS, native_metadata
+from . import embedded_physical
 
 
 def build_diagram(resources, provenance):
@@ -27,6 +28,7 @@ def build_diagram(resources, provenance):
     prefix = ('sqlite:' + provenance['endpoint_id'] + ':' +
               provenance['database_target_id'] + ':')
     declarations, edges, warnings, mapping = [], [], [], {}
+    indexes = embedded_physical.forward('sqlite', resources)
     for row in relations:
         identity = row['resource_id']
         native = native_metadata(row, 'sqlite')
@@ -40,8 +42,16 @@ def build_diagram(resources, provenance):
             mapping[key(column_id)] = column_id
         label = '.'.join(row['display_path'])
         kind = 'view' if row['resource_kind'] == 'view' else 'table'
+        children = []
+        for item in indexes.get(identity, []) if row['resource_kind'] == 'table' else []:
+            child = item['row']['resource_id']
+            children.append({'identity': key(child), 'title': item['row']['display_name'], 'role': 'index',
+                'uid': prefix + child, 'values': {'resource_id': child, 'native_kind': 'index',
+                    'native_json': quote(native_metadata(item['row'], 'sqlite')), **item['values']}})
+            mapping[key(child)] = child
         declarations.append(ddn.relation_object(key(identity), label, kind, prefix + identity,
-            {'resource_id': identity, 'native_kind': row['resource_kind'], 'native_json': quote(native)}, fields, module))
+            {'resource_id': identity, 'native_kind': row['resource_kind'], 'native_json': quote(native)}, fields, module,
+            children))
         mapping[key(identity)] = identity
         for constraint in native.get('constraints', []):
             if constraint.get('constraint_type') != 'FOREIGN KEY':

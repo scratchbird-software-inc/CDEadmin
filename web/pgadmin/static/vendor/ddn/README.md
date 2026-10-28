@@ -1,10 +1,12 @@
 # DDN distribution consumed by ScratchRobin
 
-`current/` contains DDN 0.8.0's public runtime, declarations, stylesheet and
-self-contained unified editing tool from the owner-designated sister project.
-It is distributed under **GPL-2.0-or-later**, with the original LICENSE and
-NOTICE.md. This is a new distribution; the previous MIT-labelled 0.5 viewer and
-0.1 Designer are retired, not relabelled.
+`current/` contains the standalone open DDN `ddn-next-1` (utility API 1.0) public
+runtime, declarations, stylesheet and self-contained unified editing tool from the
+owner-designated sister project (`tools/ddn_intake.py` `CONTRACT`, recorded as
+`version` in `current/resource-manifest.json`). It is distributed under
+**GPL-2.0-or-later**, with the original LICENSE and NOTICE.md. This is a new
+distribution; the earlier 0.8.0 distribution, the previous MIT-labelled 0.5 viewer
+and 0.1 Designer are retired, not relabelled.
 
 Run `python3 tools/refresh_ddn.py` from the repository root before builds and
 commit-validation tests. Direct webpack builds run this gate automatically.

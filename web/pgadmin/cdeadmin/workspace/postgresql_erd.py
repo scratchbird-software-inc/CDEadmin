@@ -4,6 +4,7 @@ import json
 from . import ddn_source as ddn
 
 from .firebird_catalog_export import MAX_DDN_UNITS, MAX_BYTES, native_metadata
+from . import postgresql_physical as physical
 
 RELATIONS = {'table', 'partitioned-table', 'foreign-table', 'view', 'materialized-view'}
 
@@ -25,6 +26,7 @@ def build_diagram(resources, provenance):
         raise ValueError('Ambiguous native relation identities')
     prefix = 'postgresql:' + provenance['endpoint_id'] + ':' + provenance['database_target_id'] + ':'
     declarations, warnings, edges, mapping, column_names = [], [], [], {}, {}
+    groups, catalog = physical.forward(resources), physical.resource_map(resources)
     for row in relations:
         identity = row['resource_id']
         native = native_metadata(row, 'postgresql')
@@ -41,12 +43,23 @@ def build_diagram(resources, provenance):
             if column.get('attnotnull') is True: props['nullable'] = False
             if int(column.get('attndims', 0)) > 0: props['shape'] = 'array'
             if column.get('comment'): props['description'] = column['comment']
-            fields.append(ddn.native_field(key(column_id), column['attname'], prefix + column_id, props))
+            fields.append(ddn.native_field(key(column_id), column['attname'], prefix + column_id, props,
+                                           physical.column_values(column['attname'])))
             mapping[key(column_id)] = column_id
         shape = 'view' if row['resource_kind'] in {'view', 'materialized-view'} else 'table'
         label = '.'.join(row['display_path'][1:]) + ' [' + row['resource_kind'] + ']'
+        children = []
+        for item in groups.get(int(native['oid']), []) if row['resource_kind'] == 'table' else []:
+            child_id = item['row']['resource_id']
+            children.append({'identity': key(child_id), 'title': item['row']['display_name'], 'role': item['role'],
+                'uid': prefix + child_id, 'values': {'resource_id': child_id,
+                    'native_kind': item['row']['resource_kind'],
+                    'native_json': quoted(native_metadata(item['row'], 'postgresql')), **item['values']}})
+            mapping[key(child_id)] = child_id
         declarations.append(ddn.relation_object(key(identity), label, shape, prefix + identity,
-            {'resource_id': identity, 'native_kind': row['resource_kind'], 'native_json': quoted(native)}, fields, module))
+            {'resource_id': identity, 'native_kind': row['resource_kind'], 'native_json': quoted(native)}, fields, module,
+            children, physical.table_values(native['catalog_row']['relname'])
+            if row['resource_kind'] == 'table' and isinstance(native.get('catalog_row', {}).get('relname'), str) else None))
         mapping[key(identity)] = identity
     for row in resources:
         native = native_metadata(row, 'postgresql')
@@ -68,7 +81,8 @@ def build_diagram(resources, provenance):
         identity = row['resource_id']
         label = row['display_name'] + ' (' + ', '.join(source_columns) + ') -> (' + ', '.join(target_columns) + ')'
         declarations.append(ddn.relation_edge(key(identity), label, key(source), key(target),
-            prefix + identity, {'resource_id': identity, 'native_json': quoted(native)}, module))
+            prefix + identity, {'resource_id': identity, 'native_json': quoted(native)}, module,
+            physical.edge_values(row, catalog)))
         edges.append((key(identity), source, target))
         mapping[key(identity)] = identity
     views, blocks = [], []

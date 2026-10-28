@@ -92,6 +92,7 @@ upstream attribution.
    monitoring_history
    ddn_database_roundtrip
    ddn_adopted_runtime
+   ddn_physical_schema_vocabulary
    mysql_functional_completion
    mysql_implementation_priorities
    mysql_router_hosts

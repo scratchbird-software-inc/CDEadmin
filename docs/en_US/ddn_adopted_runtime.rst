@@ -5,8 +5,8 @@ Source and release boundary
 ===========================
 
 Owner direction, 2026-10-28: generation, dashboards and DDN-to-native-metadata
-exchange use the standalone open DDN foundation in
-``/home/dcalford/Sandbox/ScratchWeaver/project/ddn``. The adopted language is
+exchange use the standalone open DDN foundation, published as the public repository
+``scratchbird-software-inc/Diagram-Design-Notation``. The adopted language is
 ``ddn-next-1`` and the public utility API is 1.0. Its package version 0.0.0 is
 not the old DDN 0.8 release. The old grammar, runtime and editor are incompatible.
 The owner authorized publication of this standalone DDN integration on

@@ -143,9 +143,9 @@ def _label(value):
     return prefix + '…'
 
 
-def native_field(identity, title, uid, values):
+def native_field(identity, title, uid, values, physical=None):
     content = {key: value for key, value in values.items() if key in {'datatype', 'nullable'}}
-    return {'identity': identity, 'title': title, 'uid': uid, 'values': values,
+    return {'identity': identity, 'title': title, 'uid': uid, 'values': values, 'physical': physical or {},
             'source': declaration('element', identity, 'field', {
                 'title': _label(title), **({'content': content} if content else {}),
                 **({'description': _display(values['description'])} if 'description' in values else {})})}
@@ -159,21 +159,33 @@ def annotation(identity, title, uid, values, module):
                              block='relations', uid=uid)
 
 
-def relation_object(identity, title, role, uid, native, fields, module):
+def physical_object(identity, title, role, parent, uid, values, module):
+    """An index or constraint element plus its physical-schema x_record
+    (docs/en_US/ddn_physical_schema_vocabulary.rst). Existing objects carry
+    resource_id and native_json; drafts carry neither."""
+    return declaration('element', identity, role, {'title': _label(title)}) + annotation(
+        identity, title, uid, {'subject_kind': role, 'parent_id': parent, **values}, module)
+
+
+def relation_object(identity, title, role, uid, native, fields, module, physical=(), physical_values=None):
     source = ''.join(field['source'] + annotation(field['identity'], field['title'],
         field['uid'], {'subject_kind': 'field', 'parent_id': identity,
                        'field_title_json': json.dumps(field['title'], ensure_ascii=False),
-                       'field_properties_json': json.dumps(field['values'], ensure_ascii=False)}, module) for field in fields)
+                       'field_properties_json': json.dumps(field['values'], ensure_ascii=False),
+                       **field.get('physical', {})}, module) for field in fields)
+    source += ''.join(physical_object(item['identity'], item['title'], item['role'], identity,
+                                      item['uid'], item['values'], module) for item in physical)
+    members = [ref(field['identity']) for field in fields] + [ref(item['identity']) for item in physical]
     return source + declaration('element', identity, role, {
-        'title': _label(title), 'members': [ref(field['identity']) for field in fields]}) + annotation(
-            identity, title, uid, {'subject_kind': role, **native}, module)
+        'title': _label(title), 'members': members}) + annotation(
+            identity, title, uid, {'subject_kind': role, **native, **(physical_values or {})}, module)
 
 
-def relation_edge(identity, title, source, target, uid, native, module):
+def relation_edge(identity, title, source, target, uid, native, module, physical_values=None):
     return declaration('relation', identity, 'ref', {'title': title,
         'properties': {'enforcement': 'database'},
         'endpoints': [{'definition': ref(source)}, {'definition': ref(target)}]}) + annotation(
-            identity, title, uid, {'subject_kind': 'ref', **native}, module)
+            identity, title, uid, {'subject_kind': 'ref', **native, **(physical_values or {})}, module)
 
 
 def graph_view(identity, title, selected, edges=()):
