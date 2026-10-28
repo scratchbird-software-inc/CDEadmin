@@ -97,3 +97,4 @@ upstream attribution.
    duckdb_functional_completion
    sqlite_functional_completion
    native_dialect_tooling
+   bi_saved_questions

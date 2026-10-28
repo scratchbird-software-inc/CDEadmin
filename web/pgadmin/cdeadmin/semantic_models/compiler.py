@@ -325,6 +325,11 @@ def compile_sql(model_value, query_value, dialect):
         query['totals'] and dialect['supports_rollup'] and
         not rollup_allows_order_by
     )
+    if query.get('order_by'):
+        output_order = [
+            quote(item['id']) + ' ' + item['direction'].upper()
+            for item in query['order_by']
+        ]
     if output_order and not native_rollup_without_order:
         source += ' ORDER BY ' + ', '.join(output_order)
     if dialect['limit_style'] == 'rows':

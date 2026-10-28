@@ -53,6 +53,7 @@ class ProviderWorkspaceService:
         self.studio_service = studio_service
         self.result_service = result_service
         self.semantic_model_service = semantic_model_service
+        self.bi_service = None
         self.operation_bus = operation_bus
         self.report_delivery_service = report_delivery_service
         self.report_scheduler_service = report_scheduler_service
@@ -2645,6 +2646,71 @@ class ProviderWorkspaceService:
             )
         raise ProviderWorkspaceError('semantic model action is unavailable')
 
+    def bi_action(self, server, action, request):
+        """Apply an owner-scoped saved-question or collection action."""
+        service = self.bi_service
+        if service is None:
+            raise ProviderWorkspaceError('BI service is not initialized')
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('BI request must be an object')
+        context, _endpoint, _root = self.endpoint_service.workspace(server)
+        user_id = self._principal_id(server)
+        endpoint_id = context.endpoint_id
+        qid = request.get('question_id')
+        revision = request.get('expected_revision')
+        if action == 'bi_collection_list':
+            return {'items': service.list_collections(user_id)}
+        if action == 'bi_collection_create':
+            return service.create_collection(user_id,
+                                             request.get('collection'))
+        if action == 'bi_collection_update':
+            return service.update_collection(
+                user_id, request.get('collection_id'),
+                request.get('collection'))
+        if action == 'bi_collection_delete':
+            return service.delete_collection(user_id,
+                                             request.get('collection_id'))
+        if action == 'bi_question_list':
+            filters = {'collection_id': request['collection_id']} if (
+                'collection_id' in request) else {}
+            return {'items': service.list_questions(
+                user_id, endpoint_id, **filters)}
+        if action == 'bi_question_get':
+            return service.get_question(user_id, endpoint_id, qid)
+        if action == 'bi_question_create':
+            return service.create_question(
+                user_id, endpoint_id, request.get('question'))
+        if action == 'bi_question_update':
+            return service.update_question(
+                user_id, endpoint_id, qid, revision, request.get('question'))
+        if action == 'bi_question_status':
+            return service.set_status(
+                user_id, endpoint_id, qid, revision, request.get('status'))
+        if action == 'bi_question_move':
+            return service.move_question(
+                user_id, endpoint_id, qid, revision,
+                request.get('collection_id'))
+        if action == 'bi_question_clone':
+            return service.clone_question(
+                user_id, endpoint_id, qid, request.get('name'))
+        if action == 'bi_question_delete':
+            return service.delete_question(user_id, endpoint_id, qid,
+                                           revision)
+        if action == 'bi_question_history':
+            return {'items': service.history(user_id, endpoint_id, qid)}
+        if action == 'bi_question_revision':
+            return service.revision(user_id, endpoint_id, qid,
+                                    request.get('revision'))
+        if action == 'bi_question_compile':
+            binding = self.endpoint_service.provider_registry.resolve(context)
+            return service.compile(
+                binding.instance, user_id, endpoint_id, question_id=qid,
+                definition=request.get('question'),
+                parameters=request.get('parameters'),
+                revision=request.get('revision'),
+                security_context={'claims': {'user_id': user_id}})
+        raise ProviderWorkspaceError('BI action is unavailable')
+
     def _semantic_definition(self, context, value):
         if not isinstance(value, dict):
             raise ProviderWorkspaceError(
@@ -3821,6 +3887,9 @@ def init_app(
     import atexit
     atexit.register(service.firebird_events.close)
     app.extensions[APP_EXTENSION_KEY] = service
+    if semantic_model_service is not None:
+        from pgadmin.cdeadmin.bi import init_app as init_bi
+        service.bi_service = init_bi(app, semantic_model_service)
     from .mysql_retention_schedule import init_app as init_mysql_retention_schedule
     init_mysql_retention_schedule(app, service)
     from .mysql_physical_retention_schedule import init_app as init_mysql_physical_schedule

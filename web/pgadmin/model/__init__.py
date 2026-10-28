@@ -1180,6 +1180,99 @@ class SemanticModelRevision(db.Model):
     )
 
 
+class BICollection(db.Model):
+    """Owner-scoped hierarchical folder for saved questions."""
+    __tablename__ = 'cde_bi_collection'
+    __table_args__ = (
+        db.Index('ix_cde_bi_collection_parent', 'user_id', 'parent_id'),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    parent_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_collection.id', ondelete='CASCADE'),
+        nullable=True
+    )
+    name = db.Column(db.String(256), nullable=False)
+    description = db.Column(db.Text(), nullable=False, default='')
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+
+
+class BISavedQuestion(db.Model):
+    """Current endpoint-scoped saved question (builder state or SQL)."""
+    __tablename__ = 'cde_bi_saved_question'
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('active', 'archived')",
+            name='ck_cde_bi_saved_question_status'
+        ),
+        db.Index(
+            'ix_cde_bi_saved_question_scope',
+            'user_id', 'endpoint_id', 'collection_id'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    collection_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_collection.id', ondelete='SET NULL'),
+        nullable=True
+    )
+    name = db.Column(db.String(256), nullable=False)
+    status = db.Column(db.String(16), nullable=False, default='active')
+    semantic_model_id = db.Column(db.String(36), nullable=True)
+    semantic_model_revision = db.Column(db.Integer, nullable=True)
+    revision = db.Column(db.Integer, nullable=False, default=1)
+    __mapper_args__ = {
+        'version_id_col': revision,
+        'version_id_generator': False,
+    }
+    definition = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    revisions = db.relationship(
+        'BISavedQuestionRevision', back_populates='question',
+        cascade=CASCADE_STR
+    )
+
+
+class BISavedQuestionRevision(db.Model):
+    """Immutable saved-question revision snapshot."""
+    __tablename__ = 'cde_bi_saved_question_revision'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'question_id', 'revision', name='uq_cde_bi_question_revision'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    question_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_saved_question.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    revision = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(16), nullable=False)
+    definition = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    question = db.relationship(
+        'BISavedQuestion', back_populates='revisions'
+    )
+
+
+@event.listens_for(BISavedQuestionRevision, 'before_update')
+def _bi_revision_is_immutable(_mapper, _connection, _target):
+    raise ValueError('saved question revisions are immutable')
+
+
 class CDEReportDeliveryOccurrence(db.Model):
     """Durable, secret-free record of one report delivery attempt."""
     __tablename__ = 'cde_report_delivery_occurrence'

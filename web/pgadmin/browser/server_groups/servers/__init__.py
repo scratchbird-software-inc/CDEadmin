@@ -3408,6 +3408,10 @@ class ServerNode(PGChildNodeView):
                     payload = service.semantic_model_action(
                         server, action, data.get('request') or {}
                     )
+                elif isinstance(action, str) and action.startswith('bi_'):
+                    payload = service.bi_action(
+                        server, action, data.get('request') or {}
+                    )
                 elif isinstance(action, str) and action.startswith(
                     'report_scheduler_'
                 ):
