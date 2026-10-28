@@ -88,8 +88,8 @@ MoveDialog.propTypes = {
   current: PropTypes.string, onConfirm: PropTypes.func.isRequired, onClose: PropTypes.func.isRequired,
 };
 
-/** Save a new question or save a copy: name, description and collection. */
-export function SaveDialog({open, title, initial, collections, confirmLabel, onConfirm, onClose}) {
+/** Save a new question or dashboard, or a copy: name, description and collection. */
+export function SaveDialog({open, title, initial, collections, confirmLabel, nameLabel, onConfirm, onClose}) {
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
   const [collection, setCollection] = useState(toOption(initial.collectionId));
@@ -102,7 +102,7 @@ export function SaveDialog({open, title, initial, collections, confirmLabel, onC
     </Stack>}>
     <Stack>
       {error && <Banner status="error">{error}</Banner>}
-      <TextField autoFocus fullWidth size="small" label={gettext('Question name')} value={name}
+      <TextField autoFocus fullWidth size="small" label={nameLabel || gettext('Question name')} value={name}
         onChange={(event) => setName(event.target.value)} />
       <TextArea fullWidth size="small" rows={2} label={gettext('Description')} value={description}
         onChange={(event) => setDescription(event.target.value)} />
@@ -116,5 +116,6 @@ SaveDialog.propTypes = {
   open: PropTypes.bool.isRequired, title: PropTypes.string.isRequired,
   initial: PropTypes.shape({name: PropTypes.string, description: PropTypes.string, collectionId: PropTypes.string}).isRequired,
   collections: PropTypes.array.isRequired, confirmLabel: PropTypes.string.isRequired,
+  nameLabel: PropTypes.string,
   onConfirm: PropTypes.func.isRequired, onClose: PropTypes.func.isRequired,
 };

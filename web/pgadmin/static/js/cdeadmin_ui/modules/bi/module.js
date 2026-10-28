@@ -46,7 +46,7 @@ export function biModuleDefinition() {
         readOnly: false, editable: true, detachable: true, duplicable: false, fullscreen: true,
         restore: restoreQuestionsTool,
         canClose: async (_descriptor, context) => context.dirty ?
-          {allowed: false, reason: 'Save or discard the open question first.'} :
+          {allowed: false, reason: 'Save or discard the open question or dashboard first.'} :
           {allowed: true, reason: ''},
       }],
     },

@@ -6,7 +6,7 @@ BI questions: the query builder UI
 
 Stream C, first UI slice. The backend (saved questions, execution, result
 cache) is described in :doc:`bi_saved_questions`; dashboards in
-:doc:`bi_dashboards` have no UI yet. This page covers the front end of
+:doc:`bi_dashboards` have their UI in :doc:`bi_dashboard_ui`. This page covers the front end of
 "BI questions": a registered workbench tool that talks to one endpoint through
 the ``bi_*`` workspace actions and nothing else.
 

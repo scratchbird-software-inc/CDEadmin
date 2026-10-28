@@ -15,11 +15,15 @@
  * the UI relies on is visible in this file and nowhere else.
  */
 
+import {createDashboardClient} from './dashboardClient';
+
 const RESOURCE_PAGE_LIMIT = 20;
 
 export function createBIClient(post) {
   const call = (action, request = {}) => post({action, request});
   return {
+    ...createDashboardClient(call),
+
     // collections
     listCollections: async () => (await call('bi_collection_list')).items || [],
     createCollection: (collection) => call('bi_collection_create', {collection}),

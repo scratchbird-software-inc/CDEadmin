@@ -798,3 +798,18 @@ Structure, state model and gaps are in :doc:`bi_query_builder_ui`. No shared
 schema, form or family renderer was edited. Lint before/after: JSON297/297,
 MUI244/244, UI engine branches111/111, panels113/113, context-menu
 branches14/14.
+
+BI dashboards: editor and viewer UI, 2026-10-28
+-----------------------------------------------
+
+The dashboard editor and viewer extend the same ``cdeadmin.bi`` module and
+``bi.questions`` surface; there is no new surface, panel or engine branch.
+The collection tree gains a dashboards section (create, rename, move,
+archive, duplicate, search), the workspace has Edit and View modes, and
+"Import monitoring dashboard" opens a DDN file through
+``bi_dashboard_from_ddn`` as an unsaved draft. Layout, filter mapping,
+cross-filter and drill-through logic are pure reducers with Jest specs
+against fixtures generated from the real backend validators. Structure, state
+model and gaps are in :doc:`bi_dashboard_ui`. No shared schema, form or family
+renderer was edited. Lint before/after: JSON297/297, MUI244/244, UI engine
+branches111/111, panels113/113, context-menu branches14/14.

@@ -54,6 +54,7 @@ function fakeBackend(overrides = {}) {
   const handlers = {
     bi_collection_list: () => ({items: db.tree}),
     bi_question_list: () => ({items: db.questions}),
+    bi_dashboard_list: () => ({items: db.dashboards || []}),
     bi_question_get: () => db.record,
     bi_collection_create: ({collection}) => ({collection_id: 'c2', ...collection, children: []}),
     bi_collection_update: ({collection}) => collection,
@@ -114,10 +115,10 @@ describe('collections and question list', () => {
     expect(screen.getByRole('button', {name: 'Open Old report'})).toBeInTheDocument();
     const nav = screen.getByRole('navigation', {name: 'Collections'});
     expect(within(nav).getByRole('button', {name: /^Sales/})).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Search questions and collections'), {target: {value: 'OLD'}});
+    fireEvent.change(screen.getByLabelText('Search questions, dashboards and collections'), {target: {value: 'OLD'}});
     expect(screen.queryByRole('button', {name: 'Open Big sales'})).not.toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Open Old report'})).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Search questions and collections'), {target: {value: 'zzz'}});
+    fireEvent.change(screen.getByLabelText('Search questions, dashboards and collections'), {target: {value: 'zzz'}});
     expect(screen.getByText('No question or collection matches the search.')).toBeInTheDocument();
   });
 

@@ -20,6 +20,7 @@ import {
   findCollection, flattenCollections, matchingCollectionIds, moveTargets, questionCounts, visibleQuestions,
 } from './collectionTree';
 import {MoveDialog, NameDialog} from './Dialogs';
+import DashboardList from './DashboardList';
 
 const itemSx = (active, depth) => ({
   display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', border: 0, font: 'inherit',
@@ -49,16 +50,22 @@ CollectionItem.propTypes = {
  * change goes through the bi_* actions and then asks the host to refresh.
  */
 export default function CollectionBrowser({
-  client, tree, questions, selected, onSelect, search, onSearch, showArchived, onShowArchived,
-  activeQuestionId, dirtyQuestionId, onOpen, onNew, onChanged, onError,
+  client, tree, questions, dashboards = [], selected, onSelect, search, onSearch, showArchived, onShowArchived,
+  activeQuestionId, dirtyQuestionId, activeDashboardId, dirtyDashboardId,
+  onOpen, onNew, onOpenDashboard, onNewDashboard, onImportDashboard, onChanged, onChangedDashboard, onError,
 }) {
   const [dialog, setDialog] = useState(null);
   const rows = useMemo(() => flattenCollections(tree), [tree]);
-  const counts = useMemo(() => questionCounts(
-    showArchived ? questions : questions.filter((question) => question.status !== 'archived')), [questions, showArchived]);
+  const counts = useMemo(() => {
+    const items = [...questions, ...dashboards];
+    return questionCounts(showArchived ? items : items.filter((item) => item.status !== 'archived'));
+  }, [questions, dashboards, showArchived]);
   const matching = useMemo(() => matchingCollectionIds(tree, search), [tree, search]);
   const searching = search.trim() !== '';
   const list = visibleQuestions(questions, {
+    collectionId: searching ? undefined : selected, text: search, includeArchived: showArchived,
+  });
+  const dashboardList = visibleQuestions(dashboards, {
     collectionId: searching ? undefined : selected, text: search, includeArchived: showArchived,
   });
   const selectedCollection = typeof selected === 'string' ? findCollection(tree, selected) : null;
@@ -80,15 +87,19 @@ export default function CollectionBrowser({
       <Button intent="primary" onClick={() => onNew(typeof selected === 'string' ? selected : null)}>
         {gettext('New question')}
       </Button>
+      <Button onClick={() => onNewDashboard(typeof selected === 'string' ? selected : null)}>
+        {gettext('New dashboard')}
+      </Button>
       <Button onClick={() => setDialog({kind: 'newCollection'})}>{gettext('New collection')}</Button>
+      <Button onClick={onImportDashboard}>{gettext('Import monitoring dashboard')}</Button>
     </Stack>
-    <SearchField size="small" label={gettext('Search questions and collections')} value={search}
-      onChange={onSearch} resultCount={searching ? list.length : undefined} />
+    <SearchField size="small" label={gettext('Search questions, dashboards and collections')} value={search}
+      onChange={onSearch} resultCount={searching ? list.length + dashboardList.length : undefined} />
     <Checkbox size="small" label={gettext('Show archived')} checked={showArchived} onChange={onShowArchived} />
 
     <Box component="nav" aria-label={gettext('Collections')}>
       <Box component="ul" sx={{m: 0, p: 0, listStyle: 'none'}}>
-        <CollectionItem label={gettext('All questions')} count={total} depth={0}
+        <CollectionItem label={gettext('All items')} count={total} depth={0}
           active={!searching && selected === undefined} onSelect={() => onSelect(undefined)} />
         <CollectionItem label={gettext('No collection')} count={counts.get(null) || 0} depth={0}
           active={!searching && selected === null} onSelect={() => onSelect(null)} />
@@ -111,6 +122,7 @@ export default function CollectionBrowser({
       })}>{gettext('Delete collection')}</Button>
     </Stack>}
 
+    <Box component="h3" sx={{m: 0, fontSize: '0.8125rem'}}>{gettext('Questions')}</Box>
     <Box component="ul" aria-label={gettext('Questions')} sx={{m: 0, p: 0, listStyle: 'none'}}>
       {list.map((question) => {
         const archived = question.status === 'archived';
@@ -145,6 +157,11 @@ export default function CollectionBrowser({
       {list.length === 0 && <li><EmptyState message={searching ?
         gettext('No question or collection matches the search.') : gettext('No questions here yet.')} /></li>}
     </Box>
+
+    <Box component="h3" sx={{m: 0, fontSize: '0.8125rem'}}>{gettext('Dashboards')}</Box>
+    <DashboardList client={client} dashboards={dashboardList} collections={rows} searching={searching}
+      activeDashboardId={activeDashboardId} dirtyDashboardId={dirtyDashboardId}
+      onOpen={onOpenDashboard} onChanged={onChangedDashboard} onError={onError} />
 
     {dialog?.kind === 'newCollection' && <NameDialog open title={gettext('New collection')}
       label={gettext('Collection name')} confirmLabel={gettext('Create')} onClose={() => setDialog(null)}
@@ -182,6 +199,7 @@ CollectionBrowser.propTypes = {
   client: PropTypes.object.isRequired,
   tree: PropTypes.array.isRequired,
   questions: PropTypes.array.isRequired,
+  dashboards: PropTypes.array,
   selected: PropTypes.oneOfType([PropTypes.string, PropTypes.oneOf([null])]),
   onSelect: PropTypes.func.isRequired,
   search: PropTypes.string.isRequired,
@@ -190,8 +208,14 @@ CollectionBrowser.propTypes = {
   onShowArchived: PropTypes.func.isRequired,
   activeQuestionId: PropTypes.string,
   dirtyQuestionId: PropTypes.string,
+  activeDashboardId: PropTypes.string,
+  dirtyDashboardId: PropTypes.string,
   onOpen: PropTypes.func.isRequired,
   onNew: PropTypes.func.isRequired,
+  onOpenDashboard: PropTypes.func.isRequired,
+  onNewDashboard: PropTypes.func.isRequired,
+  onImportDashboard: PropTypes.func.isRequired,
   onChanged: PropTypes.func.isRequired,
+  onChangedDashboard: PropTypes.func.isRequired,
   onError: PropTypes.func.isRequired,
 };
