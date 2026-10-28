@@ -10,9 +10,10 @@ extends the existing geography method enum with `cartesian` in the adopted
 codex/schema, records the extension in profile rules, and regenerates compiled
 contracts with DDN's generator before building. No grammar, ABI, default,
 commercial Weaver dependency or active sister-project file changes. The intake
-manifest records patch, source-contract and generated-artifact hashes. Keep
-this patch local with the unreleased dependency; it is reviewable for upstream
-adoption, not a claim that unpatched upstream supports Cartesian inspection.
+manifest records patch, source-contract and generated-artifact hashes. This
+consumer patch may be published with the authorized standalone integration and
+is reviewable for upstream adoption. Unpatched upstream does not thereby gain
+Cartesian inspection.
 
 Geographic methods retain range checks, antimeridian polygon splitting and
 bounded coordinate counts. Cartesian coordinates are finite native x/y, with

@@ -4,6 +4,15 @@
 `Code Overview`:index:
 **********************
 
+.. note::
+
+   This page is inherited upstream pgAdmin reference material, retained for
+   provenance. In CDEadmin the canonical launcher is **CDEadmin.py**
+   (**pgAdmin4.py** remains a temporary compatibility entry point), and the
+   configuration database is initialized with
+   ``python3 web/setup.py setup-db``. See the repository README for current
+   setup instructions.
+
 The bulk of pgAdmin is a Python web application written using the Flask framework
 on the backend, and HTML5 with CSS3,ReactJS on the front end. A
 desktop runtime is also included for users that prefer a desktop application to
@@ -20,7 +29,8 @@ Web Application
 ***************
 
 The web application forms the bulk of pgAdmin and can be found in the **/web**
-directory in the source tree. The main file is **pgAdmin4.py** which can be used
+directory in the source tree. The main file is **CDEadmin.py** (the inherited
+**pgAdmin4.py** remains as a compatibility entry point) which can be used
 to run the built-in standalone web server, or as a WSGI application for production
 use.
 
@@ -45,7 +55,7 @@ provides options for self-service password reset and password changes etc.
 
 Whether in desktop or server mode, each user's settings are stored in a SQLite
 OR external database which is also used to store the user accounts. This is initially
-created using the **setup.py** script which will create the database file and
+created using the **setup.py setup-db** command which will create the database file and
 schema within it, and add the first user account (with administrative
 privileges) and a default server group for them. A **settings** table is also
 used to store user configuration settings in a key-value fashion. Although not

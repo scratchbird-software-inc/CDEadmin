@@ -26,7 +26,7 @@ For a fresh development machine, see the
 [Native Windows and macOS development setup](tools/development/NATIVE.md) includes the GitHub qualification matrix.
 It covers dependencies, frontend builds, account setup, Docker fixtures, sample
 credentials, and per-engine start/stop/verification commands.
-The standard production frontend build allows a 6 GiB Node heap.
+The `dev.sh frontend` build sets a 3 GiB Node heap.
 
 ## Shared development branch
 
@@ -224,8 +224,7 @@ without WSL, Docker or Linux libraries. The GitHub **Native development
 environments** workflow tests each host separately.
 
 - Python 3.14 or later (the standard 3.14 build is the current installation baseline)
-- Node.js 20 or later
-- Yarn through Corepack
+- Node.js 22 LTS (tested 22.22.x) through Corepack
 - The Python and native drivers required by the providers being exercised
 - Live reference engines only for the relevant integration/activation tests
 
@@ -234,16 +233,18 @@ qualification target, not a supported full-product runtime yet. See the
 [Python runtime policy](docs/en_US/python_runtime_policy.rst) for the dependency
 and no-GIL gates. Python 3.15 has been released but needs its own qualification.
 
-Enable Yarn and create a Python environment:
+Enable Yarn and install dependencies:
 
 ```bash
 corepack enable
-python3.14 -m venv venv
-source venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m pip install -r web/regression/requirements.txt
 ```
+
+On Linux, do not create a manual environment here: the canonical path is
+[the development guide](tools/development/README.md), which drives
+`bash tools/development/dev.sh python` to build the repository-local `.venv`
+and install the application and demo requirements together. The regression
+requirements under `web/regression/requirements.txt` are a separate set used
+by the upstream test harness, not by the dev.sh path.
 
 Provider-specific drivers and reference-engine versions are documented by
 their activation plans and tests. Do not silently substitute an engine or
@@ -251,11 +252,8 @@ driver version when collecting conformance evidence.
 
 ## Building web assets
 
-```bash
-make install-node
-make bundle
-```
-
+On Linux, use `bash tools/development/dev.sh frontend` (it refreshes the
+consumed DDN snapshot first; see the DDN freshness protocol in `AGENTS.md`).
 On Windows and macOS, use the native guide's `frontend` stage to build with
 the required host tools and memory settings.
 
@@ -265,11 +263,12 @@ Local overrides belong in `web/config_local.py`. CDEadmin defaults should use
 separate paths and ports from pgAdmin 4. The product identity contract reserves
 port 5051 and `cdeadmin` state namespaces for this purpose.
 
-Initialize the configuration database and run the inherited compatibility
-launcher:
+On Linux, `bash tools/development/dev.sh configure`, `init` and `run` create
+the configuration, initialize the database (`web/setup.py setup-db`) and start
+the launcher:
 
 ```bash
-python3 web/setup.py
+python3 web/setup.py setup-db
 python3 web/CDEadmin.py
 ```
 
@@ -343,5 +342,6 @@ support or security contacts.
 
 The adopted diagram/dashboard foundation is standalone open DDN `ddn-next-1`
 from the authorized ScratchWeaver checkout. See
-[the integration contract](docs/en_US/ddn_adopted_runtime.rst). It is currently
-unreleased; builds require that source, not the incompatible old DDN repository.
+[the integration contract](docs/en_US/ddn_adopted_runtime.rst). Publication of
+this standalone dependency is authorized. Builds require matching `ddn-next-1`
+source; the old DDN repository is incompatible.

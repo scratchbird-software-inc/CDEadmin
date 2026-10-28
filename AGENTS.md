@@ -59,15 +59,20 @@ Before EVERY build, and before every test run intended to validate a commit:
    during capture, retry capture; later changes are consumed on the next run.
    Review and retain the refreshed dependency and manifest with the commit.
 
-This is a prerequisite even for direct webpack/pytest/Jest invocation. Until an
-automated gate covers those entry points, perform and document it explicitly.
-Do not claim the gate is automated when it is only a contributor instruction.
+This gate is automated on both development paths. On Linux,
+`bash tools/development/dev.sh ddn` runs `tools/refresh_ddn.py`, and the
+`frontend` stage runs the refresh before building. On native Windows/macOS,
+`native.py` runs the same refresh before its build and test stages. Direct
+webpack, pytest or Jest invocations bypass those entry points: run
+`bash tools/development/dev.sh ddn` (or `tools/refresh_ddn.py`) explicitly
+first and record it.
 
 Owner direction, 2026-10-28: migrate generation, dashboard generation and
 DDN-to-native-metadata exchange to ScratchWeaver's standalone open DDN
 `ddn-next-1` utility API 1.0. The old dialect is incompatible. Consume only
 `project/ddn` and its public build dependencies; never consume commercial Weaver.
-Keep unreleased DDN local until publication is separately authorized. Source
+Publication of this standalone DDN integration is authorized by the owner
+(2026-10-28); commercial Weaver remains excluded. Source
 workspaces use `ddn-source-workspace@1`; native DDN ModelSnapshot is a different
 contract. Legacy saved designs require an explicit, loss-reported conversion,
 never a format relabel. Refresh with `tools/refresh_ddn.py`; review the exact

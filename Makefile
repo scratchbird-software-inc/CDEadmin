@@ -17,6 +17,59 @@ APP_REVISION := $(shell grep ^APP_REVISION web/version.py | awk -F"=" '{print $$
 # High-level targets
 #########################################################################
 
+help:
+	@echo "Setup and build:"
+	@echo "  all                   docs, pip and src packages (platform-independent)"
+	@echo "  install-node          install web/ Node dependencies (yarn install)"
+	@echo "  install-python        create the Python environment"
+	@echo "  install-python-testing  Python environment incl. test requirements"
+	@echo "  bundle                production web bundle"
+	@echo "  bundle-dev            development web bundle"
+	@echo "  appbundle             macOS application bundle (BUILD_OPTS to pass args)"
+	@echo "Checks:"
+	@echo "  check                 full gate: install, bundle, lint, check-gates, Jest + regression"
+	@echo "  check-gates           CDEadmin gates/tests only; no install/lint/Jest/regression"
+	@echo "  check-pep8            pycodestyle over docs/, pkg/, web/, tools/"
+	@echo "  check-python          Python regression suite (no feature tests)"
+	@echo "  check-resql           resql regression suite"
+	@echo "  check-feature         feature test suite (installs node, builds bundle)"
+	@echo "  check-js              Jest suite (installs node, lints)"
+	@echo "  check-js-coverage     Jest suite with coverage"
+	@echo "  check-audit           yarn audit"
+	@echo "  check-auditjs         auditjs, dependencies group only"
+	@echo "  check-auditjs-html    auditjs HTML report"
+	@echo "  check-auditpy         Python dependency audit"
+	@echo "  ui-descriptors-check  validate ui_descriptors and run family tests"
+	@echo "CDEadmin gates and tests:"
+	@echo "  cdeadmin-*-test       unit test suites (endpoint-persistence, provider-registry,"
+	@echo "                        postgresql/mongodb/redis-provider, resource-explorer,"
+	@echo "                        data-studio, result-renderer, semantic-model, operation-bus,"
+	@echo "                        security-isolation, quality-infrastructure, product-identity,"
+	@echo "                        profile-migration, transport-foundations, actual-engine-pilots,"
+	@echo "                        relational-driver-verification, reference-corpus, parity,"
+	@echo "                        workspace-shell, scratchbird-consumer, upstream-acceptance,"
+	@echo "                        baseline, jest-contract)"
+	@echo "  cdeadmin-*-gate       structural gates (architecture, transport, actual-engine,"
+	@echo "                        reference-corpus, parity, workspace-shell,"
+	@echo "                        scratchbird-consumer, upstream-acceptance, quality,"
+	@echo "                        bundle-regression; *-donor-gate variants need CDEADMIN_DONOR_ROOT)"
+	@echo "  cdeadmin-*-check      contract/product-identity check targets"
+	@echo "  cdeadmin-*-coverage   coverage runs (shared recipe; 75-80% floors)"
+	@echo "  cdeadmin-semantic-live  per-engine live semantic verification, ENGINE=duckdb default"
+	@echo "                        (aliases: cdeadmin-semantic-live-duckdb, -sqlite)"
+	@echo "  cdeadmin-contracts-generate  regenerate provider contracts"
+	@echo "  cdeadmin-baseline     read-only baseline (needs CDEADMIN_BASELINE_OUTPUT)"
+	@echo "  cdeadmin-branding-inventory  branding report (needs CDEADMIN_BRANDING_OUTPUT)"
+	@echo "  cdeadmin-dependency-licenses  license report (needs CDEADMIN_LICENSE_OUTPUT,"
+	@echo "                        CDEADMIN_BASELINE_ID)"
+	@echo "Packaging and docs:"
+	@echo "  docs / docs-pdf / docs-epub  Sphinx documentation"
+	@echo "  pip / redhat / debian / src / docker  package builds"
+	@echo "  messages              msg-extract + msg-update + msg-compile"
+	@echo "Cleaning:"
+	@echo "  clean                 all clean-* targets plus generated js/css"
+	@echo "  clean-<part>          appbundle, debian, dist, docs, node, pip, redhat, src"
+
 # Include only platform-independent builds in all
 all: docs pip src
 
@@ -42,7 +95,28 @@ bundle-dev:
 linter:
 	cd web && yarn run linter
 
-check: install-node bundle linter check-pep8 cdeadmin-contracts-check cdeadmin-architecture-gate ui-descriptors-check cdeadmin-endpoint-persistence-test cdeadmin-provider-registry-test cdeadmin-postgresql-provider-test cdeadmin-mongodb-provider-test cdeadmin-resource-explorer-test cdeadmin-data-studio-test cdeadmin-result-renderer-test cdeadmin-semantic-model-test cdeadmin-operation-bus-test cdeadmin-security-isolation-test cdeadmin-quality-infrastructure-test cdeadmin-product-identity-test cdeadmin-product-identity-check cdeadmin-profile-migration-test cdeadmin-transport-foundations-test cdeadmin-transport-gate cdeadmin-actual-engine-pilots-test cdeadmin-actual-engine-gate cdeadmin-reference-corpus-test cdeadmin-reference-corpus-gate cdeadmin-parity-test cdeadmin-parity-gate cdeadmin-workspace-shell-test cdeadmin-workspace-shell-gate cdeadmin-scratchbird-consumer-test cdeadmin-scratchbird-consumer-gate cdeadmin-upstream-acceptance-test cdeadmin-upstream-acceptance-gate cdeadmin-quality-gate cdeadmin-bundle-regression-gate
+CHECK_GATES := cdeadmin-contracts-check cdeadmin-architecture-gate ui-descriptors-check \
+	cdeadmin-endpoint-persistence-test cdeadmin-provider-registry-test \
+	cdeadmin-postgresql-provider-test cdeadmin-mongodb-provider-test \
+	cdeadmin-resource-explorer-test cdeadmin-data-studio-test \
+	cdeadmin-result-renderer-test cdeadmin-semantic-model-test \
+	cdeadmin-operation-bus-test cdeadmin-security-isolation-test \
+	cdeadmin-quality-infrastructure-test cdeadmin-product-identity-test \
+	cdeadmin-product-identity-check cdeadmin-profile-migration-test \
+	cdeadmin-transport-foundations-test cdeadmin-transport-gate \
+	cdeadmin-actual-engine-pilots-test cdeadmin-actual-engine-gate \
+	cdeadmin-reference-corpus-test cdeadmin-reference-corpus-gate \
+	cdeadmin-parity-test cdeadmin-parity-gate \
+	cdeadmin-workspace-shell-test cdeadmin-workspace-shell-gate \
+	cdeadmin-scratchbird-consumer-test cdeadmin-scratchbird-consumer-gate \
+	cdeadmin-upstream-acceptance-test cdeadmin-upstream-acceptance-gate \
+	cdeadmin-quality-gate cdeadmin-bundle-regression-gate
+
+# CDEadmin gate/test targets only: no install/bundle/lint, no Jest or
+# regression suites. Fast pre-commit check.
+check-gates: $(CHECK_GATES)
+
+check: install-node bundle linter check-pep8 check-gates
 	cd web && yarn run test:js-once && python regression/runtests.py
 
 check-audit:
@@ -81,7 +155,7 @@ check-js: install-node linter
 	cd web && yarn run test:js-once
 
 check-js-coverage:
-    cd web && yarn run test:js-coverage
+	cd web && yarn run test:js-coverage
 
 # Capture a read-only CDEadmin preparation baseline. The output directory is
 # deliberately required and must be outside this source tree.
@@ -152,15 +226,18 @@ cdeadmin-semantic-model-test:
 		tools.tests.test_cdeadmin_provider_workspace \
 		tools.tests.test_cdeadmin_result_renderers -v
 
-cdeadmin-semantic-live-duckdb:
+# Per-engine live semantic verification: make cdeadmin-semantic-live ENGINE=sqlite
+ENGINE ?= duckdb
+cdeadmin-semantic-live:
 	python3 tools/cdeadmin_relational_provider_live_verify.py \
-		--engine duckdb \
-		--output /tmp/cdeadmin-semantic-live-duckdb.json
+		--engine $(ENGINE) \
+		--output /tmp/cdeadmin-semantic-live-$(ENGINE).json
+
+cdeadmin-semantic-live-duckdb:
+	$(MAKE) cdeadmin-semantic-live ENGINE=duckdb
 
 cdeadmin-semantic-live-sqlite:
-	python3 tools/cdeadmin_relational_provider_live_verify.py \
-		--engine sqlite \
-		--output /tmp/cdeadmin-semantic-live-sqlite.json
+	$(MAKE) cdeadmin-semantic-live ENGINE=sqlite
 
 cdeadmin-operation-bus-test:
 	python3 -m unittest tools.tests.test_cdeadmin_operation_bus -v
@@ -178,17 +255,25 @@ cdeadmin-product-identity-check:
 	python3 tools/cdeadmin_product_identity.py --source . \
 		--policy tools/cdeadmin_product_identity_policy.json
 
+# Shared recipe for the cdeadmin *-coverage targets. $1 is the coverage
+# data-file stem, $2 the unittest module, $3 the --fail-under percent; each
+# target sets COV_INCLUDE to its --include globs.
+define coverage_run
+rm -f /tmp/$1_coverage
+python3 -m coverage run \
+	--data-file=/tmp/$1_coverage \
+	--include='$(COV_INCLUDE)' \
+	-m unittest $2
+python3 -m coverage report \
+	--data-file=/tmp/$1_coverage \
+	--include='$(COV_INCLUDE)' \
+	--fail-under=$3
+rm -f /tmp/$1_coverage
+endef
+
+cdeadmin-product-identity-coverage: COV_INCLUDE = */tools/cdeadmin_product_identity.py,*/web/pgadmin/cdeadmin/product/*.py
 cdeadmin-product-identity-coverage:
-	rm -f /tmp/cdeadmin_product_identity_coverage
-	python3 -m coverage run \
-		--data-file=/tmp/cdeadmin_product_identity_coverage \
-		--include='*/tools/cdeadmin_product_identity.py,*/web/pgadmin/cdeadmin/product/*.py' \
-		-m unittest tools.tests.test_cdeadmin_product_identity
-	python3 -m coverage report \
-		--data-file=/tmp/cdeadmin_product_identity_coverage \
-		--include='*/tools/cdeadmin_product_identity.py,*/web/pgadmin/cdeadmin/product/*.py' \
-		--fail-under=75
-	rm -f /tmp/cdeadmin_product_identity_coverage
+	$(call coverage_run,cdeadmin_product_identity,tools.tests.test_cdeadmin_product_identity,75)
 
 cdeadmin-branding-inventory:
 	@test -n "$(CDEADMIN_BRANDING_OUTPUT)" || { echo "CDEADMIN_BRANDING_OUTPUT is required"; exit 2; }
@@ -199,17 +284,9 @@ cdeadmin-branding-inventory:
 cdeadmin-profile-migration-test:
 	python3 -m unittest tools.tests.test_cdeadmin_profile_migration -v
 
+cdeadmin-profile-migration-coverage: COV_INCLUDE = */web/pgadmin/cdeadmin/migration/*.py,*/web/migrations/versions/cde_profile_migration_v1_.py
 cdeadmin-profile-migration-coverage:
-	rm -f /tmp/cdeadmin_profile_migration_coverage
-	python3 -m coverage run \
-		--data-file=/tmp/cdeadmin_profile_migration_coverage \
-		--include='*/web/pgadmin/cdeadmin/migration/*.py,*/web/migrations/versions/cde_profile_migration_v1_.py' \
-		-m unittest tools.tests.test_cdeadmin_profile_migration
-	python3 -m coverage report \
-		--data-file=/tmp/cdeadmin_profile_migration_coverage \
-		--include='*/web/pgadmin/cdeadmin/migration/*.py,*/web/migrations/versions/cde_profile_migration_v1_.py' \
-		--fail-under=80
-	rm -f /tmp/cdeadmin_profile_migration_coverage
+	$(call coverage_run,cdeadmin_profile_migration,tools.tests.test_cdeadmin_profile_migration,80)
 
 cdeadmin-transport-foundations-test:
 	python3 -m unittest \
@@ -218,17 +295,9 @@ cdeadmin-transport-foundations-test:
 cdeadmin-transport-gate:
 	python3 tools/cdeadmin_transport_gate.py --source .
 
+cdeadmin-transport-coverage: COV_INCLUDE = */web/pgadmin/cdeadmin/transports/*.py,*/tools/cdeadmin_transport_gate.py
 cdeadmin-transport-coverage:
-	rm -f /tmp/cdeadmin_transport_coverage
-	python3 -m coverage run \
-		--data-file=/tmp/cdeadmin_transport_coverage \
-		--include='*/web/pgadmin/cdeadmin/transports/*.py,*/tools/cdeadmin_transport_gate.py' \
-		-m unittest tools.tests.test_cdeadmin_transport_foundations
-	python3 -m coverage report \
-		--data-file=/tmp/cdeadmin_transport_coverage \
-		--include='*/web/pgadmin/cdeadmin/transports/*.py,*/tools/cdeadmin_transport_gate.py' \
-		--fail-under=80
-	rm -f /tmp/cdeadmin_transport_coverage
+	$(call coverage_run,cdeadmin_transport,tools.tests.test_cdeadmin_transport_foundations,80)
 
 cdeadmin-actual-engine-pilots-test:
 	python3 -m unittest \
@@ -249,17 +318,9 @@ cdeadmin-actual-engine-donor-gate:
 	python3 tools/cdeadmin_actual_engine_gate.py --source . \
 		--donor-root "$(CDEADMIN_DONOR_ROOT)"
 
+cdeadmin-actual-engine-coverage: COV_INCLUDE = */web/pgadmin/cdeadmin/sdk/*.py,*/web/pgadmin/cdeadmin/providers/mysql_family/*.py,*/web/pgadmin/cdeadmin/providers/mongodb/*.py,*/web/pgadmin/cdeadmin/providers/neo4j/*.py,*/web/pgadmin/cdeadmin/providers/clickhouse/*.py,*/web/pgadmin/cdeadmin/providers/duckdb/*.py,*/tools/cdeadmin_actual_engine_gate.py
 cdeadmin-actual-engine-coverage:
-	rm -f /tmp/cdeadmin_actual_engine_coverage
-	python3 -m coverage run \
-		--data-file=/tmp/cdeadmin_actual_engine_coverage \
-		--include='*/web/pgadmin/cdeadmin/sdk/*.py,*/web/pgadmin/cdeadmin/providers/mysql_family/*.py,*/web/pgadmin/cdeadmin/providers/mongodb/*.py,*/web/pgadmin/cdeadmin/providers/neo4j/*.py,*/web/pgadmin/cdeadmin/providers/clickhouse/*.py,*/web/pgadmin/cdeadmin/providers/duckdb/*.py,*/tools/cdeadmin_actual_engine_gate.py' \
-		-m unittest tools.tests.test_cdeadmin_actual_engine_pilots
-	python3 -m coverage report \
-		--data-file=/tmp/cdeadmin_actual_engine_coverage \
-		--include='*/web/pgadmin/cdeadmin/sdk/*.py,*/web/pgadmin/cdeadmin/providers/mysql_family/*.py,*/web/pgadmin/cdeadmin/providers/mongodb/*.py,*/web/pgadmin/cdeadmin/providers/neo4j/*.py,*/web/pgadmin/cdeadmin/providers/clickhouse/*.py,*/web/pgadmin/cdeadmin/providers/duckdb/*.py,*/tools/cdeadmin_actual_engine_gate.py' \
-		--fail-under=80
-	rm -f /tmp/cdeadmin_actual_engine_coverage
+	$(call coverage_run,cdeadmin_actual_engine,tools.tests.test_cdeadmin_actual_engine_pilots,80)
 
 cdeadmin-reference-corpus-test:
 	python3 -m unittest \
@@ -273,17 +334,9 @@ cdeadmin-reference-corpus-donor-gate:
 	python3 tools/cdeadmin_reference_corpus.py --source . \
 		--donor-root "$(CDEADMIN_DONOR_ROOT)"
 
+cdeadmin-reference-corpus-coverage: COV_INCLUDE = */tools/cdeadmin_reference_corpus.py
 cdeadmin-reference-corpus-coverage:
-	rm -f /tmp/cdeadmin_reference_corpus_coverage
-	python3 -m coverage run \
-		--data-file=/tmp/cdeadmin_reference_corpus_coverage \
-		--include='*/tools/cdeadmin_reference_corpus.py' \
-		-m unittest tools.tests.test_cdeadmin_reference_corpus
-	python3 -m coverage report \
-		--data-file=/tmp/cdeadmin_reference_corpus_coverage \
-		--include='*/tools/cdeadmin_reference_corpus.py' \
-		--fail-under=80
-	rm -f /tmp/cdeadmin_reference_corpus_coverage
+	$(call coverage_run,cdeadmin_reference_corpus,tools.tests.test_cdeadmin_reference_corpus,80)
 
 cdeadmin-parity-test:
 	python3 -m unittest \
@@ -299,17 +352,9 @@ cdeadmin-parity-reference-gate:
 cdeadmin-parity-release-gate:
 	python3 tools/cdeadmin_parity_runner.py --source . --require-release
 
+cdeadmin-parity-coverage: COV_INCLUDE = */tools/cdeadmin_parity_runner.py
 cdeadmin-parity-coverage:
-	rm -f /tmp/cdeadmin_parity_coverage
-	python3 -m coverage run \
-		--data-file=/tmp/cdeadmin_parity_coverage \
-		--include='*/tools/cdeadmin_parity_runner.py' \
-		-m unittest tools.tests.test_cdeadmin_parity_runner
-	python3 -m coverage report \
-		--data-file=/tmp/cdeadmin_parity_coverage \
-		--include='*/tools/cdeadmin_parity_runner.py' \
-		--fail-under=75
-	rm -f /tmp/cdeadmin_parity_coverage
+	$(call coverage_run,cdeadmin_parity,tools.tests.test_cdeadmin_parity_runner,75)
 
 cdeadmin-workspace-shell-test:
 	python3 -m unittest \
@@ -318,17 +363,9 @@ cdeadmin-workspace-shell-test:
 cdeadmin-workspace-shell-gate:
 	python3 tools/cdeadmin_workspace_shell_gate.py --source .
 
+cdeadmin-workspace-shell-coverage: COV_INCLUDE = */tools/cdeadmin_workspace_shell_gate.py
 cdeadmin-workspace-shell-coverage:
-	rm -f /tmp/cdeadmin_workspace_shell_coverage
-	python3 -m coverage run \
-		--data-file=/tmp/cdeadmin_workspace_shell_coverage \
-		--include='*/tools/cdeadmin_workspace_shell_gate.py' \
-		-m unittest tools.tests.test_cdeadmin_workspace_shells
-	python3 -m coverage report \
-		--data-file=/tmp/cdeadmin_workspace_shell_coverage \
-		--include='*/tools/cdeadmin_workspace_shell_gate.py' \
-		--fail-under=80
-	rm -f /tmp/cdeadmin_workspace_shell_coverage
+	$(call coverage_run,cdeadmin_workspace_shell,tools.tests.test_cdeadmin_workspace_shells,80)
 
 cdeadmin-scratchbird-consumer-test:
 	python3 -m unittest \
@@ -337,17 +374,9 @@ cdeadmin-scratchbird-consumer-test:
 cdeadmin-scratchbird-consumer-gate:
 	python3 tools/cdeadmin_scratchbird_consumer.py --source .
 
+cdeadmin-scratchbird-consumer-coverage: COV_INCLUDE = */tools/cdeadmin_scratchbird_consumer.py
 cdeadmin-scratchbird-consumer-coverage:
-	rm -f /tmp/cdeadmin_scratchbird_consumer_coverage
-	python3 -m coverage run \
-		--data-file=/tmp/cdeadmin_scratchbird_consumer_coverage \
-		--include='*/tools/cdeadmin_scratchbird_consumer.py' \
-		-m unittest tools.tests.test_cdeadmin_scratchbird_consumer
-	python3 -m coverage report \
-		--data-file=/tmp/cdeadmin_scratchbird_consumer_coverage \
-		--include='*/tools/cdeadmin_scratchbird_consumer.py' \
-		--fail-under=80
-	rm -f /tmp/cdeadmin_scratchbird_consumer_coverage
+	$(call coverage_run,cdeadmin_scratchbird_consumer,tools.tests.test_cdeadmin_scratchbird_consumer,80)
 
 cdeadmin-upstream-acceptance-test:
 	python3 -m unittest \
@@ -356,17 +385,9 @@ cdeadmin-upstream-acceptance-test:
 cdeadmin-upstream-acceptance-gate:
 	python3 tools/cdeadmin_upstream_acceptance.py --source .
 
+cdeadmin-upstream-acceptance-coverage: COV_INCLUDE = */tools/cdeadmin_upstream_acceptance.py
 cdeadmin-upstream-acceptance-coverage:
-	rm -f /tmp/cdeadmin_upstream_acceptance_coverage
-	python3 -m coverage run \
-		--data-file=/tmp/cdeadmin_upstream_acceptance_coverage \
-		--include='*/tools/cdeadmin_upstream_acceptance.py' \
-		-m unittest tools.tests.test_cdeadmin_upstream_acceptance
-	python3 -m coverage report \
-		--data-file=/tmp/cdeadmin_upstream_acceptance_coverage \
-		--include='*/tools/cdeadmin_upstream_acceptance.py' \
-		--fail-under=80
-	rm -f /tmp/cdeadmin_upstream_acceptance_coverage
+	$(call coverage_run,cdeadmin_upstream_acceptance,tools.tests.test_cdeadmin_upstream_acceptance,80)
 
 cdeadmin-quality-gate:
 	python3 tools/cdeadmin_quality_gate.py --source . \
@@ -377,17 +398,9 @@ cdeadmin-bundle-regression-gate:
 		--policy tools/cdeadmin_quality_policy.json \
 		--require-built-bundle
 
+cdeadmin-quality-coverage: COV_INCLUDE = */tools/cdeadmin_provider_testkit.py,*/tools/cdeadmin_quality_gate.py
 cdeadmin-quality-coverage:
-	rm -f /tmp/cdeadmin_quality_coverage
-	python3 -m coverage run \
-		--data-file=/tmp/cdeadmin_quality_coverage \
-		--include='*/tools/cdeadmin_provider_testkit.py,*/tools/cdeadmin_quality_gate.py' \
-		-m unittest tools.tests.test_cdeadmin_quality_infrastructure
-	python3 -m coverage report \
-		--data-file=/tmp/cdeadmin_quality_coverage \
-		--include='*/tools/cdeadmin_provider_testkit.py,*/tools/cdeadmin_quality_gate.py' \
-		--fail-under=75
-	rm -f /tmp/cdeadmin_quality_coverage
+	$(call coverage_run,cdeadmin_quality,tools.tests.test_cdeadmin_quality_infrastructure,75)
 
 cdeadmin-jest-contract-test:
 	cd web && corepack yarn run jest --runInBand \
@@ -428,7 +441,7 @@ clean-docs:
 	LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 $(MAKE) -C docs/en_US -f Makefile.sphinx clean
 
 clean-node:
-	rm -rf web/node-modules/
+	rm -rf web/node_modules/
 
 clean-pip:
 	rm -rf pip-build/
@@ -444,7 +457,6 @@ debian:
 
 docker:
 	echo $(APP_NAME)
-	git checkout HEAD
 	docker build --pull -t ${APP_NAME} -t $(APP_NAME):latest -t $(APP_NAME):$(APP_RELEASE) -t $(APP_NAME):$(APP_RELEASE).$(APP_REVISION) .
 
 docs:
@@ -467,42 +479,44 @@ msg-extract:
 msg-update:
 	cd web && pybabel update --no-fuzzy-matching -i pgadmin/messages.pot -d pgadmin/translations
 
-.PHONY: docs cdeadmin-baseline cdeadmin-baseline-test
-.PHONY: cdeadmin-architecture-gate cdeadmin-dependency-licenses
-.PHONY: cdeadmin-contracts-generate cdeadmin-contracts-check
-.PHONY: cdeadmin-endpoint-persistence-test
-.PHONY: cdeadmin-provider-registry-test
-.PHONY: cdeadmin-postgresql-provider-test
-.PHONY: cdeadmin-mongodb-provider-test
-.PHONY: cdeadmin-redis-provider-test
-.PHONY: cdeadmin-resource-explorer-test
-.PHONY: cdeadmin-data-studio-test
-.PHONY: cdeadmin-result-renderer-test
-.PHONY: cdeadmin-semantic-model-test
-.PHONY: cdeadmin-semantic-live-duckdb cdeadmin-semantic-live-sqlite
-.PHONY: cdeadmin-operation-bus-test
-.PHONY: cdeadmin-security-isolation-test
-.PHONY: cdeadmin-transport-foundations-test cdeadmin-transport-gate
-.PHONY: cdeadmin-transport-coverage
-.PHONY: cdeadmin-actual-engine-pilots-test cdeadmin-actual-engine-gate
-.PHONY: cdeadmin-actual-engine-donor-gate cdeadmin-actual-engine-coverage
-.PHONY: cdeadmin-reference-corpus-test cdeadmin-reference-corpus-gate
-.PHONY: cdeadmin-reference-corpus-donor-gate
-.PHONY: cdeadmin-reference-corpus-coverage
-.PHONY: cdeadmin-parity-test cdeadmin-parity-gate
-.PHONY: cdeadmin-parity-reference-gate cdeadmin-parity-release-gate
-.PHONY: cdeadmin-parity-coverage
-.PHONY: cdeadmin-workspace-shell-test cdeadmin-workspace-shell-gate
-.PHONY: cdeadmin-workspace-shell-coverage
-.PHONY: cdeadmin-scratchbird-consumer-test
-.PHONY: cdeadmin-scratchbird-consumer-gate
-.PHONY: cdeadmin-scratchbird-consumer-coverage
-.PHONY: cdeadmin-upstream-acceptance-test
-.PHONY: cdeadmin-upstream-acceptance-gate
-.PHONY: cdeadmin-upstream-acceptance-coverage
-.PHONY: cdeadmin-quality-infrastructure-test cdeadmin-quality-gate
-.PHONY: cdeadmin-bundle-regression-gate cdeadmin-quality-coverage
-.PHONY: cdeadmin-jest-contract-test cdeadmin-jest-contract-coverage
+.PHONY: all appbundle install-node install-python install-python-testing \
+	bundle bundle-dev linter help \
+	check check-gates check-audit check-auditjs check-auditjs-html \
+	check-auditpy check-pep8 check-python check-resql check-feature \
+	check-js check-js-coverage ui-descriptors-check \
+	cdeadmin-baseline cdeadmin-baseline-test cdeadmin-architecture-gate \
+	cdeadmin-dependency-licenses cdeadmin-contracts-generate \
+	cdeadmin-contracts-check cdeadmin-endpoint-persistence-test \
+	cdeadmin-provider-registry-test cdeadmin-postgresql-provider-test \
+	cdeadmin-mongodb-provider-test cdeadmin-redis-provider-test \
+	cdeadmin-resource-explorer-test cdeadmin-data-studio-test \
+	cdeadmin-result-renderer-test cdeadmin-semantic-model-test \
+	cdeadmin-semantic-live cdeadmin-semantic-live-duckdb \
+	cdeadmin-semantic-live-sqlite cdeadmin-operation-bus-test \
+	cdeadmin-security-isolation-test cdeadmin-quality-infrastructure-test \
+	cdeadmin-product-identity-test cdeadmin-product-identity-check \
+	cdeadmin-product-identity-coverage cdeadmin-branding-inventory \
+	cdeadmin-profile-migration-test cdeadmin-profile-migration-coverage \
+	cdeadmin-transport-foundations-test cdeadmin-transport-gate \
+	cdeadmin-transport-coverage cdeadmin-actual-engine-pilots-test \
+	cdeadmin-relational-driver-verification-test \
+	cdeadmin-relational-driver-verification cdeadmin-actual-engine-gate \
+	cdeadmin-actual-engine-donor-gate cdeadmin-actual-engine-coverage \
+	cdeadmin-reference-corpus-test cdeadmin-reference-corpus-gate \
+	cdeadmin-reference-corpus-donor-gate cdeadmin-reference-corpus-coverage \
+	cdeadmin-parity-test cdeadmin-parity-gate \
+	cdeadmin-parity-reference-gate cdeadmin-parity-release-gate \
+	cdeadmin-parity-coverage cdeadmin-workspace-shell-test \
+	cdeadmin-workspace-shell-gate cdeadmin-workspace-shell-coverage \
+	cdeadmin-scratchbird-consumer-test cdeadmin-scratchbird-consumer-gate \
+	cdeadmin-scratchbird-consumer-coverage \
+	cdeadmin-upstream-acceptance-test cdeadmin-upstream-acceptance-gate \
+	cdeadmin-upstream-acceptance-coverage cdeadmin-quality-gate \
+	cdeadmin-bundle-regression-gate cdeadmin-quality-coverage \
+	cdeadmin-jest-contract-test cdeadmin-jest-contract-coverage \
+	clean clean-appbundle clean-debian clean-dist clean-docs clean-node \
+	clean-pip clean-redhat clean-src debian docker docs docs-pdf \
+	docs-epub messages msg-compile msg-extract msg-update pip redhat src
 
 pip: docs
 	./pkg/pip/build.sh

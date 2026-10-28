@@ -12,8 +12,8 @@ sister checkout and commercial Weaver source remain untouched.
 
 The old 0.8 runtime, editor and intake patches are retired. A refresh failure
 preserves the last admitted distribution and fails the build; it cannot select
-an older dialect as a fallback. Keep the unreleased foundation local until
-publication is authorized separately.
+an older dialect as a fallback. The owner authorized publication of the
+standalone DDN integration on 2026-10-28; commercial Weaver remains excluded.
 
 Native MariaDB 12.2.2 macOS builds apply one guarded source correction in
 `native_servers.patch_mariadb_darwin_linker`: ColumnStore's GNU ld

@@ -369,7 +369,7 @@
     "ddn_intake.py": "8d4fa36a404d2f477dc56ce314e26c48b99e6c48786e13f3729037e436123015",
     "refresh_ddn.py": "4067573ebeb19bb7d0f11cd193be362af580716899b46226c0c4581920dd10ec",
     "ddn_next_native_geometry.py": "a3e128b318eeace4939e3cf0bc113eb2e192d17fa6f40baecac0436778c18191",
-    "ddn-next-native-geometry.md": "419d7c715c37e2c9297eddeaf168e496749a1b0324c6348d7b9ef9cee82bcb86",
+    "ddn-next-native-geometry.md": "cf8d6ed67e9483005c3d3c97b3377c6bf43e98f78d1a22ad512449a06ce3d89f",
     "ddn_toolchain.py": "cfafe55ef79e9770f3317b81c6205b9d4ea69456988f9107be84080a76fc89d9"
   },
   "compiler": {
@@ -381,7 +381,7 @@
   "consumer_patches": {
     "native_geometry": {
       "tool": "a3e128b318eeace4939e3cf0bc113eb2e192d17fa6f40baecac0436778c18191",
-      "review": "419d7c715c37e2c9297eddeaf168e496749a1b0324c6348d7b9ef9cee82bcb86",
+      "review": "cf8d6ed67e9483005c3d3c97b3377c6bf43e98f78d1a22ad512449a06ce3d89f",
       "changed_inputs": {
         "docs/Weaver-Specifications/reference/planning/2026-10-property-codex/ddn.schema.json": "2e3b08768c1c490ba760e0b24240d96fa70d8c95c626b6b4ce221ef7d2b71862",
         "docs/Weaver-Specifications/reference/planning/2026-10-property-codex/profile-contracts.json": "eb23373d96838c721d5fd3a4e8c19b372989a3b8dacf481c156258c8a7551079",

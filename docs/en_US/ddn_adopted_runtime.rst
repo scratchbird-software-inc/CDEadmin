@@ -9,9 +9,10 @@ exchange use the standalone open DDN foundation in
 ``/home/dcalford/Sandbox/ScratchWeaver/project/ddn``. The adopted language is
 ``ddn-next-1`` and the public utility API is 1.0. Its package version 0.0.0 is
 not the old DDN 0.8 release. The old grammar, runtime and editor are incompatible.
-The foundation is not publicly released; this integration remains local until
-publication is separately authorized. Commercial Weaver is a separate product
-and is not an integration dependency.
+The owner authorized publication of this standalone DDN integration on
+2026-10-28. Commercial Weaver is a separate product and is not an integration
+dependency. Source acquisition still requires an explicitly configured, reviewed
+location for the matching new foundation.
 
 ``tools/refresh_ddn.py`` captures only standalone sources, maintained DDN tests,
 public contract inputs and required build tools. It builds an isolated capture,

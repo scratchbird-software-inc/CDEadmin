@@ -24,7 +24,7 @@ def prepare(destination):
                            'reviewed clean sister-project revision first.')
     source_url = os.environ.get('CDEADMIN_DDN_SOURCE_URL')
     if not source_url:
-        raise RuntimeError('The adopted ddn-next-1 source is not publicly released. Set CDEADMIN_DDN_SOURCE_URL to an authorized reviewed source; the obsolete public DDN repository is not a fallback.')
+        raise RuntimeError('Set CDEADMIN_DDN_SOURCE_URL to an authorized reviewed ddn-next-1 source; the obsolete public DDN repository is not a fallback.')
     subprocess.run([
         'git', '-c', 'core.autocrlf=false', 'clone',
         source_url,

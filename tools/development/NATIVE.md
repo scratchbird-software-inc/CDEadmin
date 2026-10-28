@@ -1,5 +1,9 @@
 # Native Windows and macOS development
 
+This is the host-OS path for Windows and macOS. For the Linux reference estate
+(including WSL2 and VM guests), use [README.md](README.md) and
+`bash tools/development/dev.sh` instead.
+
 This workflow runs the application, Python extensions and native engine clients
 on the host OS. It does not use WSL, Linux client libraries, or Docker. Network
 database servers may be local native installations or explicit remote test
@@ -67,7 +71,7 @@ Reopening does not automatically reload. Review and loading require native
 administration and filesystem permissions in addition to query execution.
 
 The adopted source is the standalone open DDN tree in the authorized
-ScratchWeaver checkout. It is not publicly released. Set
+ScratchWeaver checkout. Publication of this standalone integration is authorized. Set
 `SCRATCHROBIN_DDN_SOURCE` to that checkout; the old public DDN repository is not
 a fallback. Read `project/ddn/README.md` and its public utility declarations.
 The intake captures and rebuilds only standalone DDN in consumer-owned work;
@@ -83,7 +87,7 @@ Windows/macOS receipts remain required from the platform stream.
 CI/container acquisition requires an explicitly configured
 `CDEADMIN_DDN_SOURCE_URL` with authorized source access. Unpublished source
 changes must be captured locally; they cannot be fetched from an older release.
-Do not publish the unreleased dependency or use closed Weaver code.
+Publish only the standalone open DDN dependency; commercial Weaver remains excluded.
 
 ## Windows stages
 
