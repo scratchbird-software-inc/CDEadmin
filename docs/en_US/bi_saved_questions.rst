@@ -225,3 +225,31 @@ Joins from the semantic layer in the builder, sharing and permissions beyond
 the owner, scheduled threshold alerts (C4). Row-level policy for raw SQL
 questions is not enforced by the common layer; use a semantic question when a
 row filter or tenant claim must apply.
+
+Raw SQL hardening (2026-10-28)
+------------------------------
+
+Raw SQL questions run with the connection's database privileges, so the
+lexical guard is defence in depth, not a sandbox. ``assert_read_only_select`` now
+also refuses:
+
+* side-effecting or host-reaching calls on any engine (``pg_sleep``, ``pg_read_*``,
+  ``pg_advisory_*``, ``lo_*``, ``dblink*``, ``nextval``/``setval``, ``set_config``,
+  ``load_file``, ``sleep``, ``benchmark``, ``get_lock``, ``load_extension``,
+  ``readfile``/``writefile``, ``read_*``/``write_*`` table functions and similar;
+  the full list is in ``bi/sqltext.py``);
+* row locks (``FOR UPDATE``/``SHARE``/``NO KEY UPDATE``, ``LOCK IN SHARE MODE``);
+* file output (``INTO OUTFILE``/``DUMPFILE``) and a file literal after ``FROM``/``JOIN``.
+
+The guard now runs on every raw compile, previews included.
+
+Raw SQL does not pass through semantic row policies. ``BIService.assert_raw_sql_allowed``
+therefore refuses raw questions on an endpoint whose semantic models declare
+``security.row_filters`` or ``tenant_filter``. ``add_raw_sql_policy(callback)``
+replaces that built-in rule: every registered callback must approve
+``(user_id, endpoint_id)``, so the host can grant raw SQL to specific principals.
+
+Residual risk: a lexical guard cannot see through dynamic SQL or an engine-specific
+function it does not list. Run raw questions through a database principal that only
+has SELECT on what the user may read. Engine-level read-only sessions (for example
+``BEGIN READ ONLY`` on PostgreSQL) need Data Studio support and are not done.

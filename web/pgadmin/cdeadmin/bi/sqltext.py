@@ -46,6 +46,30 @@ _WRITE_WORDS = frozenset({
     'analyze', 'begin', 'commit', 'rollback', 'savepoint', 'use',
 })
 
+# Function calls that read files or the host, take locks or sleep, change
+# sequences or settings, or reach other servers.  They run with the caller's
+# database privileges, so a read-only statement could still do these.  The
+# list is deliberately engine-neutral: a name that is harmless on one engine
+# and dangerous on another is denied everywhere.
+_DENIED_CALLS = frozenset({
+    'set_config', 'nextval', 'setval', 'load_file', 'sleep', 'benchmark',
+    'get_lock', 'release_lock', 'release_all_locks', 'master_pos_wait',
+    'sys_exec', 'sys_eval', 'load_extension', 'readfile', 'writefile',
+    'edit', 'fts3_tokenizer', 'getenv', 'glob', 'sniff_csv', 'query',
+    'query_table', 'shell', 'dblink', 'wait_for_executed_gtid_set',
+    'source_pos_wait', 'pg_sleep', 'pg_terminate_backend',
+    'pg_cancel_backend', 'pg_reload_conf', 'pg_rotate_logfile',
+    'pg_stat_file', 'pg_ls_dir', 'pg_switch_wal', 'pg_promote',
+})
+_DENIED_CALL_PREFIXES = (
+    'pg_read_', 'pg_ls_', 'pg_advisory_', 'pg_create_', 'pg_drop_',
+    'pg_logical_', 'pg_replication_', 'pg_sleep_', 'lo_', 'dblink_',
+    'read_', 'write_', 'copy_', 'parquet_', 'csv_', 'json_scan',
+    'xa_', 'mysql_',
+)
+# FOR UPDATE / SHARE variants take row locks inside the question's session.
+_LOCK_SECOND_WORDS = frozenset({'update', 'share', 'no', 'key'})
+
 
 def tokenize(sql):
     """Split ``sql`` into tokens, preserving every character."""
@@ -185,4 +209,38 @@ def assert_read_only_select(sql):
         raise BIError(
             f'saved questions are read-only; {token.text.upper()} is not '
             'allowed (quote the identifier if it is a column name)')
+    _assert_no_side_effects(tokens)
     return True
+
+
+def _assert_no_side_effects(tokens):
+    for position, token in enumerate(tokens):
+        previous = tokens[position - 1] if position else None
+        following = tokens[position + 1] if position + 1 < len(tokens) \
+            else None
+        if token.kind == 'word':
+            word = token.text.lower()
+            called = following is not None and following.text == '('
+            if called and (word in _DENIED_CALLS or
+                           word.startswith(_DENIED_CALL_PREFIXES)):
+                raise BIError(
+                    f'saved questions may not call {token.text}(): it reads '
+                    'files, locks, sleeps or changes server state')
+            if word == 'for' and following is not None and \
+                    following.kind == 'word' and \
+                    following.text.lower() in _LOCK_SECOND_WORDS:
+                raise BIError('saved questions may not take row locks '
+                              '(FOR UPDATE / FOR SHARE)')
+            if word == 'lock' and following is not None and \
+                    following.text.lower() == 'in':
+                raise BIError('saved questions may not take row locks '
+                              '(LOCK IN SHARE MODE)')
+            if word in {'outfile', 'dumpfile'}:
+                raise BIError('saved questions may not write files')
+        elif token.kind == 'string' and previous is not None and \
+                previous.kind == 'word' and \
+                previous.text.lower() in {'from', 'join'} and \
+                token.text[:1] == "'":
+            # engines that read a file named in FROM (DuckDB replacement scan)
+            raise BIError('saved questions may not read a file named in '
+                          'FROM or JOIN')

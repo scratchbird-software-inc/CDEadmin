@@ -197,6 +197,70 @@ class BoundParameterTests(unittest.TestCase):
             tokenize("SELECT 'open")
 
 
+class RawSqlHardeningTests(unittest.TestCase):
+    DENIED = [
+        "SELECT pg_sleep(5)", "SELECT pg_catalog.pg_read_file('/etc/passwd')",
+        "SELECT * FROM sales FOR UPDATE", "SELECT * FROM sales FOR SHARE",
+        "SELECT * FROM sales FOR NO KEY UPDATE",
+        "SELECT * FROM read_csv('/etc/passwd')", "SELECT * FROM 'x.csv'",
+        "SELECT * FROM sales JOIN 'x.parquet' ON 1=1",
+        "SELECT load_file('/etc/passwd')", "SELECT SLEEP(10)",
+        "SELECT BENCHMARK(100000000, MD5('a'))",
+        "SELECT 1 INTO OUTFILE '/tmp/x'", "SELECT * FROM sales LOCK IN SHARE MODE",
+        "SELECT nextval('s')", "SELECT lo_import('/x')",
+        "SELECT dblink('c', 'select 1')", "SELECT load_extension('x')",
+        "SELECT set_config('role', 'postgres', false)",
+        "SELECT get_lock('a', 10)",
+    ]
+
+    def test_side_effecting_selects_are_refused(self):
+        for sql in self.DENIED:
+            with self.subTest(sql=sql):
+                with self.assertRaises(BIError):
+                    assert_read_only_select(sql)
+
+    def test_ordinary_selects_still_pass(self):
+        for sql in ["SELECT read_count, write_total FROM stats",
+                    "SELECT query FROM log WHERE edit = 1",
+                    "WITH c AS (SELECT 1) SELECT * FROM c",
+                    "SELECT glob_name, now() FROM t WHERE x = {{p}}"]:
+            with self.subTest(sql=sql):
+                self.assertTrue(assert_read_only_select(sql))
+
+
+class RawSqlPolicyTests(unittest.TestCase):
+    class _Row:
+        def __init__(self, definition):
+            self.definition = definition
+
+    def _service(self, rows):
+        from pgadmin.cdeadmin.bi.service import BIService
+        service = BIService.__new__(BIService)
+        service._raw_sql_policies = []
+        repository = type('R', (), {'list': lambda _s, *_a: rows})()
+        service.semantic = type('S', (), {'repository': repository})()
+        return service
+
+    def test_refused_where_models_declare_row_filters(self):
+        import json
+        rows = [self._Row(json.dumps({'security': {'row_filters': [{'x': 1}]}}))]
+        service = self._service(rows)
+        with self.assertRaisesRegex(BIError, 'row policies'):
+            service.assert_raw_sql_allowed(1, 'e')
+
+    def test_allowed_without_row_policies_and_policy_callback_decides(self):
+        import json
+        service = self._service([self._Row(json.dumps({'security': {}}))])
+        service.assert_raw_sql_allowed(1, 'e')
+        service.add_raw_sql_policy(lambda user, endpoint: False)
+        with self.assertRaisesRegex(BIError, 'not permitted'):
+            service.assert_raw_sql_allowed(1, 'e')
+        granted = self._service([self._Row(json.dumps(
+            {'security': {'row_filters': [{'x': 1}]}}))])
+        granted.add_raw_sql_policy(lambda user, endpoint: True)
+        granted.assert_raw_sql_allowed(1, 'e')
+
+
 class LiveExecutionTests(unittest.TestCase):
     def each(self):
         for engine in ENGINES:

@@ -130,6 +130,7 @@ class BIService:
         self._listeners = []
         self._collection_guards = []
         self._question_guards = []
+        self._raw_sql_policies = []
 
     def add_collection_guard(self, callback):
         """``callback(user_id, collection_id) -> bool``: still in use."""
@@ -138,6 +139,36 @@ class BIService:
     def add_question_guard(self, callback):
         """``callback(user_id, endpoint_id, question_id) -> name|None``."""
         self._question_guards.append(callback)
+
+    def add_raw_sql_policy(self, callback):
+        """``callback(user_id, endpoint_id) -> bool``: raw SQL may run here.
+
+        Every registered callback must approve.  Without callbacks the
+        built-in rule applies: raw SQL does not pass through semantic row
+        policies, so it is refused on an endpoint whose semantic models
+        declare row or tenant filters.
+        """
+        self._raw_sql_policies.append(callback)
+
+    def assert_raw_sql_allowed(self, user_id, endpoint_id):
+        for callback in self._raw_sql_policies:
+            if not callback(user_id, endpoint_id):
+                raise BIError('raw SQL questions are not permitted for this '
+                              'user on this endpoint')
+        if self._raw_sql_policies:
+            return
+        for row in self.semantic.repository.list(user_id, endpoint_id):
+            try:
+                security = (json.loads(row.definition).get('security')
+                            or {})
+            except (TypeError, ValueError):
+                continue
+            if security.get('row_filters') or security.get('tenant_filter'):
+                raise BIError(
+                    'raw SQL questions bypass semantic row policies and are '
+                    'refused on an endpoint whose models declare row or '
+                    'tenant filters; use a builder or semantic question, or '
+                    'register a raw-SQL policy that grants access')
 
     def on_question_change(self, callback):
         """Register ``callback(user_id, endpoint_id, question_id)``."""
@@ -362,6 +393,7 @@ class BIService:
                     f'engine {engine_id!r} has no admitted bound-parameter '
                     'style for saved questions')
         if spec['kind'] == 'sql':
+            self.assert_raw_sql_allowed(user_id, endpoint_id)
             if extra_filters:
                 raise BIError(
                     'dashboard field filters cannot be applied to raw SQL; '
@@ -419,10 +451,10 @@ class BIService:
             'warnings': ['Raw SQL is passed to the provider unchanged.'],
             'bound': False,
         }
+        sql = question['query']['sql']
+        assert_read_only_select(sql)  # also for compile-only previews
         if style is None:
             return result
-        sql = question['query']['sql']
-        assert_read_only_select(sql)
         source, names = bind_placeholders(sql, BIND_MARKERS[style], declared)
         ordered = []
         for pid in names:
