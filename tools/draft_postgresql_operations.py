@@ -2,23 +2,21 @@
 """Generate ui_descriptors/postgresql/operations.json.
 
 Only operations the PostgreSQL provider executes through its own
-validate/plan/apply route (providers/postgresql/native_admin.py and
-large_objects.py) are drafted here. Every maintenance action the legacy
-pgAdmin surface still owns (VACUUM, ANALYZE, REINDEX, CLUSTER, table TRUNCATE,
-REFRESH MATERIALIZED VIEW, rename, set schema, owner, grant on tables,
-indexes, sequences, roles and databases) has execution_route
-``legacy-preserved`` and ``compile_native_admin`` refuses it, so a descriptor
-entry would promise a dialog the provider cannot plan; those are recorded in
-docs/en_US/ui_unification_status.rst as provider gaps instead.
+validate/plan/apply route are drafted here: the large-object actions
+(providers/postgresql/large_objects.py) and the maintenance actions
+(providers/postgresql/maintenance.py: VACUUM, ANALYZE, REINDEX of a table,
+index, schema or database, CLUSTER, table TRUNCATE and REFRESH MATERIALIZED
+VIEW). Rename, set schema, owner and grant on tables, indexes, sequences, roles
+and databases are still legacy-preserved and stay provider gaps.
 
 The descriptor operation_id is sent to the provider verbatim, so only
 provider operations that are tier 2/3 and need no ``action`` discriminator
-qualify. The ``alter`` actions (owner, rename, schema, comment, members,
-optimization options) and create/drop/grant/revoke are tier-1 lifecycle and
-stay out of this file (design Decision 15).
+qualify. The ``alter`` actions and create/drop/grant/revoke are tier-1
+lifecycle and stay out of this file (design Decision 15).
 
-Usage: python3 tools/draft_postgresql_operations.py [--complete id,id,...]
-``--complete`` marks the named operations ``complete``; the live test
+Usage: python3 tools/draft_postgresql_operations.py [--complete id[@kind],...]
+``--complete`` marks the named operations ``complete`` (a bare id means the
+large-object action; maintenance ids are ``operation@kind``); the live test
 tools/tests/test_ui_descriptor_operations_postgresql.py is the gate for that.
 """
 import argparse
@@ -30,6 +28,7 @@ KIND = 'large-object'
 EVIDENCE = ('Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> '
             'validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 '
             'evidence: the profile pins 18.3, this host has 16.')
+MAINTENANCE_NOTE = ('Not yet round-tripped against a live server. The provider route is maintenance.compile_operation.')
 DRAFT_NOTE = ('Not yet round-tripped against a live server. The provider route is large_objects.compile_operation.')
 
 
@@ -41,17 +40,17 @@ OFFSET = text('offset', 'Byte offset (exact decimal)', default='0',
               help='Decimal text so offsets above 2^53 survive the browser; at most 4 TiB.')
 
 
-def operation(operation_id, title, category, order, fields, confirmation='none', notes=None):
+def operation(operation_id, title, category, order, fields, confirmation='none', notes=None, kind=KIND):
     return {
         'operation_id': operation_id,
-        'resource_kind': KIND,
+        'resource_kind': kind,
         'title': title,
         'menu': {'category': category, 'order': order},
         'tier': 2,
         'status': 'draft',
         'confirmation': confirmation,
         'fields': fields,
-        'notes': notes or DRAFT_NOTE,
+        'notes': notes or (DRAFT_NOTE if kind == KIND else MAINTENANCE_NOTE),
     }
 
 
@@ -92,18 +91,66 @@ OPERATIONS = [
 ]
 
 
+def flag(field_id, label, **kw):
+    return {'field_id': field_id, 'label': label, 'control': 'boolean', 'required': False, **kw}
+
+
+def maintenance(operation_id, kind, title, category, order, fields, confirmation='none', notes=None):
+    return operation(operation_id, title, category, order, fields, confirmation, notes, kind=kind)
+
+
+VERBOSE = flag('verbose', 'Verbose')
+CONCURRENTLY = flag('concurrently', 'Concurrently (cannot run in a transaction block)')
+REINDEX_NOTE = ' Runs in autocommit when CONCURRENTLY is chosen.'
+OPERATIONS += [
+    maintenance('vacuum', 'table', 'Vacuum', 'maintenance', 10, [
+        flag('full', 'Full (rewrite the table; exclusive lock)'), flag('freeze', 'Freeze row versions'),
+        flag('analyze', 'Also analyze'), VERBOSE,
+        {'field_id': 'parallel', 'label': 'Parallel workers (not with Full)', 'control': 'number', 'required': False,
+         'help': 'Leave empty to let the server decide; 0 disables parallel index vacuuming.'},
+    ], notes=MAINTENANCE_NOTE + ' VACUUM cannot run in a transaction block: the apply route runs it in autocommit.'),
+    maintenance('analyze', 'table', 'Analyze', 'maintenance', 20, [
+        VERBOSE, flag('skip_locked', 'Skip tables that cannot be locked')]),
+    maintenance('reindex', 'table', 'Reindex', 'maintenance', 30, [CONCURRENTLY, VERBOSE],
+                notes=MAINTENANCE_NOTE + REINDEX_NOTE),
+    maintenance('cluster', 'table', 'Cluster', 'maintenance', 40, [
+        {'field_id': 'index', 'label': 'Index to cluster on', 'control': 'text', 'required': False,
+         'help': 'Leave empty to reuse the index the table was last clustered on.'}, VERBOSE],
+        confirmation='confirm',
+        notes=MAINTENANCE_NOTE + ' Rewrites the table under an exclusive lock, hence the confirmation.'),
+    maintenance('truncate', 'table', 'Truncate', 'maintenance', 50, [
+        flag('restart_identity', 'Restart identity (reset owned sequences)'),
+        flag('cascade', 'Cascade to tables with foreign keys to this table'),
+    ], confirmation='typed_name', notes=MAINTENANCE_NOTE + ' The typed name is the table name (the resource display name).'),
+    maintenance('reindex', 'index', 'Reindex', 'maintenance', 10, [CONCURRENTLY, VERBOSE],
+                notes=MAINTENANCE_NOTE + REINDEX_NOTE),
+    maintenance('reindex', 'schema', 'Reindex', 'maintenance', 10, [CONCURRENTLY, VERBOSE], confirmation='confirm',
+                notes=MAINTENANCE_NOTE + ' REINDEX SCHEMA always runs in autocommit.'),
+    maintenance('reindex', 'database', 'Reindex', 'maintenance', 10, [CONCURRENTLY, VERBOSE], confirmation='confirm',
+                notes=MAINTENANCE_NOTE + ' REINDEX DATABASE always runs in autocommit and only the connected database.'),
+    maintenance('refresh', 'materialized-view', 'Refresh data', 'refresh', 10, [
+        flag('with_data', 'Populate with data', default=True),
+        flag('concurrently', 'Concurrently (requires a unique index)')]),
+]
+
+
+def key(op):
+    return op['operation_id'] if op['resource_kind'] == KIND else f"{op['operation_id']}@{op['resource_kind']}"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--complete', default='', help='comma-separated operation ids verified by the live test')
     args = parser.parse_args()
     complete = {item for item in args.complete.split(',') if item}
-    unknown = complete - {op['operation_id'] for op in OPERATIONS}
+    unknown = complete - {key(op) for op in OPERATIONS}
     if unknown:
         raise SystemExit(f'unknown operations: {sorted(unknown)}')
     for op in OPERATIONS:
-        if op['operation_id'] in complete:
+        if key(op) in complete:
             op['status'] = 'complete'
-            op['notes'] = EVIDENCE + ('' if op['notes'] == DRAFT_NOTE else op['notes'][len(DRAFT_NOTE):])
+            base = DRAFT_NOTE if op['resource_kind'] == KIND else MAINTENANCE_NOTE
+            op['notes'] = EVIDENCE + ('' if op['notes'] == base else op['notes'][len(base):])
     doc = {'schema': 'cdeadmin.ui-operations.v1', 'engine': 'postgresql', 'operations': OPERATIONS}
     OUT.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + '\n')
     print(f'{len(OPERATIONS)} operations, {len(complete)} complete')

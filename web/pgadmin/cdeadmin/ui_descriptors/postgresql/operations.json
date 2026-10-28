@@ -144,6 +144,270 @@
         }
       ],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. The typed value is the destination path, not the target name, so it is an ordinary required field (as the Firebird confirm-type operations do), not typed_name."
+    },
+    {
+      "operation_id": "vacuum",
+      "resource_kind": "table",
+      "title": "Vacuum",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "full",
+          "label": "Full (rewrite the table; exclusive lock)",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "freeze",
+          "label": "Freeze row versions",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "analyze",
+          "label": "Also analyze",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "parallel",
+          "label": "Parallel workers (not with Full)",
+          "control": "number",
+          "required": false,
+          "help": "Leave empty to let the server decide; 0 disables parallel index vacuuming."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. VACUUM cannot run in a transaction block: the apply route runs it in autocommit."
+    },
+    {
+      "operation_id": "analyze",
+      "resource_kind": "table",
+      "title": "Analyze",
+      "menu": {
+        "category": "maintenance",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "skip_locked",
+          "label": "Skip tables that cannot be locked",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16."
+    },
+    {
+      "operation_id": "reindex",
+      "resource_kind": "table",
+      "title": "Reindex",
+      "menu": {
+        "category": "maintenance",
+        "order": 30
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "concurrently",
+          "label": "Concurrently (cannot run in a transaction block)",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. Runs in autocommit when CONCURRENTLY is chosen."
+    },
+    {
+      "operation_id": "cluster",
+      "resource_kind": "table",
+      "title": "Cluster",
+      "menu": {
+        "category": "maintenance",
+        "order": 40
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "index",
+          "label": "Index to cluster on",
+          "control": "text",
+          "required": false,
+          "help": "Leave empty to reuse the index the table was last clustered on."
+        },
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. Rewrites the table under an exclusive lock, hence the confirmation."
+    },
+    {
+      "operation_id": "truncate",
+      "resource_kind": "table",
+      "title": "Truncate",
+      "menu": {
+        "category": "maintenance",
+        "order": 50
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "restart_identity",
+          "label": "Restart identity (reset owned sequences)",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "cascade",
+          "label": "Cascade to tables with foreign keys to this table",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. The typed name is the table name (the resource display name)."
+    },
+    {
+      "operation_id": "reindex",
+      "resource_kind": "index",
+      "title": "Reindex",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "concurrently",
+          "label": "Concurrently (cannot run in a transaction block)",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. Runs in autocommit when CONCURRENTLY is chosen."
+    },
+    {
+      "operation_id": "reindex",
+      "resource_kind": "schema",
+      "title": "Reindex",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "concurrently",
+          "label": "Concurrently (cannot run in a transaction block)",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. REINDEX SCHEMA always runs in autocommit."
+    },
+    {
+      "operation_id": "reindex",
+      "resource_kind": "database",
+      "title": "Reindex",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "concurrently",
+          "label": "Concurrently (cannot run in a transaction block)",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. REINDEX DATABASE always runs in autocommit and only the connected database."
+    },
+    {
+      "operation_id": "refresh",
+      "resource_kind": "materialized-view",
+      "title": "Refresh data",
+      "menu": {
+        "category": "refresh",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "with_data",
+          "label": "Populate with data",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "concurrently",
+          "label": "Concurrently (requires a unique index)",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16."
     }
   ]
 }

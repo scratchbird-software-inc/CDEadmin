@@ -357,6 +357,20 @@ class PostgreSQLProvider:
         except PostgreSQLNativeAdminError as exc:
             raise PostgreSQLProviderError(str(exc)) from exc
 
+    @staticmethod
+    def _admin_warnings(request, compiled):
+        warnings = []
+        if compiled.get('autocommit'):
+            warnings.append('Runs outside a transaction block and cannot be rolled back; an interrupted '
+                            'REINDEX CONCURRENTLY can leave an invalid index behind.')
+        if request['operation_id'] == 'truncate' and request['resource_kind'] == 'table':
+            warnings.append('TRUNCATE permanently removes every row of the table.')
+        if compiled.get('server_file_operation'):
+            warnings.append('File paths refer to the database server host. Native function privileges and OS file access apply.')
+            if compiled['server_file_operation'] == 'export':
+                warnings.append('Export can overwrite the selected file. SQL rollback does not undo server filesystem output.')
+        return warnings
+
     def plan_admin_operation(self, request):
         compiled = self._compile_native_admin(request)
         payload = {
@@ -367,7 +381,7 @@ class PostgreSQLProvider:
             'route': self._native_admin_route(request),
             'statement': compiled['statement'],
             'read_only': compiled['read_only'],
-            **{key: compiled[key] for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation') if key in compiled},
+            **{key: compiled[key] for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance') if key in compiled},
         }
         return {
             'command_preview': {
@@ -377,10 +391,7 @@ class PostgreSQLProvider:
                 **({'verification_statement': compiled['post_statement']} if 'post_statement' in compiled else {}),
             },
             'provider_payload': payload,
-            'warnings': (['File paths refer to the database server host. Native function privileges and OS file access apply.'] +
-                         (['Export can overwrite the selected file. SQL rollback does not undo server filesystem output.']
-                          if compiled.get('server_file_operation') == 'export' else []))
-                        if compiled.get('server_file_operation') else [],
+            'warnings': self._admin_warnings(request, compiled),
             'receipt': {
                 'provider_owned': True,
                 'automatic_mutation_retry': False,
@@ -397,7 +408,7 @@ class PostgreSQLProvider:
         statement = _required_text(payload.get('statement'), 'statement')
         compiled = self._compile_native_admin(payload)
         expected = {'statement': statement, 'read_only': payload.get('read_only')}
-        for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation'):
+        for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance'):
             if key in compiled:
                 expected[key] = payload.get(key)
         if compiled != expected:
@@ -415,13 +426,19 @@ class PostgreSQLProvider:
             connection = state.connection
             if connection.transaction_status() != 0:
                 raise PostgreSQLProviderError('Administrative connection must be idle')
-            status, _ = native_control(connection.conn,
-                'BEGIN READ ONLY' if compiled['read_only'] else 'BEGIN')
-            if not status:
-                raise PostgreSQLProviderError('Administrative transaction could not start')
-            status, _ = native_control(connection.conn, 'SET LOCAL standard_conforming_strings = on')
-            if not status:
-                raise PostgreSQLProviderError('Administrative literal policy could not be established')
+            autocommit = compiled.get('autocommit') is True
+            if autocommit:
+                # VACUUM and REINDEX CONCURRENTLY/SCHEMA/DATABASE are refused inside a transaction block.
+                if getattr(connection.conn, 'autocommit', None) is not True:
+                    raise PostgreSQLProviderError('Autocommit is required for this maintenance statement')
+            else:
+                status, _ = native_control(connection.conn,
+                    'BEGIN READ ONLY' if compiled['read_only'] else 'BEGIN')
+                if not status:
+                    raise PostgreSQLProviderError('Administrative transaction could not start')
+                status, _ = native_control(connection.conn, 'SET LOCAL standard_conforming_strings = on')
+                if not status:
+                    raise PostgreSQLProviderError('Administrative literal policy could not be established')
             status, identity = connection.execute_dict(
                 'SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database()')
             if not status or identity.get('rows') != [{'oid': database_id}]:
@@ -443,16 +460,24 @@ class PostgreSQLProvider:
                 if (not status or len(result.get('rows', [])) != 1 or
                         result['rows'][0].get('observed_sha256') != compiled['expected_sha256']):
                     raise PostgreSQLProviderError('PostgreSQL large-object write verification failed before commit')
-            committing = True
-            status, command = native_control(connection.conn, 'COMMIT')
-            if not status or command != 'COMMIT':
-                raise PostgreSQLProviderError('Administrative commit was not confirmed')
+            if autocommit:
+                # The server committed the statement when it returned; there is no COMMIT to confirm.
+                status = True
+            else:
+                committing = True
+                status, command = native_control(connection.conn, 'COMMIT')
+                if not status or command != 'COMMIT':
+                    raise PostgreSQLProviderError('Administrative commit was not confirmed')
             response = {
                 'provider_owned': True, 'native_outcome': 'observed',
                 'transaction_outcome': 'committed', 'independent_attachment': True,
                 'result': copy.deepcopy(result), 'automatic_retry_performed': False,
                 'common_finality_inference': False,
             }
+            if compiled.get('maintenance'):
+                response['maintenance_receipt'] = dict(
+                    compiled['maintenance'], statement=statement, executed=True,
+                    transaction_mode='autocommit' if autocommit else 'transaction')
             if compiled.get('server_file_operation'):
                 response['file_effects'] = {'host':'database-server','operation':compiled['server_file_operation'],
                     'native_function_acknowledged':True,'independent_file_verification':False,

@@ -396,11 +396,18 @@ def preserved_operations():
 def administration_operations():
     """Preserved operations plus separately implemented native product features."""
     from .large_objects import OPERATIONS
-    return {**preserved_operations(), 'large-object': OPERATIONS}
+    from .maintenance import MAINTENANCE_OPERATIONS
+    result = {**preserved_operations(), 'large-object': OPERATIONS}
+    for kind, operations in MAINTENANCE_OPERATIONS.items():
+        result[kind] = frozenset(result.get(kind, frozenset()) | operations)
+    return result
 
 
 def adapt_catalog(catalog):
     """Bind the common catalog to exact preserved-surface operations."""
+    from .maintenance import (
+        CONFIRMED, MAINTENANCE_OPERATIONS, MUTATION_CLASSES, form as maintenance_form,
+    )
     admitted_operations = administration_operations()
     result = copy.deepcopy(catalog)
     resources = {
@@ -417,19 +424,21 @@ def adapt_catalog(catalog):
         'refresh': 'admin',
         'read': 'read', 'write': 'write', 'truncate': 'destructive',
         'import-server-file': 'admin', 'export-server-file': 'destructive',
+        **MUTATION_CLASSES,
     }
+    maintenance = MAINTENANCE_OPERATIONS
     native_form_kinds = {
         'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
     }
 
+    def native_field(field_id, label, control='text', required=False, **extra):
+        return {
+            'field_id': field_id, 'label': label, 'control': control,
+            'required': required, **extra,
+        }
+
     def native_form(kind, operation_id, title):
-        def field(
-            field_id, label, control='text', required=False, **extra
-        ):
-            return {
-                'field_id': field_id, 'label': label, 'control': control,
-                'required': required, **extra,
-            }
+        field = native_field
 
         if kind == 'large-object':
             from .large_objects import form
@@ -564,7 +573,14 @@ def adapt_catalog(catalog):
                     'delete', 'drop', 'truncate', 'export-server-file',
                 },
             })
-            if kind in native_form_kinds:
+            if operation_id in maintenance.get(kind, ()):
+                operation['form'] = maintenance_form(
+                    kind, operation_id, lambda *a, **k: native_field(*a, **k))
+                operation['execution_route'] = 'provider-native'
+                operation['mutation_class'] = mutation_classes[operation_id]
+                operation['confirmation_required'] = (kind, operation_id) in CONFIRMED
+                operation['target_required'] = True
+            elif kind in native_form_kinds:
                 operation['form'] = native_form(
                     kind, operation_id, resource['title']
                 )
