@@ -339,9 +339,8 @@ export function toBackendDraft(form, draft, {mode='create', baseline=null}={}) {
         if(diff.rename_columns.length) out.rename_columns = diff.rename_columns;
         continue;
       }
-      if(mode === 'alter' && baseline && JSON.stringify(value ?? null) === JSON.stringify(baseline[field.field_id] ?? null) &&
-         !field.required) {
-        continue; // unchanged fields are not part of the ALTER set
+      if(mode === 'alter' && baseline && JSON.stringify(value ?? null) === JSON.stringify(baseline[field.field_id] ?? null)) {
+        continue; // unchanged fields are not part of the ALTER set, required or not (the target names the object)
       }
       const target = field.backend_field_id || field.field_id;
       const bracket = target.match(/^([a-z0-9_]+)\[([a-z0-9_]+)=([a-z0-9_]+)\]$/i);

@@ -172,7 +172,7 @@ describe('alter-mode column diff', () => {
     const baseline = initialDraft(resolved, {mode: 'alter', record});
     const draft = {...baseline, columns: [...baseline.columns, {name: 'extra', type: 'text'}], engine: 'b'};
     expect(toBackendDraft(resolved, draft, {mode: 'alter', baseline})).toEqual({
-      name: 'w', add_columns: [{name: 'extra', type: 'text'}], widget_options: {engine: 'b'}});
+      add_columns: [{name: 'extra', type: 'text'}], widget_options: {engine: 'b'}}); // unchanged name stays out
   });
 });
 

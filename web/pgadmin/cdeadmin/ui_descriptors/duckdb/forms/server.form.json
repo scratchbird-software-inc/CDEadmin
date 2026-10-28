@@ -5,7 +5,7 @@
   "resource_kinds": [
     "server"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "DuckDB",
   "omitted_tabs": [
     {
@@ -17,22 +17,14 @@
       "reason": "embedded file engine: no network transport"
     }
   ],
-  "gaps": [
-    {
-      "concept": "server.config",
-      "reason": "provider control 'json' needs a typed control"
-    },
-    {
-      "concept": "server.attached_databases",
-      "reason": "provider control 'json' needs a typed control"
-    }
-  ],
+  "gaps": [],
   "fields": [
     {
       "field_id": "name",
       "label": "Connection profile name",
       "tab": "Connection",
       "control": "text",
+      "backend_field_id": "name",
       "required": true
     },
     {
@@ -40,14 +32,42 @@
       "label": "Open database read-only",
       "tab": "Connection",
       "control": "boolean",
+      "backend_field_id": "cde_route_read_only",
       "required": false,
       "default": false
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Database file",
+      "control": "file",
+      "required": true,
+      "help": "Absolute path of the database file this profile opens; further files are registered as databases under it."
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
     },
     {
       "field_id": "config",
       "label": "Connection configuration (JSON object)",
       "tab": "Engine",
-      "control": "text",
+      "control": "keyvalue",
+      "help": "Connection configuration options passed to the engine as named scalar values.",
+      "backend_field_id": "cde_route_config",
       "required": false,
       "default": {}
     },
@@ -55,9 +75,59 @@
       "field_id": "attached_databases",
       "label": "Attached databases",
       "tab": "Engine",
-      "control": "text",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Alias",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "database",
+          "label": "Database file",
+          "control": "file",
+          "required": true
+        }
+      ],
+      "backend_field_id": "cde_route_attached_databases",
       "required": false
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
     }
   ],
-  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for duckdb-native. Field ids are the registration contract's own. Review tab/group placement."
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for duckdb-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Round-tripped (tools/tests/test_ui_descriptor_server_forms.py): draft -> servers-API payload -> persisted route via the registration contract -> live identity on a temporary file -> edit pre-fill. Connection configuration is a key/value editor; attached databases a grid."
 }

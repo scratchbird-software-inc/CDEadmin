@@ -5,7 +5,7 @@
   "resource_kinds": [
     "server"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "Firebird",
   "omitted_tabs": [],
   "gaps": [],
@@ -32,6 +32,7 @@
       "label": "Connection profile name",
       "tab": "Connection",
       "control": "text",
+      "backend_field_id": "name",
       "required": true
     },
     {
@@ -39,6 +40,7 @@
       "label": "Server host or address",
       "tab": "Connection",
       "control": "text",
+      "backend_field_id": "host",
       "required": true,
       "visible_when": {
         "field": "profile",
@@ -50,6 +52,7 @@
       "label": "Server port",
       "tab": "Connection",
       "control": "number",
+      "backend_field_id": "port",
       "required": true,
       "min": 1,
       "max": 65535,
@@ -63,6 +66,7 @@
       "label": "Approved database creation root",
       "tab": "Connection",
       "control": "text",
+      "backend_field_id": "cde_route_database_create_root",
       "required": false,
       "help": "Optional for registering a server or opening an existing database. Set the approved absolute directory on the Firebird server before creating a database from a server-only connection.",
       "visible_when": {
@@ -75,6 +79,7 @@
       "label": "Service authentication database context",
       "tab": "Connection",
       "control": "text",
+      "backend_field_id": "cde_route_service_expected_database",
       "required": false,
       "help": "Optional ordinary database path or alias whose server-configured SecurityDatabase and mappings should authenticate Services API requests. Do not enter the security store filename here. This does not change server configuration, the database being opened, or an operation target. Leave empty for the server default; CDEadmin prevents FB_EXPECTED_DB in its process environment from overriding that choice.",
       "visible_when": {
@@ -87,6 +92,7 @@
       "label": "Network protocol",
       "tab": "Connection",
       "control": "select",
+      "backend_field_id": "cde_route_protocol",
       "required": false,
       "options": [
         {
@@ -114,10 +120,40 @@
       }
     },
     {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Database file",
+      "control": "file",
+      "required": true,
+      "help": "Database the profile connects to first; leave empty for the engine default.",
+      "visible_when": {
+        "field": "profile",
+        "equals": "firebird-embedded"
+      }
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
+    },
+    {
       "field_id": "username",
       "label": "User or principal",
       "tab": "Authentication",
       "control": "text",
+      "backend_field_id": "username",
       "required": false,
       "visible_when": {
         "field": "profile",
@@ -129,6 +165,7 @@
       "label": "Authentication plugin preference list",
       "tab": "Authentication",
       "control": "text",
+      "backend_field_id": "cde_route_auth_plugin_list",
       "required": true,
       "default": "Srp256,Srp,Legacy_Auth",
       "help": "Ordered native AuthClient list for database creation, attachment and Services API. Separate case-sensitive plugin names with commas, spaces, tabs or semicolons. Native negotiation selects a compatible installed plugin; this does not install plugins or change AuthServer. An unavailable-only or nonmatching list fails; CDEadmin never retries with a broader list. Legacy_Auth cannot satisfy Required wire encryption. Win_Sspi requires Windows. Do not leave an explicit list empty.",
@@ -142,6 +179,7 @@
       "label": "Use trusted authentication",
       "tab": "Authentication",
       "control": "boolean",
+      "backend_field_id": "cde_route_trusted_auth",
       "required": false,
       "default": false,
       "help": "Windows Win_Sspi authentication requires the CDEadmin application host (not merely the browser or database server) to run Windows. Linux and macOS reject this selection without password fallback. Windows native login qualification is separate from authentication mapping DDL.",
@@ -155,6 +193,7 @@
       "label": "Initial role",
       "tab": "Authentication",
       "control": "text",
+      "backend_field_id": "cde_route_role",
       "required": false
     },
     {
@@ -162,6 +201,7 @@
       "label": "Password",
       "tab": "Authentication",
       "control": "password",
+      "backend_field_id": "cde_secret_password",
       "required": false,
       "visible_when": {
         "field": "trusted_auth",
@@ -173,6 +213,7 @@
       "label": "Save default connection credentials",
       "tab": "Authentication",
       "control": "boolean",
+      "backend_field_id": "save_password",
       "required": false,
       "default": false,
       "help": "Store the credentials for the default user in CDEadmin. Credentials entered while connecting as another user are never stored as the default credentials.",
@@ -186,6 +227,7 @@
       "label": "SQL authorization identity",
       "tab": "Authentication",
       "control": "text",
+      "backend_field_id": "cde_route_user",
       "required": true,
       "default": "SYSDBA",
       "help": "Embedded mode uses filesystem authorization, not password authentication. SQL privileges still apply to this identity.",
@@ -199,6 +241,7 @@
       "label": "Wire encryption policy",
       "tab": "SSL/TLS",
       "control": "select",
+      "backend_field_id": "cde_route_wire_crypt",
       "required": false,
       "options": [
         {
@@ -226,6 +269,7 @@
       "label": "Wire encryption plugin preference list",
       "tab": "SSL/TLS",
       "control": "text",
+      "backend_field_id": "cde_route_wire_crypt_plugins",
       "required": false,
       "help": "Optional ordered native WireCryptPlugin list, for example ChaCha64,ChaCha. Separate case-sensitive names with commas, spaces, tabs or semicolons. Uses installed client/server plugins; does not install them. Omit for native defaults. Arc4 is a legacy compatibility choice, not the preferred default. Required needs a compatible encryption plugin and authentication key. Windows/macOS native qualification is separate.",
       "visible_when": {
@@ -238,6 +282,7 @@
       "label": "Enable wire compression",
       "tab": "SSL/TLS",
       "control": "boolean",
+      "backend_field_id": "cde_route_wire_compression",
       "required": false,
       "default": false,
       "help": "Client preference for native network compression (protocol 13 or later); the server follows the negotiated request. Can be combined with wire encryption, but does not encrypt traffic itself. Disabled by default. Applies to new connections, not existing sessions. Database MON$WIRE_COMPRESSED reports the negotiated state; enabling this option alone is not proof of compression. Do not also set WireCompression in additional native configuration. Windows/macOS require separate native runtime qualification.",
@@ -252,6 +297,7 @@
       "tab": "SSL/TLS",
       "control": "code",
       "language": "text",
+      "backend_field_id": "cde_route_wire_config",
       "required": false,
       "help": "Audited native client text: WireCrypt, WireCryptPlugin, WireCompression, AuthClient, ConnectionTimeout, DummyPacketInterval, TcpNoNagle and ClientBatchBuffer. One key=value per line; comments and quoted values are supported. Maximum 16 KiB UTF-8. Includes, macros, blocks, duplicate or unknown keys and server/engine settings are rejected. Do not repeat a dedicated wire, dummy or authentication field. Exception: explicit connection timeout uses native DPB/SPB precedence over raw ConnectionTimeout. Blank removes this override; unrelated Python driver defaults are not inherited. This does not edit firebird.conf or install plugins. Windows/macOS native qualification is separate.",
       "visible_when": {
@@ -264,6 +310,7 @@
       "label": "Connection character set",
       "tab": "Advanced",
       "control": "text",
+      "backend_field_id": "cde_route_charset",
       "group": "Attachment",
       "required": false,
       "default": "UTF8"
@@ -273,6 +320,7 @@
       "label": "Session time zone",
       "tab": "Advanced",
       "control": "text",
+      "backend_field_id": "cde_route_session_time_zone",
       "group": "Attachment",
       "required": false
     },
@@ -281,6 +329,7 @@
       "label": "Initial DECFLOAT trap policy",
       "tab": "Advanced",
       "control": "select",
+      "backend_field_id": "cde_route_decfloat_traps_policy",
       "group": "DECFLOAT",
       "required": false,
       "options": [
@@ -301,6 +350,7 @@
       "label": "Trap division by zero",
       "tab": "Advanced",
       "control": "boolean",
+      "backend_field_id": "cde_route_trap_division_by_zero",
       "group": "DECFLOAT",
       "required": false,
       "default": true,
@@ -314,6 +364,7 @@
       "label": "Trap inexact results",
       "tab": "Advanced",
       "control": "boolean",
+      "backend_field_id": "cde_route_trap_inexact",
       "group": "DECFLOAT",
       "required": false,
       "default": false,
@@ -327,6 +378,7 @@
       "label": "Trap invalid operations",
       "tab": "Advanced",
       "control": "boolean",
+      "backend_field_id": "cde_route_trap_invalid_operation",
       "group": "DECFLOAT",
       "required": false,
       "default": true,
@@ -340,6 +392,7 @@
       "label": "Trap overflow",
       "tab": "Advanced",
       "control": "boolean",
+      "backend_field_id": "cde_route_trap_overflow",
       "group": "DECFLOAT",
       "required": false,
       "default": true,
@@ -353,6 +406,7 @@
       "label": "Trap underflow",
       "tab": "Advanced",
       "control": "boolean",
+      "backend_field_id": "cde_route_trap_underflow",
       "group": "DECFLOAT",
       "required": false,
       "default": false,
@@ -366,6 +420,7 @@
       "label": "Initial DECFLOAT rounding mode",
       "tab": "Advanced",
       "control": "select",
+      "backend_field_id": "cde_route_decfloat_round",
       "group": "DECFLOAT",
       "required": false,
       "options": [
@@ -414,6 +469,7 @@
       "label": "Attachment linger policy",
       "tab": "Advanced",
       "control": "select",
+      "backend_field_id": "cde_route_no_linger",
       "group": "Attachment",
       "required": false,
       "options": [
@@ -434,6 +490,7 @@
       "label": "Attachment page-cache policy",
       "tab": "Advanced",
       "control": "select",
+      "backend_field_id": "cde_route_attachment_cache_policy",
       "group": "Attachment",
       "required": false,
       "options": [
@@ -454,6 +511,7 @@
       "label": "Requested attachment cache pages",
       "tab": "Advanced",
       "control": "number",
+      "backend_field_id": "cde_route_attachment_cache_pages",
       "group": "Attachment",
       "required": true,
       "default": 128,
@@ -470,6 +528,7 @@
       "label": "Initial parallel-worker policy",
       "tab": "Advanced",
       "control": "select",
+      "backend_field_id": "cde_route_parallel_workers_policy",
       "group": "Attachment",
       "required": false,
       "options": [
@@ -490,6 +549,7 @@
       "label": "Requested parallel workers",
       "tab": "Advanced",
       "control": "number",
+      "backend_field_id": "cde_route_parallel_workers",
       "group": "Attachment",
       "required": true,
       "default": 1,
@@ -506,6 +566,7 @@
       "label": "Disable cooperative garbage collection",
       "tab": "Advanced",
       "control": "boolean",
+      "backend_field_id": "cde_route_no_gc",
       "group": "Attachment",
       "required": false,
       "default": false,
@@ -516,6 +577,7 @@
       "label": "Disable database triggers",
       "tab": "Advanced",
       "control": "boolean",
+      "backend_field_id": "cde_route_no_db_triggers",
       "group": "Attachment",
       "required": false,
       "default": false
@@ -525,6 +587,7 @@
       "label": "DBKEY scope",
       "tab": "Advanced",
       "control": "select",
+      "backend_field_id": "cde_route_dbkey_scope",
       "group": "Attachment",
       "required": false,
       "options": [
@@ -544,6 +607,7 @@
       "label": "Default transaction isolation",
       "tab": "Advanced",
       "control": "select",
+      "backend_field_id": "cde_route_transaction_isolation",
       "group": "Transaction defaults",
       "required": false,
       "options": [
@@ -579,6 +643,7 @@
       "label": "Default transaction access",
       "tab": "Advanced",
       "control": "select",
+      "backend_field_id": "cde_route_transaction_access",
       "group": "Transaction defaults",
       "required": false,
       "options": [
@@ -598,6 +663,7 @@
       "label": "Transaction lock timeout (seconds; -1 waits forever)",
       "tab": "Advanced",
       "control": "number",
+      "backend_field_id": "cde_route_transaction_lock_timeout",
       "group": "Transaction defaults",
       "required": false,
       "default": -1,
@@ -609,6 +675,7 @@
       "label": "Native autocommit (writes cannot be rolled back later)",
       "tab": "Advanced",
       "control": "boolean",
+      "backend_field_id": "cde_route_transaction_auto_commit",
       "group": "Transaction defaults",
       "required": false,
       "default": false
@@ -618,6 +685,7 @@
       "label": "No auto undo (native rollback still applies)",
       "tab": "Advanced",
       "control": "boolean",
+      "backend_field_id": "cde_route_transaction_no_auto_undo",
       "group": "Transaction defaults",
       "required": false,
       "default": false
@@ -627,6 +695,7 @@
       "label": "Ignore records from limbo transactions",
       "tab": "Advanced",
       "control": "boolean",
+      "backend_field_id": "cde_route_transaction_ignore_limbo",
       "group": "Transaction defaults",
       "required": false,
       "default": false
@@ -636,6 +705,7 @@
       "label": "Statement timeout (milliseconds; 0 uses database policy)",
       "tab": "Advanced",
       "control": "number",
+      "backend_field_id": "cde_route_statement_timeout_ms",
       "group": "Timeouts and utilities",
       "required": false,
       "min": 0,
@@ -646,6 +716,7 @@
       "label": "Session idle timeout (seconds; 0 uses database policy)",
       "tab": "Advanced",
       "control": "number",
+      "backend_field_id": "cde_route_session_idle_timeout_seconds",
       "group": "Timeouts and utilities",
       "required": false,
       "min": 0,
@@ -656,6 +727,7 @@
       "label": "Connection timeout (seconds)",
       "tab": "Advanced",
       "control": "number",
+      "backend_field_id": "cde_route_timeout",
       "group": "Timeouts and utilities",
       "required": false,
       "help": "Native connection-establishment wait for database attachment, creation and Services. Blank uses native configuration; zero makes the protocol-establishment read wait immediate, not unlimited. DNS resolution and operating-system TCP connection attempts can take longer; this is not a total wall-clock deadline, statement timeout or idle-session timeout. Windows/macOS require separate native timing qualification.",
@@ -671,6 +743,7 @@
       "label": "Dummy packet interval (seconds)",
       "tab": "Advanced",
       "control": "number",
+      "backend_field_id": "cde_route_dummy_packet_interval",
       "group": "Timeouts and utilities",
       "required": false,
       "help": "Native DummyPacketInterval configuration for new database and Services connections. Blank uses native configuration; zero disables dummy packets. A positive interval can send native dummy packets while waiting for network input. It is not a background heartbeat for an idle application, a disconnect deadline or an OS TCP-keepalive setting. Do not also set DummyPacketInterval in additional native configuration. Windows/macOS require separate native traffic qualification.",
@@ -686,6 +759,7 @@
       "label": "Attachment mode",
       "tab": "Engine",
       "control": "select",
+      "backend_field_id": "cde_route_attachment_mode",
       "required": false,
       "options": [
         {
@@ -704,13 +778,49 @@
       "label": "Approved local database directory",
       "tab": "Engine",
       "control": "text",
+      "backend_field_id": "cde_route_filesystem_root",
       "required": true,
       "help": "Directory on the application host, not the browser. Local file access grants embedded access; a password is not checked.",
       "visible_when": {
         "field": "profile",
         "equals": "firebird-embedded"
       }
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
     }
   ],
-  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for firebird-native, firebird-embedded. Field ids are the registration contract's own. Review tab/group placement."
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for firebird-native, firebird-embedded. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Round-tripped (tools/tests/test_ui_descriptor_server_forms.py): the network profile against Firebird 5.0.3 (draft -> servers-API payload -> persisted route -> live identity -> edit pre-fill); the embedded profile is proven to reach its own contract (route keys, attachment_mode, filesystem_root); a live embedded attachment needs the application-host Engine13 runtime, which the platform teams qualify."
 }

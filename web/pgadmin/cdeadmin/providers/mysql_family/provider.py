@@ -2001,6 +2001,11 @@ def _route_arguments(route, profile):
     result = {key: value for key, value in route.items() if key in allowed}
     if profile is MARIADB_PROFILE and 'connection_timeout' in result:
         result['connect_timeout'] = result.pop('connection_timeout')
+    if profile is MARIADB_PROFILE and not result.get('ssl') and not any(
+            result.get(key) for key in ('ssl_ca', 'ssl_capath', 'ssl_cert', 'ssl_key')):
+        # The registration default ssl_verify_cert=True governs TLS routes only;
+        # MariaDB Connector/Python treats it as "require TLS" on its own.
+        result.pop('ssl_verify_cert', None)
     if result.get('pool_size') and not result.get('pool_name'):
         route_id = str(route.get('route_id') or 'unscoped')
         result['pool_name'] = 'cde_' + hashlib.sha256(
@@ -2737,6 +2742,8 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 record.update(registration_origin='mysql.func',
                               administration={'allowed_operations': ['inspect', 'drop']})
                 add('loadable-function', [], record['name'], record)
+            from .mariadb_catalog import program_object_natives
+            program_object_natives(optional_records, add)
         if profile is MYSQL_PROFILE and any(str(row[0]).lower()=='group_replication' and str(row[1]).upper()=='ACTIVE' for row in plugin_rows):
             members=optional_records('SELECT * FROM performance_schema.replication_group_members')
             stats=optional_records('SELECT * FROM performance_schema.replication_group_member_stats')

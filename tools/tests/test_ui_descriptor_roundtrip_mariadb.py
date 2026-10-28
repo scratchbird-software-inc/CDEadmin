@@ -140,11 +140,16 @@ def test_view_index_trigger_forms(live):
         'name': 'rt_ix', 'parent': DATABASE, 'table': 'owner', 'columns': [{'value': 'label'}], 'unique': True}))
     _index, index_record = record(client, route, 'index', 'rt_ix', 'index')
     assert index_record['table'] == 'owner' and index_record['unique'] is True
-    run(client, route, 'trigger', 'create', backend_draft(resolved_form('mariadb', 'trigger'), {
-        'name': 'rt_trg', 'parent': DATABASE, 'table': 'owner', 'timing': 'BEFORE', 'events': ['INSERT'], 'active': True,
-        'position': 0, 'body': "SET NEW.label = COALESCE(NEW.label, '-')"}))
+    trigger_form = resolved_form('mariadb', 'trigger')
+    trigger = backend_draft(trigger_form, {
+        'name': 'rt_trg', 'parent': DATABASE, 'table': 'owner', 'timing': 'BEFORE', 'events': ['INSERT'],
+        'body': "SET NEW.label = COALESCE(NEW.label, '-')"})
+    assert 'active' not in trigger and 'position' not in trigger  # hidden: the MariaDB compiler emits neither
+    run(client, route, 'trigger', 'create', trigger)
     _trigger, trigger_record = record(client, route, 'trigger', 'rt_trg', 'trigger')
     assert trigger_record['table'] == 'owner' and trigger_record['timing'] == 'BEFORE' and trigger_record['events'] == ['INSERT']
+    # Re-open shows the definition (the inventory reports the body).
+    assert trigger_record['body'] == "SET NEW.label = COALESCE(NEW.label, '-')"
 
 
 def test_sequence_and_routine_forms(live):
@@ -166,8 +171,25 @@ def test_sequence_and_routine_forms(live):
         'variant': 'function', 'name': 'rt_fn', 'parent': DATABASE, 'parameters': [{'name': 'a', 'type': 'INT'}], 'returns': 'INT',
         'body': 'RETURN a + 1'}))
     _function, function_record = record(client, route, 'function', 'rt_fn', 'routine')
-    assert function_record['returns'] == 'int'
+    assert function_record['returns'].lower().startswith('int')
+    assert function_record['body'] == 'RETURN a + 1'
+    assert [(row['name'], row['type'].lower()) for row in function_record['parameters']] == [('a', 'int(11)')]
+    _procedure, procedure_record = record(client, route, 'procedure', 'rt_proc', 'routine')
+    assert procedure_record['body'] == 'BEGIN SELECT a * 2; END'
+    assert [row['name'] for row in procedure_record['parameters']] == ['a']
     assert query(f'SELECT `{DATABASE}`.rt_fn(41)') == [(42,)]
+
+    run(client, route, 'event', 'create', backend_draft(routine_form, {
+        'variant': 'scheduled', 'name': 'rt_ev', 'parent': DATABASE, 'schedule': 'EVERY 1 DAY', 'preserve': True,
+        'enabled': False, 'body': 'DELETE FROM owner WHERE id < 0'}))
+    event, event_record = record(client, route, 'event', 'rt_ev', 'routine')
+    # MariaDB records an implicit STARTS for recurring events; the schedule reads back as the server keeps it.
+    assert event_record['schedule'].startswith('EVERY 1 DAY') and (event_record['preserve'], event_record['enabled']) == (True, False)
+    assert event_record['body'] == 'DELETE FROM owner WHERE id < 0'
+    alter = backend_draft(routine_form, {**event_record, 'variant': 'scheduled', 'enabled': True}, mode='alter', baseline=event_record)
+    assert alter == {'enabled': True}, alter  # only the touched field travels
+    run(client, route, 'event', 'alter', alter, target=event)
+    assert query(f"SELECT status FROM information_schema.events WHERE event_schema='{DATABASE}' AND event_name='rt_ev'") == [('ENABLED',)]
 
 
 def test_role_user_and_database_forms(live):
@@ -193,7 +215,8 @@ def test_role_user_and_database_forms(live):
         'name': f'{DATABASE}_child', 'character_set': 'utf8mb4', 'collation': 'utf8mb4_general_ci', 'comment': 'rt'}))
     assert query(f"SELECT default_character_set_name, schema_comment FROM information_schema.schemata WHERE schema_name='{DATABASE}_child'") == [('utf8mb4', 'rt')]
     database, baseline = record(client, route, 'database', DATABASE, 'database')
-    assert baseline['character_set'] == 'utf8mb4'
+    assert baseline['character_set'] == query(
+        f"SELECT default_character_set_name FROM information_schema.schemata WHERE schema_name='{DATABASE}'")[0][0]
     alter = backend_draft(database_form, {**baseline, 'comment': 'edited'}, mode='alter', baseline=baseline)
     assert alter == {'comment': 'edited'}
     run(client, route, 'database', 'alter', alter, target=database)
