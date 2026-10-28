@@ -1,5 +1,149 @@
 {
   "schema": "cdeadmin.ui-operations.v1",
   "engine": "postgresql",
-  "operations": []
+  "operations": [
+    {
+      "operation_id": "read",
+      "resource_kind": "large-object",
+      "title": "Read bytes",
+      "menu": {
+        "category": "open",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "offset",
+          "label": "Byte offset (exact decimal)",
+          "control": "text",
+          "required": false,
+          "default": "0",
+          "help": "Decimal text so offsets above 2^53 survive the browser; at most 4 TiB."
+        },
+        {
+          "field_id": "length",
+          "label": "Byte length (exact decimal)",
+          "control": "text",
+          "required": true,
+          "default": "1048576",
+          "help": "At most 1 MiB per read; the result carries the chunk as base64 with its SHA-256."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16."
+    },
+    {
+      "operation_id": "write",
+      "resource_kind": "large-object",
+      "title": "Write bytes",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "offset",
+          "label": "Byte offset (exact decimal)",
+          "control": "text",
+          "required": false,
+          "default": "0",
+          "help": "Decimal text so offsets above 2^53 survive the browser; at most 4 TiB."
+        },
+        {
+          "field_id": "large_object_data_base64",
+          "label": "Binary chunk",
+          "control": "code",
+          "language": "base64",
+          "required": true,
+          "help": "Canonical base64, at most 1 MiB per reviewed chunk. The write is verified by a SHA-256 read-back before the transaction commits."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16."
+    },
+    {
+      "operation_id": "truncate",
+      "resource_kind": "large-object",
+      "title": "Truncate to length",
+      "menu": {
+        "category": "maintenance",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "length",
+          "label": "New length in bytes (exact decimal)",
+          "control": "text",
+          "required": true,
+          "default": "0",
+          "help": "Bytes beyond this length are discarded; a longer length extends the object with zero bytes."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. The typed name is the large-object OID, which is the resource display name."
+    },
+    {
+      "operation_id": "import-server-file",
+      "resource_kind": "large-object",
+      "title": "Import file from database server",
+      "menu": {
+        "category": "backup_restore",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "oid",
+          "label": "OID (0 allocates a native identity)",
+          "control": "text",
+          "required": false,
+          "default": "0"
+        },
+        {
+          "field_id": "server_file",
+          "label": "Source file on database server",
+          "control": "text",
+          "required": true,
+          "help": "The path belongs to the database server host; server file privileges and operating-system access apply."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. Creates a large object from a server-side file, so it has no existing target; it is kept as a data-transfer action rather than the tier-1 create."
+    },
+    {
+      "operation_id": "export-server-file",
+      "resource_kind": "large-object",
+      "title": "Export to file on database server",
+      "menu": {
+        "category": "backup_restore",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "server_file",
+          "label": "Destination file on database server (an existing file is overwritten)",
+          "control": "text",
+          "required": true,
+          "help": "The path belongs to the database server host; SQL rollback cannot undo the file it writes."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Type the exact server destination path",
+          "control": "text",
+          "required": true,
+          "help": "Must equal the destination path above."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. The typed value is the destination path, not the target name, so it is an ordinary required field (as the Firebird confirm-type operations do), not typed_name."
+    }
+  ]
 }
