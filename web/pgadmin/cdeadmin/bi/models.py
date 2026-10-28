@@ -16,7 +16,8 @@ import re
 from typing import Any, Mapping
 
 from pgadmin.cdeadmin.semantic_models.models import (
-    CHART_TYPES, FILTER_OPERATORS, PARAMETER_TYPES, SemanticModelError,
+    CHART_TYPES, EXPORT_FORMATS, FILTER_OPERATORS, PARAMETER_TYPES,
+    SemanticModelError,
     _validate_parameter_value, identifier, required_text,
 )
 
@@ -120,6 +121,45 @@ def validate_visualization(value):
     return {'type': kind,
             'settings': _map(item.get('settings', {}),
                              'visualization.settings')}
+
+
+DEFAULT_CACHE_TTL = 300
+MAX_CACHE_TTL = 86400
+DEFAULT_PAGE_SIZE = 100
+
+
+def validate_result_policy(value):
+    """Normalize how a question's result may be cached, shown and exported.
+
+    Export is off unless a question opts in, and only for the listed
+    formats; redacted columns are masked in every page and export.
+    """
+    item = _map(value if value is not None else {}, 'result_policy')
+    redact = []
+    for column in _list(item.get('redact_columns', []),
+                        'result_policy.redact_columns', 64):
+        redact.append(_text(column, 'result_policy.redact_columns', 128))
+    export = _map(item.get('export', {}), 'result_policy.export')
+    formats = _list(export.get('formats', []), 'result_policy.export.formats',
+                    len(EXPORT_FORMATS))
+    if any(f not in EXPORT_FORMATS for f in formats):
+        raise BIError('result_policy.export.formats has an unsupported format')
+    if export.get('enabled', False) and not formats:
+        raise BIError('enabled export needs at least one format')
+    ttl = item.get('cache_ttl_seconds', DEFAULT_CACHE_TTL)
+    if isinstance(ttl, bool) or not isinstance(ttl, int) or not (
+            0 <= ttl <= MAX_CACHE_TTL):
+        raise BIError('result_policy.cache_ttl_seconds must be 0 to 86400')
+    page = item.get('page_size', DEFAULT_PAGE_SIZE)
+    if isinstance(page, bool) or not isinstance(page, int) or not (
+            1 <= page <= 500):
+        raise BIError('result_policy.page_size must be 1 to 500')
+    return {
+        'redact_columns': list(dict.fromkeys(redact)),
+        'export': {'enabled': bool(export.get('enabled', False)),
+                   'formats': list(dict.fromkeys(formats))},
+        'cache_ttl_seconds': ttl, 'page_size': page,
+    }
 
 
 def _filters(value, parameter_ids, field_key):
@@ -289,6 +329,7 @@ def validate_question(value: Mapping[str, Any]) -> dict[str, Any]:
         'query': query,
         'visualization': validate_visualization(item.get('visualization')),
         'parameters': parameters,
+        'result_policy': validate_result_policy(item.get('result_policy')),
     }
 
 

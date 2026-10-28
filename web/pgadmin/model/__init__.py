@@ -1273,6 +1273,76 @@ def _bi_revision_is_immutable(_mapper, _connection, _target):
     raise ValueError('saved question revisions are immutable')
 
 
+class BIDashboard(db.Model):
+    """Current endpoint-scoped, owner-only dashboard document."""
+    __tablename__ = 'cde_bi_dashboard'
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('active', 'archived')",
+            name='ck_cde_bi_dashboard_status'
+        ),
+        db.Index(
+            'ix_cde_bi_dashboard_scope',
+            'user_id', 'endpoint_id', 'collection_id'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    collection_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_collection.id', ondelete='SET NULL'),
+        nullable=True
+    )
+    name = db.Column(db.String(256), nullable=False)
+    status = db.Column(db.String(16), nullable=False, default='active')
+    revision = db.Column(db.Integer, nullable=False, default=1)
+    __mapper_args__ = {
+        'version_id_col': revision,
+        'version_id_generator': False,
+    }
+    definition = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    revisions = db.relationship(
+        'BIDashboardRevision', back_populates='dashboard',
+        cascade=CASCADE_STR
+    )
+
+
+class BIDashboardRevision(db.Model):
+    """Immutable dashboard revision snapshot."""
+    __tablename__ = 'cde_bi_dashboard_revision'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'dashboard_id', 'revision', name='uq_cde_bi_dashboard_revision'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    dashboard_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_dashboard.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    revision = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(16), nullable=False)
+    definition = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    dashboard = db.relationship(
+        'BIDashboard', back_populates='revisions'
+    )
+
+
+@event.listens_for(BIDashboardRevision, 'before_update')
+def _bi_dashboard_revision_is_immutable(_mapper, _connection, _target):
+    raise ValueError('dashboard revisions are immutable')
+
+
 class CDEReportDeliveryOccurrence(db.Model):
     """Durable, secret-free record of one report delivery attempt."""
     __tablename__ = 'cde_report_delivery_occurrence'

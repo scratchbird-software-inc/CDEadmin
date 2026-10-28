@@ -1032,6 +1032,10 @@ def validate_query(model, value):
                 'query.order_by must name an output column and asc or desc'
             )
         query['order_by'].append({'id': entry['id'], 'direction': direction})
+    bind = query.get('bind')
+    if bind is not None and bind not in {'qmark', 'format'}:
+        raise SemanticModelError('query.bind must be qmark, format or null')
+    query['bind'] = bind
     query['limit'] = query.get('limit', 500)
     if isinstance(query['limit'], bool) or not isinstance(query['limit'], int):
         raise SemanticModelError('query.limit must be an integer')

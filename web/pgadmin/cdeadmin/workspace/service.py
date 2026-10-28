@@ -2709,6 +2709,134 @@ class ProviderWorkspaceService:
                 parameters=request.get('parameters'),
                 revision=request.get('revision'),
                 security_context={'claims': {'user_id': user_id}})
+        return self._bi_extended_action(
+            service, action, request, context, _endpoint, user_id,
+            endpoint_id, qid, revision)
+
+    def _bi_extended_action(self, service, action, request, context,
+                            endpoint, user_id, endpoint_id, qid, revision):
+        """Execution, conversion and dashboard actions of ``bi_action``."""
+        if action == 'bi_sql_to_question':
+            from pgadmin.cdeadmin.bi.convert import sql_to_question
+            return sql_to_question(
+                request.get('sql'),
+                name=request.get('name') or 'Converted question',
+                parameter_types=request.get('parameter_types'),
+                collection_id=request.get('collection_id'))
+        dashboards = getattr(service, 'dashboards', None)
+        if action in ('bi_dashboard_from_ddn', 'bi_dashboard_to_ddn'):
+            from pgadmin.cdeadmin.bi import dashboard_ddn
+            if action == 'bi_dashboard_from_ddn':
+                return dashboard_ddn.ddn_to_dashboard(
+                    request.get('snapshot'), name=request.get('name'))
+            dashboard = request.get('dashboard')
+            if request.get('dashboard_id') is not None:
+                dashboard = dashboards.get(
+                    user_id, endpoint_id, request['dashboard_id'])[
+                        'definition']
+            return dashboard_ddn.dashboard_to_ddn(
+                dashboard, strict=bool(request.get('strict', False)))
+        executor = getattr(service, 'executor', None)
+        if action in ('bi_question_execute', 'bi_question_page',
+                      'bi_question_export', 'bi_cache_info',
+                      'bi_cache_invalidate'):
+            if executor is None:
+                raise ProviderWorkspaceError(
+                    'BI execution is not initialized')
+            if action == 'bi_question_execute':
+                binding = self.endpoint_service.provider_registry.resolve(
+                    context)
+                return executor.run(
+                    provider=binding.instance, context=context,
+                    endpoint=endpoint, user_id=user_id, question_id=qid,
+                    revision=request.get('revision'),
+                    definition=request.get('question'),
+                    parameters=request.get('parameters'),
+                    page_size=request.get('page_size'),
+                    bypass_cache=bool(request.get('bypass_cache')),
+                    ttl_seconds=request.get('cache_ttl_seconds'))
+            if action == 'bi_question_page':
+                return executor.page(
+                    user_id, endpoint_id, request.get('result_id'),
+                    cursor=request.get('cursor'),
+                    page_size=request.get('page_size'))
+            if action == 'bi_question_export':
+                export_format = request.get('format')
+                exported = executor.export(
+                    user_id, endpoint_id, request.get('result_id'),
+                    export_format)
+                content = exported.pop('content')
+                return {
+                    **exported,
+                    'content_base64': base64.b64encode(content).decode(
+                        'ascii'),
+                    'media_type': self._export_media_type(export_format),
+                    'filename': 'cdeadmin-question-' + str(
+                        request.get('result_id')) + '.' + str(export_format),
+                }
+            if action == 'bi_cache_info':
+                return {'items': executor.cache_info(user_id, endpoint_id)}
+            # Owner-scoped: a principal can only drop its own entries.
+            return {'released': executor.invalidate(
+                user_id=user_id, endpoint_id=endpoint_id,
+                question_id=qid, result_id=request.get('result_id'))}
+        if dashboards is not None and action.startswith('bi_dashboard_'):
+            did = request.get('dashboard_id')
+            simple = {
+                'bi_dashboard_get': lambda: dashboards.get(
+                    user_id, endpoint_id, did),
+                'bi_dashboard_create': lambda: dashboards.create(
+                    user_id, endpoint_id, request.get('dashboard')),
+                'bi_dashboard_update': lambda: dashboards.update(
+                    user_id, endpoint_id, did, revision,
+                    request.get('dashboard')),
+                'bi_dashboard_status': lambda: dashboards.set_status(
+                    user_id, endpoint_id, did, revision,
+                    request.get('status')),
+                'bi_dashboard_move': lambda: dashboards.move(
+                    user_id, endpoint_id, did, revision,
+                    request.get('collection_id')),
+                'bi_dashboard_clone': lambda: dashboards.clone(
+                    user_id, endpoint_id, did, request.get('name')),
+                'bi_dashboard_delete': lambda: dashboards.delete(
+                    user_id, endpoint_id, did, revision),
+                'bi_dashboard_history': lambda: {
+                    'items': dashboards.history(user_id, endpoint_id, did)},
+                'bi_dashboard_revision': lambda: dashboards.revision(
+                    user_id, endpoint_id, did, request.get('revision')),
+                'bi_dashboard_resolve': lambda: dashboards.resolve(
+                    user_id, endpoint_id, did, request.get('filters'),
+                    revision=request.get('revision')),
+                'bi_dashboard_cross_filter': lambda: dashboards.cross_filter(
+                    user_id, endpoint_id, did,
+                    request.get('cross_filter_id'), request.get('row'),
+                    request.get('filters')),
+                'bi_dashboard_drill': lambda: dashboards.drill(
+                    user_id, endpoint_id, did, request.get('drill_id'),
+                    request.get('row'), request.get('filters')),
+            }
+            if action == 'bi_dashboard_list':
+                filters = {'collection_id': request['collection_id']} if (
+                    'collection_id' in request) else {}
+                return {'items': dashboards.list(
+                    user_id, endpoint_id, **filters)}
+            if action in simple:
+                return simple[action]()
+            if action in ('bi_dashboard_run', 'bi_dashboard_card_run'):
+                binding = self.endpoint_service.provider_registry.resolve(
+                    context)
+                common = dict(
+                    provider=binding.instance, context=context,
+                    endpoint=endpoint, user_id=user_id,
+                    dashboard_id=did, filters=request.get('filters'),
+                    revision=request.get('revision'),
+                    page_size=request.get('page_size'),
+                    bypass_cache=bool(request.get('bypass_cache')),
+                    exclude=request.get('exclude') or ())
+                if action == 'bi_dashboard_card_run':
+                    return dashboards.run_card(
+                        card_id=request.get('card_id'), **common)
+                return dashboards.run(tab_id=request.get('tab_id'), **common)
         raise ProviderWorkspaceError('BI action is unavailable')
 
     def _semantic_definition(self, context, value):
@@ -3889,7 +4017,8 @@ def init_app(
     app.extensions[APP_EXTENSION_KEY] = service
     if semantic_model_service is not None:
         from pgadmin.cdeadmin.bi import init_app as init_bi
-        service.bi_service = init_bi(app, semantic_model_service)
+        service.bi_service = init_bi(
+            app, semantic_model_service, studio_service, result_service)
     from .mysql_retention_schedule import init_app as init_mysql_retention_schedule
     init_mysql_retention_schedule(app, service)
     from .mysql_physical_retention_schedule import init_app as init_mysql_physical_schedule

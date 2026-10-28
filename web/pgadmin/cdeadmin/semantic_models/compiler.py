@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import copy
 import re
+import uuid
 from decimal import Decimal
 from typing import Mapping
 
@@ -92,6 +93,7 @@ def compile_sql(model_value, query_value, dialect):
         )
     model = validate_model(model_value)
     query = validate_query(model, query_value)
+    binder = _Binder(query.get('bind'))
     time_operations = frozenset(dialect['time_operations'])
     window_operations = frozenset(dialect['window_operations'])
     if query['time_intelligence'] and query['time_intelligence'][
@@ -251,7 +253,7 @@ def compile_sql(model_value, query_value, dialect):
         query['filters'] + query['cross_filters']
     )
     predicates = [
-        _compile_filter(item, field, dialect, parameter_values)
+        _compile_filter(item, field, dialect, parameter_values, binder)
         for item in filters
     ]
     time_intelligence = query['time_intelligence']
@@ -262,16 +264,16 @@ def compile_sql(model_value, query_value, dialect):
             if item['id'] == time_intelligence['dimension_id']
         )
         time_field = field(dimension['field'])
-        start = _literal(time_intelligence['start'], dialect)
+        start = binder.literal(time_intelligence['start'], dialect)
         operation = time_intelligence['operation']
         if operation == 'as_of':
             predicates.append(f'{time_field} <= {start}')
         elif operation == 'period_comparison':
-            end = _literal(time_intelligence['end'], dialect)
-            previous_start = _literal(
+            end = binder.literal(time_intelligence['end'], dialect)
+            previous_start = binder.literal(
                 time_intelligence['comparison_start'], dialect
             )
-            previous_end = _literal(
+            previous_end = binder.literal(
                 time_intelligence['comparison_end'], dialect
             )
             current = f'{time_field} BETWEEN {start} AND {end}'
@@ -287,7 +289,7 @@ def compile_sql(model_value, query_value, dialect):
                 f'{comparison_expression} AS {quote("__semantic_period")}'
             )
         else:
-            end = _literal(time_intelligence['end'], dialect)
+            end = binder.literal(time_intelligence['end'], dialect)
             predicates.append(f'{time_field} BETWEEN {start} AND {end}')
     source = 'SELECT ' + ', '.join(selections) + ' FROM ' + from_clause
     if predicates:
@@ -336,11 +338,12 @@ def compile_sql(model_value, query_value, dialect):
         source += f" ROWS 1 TO {query['limit']}"
     else:
         source += f" LIMIT {query['limit']}"
+    source, bound = binder.finish(source)
     return {
         'contract_version': '1.0.0',
         'language_profile': dialect['language_profile'],
         'source': source,
-        'parameters': {},
+        'parameters': bound if binder.active else {},
         'projection': {
             'axes': query['axes'], 'levels': axis_ids,
             'measures': query['measures'], 'totals': query['totals'],
@@ -454,7 +457,55 @@ def _literal(value, dialect):
     raise SemanticModelError('filter value type is not portable')
 
 
-def _compile_filter(item, field, dialect, parameters=None):
+class _Binder:
+    """Render filter values as inline literals or as bound parameters.
+
+    With a ``bind`` style the SQL text never contains a caller value: each
+    value becomes a private token that ``finish`` replaces, in textual order,
+    by the engine marker (``?`` for ``qmark``, ``%s`` for ``format``) while the
+    values are returned as the positional parameter array.
+    """
+
+    STYLES = {'qmark': '?', 'format': '%s'}
+
+    def __init__(self, style):
+        if style is not None and style not in self.STYLES:
+            raise SemanticModelError('query.bind style is unsupported')
+        self.style = style
+        self.active = style is not None
+        self._values = []
+        self._prefix = '\x00' + uuid.uuid4().hex + ':'
+
+    def literal(self, value, dialect):
+        if not self.active or value is None:
+            return _literal(value, dialect)
+        if isinstance(value, bool):
+            pass
+        elif not isinstance(value, (int, float, Decimal, str)):
+            raise SemanticModelError('filter value type is not portable')
+        if isinstance(value, str) and '\x00' in value:
+            raise SemanticModelError('filter value cannot contain NUL')
+        self._values.append(value)
+        return f'{self._prefix}{len(self._values) - 1}\x00'
+
+    def finish(self, source):
+        if not self.active:
+            return source, {}
+        marker = self.STYLES[self.style]
+        pattern = re.compile(re.escape(self._prefix) + r'(\d+)\x00')
+        ordered, parts, position = [], [], 0
+        for match in pattern.finditer(source):
+            parts.append(source[position:match.start()])
+            ordered.append(self._values[int(match.group(1))])
+            position = match.end()
+        parts.append(source[position:])
+        if ordered and self.style == 'format':
+            parts = [part.replace('%', '%%') for part in parts]
+        return marker.join(parts), ordered
+
+
+def _compile_filter(item, field, dialect, parameters=None, binder=None):
+    binder = binder or _Binder(None)
     left = field(item['field'])
     operator = item.get('operator', 'eq')
     if item.get('parameter_id') is not None:
@@ -475,19 +526,20 @@ def _compile_filter(item, field, dialect, parameters=None):
                 'set filter value must be a non-empty array'
             )
         keyword = 'IN' if operator == 'in' else 'NOT IN'
-        literals = ', '.join(_literal(value, dialect) for value in values)
+        literals = ', '.join(
+            binder.literal(value, dialect) for value in values)
         return f'{left} {keyword} ({literals})'
     if operator == 'between':
         values = item.get('value')
         if not isinstance(values, list) or len(values) != 2:
             raise SemanticModelError('between filter requires two values')
         return (
-            f'{left} BETWEEN {_literal(values[0], dialect)} '
-            f'AND {_literal(values[1], dialect)}'
+            f'{left} BETWEEN {binder.literal(values[0], dialect)} '
+            f'AND {binder.literal(values[1], dialect)}'
         )
     operators = {
         'eq': '=', 'ne': '<>', 'lt': '<', 'lte': '<=',
         'gt': '>', 'gte': '>=',
     }
-    literal = _literal(item.get('value'), dialect)
+    literal = binder.literal(item.get('value'), dialect)
     return f'{left} {operators[operator]} {literal}'

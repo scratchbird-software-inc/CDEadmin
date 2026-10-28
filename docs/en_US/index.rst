@@ -100,3 +100,4 @@ upstream attribution.
    sqlite_functional_completion
    native_dialect_tooling
    bi_saved_questions
+   bi_dashboards

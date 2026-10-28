@@ -16,13 +16,23 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from pgadmin.cdeadmin.semantic_models.models import SemanticModelError
+from pgadmin.cdeadmin.semantic_models.models import (
+    SemanticModelError, _validate_parameter_value,
+)
 
 from .builder import builder_to_semantic, semantic_to_query
 from .models import (
     BIConflict, BIError, QUESTION_STATUSES, validate_collection,
     validate_question,
 )
+from .sqltext import assert_read_only_select, bind_placeholders
+
+# Bound-parameter style per engine (the driver's marker, never inlined data).
+BIND_STYLES = {
+    'sqlite': 'qmark', 'duckdb': 'qmark', 'firebird': 'qmark',
+    'mysql': 'format', 'mariadb': 'format', 'postgresql': 'format',
+}
+BIND_MARKERS = {'qmark': '?', 'format': '%s'}
 
 
 class DatabaseBIRepository:
@@ -117,6 +127,25 @@ class BIService:
     def __init__(self, semantic_service, repository=None):
         self.semantic = semantic_service
         self.repository = repository or DatabaseBIRepository()
+        self._listeners = []
+        self._collection_guards = []
+        self._question_guards = []
+
+    def add_collection_guard(self, callback):
+        """``callback(user_id, collection_id) -> bool``: still in use."""
+        self._collection_guards.append(callback)
+
+    def add_question_guard(self, callback):
+        """``callback(user_id, endpoint_id, question_id) -> name|None``."""
+        self._question_guards.append(callback)
+
+    def on_question_change(self, callback):
+        """Register ``callback(user_id, endpoint_id, question_id)``."""
+        self._listeners.append(callback)
+
+    def _changed(self, user_id, endpoint_id, question_id):
+        for callback in self._listeners:
+            callback(user_id, endpoint_id, question_id)
 
     # collections ---------------------------------------------------------
     def create_collection(self, user_id, value):
@@ -148,7 +177,8 @@ class BIService:
         row = self._collection_row(user_id, collection_id)
         rows = self.repository.collections(user_id)
         if any(item.parent_id == row.id for item in rows) or (
-                self.repository.collection_has_questions(user_id, row.id)):
+                self.repository.collection_has_questions(user_id, row.id)
+        ) or any(guard(user_id, row.id) for guard in self._collection_guards):
             raise BIError('collection must be empty before deletion')
         self.repository.delete_collection(row)
         return {'collection_id': collection_id, 'deleted': True}
@@ -229,6 +259,7 @@ class BIService:
         row.revision += 1
         row.updated_at = _now()
         self.repository.save_question(row, row.definition)
+        self._changed(user_id, endpoint_id, row.id)
         return self._present(row)
 
     def set_status(self, user_id, endpoint_id, question_id,
@@ -241,6 +272,7 @@ class BIService:
         row.revision += 1
         row.updated_at = _now()
         self.repository.save_question(row, row.definition)
+        self._changed(user_id, endpoint_id, row.id)
         return self._present(row)
 
     def move_question(self, user_id, endpoint_id, question_id,
@@ -261,7 +293,13 @@ class BIService:
                         expected_revision):
         row = self._required(user_id, endpoint_id, question_id)
         self._check_revision(row, expected_revision)
+        for guard in self._question_guards:
+            user = guard(user_id, endpoint_id, question_id)
+            if user:
+                raise BIError(
+                    f'saved question is used by dashboard {user!r}')
         self.repository.delete_question(row)
+        self._changed(user_id, endpoint_id, question_id)
         return {'question_id': question_id, 'deleted': True}
 
     def history(self, user_id, endpoint_id, question_id):
@@ -298,26 +336,55 @@ class BIService:
             security_context)
 
     def compile_definition(self, provider, user_id, endpoint_id, question,
-                           parameters=None, security_context=None):
+                           parameters=None, security_context=None,
+                           bind=False, extra_filters=()):
+        """Compile a validated question.
+
+        With ``bind`` the SQL carries only the engine's parameter markers and
+        ``parameters`` is the positional array of values, so no caller value
+        is ever part of the statement text.  ``extra_filters`` are dashboard
+        filters mapped onto a field; they are values too and are bound the
+        same way.
+        """
         parameters = dict(parameters or {})
         spec = question['query']
         known = {p['id'] for p in question['parameters']}
         if set(parameters) - known:
             raise BIError('compile request contains an unknown parameter')
-        if spec['kind'] == 'sql':
-            return self._compile_raw(provider, question, parameters)
         descriptor = getattr(provider, 'semantic_model_descriptor', None)
         provider_value = descriptor() if callable(descriptor) else None
+        engine_id = (provider_value or {}).get('engine_id')
+        style = None
+        if bind:
+            style = BIND_STYLES.get(engine_id)
+            if style is None:
+                raise BIError(
+                    f'engine {engine_id!r} has no admitted bound-parameter '
+                    'style for saved questions')
+        if spec['kind'] == 'sql':
+            if extra_filters:
+                raise BIError(
+                    'dashboard field filters cannot be applied to raw SQL; '
+                    'map the filter to a question parameter')
+            return self._compile_raw(provider, question, parameters, style,
+                                     engine_id)
         if spec['kind'] == 'builder':
             family = self.semantic.capabilities(provider)[
                 'analytical_profile']['semantic_family']
+            builder = copy.deepcopy(spec['builder'])
+            builder['filters'] = builder['filters'] + [
+                dict(f) for f in extra_filters]
             model, query, columns = builder_to_semantic(
-                spec['builder'], question['parameters'], family)
+                builder, question['parameters'], family)
         else:
             model = self._semantic_definition(
                 user_id, endpoint_id, question['semantic_model'])
             query, columns = semantic_to_query(spec['builder']), None
+            query['filters'] = query['filters'] + [
+                dict(f) for f in extra_filters]
         query['parameters'] = parameters
+        if style is not None:
+            query['bind'] = style
         compiled = self.semantic.compile(
             provider, model, query, security_context=security_context)
         compiled['kind'] = spec['kind']
@@ -326,11 +393,13 @@ class BIService:
              for i in query['axes']['rows']] +
             [{'id': i, 'kind': 'measure', 'label': i}
              for i in query['measures']])
-        compiled['engine_id'] = (provider_value or {}).get('engine_id')
+        compiled['engine_id'] = engine_id
+        compiled['bound'] = style is not None
         return compiled
 
     @staticmethod
-    def _compile_raw(provider, question, parameters):
+    def _compile_raw(provider, question, parameters, style=None,
+                     engine_id=None):
         declared = {p['id']: p for p in question['parameters']}
         for pid, item in declared.items():
             if item['required'] and pid not in parameters and (
@@ -340,14 +409,43 @@ class BIService:
                   if 'default' in item} | parameters
         descriptor = getattr(provider, 'semantic_model_descriptor', None)
         provider_value = descriptor() if callable(descriptor) else {}
-        return {
+        result = {
             'kind': 'sql', 'source': question['query']['sql'],
             'parameters': values,
             'language_profile': (provider_value or {}).get(
                 'language_profile'),
-            'engine_id': (provider_value or {}).get('engine_id'),
+            'engine_id': engine_id or (provider_value or {}).get(
+                'engine_id'),
             'warnings': ['Raw SQL is passed to the provider unchanged.'],
+            'bound': False,
         }
+        if style is None:
+            return result
+        sql = question['query']['sql']
+        assert_read_only_select(sql)
+        source, names = bind_placeholders(sql, BIND_MARKERS[style], declared)
+        ordered = []
+        for pid in names:
+            if pid not in values:
+                raise BIError(f'parameter {pid!r} requires a value')
+            item, value = declared[pid], values[pid]
+            if item['type'] == 'array':
+                raise BIError(
+                    f'array parameter {pid!r} needs a builder filter, not '
+                    'a raw SQL marker')
+            try:
+                _validate_parameter_value(value, item['type'])
+            except SemanticModelError as exc:
+                raise BIError(f'parameter {pid!r}: {exc}') from exc
+            if item['allowed_values'] and value not in item['allowed_values']:
+                raise BIError(f'parameter {pid!r} value is not allowed')
+            ordered.append(value)
+        result.update(
+            source=source, parameters=ordered, bound=True,
+            warnings=['Raw SQL has read-only lexical checks only; the '
+                      'connection privileges remain the authority.'],
+            output_columns=None)
+        return result
 
     def _semantic_definition(self, user_id, endpoint_id, reference):
         repository = self.semantic.repository
