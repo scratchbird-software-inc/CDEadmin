@@ -21,6 +21,7 @@ attachment to the live server.
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import uuid
@@ -391,9 +392,32 @@ def test_repair_validates_and_mends_a_database(env):
     assert env.query(path, 'SELECT COUNT(*) FROM BULK') == [(3000,)]
 
 
-def test_upgrade_and_linger_log_probe(env):
-    path = env.database('probe')
-    env.run('upgrade_database', path)
-    env.run('remove_linger', path)
-    print('LOG', env.server_log(path))
-    env.run('fixup_database', path)
+def test_physical_backup_mode_and_fixup_of_a_filesystem_copy(env):
+    path = env.database('nfix')
+    target = env.resource(env.route(path), 'database')
+    difference = env.path('nfix.delta')
+    env.run('add_difference_file', path, {'filename': difference})
+    entry = env.query(path, "SELECT TRIM(RDB$FILE_NAME), RDB$FILE_FLAGS FROM RDB$FILES WHERE RDB$FILE_FLAGS = 32")
+    assert [row[0] for row in entry] == [difference]
+    env.run('begin_backup', path, {'confirm_difference_overwrite': True})
+    assert env.monitor(path)['backup_state'] == 1 or env.monitor(path)['backup_state'] == 2
+    copy = env.path('nfix_copy.fdb')
+    shutil.copyfile(path, copy)  # the main file is frozen while the difference file takes writes
+    env.run('end_backup', path)
+    assert env.monitor(path)['backup_state'] == 0
+    with pytest.raises(driver.DatabaseError):
+        env.connect(copy)  # a copy taken in backup mode is not attachable until it is fixed up
+    env.run('fixup_database', copy, target=target)
+    assert env.query(copy, 'SELECT COUNT(*) FROM OWNER') == [(1,)]
+    assert env.monitor(copy)['backup_state'] == 0
+    env.run('drop_difference_file', path)
+    assert env.query(path, "SELECT COUNT(*) FROM RDB$FILES WHERE RDB$FILE_FLAGS = 32") == [(0,)]
+
+
+def test_add_database_files_extends_storage(env):
+    path = env.database('files')
+    secondary = env.path('files.fd1')
+    env.run('add_files', path, {'files': [{'filename': secondary, 'start': 400}]})
+    registered = env.query(path, "SELECT TRIM(RDB$FILE_NAME), RDB$FILE_START FROM RDB$FILES WHERE RDB$SHADOW_NUMBER = 0")
+    assert (secondary, 400) in registered
+    assert env.query(path, 'SELECT COUNT(*) FROM OWNER') == [(1,)]
