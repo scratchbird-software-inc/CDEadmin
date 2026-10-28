@@ -186,7 +186,9 @@ the tree through the same ``tree:add`` / ``tree:update`` events as the legacy
 dialog. ``create_database`` and ``register_existing`` intents, PostgreSQL,
 MySQL and any engine without a complete form keep the legacy dialog (fallback
 on any bundle error). Not yet exercised in a running browser; the Jest specs
-cover payloads and the edit-only-changed rule.
+cover payloads and the edit-only-changed rule. ``confirm``-type operations that
+carry a typed ``confirmation`` field (Firebird limbo and shadow tasks) were
+checked: the field is an ordinary required field and reaches the draft.
 
 Firebird and MariaDB operation round trips (2026-10-28)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
