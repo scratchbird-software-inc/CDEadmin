@@ -1,3 +1,4 @@
+import {observationTable} from './source.js';
 // Native values from an authorized retained collector snapshot. No query execution.
 export const FIREBIRD_ACTIVITY = Object.freeze([
   {id: 'findings', label: 'Policy attention findings', fields: ['code', 'severity', 'reason', 'value', 'threshold', 'observed_at']},
@@ -47,7 +48,6 @@ export const FIREBIRD_ACTIVITY = Object.freeze([
     'record_backouts_per_second', 'record_purges_per_second', 'record_expunges_per_second',
     'record_waits_per_second', 'record_conflicts_per_second', 'backversion_reads_per_second']},
 ]);
-const quote = (value) => JSON.stringify(String(value == null ? 'NULL' : value));
 export function firebirdActivityFiles(sample, category, filter='') {
   const selection = FIREBIRD_ACTIVITY.find((item) => item.id === category);
   if(!selection) throw new Error('Unsupported activity category.');
@@ -56,18 +56,6 @@ export function firebirdActivityFiles(sample, category, filter='') {
   const needle = filter.trim().toLocaleLowerCase();
   const rows = group?.status === 'available' ? (group.values?.rows || []).slice(0, 100)
     .filter((row) => !needle || selection.fields.some((field) => String(row[field] ?? '').toLocaleLowerCase().includes(needle))) : [];
-  const records = rows.map((row, index) => `record r${index} ${quote(row[selection.fields[0]])} {
-    x_record: {${selection.fields.map((field) => `${field}: ${quote(row[field])}`).join(',')}}; }`);
-  // Even empty/unavailable sources render an explicit diagnostic record.
   const message = group?.status === 'available' ? (needle ? 'No matching captured rows' : 'No visible rows in this snapshot') : 'Source unavailable';
-  if(!records.length) records.push(`record empty ${quote(message)} {}`);
-  return {'activity.ddn': `ddn "0.5"; module "scratchrobin.firebird.activity";
-    data observations {${records.join('\n')}}
-    view activity ${quote(selection.label)} { data: [@observations];
-      projection {kind: table; profile: "table.records@1";
-        records: [${rows.length ? rows.map((_, index) => `@observations.r${index}`).join(',') : '@observations.empty'}];
-        columns: [${rows.length ? selection.fields.map((field) =>
-    `{key:${quote('x_record.' + field)},label:${quote(field.replaceAll('_', ' '))}}`).join(',') : '{key:"name",label:"Observation"}'}];
-      } publication {size: content; fit: none;}
-    }`};
+  return observationTable('activity.ddn','activity',selection.label,rows,selection.fields,'scratchrobin.firebird.activity',message);
 }

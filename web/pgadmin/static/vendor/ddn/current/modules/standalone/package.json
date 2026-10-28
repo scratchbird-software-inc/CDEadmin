@@ -1,0 +1,29 @@
+{
+  "name": "@ddn/standalone",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./api/viewer": {
+      "types": "./src/modular-viewer-api.d.ts",
+      "import": "./src/modular-viewer-api.js"
+    },
+    "./api/designer": {
+      "types": "./src/modular-designer-api.d.ts",
+      "import": "./src/modular-designer-api.js"
+    },
+    "./api/verifier": {
+      "types": "./src/modular-verifier-api.d.ts",
+      "import": "./src/modular-verifier-api.js"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "sideEffects": true,
+  "license": "GPL-2.0-or-later"
+}

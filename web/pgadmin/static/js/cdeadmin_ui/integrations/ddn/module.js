@@ -11,6 +11,7 @@ import React from 'react';
 import {ProjectAssetClient} from '../../projects/ProjectAssetClient';
 import {DDNDesignerSurface} from './DDNDesignerSurface';
 import {DDNViewerSurface} from './DDNViewerSurface';
+import {splitDDNAssetContent} from './contracts';
 
 export const DDN_MODULE_ID = 'cdeadmin.ddn';
 export const PROJECT_ASSET_SERVICE_ID = 'project.assets';
@@ -67,7 +68,7 @@ async function loadBoundAsset(descriptor, context) {
   if(asset?.asset_type !== 'ddn-workspace') {
     throw new Error('The requested project asset is not a DDN workspace.');
   }
-  return {client, asset};
+  return {client, asset, ...splitDDNAssetContent(asset.content)};
 }
 
 export function ddnModuleDefinition() {
@@ -85,9 +86,9 @@ export function ddnModuleDefinition() {
           readOnly: true, editable: false, detachable: true,
           duplicable: true, fullscreen: true, presentation: true,
           restore: async (descriptor, context) => {
-            const {asset} = await loadBoundAsset(descriptor, context);
+            const {snapshot} = await loadBoundAsset(descriptor, context);
             return React.createElement(DDNViewerSurface, {
-              snapshot: asset.content,
+              snapshot,
               presentation: context.presentation === true,
               executeCommand: surfaceCommandExecutor(context),
               onExport: context.onExport,
@@ -101,22 +102,20 @@ export function ddnModuleDefinition() {
           readOnly: true, editable: true, detachable: true,
           duplicable: false, fullscreen: true,
           restore: async (descriptor, context) => {
-            const {client, asset} = await loadBoundAsset(descriptor, context);
+            const {client, asset, snapshot, attachments} = await loadBoundAsset(descriptor, context);
             return React.createElement(DDNDesignerSurface, {
-              snapshot: asset.content,
+              snapshot,
               assetRef: asset.assetRef,
               readOnly: asset.access === 'viewer' || !asset.editor_capable,
-              saveAsset: (payload) => client.saveDDNAsset(payload),
+              saveAsset: (payload) => client.saveDDNAsset({...payload, ...(asset.metadata?{metadata:asset.metadata}:{}), snapshot: {...payload.snapshot,...attachments}}),
               executeCommand: surfaceCommandExecutor(context),
               onStateChange: (state) => context.setSurfaceState?.({
                 dirty: state.persistence !== 'clean',
                 persistence: state.persistence,
                 sourceRevision: state.revision,
               }),
-              onReady: (controller, toolbox) => context.setSurfaceState?.({
-                ddnToolboxItems: toolbox.items,
-                insertToolboxItem: toolbox.insert,
-                ddnBeforeClose: () => controller.isDirty(),
+              onReady: (controller) => context.setSurfaceState?.({
+                ddnBeforeClose: () => controller.beforeClose(),
               }),
               onExport: context.onExport,
               onError: context.onError,
@@ -124,7 +123,7 @@ export function ddnModuleDefinition() {
           },
           canClose: async (_descriptor, context) => {
             try {
-              return (context.ddnBeforeClose ? context.ddnBeforeClose() : context.dirty) ? {
+              return (context.ddnBeforeClose ? await context.ddnBeforeClose() : context.dirty) ? {
                 allowed: false, reason: 'Save or discard the DDN changes first.',
               } : {allowed: true, reason: ''};
             } catch(error) { return {allowed: false, reason: error.message}; }
@@ -170,11 +169,6 @@ export function ddnModuleDefinition() {
         id: 'inspector.ddn.validation', label: 'DDN validation',
         priority: 70, when: (context) => context.surfaceId?.startsWith('diagram.ddn.'),
         render: (context) => context.validation ?? [],
-      }],
-      toolbox: [{
-        id: 'toolbox.ddn.elements', label: 'DDN elements', priority: 40,
-        when: (context) => context.surfaceId === 'diagram.ddn.designer',
-        items: (context) => context.ddnToolboxItems ?? [],
       }],
       status: [{
         id: 'status.ddn.persistence', label: 'DDN save state', priority: 40,

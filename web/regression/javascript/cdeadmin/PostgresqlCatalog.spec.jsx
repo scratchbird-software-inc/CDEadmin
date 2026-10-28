@@ -6,7 +6,7 @@ jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
   DDNViewerSurface: props => {mockViewer = props; return <div>Native DDN viewer</div>;},
   DDNDesignerSurface: props => {mockDesigner = props; return <div>Native DDN designer</div>;},
 }));
-const snapshot = {format: 'ddn-workspace@1', entry: 'catalog.ddn', view: 'inventory_1', files: {'catalog.ddn': 'ddn "0.5"; module "scratchrobin.postgresql.catalog";'}};
+const snapshot = {format: 'ddn-source-workspace@1', entry: 'catalog.ddn', view: 'inventory_1', files: {'catalog.ddn': 'version ddn-next-1\n// ScratchRobin mapping: scratchrobin.postgresql.catalog\n'}};
 const result = {snapshot, views: [{id: 'inventory_1', entry: 'catalog.ddn', label: 'Inventory'}],
   provenance: {warnings: ['Explicit incomplete coverage']}, objects: []};
 const Component = withTheme(PostgresqlCatalog);
@@ -33,7 +33,7 @@ describe('PostgreSQL native catalog DDN', () => {
     await screen.findByText('Native DDN viewer');
     fireEvent.click(screen.getByRole('button', {name: 'Edit DDN draft'}));
     const draft = {...snapshot, files: {'catalog.ddn': snapshot.files['catalog.ddn'] + '\n// authored'}};
-    act(() => mockDesigner.onReady({snapshot: () => draft}));
+    act(() => mockDesigner.onReady({snapshot: async () => draft}));
     fireEvent.click(screen.getByRole('button', {name: 'Keep draft'}));
     await waitFor(() => expect(screen.queryByText('Native DDN designer')).not.toBeInTheDocument());
     fireEvent.click(await screen.findByRole('button', {name: 'Capture metadata'}));
@@ -55,7 +55,7 @@ describe('PostgreSQL native catalog DDN', () => {
     await screen.findByText('An imported or edited document is retained separately from the latest live capture.');
     fireEvent.click(screen.getByRole('button', {name: 'Edit DDN draft'}));
     expect(mockDesigner.snapshot.files['catalog.ddn']).toBe(source);
-    expect(mockDesigner.snapshot.format).toBe('ddn-workspace@1');
+    expect(mockDesigner.snapshot.format).toBe('ddn-source-workspace@1');
   });
 
   it('keeps the initial baseline while refreshing and sends a three-way preview', async () => {
@@ -104,7 +104,7 @@ describe('PostgreSQL native catalog DDN', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Edit relational DDN'}));
     expect(mockDesigner.snapshot).toEqual(diagram.snapshot);
     const draft = {...diagram.snapshot, files: {'relations.ddn': 'authored relations'}};
-    act(() => mockDesigner.onReady({snapshot: () => draft}));
+    act(() => mockDesigner.onReady({snapshot: async () => draft}));
     post.mockResolvedValue({baseline: 'original catalog', desired: 'authored catalog'});
     fireEvent.click(screen.getByRole('button', {name: 'Keep draft'}));
     await waitFor(() => expect(screen.queryByText('Native DDN designer')).not.toBeInTheDocument());
@@ -150,4 +150,20 @@ describe('PostgreSQL native catalog DDN', () => {
       database_target_id: 'postgresql-database:42', review_id: 'review'}}));
   });
 
+});
+
+
+it('ignores a source capture that completes after selecting another database', async () => {
+  const post=jest.fn().mockResolvedValue(result);
+  const {rerender}=render(<Component post={post} databaseTargetId="postgresql-database:42" />);
+  fireEvent.click(await screen.findByRole('button',{name:'Capture metadata'}));
+  await screen.findByText('Native DDN viewer');
+  fireEvent.click(screen.getByRole('button',{name:'Edit DDN draft'}));
+  let complete;
+  act(()=>mockDesigner.onReady({snapshot:()=>new Promise(resolve=>{complete=resolve;})}));
+  fireEvent.click(screen.getByRole('button',{name:'Keep draft'}));
+  rerender(<Component post={post} databaseTargetId="postgresql-database:43" />);
+  await act(async()=>complete(snapshot));
+  expect(screen.queryByText('An imported or edited document is retained separately from the latest live capture.')).toBeNull();
+  expect(post).toHaveBeenCalledTimes(1);
 });

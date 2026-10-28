@@ -31,7 +31,7 @@ def safe_integer(text):
 def parse(source):
     if not isinstance(source, str) or len(source.encode('utf-8')) > MAX_BYTES:
         raise ValueError('Data archive exceeds 8 MiB')
-    if re.match(r'\s*ddn\s', source):
+    if not source.lstrip().startswith(('{', '[')):
         from .firebird_data_ddn import read
         return parse(read(source))
     try:
@@ -39,7 +39,7 @@ def parse(source):
                            parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite JSON number')))
     except (ValueError, RecursionError):
         raise ValueError('Invalid data archive JSON or duplicate property') from None
-    if isinstance(value, dict) and value.get('format') == 'ddn-workspace@1':
+    if isinstance(value, dict) and value.get('format') == 'ddn-source-workspace@1':
         from .firebird_data_ddn import read
         return parse(read(source))
     if (not isinstance(value, dict) or value.get('format') != 'scratchrobin.firebird.data@1' or

@@ -27,7 +27,7 @@ def test_native_data_capture_exact_values_bounds_and_transaction_isolation(tmp_p
         result = provider.capture_data(route, identity, endpoint_id='ep', target_id='owned', row_limit=1)
         assert result['acquisition']['rows'] == 1
         assert result['acquisition']['more_rows_observed']
-        assert result['snapshot']['format'] == 'ddn-workspace@1'
+        assert result['snapshot']['format'] == 'ddn-source-workspace@1'
         assert [column['name'] for column in result['columns']] == ['id', 'amount', 'payload']
         assert '1.230' in json.dumps(result['snapshot'])
         assert owner.execute('SELECT COUNT(*) FROM "s:x"."t:y"').fetchone() == (3,)

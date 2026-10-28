@@ -1,4 +1,4 @@
-import {admitWorkspace} from './workspace_admission.mjs';
+import {admitWorkspace, mapping} from './workspace_admission.mjs';
 import {Buffer} from 'node:buffer';
 let input = '';
 try {
@@ -8,30 +8,24 @@ try {
   }
   const snapshot = JSON.parse(input), rows = [], ordinals = new Set(), payload = [];
   let header = null;
-  for(const document of admitWorkspace(snapshot, 'scratchrobin.result.static').values()) {
-    for(const block of document.declarations) {
-      if(!['data', 'view', 'format'].includes(block.type)) throw new Error();
-      if(block.type !== 'data') continue;
-      if(!['provenance', 'rows', 'native_payload'].includes(block.id) || block.children.length > 100) throw new Error();
-      for(const row of block.children) {
-        if(row.type !== 'object' || row.props.kind !== 'record' || row.children.length) throw new Error();
-        const facts = row.props.x_record;
-        if(block.id === 'native_payload') {
-          if(!Number.isInteger(facts?.ordinal) || facts.ordinal < 1 || facts.ordinal > 4 ||
-            facts.encoding !== 'arrow-ipc-base64' || typeof facts.data !== 'string' ||
-            Object.keys(facts).sort().join() !== 'data,encoding,ordinal' || !/^[A-Za-z0-9+/]*={0,2}$/.test(facts.data)) throw new Error();
-          payload.push(facts);
-        } else if(block.id === 'provenance') {
-          if(block.children.length !== 1 || typeof facts?.native_json !== 'string' || Object.keys(facts).join() !== 'native_json') throw new Error();
-          if(header !== null && header !== facts.native_json) throw new Error();
-          header = facts.native_json;
-        } else {
-          if(row.id === 'empty' && !facts) continue;
-          if(!/^r_[1-9][0-9]*$/.test(row.id) || ordinals.has(row.id) || typeof facts?.values_json !== 'string' || rows.length >= 6000) throw new Error();
-          ordinals.add(row.id);
-          rows.push({ordinal: Number(row.id.slice(2)), values: facts.values_json,
-            display: Object.fromEntries(Object.entries(facts).filter(([key]) => key !== 'values_json'))});
-        }
+  for(const document of (await admitWorkspace(snapshot, 'scratchrobin.result.static')).values()) {
+    for(const row of document.records) {
+      if(row.kind !== 'definition') continue;
+      const meta=mapping(row.record), block=meta?.block, facts=meta?.record;
+      if(row.record.role!=='record' || !meta || !['provenance','rows','native_payload'].includes(block)) throw new Error();
+      if(block==='native_payload') {
+        if(!Number.isInteger(facts?.ordinal) || facts.ordinal<1 || facts.ordinal>4 || facts.encoding!=='arrow-ipc-base64' ||
+          typeof facts.data!=='string' || Object.keys(facts).sort().join()!=='data,encoding,ordinal' || !/^[A-Za-z0-9+/]*={0,2}$/.test(facts.data)) throw new Error();
+        payload.push(facts);
+      } else if(block==='provenance') {
+        if(typeof facts?.native_json!=='string' || Object.keys(facts).join()!=='native_json') throw new Error();
+        if(header!==null && header!==facts.native_json) throw new Error();header=facts.native_json;
+      } else {
+        const identity=row.ref.id.slice('rows.'.length);
+        if(identity==='empty' && !facts.values_json) continue;
+        if(!/^r_[1-9][0-9]*$/.test(identity) || ordinals.has(identity) || typeof facts?.values_json!=='string' || rows.length>=6000) throw new Error();
+        ordinals.add(identity);rows.push({ordinal:Number(identity.slice(2)),values:facts.values_json,
+          display:Object.fromEntries(Object.entries(facts).filter(([k])=>k!=='values_json'))});
       }
     }
   }

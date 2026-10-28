@@ -41,8 +41,6 @@ ACCESS = {'viewer': 1, 'editor': 2, 'manager': 3, 'owner': 4}
 VALIDATION_STATES = frozenset({'unknown', 'valid', 'warning', 'invalid'})
 MAX_ASSET_BYTES = 64 * 1024 * 1024
 MAX_METADATA_BYTES = 256 * 1024
-MAX_DDN_FILES = 1024
-MAX_DDN_FILE_BYTES = 8 * 1024 * 1024
 SCHEMA_COMPARE_ASSET_TYPE = 'cdeadmin.schema_compare.v1'
 SCHEMA_COMPARE_SCHEMA = 'cdeadmin.schema-compare.asset.v1'
 SCHEMA_COMPARE_DIFF_STATES = frozenset({
@@ -313,31 +311,34 @@ def _path(value):
 
 
 def _ddn_snapshot(value):
+    from .ddn_source import validate_workspace
     if not isinstance(value, dict):
         raise ProjectAssetError('DDN snapshot must be an object')
-    if value.get('format') not in (
-        'ddn-workspace@1', 'ddn-live-snapshot@0.1'
-    ):
-        raise ProjectAssetError('DDN snapshot format is unsupported')
-    files = value.get('files')
-    if not isinstance(files, dict) or not 1 <= len(files) <= MAX_DDN_FILES:
-        raise ProjectAssetError('DDN source file count is invalid')
-    total = 0
-    for name, source in files.items():
-        if not isinstance(name, str) or not name.endswith('.ddn'):
-            raise ProjectAssetError('DDN source path is invalid')
-        _path(name)
-        if not isinstance(source, str):
-            raise ProjectAssetError('DDN source must be text')
-        size = len(source.encode('utf-8'))
-        if size > MAX_DDN_FILE_BYTES:
-            raise ProjectAssetError('DDN source file exceeds its size limit')
-        total += size
-    if total > MAX_ASSET_BYTES:
-        raise ProjectAssetError('DDN workspace exceeds its size limit')
-    if not isinstance(value.get('entry'), str) or not isinstance(
-            value.get('view'), str):
-        raise ProjectAssetError('DDN snapshot requires entry and view')
+    source_keys = {'format', 'entry', 'view', 'files'}
+    sidecars = set(value) - source_keys
+    # Native design storage retains its baseline as content, not size-limited
+    # display metadata. These storage attachments never enter the DDN SourceSet.
+    if sidecars:
+        if len(sidecars) != 1 or not sidecars <= {
+                engine + 'Design' for engine in ('firebird', 'mysql', 'mariadb', 'duckdb', 'sqlite')}:
+            raise ProjectAssetError('DDN workspace requires authored source; legacy appearance or transient values cannot be persisted')
+        attachment = value[next(iter(sidecars))]
+        if (not isinstance(attachment, dict) or set(attachment) != {'baseline'} or
+                not isinstance(attachment['baseline'], dict) or set(attachment['baseline']) != source_keys):
+            raise ProjectAssetError('Invalid native design baseline')
+        _ddn_snapshot(attachment['baseline'])
+    source = {key: child for key, child in value.items() if key in source_keys}
+    if source.get('format') != 'ddn-source-workspace@1':
+        raise ProjectAssetError('DDN snapshot format is unsupported; explicit migration is required')
+    if isinstance(source.get('files'), dict):
+        for name, text in source['files'].items():
+            _path(name)
+            if not isinstance(text, str):
+                raise ProjectAssetError('DDN source must be text')
+    try:
+        validate_workspace(source)
+    except ValueError as error:
+        raise ProjectAssetError('DDN source is invalid or legacy; explicit migration is required') from error
     return value
 
 

@@ -271,22 +271,18 @@ def qualify(route, password, evidence, *, reply_loss=False, multi_database=False
             snapshot = export_workspace({'result_id':'native-proof', 'execution_id':'native-proof',
                 'schema':{'columns':pages[0]['columns']}, 'complete':True,
                 'export_coverage':{'stored_records':1,'exported_records':1}}, [row])
-            runtime = (ROOT / 'web/pgadmin/static/vendor/ddn/current/ddn.mjs').as_uri()
-            script = "import runtime from " + json.dumps(runtime) + ";" + """
+            runtime = (ROOT / 'tools/ddn_render.mjs').as_uri()
+            script = "import {renderWorkspace} from " + json.dumps(runtime) + ";" + """
               let text='';for await(const chunk of process.stdin) text+=chunk;
-              const snapshot=JSON.parse(text),source=snapshot.files[snapshot.entry];
-              const parsed=runtime.parse(source,snapshot.entry);
-              const rows=parsed.declarations.find(x=>x.id==='rows').children;
-              const workspace=runtime.createWorkspace(snapshot.files);
-              try {const rendered=workspace.renderSync({entry:snapshot.entry,view:snapshot.view});
-                if(rendered.diagnostics.some(x=>x.severity==='error')) throw new Error('DDN rendering failed');
-              } finally {workspace.destroy();}
-              process.stdout.write(rows[0].props.x_record.values_json);
+              const result=await renderWorkspace(JSON.parse(text));
+              const row=result.records.find(item=>item.facts?.block==='rows' && item.facts.record?.values_json);
+              if(!result.views.length || !row)throw Error('DDN capture or data mapping missing');
+              process.stdout.write(row.facts.record.values_json);
             """
             exported = subprocess.run(['node','--input-type=module','-e',script],input=snapshot,
                 capture_output=True,timeout=15,check=True)
             assert json.loads(exported.stdout) == row
-            receipt['checks'].append('native-buffered-result-ddn-exact-values-duplicate-columns-and-public-renderer')
+            receipt['checks'].append('native-buffered-result-ddn-exact-values-duplicate-columns-and-public-sdk-capture')
             pages = execute(
                 'SELECT generate_series(1,777); SELECT 42 AS answer')
             assert sum(len(p['rows']) for p in pages) == 778

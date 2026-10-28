@@ -1,3 +1,4 @@
+import {recordSource,sourceHeader,tableSource,viewSource,ref} from './source.js';
 import BigNumber from 'bignumber.js';
 
 export const RANK_FIELDS = Object.freeze({
@@ -9,7 +10,6 @@ export const RANK_FIELDS = Object.freeze({
     'page_reads_per_second', 'page_writes_per_second', 'oldest_age_seconds'],
   version_distribution: ['count'],
 });
-const quote = (value) => JSON.stringify(String(value ?? 'Unavailable'));
 
 export function fleetRankingSample(snapshot, engineMode=false) {
   const servers = engineMode ? snapshot?.servers || [] : [{
@@ -53,26 +53,16 @@ export function firebirdRankingFiles(sample, category, field) {
   const group = sample?.groups?.[category];
   const rows = rankingRows(group?.status === 'available' ? group.values?.rows || [] : [], field);
   const points = rows.filter((row) => row.numeric !== null);
-  const records = rows.map((row, index) => `record r${index} ${quote(row.label)} {
-    x_record: {exact:${quote(row.raw)},geometry:${quote(row.numeric === null ? 'Outside chart range' : 'Approximate')},
-      value:${row.numeric === null ? 0 : row.numeric},label:${quote(row.label)}}; }`).join('\n');
-  const chart = points.length ? `view bars "Top20 within captured coverage" {data:[@observations];
-    projection {kind:chart;profile:"chart.basic@1";mark:bar;
-      records:[${rows.flatMap((row, index) => row.numeric === null ? [] : [`@observations.r${index}`]).join(',')}];
-      x:"x_record.label";y:"x_record.value";width:1000px;height:400px;}
-    publication {size:content;fit:none;}}
-  ` : '';
-  return {'ranking.ddn': `ddn "0.5"; module "scratchrobin.firebird.ranking";
-    data observations {${records || 'record empty "No comparable captured observations" {}'}}
-    ${chart}
-    view exact "Exact ranked observations" {data:[@observations];projection {kind:table;profile:"table.records@1";
-      records:[${rows.length ? rows.map((_, index) => `@observations.r${index}`).join(',') : '@observations.empty'}];
-      columns:[{key:"name",label:"Native category"},{key:"x_record.exact",label:"Exact value"},
-        {key:"x_record.geometry",label:"Chart representation"}];} publication {size:content;fit:none;}}
-    view ranking ${quote(field.replaceAll('_', ' ') + (group?.values?.truncated ? ' — capture truncated' : ' — captured observations'))} {
-      data:[@observations];projection {kind:panels;profile:"panels.composed@1";columns:1;
-        panels:[${points.length ? '{id:"bars",title:"Approximate bars",row:0,column:0,view:@bars},' : ''}
-          {id:"exact",title:"Exact values",row:${points.length ? 1 : 0},column:0,view:@exact}];}
-      publication {size:content;fit:none;}}
-  `};
+  const table=rows.length?rows:[{label:'No comparable captured observations',raw:'Unavailable',numeric:null}];
+  const records=table.map((row,index)=>recordSource('r'+index,row.label,{exact:row.raw,
+    geometry:row.numeric===null?'Outside chart range':'Approximate',value:row.numeric ?? 0,label:row.label})).join('');
+  const chart=points.length?viewSource('bars','Top20 within captured coverage','chart.basic@1',
+    {mark:'bar',x:'metadata.x_record.label',y:'metadata.x_record.value'},rows.flatMap((row,index)=>row.numeric===null?[]:['r'+index])):'';
+  return {'ranking.ddn':sourceHeader('scratchrobin.firebird.ranking')+records+chart+
+    tableSource('exact','Exact ranked observations',table.map((_,index)=>'r'+index),[
+      {key:'title',label:'Native category'},{key:'metadata.x_record.exact',label:'Exact value'},
+      {key:'metadata.x_record.geometry',label:'Chart representation'}])+
+    viewSource('ranking',field.replaceAll('_',' ')+(group?.values?.truncated?' — capture truncated':' — captured observations'),
+      'panels.composed@1',{columns:1,panels:[...(points.length?[{target:ref('bars'),kind:'view',title:'Approximate bars',layout:{row:0,column:0}}]:[]),
+        {target:ref('exact'),kind:'view',title:'Exact values',layout:{row:points.length?1:0,column:0}}]})};
 }

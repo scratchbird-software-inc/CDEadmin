@@ -1,3 +1,4 @@
+import {observationTable} from '../cdeadmin_ui/integrations/ddn/source';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, MenuItem, TextField} from '@mui/material';
@@ -6,25 +7,14 @@ import url_for from 'sources/url_for';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 
-const quoted = (value) => JSON.stringify(String(value ?? 'Unavailable'));
 export function statementFiles(result) {
-  const rows = ['sql_text', 'explained_plan'].map((field) => `record ${field} ${quoted(field.replaceAll('_', ' '))} {
-    x_record: {text: ${quoted(result[field]?.value)}, truncated: ${quoted(result[field]?.truncated ? 'Yes' : 'No')}};
-  }`);
-  if(result.call_stack) rows.push(`record call_stack "Native PSQL call stack" {
-    x_record: {text:${quoted(result.call_stack.status === 'available' ?
-    (result.call_stack.rows?.length ? result.call_stack.rows.map((row) =>
-      `${row.call_id} caller=${row.caller_id ?? 'none'} ${row.package_name ? row.package_name + '.' : ''}${row.object_name ?? 'dynamic SQL'} line=${row.source_line ?? 'unknown'} column=${row.source_column ?? 'unknown'}`).join('\n') : 'No visible calls in this snapshot') : 'Unavailable')},
-      truncated:${quoted(result.call_stack.truncated ? 'Yes' : 'No')}}; }`);
-  return {'statement.ddn': `ddn "0.5"; module "scratchrobin.firebird.statement";
-    data details {${rows.join('\n')}}
-    view statement "Native statement inspection" {data: [@details];
-      projection {kind: table; profile: "table.records@1";
-        records: [@details.sql_text,@details.explained_plan${result.call_stack ? ',@details.call_stack' : ''}];
-        columns: [{key:"name",label:"Source"},{key:"x_record.text",label:"Native text"},
-          {key:"x_record.truncated",label:"Truncated"}];
-      } publication {size: content; fit: none;}
-    }`};
+  const rows=['sql_text','explained_plan'].map(field=>({source:field.replaceAll('_',' '),
+    text:result[field]?.value ?? 'Unavailable',truncated:result[field]?.truncated?'Yes':'No'}));
+  if(result.call_stack) rows.push({source:'Native PSQL call stack',text:result.call_stack.status==='available'?
+    (result.call_stack.rows?.length?result.call_stack.rows.map(row=>
+      `${row.call_id} caller=${row.caller_id ?? 'none'} ${row.package_name?row.package_name+'.':''}${row.object_name ?? 'dynamic SQL'} line=${row.source_line ?? 'unknown'} column=${row.source_column ?? 'unknown'}`).join('\n'):'No visible calls in this snapshot'):'Unavailable',
+  truncated:result.call_stack.truncated?'Yes':'No'});
+  return observationTable('statement.ddn','statement','Native statement inspection',rows,['source','text','truncated'],'scratchrobin.firebird.statement');
 }
 
 export default function FirebirdStatementDetails({serverId, targetId, sample, compiled=false}) {

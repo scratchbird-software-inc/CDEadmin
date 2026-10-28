@@ -135,14 +135,48 @@ def test_graphical_native_relationship_changes_cannot_disappear_from_review(monk
 def test_native_relationship_reader_captures_stable_endpoints_but_labels_are_presentation():
     from pgadmin.cdeadmin.workspace.firebird_relational_review import read_relations
     import json
-    source='ddn "0.6"; module "scratchrobin.mysql.relations"; data relations {'
-    for name in ('source','target'):
-        source+='object '+name+' '+json.dumps(name)+' {kind:table;uid:"mysql:ep:target:'+name+'";x_record:{resource_id:"'+name+'",native_json:"{}"};}'
-    source+='relation fk "display label" @source -> @target {kind:ref;enforcement:database;uid:"fk";x_record:{native_json:"[]"};}} view v {data:[@relations];projection {kind:graph;profile:"ddn@1";}}'
-    snapshot={'format':'ddn-workspace@1','entry':'relations.ddn','view':'v','files':{'relations.ddn':source}}
+    from pgadmin.cdeadmin.workspace import ddn_source as ddn
+    module='scratchrobin.mysql.relations'
+    source=ddn.header(module)+''.join(ddn.relation_object(name,name,'table','mysql:ep:target:'+name,{'resource_id':name,'native_json':'{}'},[],module) for name in ('source','target'))
+    source+=ddn.relation_edge('fk','display label','source','target','fk',{'native_json':'[]'},module)
+    source+=ddn.graph_view('v','Native',['source','target'],[('fk','source','target')])
+    snapshot=ddn.workspace({'relations.ddn':source},'relations.ddn','v')
     result=read_relations(snapshot,engine='mysql')
     edges=next(row['graphical_relationships'] for row in result.values() if 'graphical_relationships' in row)
-    assert edges==[{'uid':'fk','kind':'ref','enforcement':'database','native_json':'[]','source':'source','target':'target'}]
+    assert edges==[{'uid':'fk','from_ref':'source','to_ref':'target','kind':'ref','enforcement':'database','native_json':'[]','source':'source','target':'target'}]
     snapshot['files']['relations.ddn']=source.replace('display label','new presentation label')
     updated=read_relations(snapshot,engine='mysql')
     assert next(row['graphical_relationships'] for row in updated.values() if 'graphical_relationships' in row)==edges
+
+
+def test_new_graphical_columns_reach_explicit_native_admission_through_current_ddn():
+    from pgadmin.cdeadmin.workspace import ddn_source as ddn
+    from pgadmin.cdeadmin.workspace.firebird_relational_review import read_relations
+    from pgadmin.cdeadmin.workspace.mysql_relational_fields import merge_fields
+    module='scratchrobin.mysql.relations'
+    source=ddn.header(module)+ddn.relation_object('t','t','table','mysql:ep:target:table',
+        {'resource_id':'table','native_json':'{"database":"db","definition":"CREATE TABLE `t` (`id` int)"}'},[],module)
+    source+=ddn.declaration('element','new-field','field',{'title':'n`é','content':{'datatype':'varchar(80)','nullable':True},'description':"owner's note"})
+    source=source.replace('members empty list','members\n            item\n                id "new-field"')
+    source+=ddn.graph_view('v','Native',['t'])
+    snapshot=ddn.workspace({'relations.ddn':source},'relations.ddn','v')
+    desired=read_relations(snapshot,engine='mysql')['table']
+    before={**desired,'name':'t','kind':'table','fields':{}}
+    desired={**desired,'name':'t','kind':'table'}
+    with pytest.raises(ValueError,match='reconciliation'):merge_fields(before,desired,'')
+    changed=merge_fields(before,desired,'',allow_new_columns=True)
+    assert "`n``é` varchar(80) NULL COMMENT 'owner''s note'" in changed['definition']
+    # Presentation is never a request to drop an unshown native column.
+    assert '`id` int' in changed['definition']
+
+
+@pytest.mark.parametrize('title', ['quoted " native\r\ncolumn', '列😀' * 600])
+def test_unchanged_native_field_names_survive_display_escaping_and_shortening(title):
+    from pgadmin.cdeadmin.workspace import ddn_source as ddn
+    from pgadmin.cdeadmin.workspace.firebird_relational_review import read_relations
+    module = 'scratchrobin.mysql.relations'
+    field = ddn.native_field('f', title, 'native-field-uid', {'datatype': 'int'})
+    source = ddn.header(module) + ddn.relation_object('t', 'Native', 'table', 'mysql:ep:target:table',
+        {'resource_id': 'table', 'native_json': '{}'}, [field], module) + ddn.graph_view('v', 'Native', ['t'])
+    row = read_relations(ddn.workspace({'relations.ddn': source}, 'relations.ddn', 'v'), engine='mysql')['table']
+    assert row['fields']['native-field-uid']['_label'] == title

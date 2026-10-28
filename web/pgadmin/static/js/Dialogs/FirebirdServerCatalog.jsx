@@ -1,3 +1,4 @@
+import {recordSource,sourceHeader,tableSource,sourceWorkspace} from '../cdeadmin_ui/integrations/ddn/source';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
@@ -7,22 +8,19 @@ import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const MAX_BYTES = 64 * 1024 * 1024;
 export function catalogBundle(endpoint, entries) {
-  const q = JSON.stringify;
-  const records = entries.map((entry, index) => `record db_${index} ${q(entry.label)} {
-    uid: ${q('firebird:' + endpoint.endpoint_id + ':' + entry.target_id + ':database')};
-    x_record: {target_id:${q(entry.target_id)},status:${q(entry.status)},coverage:${q(entry.catalog?.provenance?.coverage || 'unavailable')},objects:${q(String(entry.catalog?.provenance?.objects ?? 'unknown'))}};
-  }`).join('\n');
-  const source = `ddn "0.5"; module "scratchrobin.firebird.server";
-    data databases {${records}}
-    view server "Registered Firebird databases" {data: [@databases]; projection {kind: table; profile: "table.records@1";
-      records: [${entries.map((_, index) => '@databases.db_' + index).join(',')}]; columns: [{key:"name",label:"Database"},{key:"x_record.status",label:"Capture"},
-      {key:"x_record.coverage",label:"Coverage"},{key:"x_record.objects",label:"Objects"}];}}`;
+  const source=sourceHeader('scratchrobin.firebird.server')+entries.map((entry,index)=>
+    recordSource('db_'+index,entry.label,{target_id:entry.target_id,status:entry.status,
+      coverage:entry.catalog?.provenance?.coverage || 'unavailable',objects:String(entry.catalog?.provenance?.objects ?? 'unknown'),
+      uid:'firebird:'+endpoint.endpoint_id+':'+entry.target_id+':database'})).join('')+
+    tableSource('server','Registered Firebird databases',entries.map((_,index)=>'db_'+index),[
+      {key:'title',label:'Database'},{key:'metadata.x_record.status',label:'Capture'},
+      {key:'metadata.x_record.coverage',label:'Coverage'},{key:'metadata.x_record.objects',label:'Objects'}]);
   return {format: 'scratchrobin.firebird.server-catalog@1',
     endpoint: {endpoint_id: endpoint.endpoint_id, display_name: endpoint.display_name},
     scope: 'selected registered databases', consistency: 'independent database observations; not an atomic server snapshot',
     captured_at: new Date().toISOString(), complete: entries.length > 0 && entries.every(item =>
       item.status === 'captured' && item.catalog.provenance.coverage === 'visible-catalog'),
-    overview: {format: 'ddn-workspace@1', entry: 'server.ddn', view: 'server', files: {'server.ddn': source}}, entries};
+    overview: sourceWorkspace({'server.ddn':source},'server.ddn','server'), entries};
 }
 
 export default function FirebirdServerCatalog({endpoint, targets, post}) {

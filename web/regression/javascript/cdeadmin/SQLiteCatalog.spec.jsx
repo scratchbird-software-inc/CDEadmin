@@ -8,7 +8,7 @@ jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
 jest.mock('sources/Dialogs/FirebirdCatalogDesigner', () => () => null);
 
 const Component = withTheme(SQLiteCatalog);
-const snapshot = {format: 'ddn-workspace@1', entry: 'catalog.ddn',
+const snapshot = {format: 'ddn-source-workspace@1', entry: 'catalog.ddn',
   view: 'inventory_1', files: {'catalog.ddn': 'native facts'}};
 
 it('generates an untyped and computed column design from properties before native review', async () => {

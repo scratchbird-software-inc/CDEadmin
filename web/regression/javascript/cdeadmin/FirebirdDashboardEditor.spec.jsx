@@ -1,58 +1,138 @@
-import {act, configure, getConfig, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import { act, configure, getConfig, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import FirebirdDashboardEditor from 'sources/Dialogs/FirebirdDashboardEditor';
 import getApiInstance from 'sources/api_instance';
 import pgAdmin from 'sources/pgadmin';
-import viewer from '../../../pgadmin/static/vendor/ddn/current/ddn.mjs';
-import {loadDDNLibraries} from 'sources/cdeadmin_ui/integrations/ddn/library';
-import {withTheme} from '../fake_theme';
-
+import { libraries } from './ddnTestRuntime';
+import { loadDDNLibraries } from 'sources/cdeadmin_ui/integrations/ddn/library';
+import { withTheme } from '../fake_theme';
 const previousAsyncTimeout = getConfig().asyncUtilTimeout;
-beforeAll(() => configure({asyncUtilTimeout: Math.max(previousAsyncTimeout, 5000)}));
-afterAll(() => configure({asyncUtilTimeout: previousAsyncTimeout}));
-
+beforeAll(() => configure({
+  asyncUtilTimeout: Math.max(previousAsyncTimeout, 5000)
+}));
+afterAll(() => configure({
+  asyncUtilTimeout: previousAsyncTimeout
+}));
 jest.mock('sources/api_instance');
 jest.mock('sources/cdeadmin_ui/integrations/ddn/library');
 jest.mock('sources/url_for', () => () => '/definition');
 let mockProps;
 jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
-  DDNDesignerSurface: (props) => {
+  DDNDesignerSurface: props => {
     mockProps = props;
-    return <button onClick={() => props.saveAsset({schema: 'draft'})}>Save test draft</button>;
-  },
+    return <button onClick={() => props.saveAsset({
+      schema: 'draft'
+    })}>Save test draft</button>;
+  }
 }));
-
 describe('separate Firebird dashboard draft editor', () => {
   const Component = withTheme(FirebirdDashboardEditor);
   let api, close, closing, remove;
   beforeEach(() => {
-    close = jest.fn(); remove = jest.fn();
-    pgAdmin.Browser = {docker: {default_workspace: {close,
-      eventBus: {registerListener: (_event, callback) => { closing = callback; return remove; }}}},
-    notifier: {confirm: jest.fn(), alert: jest.fn()}};
-    api = {get: jest.fn(async () => ({data: {data: {assetRef: {assetVersion: 0}, snapshot: null}}})),
-      put: jest.fn(async () => ({data: {data: {assetRef: {assetVersion: 1}, state: 'draft'}}}))};
-    loadDDNLibraries.mockResolvedValue({viewer});
+    close = jest.fn();
+    remove = jest.fn();
+    pgAdmin.Browser = {
+      docker: {
+        default_workspace: {
+          close,
+          eventBus: {
+            registerListener: (_event, callback) => {
+              closing = callback;
+              return remove;
+            }
+          }
+        }
+      },
+      notifier: {
+        confirm: jest.fn(),
+        alert: jest.fn()
+      }
+    };
+    api = {
+      get: jest.fn(async () => ({
+        data: {
+          data: {
+            assetRef: {
+              assetVersion: 0
+            },
+            snapshot: null
+          }
+        }
+      })),
+      put: jest.fn(async () => ({
+        data: {
+          data: {
+            assetRef: {
+              assetVersion: 1
+            },
+            state: 'draft'
+          }
+        }
+      }))
+    };
+    loadDDNLibraries.mockResolvedValue(libraries);
     getApiInstance.mockReturnValue(api);
   });
   it('loads scoped definitions, seeds no live telemetry, saves only through definition route', async () => {
-    const {unmount} = render(<Component serverId={7} targetId="db" panelId="editor" />);
-    await screen.findByRole('button', {name: 'Save test draft'});
+    const {
+      unmount
+    } = render(<Component serverId={7} targetId="db" panelId="editor" />);
+    await screen.findByRole('button', {
+      name: 'Save test draft'
+    });
     expect(api.get).toHaveBeenCalledWith('/definition?sid=7&target_id=db');
     expect(mockProps.snapshot.files['dashboard.ddn']).toContain('Unavailable');
     expect(screen.getByText('SR-F-001353')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', {name: 'Save test draft'}));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/definition?sid=7&target_id=db', {schema: 'draft'}));
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Save test draft'
+    }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/definition?sid=7&target_id=db', {
+      schema: 'draft'
+    }));
     unmount();
     expect(remove).toHaveBeenCalled();
   });
   it('seeds PostgreSQL catalog identities without storing observed metric values', async () => {
-    loadDDNLibraries.mockResolvedValue({viewer});
-    api.get.mockResolvedValueOnce({data: {data: {assetRef: {assetVersion: 0}, snapshot: null}}});
-    api.get.mockResolvedValueOnce({data: {data: {state: 'collecting', sample_age_seconds: 1, stale_after_seconds: 15,
-      samples: [{scope: 'database', status: 'available', transaction_completed: true,
-        groups: {database: {status: 'available', rows: [{datid: '42', datname: 'qa', xact_commit: '987654321'}]}}}]}}});
-    const {unmount} = render(<Component engine="postgresql" serverId={7} targetId="postgresql-database:42" panelId="postgres-editor" />);
-    await screen.findByRole('button', {name: 'Save test draft'});
+    loadDDNLibraries.mockResolvedValue(libraries);
+    api.get.mockResolvedValueOnce({
+      data: {
+        data: {
+          assetRef: {
+            assetVersion: 0
+          },
+          snapshot: null
+        }
+      }
+    });
+    api.get.mockResolvedValueOnce({
+      data: {
+        data: {
+          state: 'collecting',
+          sample_age_seconds: 1,
+          stale_after_seconds: 15,
+          samples: [{
+            scope: 'database',
+            status: 'available',
+            transaction_completed: true,
+            groups: {
+              database: {
+                status: 'available',
+                rows: [{
+                  datid: '42',
+                  datname: 'qa',
+                  xact_commit: '987654321'
+                }]
+              }
+            }
+          }]
+        }
+      }
+    });
+    const {
+      unmount
+    } = render(<Component engine="postgresql" serverId={7} targetId="postgresql-database:42" panelId="postgres-editor" />);
+    await screen.findByRole('button', {
+      name: 'Save test draft'
+    });
     expect(mockProps.snapshot.files['dashboard.ddn']).toContain('database_42_7161_0');
     expect(mockProps.snapshot.files['dashboard.ddn']).not.toContain('987654321');
     expect(screen.getByText('SR-F-001380')).toBeInTheDocument();
@@ -60,52 +140,113 @@ describe('separate Firebird dashboard draft editor', () => {
     unmount();
   });
   it('guards dirty and unapplied drafts while allowing clean close', async () => {
-    const {unmount} = render(<Component panelId="editor" />);
-    await screen.findByRole('button', {name: 'Save test draft'});
-    act(() => mockProps.onReady({isDirty: () => true}));
+    const {
+      unmount
+    } = render(<Component panelId="editor" />);
+    await screen.findByRole('button', {
+      name: 'Save test draft'
+    });
+    act(() => mockProps.onReady({
+      isDirty: () => true, beforeClose: async()=>true
+    }));
     closing('another');
     expect(close).not.toHaveBeenCalled();
-    closing('editor');
+    await closing('editor');
     expect(pgAdmin.Browser.notifier.confirm).toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
-    act(() => mockProps.onReady({isDirty: () => false}));
-    closing('editor');
+    act(() => mockProps.onReady({
+      isDirty: () => false, beforeClose: async()=>false
+    }));
+    await closing('editor');
     expect(close).toHaveBeenCalledWith('editor', true);
     unmount();
   });
   it('does not offer discard while a save is in flight', async () => {
-    const {unmount} = render(<Component panelId="editor" />);
-    await screen.findByRole('button', {name: 'Save test draft'});
+    const {
+      unmount
+    } = render(<Component panelId="editor" />);
+    await screen.findByRole('button', {
+      name: 'Save test draft'
+    });
     let complete;
-    api.put.mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
+    api.put.mockImplementation(() => new Promise(resolve => {
+      complete = resolve;
+    }));
     const pending = mockProps.saveAsset({});
-    closing('editor');
+    await closing('editor');
     expect(pgAdmin.Browser.notifier.alert).toHaveBeenCalled();
     expect(pgAdmin.Browser.notifier.confirm).not.toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
-    complete({data: {data: {assetRef: {assetVersion: 1}}}});
-    await act(async () => { await pending; });
+    complete({
+      data: {
+        data: {
+          assetRef: {
+            assetVersion: 1
+          }
+        }
+      }
+    });
+    await act(async () => {
+      await pending;
+    });
     unmount();
   });
   it('publishes the exact saved revision only after the draft is clean', async () => {
-    const {unmount} = render(<Component panelId="editor" />);
-    await screen.findByRole('button', {name: 'Save test draft'});
-    act(() => mockProps.onReady({isDirty: () => true}));
-    await act(async () => { await mockProps.saveAsset({}); });
-    fireEvent.click(screen.getByRole('button', {name: 'Publish saved revision'}));
+    const {
+      unmount
+    } = render(<Component panelId="editor" />);
+    await screen.findByRole('button', {
+      name: 'Save test draft'
+    });
+    act(() => mockProps.onReady({
+      isDirty: () => true, beforeClose: async()=>true
+    }));
+    await act(async () => {
+      await mockProps.saveAsset({});
+    });
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Publish saved revision'
+    }));
     await screen.findByText('Save the current draft before publishing.');
-    api.post = jest.fn(async () => ({data: {data: {version: 1}}}));
-    act(() => mockProps.onReady({isDirty: () => false}));
-    fireEvent.click(screen.getByRole('button', {name: 'Publish saved revision'}));
+    api.post = jest.fn(async () => ({
+      data: {
+        data: {
+          version: 1
+        }
+      }
+    }));
+    act(() => mockProps.onReady({
+      isDirty: () => false, beforeClose: async()=>false
+    }));
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Publish saved revision'
+    }));
     await screen.findByText('Published revision 1');
-    expect(api.post).toHaveBeenCalledWith('/definition', {source_version: 1, expected_version: 0});
+    expect(api.post).toHaveBeenCalledWith('/definition', {
+      source_version: 1,
+      expected_version: 0
+    });
     unmount();
   });
   it('preserves conflict codes for DDN session conflict handling', async () => {
-    const {unmount} = render(<Component panelId="editor" />);
-    await screen.findByRole('button', {name: 'Save test draft'});
-    api.put.mockRejectedValue({response: {data: {code: 'asset_conflict', errormsg: 'Changed'}}});
-    await expect(mockProps.saveAsset({})).rejects.toMatchObject({code: 'asset_conflict', message: 'Changed'});
+    const {
+      unmount
+    } = render(<Component panelId="editor" />);
+    await screen.findByRole('button', {
+      name: 'Save test draft'
+    });
+    api.put.mockRejectedValue({
+      response: {
+        data: {
+          code: 'asset_conflict',
+          errormsg: 'Changed'
+        }
+      }
+    });
+    await expect(mockProps.saveAsset({})).rejects.toMatchObject({
+      code: 'asset_conflict',
+      message: 'Changed'
+    });
     unmount();
   });
 });

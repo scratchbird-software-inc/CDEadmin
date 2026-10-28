@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 import hashlib
 import json
+from . import ddn_source as ddn
 
 MAX_RESOURCES = 20000
 MAX_BYTES = 8 * 1024 * 1024
@@ -117,17 +118,17 @@ def build_export(resources, *, endpoint_id, target_id, generation,
                        'false' if native_metadata(item, engine).get('system_object') is False else 'unknown'),
             'native_json': _json(native_metadata(item, engine)),
         }
-        records.append('record ' + key + ' ' + _json(item['display_name']) +
-                       ' { uid: ' + _json(engine + ':' + endpoint_id + ':' + str(target_id) + ':' + item['resource_id']) +
-                       '; x_record: {' + ','.join(name + ':' + _json(value)
-                       for name, value in fields.items()) + '}; }')
+        records.append({'identity': key, 'title': item['display_name'], 'fields': fields,
+                        'uid': engine + ':' + endpoint_id + ':' + str(target_id) + ':' + item['resource_id']})
     if not records:
-        records = ['record empty "No objects in the selected visible scope" {}']
+        records = [{'identity': 'empty', 'title': 'No objects in the selected visible scope',
+                    'fields': {'kind': '', 'path_json': '[]', 'system': 'unknown'}, 'uid': None}]
         ids = ['empty']
     blocks, views, view_metadata = [], [], []
     pages, current, units = [], [], 0
     for record, identity in zip(records, ids):
-        size = _units(record) + len(identity) + 100
+        size = _units(ddn.record_definition(record['identity'], record['title'], record['fields'],
+            module=f'scratchrobin.{engine}.catalog', block='catalog_999', uid=record['uid'])) + len(identity) + 100
         if size > MAX_DDN_UNITS - 20000:
             raise ValueError('Record exceeds the paired DDN per-file limit')
         if current and (len(current) == VIEW_LIMIT or units + size > MAX_DDN_UNITS - 20000):
@@ -141,20 +142,17 @@ def build_export(resources, *, endpoint_id, target_id, generation,
         block = 'catalog_' + str(page)
         view_id = 'inventory_' + str(page)
         label = f'Native catalog inventory — page {page}; documentary only'
-        blocks.append('data ' + block + ' {' + '\n'.join([record for record, _ in chunk]) + '}')
-        refs = ['@' + block + '.' + key for key in [identity for _, identity in chunk]]
-        views.append('view ' + view_id + ' ' + _json(label) + ' { data: [@' + block + '''];
-          projection {kind: table; profile: "table.records@1";
-            records: [''' + ','.join(refs) + '''];
-            columns: [{key:"name",label:"Name"}, {key:"x_record.kind",label:"Native kind"},
-              {key:"x_record.path_json",label:"Exact path"}, {key:"x_record.system",label:"System object"}];
-          } publication {size: content; fit: none;}
-        }''')
+        module = f'scratchrobin.{engine}.catalog'
+        blocks.append(''.join(ddn.record_definition(row['identity'], row['title'], row['fields'],
+            module=module, block=block, uid=row['uid']) for row, _ in chunk))
+        views.append(ddn.table_view(view_id, label, [block + '.' + identity for _, identity in chunk], [
+            {'key': 'name', 'label': 'Name'}, {'key': 'x_record.kind', 'label': 'Native kind'},
+            {'key': 'x_record.path_json', 'label': 'Exact path'}, {'key': 'x_record.system', 'label': 'System object'}]))
         view_metadata.append({'id': view_id, 'label': label})
-    blocks.append('data provenance {record capture "Catalog provenance" { x_record: {'
-                  'mapping:' + _json(provenance['mapping']) +
-                  ', native_json:' + _json(_json(provenance)) + '}; }}')
-    header = f'ddn "0.5"; module "scratchrobin.{engine}.catalog";\n'
+    blocks.append(ddn.record_definition('capture', 'Catalog provenance',
+        {'mapping': provenance['mapping'], 'native_json': _json(provenance)},
+        module=f'scratchrobin.{engine}.catalog', block='provenance'))
+    header = ddn.header(f'scratchrobin.{engine}.catalog')
     files, parts = {}, [blocks[-1]]
     if _units(header + parts[0]) > MAX_DDN_UNITS:
         raise ValueError('Provenance exceeds the paired DDN per-file limit')
@@ -177,7 +175,8 @@ def build_export(resources, *, endpoint_id, target_id, generation,
         item['entry'] = name
     if len(files) > MAX_FILES:
         raise ValueError('Catalog exceeds the 64-file workspace limit')
-    snapshot = {'format': 'ddn-workspace@1', 'entry': view_metadata[0]['entry'],
+    ddn.connect_files(files)
+    snapshot = {'format': ddn.FORMAT, 'entry': view_metadata[0]['entry'],
                 'view': 'inventory_1', 'files': files}
     multi = len(files) > 1
     download = _json(snapshot) if multi else files['catalog.ddn']

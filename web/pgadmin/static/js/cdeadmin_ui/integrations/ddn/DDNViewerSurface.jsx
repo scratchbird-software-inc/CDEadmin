@@ -1,12 +1,3 @@
-/////////////////////////////////////////////////////////////
-//
-// CDEadmin - Multi-engine Database Administration
-//
-// Copyright (C) 2013 - 2026, The pgAdmin Development Team
-// This software is released under the PostgreSQL Licence
-//
-//////////////////////////////////////////////////////////////
-
 import {useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Box} from '@mui/material';
@@ -17,199 +8,104 @@ import {ProgressOverlay} from '../../feedback/ProgressOverlay';
 import {StatusBadge} from '../../status/StatusBadge';
 import {loadDDNLibraries} from './library';
 import {validateDDNFiles, validateDDNSnapshot} from './contracts';
+import {sourceSet,checkOpen,entriesOf,selectView,captureSVG,ingestData} from './runtime';
 import FormReference from '../../navigation/FormReference';
 
-function firstView(workspace, requestedEntry, requestedView) {
-  const entries = workspace.entries().filter((entry) => entry.views.length);
-  if(!entries.length) throw new Error('The DDN workspace has no displayable views.');
-  const entry = entries.find((item) => item.file === requestedEntry) ?? entries[0];
-  const view = entry.views.find((item) => item.id === requestedView) ?? entry.views[0];
-  return {entry: entry.file, view: view.id};
-}
-
-export function DDNViewerSurface({files, snapshot, entry, view,
-  presentation=false, viewSelection=false, executeCommand, onExport, onReady, onError, onSelectionChange}) {
-  const selectionCallback = useRef(onSelectionChange);
-  selectionCallback.current = onSelectionChange;
-  const hostRef = useRef(null);
-  const mountedRef = useRef(null);
-  const imageRef = useRef(null);
-  const workspaceRef = useRef(null);
-  const [libraries, setLibraries] = useState(null);
-  const [selection, setSelection] = useState({entry: entry ?? '', view: view ?? ''});
-  const [entries, setEntries] = useState([]);
-  const retainedSelection = useRef(null);
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const sourceFiles = useMemo(() => snapshot ?
-    validateDDNSnapshot(snapshot).files : validateDDNFiles(files),
-  [files, snapshot]);
-
-  useEffect(() => {
-    let active = true;
-    loadDDNLibraries().then((loaded) => {
-      if(active) setLibraries(loaded);
-    }).catch((loadError) => {
+export function DDNViewerSurface(props) {
+  const {files,snapshot,entry,view,presentation=false,viewSelection=false,liveData} = props;
+  const callbacks=useRef(props); callbacks.current=props;
+  const host=useRef(null), image=useRef(null), session=useRef(null), retained=useRef(null);
+  const [entries,setEntries]=useState([]), [selection,setSelection]=useState({entry:'',view:''});
+  const [loading,setLoading]=useState(true), [error,setError]=useState(null), [result,setResult]=useState(null);
+  const sourceFiles=useMemo(()=>snapshot ? validateDDNSnapshot(snapshot).files : validateDDNFiles(files),[files,snapshot]);
+  const sourceSignature=JSON.stringify(sourceFiles);
+  const report=failure=>{setResult(null);image.current?.removeAttribute('src');setError(failure);setLoading(false);callbacks.current.onError?.(failure);};
+  const draw=async(current,chosen)=> {
+    try {
+      await current.viewer.navigate({kind:'expand-view',target:{file:chosen.entry,id:chosen.view}});
+      if(session.current!==current || current.selection!==chosen)return;
+      await current.viewer.navigate({kind:'fit-view',target:{file:chosen.entry,id:chosen.view}});
+      const captured=await captureSVG(current.viewer,chosen);
+      if(session.current!==current || current.selection!==chosen)return;
+      if(presentation && image.current) image.current.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(captured.svg);
+      setResult(captured);setError(null);setLoading(false);callbacks.current.onReady?.(captured);
+    } catch(failure) {
+      if(session.current===current && current.selection===chosen)throw failure;
+    }
+  };
+  useEffect(()=> {
+    let active=true, current;
+    setLoading(true);setError(null);setResult(null);
+    if(image.current) image.current.removeAttribute('src');
+    (async()=> {
+      const libraries=await loadDDNLibraries();
       if(!active) return;
-      setError(loadError);
-      setLoading(false);
-      onError?.(loadError);
-    });
-    return () => { active = false; };
-  }, [onError]);
-
-  useEffect(() => {
-    if(!libraries || !hostRef.current) return undefined;
-    let active = true;
-    setLoading(true);
-    setError(null);
-    const workspace = libraries.viewer.createWorkspace(sourceFiles);
-    workspaceRef.current = workspace;
-    const requested = snapshot ? validateDDNSnapshot(snapshot) : {entry, view};
-    let chosen;
-    try {
-      const retained = retainedSelection.current;
-      const retain = viewSelection && retained && workspace.entries().some((item) =>
-        item.file === retained.entry && item.views.some((itemView) => itemView.id === retained.view));
-      const preferred = retain ? retained : requested;
-      chosen = firstView(workspace, preferred.entry, preferred.view);
-      retainedSelection.current = chosen;
-      setEntries(workspace.entries());
-      setSelection(chosen);
-      const rendered = workspace.renderSync({...chosen,
-        overrides: snapshot?.overrides, layoutState: snapshot?.layoutState?.view === chosen.view ? snapshot.layoutState : undefined});
-      const img = document.createElement('img');
-      img.alt = 'DDN diagram';
-      img.style.maxWidth = '100%';
-      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(rendered.svg);
-      hostRef.current.replaceChildren(img);
-      imageRef.current = img;
-      mountedRef.current = {destroy: () => img.remove(), exportSVG: () => rendered.svg,
-        setOptions: () => { img.style.maxWidth = '100%'; }};
-      if(active) { setResult(rendered); setLoading(false); selectionCallback.current?.(chosen); onReady?.(rendered); }
-
-    } catch(renderError) {
-      setError(renderError);
-      setLoading(false);
-      onError?.(renderError);
-    }
-    return () => {
-      active = false;
-      mountedRef.current?.destroy();
-      workspace.destroy();
-      mountedRef.current = null;
-      workspaceRef.current = null;
-      if(hostRef.current) hostRef.current.replaceChildren();
-    };
-  }, [libraries, sourceFiles, entry, view, snapshot, onReady, onError, viewSelection]);
-
-  const chooseView = async (value) => {
-    const [nextEntry, nextView] = value.split('\u0000');
-    retainedSelection.current = {entry: nextEntry, view: nextView};
-    setSelection(retainedSelection.current);
-    setLoading(true);
-    setError(null);
-    try {
-      mountedRef.current?.destroy();
-      hostRef.current?.replaceChildren();
-      const rendered = workspaceRef.current.renderSync({entry: nextEntry, view: nextView,
-        overrides: snapshot?.overrides,
-        layoutState: snapshot?.layoutState?.view === nextView ? snapshot.layoutState : undefined});
-      const img = document.createElement('img');
-      img.alt = 'DDN diagram';
-      img.style.maxWidth = '100%';
-      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(rendered.svg);
-      hostRef.current.replaceChildren(img);
-      imageRef.current = img;
-      mountedRef.current = {destroy: () => img.remove(), exportSVG: () => rendered.svg,
-        setOptions: () => { img.style.maxWidth = '100%'; }};
-      setResult(rendered);
-      selectionCallback.current?.({entry: nextEntry, view: nextView});
-      onReady?.(rendered);
-
-    } catch(renderError) {
-      setError(renderError);
-      onError?.(renderError);
-    } finally {
-      setLoading(false);
-    }
+      const runtime=libraries.viewer.createRuntime(libraries.viewer.createBrowserRuntimeOptions());
+      current={runtime,viewer:libraries.viewer.createViewer(host.current,{runtime,controls:'host'})};
+      session.current=current;
+      current.pending=(async()=> {
+        const requested=snapshot ? validateDDNSnapshot(snapshot) : {entry,view};
+        const opened=checkOpen(await current.viewer.open(sourceSet(sourceFiles,requested.entry || Object.keys(sourceFiles)[0])));
+        if(!active) return;
+        const available=entriesOf(libraries,opened.snapshot);
+        const keep=retained.current;
+        const chosen=selectView(available,...(viewSelection && keep && available.some(file=>file.file===keep.entry && file.views.some(item=>item.id===keep.view)) ?
+          [keep.entry,keep.view] : [requested.entry,requested.view]));
+        current.selection=chosen;retained.current=chosen;setEntries(available);setSelection(chosen);
+        await ingestData(runtime,callbacks.current.liveData || snapshot?.liveData);
+        if(!active) return;
+        callbacks.current.onSelectionChange?.(chosen);
+        await draw(current,chosen);
+      })();
+      await current.pending;
+    })().catch(failure=>{if(active) report(failure);});
+    return ()=>{active=false;if(session.current===current) session.current=null;current?.viewer.destroy();current?.runtime.destroy();};
+  },[sourceSignature,entry,view,presentation,viewSelection]);
+  useEffect(()=> {
+    const current=session.current;
+    if(!current?.selection || !current.runtime.snapshot()) return;
+    let active=true;
+    // Serialize updates so the next batch observes the preceding revision.
+    current.pending=(current.pending || Promise.resolve()).then(async()=> {
+      if(session.current!==current || !active) return;
+      await ingestData(current.runtime,liveData || snapshot?.liveData);
+      if(active) await draw(current,current.selection);
+    }).catch(failure=>{if(active) report(failure);});
+    return ()=>{active=false;};
+  },[liveData,snapshot?.liveData]);
+  const chooseView=async value=> {
+    const [nextEntry,nextView]=value.split('\0');
+    const chosen=selectView(entries,nextEntry,nextView), current=session.current;
+    if(!current) return;
+    current.selection=chosen;retained.current=chosen;setSelection(chosen);setLoading(true);setError(null);
+    callbacks.current.onSelectionChange?.(chosen);
+    current.pending=(current.pending || Promise.resolve()).then(()=>draw(current,current.selection)).catch(report);
+    await current.pending;
   };
-
-  const exportDiagram = () => {
-    const svg = mountedRef.current?.exportSVG();
-    if(svg) onExport?.(svg, selection);
+  const run=async(id,invoke)=> {
+    try {await (callbacks.current.executeCommand ? callbacks.current.executeCommand(id,{invoke,enabled:Boolean(result)}) : invoke());}
+    catch(failure) {report(failure);}
   };
-  const runCommand = (id, invoke, enabled=true) => {
-    try {
-      const result = executeCommand ? executeCommand(id, {invoke, enabled}) : invoke();
-      Promise.resolve(result).catch((commandError) => onError?.(commandError));
-    } catch(commandError) {
-      onError?.(commandError);
-    }
-  };
-
-  const options = entries.flatMap((item) => item.views.map((itemView) => ({
-    value: `${item.file}\u0000${itemView.id}`,
-    label: `${item.file} / ${itemView.name || itemView.id}`,
-  })));
-  const status = error ? 'error' : result?.diagnostics?.length ?
-    'warning' : 'success';
-
-  return <Box
-    data-cde-surface="diagram.ddn.viewer"
-    sx={{display: 'flex', flexDirection: 'column', height: presentation ? 'auto' : '100%',
-      flexShrink: presentation ? 0 : 1,
-      minHeight: 0, bgcolor: 'background.default', color: 'text.primary'}}
-  >
+  const options=entries.flatMap(file=>file.views.map(item=>({value:`${file.file}\0${item.id}`,label:`${file.file} / ${item.name || item.id}`})));
+  return <Box data-cde-surface="diagram.ddn.viewer" sx={{display:'flex',flexDirection:'column',height:presentation?'auto':'100%',minHeight:0}}>
     <FormReference formKey="ddn-viewer" />
-    {presentation && viewSelection && options.length > 1 && <Select
-      label="Dashboard view" size="small"
-      value={selection.entry ? `${selection.entry}\u0000${selection.view}` : ''}
-      options={options} onChange={chooseView} />}
-    {!presentation && <Box component="header" sx={{height: 'var(--cde-toolbar-height, 34px)',
-      display: 'flex', alignItems: 'center', gap: 1, px: 1,
-      borderBottom: '1px solid', borderColor: 'divider'}}>
-      <Select
-        aria-label="DDN view"
-        size="small"
-        value={selection.entry ? `${selection.entry}\u0000${selection.view}` : ''}
-        options={options}
-        onChange={chooseView}
-        sx={{minWidth: 260}}
-      />
-      <Button onClick={() => runCommand('ddn.viewer.fit',
-        () => mountedRef.current?.setOptions({page: 'content'}), Boolean(result))}
-      disabled={!result}>
-        Fit
-      </Button>
-      <Button onClick={() => runCommand('ddn.viewer.export', exportDiagram,
-        Boolean(result))} disabled={!result}>Export SVG</Button>
-      <Box sx={{ml: 'auto'}}>
-        <StatusBadge live status={status} label={error ? 'Render failed' :
-          `${result?.diagnostics?.length ?? 0} diagnostics`} />
-      </Box>
+    {((presentation && viewSelection && options.length>1) || !presentation) && <Box component="header" sx={{display:'flex',gap:1,alignItems:'center',p:0.5}}>
+      <Select label={presentation?'Dashboard view':'DDN view'} size="small" value={selection.entry?`${selection.entry}\0${selection.view}`:''} options={options} onChange={chooseView}/>
+      {!presentation && <>
+        <Button disabled={!result} onClick={()=>run('ddn.viewer.fit',()=>session.current.viewer.navigate({kind:'fit-workarea'}))}>Fit</Button>
+        <Button disabled={!result} onClick={()=>run('ddn.viewer.export',async()=>callbacks.current.onExport?.((await captureSVG(session.current.viewer,selection)).svg,selection))}>Export SVG</Button>
+        <StatusBadge live status={error?'error':result?.diagnostics?.length?'warning':'success'} label={error?'Render failed':`${result?.diagnostics?.length || 0} diagnostics`}/>
+      </>}
     </Box>}
-    <Box sx={{position: 'relative', flex: presentation ? 'none' : 1, minHeight: 0, overflow: 'auto'}}>
-      {error && <EmptyState role="alert" message={error.message} />}
-      <Box ref={hostRef} aria-label="DDN diagram" sx={{height: presentation ? 'auto' : '100%',
-        display: error ? 'none' : 'block'}} />
-      <ProgressOverlay message={loading ? 'Rendering DDN view' : ''} />
+    <Box sx={{position:'relative',flex:1,minHeight:presentation?120:0,overflow:'auto'}}>
+      {error && <EmptyState role="alert" message={error.message}/>}
+      <Box ref={host} aria-label="DDN diagram" sx={{height:presentation?600:'100%',minHeight:300,visibility:error?'hidden':'visible',
+        ...(presentation?{position:'absolute',width:'100%',visibility:'hidden',pointerEvents:'none'}:{})}}/>
+      {presentation && <img ref={image} alt="DDN diagram" style={{maxWidth:'100%',display:error?'none':'block'}}/>}
+      <ProgressOverlay message={loading?'Rendering DDN view':''}/>
     </Box>
   </Box>;
 }
-
-DDNViewerSurface.propTypes = {
-  files: PropTypes.object,
-  snapshot: PropTypes.object,
-  entry: PropTypes.string,
-  view: PropTypes.string,
-  presentation: PropTypes.bool,
-  viewSelection: PropTypes.bool,
-  executeCommand: PropTypes.func,
-  onExport: PropTypes.func,
-  onReady: PropTypes.func,
-  onError: PropTypes.func,
-  onSelectionChange: PropTypes.func,
-};
+DDNViewerSurface.propTypes={files:PropTypes.object,snapshot:PropTypes.object,entry:PropTypes.string,view:PropTypes.string,
+  presentation:PropTypes.bool,viewSelection:PropTypes.bool,liveData:PropTypes.array,executeCommand:PropTypes.func,
+  onExport:PropTypes.func,onReady:PropTypes.func,onError:PropTypes.func,onSelectionChange:PropTypes.func};

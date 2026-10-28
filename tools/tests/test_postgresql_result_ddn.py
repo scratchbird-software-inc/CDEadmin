@@ -16,24 +16,14 @@ def metadata():
             'export_coverage':{'stored_records':2,'exported_records':2,'sampling_applied':False}}
 
 
-def test_exact_positional_values_and_coverage_render_through_public_ddn():
+def test_exact_positional_values_and_coverage_pass_public_ddn_semantics():
     rows = [{'c0':'12345678901234567890.123456789','c1':{'type':'binary','value':'AP8='}},
             {'c0':None,'c1':'null'}]
     snapshot = json.loads(export_workspace(metadata(), rows))
     source = snapshot['files'][snapshot['entry']]
     assert 'private-handle-not-for-export' not in source
-    runtime = (Path(__file__).resolve().parents[2]/'web/pgadmin/static/vendor/ddn/current/ddn.mjs').as_uri()
-    script = f'''import runtime from {json.dumps(runtime)};
-      let input='';for await(const chunk of process.stdin) input+=chunk;
-      const snapshot=JSON.parse(input), workspace=runtime.createWorkspace(snapshot.files);
-      try {{for(const entry of workspace.entries()) for(const view of entry.views) {{
-        const result=workspace.renderSync({{entry:entry.file,view:view.id}});
-        const errors=result.diagnostics.filter(x=>x.severity==='error');
-        if(errors.length) throw new Error(JSON.stringify(errors));
-        if(!result.svg.includes('12345678901234567890.123456789')) throw new Error('Lost decimal');
-        if(!result.svg.includes('duplicate')) throw new Error('Lost labels');
-      }}}} finally {{workspace.destroy();}}
-      process.stdout.write('PASS');'''
+    checker=Path(__file__).with_name('check_firebird_catalog_ddn.mjs')
+    script='import '+json.dumps(checker.as_uri())+';'
     result = subprocess.run(['node','--input-type=module','-e',script],input=json.dumps(snapshot),
                             text=True,capture_output=True,timeout=15)
     assert result.returncode == 0, result.stderr
@@ -45,7 +35,7 @@ def test_exact_positional_values_and_coverage_render_through_public_ddn():
 def test_bounded_views_preserve_all_selected_rows_and_empty_results():
     result = json.loads(export_workspace(metadata(), [[str(i),None] for i in range(401)]))
     assert len(result['files']) == 5
-    assert sum(text.count('record r_') for text in result['files'].values()) == 401
+    assert sum(text.count('element "rows.r_') for text in result['files'].values()) == 401
     empty = json.loads(export_workspace(metadata(), []))
     assert 'No rows in this export' in empty['files'][empty['entry']]
 
@@ -74,7 +64,7 @@ def test_result_service_applies_owner_scope_redaction_and_selection_coverage():
 
 def test_multi_page_export_fits_paired_runtime_live_view_element_limits():
     snapshot=json.loads(export_workspace(metadata(), [[str(i),None] for i in range(257)]))
-    runtime=(Path(__file__).resolve().parents[2]/'web/pgadmin/static/vendor/ddn/current/ddn.mjs').as_uri()
-    script='import runtime from '+json.dumps(runtime)+";let input='';for await(const part of process.stdin)input+=part;const s=JSON.parse(input),w=runtime.createWorkspace(s.files);try{for(const entry of w.entries())for(const view of entry.views){const result=w.renderSync({entry:entry.file,view:view.id});if(result.diagnostics.some(x=>x.severity==='error'))throw Error('Invalid multi-page DDN');}}finally{w.destroy();}"
+    checker=Path(__file__).with_name('check_firebird_catalog_ddn.mjs')
+    script='import '+json.dumps(checker.as_uri())+';'
     result=subprocess.run(['node','--input-type=module','-e',script],input=json.dumps(snapshot),text=True,capture_output=True,timeout=30)
     assert result.returncode==0,result.stderr

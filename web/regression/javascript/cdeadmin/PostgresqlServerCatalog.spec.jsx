@@ -3,7 +3,7 @@ import PostgresqlServerCatalog from 'sources/Dialogs/PostgresqlServerCatalog';
 import {withTheme} from '../fake_theme';
 jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({DDNViewerSurface: () => <div>Server DDN viewer</div>}));
 const Component = withTheme(PostgresqlServerCatalog);
-const snapshot = {format: 'ddn-workspace@1', entry: 'catalog.ddn', view: 'inventory_1', files: {'catalog.ddn': 'native source'}};
+const snapshot = {format: 'ddn-source-workspace@1', entry: 'catalog.ddn', view: 'inventory_1', files: {'catalog.ddn': 'native source'}};
 const document = {snapshot, views: [{id: 'inventory_1', label: 'Inventory'}], provenance: {warnings: ['No password hashes']}};
 
 describe('PostgreSQL server DDN capture', () => {

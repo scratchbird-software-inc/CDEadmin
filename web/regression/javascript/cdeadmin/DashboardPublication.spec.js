@@ -1,43 +1,76 @@
-import runtime from '../../../pgadmin/static/vendor/ddn/current/ddn.mjs';
-import {firebirdDashboardFiles, firebirdFleetFiles} from 'sources/cdeadmin_ui/integrations/ddn/firebirdDashboard';
-import {validatePublication, bindPublication} from 'sources/cdeadmin_ui/integrations/ddn/dashboardPublication.mjs';
-
-describe('published DDN observation bindings', () => {
-  beforeAll(() => runtime.setTextProvider((text, size) => ({width: String(text).length * size * 0.6,
-    ascent: size * 0.8, descent: size * 0.2}), 'publication-test'));
-  afterAll(() => runtime.setTextProvider(null));
-  const source = (scope) => ({format: 'ddn-workspace@1', entry: 'dashboard.ddn', view: 'dashboard',
-    files: scope === 'engine' ? firebirdFleetFiles(null) : firebirdDashboardFiles(null, 'Custom layout', scope)});
-  it.each(['engine', 'server', 'database'])('validates and renders the %s template through the real DDN runtime', (scope) => {
-    const clean = validatePublication(runtime, source(scope), scope);
-    const bound = bindPublication(runtime, clean, scope, source(scope).files);
-    const workspace = runtime.createWorkspace(bound.files);
+import { libraries, setupDDNDOM, createTestWorkspace, metricRows } from './ddnTestRuntime';
+import { firebirdDashboardFiles, firebirdFleetFiles } from 'sources/cdeadmin_ui/integrations/ddn/firebirdDashboard';
+import { validatePublication, bindPublication } from 'sources/cdeadmin_ui/integrations/ddn/dashboardPublication.mjs';
+const source = scope => ({
+  format: 'ddn-source-workspace@1',
+  entry: 'dashboard.ddn',
+  view: 'dashboard',
+  files: scope === 'engine' ? firebirdFleetFiles(null) : firebirdDashboardFiles(null, 'Custom layout', scope)
+});
+describe('published DDN host observations', () => {
+  beforeAll(setupDDNDOM);
+  it.each(['engine', 'server', 'database'])('validates and captures %s through public DDN APIs', async scope => {
+    const clean = await validatePublication(libraries, source(scope), scope);
+    const bound = await bindPublication(libraries, clean, scope, source(scope).files),
+      workspace = await createTestWorkspace(bound.files);
     try {
-      const result = workspace.renderSync(bound);
+      const result = await workspace.render(bound);
       expect(result.svg).toContain('<svg');
-      expect(result.diagnostics.filter((item) => item.severity === 'error')).toEqual([]);
-    } finally { workspace.destroy(); }
+      expect(result.diagnostics.filter(item => item.severity === 'error')).toEqual([]);
+    } finally {
+      workspace.destroy();
+    }
   });
-  it('binds exact integers by key and removes stale metrics without changing the publication', () => {
-    const clean = validatePublication(runtime, source('database'), 'database');
-    const original = JSON.stringify(clean);
-    const sample = {state: 'collecting', sample_age_seconds: 1, stale_after_seconds: 15,
-      samples: [{status: 'available', groups: {io: {status: 'available', values: {page_reads: '9007199254740993'}}}}]};
-    const live = firebirdDashboardFiles(sample);
-    expect(bindPublication(runtime, clean, 'database', live).files['dashboard.ddn']).toContain('9007199254740993');
-    const stale = firebirdDashboardFiles({...sample, sample_age_seconds: 20});
-    expect(bindPublication(runtime, clean, 'database', stale).files['dashboard.ddn']).not.toContain('9007199254740993');
+  it('binds exact integers, removes stale metrics and retains authored source', async () => {
+    const clean = await validatePublication(libraries, source('database'), 'database'),
+      original = JSON.stringify(clean);
+    const sample = {
+      state: 'collecting',
+      sample_age_seconds: 1,
+      stale_after_seconds: 15,
+      samples: [{
+        status: 'available',
+        groups: {
+          io: {
+            status: 'available',
+            values: {
+              page_reads: '9007199254740993'
+            }
+          }
+        }
+      }]
+    };
+    const bound = await bindPublication(libraries, clean, 'database', firebirdDashboardFiles(sample));
+    expect(metricRows(bound).some(row => row[3] === '9007199254740993')).toBe(true);
+    expect(bound.files).toEqual(clean.files);
+    const stale = await bindPublication(libraries, clean, 'database', firebirdDashboardFiles({
+      ...sample,
+      sample_age_seconds: 20
+    }));
+    expect(metricRows(stale).some(row => row[3] === '9007199254740993')).toBe(false);
     expect(JSON.stringify(clean)).toBe(original);
   });
-  it('preserves validated appearance and rejects invalid options', () => {
-    const styled = {...source('server'), overrides: {theme: 'dark'}};
-    expect(validatePublication(runtime, styled, 'server').overrides.theme).toBe('dark');
-    expect(() => validatePublication(runtime, {...styled, overrides: {notAnOption: true}}, 'server')).toThrow();
+  it('preserves authored appearance and refuses obsolete transient overrides', async () => {
+    const styled = source('server');
+    styled.files['dashboard.ddn'] = styled.files['dashboard.ddn'].replace('title "Custom layout"', 'title "Authored layout"');
+    expect((await validatePublication(libraries, styled, 'server')).files['dashboard.ddn']).toContain('Authored layout');
+    await expect(validatePublication(libraries, {
+      ...styled,
+      overrides: {
+        theme: 'dark'
+      }
+    }, 'server')).rejects.toThrow();
   });
-  it('rejects invented bindings and missing selected views', () => {
+  it('rejects invented bindings, extra providers and missing views', async () => {
     const bad = source('server');
     bad.files['dashboard.ddn'] = bad.files['dashboard.ddn'].replaceAll('server_0', 'evil_query');
-    expect(() => validatePublication(runtime, bad, 'server')).toThrow();
-    expect(() => validatePublication(runtime, {...source('server'), view: 'missing'}, 'server')).toThrow();
+    await expect(validatePublication(libraries, bad, 'server')).rejects.toThrow();
+    await expect(validatePublication(libraries, {
+      ...source('server'),
+      view: 'missing'
+    }, 'server')).rejects.toThrow();
+    const extra = source('server');
+    extra.files['dashboard.ddn'] += 'source evil as host\n    with\n        channel "foreign"\n';
+    await expect(validatePublication(libraries, extra, 'server')).rejects.toThrow();
   });
 });

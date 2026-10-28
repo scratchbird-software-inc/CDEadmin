@@ -51,7 +51,7 @@ def test_registered_file_bundle_keeps_independent_catalogs_and_unavailable_state
             'first', 'second', 'missing'], 'include_system': False})
         assert bundle['format'] == 'scratchrobin.duckdb.registered-files-ddn@1'
         assert not bundle['all_selected_captured']
-        assert bundle['server']['document']['snapshot']['format'] == 'ddn-workspace@1'
+        assert bundle['server']['document']['snapshot']['format'] == 'ddn-source-workspace@1'
         assert [item['available'] for item in bundle['files']] == [True, True, False]
         assert 'document' not in bundle['files'][2]
         first, second = (item['document'] for item in bundle['files'][:2])
@@ -65,8 +65,8 @@ def test_registered_file_bundle_keeps_independent_catalogs_and_unavailable_state
         second_model = read_catalog(json.dumps(second['snapshot']), engine='duckdb')
         assert first_model['provenance']['database_target_id'] == 'first'
         assert second_model['provenance']['database_target_id'] == 'second'
-        assert first['diagram']['snapshot']['format'] == 'ddn-workspace@1'
-        assert second['diagram']['snapshot']['format'] == 'ddn-workspace@1'
+        assert first['diagram']['snapshot']['format'] == 'ddn-source-workspace@1'
+        assert second['diagram']['snapshot']['format'] == 'ddn-source-workspace@1'
         for invalid in (["first", "first"], ['foreign'], [], ["first"] * 33):
             with pytest.raises(ProviderWorkspaceError):
                 service.duckdb_catalog(server, {'database_target_ids': invalid})

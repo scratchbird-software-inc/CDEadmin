@@ -7,8 +7,8 @@ from pgadmin.cdeadmin.workspace.assets import (
 from pgadmin.cdeadmin.workspace.firebird_design_assets import FirebirdDesignAssets
 
 SCOPE = {'endpoint_id': 'endpoint', 'database_target_id': 'db'}
-SNAPSHOT = {'format': 'ddn-workspace@1', 'entry': 'catalog.ddn', 'view': 'inventory',
-            'files': {'catalog.ddn': 'ddn "0.5"; module "test"; view inventory "Catalog" {}'}}
+SNAPSHOT = {'format': 'ddn-source-workspace@1', 'entry': 'catalog.ddn', 'view': 'inventory',
+            'files': {'catalog.ddn': 'version ddn-next-1\nerd inventory\n    with\n        id inventory\n    Catalog\n'}}
 
 
 def fixture():

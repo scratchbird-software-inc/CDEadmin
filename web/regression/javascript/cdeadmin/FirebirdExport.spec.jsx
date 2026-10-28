@@ -45,7 +45,7 @@ describe('Firebird DDN metadata export', () => {
   });
   it('previews every static data page using its own entry file', async () => {
     const post = jest.fn().mockResolvedValue({contents:'data', table_count:1, row_count:205,
-      ddn:{snapshot:{format:'ddn-workspace@1',entry:'data.ddn',view:'data_1',files:{}},
+      ddn:{snapshot:{format:'ddn-source-workspace@1',entry:'data.ddn',view:'data_1',files:{}},
         views:[{id:'data_1',entry:'data.ddn',label:'First'}, {id:'data_2',entry:'data-2.ddn',label:'Second'}]}});
     render(<Component post={post} generation="g" />);
     fireEvent.click(screen.getByRole('button', {name:'Capture data archive'}));
@@ -69,7 +69,7 @@ describe('Firebird DDN metadata export', () => {
     expect(screen.getByText('SR-F-001348')).toBeInTheDocument();
   });
   it('previews the selected file and downloads the complete workspace', async () => {
-    const snapshot = {format: 'ddn-workspace@1', entry: 'catalog.ddn', view: 'inventory_1',
+    const snapshot = {format: 'ddn-source-workspace@1', entry: 'catalog.ddn', view: 'inventory_1',
       files: {'catalog.ddn': 'first', 'catalog-2.ddn': 'second'}};
     const download = JSON.stringify(snapshot);
     const post = jest.fn().mockResolvedValue({snapshot, download_text: download,

@@ -36,13 +36,13 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     const link = document.createElement('a'); link.href = url; link.download = name; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const captureEditor = () => {
-    const value = editor.current?.snapshot() || draft;
+  const captureEditor = async () => {
+    const value = editor.current ? await editor.current.snapshot() : draft;
     setDraft(value); selected.current = {entry: value.entry, view: value.view};
     return value;
   };
-  const closeEditor = () => {
-    try {captureEditor(); editor.current = null; setEditing(false);}
+  const closeEditor = async () => {
+    try {await captureEditor(); editor.current = null; setEditing(false);}
     catch {setError('Unable to capture the current design. Keep the editor open and download it from DDN.');}
   };
   if (diagram.unavailable) return <Alert severity="warning">Relational diagram unavailable: {diagram.unavailable}</Alert>;
@@ -67,7 +67,7 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
           } catch {if (serial === fileToken.current) setError('Load a valid UTF-8 DDN workspace JSON file, maximum 8 MiB.');}
         }} />
       </Button>
-      <Button onClick={() => download(JSON.stringify(editing ? draft : snapshot()), `${engine}-relations.ddn-workspace.json`, 'application/json')}>Download relational design</Button>
+      <Button onClick={async () => download(JSON.stringify(editing ? await captureEditor() : snapshot()), `${engine}-relations.ddn-workspace.json`, 'application/json')}>Download relational design</Button>
     </Box>
     <FirebirdDesignStorage post={post} databaseTargetId={databaseTargetId} kind="relations" engine={engine} disabled={editing || merging || reviewing}
       capture={() => ({snapshot: snapshot(), baseline: baseline.current})}
@@ -114,7 +114,10 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
       <Box sx={{display: 'flex', alignItems: 'center', gap: 2, p: 1}}>
         <FormReference formKey={`${engine}-relational-diagram`} />
         <Box sx={{flex: 1}}>Relational design — database changes require separate native review and explicit application.</Box>
-        <Button onClick={() => download(JSON.stringify(captureEditor()), `${engine}-relations.ddn-workspace.json`, 'application/json')}>Download edited design</Button>
+        <Button onClick={async () => {
+          try {download(JSON.stringify(await captureEditor()), `${engine}-relations.ddn-workspace.json`, 'application/json');}
+          catch {setError('Unable to capture the current design. Keep the editor open and retry.');}
+        }}>Download edited design</Button>
         <Button onClick={closeEditor}>Return to diagram viewer</Button>
       </Box>
       {error && <Alert severity="error">{error}</Alert>}

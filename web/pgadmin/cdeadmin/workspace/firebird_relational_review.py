@@ -1,11 +1,12 @@
 """Bridge authoritative relational native facts into ordinary catalog review."""
 from copy import deepcopy
+from . import ddn_source as ddn
 from decimal import Decimal
 import hashlib
 import os
 from pathlib import Path
 import subprocess
-from .firebird_catalog_export import MAX_BYTES, MAX_DDN_UNITS, MAX_FILES, _json
+from .firebird_catalog_export import _json
 from .firebird_catalog_import import read_catalog, _decode, _equal, _SLOTS
 
 
@@ -24,23 +25,11 @@ def _exact_json(value):
 def read_relations(snapshot, *, engine="firebird"):
     if engine not in {"firebird", "postgresql", "mysql", "mariadb"}:
         raise ValueError("Unsupported relational engine")
-    if (not isinstance(snapshot, dict) or set(snapshot) != {'format', 'entry', 'view', 'files'} or
-            snapshot['format'] != 'ddn-workspace@1' or not isinstance(snapshot['files'], dict) or
-            not 1 <= len(snapshot['files']) <= MAX_FILES or not isinstance(snapshot['entry'], str) or
-            not isinstance(snapshot['view'], str) or snapshot['entry'] not in snapshot['files']):
-        raise ValueError('Invalid relational workspace envelope')
-    for name, source in snapshot['files'].items():
-        if (not isinstance(name, str) or not name.endswith('.ddn') or
-                any(part in {'', '.', '..'} for part in name.split('/')) or '\\' in name or '\0' in name or
-                not isinstance(source, str) or len(source.encode('utf-16-le')) // 2 > MAX_DDN_UNITS):
-            raise ValueError('Invalid relational source file')
-    encoded = _json(snapshot)
-    if len(encoded.encode()) > MAX_BYTES:
-        raise ValueError('Relational design exceeds 8 MiB')
+    encoded = ddn.validate_workspace(snapshot, 'relational')
     if not _SLOTS.acquire(timeout=1):
         raise ValueError('Catalog reader is busy; retry shortly')
     try:
-        result = subprocess.run(['node', str(Path(__file__).parent / 'ddn/read_relations.mjs'), engine],
+        result = subprocess.run(['node', ddn.NODE_HEAP_OPTION, str(Path(__file__).parent / 'ddn/read_relations.mjs'), engine],
             input=encoded, text=True, encoding='utf-8', capture_output=True, timeout=20,
             env={key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ})
         if result.returncode:
@@ -153,8 +142,10 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
             metadata = {key: live[key] for key in ('resource_id', 'kind', 'path_json', 'system')}
             metadata['native_json'] = _exact_json(value)
             key = 'o_' + hashlib.sha256(identity.encode()).hexdigest()
-            text = ('record ' + key + ' ' + _json(live['name']) + ' {uid: ' + _json(live['uid']) +
-                '; x_record: {' + ','.join(name + ':' + _json(fact) for name, fact in metadata.items()) + '};}')
+            declaration_id = live['source_location']['definition_id']
+            block, local_id = declaration_id.rsplit('.', 1)
+            text = ddn.record_definition(local_id, live['name'], metadata,
+                module=f'scratchrobin.{engine}.catalog', block=block, uid=live['uid'])
             replacements[index].append({**live['source_location'], 'text': text})
     for snapshot, edits in zip((baseline, proposed), replacements):
         for edit in sorted(edits, key=lambda value: value['start'], reverse=True):

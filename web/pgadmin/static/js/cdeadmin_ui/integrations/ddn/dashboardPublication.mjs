@@ -1,3 +1,4 @@
+import {METRIC_COLUMNS,metricChannel} from './dashboardPanels.js';
 // Shared browser/host validation against the paired public DDN API.
 export const COUNTER_FIELDS = Object.freeze({
   io: ['page_reads', 'page_writes', 'page_fetches', 'page_marks'],
@@ -92,74 +93,62 @@ function firebirdDynamic(id, scope) {
 }
 const unavailable = {value: 'Unavailable', unit: '', rate: ''};
 function check(condition, message) { if(!condition) throw new Error(message); }
-function records(runtime, files) {
-  const parsed = runtime.parse(files['dashboard.ddn'], 'dashboard.ddn');
-  check(parsed.imports.length === 0, 'Dashboard imports are not admitted.');
-  const blocks = parsed.declarations.filter((item) => item.type === 'data');
-  check(blocks.length === 1 && blocks[0].id === 'observations', 'Only observations data is admitted.');
-  return {parsed, rows: blocks[0].children};
+function sourceSet(snapshot) {
+  return {entry:snapshot.entry,files:Object.entries(snapshot.files).map(([id,text])=>({id,text,revision:'publication',encoding:'utf-8',writable:true}))};
 }
-export function validatePublication(runtime, snapshot, scope, engine='firebird') {
-  check(['firebird', 'postgresql', 'mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine), 'Unknown dashboard engine.');
-  const bindings = engine === 'postgresql' ? postgresCounts : ['mysql', 'mariadb'].includes(engine) ? mysqlCounts : engine === 'duckdb' ? duckdbCounts : engine === 'sqlite' ? sqliteCounts : counts;
-  check(bindings[scope], 'Unknown dashboard scope.');
-  check(snapshot?.format === 'ddn-workspace@1', 'Unsupported dashboard format.');
-  check(Object.keys(snapshot.files || {}).join() === 'dashboard.ddn', 'Use one dashboard.ddn file.');
-  check(snapshot.entry === 'dashboard.ddn' && typeof snapshot.view === 'string', 'Invalid selected view.');
-  const source = snapshot.files['dashboard.ddn'];
-  check(typeof source === 'string' && new TextEncoder().encode(source).length <= 512 * 1024, 'Dashboard source exceeds its limit.');
-  const {parsed, rows} = records(runtime, snapshot.files);
-  check(parsed.module === `scratchrobin.${engine}.monitoring`, 'Wrong dashboard engine module.');
-  check(parsed.declarations.every((item) => ['data', 'view', 'format'].includes(item.type)), 'Unsupported dashboard declaration.');
-  const allowed = new Set(Object.entries(bindings[scope]).flatMap(([prefix, count]) =>
-    Array.from({length: count}, (_, index) => `${prefix}_${index}`)));
-  check(rows.length > 0 && rows.length <= 4096, 'Dashboard needs admitted metric records.');
-  const seen = new Set();
-  for(const row of rows) {
-    check((allowed.has(row.id) || (engine === 'firebird' && firebirdDynamic(row.id, scope)) || (engine === 'postgresql' && postgresDynamic(row.id, scope)) ||
-      (engine === 'duckdb' && duckdbDynamic(row.id, scope)) ||
-      (engine === 'sqlite' && sqliteDynamic(row.id, scope)) ||
-      (['mysql', 'mariadb'].includes(engine) && mysqlDynamic(row.id, scope, engine))) && !seen.has(row.id), 'Unknown, duplicate or wrong-scope metric binding.');
-    seen.add(row.id);
-    check(row.type === 'object' && row.props.kind === 'record' && !row.children.length,
-      'Only metric records are admitted.');
-    check(Object.keys(row.props).sort().join() === 'kind,x_record' &&
-      Object.keys(row.props.x_record || {}).sort().join() === 'rate,unit,value' &&
-      Object.values(row.props.x_record).every((value) => typeof value === 'string'),
-    'Metric records require string value, unit and rate fields.');
+function records(libraries,snapshot) {
+  const input=sourceSet(snapshot), parsed=libraries.language.decodeSources(input);
+  check(parsed.syntaxValid && !parsed.diagnostics.some(item=>item.severity==='error'),'Invalid dashboard notation.');
+  const all=libraries.model.listRecords(parsed.normalized);
+  const sources=all.filter(item=>item.kind==='source');
+  const datasets=all.filter(item=>item.kind==='data');
+  check(sources.length===1 && sources[0].record.id==='metric_feed' && sources[0].record.mode==='host' && sources[0].record.update==='keyed','Only the collector host source is admitted.');
+  check(datasets.length===1 && datasets[0].record.id==='observations','Only observations data is admitted.');
+  const data=datasets[0].record;
+  check(data.source?.id==='metric_feed' && (!data.source.file || data.source.file===snapshot.entry) && data.key?.join()==='id','Invalid metric source binding.');
+  check(data.columns?.length===METRIC_COLUMNS.length && data.columns.every((column,index)=>column.id===METRIC_COLUMNS[index] && column.type==='text'),'Invalid metric schema.');
+  check(Array.isArray(data.rows) && data.rows.length>0 && data.rows.length<=4096 && data.rows.every(row=>Array.isArray(row) && row.length===METRIC_COLUMNS.length && row.every(cell=>typeof cell==='string')),'Metric records require string value, unit and rate fields.');
+  return {input,parsed,all,data,source:sources[0].record};
+}
+export async function validatePublication(libraries,snapshot,scope,engine='firebird') {
+  check(['firebird','postgresql','mysql','mariadb','duckdb','sqlite'].includes(engine),'Unknown dashboard engine.');
+  const bindings=engine==='postgresql'?postgresCounts:['mysql','mariadb'].includes(engine)?mysqlCounts:engine==='duckdb'?duckdbCounts:engine==='sqlite'?sqliteCounts:counts;
+  check(bindings[scope],'Unknown dashboard scope.');
+  check(snapshot && Object.keys(snapshot).sort().join()==='entry,files,format,view','Dashboard appearance belongs in authored source.');
+  check(snapshot?.format==='ddn-source-workspace@1','Legacy dashboard source requires migration.');
+  check(Object.keys(snapshot.files || {}).join()==='dashboard.ddn','Use one dashboard.ddn file.');
+  check(snapshot.entry==='dashboard.ddn' && typeof snapshot.view==='string','Invalid selected view.');
+  check(typeof snapshot.files['dashboard.ddn']==='string' && new TextEncoder().encode(snapshot.files['dashboard.ddn']).length<=512*1024,'Dashboard source exceeds its limit.');
+  const {input,parsed,all,data,source}=records(libraries,snapshot);
+  check(source.channel===metricChannel(`scratchrobin.${engine}.monitoring`),'Wrong dashboard engine source.');
+  check(all.every(item=>['source','data','view','placement','appearance','publication','definition'].includes(item.kind)),'Unsupported dashboard declaration.');
+  // A publication cannot smuggle extra providers or opaque native payloads.
+  check(all.filter(item=>item.kind==='definition').length===0,'Dashboard definitions are not admitted.');
+  const allowed=new Set(Object.entries(bindings[scope]).flatMap(([prefix,count])=>Array.from({length:count},(_,index)=>`${prefix}_${index}`)));
+  const seen=new Set();
+  for(const row of data.rows) {
+    const id=row[0];
+    check((allowed.has(id) || (engine==='firebird' && firebirdDynamic(id,scope)) || (engine==='postgresql' && postgresDynamic(id,scope)) ||
+      (engine==='duckdb' && duckdbDynamic(id,scope)) || (engine==='sqlite' && sqliteDynamic(id,scope)) ||
+      (['mysql','mariadb'].includes(engine) && mysqlDynamic(id,scope,engine))) && !seen.has(id),'Unknown, duplicate or wrong-scope metric binding.');
+    seen.add(id);
   }
-  const workspace = runtime.createWorkspace(snapshot.files);
+  check(all.some(item=>item.kind==='view' && item.ref.id===snapshot.view),'Selected dashboard view does not exist.');
+  const api=libraries.viewer;
+  const verifier=api.createVerifier(api.createBrowserRuntimeOptions?api.createBrowserRuntimeOptions():api.createCompleteRuntimeOptions());
   try {
-    const entries = workspace.entries();
-    check(entries.some((entry) => entry.file === snapshot.entry && entry.views.some((view) => view.id === snapshot.view)),
-      'Selected dashboard view does not exist.');
-    for(const entry of entries) for(const view of entry.views) {
-      check(workspace.validateDraft(entry.file, view.id).status === 'valid', 'Invalid dashboard view or binding.');
-    }
-    const result = workspace.replaceData('observations', rows.map((row) => ({key: row.id, ...unavailable})));
-    check(result.committed, 'Dashboard metric replacement failed validation.');
-    const layout = snapshot.layoutState || null;
-    if(layout) {
-      check(layout.format === 'ddn-layout-state@1' && layout.view === snapshot.view &&
-        layout.positions && Object.keys(layout.positions).length <= 256 &&
-        Object.values(layout.positions).every((point) => Array.isArray(point) && point.length === 2 &&
-          point.every((value) => Number.isFinite(value) && Math.abs(value) <= 100000)),
-      'Invalid dashboard layout positions.');
-    }
-    // The public snapshot API validates runtime appearance options as well.
-    return workspace.snapshot(snapshot.entry, snapshot.view, snapshot.overrides || {}, layout);
-  } finally { workspace.destroy(); }
+    const verified=await verifier.verifySources(input,{level:'semantic',scope:{kind:'workarea'},purpose:'view'});
+    check(verified.outcome==='valid' && verified.coverage.complete,'Invalid dashboard view or binding.');
+  } finally {verifier.destroy();}
+  const rows=data.rows.map(row=>[...row.slice(0,3),unavailable.value,unavailable.unit,unavailable.rate]);
+  const patches=libraries.language.patchProperty(parsed,{file:snapshot.entry,id:'observations'},'rows',rows);
+  const changed=libraries.language.applySourcePatches(input,patches);
+  return {format:'ddn-source-workspace@1',entry:snapshot.entry,view:snapshot.view,files:Object.fromEntries(changed.files.map(file=>[file.id,file.text]))};
 }
-export function bindPublication(runtime, snapshot, scope, liveFiles, engine='firebird') {
-  const clean = validatePublication(runtime, snapshot, scope, engine);
-  const wanted = records(runtime, clean.files).rows;
-  const current = new Map(records(runtime, liveFiles).rows.map((row) => [row.id, row.props.x_record]));
-  const workspace = runtime.createWorkspace(clean.files);
-  try {
-    const result = workspace.replaceData('observations', wanted.map((row) => ({
-      key: row.id, ...(current.get(row.id) || unavailable),
-    })));
-    check(result.committed, 'Live metric refresh failed validation.');
-    return {...clean, files: workspace.getFiles()};
-  } finally { workspace.destroy(); }
+export async function bindPublication(libraries,snapshot,scope,liveFiles,engine='firebird') {
+  const clean=await validatePublication(libraries,snapshot,scope,engine);
+  const wanted=records(libraries,clean), current=records(libraries,{entry:'dashboard.ddn',files:liveFiles});
+  const values=new Map(current.data.rows.map(row=>[row[0],row.slice(3)]));
+  return {...clean,liveData:[{kind:'replace',source:wanted.source.channel,schema:wanted.data.columns,
+    rows:wanted.data.rows.map(row=>[...row.slice(0,3),...(values.get(row[0]) || ['Unavailable','',''])])}]};
 }

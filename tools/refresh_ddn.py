@@ -1,181 +1,34 @@
 #!/usr/bin/env python3
-"""Capture and rebuild the current sister-project SDK/tool without editing it.
-
-Run before builds and commit-validation tests. A verified input/artifact match
-reuses the immutable bundle; changed inputs rebuild both runtime and tool.
-"""
+"""Capture ScratchWeaver's current standalone open DDN without editing it."""
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
-import subprocess
-import tempfile
+
+from ddn_intake import CONTRACT, refresh as capture, verify_artifacts
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SOURCE = Path(os.environ.get('SCRATCHROBIN_DDN_SOURCE',
-                                    str(ROOT.parent / 'Diagram-Design-Notation')))
+DEFAULT_SOURCE = Path(os.environ.get('SCRATCHROBIN_DDN_SOURCE', str(ROOT.parent / 'ScratchWeaver')))
 DEFAULT_WORK = Path(os.environ.get('SCRATCHROBIN_DDN_WORK',
                                   str(ROOT.parent / 'ChatGPT_Codex_1_Workarea/ddn-intake')))
 DEST = ROOT / 'web/pgadmin/static/vendor/ddn/current'
-WINDOWS_PATCH = ROOT / 'tools/dependency_patches/ddn-windows-paths.patch'
-SPATIAL_PATCH = ROOT / 'tools/dependency_patches/ddn-spatial-inspection.patch'
-
-
-def git(source, *args):
-    return subprocess.check_output(['git', '-C', str(source), *args])
-
-
-def digest(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def verify_vendored_only():
-    """Check the checked-in vendor bundle without the sister-project checkout."""
-    manifest_path = DEST / 'resource-manifest.json'
-    if not manifest_path.exists():
-        raise RuntimeError(
-            'No vendored DDN bundle at web/pgadmin/static/vendor/ddn/current')
-    previous = json.loads(manifest_path.read_text())
-    tool_hash = digest(Path(__file__))
-    if previous.get('intake_tool_sha256') != tool_hash:
-        print('Note: refresh_ddn.py differs from manifest; offline artifact check only')
-    artifacts = previous.get('artifacts') or {}
-    if not artifacts:
-        raise RuntimeError('Vendored DDN manifest has no artifacts')
-    for name, sha in artifacts.items():
-        path = DEST / name
-        if not path.is_file() or digest(path) != sha:
-            raise RuntimeError(
-                f'Vendored DDN artifact missing or stale: {name}')
-    print('DDN vendored snapshot verified (offline):',
-          previous.get('version', 'unknown'))
-
-
-def inventory(source):
-    # Include uncommitted and untracked source, never ignored caches/dependencies.
-    paths = git(source, 'ls-files', '-z', '--cached', '--others',
-                '--exclude-standard').decode().split('\0')
-    files = {}
-    for name in sorted(set(paths) - {''}):
-        path = source / name
-        if path.is_symlink():
-            raise RuntimeError(f'Source symlink requires intake review: {name}')
-        if path.is_file():
-            files[name] = digest(path)
-    return {'revision': git(source, 'rev-parse', 'HEAD').decode().strip(),
-            'status': git(source, 'status', '--porcelain').decode(),
-            'files': files}
+    manifest = json.loads((DEST / 'resource-manifest.json').read_text())
+    verify_artifacts(DEST, manifest)
+    print('DDN standalone artifacts verified (inspection only):', CONTRACT)
 
 
 def refresh(source, work):
-    offline = os.environ.get('SCRATCHROBIN_DDN_OFFLINE', '').strip().lower()
-    if offline in ('1', 'true', 'yes'):
-        raise RuntimeError('Builds require a current DDN source checkout; '
-                           'set SCRATCHROBIN_DDN_SOURCE. Use --verify-vendored '
-                           'only to inspect artifacts, not to validate a build.')
-    work.mkdir(parents=True, exist_ok=True)
-    before = inventory(source)
-    # Apply reviewed path and spatial-module corrections on every host. Keep
-    # the sister checkout untouched and record every adjusted source hash.
-    patches = [WINDOWS_PATCH, SPATIAL_PATCH]
-    adjustments = [{'patch': patch.relative_to(ROOT).as_posix(),
-                    'sha256': digest(patch)} for patch in patches]
-    manifest_path = DEST / 'resource-manifest.json'
-    if manifest_path.exists():
-        previous = json.loads(manifest_path.read_text())
-        if (previous.get('intake_tool_sha256') == digest(Path(__file__)) and
-            previous.get('source_adjustments', []) == adjustments and
-            previous.get('source') == before and all(
-            (DEST / name).is_file() and digest(DEST / name) == sha
-            for name, sha in previous.get('artifacts', {}).items()
-        ) and previous.get('artifacts')):
-            print('DDN current snapshot verified:', before['revision'])
-            return
-    with tempfile.TemporaryDirectory(prefix='capture-', dir=work) as scratch:
-        snapshot = Path(scratch) / 'source'
-        snapshot.mkdir()
-        for name in before['files']:
-            target = snapshot / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source / name, target)
-            if digest(target) != before['files'][name]:
-                raise RuntimeError('DDN changed during capture; retry intake')
-        if inventory(source) != before:
-            raise RuntimeError('DDN changed during capture; retry intake')
-        adjusted_files = {}
-        if adjustments:
-            for patch in patches:
-                subprocess.run(['git', 'apply', '--check', '--unidiff-zero', '--ignore-space-change',
-                                str(patch)], cwd=snapshot, check=True)
-                subprocess.run(['git', 'apply', '--unidiff-zero', '--ignore-space-change',
-                                str(patch)], cwd=snapshot, check=True)
-            for name in ('tools/rollup.config.mjs', 'tools/rollup/entries/geo.js', 'notation/runtime/ddn-geo.js'):
-                adjusted_files[name] = digest(snapshot / name)
-        # Build tools consume pinned installed dependencies without modifying them.
-        if os.name == 'nt':
-            # Ordinary Windows developer accounts may not create symlinks.
-            # DDN's dependency tree is small; copy it without requiring admin
-            # privileges or changing the host's Developer Mode/security policy.
-            shutil.copytree(source / 'node_modules', snapshot / 'node_modules')
-        else:
-            (snapshot / 'node_modules').symlink_to(source / 'node_modules',
-                                                 target_is_directory=True)
-        env = {**os.environ, 'TMPDIR': str(work)}
-        env.pop('DDN_SDK_OUT', None)
-        env.pop('DDN_SDK_MANIFEST', None)
-        log = work / 'build.log'
-        try:
-            with log.open('w', encoding='utf-8') as output:
-                for tool in ('build-sdk.js', 'build-tool.js'):
-                    subprocess.run(['node', 'tools/' + tool], cwd=snapshot,
-                                   env=env, stdout=output,
-                                   stderr=subprocess.STDOUT, check=True)
-        except subprocess.CalledProcessError:
-            # Temporary captures are removed on failure. Preserve and expose
-            # the actual builder error in CI, not only its exit status.
-            print(log.read_text(encoding='utf-8', errors='replace'))
-            raise
-        stage = Path(scratch) / 'vendor'
-        stage.mkdir()
-        for name in ('ddn.global.js', 'ddn.global.min.js', 'ddn.global.min.js.map',
-                     'ddn.mjs', 'ddn.d.ts', 'ddn.d.mts', 'ddn.css', 'README.md',
-                     'ddn-geo.js', 'ddn-geo.d.ts', 'ddn-geo.d.mts'):
-            shutil.copy2(snapshot / 'notation/dist' / name, stage / name)
-        shutil.copy2(snapshot / 'notation/tool/ddn-tool.html', stage)
-        shutil.copy2(snapshot / 'release/validation/sdk-build.json',
-                     stage / 'sdk-build.json')
-        for name in ('LICENSE', 'NOTICE'):
-            matches = list(snapshot.glob(name + '*'))
-            for path in matches:
-                if path.is_file():
-                    shutil.copy2(path, stage / path.name)
-        package = json.loads((snapshot / 'package.json').read_text())
-        manifest = {'version': package['version'], 'license': package['license'],
-                    'intake_tool_sha256': digest(Path(__file__)),
-                    'source': before,
-                    'source_adjustments': adjustments,
-                    'adjusted_source_sha256': adjusted_files,
-                    'artifacts': {p.name: digest(p) for p in sorted(stage.iterdir())}}
-        (stage / 'resource-manifest.json').write_text(
-            json.dumps(manifest, indent=2) + '\n')
-        DEST.parent.mkdir(parents=True, exist_ok=True)
-        # Capture/build failures never overwrite the last admitted bundle.
-        if DEST.exists():
-            shutil.rmtree(DEST)
-        shutil.copytree(stage, DEST)
-        print('DDN runtime and unified tool refreshed:', package['version'],
-              before['revision'])
+    return capture(source, work, DEST, Path(__file__))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=DEFAULT_SOURCE)
     parser.add_argument('--work', type=Path, default=DEFAULT_WORK)
-    parser.add_argument('--verify-vendored', action='store_true',
-                        help='Inspect artifact integrity only; no freshness '
-                             'or build qualification')
+    parser.add_argument('--verify-vendored', action='store_true')
     args = parser.parse_args()
     if args.verify_vendored:
         verify_vendored_only()

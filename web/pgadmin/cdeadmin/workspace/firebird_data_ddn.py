@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+from . import ddn_source as ddn
 
 from .firebird_catalog_export import MAX_BYTES, MAX_DDN_UNITS, MAX_FILES, _json, _units
 
@@ -13,22 +14,27 @@ def build(document):
     header = deepcopy(document)
     counts = [len(table.pop('rows')) for table in header['tables']]
     envelope = {'format': 'scratchrobin.firebird.data-ddn@1', 'archive': header, 'row_counts': counts}
-    pages, current = [], []
+    pages, current, current_units = [], [], 0
+    def render(row, block):
+        return ddn.record_definition(row['id'], row['title'], row['fields'],
+            module='scratchrobin.firebird.data', block=block, uid=row['uid'])
     for table_number, table in enumerate(document['tables']):
         for ordinal, values in enumerate(table['rows']):
             identity = f'{table_number}:{ordinal}'
-            record = ('record r_' + identity.replace(':', '_') + ' ' + _json(table['name'] + ' / ' + str(ordinal+1)) +
-                      ' {uid:' + _json('firebird-data:' + identity) + ';x_record:{table_index:' + str(table_number) +
-                      ';ordinal:' + str(ordinal) + ';values_json:' + _json(_json(values)) + ';};}')
-            if _units(record) > MAX_DDN_UNITS-20000:
+            record = {'id': 'r_' + identity.replace(':', '_'), 'title': table['name'] + ' / ' + str(ordinal+1),
+                      'fields': {'table_index': table_number, 'ordinal': ordinal, 'values_json': _json(values)},
+                      'uid': 'firebird-data:' + identity}
+            size = _units(render(record, 'rows_999'))
+            if size > MAX_DDN_UNITS-20000:
                 raise ValueError('A data row exceeds the DDN source limit')
-            if current and (len(current) == 100 or _units('\n'.join(current+[record])) > MAX_DDN_UNITS-20000):
-                pages.append(current); current = []
-            current.append(record)
+            if current and (len(current) == 100 or current_units + size > MAX_DDN_UNITS-20000):
+                pages.append(current); current = []; current_units = 0
+            current.append(record); current_units += size
     if current:
         pages.append(current)
-    header_source = 'data data_info {record archive "Static data provenance and native column layouts" {x_record:{header_json:' + _json(_json(envelope)) + ';};}}'
-    prefix = 'ddn "0.7";module "scratchrobin.firebird.data";\n'
+    header_source = ddn.record_definition('archive', 'Static data provenance and native column layouts',
+        {'header_json': _json(envelope)}, module='scratchrobin.firebird.data', block='data_info')
+    prefix = ddn.header('scratchrobin.firebird.data')
     if not pages:
         pages = [[]]
     files, parts, views = {}, [header_source], []
@@ -41,13 +47,13 @@ def build(document):
         block = 'rows_' + str(number)
         view = 'data_' + str(number)
         if records:
-            source = ('data ' + block + ' {' + '\n'.join(records) + '}\nview ' + view +
-                      ' "Static data — exact JSON values" {data:[@' + block + '];projection {kind:table;profile:"table.records@1";'
-                      'records:[' + ','.join('@' + block + '.' + record.split(' ', 2)[1] for record in records) + '];'
-                      'columns:[{key:"name",label:"Table / export row"},{key:"x_record.values_json",label:"Exact typed values (JSON)"}];}'
-                      'publication {size:content;fit:none;}}')
+            declarations = [render(record, block) for record in records]
+            identities = [block + '.' + record['id'] for record in records]
+            source = ''.join(declarations) + ddn.table_view(view, 'Static data — exact JSON values', identities,
+                [{'key': 'name', 'label': 'Table / export row'}, {'key': 'x_record.values_json', 'label': 'Exact typed values (JSON)'}])
         else:
-            source = 'view ' + view + ' "Empty static data capture" {data:[@data_info];}'
+            source = ddn.table_view(view, 'Empty static data capture', ['data_info.archive'],
+                [{'key': 'name', 'label': 'Export'}])
         if _units(prefix+'\n'.join(parts+[source])) > MAX_DDN_UNITS:
             name = flush()
             for item in pending: item['entry'] = name
@@ -59,7 +65,8 @@ def build(document):
     for item in pending: item['entry'] = name
     if len(files) > MAX_FILES or any(_units(value) > MAX_DDN_UNITS for value in files.values()):
         raise ValueError('Static data DDN exceeds its workspace limits')
-    snapshot = {'format': 'ddn-workspace@1', 'entry': views[0]['entry'], 'view': views[0]['id'], 'files': files}
+    ddn.connect_files(files)
+    snapshot = {'format': 'ddn-source-workspace@1', 'entry': views[0]['entry'], 'view': views[0]['id'], 'files': files}
     text = _json(snapshot)
     if len(text.encode()) > MAX_BYTES:
         raise ValueError('Static data DDN exceeds 8 MiB; choose a smaller data scope')
@@ -74,16 +81,12 @@ def read(source):
         raise ValueError('Static data source exceeds its limit')
     from .firebird_catalog_import import _decode, _SLOTS
     snapshot = _decode(source) if source.lstrip().startswith('{') else {
-        'format': 'ddn-workspace@1', 'entry': 'data.ddn', 'view': 'data_1', 'files': {'data.ddn': source}}
-    if (not isinstance(snapshot, dict) or set(snapshot) != {'format', 'entry', 'view', 'files'} or
-            snapshot['format'] != 'ddn-workspace@1' or not isinstance(snapshot['files'], dict) or
-            not 1 <= len(snapshot['files']) <= MAX_FILES or snapshot['entry'] not in snapshot['files'] or
-            any(not isinstance(value, str) or _units(value) > MAX_DDN_UNITS for value in snapshot['files'].values())):
-        raise ValueError('Invalid static data workspace')
+        'format': 'ddn-source-workspace@1', 'entry': 'data.ddn', 'view': 'data_1', 'files': {'data.ddn': source}}
+    ddn.validate_workspace(snapshot)
     if not _SLOTS.acquire(timeout=1):
         raise ValueError('Data reader is busy; retry shortly')
     try:
-        result = subprocess.run(['node', '--max-old-space-size=192', str(Path(__file__).parent/'ddn/read_data.mjs')],
+        result = subprocess.run(['node', ddn.NODE_HEAP_OPTION, str(Path(__file__).parent/'ddn/read_data.mjs')],
             input=_json(snapshot), text=True, encoding='utf-8', capture_output=True, timeout=20,
             env={key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ})
         if result.returncode:

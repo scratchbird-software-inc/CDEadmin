@@ -49,15 +49,8 @@ def test_native_identity_scope_roundtrip_and_render(tmp_path):
         assert len(exported['diagram']['resource_mapping']) >= 2
 
         source = exported['diagram']['snapshot']
-        runtime = (Path(__file__).resolve().parents[2] /
-                   'web/pgadmin/static/vendor/ddn/current/ddn.mjs').as_uri()
-        script = f'''import runtime from {json.dumps(runtime)};
-          let input='';for await(const chunk of process.stdin)input+=chunk;
-          const snapshot=JSON.parse(input), workspace=runtime.createWorkspace(snapshot.files);
-          try {{const output=workspace.renderSync({{entry:snapshot.entry,view:snapshot.view}});
-            if(output.diagnostics.some(x=>x.severity==='error'))throw Error(JSON.stringify(output.diagnostics));
-            if(!output.svg.includes('a:b') || !output.svg.includes('b:c'))throw Error('Missing native relation labels');
-          }}finally{{workspace.destroy();}}'''
+        checker=Path(__file__).with_name('check_firebird_catalog_ddn.mjs')
+        script='import '+json.dumps(checker.as_uri())+';'
         subprocess.run(['node', '--input-type=module', '-e', script], input=json.dumps(source),
                        text=True, capture_output=True, timeout=15, check=True)
 

@@ -1,10 +1,12 @@
 """DuckDB catalog-qualified relations and native keys in the public DDN graph."""
 import hashlib
 import json
+from . import ddn_source as ddn
 from .firebird_catalog_export import MAX_BYTES, MAX_DDN_UNITS, native_metadata
 
 
 def build_diagram(resources, provenance):
+    module = 'scratchrobin.duckdb.relations'
     def quote(value):
         return json.dumps(value, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
     def key(value): return 'n_' + hashlib.sha256(value.encode('utf8')).hexdigest()
@@ -20,16 +22,13 @@ def build_diagram(resources, provenance):
         fields = []
         for column in sorted(native.get('columns', []), key=lambda item: item['ordinal_position']):
             cid = column['resource_id']
-            properties = ['uid:' + quote(prefix + cid), 'datatype:' + quote(column['data_type']),
-                          'nullable:' + ('true' if column['nullable'] else 'false')]
-            if column.get('comment'): properties.append('description:' + quote(column['comment']))
-            fields.append('field ' + key(cid) + ' ' + quote(column['name']) + ' {' + ';'.join(properties) + ';}')
+            properties = {'datatype': column['data_type'], 'nullable': bool(column['nullable'])}
+            if column.get('comment'): properties['description'] = column['comment']
+            fields.append(ddn.native_field(key(cid), column['name'], prefix + cid, properties))
             mapping[key(cid)] = cid
         label = '.'.join(row['display_path'])
-        declarations.append('object ' + key(identity) + ' ' + quote(label) + ' {kind:' + row['resource_kind'] +
-            ';uid:' + quote(prefix + identity) + ';x_record:{resource_id:' + quote(identity) +
-            ',native_kind:' + quote(row['resource_kind']) + ',native_json:' + quote(quote(native)) +
-            '};fields {' + '\n'.join(fields) + '}}')
+        declarations.append(ddn.relation_object(key(identity), label, row['resource_kind'], prefix + identity,
+            {'resource_id': identity, 'native_kind': row['resource_kind'], 'native_json': quote(native)}, fields, module))
         mapping[key(identity)] = identity
         for constraint in native.get('constraints', []):
             if constraint['constraint_type'] != 'FOREIGN KEY': continue
@@ -40,25 +39,22 @@ def build_diagram(resources, provenance):
                 continue
             cid = constraint['resource_id']
             label = constraint['name'] + ' (' + ', '.join(constraint['column_names']) + ') -> (' + ', '.join(constraint['referenced_column_names']) + ')'
-            declarations.append('relation ' + key(cid) + ' ' + quote(label) + ' @' + key(identity) + ' -> @' +
-                key(target['resource_id']) + ' {kind:ref;enforcement:database;uid:' + quote(prefix + cid) +
-                ';x_record:{native_json:' + quote(quote(constraint)) + '};}')
-            edges.append((identity, target['resource_id'])); mapping[key(cid)] = cid
+            declarations.append(ddn.relation_edge(key(cid), label, key(identity), key(target['resource_id']),
+                prefix + cid, {'native_json': quote(constraint)}, module))
+            edges.append((key(cid), identity, target['resource_id'])); mapping[key(cid)] = cid
     views, blocks = [], []
     for start in range(0, len(relations), 25):
         selected = {row['resource_id'] for row in relations[start:start + 25]}
         sources = set(selected)
-        selected.update(target for source, target in edges if source in sources)
+        selected.update(target for _, source, target in edges if source in sources)
         if len(selected) > 100 or len(views) >= 64: raise ValueError('DuckDB diagram exceeds view bounds')
         view = 'relations_' + str(len(views) + 1); label = 'DuckDB relations — page ' + str(len(views) + 1)
-        blocks.append('view ' + view + ' ' + quote(label) + ' {data:[@relations];select:[' +
-            ','.join('@relations.' + key(identity) for identity in sorted(selected)) +
-            '];projection {kind:graph;profile:"ddn@1";}layout {algorithm:layered;gap:240px;row_gap:160px;}' +
-            'publication {size:content;fit:none;}}')
+        blocks.append(ddn.graph_view(view, label, [key(identity) for identity in sorted(selected)],
+            [(edge, key(source), key(target)) for edge, source, target in edges]))
         views.append({'id': view, 'label': label, 'entry': 'relations.ddn'})
-    source = 'ddn "0.6";module "scratchrobin.duckdb.relations";\ndata relations {\n' + '\n'.join(declarations) + '\n}\n' + '\n'.join(blocks)
+    source = ddn.header(module) + '\n'.join(declarations + blocks)
     if len(source.encode('utf8')) > MAX_BYTES or len(source.encode('utf-16-le')) // 2 > MAX_DDN_UNITS:
         raise ValueError('DuckDB diagram exceeds the paired DDN document bound')
-    return {'snapshot': {'format': 'ddn-workspace@1', 'entry': 'relations.ddn', 'view': views[0]['id'], 'files': {'relations.ddn': source}},
+    return {'snapshot': {'format': 'ddn-source-workspace@1', 'entry': 'relations.ddn', 'view': views[0]['id'], 'files': {'relations.ddn': source}},
             'views': views, 'warnings': warnings, 'resource_mapping': mapping,
             'deployment': 'diagram-only', 'foreign_keys': len(edges)}

@@ -1,5 +1,8 @@
 """Public-parser import, exact documentary comparisons and scope rejection."""
 import json
+import re
+from pgadmin.cdeadmin.workspace import ddn_source as ddn
+from pgadmin.cdeadmin.workspace.ddn_source import quoted as q
 from unittest.mock import patch
 
 import pytest
@@ -43,13 +46,13 @@ def test_comparison_keeps_types_missing_null_and_array_order():
     lambda text: text.replace('firebird:endpoint:target:', 'firebird:endpoint:other:'),
     lambda text: text.replace('catalog_1', 'unrelated'),
     lambda text: text + ' data hidden {record a {}}',
-    lambda text: text.replace('data catalog_1', 'import "file:///private.ddn" as remote; data catalog_1'),
-    lambda text: text.replace('native_json:"{}"', 'native_json:"{\\"a\\":1,\\"a\\":2}"'),
-    lambda text: text.replace('native_json:"{}"', 'native_json:"{\\"a\\":NaN}"'),
-    lambda text: text.replace('native_json:"{}"', 'native_json:"[]"'),
-    lambda text: text.replace('path_json:"[\\"table\\"]"', 'path_json:"[42]"'),
-    lambda text: text.replace('system:"unknown"', 'system:"true"'),
-    lambda text: text.replace('\\"objects\\":1', '\\"objects\\":0'),
+    lambda text: 'include "file:///private.ddn"\n' + text,
+    lambda text: text.replace('native_json '+q('{}'), 'native_json '+q('{"a":1,"a":2}')),
+    lambda text: text.replace('native_json '+q('{}'), 'native_json '+q('{"a":NaN}')),
+    lambda text: text.replace('native_json '+q('{}'), 'native_json '+q('[]')),
+    lambda text: text.replace('path_json '+q('["table"]'), 'path_json '+q('[42]')),
+    lambda text: text.replace('system "unknown"', 'system "true"'),
+    lambda text: text.replace('""objects"":1', '""objects"":0'),
 ])
 def test_malformed_or_inconsistent_documents_are_rejected(mutate):
     text = source([resource('table')])
@@ -62,8 +65,8 @@ def test_malformed_or_inconsistent_documents_are_rejected(mutate):
 def test_duplicate_records_and_resource_identity_are_rejected():
     text = source([resource('table'), resource('other')])
     with pytest.raises(ValueError):
-        read_catalog(text.replace('resource_id:"other"', 'resource_id:"table"'))
-    start, end = text.index('record o_'), text.index('\nview ')
+        read_catalog(text.replace('resource_id "other"', 'resource_id "table"'))
+    start, end = text.index('element "catalog_'), text.index('\nview ')
     with pytest.raises(ValueError):
         read_catalog(text[:start] + text[start:end] + text[start:])
 
@@ -102,12 +105,12 @@ def test_paired_parser_character_limit_is_checked_before_starting_a_process():
 
 
 def imported_workspace(text):
-    start = text.index('view inventory_1')
-    model, view = text[:start], text[start:]
-    model = model.replace('module "scratchrobin.firebird.catalog"', 'module "scratchrobin.firebird.catalog.model"')
-    view = 'ddn "0.7"; import "../models/native.ddn" as native; module "scratchrobin.firebird.catalog.views";\n' + view.replace('@catalog_', '@native.catalog_')
-    return {'format': 'ddn-workspace@1', 'entry': 'views/catalog.ddn', 'view': 'inventory_1',
-            'files': {'models/native.ddn': model, 'views/catalog.ddn': view}}
+    start=text.index('view "inventory_1"')
+    model, view=text[:start],text[start:]
+    identities=re.findall(r'^element "(catalog_[^"]+)"',model,re.M)
+    view=ddn.header('scratchrobin.firebird.catalog.views')+'include "../models/native.ddn"\n'+ddn.table_view('inventory_1','Inventory',[ddn.ref(identity,'../models/native.ddn') for identity in identities],[{'key':'name','label':'Name'}])
+    return {'format':'ddn-source-workspace@1','entry':'views/catalog.ddn','view':'inventory_1',
+        'files':{'models/native.ddn':model,'views/catalog.ddn':view}}
 
 
 def test_workspace_imports_preserve_native_records_and_file_locations():
@@ -128,19 +131,18 @@ def test_imports_cannot_leave_the_admitted_file_set(path):
 
 def test_invalid_hidden_view_and_import_cycle_are_rejected():
     snapshot = imported_workspace(source([resource('table')]))
-    snapshot['files']['views/catalog.ddn'] += '\nview broken {data:[@native.missing];}'
+    snapshot['files']['views/catalog.ddn'] += '\nview broken as table.records@1\n    with\n        projection\n            options\n                records\n                    item\n                        id missing\n'
     with pytest.raises(ValueError):
         read_catalog(json.dumps(snapshot))
     snapshot = imported_workspace(source([resource('table')]))
-    snapshot['files']['models/native.ddn'] += '\nimport "../views/catalog.ddn" as cycle;'
-    with pytest.raises(ValueError):
-        read_catalog(json.dumps(snapshot))
+    snapshot['files']['models/native.ddn'] += '\ninclude "../views/catalog.ddn"\n'
+    assert len(read_catalog(json.dumps(snapshot))['rows']) == 1
 
 
 def test_invalid_source_retains_coded_file_offset_without_source_text():
     with pytest.raises(ValueError) as failure:
         read_catalog('ddn "0.7"; module "scratchrobin.firebird.catalog"; invalid_secret_source')
-    assert 'DDN_PARSE' in str(failure.value)
+    assert 'syntax.statement' in str(failure.value)
     assert 'catalog.ddn' in str(failure.value)
     assert 'offset' in str(failure.value)
     assert 'invalid_secret_source' not in str(failure.value)

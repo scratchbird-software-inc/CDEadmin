@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "specification": "WIS1.1",
+  "api": "1.0",
+  "language": "ddn-next-1",
+  "identitySource": {
+    "source": "docs/Weaver-Specifications/reference/planning/2026-10-standard-plugins/contracts/modules.json",
+    "sha256": "d0d3c6489a2f4c9feab2729b312ef86dd7f617b9332c1486b06479b193685f06"
+  },
+  "scope": "Declaration-only DDN utility ABI. No parser, renderer or factory implementation is included.",
+  "files": [
+    {
+      "source": "docs/Weaver-Specifications/reference/planning/2026-10-standard-plugins/contracts/core.d.ts",
+      "target": "project/ddn/packages/types/src/core.d.ts",
+      "sha256": "3d9f3a40ebb6a96c2c162b416bd65354dbe47323de37839a649bea62dff94527"
+    },
+    {
+      "source": "docs/Weaver-Specifications/reference/planning/2026-10-standard-plugins/contracts/scene.d.ts",
+      "target": "project/ddn/packages/types/src/scene.d.ts",
+      "sha256": "9ac9415606dfa5b45bdff3cb9f2ab2fe4c7c4e15a5feb49d8056ab273543ab93"
+    },
+    {
+      "source": "docs/Weaver-Specifications/reference/planning/2026-10-standard-plugins/contracts/browser.d.ts",
+      "target": "project/ddn/packages/types/src/browser.d.ts",
+      "sha256": "51482dd6e55d15bfe8ddb065cedbe694514b81896e1329df024d017ee43d4f69"
+    }
+  ],
+  "entry": {
+    "target": "project/ddn/packages/types/src/index.d.ts",
+    "sha256": "7fbff36a3bbaefbd753fc82a88de4ba02996e1c76c51e9aaa61ea5a0984c67ab",
+    "scope": "Core and scene types without DOM dependencies; browser types use the separate browser subpath."
+  }
+}

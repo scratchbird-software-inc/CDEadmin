@@ -1,4 +1,5 @@
 """Typed static DDN data admission and durable, explicitly committed imports."""
+from . import ddn_source as ddn
 from copy import deepcopy
 import hashlib
 import json
@@ -33,15 +34,15 @@ def read(source, node='node', *, engine='mysql'):
     if not isinstance(source, str) or not source or len(source.encode('utf8')) > MAX_BYTES:
         raise ValueError('Data DDN must be nonempty text within 8 MiB')
     snapshot = decode(source) if source.lstrip().startswith('{') else {
-        'format': 'ddn-workspace@1', 'entry': 'result-1.ddn', 'view': 'result_1', 'files': {'result-1.ddn': source}}
+        'format': 'ddn-source-workspace@1', 'entry': 'result-1.ddn', 'view': 'result_1', 'files': {'result-1.ddn': source}}
     if (not isinstance(snapshot, dict) or set(snapshot) != {'format', 'entry', 'view', 'files'} or
-            snapshot['format'] != 'ddn-workspace@1' or not isinstance(snapshot['files'], dict) or
+            snapshot['format'] != 'ddn-source-workspace@1' or not isinstance(snapshot['files'], dict) or
             not 1 <= len(snapshot['files']) <= 64 or snapshot.get('entry') not in snapshot['files']):
         raise ValueError('Invalid static data workspace')
     if not SLOTS.acquire(timeout=1):
         raise ValueError('Data DDN reader is busy')
     try:
-        result = subprocess.run([node, '--max-old-space-size=192', str(Path(__file__).parent / 'ddn/read_mysql_data.mjs')],
+        result = subprocess.run([node, ddn.NODE_HEAP_OPTION, str(Path(__file__).parent / 'ddn/read_mysql_data.mjs')],
             input=json.dumps(snapshot), text=True, encoding='utf8', capture_output=True, timeout=15,
             env={key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ})
         if result.returncode:

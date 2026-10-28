@@ -67,21 +67,21 @@ jobs:
       - name: Provision and qualify the development environment
         env:
           CDEADMIN_NATIVE_EVIDENCE: ${{ runner.temp }}/cdeadmin-native-evidence
-          SCRATCHROBIN_DDN_SOURCE: ${{ runner.temp }}/Diagram-Design-Notation
+          SCRATCHROBIN_DDN_SOURCE: ${{ runner.temp }}/ScratchWeaver
           SCRATCHROBIN_DDN_WORK: ${{ runner.temp }}/ddn-intake
+          CDEADMIN_DDN_SOURCE_URL: ${{ vars.CDEADMIN_DDN_SOURCE_URL }}
           NATIVE_STAGES: ${{ inputs.stages || 'prerequisites,doctor,clients,python,servers,frontend,desktop,verify,fixtures' }}
         run: |
           $ddn = Get-Content 'web/pgadmin/static/vendor/ddn/current/resource-manifest.json' -Raw | ConvertFrom-Json
-          git -c core.autocrlf=false clone https://github.com/scratchbird-software-inc/Diagram-Design-Notation.git $env:SCRATCHROBIN_DDN_SOURCE
+          if (-not $env:CDEADMIN_DDN_SOURCE_URL) { throw 'Configure an authorized ddn-next-1 source. The obsolete public DDN repository is not a fallback.' }
+          git -c core.autocrlf=false clone $env:CDEADMIN_DDN_SOURCE_URL $env:SCRATCHROBIN_DDN_SOURCE
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Push-Location $env:SCRATCHROBIN_DDN_SOURCE
           git config core.autocrlf false
           git checkout --detach $ddn.source.revision
           if ($LASTEXITCODE) { Pop-Location; exit $LASTEXITCODE }
-          npm ci --ignore-scripts
-          $dependencyExit = $LASTEXITCODE
           Pop-Location
-          if ($dependencyExit) { exit $dependencyExit }
+          # The intake provisions exact native tools in runner-owned evidence.
           python -m uv run --no-project --python 3.14 python tools/development/native.py ci --evidence $env:CDEADMIN_NATIVE_EVIDENCE --stages $env:NATIVE_STAGES
           exit $LASTEXITCODE
       - name: Qualify configured disposable network engines
@@ -95,7 +95,7 @@ jobs:
         run: |
           $env:CDEADMIN_NATIVE_ROUTES = Join-Path '${{ runner.temp }}' 'native-routes.json'
           [System.IO.File]::WriteAllText($env:CDEADMIN_NATIVE_ROUTES, $env:ROUTES_JSON)
-          $env:SCRATCHROBIN_DDN_SOURCE = Join-Path '${{ runner.temp }}' 'Diagram-Design-Notation'
+          $env:SCRATCHROBIN_DDN_SOURCE = Join-Path '${{ runner.temp }}' 'ScratchWeaver'
           $env:SCRATCHROBIN_DDN_WORK = Join-Path '${{ runner.temp }}' 'ddn-intake'
           python -m uv run --no-project --python 3.14 python tools/development/native.py network --evidence '${{ runner.temp }}/cdeadmin-native-network'
           exit $LASTEXITCODE

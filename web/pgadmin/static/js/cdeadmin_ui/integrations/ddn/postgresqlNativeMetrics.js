@@ -1,4 +1,4 @@
-import {dashboardPanelFiles} from './dashboardPanels';
+import {dashboardPanelFiles} from './dashboardPanels.js';
 
 export function currentPostgresqlNativeMetrics(snapshot,scope) {
   const sample=snapshot?.samples?.at(-1);

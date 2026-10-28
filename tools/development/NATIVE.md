@@ -66,17 +66,24 @@ machine code or process-wide state. Closing does not undo external effects.
 Reopening does not automatically reload. Review and loading require native
 administration and filesystem permissions in addition to query execution.
 
-Clone the sister project beside CDEadmin and install its pinned dependencies:
+The adopted source is the standalone open DDN tree in the authorized
+ScratchWeaver checkout. It is not publicly released. Set
+`SCRATCHROBIN_DDN_SOURCE` to that checkout; the old public DDN repository is not
+a fallback. Read `project/ddn/README.md` and its public utility declarations.
+The intake captures and rebuilds only standalone DDN in consumer-owned work;
+it never builds commercial Weaver or modifies the active source checkout.
 
-```text
-git clone https://github.com/scratchbird-software-inc/Diagram-Design-Notation.git
-cd Diagram-Design-Notation
-npm ci --ignore-scripts
-```
+`tools/refresh_ddn.py` reuses pinned tools from the source's `.work` when
+available, or provisions exact native Node/TypeScript versions with checked
+archive integrity. Set `SCRATCHROBIN_DDN_NODE` and
+`SCRATCHROBIN_DDN_TYPESCRIPT` for explicitly provisioned native tools. These are
+build dependencies; DDN's shipped viewer/designer run in the browser.
+Windows/macOS receipts remain required from the platform stream.
 
-Set `SCRATCHROBIN_DDN_SOURCE` to that checkout if it is elsewhere. DDN is
-captured and rebuilt in an isolated work directory before application builds
-and qualification runs. The active sister checkout is not modified.
+CI/container acquisition requires an explicitly configured
+`CDEADMIN_DDN_SOURCE_URL` with authorized source access. Unpublished source
+changes must be captured locally; they cannot be fetched from an older release.
+Do not publish the unreleased dependency or use closed Weaver code.
 
 ## Windows stages
 
@@ -84,7 +91,7 @@ From the CDEadmin checkout, use an evidence directory outside the repository:
 
 ```powershell
 $evidence = 'C:\dev-evidence\cdeadmin-native'
-$env:SCRATCHROBIN_DDN_SOURCE = 'C:\src\Diagram-Design-Notation'
+$env:SCRATCHROBIN_DDN_SOURCE = 'C:\src\ScratchWeaver'
 python tools/development/native.py doctor --evidence $evidence
 python tools/development/native.py clients --evidence $evidence
 python tools/development/native.py python --evidence $evidence
@@ -107,7 +114,7 @@ wrapper for the separate Linux reference estate.
 
 ```bash
 export SCRATCHROBIN_PYTHON=/absolute/path/to/python3.14
-export SCRATCHROBIN_DDN_SOURCE="$HOME/src/Diagram-Design-Notation"
+export SCRATCHROBIN_DDN_SOURCE="$HOME/src/ScratchWeaver"
 bash tools/development/native.sh doctor --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh clients --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh python --evidence "$HOME/dev-evidence/cdeadmin-native"

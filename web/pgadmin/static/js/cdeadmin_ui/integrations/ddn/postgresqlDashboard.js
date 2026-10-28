@@ -1,4 +1,4 @@
-import {dashboardPanelFiles} from './dashboardPanels';
+import {dashboardPanelFiles} from './dashboardPanels.js';
 
 const identity = value => [...new TextEncoder().encode(String(value ?? ''))].map(byte => byte.toString(16).padStart(2, '0')).join('') || '00';
 

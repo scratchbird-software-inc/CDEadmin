@@ -7,7 +7,7 @@ jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
   DDNViewerSurface: props => {viewer = props; return <div>DuckDB DDN viewer</div>;},
 }));
 const Component = withTheme(DuckDBServerCatalog);
-const snapshot = {format: 'ddn-workspace@1', entry: 'catalog.ddn',
+const snapshot = {format: 'ddn-source-workspace@1', entry: 'catalog.ddn',
   view: 'inventory_1', files: {'catalog.ddn': 'native facts'}};
 const document = {snapshot, views: [{id: 'inventory_1', label: 'Inventory', entry: 'catalog.ddn'}]};
 

@@ -4,7 +4,7 @@ import {withTheme} from '../fake_theme';
 
 jest.mock('sources/Dialogs/FirebirdCatalogDesigner',()=>()=>null);
 const Component=withTheme(SQLiteRetainedSchema);
-const snapshot={format:'ddn-workspace@1',entry:'catalog.ddn',view:'inventory_1',files:{'catalog.ddn':'retained native facts'}};
+const snapshot={format:'ddn-source-workspace@1',entry:'catalog.ddn',view:'inventory_1',files:{'catalog.ddn':'retained native facts'}};
 const capture={document:{snapshot},resources:[{resource_id:'temporary',resource_kind:'table',display_name:'owned',display_path:['temp','owned'],native:{}}]};
 
 it('generates and reviews native TEMP columns on the captured original session without commit',async()=>{

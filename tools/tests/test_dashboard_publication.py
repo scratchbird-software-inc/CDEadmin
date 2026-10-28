@@ -5,14 +5,12 @@ from tools.tests.test_dashboard_definitions import setup, payload
 from pgadmin.cdeadmin.workspace.assets import ProjectAssetError, ProjectAssetConflict
 from pgadmin.cdeadmin.workspace.dashboard_validation import validate_dashboard
 
-SOURCE = '''ddn "0.5"; module "scratchrobin.firebird.monitoring";
-data observations { record server_0 "Version" { x_record: {value:"should-not-persist", unit:"version", rate:""}; } }
-view dashboard { data: [@observations]; projection {kind: table; profile:"table.records@1";
-records: [@observations.server_0]; columns: [{key:"x_record.value", label:"Version"}];} }'''
+from pgadmin.cdeadmin.workspace import ddn_source as ddn
+SOURCE=ddn.header('scratchrobin.firebird.monitoring')+ddn.declaration('source','metric_feed','host',{'channel':'scratchrobin.firebird.monitoring.observations','update':'keyed'})+ddn.declaration('data','observations',None,{'columns':[{'id':key,'type':'text'} for key in ['id','panel','measure','value','unit','rate']], 'rows':[['server_0','server','Version','should-not-persist','version','']], 'source':ddn.ref('metric_feed'),'key':'id'})+ddn.declaration('view','dashboard','table.records@1',{'projection':{'options':{'records':[ddn.ref('observations')],'columns':[{'id':'value','label':'Version'}]}}})
 
 
 def source():
-    return {'format': 'ddn-workspace@1', 'entry': 'dashboard.ddn',
+    return {'format': 'ddn-source-workspace@1', 'entry': 'dashboard.ddn',
             'view': 'dashboard', 'files': {'dashboard.ddn': SOURCE}}
 
 
@@ -21,7 +19,7 @@ def test_validation_redacts_values_and_rejects_unknown_or_wrong_scope_bindings()
     assert 'should-not-persist' not in clean['files']['dashboard.ddn']
     assert 'Unavailable' in clean['files']['dashboard.ddn']
     for scope, text in [('database', SOURCE), ('server', SOURCE.replace('server_0', 'query_0')),
-                        ('server', SOURCE.replace('@observations.server_0', '@observations.absent'))]:
+                        ('server', SOURCE.replace('id "observations"', 'id "absent"', 1))]:
         bad = source()
         bad['files']['dashboard.ddn'] = text
         with pytest.raises(ProjectAssetError):

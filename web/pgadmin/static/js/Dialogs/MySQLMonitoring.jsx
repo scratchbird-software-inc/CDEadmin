@@ -53,10 +53,10 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
         if(!showPolicy) {
           const definition = (await getApiInstance().get(definitionEndpoint)).data.data;
           if(definition?.state === 'published') {
-            const {viewer} = await loadDDNLibraries();
+            const libraries = await loadDDNLibraries();
             const live = engineMode ? embedded ? embeddedFleetFiles(response.data.data) : mysqlFleetFiles(response.data.data, engine) :
               embedded ? embeddedDashboard(response.data.data, scope) : mysqlDashboardFiles(response.data.data, scope, engine);
-            publication = bindPublication(viewer, definition.snapshot, scope, live, engine);
+            publication = await bindPublication(libraries, definition.snapshot, scope, live, engine);
           }
         }
         if(active && token === serial.current) {setSnapshot(response.data.data); setPublishedView(publication); setError('');}
@@ -166,7 +166,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
         display === 'trends' && !engineMode ? engine === 'sqlite' ? <SQLiteTrendView snapshot={snapshot} /> : embedded ? <DuckDBTrendView snapshot={snapshot} /> :
           <MySQLTrendView snapshot={snapshot} scope={scope} engine={engine} /> :
           <Box sx={{height: 'calc(100% - 76px)', minHeight: 300}}><DDNViewerSurface presentation snapshot={publishedView || {
-            format: 'ddn-workspace@1', entry: 'dashboard.ddn', view: pages.includes(page) ? page : 'dashboard', files}} /></Box>}
+            format: 'ddn-source-workspace@1', entry: 'dashboard.ddn', view: pages.includes(page) ? page : 'dashboard', files}} /></Box>}
     </>}
   </Box>;
 }

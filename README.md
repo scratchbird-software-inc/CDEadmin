@@ -340,3 +340,8 @@ Upstream source: <https://github.com/pgadmin-org/pgadmin4>
 Questions, defects, and security reports about CDEadmin must be handled by the
 CDEadmin project’s own channels. Do not send CDEadmin issues to pgAdmin’s
 support or security contacts.
+
+The adopted diagram/dashboard foundation is standalone open DDN `ddn-next-1`
+from the authorized ScratchWeaver checkout. See
+[the integration contract](docs/en_US/ddn_adopted_runtime.rst). It is currently
+unreleased; builds require that source, not the incompatible old DDN repository.

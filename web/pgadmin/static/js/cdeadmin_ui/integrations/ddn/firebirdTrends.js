@@ -1,3 +1,4 @@
+import {recordSource,sourceHeader,tableSource,viewSource,ref} from './source.js';
 import {COUNTER_FIELDS} from './dashboardPublication.mjs';
 // Retained observations only. No native queries or persistence operations.
 export const FIREBIRD_TREND_METRICS = Object.freeze([
@@ -27,7 +28,6 @@ export const FIREBIRD_TREND_METRICS = Object.freeze([
     ({id: `derived.${field}`, label, scope: 'database', derived: true})),
   {id: 'connection_count' , label: 'Service-visible attachments', scope: 'server'},
 ]);
-const quote = (value) => JSON.stringify(String(value ?? 'Unavailable'));
 
 export function trendObservations(snapshot, metricId, limit=120) {
   const metric = FIREBIRD_TREND_METRICS.find((item) => item.id === metricId);
@@ -69,38 +69,21 @@ export function firebirdTrendFiles(snapshot, metricId, limit=120) {
 }
 
 // Shared DDN presentation only. Native adapters own values, epochs and gaps.
-export function retainedTrendFiles(rows, label, moduleName) {
-  const table = rows.length ? rows : [{reason: 'No retained observations'}];
-  const records = table.map((row, index) => `record r${index} ${quote(row.observed)} {
-    x_record: {value: ${quote(row.exact)}, elapsed: ${quote(row.elapsed)}, epoch: ${quote(row.epoch)},
-      coverage: ${quote(row.coverage)}, reason: ${quote(row.reason)} }; }`).join('\n');
-  const points = rows.flatMap((row, index) => row.numeric == null ? [] : [
-    `record p${index} ${quote(row.observed)} { x_record: {elapsed: ${row.elapsed}, value: ${row.numeric}}; }`,
-  ]);
-  const refs = rows.flatMap((row, index) => row.numeric == null ? [] : [`@points.p${index}`]);
-  const chart = points.length ? `
-    data points { ${points.join('\n')} }
-    view chart "Retained observations — approximate chart, no interpolation" {
-      data: [@points]; projection {kind: chart; profile: "chart.basic@1"; mark: point; x_type: number;
-        records: [${refs.join(',')}]; x: "x_record.elapsed"; y: "x_record.value";
-        width: 1000px; height: 400px; }
-      publication {size: content; fit: none;}
-    }` : '';
-  return {'trends.ddn': `ddn "0.5"; module ${quote(moduleName)};
-    data observations {${records}}
-    ${chart}
-    view detail "Exact retained values and gaps" {
-      data: [@observations]; projection {kind: table; profile: "table.records@1";
-        records: [${table.map((_, index) => `@observations.r${index}`).join(',')}];
-        columns: [{key:"name",label:"Received (UTC)"}, {key:"x_record.elapsed",label:"Elapsed seconds"},
-          {key:"x_record.value",label:"Exact value"}, {key:"x_record.reason",label:"Observation / gap"},
-          {key:"x_record.coverage",label:"Coverage"}, {key:"x_record.epoch",label:"Epoch"}];
-      } publication {size: content; fit: none;}
-    }
-    view trends ${quote(label)} { data: [@observations];
-      projection {kind: panels; profile: "panels.composed@1"; columns: 1;
-        panels: [${points.length ? '{id:"chart",title:"Retained sample points",row:0,column:0,view:@chart},' : ''}
-          {id:"detail",title:"Exact observations",row:${points.length ? 1 : 0},column:0,view:@detail}];
-      } publication {size: content; fit: none;}
-    }`};
+export function retainedTrendFiles(rows,label,moduleName) {
+  const table=rows.length?rows:[{reason:'No retained observations'}];
+  const records=table.map((row,index)=>recordSource('r'+index,String(row.observed ?? 'Unavailable'),{
+    value:String(row.exact ?? 'Unavailable'),elapsed:String(row.elapsed ?? 'Unavailable'),epoch:String(row.epoch ?? 'Unavailable'),
+    coverage:String(row.coverage ?? 'Unavailable'),reason:String(row.reason ?? 'Unavailable')})).join('');
+  const points=rows.flatMap((row,index)=>row.numeric==null?[]:[{id:'p'+index,row}]);
+  const chart=points.length?points.map(({id,row})=>recordSource(id,String(row.observed),{elapsed:row.elapsed,value:row.numeric})).join('')+
+    viewSource('chart','Retained observations — approximate chart, no interpolation','chart.basic@1',
+      {mark:'point',x_type:'number',x:'metadata.x_record.elapsed',y:'metadata.x_record.value'},points.map(item=>item.id)):'';
+  return {'trends.ddn':sourceHeader(moduleName)+records+chart+
+    tableSource('detail','Exact retained values and gaps',table.map((_,index)=>'r'+index),[
+      {key:'title',label:'Received (UTC)'},{key:'metadata.x_record.elapsed',label:'Elapsed seconds'},
+      {key:'metadata.x_record.value',label:'Exact value'},{key:'metadata.x_record.reason',label:'Observation / gap'},
+      {key:'metadata.x_record.coverage',label:'Coverage'},{key:'metadata.x_record.epoch',label:'Epoch'}])+
+    viewSource('trends',label,'panels.composed@1',{columns:1,panels:[
+      ...(points.length?[{target:ref('chart'),kind:'view',title:'Retained sample points',layout:{row:0,column:0}}]:[]),
+      {target:ref('detail'),kind:'view',title:'Exact observations',layout:{row:points.length?1:0,column:0}}]})};
 }

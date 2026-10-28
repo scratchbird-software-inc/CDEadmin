@@ -1,188 +1,110 @@
-/////////////////////////////////////////////////////////////
-//
-// CDEadmin - Multi-engine Database Administration
-//
-// Copyright (C) 2013 - 2026, The pgAdmin Development Team
-// This software is released under the PostgreSQL Licence
-//
-//////////////////////////////////////////////////////////////
-
-import {loadDDNLibraries} from './library';
-import {
-  ddnAssetPayload,
-  validateDDNAssetRef,
-  validateDDNFiles,
-  validateDDNSnapshot,
-} from './contracts';
-
-export const DDN_PERSISTENCE_STATES = Object.freeze({
-  CLEAN: 'clean',
-  DIRTY: 'dirty',
-  SAVING: 'saving',
-  SAVED_NEWER_EDITS: 'saved-newer-edits',
-  SAVE_FAILED: 'save-failed',
-  EXTERNAL_CONFLICT: 'external-conflict',
-});
-
+import {loadDDNLibraries} from './library.js';
+import {ddnAssetPayload,validateDDNAssetRef,validateDDNSnapshot} from './contracts.js';
+import {sourceSet,checkOpen,entriesOf,selectView,captureSVG,envelope} from './runtime.js';
+export const DDN_PERSISTENCE_STATES=Object.freeze({CLEAN:'clean',DIRTY:'dirty',SAVING:'saving',
+  SAVED_NEWER_EDITS:'saved-newer-edits',SAVE_FAILED:'save-failed',EXTERNAL_CONFLICT:'external-conflict'});
+const fingerprint=snapshot=>JSON.stringify({entry:snapshot.entry,view:snapshot.view,files:Object.entries(snapshot.files).sort(([a],[b])=>a.localeCompare(b))});
+const failure=result=>new Error(result.failure?.diagnostics?.map(item=>item.message).join('\n') || result.failure?.code || 'DDN command failed.');
 export class DDNSessionController {
   static async create(options={}) {
-    const libraries = await loadDDNLibraries();
-    return new DDNSessionController(libraries, options);
+    const libraries=await loadDDNLibraries({designer:true});
+    const current=new DDNSessionController(libraries,options);
+    try {await current.open(options);return current;} catch(error) {current.destroy();throw error;}
   }
-
-  constructor(libraries, options={}) {
-    this.libraries = libraries;
-    this.assetRef = options.assetRef ?
-      validateDDNAssetRef(options.assetRef) : null;
-    this.tool = options.tool || null;
-    this.readOnly = Boolean(options.readOnly);
-    this.validation = options.validation || 'strict';
-    const source = options.snapshot ? validateDDNSnapshot(options.snapshot) : options;
-    this._workspace = this.tool ? null : libraries.viewer.createWorkspace(validateDDNFiles(source.files));
-    this.editor = this.workspace.editor({canWrite: () => !this.readOnly});
-    const entries = this.workspace.entries().filter((item) => item.views.length);
-    const entry = entries.find((item) => item.file === source.entry) || entries[0];
-    if(!entry) {
-      if(!this.tool) this.workspace.destroy();
-      throw new Error('The DDN workspace has no displayable views.');
-    }
-    this.entry = entry.file;
-    this.view = entry.views.find((item) => item.id === source.view)?.id || entry.views[0].id;
-    this.overrides = source.overrides;
-    this.layoutState = source.layoutState;
-    this.persistenceState = DDN_PERSISTENCE_STATES.CLEAN;
-    this.lastError = null;
-    this.listeners = new Set();
-    this.destroyed = false;
-    this.saving = false;
-    this.savedFingerprint = JSON.stringify(this.snapshot().files);
-    const changed = (event) => {
-      this.persistenceState = DDN_PERSISTENCE_STATES.DIRTY;
-      try {
-        if(!this.isDirty()) this.persistenceState = DDN_PERSISTENCE_STATES.CLEAN;
-      } catch(error) { this.lastError = error; }
-      this._emit({type: 'session', event});
-    };
-    this.unsubscribe = this.tool ? this.tool.onSourceChange(changed) : this.workspace.subscribe(changed);
+  constructor(libraries,options={}) {
+    this.libraries=libraries;this.assetRef=options.assetRef?validateDDNAssetRef(options.assetRef):null;
+    this.readOnly=Boolean(options.readOnly);this.validation=options.validation || 'strict';
+    this.listeners=new Set();this.persistenceState='clean';this.saving=false;this.destroyed=false;this.lastError=null;
+    this.host=options.host || document.createElement('div');
+    this.runtime=libraries.viewer.createRuntime(libraries.viewer.createBrowserRuntimeOptions());
+    this.viewer=libraries.viewer.createViewer(this.host,{runtime:this.runtime,controls:'standard'});
+    // Editing a local design grants model edits only. Review/accept/reopen require
+    // an explicit authority supplied by the owning product workflow.
+    this.authority=options.authority || {authorize:async action=>({allowed:!this.readOnly && ['model.edit','model.verify'].includes(action),principal:'scratchrobin.design',grants:!this.readOnly?['model.edit','model.verify']:[]})};
   }
-
-  _alive() {
-    if(this.destroyed) throw new Error('DDN session has been destroyed.');
-  }
-
-  get workspace() { return this.tool?.workspace || this._workspace; }
-  isDirty() { return this.saving || JSON.stringify(this.snapshot().files) !== this.savedFingerprint; }
-
-  _emit(event) {
-    for(const listener of this.listeners) listener(this.state(), event);
-  }
-
-  state() {
-    return Object.freeze({
-      entry: this.entry,
-      view: this.view,
-      revision: this.workspace.revision,
-      readOnly: this.readOnly,
-      validation: this.validation,
-      persistence: this.persistenceState,
-      history: Object.freeze({...this.workspace.history()}),
-      lastError: this.lastError,
+  async open(options) {
+    const source=options.snapshot?validateDDNSnapshot(options.snapshot):options;
+    const opened=checkOpen(await this.viewer.open(sourceSet(source.files,source.entry || Object.keys(source.files)[0],!this.readOnly)));
+    const chosen=selectView(entriesOf(this.libraries,opened.snapshot),source.entry,source.view);
+    this.entry=chosen.entry;this.view=chosen.view;
+    await this.viewer.navigate({kind:'expand-view',target:{file:this.entry,id:this.view}});
+    this.designer=this.libraries.designer.createDesigner(this.viewer,{authority:this.authority,controls:'standard'});
+    this.savedFingerprint=fingerprint(this.getSnapshot());
+    this.inputRevision=0;this.pendingInput=false;
+    this.onInput=()=>{if(this.destroyed || this.readOnly)return;this.inputRevision++;this.pendingInput=true;if(!this.saving)this.persistenceState='dirty';this._emit({type:'pending-input'});};
+    this.host.addEventListener('input',this.onInput);this.host.addEventListener('change',this.onInput);
+    this.unsubscribe=this.runtime.subscribe(event=> {
+      if(this.destroyed) return;
+      if(!this.saving) this.persistenceState=this.isDirty()?'dirty':'clean';
+      this._emit({type:'session',event});
+    });
+    this.unsubscribeViewer=this.viewer.subscribe(event=> {
+      if(['viewport','ready'].includes(event.kind) && event.target && this.libraries.model.listRecords(this.runtime.snapshot().normalized).some(row=>row.kind==='view' && row.ref.file===event.target.file && row.ref.id===event.target.id)) {
+        this.entry=event.target.file;this.view=event.target.id;this._emit({type:'view'});
+      }
     });
   }
-
-  subscribe(listener) {
+  _alive() {if(this.destroyed) throw new Error('DDN session has been destroyed.');}
+  _writable() {this._alive();if(this.readOnly) throw new Error('This DDN workspace is read-only.');}
+  _emit(event) {for(const listener of this.listeners) listener(this.state(),event);}
+  getFiles() {this._alive();return this.getSnapshot().files;}
+  getSnapshot() {this._alive();return envelope(this.runtime,{entry:this.entry,view:this.view});}
+  isDirty() {return this.saving || this.pendingInput || fingerprint(this.getSnapshot())!==this.savedFingerprint;}
+  state() {return Object.freeze({entry:this.entry,view:this.view,revision:this.runtime.snapshot()?.revision,
+    readOnly:this.readOnly,validation:this.validation,persistence:this.persistenceState,lastError:this.lastError});}
+  subscribe(listener) {this._alive();if(typeof listener!=='function') throw new TypeError('DDN session listener must be a function.');this.listeners.add(listener);return ()=>this.listeners.delete(listener);}
+  async snapshot() {
     this._alive();
-    if(typeof listener !== 'function') {
-      throw new TypeError('DDN session listener must be a function.');
-    }
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  _writable() {
+    const inputRevision=this.inputRevision;
+    const artifacts=await this.designer.save();
     this._alive();
-    if(this.readOnly) throw new Error('This DDN workspace is read-only.');
+    // Save flushes inspector/dialog drafts and produces one coherent revision.
+    if(!artifacts.length || artifacts.some(item=>JSON.stringify(item.revision)!==JSON.stringify(artifacts[0].revision))) throw new Error('DDN returned an incoherent save.');
+    const captured={format:'ddn-source-workspace@1',entry:this.entry,view:this.view,
+      files:Object.fromEntries(await Promise.all(artifacts.map(async item=>[item.name,new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(await item.blob.arrayBuffer())]))) };
+    this.captureRevision=artifacts[0].revision;
+    if(this.inputRevision===inputRevision)this.pendingInput=false;
+    return validateDDNSnapshot(captured);
   }
-  request() { return {entry: this.entry, view: this.view, overrides: this.overrides, layoutState: this.layoutState}; }
-  inspect() { this._alive(); return this.workspace.inspect(this.entry, this.view); }
-  getFiles() { this._alive(); return this.tool ? validateDDNFiles(this.tool.getSource({includeAppearance: true}).files) : this.workspace.getFiles(); }
-  render() { this._alive(); return this.workspace.renderSync(this.request()); }
-  review() { this._alive(); return this.workspace.validateDraft(this.entry, this.view); }
-  exportSVG() { this._alive(); return this.tool ? this.tool.exportSvgString() : this.render().svg; }
-  snapshot() {
-    this._alive();
-    if(this.tool) {
-      // A source bridge alone does not detect pending structured-editor drafts.
-      // The documented snapshot API rejects unapplied drafts before any save.
-      const snapshot = this.tool.snapshot();
-      const source = this.tool.getSource({includeAppearance: true});
-      return validateDDNSnapshot({...snapshot, format: 'ddn-workspace@1', ...source});
-    }
-    return validateDDNSnapshot(this.workspace.snapshot(this.entry, this.view, this.overrides, this.layoutState));
+  async beforeClose() {await this.snapshot();return this.isDirty();}
+  async inspect() {this._alive();return this.viewer.inspect({file:this.entry,id:this.view});}
+  async render() {await this.snapshot();return captureSVG(this.viewer,{entry:this.entry,view:this.view});}
+  async exportSVG() {return (await this.render()).svg;}
+  async review() {await this.snapshot();return this.runtime.verifier.verifyModel(this.runtime.snapshot(),{level:'semantic',scope:{kind:'workarea'},purpose:'view'});}
+  async prepare(intent) {this._writable();const result=await this.designer.commands.prepare(intent);if(!result.ok) throw failure(result);return result.command;}
+  async commit(plan) {this._writable();const result=await this.designer.commands.commit(plan.id);if(!result.ok) throw failure(result);return result.receipt;}
+  async execute(intent) {return this.commit(await this.prepare(intent));}
+  async updateSource(file,text) {
+    this._writable();const source=this.runtime.sources().files.find(item=>item.id===file);
+    if(!source) throw new Error('The selected DDN source does not exist.');
+    return this.execute({kind:'edit-source',patches:[{file,base:source.revision,start:0,end:source.text.length,text}]});
   }
-  prepare(operation) {
-    this._writable();
-    return this.editor.preview({entry: this.entry, view: this.view,
-      expectedRevision: this.workspace.revision, mode: this.validation === 'strict' ? 'review' : 'design',
-      operations: [operation]});
-  }
-  commit(plan) { this._writable(); return this.editor.apply(plan); }
-  execute(operation) { return this.commit(this.prepare(operation)); }
-  updateSource(file, source) { return this.execute({type: 'files', changes: {[file]: source}}); }
-  undo() { this._writable(); return this.workspace.undo(); }
-  redo() { this._writable(); return this.workspace.redo(); }
-  setReadOnly(value) { this.readOnly = Boolean(value); }
-
+  async undo() {this._writable();const result=await this.designer.commands.undo();if(!result.ok) throw failure(result);return result.receipt;}
+  async redo() {this._writable();const result=await this.designer.commands.redo();if(!result.ok) throw failure(result);return result.receipt;}
+  setReadOnly(value) {this.readOnly=Boolean(value);}
   async save(saveAsset) {
-    this._writable();
-    if(this.saving) throw new Error('A DDN save is already in progress.');
+    this._writable();if(this.saving) throw new Error('A DDN save is already in progress.');
     if(!this.assetRef) throw new Error('DDN session is not bound to an AssetRef.');
-    if(typeof saveAsset !== 'function') {
-      throw new TypeError('DDN asset save authority must be a function.');
-    }
-    const captured = this.snapshot();
-    const fingerprint = JSON.stringify(captured.files);
-    const revision = this.workspace.revision;
-    const payload = ddnAssetPayload(this.assetRef, captured);
-    this.saving = true;
-    this.persistenceState = DDN_PERSISTENCE_STATES.SAVING;
-    this.lastError = null;
-    this._emit({type: 'saving', revision});
+    if(typeof saveAsset!=='function') throw new TypeError('DDN asset save authority must be a function.');
+    this.saving=true;this.persistenceState='saving';this.lastError=null;this._emit({type:'saving'});
     try {
-      const result = await saveAsset(payload, {
-        expectedAssetVersion: this.assetRef.assetVersion,
-        sourceRevision: revision,
-      });
-      if(!result?.assetRef) throw new Error('Save did not return a versioned AssetRef.');
-      const reference = validateDDNAssetRef(result.assetRef);
-      if(reference.projectId !== this.assetRef.projectId || reference.assetId !== this.assetRef.assetId ||
-          reference.assetVersion <= this.assetRef.assetVersion) {
-        throw new Error('Save returned an incompatible asset identity or version.');
-      }
-      this.assetRef = reference;
-      this.savedFingerprint = fingerprint;
-      this.persistenceState = JSON.stringify(this.snapshot().files) === fingerprint ?
-        DDN_PERSISTENCE_STATES.CLEAN :
-        DDN_PERSISTENCE_STATES.SAVED_NEWER_EDITS;
-      this._emit({type: 'saved', revision, result});
-      return result;
+      const captured=await this.snapshot(), saved=fingerprint(captured), revision=this.captureRevision;
+      const result=await saveAsset(ddnAssetPayload(this.assetRef,captured),{expectedAssetVersion:this.assetRef.assetVersion,sourceRevision:revision});
+      const reference=validateDDNAssetRef(result?.assetRef);
+      if(reference.projectId!==this.assetRef.projectId || reference.assetId!==this.assetRef.assetId || reference.assetVersion<=this.assetRef.assetVersion) throw new Error('Save returned an incompatible asset identity or version.');
+      this.assetRef=reference;this.savedFingerprint=saved;
+      this.persistenceState=!this.pendingInput && fingerprint(this.getSnapshot())===saved?'clean':'saved-newer-edits';
+      this._emit({type:'saved',revision,result});return result;
     } catch(error) {
-      this.lastError = error;
-      this.persistenceState = error?.code === 'asset_conflict' ?
-        DDN_PERSISTENCE_STATES.EXTERNAL_CONFLICT :
-        DDN_PERSISTENCE_STATES.SAVE_FAILED;
-      this._emit({type: 'save-error', revision, error});
-      throw error;
-    } finally {
-      this.saving = false;
-    }
+      this.lastError=error;this.persistenceState=error?.code==='asset_conflict'?'external-conflict':'save-failed';
+      this._emit({type:'save-error',error});throw error;
+    } finally {this.saving=false;}
   }
-
   destroy() {
     if(this.destroyed) return;
-    this.unsubscribe?.();
-    this.listeners.clear();
-    if(!this.tool) this.workspace.destroy();
-    this.destroyed = true;
+    this.destroyed=true;this.host.removeEventListener('input',this.onInput);this.host.removeEventListener('change',this.onInput);this.unsubscribe?.();this.unsubscribeViewer?.();this.listeners.clear();
+    for(const resource of [this.designer,this.viewer,this.runtime]) {
+      try {resource?.destroy();} catch(error) {this.lastError ||= error;}
+    }
   }
 }

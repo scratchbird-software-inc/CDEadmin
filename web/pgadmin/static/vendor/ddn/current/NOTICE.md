@@ -1,86 +1,40 @@
-# Notices and provenance
+# DDN — notices and sponsorship
 
-ddn (Diagram Design Notation) is an open-source project of ScratchBird Software Inc.
-(https://www.scratchbird.ca), sponsored by the ScratchWeaver project
-(https://scratchbird.ca/weaver). The free tools
-are ddn-viewer and ddn-designer. ScratchWeaver is also the commercial diagramming
-suite built on ddn; ScratchRobin (open-source database console/BI project built on ddn/ddna) owns backend
-capabilities such as KEEL, which are not part of ddn, ddn-viewer, or ddn-designer.
+Copyright (c) 2026 ScratchBird Software Inc. and DDN contributors.
 
-DDN is an original proposed notation/language project. Original reference
-code, SVG geometry, documentation, and site assets are distributed together
-under `LICENSE` (GPL-2.0-or-later). The project was imported from draft
-packages previously distributed under MIT by the same contributors.
+DDN (Diagram Design Notation), its viewer, visual designer and verifier are free,
+open-source software for general public use, sponsored by
+[ScratchBird Software Inc.](https://scratchbird.ca).
 
-Mermaid, Langium, ELK, Rough.js, Vega/Vega-Lite, React Flow, diagram-js,
-JointJS, tldraw, Excalidraw, draw.io, yEd, Penpot, Unicode, W3C, and JSON
-Schema are cited design/technical references only. Their names do not imply
-endorsement, compatibility, or affiliation, and no runtime code from them is
-vendored in this repository. No vendor logos or font files are distributed;
-the reference JavaScript has no runtime dependencies.
+DDN's own implementation, documentation, examples and website code are
+licensed under the GNU General Public License, version 2 or (at your option) any
+later version (`GPL-2.0-or-later`). You may use, study, modify and redistribute
+them under that licence. DDN is distributed without warranty; see the complete
+[GPL text](LICENSE).
 
-`notation/runtime/ddn-sketch.js` is original DDN code. Rough.js documentation
-was consulted as background for seeded sketch rendering; no Rough.js
-implementation or dependency is included. The optional
-`notation/adapters/vega-lite/` adapter is original code and is not part of
-the runtime bundle.
+The [public DDN project](https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation)
+is the home for source, releases and contributions.
 
-Python rebuild utilities (optional) use locally installed `markdown-it-py`,
-`jsonschema`, `lxml`, and `Pillow`; these are not bundled and their own
-licenses apply to their distributions. The prebuilt website and JavaScript
-reference commands do not require them. External specifications are cited,
-not copied wholesale.
+## ScratchBird systems software suite
 
-## Standards and notation attributions
+- [ScratchBird Software Inc.](https://scratchbird.ca) — sponsor and suite home.
+- [Weaver](https://scratchbird.ca/weaver) — the separate commercial platform for
+  collaboration and connected design, built on the DDN foundation.
+- [ScratchBird CDE](https://scratchbird.ca/bird) — the suite's data platform.
+- [ScratchRobin](https://scratchbird.ca/robin) — the suite's client application.
 
-This project renders diagram notations defined by external standards bodies.
-Implementations are original work based on publicly described notation
-conventions; no standards-document text, figures, or symbol tables are
-reproduced. Support is profile-level coverage, not conformance or
-certification.
+DDN works independently in the browser. Its GPL licence does not require a
+Weaver subscription, and Weaver's separate commercial terms do not restrict
+use of DDN under the GPL.
 
-- **C4 model** — the C4 model and c4model.com content by Simon Brown are
-  licensed under Creative Commons Attribution 4.0 (CC BY 4.0) —
-  https://c4model.com. C4 diagrams rendered by this project follow that
-  convention with thanks to the author.
-- UML, BPMN, CMMN, DMN, SysML, SoaML, and UAF are trademarks of the Object
-  Management Group (OMG). ArchiMate is a registered trademark of The Open
-  Group. ISA-5.1 (International Society of Automation), ISO 5807,
-  ISO/IEC 15909, ISO/IEC 19507, ISO/IEC/IEEE 42010 (ISO/IEC/IEEE),
-  IEC 60617 / IEC 61131-3 (IEC), ITU-T Z.100 / Z.120 (ITU), and IEEE 1320.1
-  (IEEE) are cited as standards references only. All trademarks remain the
-  property of their respective owners; use here is nominative and does not
-  imply endorsement, affiliation, or certification.
+## Third-party resources
 
-## Bundled third-party icon artwork
+Bundled third-party resources retain their own licences and attribution.
+The optional Inter, Source Serif 4, JetBrains Mono and Caveat fonts use SIL Open
+Font License 1.1; distributed font packs include `ddn-fonts-LICENSES.txt` and a
+provenance manifest. Tabler and Iconoir icon selections retain their MIT notices.
+Other artwork carries the licence and provenance supplied with its asset pack.
+Preserve these notices when redistributing the resources.
 
-Three shipped icon packs contain curated selections of MIT-licensed artwork,
-each with its license text included in the pack manifest
-(`standard/registry/icon-packs/`):
-
-- **Tabler Icons** (`tabler-infra@1`, `ddn-pack-general@1`) — Copyright (c)
-  2020-2026 Paweł Kuna, MIT License — https://github.com/tabler/tabler-icons
-- **Iconoir** (`iconoir-infra@1`) — Copyright (c) 2021 Luca Burgio,
-  MIT License — https://github.com/iconoir-icons/iconoir
-
-All are diagram-relevant subsets; the full sets are not vendored. Their
-names do not imply endorsement or affiliation. Per-icon source URLs and
-retrieval dates are recorded in
-`standard/registry/icon-packs/ddn-pack-general.provenance.json`.
-freesvg.org was evaluated as an additional source (site-wide CC0 per its
-About page) and not used: its catalogue is filled clip-art, stylistically
-incompatible with the DDN stroke grid.
-
-## Bundled third-party presentation artwork (art packs)
-
-The shipped art pack `presentation-devices@1`
-(`standard/registry/art-packs/`, format `ddn-art-pack@1`,
-specification chapter 50) contains presentation-idiom illustrations curated
-item-by-item from **Wikimedia Commons**. Every item is CC0 or public domain
-per its Commons license record at curation time; per-item title, author,
-license, canonical source URL and retrieval date are recorded in the pack's
-`provenance` records. unDraw was evaluated and not used: its license permits
-use in products but not redistribution as an asset library. SVG Repo was
-evaluated and not used: automated access is blocked and per-item license
-verification could not be completed programmatically. Art packs are opt-in
-downloads; they are never inlined into the runtime bundles.
+Standards and product names identify supported notation conventions or design
+references. They do not imply endorsement, affiliation or certification.

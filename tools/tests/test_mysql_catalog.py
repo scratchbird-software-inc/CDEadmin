@@ -90,7 +90,7 @@ def test_documentary_ddn_roundtrip_and_native_comparison():
     assert next(row for row in decoded['rows'].values() if row['kind'] == 'table')['native']['definition'].startswith('CREATE TABLE')
 
 
-def test_native_relation_projection_renders_through_consumed_ddn():
+def test_native_relation_projection_passes_consumed_ddn_semantics():
     import json
     import subprocess
     from pathlib import Path
@@ -103,14 +103,8 @@ def test_native_relation_projection_renders_through_consumed_ddn():
         'referenced_table_schema': 'demo', 'referenced_table_name': 'a:`b'}]
     result = build_diagram(captured['resources'], {'endpoint_id': 'ep', 'database_target_id': 'target'})
     assert result['foreign_keys'] == 1
-    runtime = (Path(__file__).resolve().parents[2] / 'web/pgadmin/static/vendor/ddn/current/ddn.mjs').as_uri()
-    script = f'''import runtime from {json.dumps(runtime)};
-      let input='';for await(const chunk of process.stdin)input+=chunk;
-      const snapshot=JSON.parse(input), workspace=runtime.createWorkspace(snapshot.files);
-      try {{const output=workspace.renderSync({{entry:snapshot.entry,view:snapshot.view}});
-        if(output.diagnostics.some(x=>x.severity==='error'))throw Error(JSON.stringify(output.diagnostics));
-        if(!output.svg.includes('a:`b'))throw Error('Missing native label');
-      }}finally{{workspace.destroy();}}'''
+    checker=Path(__file__).with_name('check_firebird_catalog_ddn.mjs')
+    script='import '+json.dumps(checker.as_uri())+';'
     subprocess.run(['node', '--input-type=module', '-e', script], input=json.dumps(result['snapshot']),
                    text=True, capture_output=True, timeout=15, check=True)
 

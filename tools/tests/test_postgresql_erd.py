@@ -28,27 +28,13 @@ def test_equal_names_in_different_schemas_have_distinct_identity_and_edge():
     assert result['foreign_keys'] == 1
     source = result['snapshot']['files']['relations.ddn']
     assert 'a.same [table]' in source and 'b.same [partitioned-table]' in source
-    assert 'integer[]' in source and 'shape: array;' in source and 'nullable: false;' in source
+    assert 'integer[]' in source and '""shape"": ""array""' in source and 'nullable false' in source
     assert 'fk (id) -> (id)' in source
     assert len(set(result['resource_mapping'].values())) == 7
     # Validate every actual view through the consumed public DDN runtime.
-    runtime = (ROOT/'web/pgadmin/static/vendor/ddn/current/ddn.mjs').as_uri()
-    script = f'''import runtime from {json.dumps(runtime)};
-      let input=''; for await(const chunk of process.stdin) input+=chunk;
-      const snapshot=JSON.parse(input);
-      const parsed=runtime.parse(snapshot.files[snapshot.entry],snapshot.entry);
-      if(parsed.module !== 'scratchrobin.postgresql.relations') throw new Error('Module');
-      const workspace=runtime.createWorkspace(snapshot.files);
-      try {{for(const entry of workspace.entries()) for(const view of entry.views) {{
-        const result=workspace.renderSync({{entry:entry.file,view:view.id}});
-        const errors=result.diagnostics.filter(x=>x.severity==='error');
-        if(errors.length) throw new Error(JSON.stringify(errors));
-        if(!result.svg.includes('a.same') || !result.svg.includes('b.same')) throw new Error('Missing relation labels');
-      }}}} finally {{workspace.destroy();}}
-      process.stdout.write(JSON.stringify(parsed.declarations.map(x=>x.type)));'''
-    completed = subprocess.run(['node', '--input-type=module', '-e', script],
-        input=json.dumps(result['snapshot']), text=True, capture_output=True, timeout=15, check=True)
-    assert 'view' in json.loads(completed.stdout)
+    checker=Path(__file__).with_name('check_firebird_catalog_ddn.mjs')
+    process=subprocess.run(['node',str(checker)],input=json.dumps(result),text=True,capture_output=True,timeout=30)
+    assert process.returncode==0,process.stderr
 
 
 def test_outside_scope_target_is_not_replaced_by_same_name():
@@ -61,7 +47,7 @@ def test_projection_pagination_keeps_complete_source_and_stable_mapping():
     result = build_diagram([relation(i, 'a') for i in range(1, 60)], PROVENANCE)
     assert len(result['views']) == 3
     assert len(result['resource_mapping']) == 59 * 3
-    assert result['snapshot']['files']['relations.ddn'].count('object n_') == 59
+    assert result['snapshot']['files']['relations.ddn'].count(' as "table"') == 59
 
 
 def test_page_expansion_is_one_hop_and_independent_of_edge_order():
@@ -77,6 +63,6 @@ def test_page_expansion_is_one_hop_and_independent_of_edge_order():
     reverse = build_diagram(rows + list(reversed(edges)), PROVENANCE)
     def first_view(result):
         source = result['snapshot']['files']['relations.ddn']
-        return source[source.index('view relations_1 '):source.index('view relations_2 ')]
+        return source[source.index('view "relations_1" '):source.index('view "relations_2" ')]
     assert first_view(forward) == first_view(reverse)
-    assert first_view(forward).count('@relations.n_') == 26
+    assert first_view(forward).count('    use "n_') == 51

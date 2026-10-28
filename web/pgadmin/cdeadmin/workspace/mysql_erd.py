@@ -1,11 +1,13 @@
 """Map native MySQL relations/foreign keys into public DDN graph input."""
 import hashlib
 import json
+from . import ddn_source as ddn
 
 from .firebird_catalog_export import MAX_BYTES, MAX_DDN_UNITS, native_metadata
 
 
 def build_diagram(resources, provenance, *, engine='mysql'):
+    module = f'scratchrobin.{engine}.relations'
     if engine not in {'mysql', 'mariadb'}:
         raise ValueError('Unsupported relational diagram engine')
     engine_name = 'MariaDB' if engine == 'mariadb' else 'MySQL'
@@ -29,17 +31,14 @@ def build_diagram(resources, provenance, *, engine='mysql'):
         fields = []
         for column in sorted(native.get('children', {}).get('COLUMNS', []), key=lambda item: int(item.get('ordinal_position', 0))):
             cid = identity + ':' + quote(column['column_name'])
-            properties = ['uid:' + quote(prefix + cid), 'datatype:' + quote(column['column_type']),
-                          'nullable:' + ('false' if column.get('is_nullable') == 'NO' else 'true')]
+            properties = {'datatype': column['column_type'], 'nullable': column.get('is_nullable') != 'NO'}
             if column.get('column_comment'):
-                properties.append('description:' + quote(column['column_comment']))
-            fields.append('field ' + key(cid) + ' ' + quote(column['column_name']) + ' {' + ';'.join(properties) + ';}')
+                properties['description'] = column['column_comment']
+            fields.append(ddn.native_field(key(cid), column['column_name'], prefix + cid, properties))
             mapping[key(cid)] = cid
         shape = 'table' if row['resource_kind'] == 'table' else 'view'
-        declarations.append('object ' + key(identity) + ' ' + quote(row['display_name']) +
-            ' {kind:' + shape + '; uid:' + quote(prefix + identity) + '; x_record:{resource_id:' + quote(identity) +
-            ',native_kind:' + quote(row['resource_kind']) + ',native_json:' + quote(quote(native)) +
-            '}; fields {' + '\n'.join(fields) + '}}')
+        declarations.append(ddn.relation_object(key(identity), row['display_name'], shape, prefix + identity,
+            {'resource_id': identity, 'native_kind': row['resource_kind'], 'native_json': quote(native)}, fields, module))
         mapping[key(identity)] = identity
         foreign_keys = {}
         for column in native.get('children', {}).get('KEY_COLUMN_USAGE', []):
@@ -53,24 +52,23 @@ def build_diagram(resources, provenance, *, engine='mysql'):
                 continue
             fk_id = identity + ':foreign-key:' + quote(name)
             label = name + ' (' + ', '.join(item['column_name'] for item in columns) + ') -> (' + ', '.join(item['referenced_column_name'] for item in columns) + ')'
-            declarations.append('relation ' + key(fk_id) + ' ' + quote(label) + ' @' + key(identity) + ' -> @' + key(target['resource_id']) +
-                ' {kind:ref; enforcement:database; uid:' + quote(prefix + fk_id) + '; x_record:{native_json:' + quote(quote(columns)) + '};}')
-            edges.append((identity, target['resource_id']))
+            declarations.append(ddn.relation_edge(key(fk_id), label, key(identity), key(target['resource_id']),
+                prefix + fk_id, {'native_json': quote(columns)}, module))
+            edges.append((key(fk_id), identity, target['resource_id']))
             mapping[key(fk_id)] = fk_id
     views, blocks = [], []
     for start in range(0, len(relations), 25):
         selected = {row['resource_id'] for row in relations[start:start + 25]}
         sources = set(selected)
-        selected.update(target for source, target in edges if source in sources)
+        selected.update(target for _, source, target in edges if source in sources)
         if len(selected) > 100 or len(views) >= 64:
             raise ValueError('Relational diagram exceeds view bounds; select a smaller native branch')
         view, label = 'relations_' + str(len(views) + 1), engine_name + ' relations — page ' + str(len(views) + 1)
-        blocks.append('view ' + view + ' ' + quote(label) + ' {data:[@relations]; select:[' +
-            ','.join('@relations.' + key(identity) for identity in sorted(selected)) +
-            ']; projection {kind:graph; profile:"ddn@1";} layout {algorithm:layered; gap:240px; row_gap:160px;} publication {size:content; fit:none;} }')
+        blocks.append(ddn.graph_view(view, label, [key(identity) for identity in sorted(selected)],
+            [(edge, key(source), key(target)) for edge, source, target in edges]))
         views.append({'id': view, 'label': label, 'entry': 'relations.ddn'})
-    source = 'ddn "0.6"; module "scratchrobin.' + engine + '.relations";\ndata relations {\n' + '\n'.join(declarations) + '\n}\n' + '\n'.join(blocks)
+    source = ddn.header(module) + '\n'.join(declarations + blocks)
     if len(source.encode('utf8')) > MAX_BYTES or len(source.encode('utf-16-le')) // 2 > MAX_DDN_UNITS:
         raise ValueError('Relational diagram exceeds the paired DDN document bound')
-    return {'snapshot': {'format': 'ddn-workspace@1', 'entry': 'relations.ddn', 'view': views[0]['id'], 'files': {'relations.ddn': source}},
+    return {'snapshot': {'format': 'ddn-source-workspace@1', 'entry': 'relations.ddn', 'view': views[0]['id'], 'files': {'relations.ddn': source}},
             'views': views, 'warnings': warnings, 'resource_mapping': mapping, 'deployment': 'diagram-only', 'foreign_keys': len(edges)}

@@ -1,6 +1,7 @@
 """Project PostgreSQL catalog facts through the paired DDN graph renderer."""
 import hashlib
 import json
+from . import ddn_source as ddn
 
 from .firebird_catalog_export import MAX_DDN_UNITS, MAX_BYTES, native_metadata
 
@@ -8,6 +9,7 @@ RELATIONS = {'table', 'partitioned-table', 'foreign-table', 'view', 'materialize
 
 
 def build_diagram(resources, provenance):
+    module = 'scratchrobin.postgresql.relations'
     def quoted(value):
         return json.dumps(value, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
 
@@ -34,23 +36,17 @@ def build_diagram(resources, provenance):
             number = int(column['attnum'])
             column_id = identity + ':' + str(number)
             column_names[(int(native['oid']), number)] = column['attname']
-            props = ['uid: ' + quoted(prefix + column_id) + ';']
-            if column.get('formatted_type'):
-                props.append('datatype: ' + quoted(column['formatted_type']) + ';')
-            if column.get('attnotnull') is True:
-                props.append('nullable: false;')
-            if int(column.get('attndims', 0)) > 0:
-                props.append('shape: array;')
-            if column.get('comment'):
-                props.append('description: ' + quoted(column['comment']) + ';')
-            fields.append('field ' + key(column_id) + ' ' + quoted(column['attname']) + ' {' + ' '.join(props) + '}')
+            props = {}
+            if column.get('formatted_type'): props['datatype'] = column['formatted_type']
+            if column.get('attnotnull') is True: props['nullable'] = False
+            if int(column.get('attndims', 0)) > 0: props['shape'] = 'array'
+            if column.get('comment'): props['description'] = column['comment']
+            fields.append(ddn.native_field(key(column_id), column['attname'], prefix + column_id, props))
             mapping[key(column_id)] = column_id
         shape = 'view' if row['resource_kind'] in {'view', 'materialized-view'} else 'table'
         label = '.'.join(row['display_path'][1:]) + ' [' + row['resource_kind'] + ']'
-        declarations.append('object ' + key(identity) + ' ' + quoted(label) + ' {kind: ' + shape +
-            '; uid: ' + quoted(prefix + identity) + '; x_record: {resource_id:' + quoted(identity) +
-            ', native_kind:' + quoted(row['resource_kind']) + ', native_json:' + quoted(quoted(native)) +
-            '}; fields {' + '\n'.join(fields) + '} }')
+        declarations.append(ddn.relation_object(key(identity), label, shape, prefix + identity,
+            {'resource_id': identity, 'native_kind': row['resource_kind'], 'native_json': quoted(native)}, fields, module))
         mapping[key(identity)] = identity
     for row in resources:
         native = native_metadata(row, 'postgresql')
@@ -71,27 +67,25 @@ def build_diagram(resources, provenance):
         source, target = by_oid[source_oid]['resource_id'], by_oid[target_oid]['resource_id']
         identity = row['resource_id']
         label = row['display_name'] + ' (' + ', '.join(source_columns) + ') -> (' + ', '.join(target_columns) + ')'
-        declarations.append('relation ' + key(identity) + ' ' + quoted(label) + ' @' + key(source) + ' -> @' + key(target) +
-            ' {kind: ref; enforcement: database; uid:' + quoted(prefix + identity) +
-            '; x_record: {resource_id:' + quoted(identity) + ', native_json:' + quoted(quoted(native)) + '}; }')
-        edges.append((source, target))
+        declarations.append(ddn.relation_edge(key(identity), label, key(source), key(target),
+            prefix + identity, {'resource_id': identity, 'native_json': quoted(native)}, module))
+        edges.append((key(identity), source, target))
         mapping[key(identity)] = identity
     views, blocks = [], []
     for start in range(0, len(relations), 25):
         selected = {row['resource_id'] for row in relations[start:start + 25]}
         page_sources = set(selected)
-        selected.update(target for source, target in edges if source in page_sources)
+        selected.update(target for _, source, target in edges if source in page_sources)
         if len(selected) > 100 or len(views) >= 64:
             raise ValueError('Relational diagram exceeds its view bounds; select a smaller native branch')
         view = 'relations_' + str(len(views) + 1)
         label = 'PostgreSQL relations — page ' + str(len(views) + 1)
-        blocks.append('view ' + view + ' ' + quoted(label) + ' {data: [@relations]; select: [' +
-            ','.join('@relations.' + key(identity) for identity in sorted(selected)) +
-            ']; projection {kind: graph; profile: "ddn@1";} layout {algorithm: layered; gap: 240px; row_gap: 160px;} publication {size: content; fit: none;} }')
+        blocks.append(ddn.graph_view(view, label, [key(identity) for identity in sorted(selected)],
+            [(edge, key(source), key(target)) for edge, source, target in edges]))
         views.append({'id': view, 'label': label, 'entry': 'relations.ddn'})
-    source = 'ddn "0.6"; module "scratchrobin.postgresql.relations";\ndata relations {\n' + '\n'.join(declarations) + '\n}\n' + '\n'.join(blocks)
+    source = ddn.header(module) + '\n'.join(declarations + blocks)
     if len(source.encode('utf-16-le')) // 2 > MAX_DDN_UNITS or len(source.encode('utf8')) > MAX_BYTES:
         raise ValueError('Relational diagram exceeds the paired DDN document bound')
-    return {'snapshot': {'format': 'ddn-workspace@1', 'entry': 'relations.ddn', 'view': views[0]['id'], 'files': {'relations.ddn': source}},
+    return {'snapshot': {'format': 'ddn-source-workspace@1', 'entry': 'relations.ddn', 'view': views[0]['id'], 'files': {'relations.ddn': source}},
             'views': views, 'resource_mapping': mapping, 'warnings': warnings,
             'filename': 'postgresql-relations.ddn', 'deployment': 'diagram-only', 'foreign_keys': len(edges)}

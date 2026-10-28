@@ -37,8 +37,8 @@ def test_paged_sources_preserve_all_rows_and_omission_is_not_empty():
     assert len(json.loads(read(result['download_text']))['tables'][0]['rows']) == 205
     edited = deepcopy(result['snapshot'])
     source = edited['files']['data.ddn']
-    start = source.index('record r_0_0 ')
-    end = source.index('record r_0_1 ')
+    start = source.index('element "rows_1.r_0_0"')
+    end = source.index('element "rows_1.r_0_1"')
     edited['files']['data.ddn'] = source[:start]+source[end:]
     with pytest.raises(ValueError):
         read(json.dumps(edited))
@@ -69,6 +69,6 @@ def test_row_uid_must_agree_with_canonical_export_ordinal():
 
 def test_single_source_ddn_header_accepts_legal_line_break():
     document, current = fixture()
-    source = build(document)['snapshot']['files']['data.ddn'].replace('ddn "0.7";', 'ddn\n"0.7";')
+    source = build(document)['snapshot']['files']['data.ddn'].replace('\n', '\r\n')
     result = preview(source, current)
     assert result['operations'][0]['values'] == {'ID':42, 'VALUE':7}

@@ -89,6 +89,7 @@ upstream attribution.
    firebird_catalog_completeness
    monitoring_history
    ddn_database_roundtrip
+   ddn_adopted_runtime
    mysql_functional_completion
    mysql_implementation_priorities
    mysql_router_hosts

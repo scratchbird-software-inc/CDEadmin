@@ -1,0 +1,33 @@
+{
+  "name": "@ddn/execution",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./compute": {
+      "types": "./src/compute.d.ts",
+      "import": "./src/compute.js"
+    },
+    "./worker-host": {
+      "types": "./src/worker-host.d.ts",
+      "import": "./src/worker-host.js"
+    },
+    "./worker-entry": {
+      "types": "./src/worker-entry.d.ts",
+      "import": "./src/worker-entry.js"
+    },
+    "./browser-verifier": {
+      "types": "./src/browser-verifier.d.ts",
+      "import": "./src/browser-verifier.js"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "sideEffects": false,
+  "license": "GPL-2.0-or-later"
+}

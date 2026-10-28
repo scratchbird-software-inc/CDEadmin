@@ -46,13 +46,10 @@ def graphical(connection, provider, route, evidence):
     edited = deepcopy(original)
     from hashlib import sha256
     field = 'n_' + sha256(b'column:DDN_GRAPH:V').hexdigest()
-    source = edited['files']['relations.ddn']
-    start = source.index('field ' + field + ' ')
-    end = source.index('}', start)
-    fragment = source[start:end]
-    updated = fragment.replace('datatype: "INTEGER";', 'datatype: "BIGINT"; nullable: false; description: "Edited through DDN";')
-    assert fragment != updated
-    edited['files']['relations.ddn'] = source[:start]+updated+source[end:]
+    edits=[{'target':{'file':'relations.ddn','id':field},'path':path,'value':value}
+           for path,value in [('content.datatype','BIGINT'),('content.nullable',False),('description','Edited through DDN')]]
+    changed=subprocess.run(['node',str(ROOT/'tools/ddn_edit.mjs')],input=json.dumps({'snapshot':edited,'edits':edits}),text=True,capture_output=True,timeout=30,check=True)
+    edited=json.loads(changed.stdout)
     exchanged = handoff(captured['snapshot'], original, edited)
     baseline, desired = (read_catalog(exchanged[key]) for key in ('baseline', 'desired'))
     current = build_export(resources, endpoint_id='owned', target_id='owned', generation='ddn-native', include_system=True, native_model=True)

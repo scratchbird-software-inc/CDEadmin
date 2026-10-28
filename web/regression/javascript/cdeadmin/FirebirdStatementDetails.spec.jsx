@@ -1,3 +1,4 @@
+import {libraries} from './ddnTestRuntime';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import FirebirdStatementDetails, {statementFiles} from 'sources/Dialogs/FirebirdStatementDetails';
 import getApiInstance from 'sources/api_instance';
@@ -31,7 +32,12 @@ describe('Firebird statement inspection', () => {
   it('keeps native text as quoted DDN data, including multiline delimiters', () => {
     const text = 'quote " }\nview injected { /*';
     const files = statementFiles({sql_text: {value: text, truncated: true}, explained_plan: {value: null}});
-    expect(files['statement.ddn']).toContain(JSON.stringify(text));
-    expect(files['statement.ddn']).toContain('truncated: "Yes"');
+    const parsed=libraries.language.decodeSources({entry:'statement.ddn',files:[{id:'statement.ddn',text:files['statement.ddn'],revision:'test',encoding:'utf-8',writable:true}]});
+    expect(parsed.syntaxValid).toBe(true);
+    const records=libraries.model.listRecords(parsed.normalized);
+    expect(records.filter(row=>row.kind==='view')).toHaveLength(1);
+    const record=records.find(row=>row.ref.id==='r0').record.metadata.x_record;
+    expect(JSON.parse(record.native_json).text).toBe(text);
+    expect(record.truncated).toBe('Yes');
   });
 });

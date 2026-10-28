@@ -3,6 +3,7 @@ import base64
 import json
 
 from .models import ResultLimitError
+from ..workspace import ddn_source as ddn
 
 
 def encoded(value):
@@ -25,7 +26,8 @@ def export_workspace(metadata, records):
     provenance['mapping'] = 'scratchrobin.result.static@1'
     provenance['value_encoding'] = metadata.get('value_encoding', 'exact redacted provider JSON; columns remain positional')
     provenance['consistency'] = metadata.get('consistency', 'buffered result selection; no new database read')
-    header = 'ddn "0.6"; module "scratchrobin.result.static";\n'
+    module = 'scratchrobin.result.static'
+    header = ddn.header(module)
     files = {}
     native_payload = metadata.get('native_payload_bytes')
     if native_payload is not None and (not isinstance(native_payload, bytes) or len(native_payload) > 4 * 1024 * 1024):
@@ -45,16 +47,15 @@ def export_workspace(metadata, records):
             fields = {'values_json': encoded(values), **{
                 'c_' + str(i): encoded(value) for i, value in enumerate(values)}}
             identity = 'r_' + str(ordinal)
-            lines.append('record ' + identity + ' ' + encoded(str(ordinal)) +
-                         ' {x_record: ' + encoded(fields) + ';}')
-            refs.append('@rows.' + identity)
+            lines.append(ddn.record_definition(identity, str(ordinal), fields, module=module, block='rows'))
+            refs.append('rows.' + identity)
         if not lines:
-            lines.append('record empty "No rows in this export" {}')
-            refs.append('@rows.empty')
+            lines.append(ddn.record_definition('empty', 'No rows in this export', {}, module=module, block='rows'))
+            refs.append('rows.empty')
         title = f'{metadata.get("title", "Buffered query data")} — page {page}; {len(records)} exported rows'
-        source = header + 'data provenance {record capture "Static export coverage" {x_record: {native_json:' + encoded(encoded(provenance)) + '};}}\n'
-        source += 'data rows {' + '\n'.join(lines) + '}\n'
-        source += 'view result_' + str(page) + ' ' + encoded(title) + ' {data: [@rows]; projection {kind: table; profile: "table.records@1"; records: [' + ','.join(refs) + ']; columns: ' + encoded(definitions) + ';} publication {size: content; fit: none;}}'
+        source = header + ddn.record_definition('capture', 'Static export coverage',
+            {'native_json': encoded(provenance)}, module=module, block='provenance')
+        source += '\n'.join(lines) + ddn.table_view('result_' + str(page), title, refs, definitions)
         if len(source.encode('utf-16-le')) // 2 > 2000000:
             raise ResultLimitError('DDN result file exceeds its document limit')
         files['result-' + str(page) + '.ddn'] = source
@@ -68,8 +69,13 @@ def export_workspace(metadata, records):
             ordinal = start // (1024 * 1024) + 1
             facts = {'ordinal': ordinal, 'encoding': 'arrow-ipc-base64',
                      'data': base64.b64encode(native_payload[start:start + 1024 * 1024]).decode('ascii')}
-            files['native-values-' + str(ordinal) + '.ddn'] = header + 'data native_payload {record p_' + str(ordinal) + ' "Native typed values" {x_record:' + encoded(facts) + ';}}'
-    result = encoded({'format': 'ddn-workspace@1', 'entry': 'result-1.ddn',
+            files['native-values-' + str(ordinal) + '.ddn'] = header + ddn.record_definition(
+                'p_' + str(ordinal), 'Native typed values', facts, module=module, block='native_payload')
+    try:
+        ddn.connect_files(files)
+    except ValueError as error:
+        raise ResultLimitError(str(error)) from error
+    result = encoded({'format': 'ddn-source-workspace@1', 'entry': 'result-1.ddn',
                       'view': 'result_1', 'files': files}).encode('utf8')
     if len(result) > 8 * 1024 * 1024:
         raise ResultLimitError('DDN result exceeds 8 MiB')

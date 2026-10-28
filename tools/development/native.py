@@ -193,17 +193,17 @@ def install_scratchbird_driver(env, evidence):
 
 def ddn(evidence):
     source = Path(os.environ.get('SCRATCHROBIN_DDN_SOURCE',
-                                str(ROOT.parent / 'Diagram-Design-Notation')))
+                                str(ROOT.parent / 'ScratchWeaver')))
     work = Path(os.environ.get('SCRATCHROBIN_DDN_WORK',
                               str(evidence / 'ddn-intake')))
     if not source.is_dir():
-        raise RuntimeError('Clone Diagram-Design-Notation and set '
+        raise RuntimeError('Provide the authorized ScratchWeaver DDN source and set '
                            'SCRATCHROBIN_DDN_SOURCE to that checkout')
     command(['git', '-C', source, 'rev-parse', 'HEAD'])
     command(['git', '-C', source, 'status', '--short'])
-    print((source / 'website/docs/developers/tool.md').read_text(
+    print((source / 'project/ddn/README.md').read_text(
         encoding='utf-8'), flush=True)
-    print((source / 'notation/dist/ddn.d.ts').read_text(encoding='utf-8'), flush=True)
+    print((source / 'project/ddn/packages/types/src/browser.d.ts').read_text(encoding='utf-8'), flush=True)
     command([sys.executable, ROOT / 'tools/refresh_ddn.py', '--source',
              source, '--work', work], log=evidence / 'ddn.log')
     shutil.copyfile(ROOT / 'web/pgadmin/static/vendor/ddn/current/resource-manifest.json',
@@ -212,7 +212,7 @@ def ddn(evidence):
 
 def stage(name, evidence):
     env = environment()
-    env.setdefault('SCRATCHROBIN_DDN_SOURCE', str(ROOT.parent / 'Diagram-Design-Notation'))
+    env.setdefault('SCRATCHROBIN_DDN_SOURCE', str(ROOT.parent / 'ScratchWeaver'))
     env.setdefault('SCRATCHROBIN_DDN_WORK', str(evidence / 'ddn-intake'))
     if name == 'prerequisites':
         if os.environ.get('GITHUB_ACTIONS') != 'true':

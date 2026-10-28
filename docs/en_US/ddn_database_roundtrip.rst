@@ -1,6 +1,11 @@
 DDN database discovery, generation and metadata differences
 ***********************************************************
 
+The current source/runtime contract and migration boundary are documented in
+:doc:`ddn_adopted_runtime`. Owner direction, 2026-10-28 adopts ScratchWeaver's
+standalone open ``ddn-next-1`` foundation for all paths below. Earlier implementation
+notes do not authorize use of the incompatible old runtime or grammar.
+
 Owner requirements and scope
 ============================
 
@@ -359,7 +364,7 @@ of their original UTF-8 DDN source. Host capture retains the 20,000-resource and
 The paired DDN 0.8 parser additionally limits each source file to 2,000,000
 UTF-16 code units. Single-file export and import enforce that lower effective
 limit alongside the UTF-8 byte bound, before emitting an unreadable document or
-starting a parser process. Large catalogs are packaged as a ddn-workspace@1 JSON
+starting a parser process. Large catalogs are packaged as a ddn-source-workspace@1 JSON
 document containing bounded DDN files, with one provenance record for the entire
 capture. The download remains a plain .ddn file when the capture fits one file.
 Every inventory view identifies its entry file, and preview page selection uses
