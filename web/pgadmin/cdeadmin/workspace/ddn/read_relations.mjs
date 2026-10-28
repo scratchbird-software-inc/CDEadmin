@@ -6,7 +6,7 @@ let input = '';
 try {
   for await(const chunk of process.stdin) {input += chunk; check(Buffer.byteLength(input) <= 16 * 1024 * 1024);}
   const engine = process.argv[2] || 'firebird';
-  check(['firebird', 'postgresql', 'mysql', 'mariadb'].includes(engine));
+  check(['firebird', 'postgresql', 'mysql', 'mariadb', 'sqlite', 'duckdb'].includes(engine));
   const documents = await admitWorkspace(JSON.parse(input), `scratchrobin.${engine}.relations`);
   const definitions = new Map(), annotations = new Map();
   const key = (file, id) => JSON.stringify([file, id]);

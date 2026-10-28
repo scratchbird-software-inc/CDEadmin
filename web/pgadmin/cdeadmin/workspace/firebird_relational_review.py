@@ -10,6 +10,15 @@ from .firebird_catalog_export import _json
 from .firebird_catalog_import import read_catalog, _decode, _equal, _SLOTS
 
 
+# Native relation kinds each engine's *_erd.py publishes with a resource_id.
+_KINDS = {
+    'firebird': {'table', 'view', 'column', 'constraint'},
+    'postgresql': {'table', 'partitioned-table', 'foreign-table', 'view', 'materialized-view', 'constraint'},
+    'sqlite': {'table', 'view', 'virtual-table', 'fts-table'},
+    'duckdb': {'table', 'view'},
+}
+
+
 def _exact_json(value):
     if isinstance(value, Decimal):
         if not value.is_finite(): raise ValueError('Non-finite native number')
@@ -23,7 +32,7 @@ def _exact_json(value):
 
 
 def read_relations(snapshot, *, engine="firebird"):
-    if engine not in {"firebird", "postgresql", "mysql", "mariadb"}:
+    if engine not in {"firebird", "postgresql", "mysql", "mariadb", "sqlite", "duckdb"}:
         raise ValueError("Unsupported relational engine")
     encoded = ddn.validate_workspace(snapshot, 'relational')
     if not _SLOTS.acquire(timeout=1):
@@ -41,7 +50,7 @@ def read_relations(snapshot, *, engine="firebird"):
             raise ValueError('Duplicate relational field identity')
         children = []
         for row in rows:
-            if engine in {'firebird', 'postgresql', 'mysql', 'mariadb'}:
+            if engine in {'firebird', 'postgresql', 'mysql', 'mariadb', 'sqlite', 'duckdb'}:
                 row['fields'] = {field['uid']: {**field['properties'], '_label': field['label'],
                     '_property_names': field['property_names']} for field in parsed['field_records']
                                  if field['parent_resource_id'] == row['resource_id']}
@@ -103,8 +112,7 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
     changed = []
     for identity, row in after.items():
         old, live = before.get(identity), current['rows'].get(identity)
-        if old is None or live is None or live['kind'] not in ({'table', 'view', 'column', 'constraint'} if engine == 'firebird' else
-                {'table', 'partitioned-table', 'foreign-table', 'view', 'materialized-view', 'constraint'}):
+        if old is None or live is None or live['kind'] not in _KINDS.get(engine, _KINDS['postgresql']):
             raise ValueError('Relational definition requires explicit catalog identity reconciliation: ' + identity)
         if old['uid'] != live['uid'] or row['uid'] != live['uid']:
             raise ValueError('Relational design belongs to another database or object')
@@ -127,6 +135,14 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
         if engine == 'postgresql':
             from .postgresql_relational_fields import merge_fields
             facts[1] = merge_fields(old, row)
+        if engine in {'sqlite', 'duckdb'}:
+            # Column rows are separate native resources; a graphical field edit
+            # must not silently diverge from them.
+            for uid, fields in row.get('fields', {}).items():
+                original = old.get('fields', {}).get(uid)
+                if original is None or any(fields.get(name) != original.get(name)
+                        for name in ('datatype', 'nullable', 'description')):
+                    raise ValueError('Edit the native column definition rather than graphical field properties: ' + identity)
         if engine=='mariadb' and facts[0].get('definition')!=facts[1].get('definition') and 'WITH SYSTEM VERSIONING' in facts[0].get('definition','').upper():
             if not allow_temporal_history:raise ValueError('Graphical system-versioned schema edits require explicit native KEEP-history acceptance')
             intent=facts[1].setdefault('mariadb_change',{})

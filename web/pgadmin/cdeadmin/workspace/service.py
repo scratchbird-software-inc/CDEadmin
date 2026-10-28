@@ -1961,6 +1961,24 @@ class ProviderWorkspaceService:
         except (ValueError, TypeError, KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def _embedded_relational_review(self, engine, catalog, server, request):
+        from .firebird_relational_review import handoff
+        if not isinstance(request, dict) or not {'original', 'snapshot'} <= request.keys():
+            raise ProviderWorkspaceError('Original and edited relational designs are required')
+        options = dict(request)
+        original, snapshot = options.pop('original'), options.pop('snapshot')
+        catalog = catalog(server, options)
+        try:
+            return handoff(catalog['snapshot'], original, snapshot, engine=engine)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_relational_review(self, server, request):
+        return self._embedded_relational_review('sqlite', self.sqlite_catalog, server, request)
+
+    def duckdb_relational_review(self, server, request):
+        return self._embedded_relational_review('duckdb', self.duckdb_catalog, server, request)
+
     def duckdb_catalog(self, server, request, *, compare=False):
         from .duckdb_catalog_service import catalog
         try:
