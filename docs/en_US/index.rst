@@ -25,6 +25,7 @@ upstream attribution.
    ui_unified_design
    ui_unification_status
    ui_server_editor_retirement
+   robin_master_plan
    firebird_driver_development
    mysql_driver_development
    mariadb_driver_development
