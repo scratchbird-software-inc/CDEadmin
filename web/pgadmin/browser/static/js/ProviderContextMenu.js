@@ -10,15 +10,16 @@
 import _ from 'lodash';
 import gettext from 'sources/gettext';
 import pgAdmin from 'sources/pgadmin';
+import getApiInstance from 'sources/api_instance';
 import {
-  LEGACY_REGISTRATION_RETIRED, familyEditorContextActions, reportServerEditorFailure, tryOpenFamilyEditor,
-  tryOpenServerForm,
+  LEGACY_REGISTRATION_RETIRED, familyEditorContextActions, providerEndpointUrl, reportServerEditorFailure,
+  tryOpenFamilyEditor, tryOpenServerForm,
 } from './ProviderObjectEditor';
 
 const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
   'clear_credentials', 'connector_info', 'edit_endpoint',
-  'forget_endpoint', 'open_workspace', 'open_firebird_fleet', 'open_mysql_fleet', 'open_mysql_dashboard_editor', 'open_postgresql_fleet', 'open_postgresql_dashboard_editor', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
+  'forget_endpoint', 'open_workspace', 'open_tool', 'open_firebird_fleet', 'open_mysql_fleet', 'open_mysql_dashboard_editor', 'open_postgresql_fleet', 'open_postgresql_dashboard_editor', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
   'open_mariadb_fleet', 'open_mariadb_dashboard_editor', 'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
   'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
   'open_mysql_host', 'open_mysql_routers', 'open_mysql_physical', 'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mysql_instance_backups', 'open_mysql_instance_restores', 'open_mysql_topologies', 'open_mysql_sandboxes', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
@@ -87,6 +88,34 @@ function showConnectorInformation(args, context) {
     gettext('%s information', title), `<pre>${body}</pre>`
   );
   return false;
+}
+
+/**
+ * Engine-neutral opener for a surface registered in the workbench tool
+ * registry (cdeadmin_ui/platform/SurfaceRegistry). The descriptor names the
+ * surface; the endpoint comes from the tree selection. No engine knowledge.
+ */
+export function openRegisteredTool(surfaceId, endpoint, title) {
+  const serverNode = pgAdmin.Browser.Nodes.server;
+  const workbench = pgAdmin.Browser.CDEadminCommandContext?.();
+  if(typeof surfaceId !== 'string' || !surfaceId) {
+    throw new Error(gettext('The tool descriptor does not name a surface.'));
+  }
+  if(!endpoint?.data || typeof workbench?.openSurface !== 'function') {
+    throw new Error(gettext('The workbench tool host is unavailable.'));
+  }
+  const endpointId = Number(endpoint.data._id ?? endpoint.data.id);
+  const label = endpoint.data.label || endpoint.data._label || '';
+  return workbench.openSurface(surfaceId, {
+    toolInstanceId: `${surfaceId}:${endpointId}`,
+    restoreRef: `${surfaceId}:${endpointId}`,
+    title: label ? gettext('%s — %s', title, label) : title,
+    context: {providerId: endpoint.data.cde_engine_id, endpointId},
+  }, {
+    api: getApiInstance(),
+    endpointUrl: providerEndpointUrl(serverNode, endpoint.item, endpoint.data),
+    endpointLabel: label,
+  }).catch((error) => pgAdmin.Browser.notifier.error(error?.message || String(error)));
 }
 
 function dispatch(action, args, context) {
@@ -178,6 +207,8 @@ function dispatch(action, args, context) {
     return serverNode.callbacks.disconnect_server.call(serverNode, {
       item: endpoint.item,
     });
+  case 'open_tool':
+    return openRegisteredTool(args.surface, endpoint, action.label.replace(/\.\.\.$/, ''));
   case 'open_workspace':
     return serverNode.callbacks.open_cde_workspace.call(
       serverNode, {item: endpoint.item}, args.tab || 'resources', {

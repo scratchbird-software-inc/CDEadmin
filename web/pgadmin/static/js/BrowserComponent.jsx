@@ -274,7 +274,8 @@ function Layouts({browser, platform}) {
       migration: platform.migration,
       apiDesigner: platform.apiDesigner,
       currentUser,
-      openSurface: (surfaceId, input) => ensureSurfaceHost().open(surfaceId, input),
+      openSurface: (surfaceId, input, restoreContext) => ensureSurfaceHost().open(
+        surfaceId, input, restoreContext),
     });
     pgAdmin.Browser.CDEadminCommandContext = context;
     return () => {

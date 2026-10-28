@@ -779,3 +779,22 @@ The identified seven backend gaps are implemented; shared UI stays with the
 front-end team. No shared shell, schema, renderer, panel, menu JavaScript or
 family-render test was edited. Lint before/after: JSON297/297, MUI244/244,
 UI engine branches111/111, panels113/113, context-menu branches14/14.
+
+BI questions tool: query builder UI, 2026-10-28
+-----------------------------------------------
+
+The first Metabase-style UI slice is a registered tool, not a new panel:
+module ``cdeadmin.bi`` / surface ``bi.questions`` under
+``cdeadmin_ui/modules/bi/``. It offers a collections tree with search,
+rename, move and archive, a visual query builder (source,
+columns, typed filters, summaries with grouping, sort, limit, parameters, live
+compile preview), execution with paging and redaction notes, the chart set
+through the shared chart wrapper, a SQL mode with SQL-to-question conversion,
+save, save as and revision history. A generic ``open_tool`` context-menu
+handler (``context_menu.py`` and ``ProviderContextMenu.js``) opens any
+registered surface; SQLite, DuckDB, Firebird, MariaDB and PostgreSQL declare the
+entry in ``tools.json``. MySQL awaits its owner (:doc:`bi_ui_mysql_handoff`).
+Structure, state model and gaps are in :doc:`bi_query_builder_ui`. No shared
+schema, form or family renderer was edited. Lint before/after: JSON297/297,
+MUI244/244, UI engine branches111/111, panels113/113, context-menu
+branches14/14.
