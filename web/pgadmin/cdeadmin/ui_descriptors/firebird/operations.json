@@ -10,7 +10,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -172,7 +172,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "restore_logical",
@@ -182,7 +183,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -433,7 +434,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "backup_physical",
@@ -443,7 +445,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -549,7 +551,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "restore_physical",
@@ -559,7 +562,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -608,7 +611,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "validate_database",
@@ -618,7 +622,7 @@
         "category": "diagnostics"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -660,7 +664,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "repair_database",
@@ -670,7 +675,7 @@
         "category": "maintenance"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -754,7 +759,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "sweep_database",
@@ -764,7 +770,7 @@
         "category": "maintenance"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -781,7 +787,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "database_statistics",
@@ -791,7 +798,7 @@
         "category": "diagnostics"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -860,7 +867,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "shutdown_database",
@@ -870,7 +878,7 @@
         "category": "maintenance"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -931,7 +939,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "bring_online",
@@ -941,7 +950,7 @@
         "category": "maintenance"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -973,7 +982,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "set_page_cache_size",
@@ -983,7 +993,7 @@
         "category": "maintenance"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -1000,7 +1010,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "set_sweep_interval",
@@ -1010,7 +1021,7 @@
         "category": "maintenance"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -1027,7 +1038,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "set_space_reservation",
@@ -1037,7 +1049,7 @@
         "category": "maintenance"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -1065,7 +1077,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "set_write_mode",
@@ -1075,7 +1088,7 @@
         "category": "maintenance"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -1103,7 +1116,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "set_access_mode",
@@ -1113,7 +1127,7 @@
         "category": "maintenance"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -1141,7 +1155,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "set_sql_dialect",
@@ -1151,7 +1166,7 @@
         "category": "maintenance"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -1179,7 +1194,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "activate_shadow",
@@ -1189,8 +1205,8 @@
         "category": "maintenance"
       },
       "tier": 3,
-      "status": "draft",
-      "confirmation": "typed_name",
+      "status": "complete",
+      "confirmation": "confirm",
       "fields": [
         {
           "field_id": "shadow_filename",
@@ -1198,6 +1214,13 @@
           "control": "text",
           "required": true,
           "help": "This promotes the first shadow file into an independent database in place. Stop or isolate the original database before recovery; do not operate both copies as the same database. The target must be an active shadow, not the original database or a secondary shadow file. Native header verification is performed immediately before activation, but cannot prevent another server administrator replacing a file. Coordinate exclusive control of the recovery files. Firebird 5.0.4 may activate a shadow before rejecting insufficient utility privileges. An authorization error is not proof that the shadow is unchanged: inspect its native header before any further recovery attempt."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Repeat the shadow filename",
+          "control": "text",
+          "required": true,
+          "help": "Repeat the exact recovery target above, not the original database filename."
         },
         {
           "field_id": "original_isolated",
@@ -1216,7 +1239,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "remove_linger",
@@ -1237,7 +1261,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Draft: the task is accepted and completes, but Firebird exposes no queryable or durable effect (linger is a server cache lifetime, not a header attribute), so nothing could be observed. Exercised by tools/tests/test_ui_descriptor_operations_firebird.py as a smoke run only."
     },
     {
       "operation_id": "fixup_database",
@@ -1247,7 +1272,7 @@
         "category": "maintenance"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -1271,7 +1296,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "set_replica_mode",
@@ -1281,7 +1307,7 @@
         "category": "replication"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -1313,7 +1339,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
     },
     {
       "operation_id": "upgrade_database",
@@ -1335,7 +1362,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Draft: only a no-op upgrade of a current-ODS (13.1) database could be run; no older-ODS database was available to observe an actual upgrade. Smoke-run by tools/tests/test_ui_descriptor_operations_firebird.py."
     },
     {
       "operation_id": "commit_limbo_local",
@@ -1345,7 +1373,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -1384,7 +1412,8 @@
           "required": false,
           "help": "Blank uses the connection profile role. This does not change the saved profile."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "inspect_limbo",
@@ -1394,7 +1423,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -1404,7 +1433,8 @@
           "required": false,
           "help": "Blank uses the connection profile role. This does not change the saved profile."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "rollback_limbo_local",
@@ -1414,7 +1444,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -1453,7 +1483,8 @@
           "required": false,
           "help": "Blank uses the connection profile role. This does not change the saved profile."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "add_difference_file",
@@ -1463,7 +1494,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -1473,7 +1504,8 @@
           "required": true,
           "help": "A server path, not a browser path. Firebird rejects a second definition until the existing definition is removed."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "add_files",
@@ -1483,7 +1515,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -1516,7 +1548,8 @@
           "required": true,
           "help": "Ordered files on the engine host. Page positions are resolved by Firebird against the existing allocation. There is no native DROP FILE or rename-file task."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "begin_backup",
@@ -1526,7 +1559,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -1539,7 +1572,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "drop_difference_file",
@@ -1549,9 +1583,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "end_backup",
@@ -1561,11 +1596,12 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "reorder_columns",
@@ -1575,7 +1611,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -1593,7 +1629,8 @@
           "required": true,
           "help": "Move existing columns into the desired order. Preview shows native POSITION statements."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "set_current",
@@ -1603,7 +1640,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -1613,7 +1650,8 @@
           "required": true,
           "help": "SET GENERATOR sets the current value, not the next value. Signed 64-bit integer. Other attachments may consume values concurrently. Ordinary consumption of committed sequences is not reclaimed by row rollback. Pending sequence DDL can use transaction-local values. Current-value assignment and next-value restart are different native operations; commit the task before treating restarted values as globally published."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "create_body",
@@ -1623,7 +1661,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -1634,7 +1672,8 @@
           "required": true,
           "help": "Enter the complete BEGIN ... END package body, including any private declarations and routine implementations. This changes the package body, not its public header. Do not include CREATE, AS or SET TERM."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "drop_body",
@@ -1644,9 +1683,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "replace_body",
@@ -1656,7 +1696,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -1667,7 +1707,8 @@
           "required": true,
           "help": "Enter the complete BEGIN ... END package body, including any private declarations and routine implementations. This changes the package body, not its public header. Do not include CREATE, AS or SET TERM."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     },
     {
       "operation_id": "configure_admin_mapping",
@@ -1677,7 +1718,7 @@
         "category": "security"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -1698,7 +1739,8 @@
           ],
           "help": "RDB$ADMIN only. SET creates or replaces the reserved AutoAdminImplementationMapping using Win_Sspi in this database; DROP removes that mapping. This does not enable the authentication plugin or verify Windows login. No global mapping is changed."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
     }
   ]
 }

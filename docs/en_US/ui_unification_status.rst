@@ -173,6 +173,25 @@ count sets its maximum to zero in the enforcement file.
 Change log
 ----------
 
+Firebird and MariaDB operation round trips (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Tier 2/3 operations driven through their dialog drafts against live servers
+(``tools/tests/test_ui_descriptor_operations_{firebird,mariadb}.py``): Firebird
+33 of 35 ``complete`` (Firebird 5.0.3), MariaDB 29 of 35 (MariaDB 10.11). Left
+``draft`` with the reason in each operation's ``notes``: Firebird
+``remove_linger`` (no observable effect) and ``upgrade_database`` (no older-ODS
+database); MariaDB logical backup/restore and the upgrade check (provider pins
+the 12.2.2 tool release) and partition/table exchange (provider always emits
+``WITH|WITHOUT VALIDATION``, rejected by 10.11). Note: the 5.0.3 server refuses
+gfix-class Services API tasks over TCP with Srp256 (auth block over 255 bytes);
+those 13 operations were exercised through the local Services route and
+observed over TCP. Descriptor fixes: string lists are typed grids, hidden-field
+defaults removed, typed-name/confirmation fields aligned with the provider.
+Provider fixes (additive): firebird-driver ``keyholder`` spelling, grid
+``{value: x}`` unwrapping for Firebird and MariaDB string lists, MariaDB
+``DROP PACKAGE BODY`` ``sql_mode``.
+
 MariaDB program objects and the Server family (2026-10-25)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

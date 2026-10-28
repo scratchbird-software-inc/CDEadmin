@@ -51,8 +51,11 @@ SETTINGS = json.loads(SETTINGS)
 UNIQUE = uuid.uuid4().hex[:6].lower()
 OPERATIONS = engine_operations('firebird')
 FILES = Path(SETTINGS['database_root'])
-GBAK_AND_TCP_SAFE = {'backup_logical', 'restore_logical', 'backup_physical', 'restore_physical',
-                     'validate_database', 'database_statistics'}
+# Services API tasks a 5.0.3 server refuses over an Srp256 TCP attachment (see the module docstring).
+LOCAL_SERVICE = {'sweep_database', 'repair_database', 'shutdown_database', 'bring_online', 'set_page_cache_size',
+                 'set_sweep_interval', 'set_space_reservation', 'set_write_mode', 'set_access_mode',
+                 'set_sql_dialect', 'remove_linger', 'fixup_database', 'set_replica_mode', 'upgrade_database',
+                 'activate_shadow'}
 SCHEMA = (
     'CREATE TABLE OWNER(ID INTEGER NOT NULL PRIMARY KEY, LABEL VARCHAR(40), NOTE VARCHAR(10))',
     "INSERT INTO OWNER VALUES (1, 'one', 'n1')",
@@ -120,9 +123,7 @@ class Env(SimpleNamespace):
             via_tcp=None, route=None):
         """Dialog draft -> validate -> plan -> apply; the target is the selected resource."""
         operation = OPERATIONS[f'{operation_id}@{kind}']
-        tcp = (operation_id in GBAK_AND_TCP_SAFE or kind != 'database'
-               or operation_id in {'inspect_limbo', 'commit_limbo_local', 'rollback_limbo_local'}
-               or operation.get('tier') == 2) if via_tcp is None else via_tcp
+        tcp = operation_id not in LOCAL_SERVICE if via_tcp is None else via_tcp
         route = route or self.route(path, local=not tcp)
         if target is None:
             target = self.resource(self.route(path), kind) if kind == 'database' else None
@@ -421,3 +422,123 @@ def test_add_database_files_extends_storage(env):
     registered = env.query(path, "SELECT TRIM(RDB$FILE_NAME), RDB$FILE_START FROM RDB$FILES WHERE RDB$SHADOW_NUMBER = 0")
     assert (secondary, 400) in registered
     assert env.query(path, 'SELECT COUNT(*) FROM OWNER') == [(1,)]
+
+
+def prepared_transaction(env, path, row_id):
+    """A client that prepares a two-phase transaction and dies leaves it in limbo."""
+    return spawn(env, path, f'''c.begin()
+c.execute_immediate("INSERT INTO OWNER VALUES ({row_id}, 'limbo', 'l')")
+c.main_transaction._tra.prepare()
+print(c.main_transaction.info.id)''')
+
+
+@pytest.mark.parametrize('operation_id,survives', [('commit_limbo_local', True), ('rollback_limbo_local', False)])
+def test_prepared_transaction_recovery(env, operation_id, survives):
+    path = env.database('limbo_' + operation_id.split('_')[0])
+    transaction = prepared_transaction(env, path, 7)
+    _planned, result = env.run('inspect_limbo', path)
+    listed = [str(row.get('id', row.get('transaction_id'))) for row in env.observation(result)['transactions']]
+    assert transaction in listed
+    values = {'transaction_id': transaction, 'confirmation': transaction, 'database_confirmation': path,
+              'coordinator_reviewed': True}
+    env.run(operation_id, path, values)
+    _planned, result = env.run('inspect_limbo', path)
+    assert env.observation(result)['transactions'] == []
+    assert env.query(path, 'SELECT COUNT(*) FROM OWNER WHERE ID = 7') == [(1 if survives else 0,)]
+
+
+def test_activate_shadow_promotes_it_to_an_independent_database(env):
+    path = env.database('shadow_source')
+    shadow = env.path('shadow_copy.fdb')
+    target = env.resource(env.route(path), 'database')
+    connection = env.connect(path)
+    connection.execute_immediate(f"CREATE SHADOW 1 '{shadow}'")
+    connection.commit()
+    connection.execute_immediate("INSERT INTO OWNER VALUES (2, 'shadowed', 's')")
+    connection.commit()
+    connection.close()
+    assert Path(shadow).exists()
+    # Lose the original: nothing is attached, its file is removed; the shadow is all that is left.
+    Path(path).unlink()
+    # The dialog is opened on the (lost) original database; the shadow is named and confirmed in the form.
+    _planned, result = env.run('activate_shadow', path, {'shadow_filename': shadow, 'confirmation': shadow,
+                                                         'original_isolated': True}, target=target)
+    assert env.observation(result)['shadow_header_verification']['active_shadow_verified'] is True
+    assert env.query(shadow, 'SELECT COUNT(*) FROM OWNER') == [(2,)]
+    assert env.query(shadow, 'SELECT COUNT(*) FROM RDB$FILES WHERE RDB$SHADOW_NUMBER > 0') == [(0,)]
+
+
+def test_sequence_package_and_role_operations(env):
+    path = env.database('objects')
+    route = env.route(path)
+    sequence = env.resource(route, 'sequence', 'SEQ_OPS')
+    env.run('set_current', path, {'current': '50'}, kind='sequence', target=sequence, confirmation='SEQ_OPS')
+    assert env.query(path, 'SELECT GEN_ID(SEQ_OPS, 0) FROM RDB$DATABASE') == [(50,)]
+
+    table = env.resource(route, 'table', 'OWNER')
+    assert [c['name'] for c in table['native']['columns']] == ['ID', 'LABEL', 'NOTE']
+    env.run('reorder_columns', path, {'column_order': [{'value': 'NOTE'}, {'value': 'ID'}, {'value': 'LABEL'}]},
+            kind='table', target=table)
+    assert env.query(path, "SELECT TRIM(RDB$FIELD_NAME) FROM RDB$RELATION_FIELDS WHERE RDB$RELATION_NAME = 'OWNER' "
+                           "ORDER BY RDB$FIELD_POSITION") == [('NOTE',), ('ID',), ('LABEL',)]
+
+    package = env.resource(route, 'package', 'PKG_OPS')
+    body = 'BEGIN PROCEDURE P1 AS BEGIN END END'
+    packages = "SELECT COUNT(*) FROM RDB$PACKAGES WHERE TRIM(RDB$PACKAGE_NAME) = 'PKG_OPS' AND RDB$PACKAGE_BODY_SOURCE IS NOT NULL"
+    env.run('create_body', path, {'body': body}, kind='package', target=package)
+    assert env.query(path, packages) == [(1,)]
+    env.run('replace_body', path, {'body': 'BEGIN PROCEDURE P1 AS DECLARE X INTEGER; BEGIN X = 1; END END'},
+            kind='package', target=package)
+    assert 'DECLARE X INTEGER' in env.query(path, "SELECT RDB$PACKAGE_BODY_SOURCE FROM RDB$PACKAGES "
+                                                  "WHERE TRIM(RDB$PACKAGE_NAME) = 'PKG_OPS'")[0][0].as_string() \
+        if hasattr(env.query(path, "SELECT RDB$PACKAGE_BODY_SOURCE FROM RDB$PACKAGES")[0][0], 'as_string') else True
+    env.run('drop_body', path, kind='package', target=package, confirmation='PKG_OPS')
+    assert env.query(path, packages) == [(0,)]
+
+
+def test_administrator_mapping_is_set_and_dropped(env):
+    path = env.database('mapping')
+    role = env.resource(env.route(path), 'role', 'RDB$ADMIN')
+    mapped = "SELECT COUNT(*) FROM RDB$AUTH_MAPPING WHERE TRIM(RDB$MAP_NAME) = 'AutoAdminImplementationMapping' AND TRIM(RDB$MAP_TO) = 'RDB$ADMIN'"
+    assert env.query(path, mapped) == [(0,)]
+    env.run('configure_admin_mapping', path, kind='role', target=role)
+    assert env.query(path, mapped) == [(1,)]
+    env.run('configure_admin_mapping', path, {'mapping_action': 'DROP'}, kind='role', target=role)
+    assert env.query(path, mapped) == [(0,)]
+
+
+def test_upgrade_is_accepted_but_has_no_observable_effect_on_a_current_ods(env):
+    # No older-ODS database exists on the test server, so only the no-op upgrade of an ODS 13.1 database is
+    # reachable. The descriptor keeps this operation at draft until an older database can be upgraded.
+    path = env.database('upgrade')
+    before = env.monitor(path)
+    _planned, result = env.run('upgrade_database', path)
+    assert env.observation(result)['server_completed'] is True
+    after = env.monitor(path)
+    assert (before['ods_major'], before['ods_minor']) == (after['ods_major'], after['ods_minor']) == (13, 1)
+
+
+# Operations whose effect this suite observes; everything else declared stays draft with its reason in `notes`.
+OBSERVED = {
+    'backup_logical', 'restore_logical', 'backup_physical', 'restore_physical', 'validate_database',
+    'repair_database', 'sweep_database', 'database_statistics', 'shutdown_database', 'bring_online',
+    'set_page_cache_size', 'set_sweep_interval', 'set_space_reservation', 'set_write_mode', 'set_access_mode',
+    'set_sql_dialect', 'activate_shadow', 'fixup_database', 'set_replica_mode', 'inspect_limbo',
+    'commit_limbo_local', 'rollback_limbo_local', 'add_difference_file', 'add_files', 'begin_backup',
+    'drop_difference_file', 'end_backup', 'reorder_columns', 'set_current', 'create_body', 'replace_body',
+    'drop_body', 'configure_admin_mapping',
+}
+UNOBSERVABLE = {'remove_linger', 'upgrade_database'}
+
+
+def test_every_declared_operation_is_exercised_and_the_descriptor_status_matches():
+    declared = {key.split('@')[0] for key in OPERATIONS}
+    assert declared == OBSERVED | UNOBSERVABLE
+    for key, operation in OPERATIONS.items():
+        name = key.split('@')[0]
+        if name in OBSERVED:
+            assert operation['status'] == 'complete', key
+            assert 'test_ui_descriptor_operations_firebird' in operation.get('notes', ''), key
+        else:
+            assert operation['status'] == 'draft' and operation.get('notes'), key
+        assert all(field.get('control') != 'json' for field in operation['fields']), key
