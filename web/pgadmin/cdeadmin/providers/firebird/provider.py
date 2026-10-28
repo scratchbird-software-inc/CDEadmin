@@ -2,6 +2,7 @@
 
 import ctypes
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -933,6 +934,17 @@ def _service_backup_with_history(server, database, options, module):
     server.wait()
 
 
+def _key_holder_keyword(method):
+    """firebird-driver 1.x spells the backup/restore key-holder argument
+    ``keyhoder``; 2.x corrected it to ``keyholder``. Use what the installed
+    driver accepts."""
+    try:
+        names = inspect.signature(method).parameters
+    except (TypeError, ValueError):
+        return 'keyhoder'
+    return 'keyholder' if 'keyholder' in names else 'keyhoder'
+
+
 def _firebird_service_operation(
         server, operation_id, database, options, module):
     """Dispatch one exact Firebird 5 database service-manager task."""
@@ -997,7 +1009,8 @@ def _firebird_service_operation(
             verbint=options.get('verbose_interval'),
             skip_data=options.get('skip_data') or None,
             include_data=options.get('include_data') or None,
-            keyhoder=options.get('key_holder') or None,
+            **{_key_holder_keyword(service.backup):
+               options.get('key_holder') or None},
             keyname=options.get('key_name') or None,
             crypt=options.get('crypt_plugin') or None,
             parallel_workers=options.get('parallel_workers'),
@@ -1036,7 +1049,8 @@ def _firebird_service_operation(
                 verbint=options.get('verbose_interval'),
                 skip_data=options.get('skip_data') or None,
                 include_data=options.get('include_data') or None,
-                keyhoder=options.get('key_holder') or None,
+                **{_key_holder_keyword(service.restore):
+                   options.get('key_holder') or None},
                 keyname=options.get('key_name') or None,
                 crypt=options.get('crypt_plugin') or None,
                 replica_mode=(

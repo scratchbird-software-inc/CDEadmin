@@ -224,7 +224,6 @@
           "label": "Primary database file allocation (pages)",
           "control": "number",
           "required": true,
-          "default": 256,
           "help": "The primary filename above stays fixed. Firebird reserves at least 255 pages in this file even if a smaller allocation is requested. Allocations are pages, not bytes.",
           "visible_when": {
             "field": "multiple_database_files",
@@ -292,10 +291,6 @@
             {
               "value": "USE_ALL_SPACE",
               "label": "Use all page space"
-            },
-            {
-              "value": "NO_TRIGGERS",
-              "label": "Disable database triggers"
             },
             {
               "value": "DIRECT_IO",
@@ -520,7 +515,6 @@
           "label": "Keep backup history by",
           "control": "select",
           "required": true,
-          "default": "ROWS",
           "options": [
             {
               "value": "ROWS",
@@ -542,7 +536,6 @@
           "label": "History retention count",
           "control": "number",
           "required": true,
-          "default": 1,
           "visible_when": {
             "field": "clean_history",
             "equals": true
@@ -846,9 +839,18 @@
         },
         {
           "field_id": "tables",
-          "label": "Restrict to tables (JSON array)",
-          "control": "keyvalue",
-          "required": false
+          "label": "Restrict to tables",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Table name",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "required": false,
+          "help": "Leave empty for every table. Names are matched exactly as stored (upper case unless quoted when created)."
         },
         {
           "field_id": "role",
@@ -858,8 +860,7 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true,
-      "notes": "typed_from_json: database.database_statistics.tables"
+      "produces_log": true
     },
     {
       "operation_id": "shutdown_database",
@@ -1345,7 +1346,7 @@
       },
       "tier": 2,
       "status": "draft",
-      "confirmation": "typed_name",
+      "confirmation": "confirm",
       "fields": [
         {
           "field_id": "transaction_id",
@@ -1353,6 +1354,13 @@
           "control": "text",
           "required": true,
           "help": "Recovery changes only the selected database participant. It does not establish a global distributed outcome. Review the coordinator decision and every participating database before choosing commit or rollback. Stored participant paths are historical metadata, not verified endpoints or permission to reuse credentials. A lost response is not proof of rollback; never automatically replay a recovery decision."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Repeat the transaction ID",
+          "control": "text",
+          "required": true,
+          "help": "Repeat the exact decimal transaction ID."
         },
         {
           "field_id": "database_confirmation",
@@ -1407,7 +1415,7 @@
       },
       "tier": 2,
       "status": "draft",
-      "confirmation": "typed_name",
+      "confirmation": "confirm",
       "fields": [
         {
           "field_id": "transaction_id",
@@ -1415,6 +1423,13 @@
           "control": "text",
           "required": true,
           "help": "Recovery changes only the selected database participant. It does not establish a global distributed outcome. Review the coordinator decision and every participating database before choosing commit or rollback. Stored participant paths are historical metadata, not verified endpoints or permission to reuse credentials. A lost response is not proof of rollback; never automatically replay a recovery decision."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Repeat the transaction ID",
+          "control": "text",
+          "required": true,
+          "help": "Repeat the exact decimal transaction ID."
         },
         {
           "field_id": "database_confirmation",
@@ -1449,7 +1464,7 @@
       },
       "tier": 2,
       "status": "draft",
-      "confirmation": "confirm",
+      "confirmation": "typed_name",
       "fields": [
         {
           "field_id": "filename",
@@ -1469,7 +1484,7 @@
       },
       "tier": 2,
       "status": "draft",
-      "confirmation": "confirm",
+      "confirmation": "typed_name",
       "fields": [
         {
           "field_id": "files",
@@ -1512,7 +1527,7 @@
       },
       "tier": 3,
       "status": "draft",
-      "confirmation": "confirm",
+      "confirmation": "typed_name",
       "fields": [
         {
           "field_id": "confirm_difference_overwrite",
@@ -1535,7 +1550,7 @@
       },
       "tier": 2,
       "status": "draft",
-      "confirmation": "confirm",
+      "confirmation": "typed_name",
       "fields": []
     },
     {
@@ -1547,7 +1562,7 @@
       },
       "tier": 3,
       "status": "draft",
-      "confirmation": "confirm",
+      "confirmation": "typed_name",
       "fields": [],
       "execution_host": true,
       "produces_log": true
