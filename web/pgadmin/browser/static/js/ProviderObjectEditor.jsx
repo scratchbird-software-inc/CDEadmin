@@ -20,13 +20,14 @@ import gettext from 'sources/gettext';
 import getApiInstance from 'sources/api_instance';
 import ErrorBoundary from 'sources/helpers/ErrorBoundary';
 import {
-  OperationDialog, ProviderObjectEditorHost, descriptorClient, editorAvailable, makePost, menuForKind,
+  OperationDialog, ProviderObjectEditorHost, ServerRegistrationHost, descriptorClient, editorAvailable, makePost, menuForKind,
   visualAdminCalls,
 } from 'sources/cdeadmin_ui/objects';
 import {createRoot} from 'react-dom/client';
 import Theme from 'sources/Theme';
 import {providerEndpointSessionReady} from 'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 import {BROWSER_PANELS} from './constants';
+import {generateNodeUrl} from './node_ajax';
 
 let editorSequence = 0;
 
@@ -220,4 +221,56 @@ export function familyEditorContextActions(itemData, item) {
     }
   }
   return entries;
+}
+
+/**
+ * Open the descriptor Server editor for registering ('create', under a server group item) or
+ * editing ('alter', on a server item) a provider endpoint. Resolves true when it opened and false
+ * when the legacy dialog must handle it: no bundle, or the engine's server form is not complete.
+ */
+export async function tryOpenServerForm({item, mode='create', engine, profileId, initialData={}, intent='endpoint',
+  verifyNow=true, panelTitle}) {
+  if(!engine || !item) return false;
+  const api = getApiInstance();
+  let bundle;
+  try {
+    bundle = await descriptorClient(api).bundle(engine);
+  } catch {
+    return false;
+  }
+  const form = bundle?.forms?.server;
+  if(!form || form.status !== 'complete' || !editorAvailable(bundle, 'server')) return false;
+  const tree = pgAdmin.Browser.tree;
+  const serverNode = pgAdmin.Browser.Nodes.server;
+  const nodeData = tree.itemData(item);
+  const treeNodeInfo = tree.getTreeNodeHierarchy(item);
+  const base = generateNodeUrl.call(serverNode, treeNodeInfo, mode === 'create' ? 'create' : 'edit', nodeData, false,
+    serverNode.url_jump_after_node);
+  const urlFor = (isNew) => base + (isNew ? '' : nodeData._id);
+  const workspace = pgAdmin.Browser.docker.default_workspace;
+  const panelId = mode === 'create' ? `id-server-register-${++editorSequence}` : `id-server-edit-${nodeData._id}`;
+  const onClose = () => workspace.close(panelId);
+  const onSaved = (response) => {
+    setTimeout(() => serverNode.clear_cache?.(item), 0);
+    if(mode === 'create') {
+      pgAdmin.Browser.Events.trigger('pgadmin:browser:tree:add', {...response.node}, {...treeNodeInfo});
+    } else {
+      pgAdmin.Browser.Events.trigger('pgadmin:browser:tree:update', nodeData, response.node, treeNodeInfo, {
+        success: (updated, next, previous) => {
+          pgAdmin.Browser.Events.trigger('pgadmin:browser:node:updated', updated, next, previous);
+          pgAdmin.Browser.Events.trigger('pgadmin:browser:node:server:updated', updated, next, previous);
+        },
+      });
+    }
+    onClose();
+  };
+  workspace.openTab({
+    id: panelId, title: panelTitle || gettext('Register server'), closable: true, floatable: true,
+    content: <ErrorBoundary>
+      <ServerRegistrationHost api={api} engine={engine} version={nodeData.verified_runtime_version}
+        mode={mode === 'create' ? 'create' : 'alter'} urlFor={urlFor} initialData={initialData} profileId={profileId}
+        intent={intent} verifyNow={verifyNow} displayName={panelTitle} onClose={onClose} onSaved={onSaved} />
+    </ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return true;
 }

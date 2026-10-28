@@ -173,6 +173,21 @@ count sets its maximum to zero in the enforcement file.
 Change log
 ----------
 
+Server editor wired into the tree (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+"Register server" (endpoint intent) and "Edit endpoint" open the descriptor
+Server editor (``ServerRegistrationHost``) for engines whose ``server`` form is
+``complete`` (MariaDB, Firebird, DuckDB, SQLite). ``ObjectEditor`` gained a
+``directApply`` mode (no plan, Preview SQL hidden) because registration is not
+DDL; the host posts ``toBackendDraft`` plus ``cde_profile_id``,
+``cde_registration_intent`` and ``cde_verify_now`` to the servers API and feeds
+the tree through the same ``tree:add`` / ``tree:update`` events as the legacy
+dialog. ``create_database`` and ``register_existing`` intents, PostgreSQL,
+MySQL and any engine without a complete form keep the legacy dialog (fallback
+on any bundle error). Not yet exercised in a running browser; the Jest specs
+cover payloads and the edit-only-changed rule.
+
 Firebird and MariaDB operation round trips (2026-10-28)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

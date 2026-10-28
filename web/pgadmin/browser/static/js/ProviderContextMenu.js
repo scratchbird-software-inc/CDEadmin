@@ -10,7 +10,7 @@
 import _ from 'lodash';
 import gettext from 'sources/gettext';
 import pgAdmin from 'sources/pgadmin';
-import {familyEditorContextActions, tryOpenFamilyEditor} from './ProviderObjectEditor';
+import {familyEditorContextActions, tryOpenFamilyEditor, tryOpenServerForm} from './ProviderObjectEditor';
 
 const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
@@ -181,10 +181,16 @@ function dispatch(action, args, context) {
         ...args, task_title: action.label.replace(/\.\.\.$/, ''),
       }
     );
-  case 'edit_endpoint':
-    return pgAdmin.Browser.Node.callbacks.show_obj_properties.call(
+  case 'edit_endpoint': {
+    const legacy = () => pgAdmin.Browser.Node.callbacks.show_obj_properties.call(
       serverNode, {action: 'edit', item: endpoint.item}
     );
+    const engine = endpoint.data?.cde_engine_id;
+    if(!engine) return legacy();
+    return tryOpenServerForm({item: endpoint.item, mode: 'alter', engine, profileId: endpoint.data.cde_profile_id,
+      panelTitle: gettext('Edit %s', endpoint.data.label || endpoint.data._label)})
+      .then((opened) => opened || legacy()).catch(() => legacy());
+  }
   case 'clear_credentials':
     return serverNode.callbacks.clear_saved_password.call(serverNode, {
       item: endpoint.item,

@@ -86,7 +86,7 @@ FieldsTab.propTypes = {
 };
 
 export default function ObjectEditor({form, mode='create', resourceKind, record={}, context={},
-  plan, apply, tabRenderers={}, onClose, onApplied, title, readOnly=false, autoPlan=true}) {
+  plan, apply, tabRenderers={}, onClose, onApplied, title, readOnly=false, autoPlan=true, directApply=false, applyLabel}) {
   const [draft, setDraft] = useState(() => initialDraft(form, {mode, record}));
   const [baseline] = useState(() => initialDraft(form, {mode, record}));
   const [activeTab, setActiveTab] = useState(form.tabs[0]?.tab);
@@ -131,6 +131,18 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
   const doApply = async () => {
     if(!apply) return;
     let current = planState.plan;
+    if(directApply) {
+      // Not a DDL object (Server family): there is no plan to confirm, the host applies the draft.
+      setApplyState({status: 'loading', result: null, error: null});
+      try {
+        const result = await apply({plan: null, draft: backendDraft, mode});
+        setApplyState({status: 'done', result, error: null});
+        onApplied?.(result);
+      } catch(error) {
+        setApplyState({status: 'error', result: null, error: error?.message || String(error)});
+      }
+      return;
+    }
     if(!current) {
       await refreshPlan();
       return;
@@ -200,13 +212,13 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
           <ValidationMessage status="warning">Plan blocked: {(planState.plan.blockers || []).join(', ') || 'see SQL tab'}.</ValidationMessage>}
       </Box>
       <Button intent="neutral" onClick={onClose}>{applyState.status === 'done' ? 'Close' : 'Cancel'}</Button>
-      {!readOnly && <Button intent="neutral" disabled={!canPlan || planState.status === 'loading'}
+      {!readOnly && !directApply && <Button intent="neutral" disabled={!canPlan || planState.status === 'loading'}
         onClick={() => { setActiveTab('SQL'); refreshPlan(); }}>Preview SQL</Button>}
       {!readOnly && <Button intent="primary" loading={applyState.status === 'loading'}
         disabled={!canPlan || applyState.status === 'done' || planState.status === 'loading' ||
           (planState.plan && (planBlocked || planState.plan.execution_available === false))}
         onClick={doApply}>
-        {planState.plan ? confirmLabel : 'Preview and apply'}
+        {directApply ? (applyLabel || 'Apply') : (planState.plan ? confirmLabel : 'Preview and apply')}
       </Button>}
     </Box>
   </Box>;
@@ -262,4 +274,6 @@ ObjectEditor.propTypes = {
   title: PropTypes.string,
   readOnly: PropTypes.bool,
   autoPlan: PropTypes.bool,
+  directApply: PropTypes.bool,
+  applyLabel: PropTypes.string,
 };
