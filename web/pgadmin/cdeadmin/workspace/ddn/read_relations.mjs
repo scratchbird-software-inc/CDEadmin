@@ -5,8 +5,7 @@ const check = value => { if(!value) throw new Error('Invalid relational mapping'
 // Physical-schema vocabulary (docs/en_US/ddn_physical_schema_vocabulary.rst). Values are
 // passed through verbatim; the Python adapters validate and interpret them.
 const PHYSICAL = ['physical_kind','physical_name','rename_from','columns_json','unique','method','predicate',
-  'expression','referenced_columns_json','on_delete','on_update','drop','drop_confirmation',
-  'index_type','prefix_lengths_json','directions_json','visible','enforced'];
+  'expression','referenced_columns_json','on_delete','on_update','drop','drop_confirmation','descending','inactive'];
 const physicalOf = native => Object.fromEntries(PHYSICAL.filter(name => native && Object.hasOwn(native, name)).map(name => [name, native[name]]));
 let input = '';
 try {
@@ -42,8 +41,7 @@ try {
       if(Object.keys(physical).length) row.physical = physical;
       rows.push(row); rowInfo.push({row, subject, native});
       check(rows.length <= 20000);
-    } else if(['index','constraint','ref'].includes(native.subject_kind) && native.physical_kind !== undefined &&
-        native.native_json === undefined) {
+    } else if(['index','constraint','ref'].includes(native.subject_kind) && native.physical_kind !== undefined) {
       check(typeof native.parent_id === 'string' || native.subject_kind === 'ref');
       drafts.push({subject, uid: facts.uid, subject_kind: native.subject_kind, native, physical: physicalOf(native)});
     }
@@ -106,10 +104,7 @@ try {
       const [from,to]=row.record.endpoints.map(endpoint=>endpoint.definition);
       const uid=facts?.uid || 'ddn-new-relationship:'+JSON.stringify([file,row.ref.id]);
       if(!facts) {check(!uids.has(uid));uids.add(uid);}
-      // An annotated edge without native facts is a physical-schema draft; physical_drafts carries it.
-      if(native && native.physical_kind !== undefined && native.native_json === undefined) continue;
-      const physical=physicalOf(native);
-      relationships.push({...(Object.keys(physical).length?{physical}:{}),uid,from_ref:from?.id ?? null,to_ref:to?.id ?? null,kind:'ref',
+      relationships.push({uid,from_ref:from?.id ?? null,to_ref:to?.id ?? null,kind:'ref',
         enforcement:row.record.properties?.enforcement ?? null,native_json:native?.native_json ?? null,
         source:resourceIds.get(key(from?.file || file,from?.id)) ?? null,target:resourceIds.get(key(to?.file || file,to?.id)) ?? null});
     } else check(annotation);

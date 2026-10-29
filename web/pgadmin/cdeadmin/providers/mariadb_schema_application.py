@@ -66,11 +66,9 @@ def apply_review(connection, record):
             dispatched = True
             cursor.execute('EXECUTE sr_mariadb_schema')
             acknowledged = True; result['state'] = 'committed'
-        rename_to=operation.get('rename_to')   # a reviewed table rename is rediscovered under its new name
-        current,_rows=observed(connection,plan['database'],after['kind'],rename_to or after['name'])
+        current,_rows=observed(connection,plan['database'],after['kind'],after['name'])
         result['rediscovery_verified'] = (current is None if operation['operation']=='drop' else
-            current is not None and (current['resource_id']==key or bool(rename_to) and current['name']==rename_to) and
-            isinstance(current['native'].get('definition'),str))
+            current is not None and current['resource_id']==key and isinstance(current['native'].get('definition'),str))
         if current:
             result.update(native_definition=current['native'].get('definition'),
                 desired_definition_exact_match=current['native'].get('definition')==after['native'].get('definition'),
