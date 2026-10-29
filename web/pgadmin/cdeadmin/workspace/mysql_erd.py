@@ -4,7 +4,6 @@ import json
 from . import ddn_source as ddn
 
 from .firebird_catalog_export import MAX_BYTES, MAX_DDN_UNITS, native_metadata
-from . import mysql_physical as physical
 
 
 def build_diagram(resources, provenance, *, engine='mysql'):
@@ -27,9 +26,6 @@ def build_diagram(resources, provenance, *, engine='mysql'):
         raise ValueError('Ambiguous native ' + engine_name + ' relation identities')
     prefix = engine + ':' + provenance['endpoint_id'] + ':' + provenance['database_target_id'] + ':'
     declarations, edges, warnings, mapping = [], [], [], {}
-    root = next((native_metadata(item, engine) for item in resources if item['resource_kind'] == 'database'), {})
-    mode = root.get('definition_context', {}).get('sql_mode', root.get('catalog_row', {}).get('sql_mode', ''))
-    mode = mode if isinstance(mode, str) else ''
     for row in relations:
         identity, native = row['resource_id'], native_metadata(row, engine)
         fields = []
@@ -38,21 +34,11 @@ def build_diagram(resources, provenance, *, engine='mysql'):
             properties = {'datatype': column['column_type'], 'nullable': column.get('is_nullable') != 'NO'}
             if column.get('column_comment'):
                 properties['description'] = column['column_comment']
-            fields.append(ddn.native_field(key(cid), column['column_name'], prefix + cid, properties,
-                physical.column_values(column['column_name']) if row['resource_kind'] == 'table' else None))
+            fields.append(ddn.native_field(key(cid), column['column_name'], prefix + cid, properties))
             mapping[key(cid)] = cid
         shape = 'table' if row['resource_kind'] == 'table' else 'view'
-        kids, vocabulary, notes = physical.forward(row['display_name'], native, mode, engine) if shape == 'table' else ([], {}, [])
-        warnings.extend(notes)
-        children = []
-        for kid in kids:
-            kid_id = identity + ':' + kid['kind'] + ':' + quote(kid['name'])
-            children.append({'identity': key(kid_id), 'title': kid['name'], 'role': kid['role'], 'uid': prefix + kid_id,
-                'values': {'resource_id': kid_id, 'native_kind': kid['kind'], 'native_json': quote({'clause': kid['clause']}), **kid['values']}})
-            mapping[key(kid_id)] = kid_id
         declarations.append(ddn.relation_object(key(identity), row['display_name'], shape, prefix + identity,
-            {'resource_id': identity, 'native_kind': row['resource_kind'], 'native_json': quote(native)}, fields, module,
-            children, physical.table_values(row['display_name']) if shape == 'table' else None))
+            {'resource_id': identity, 'native_kind': row['resource_kind'], 'native_json': quote(native)}, fields, module))
         mapping[key(identity)] = identity
         foreign_keys = {}
         for column in native.get('children', {}).get('KEY_COLUMN_USAGE', []):
@@ -67,8 +53,7 @@ def build_diagram(resources, provenance, *, engine='mysql'):
             fk_id = identity + ':foreign-key:' + quote(name)
             label = name + ' (' + ', '.join(item['column_name'] for item in columns) + ') -> (' + ', '.join(item['referenced_column_name'] for item in columns) + ')'
             declarations.append(ddn.relation_edge(key(fk_id), label, key(identity), key(target['resource_id']),
-                prefix + fk_id, {'native_json': quote(columns)}, module,
-                vocabulary.get(name, {}).get('values') if shape == 'table' else None))
+                prefix + fk_id, {'native_json': quote(columns)}, module))
             edges.append((key(fk_id), identity, target['resource_id']))
             mapping[key(fk_id)] = fk_id
     views, blocks = [], []

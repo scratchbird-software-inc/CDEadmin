@@ -76,10 +76,7 @@ def address(row,database):
 def alteration(before,after,sql_mode):
     old,columns,old_order=parts(before,sql_mode);new,desired,new_order=parts(after,sql_mode)
     intent=after['native'].get('mysql_change',{})
-    if not isinstance(intent,dict) or set(intent)-{'drop_columns','rename_columns','rename_indexes','rename_table'}:raise ValueError('Unknown table alteration intent')
-    if 'rename_table' in intent:
-        from .mysql_physical import table_rename
-        return table_rename(before,after,intent,sql_mode,'mysql')
+    if not isinstance(intent,dict) or set(intent)-{'drop_columns','rename_columns'}:raise ValueError('Unknown table alteration intent')
     renames=intent.get('rename_columns',{})
     if (not isinstance(renames,dict) or len(renames)>128 or
             any(not isinstance(value,str) or not 1<=len(value)<=64 or '\x00' in value
@@ -104,11 +101,9 @@ def alteration(before,after,sql_mode):
     for key in columns.keys() & desired.keys():
         if key[0]=='foreign-key' and columns[key]!=desired[key] and key not in automatic_references:
             raise ValueError('Same-name foreign-key replacement requires separately reviewed DROP and ADD or an explicit new constraint name; foreign-key checks are never disabled')
-    from .mysql_physical import index_operations
-    renamed_indexes,settled=index_operations(columns,desired,intent,sql_mode,'mysql',before['native']['database'])
     drops=[];mutations=[];additions=[]
     for key in sorted(columns):
-        if key in automatic_references or key in settled or key in desired and columns[key]==desired[key]:continue
+        if key in automatic_references or key in desired and columns[key]==desired[key]:continue
         kind,value=key
         if kind=='column':
             if key not in desired and value not in renames:drops.append('DROP COLUMN '+identifier(value))
@@ -120,19 +115,18 @@ def alteration(before,after,sql_mode):
         key=('column',value)
         previous=new_order[index-1] if index else None
         original=inverse.get(value,value)
-        kept=[column for column in old_order if column not in removals]   # a dropped neighbour is not a move
-        old_previous=kept[kept.index(original)-1] if original in kept and kept.index(original)>0 else None
+        old_previous=old_order[old_order.index(original)-1] if original in old_order and old_order.index(original)>0 else None
         old_previous=renames.get(old_previous,old_previous)
         if value in inverse or key not in columns or columns[key]!=desired[key] or previous!=old_previous:
             placement=' AFTER '+identifier(previous) if previous is not None else ' FIRST'
             mutations.append(('CHANGE COLUMN '+identifier(inverse[value])+' ' if value in inverse else
                 'ADD COLUMN ' if key not in columns else 'MODIFY COLUMN ')+desired[key]+placement)
     for key in sorted(desired):
-        if key[0]!='column' and key not in automatic_references and key not in settled and (key not in columns or columns[key]!=desired[key]):additions.append('ADD '+desired[key])
+        if key[0]!='column' and key not in automatic_references and (key not in columns or columns[key]!=desired[key]):additions.append('ADD '+desired[key])
     if old['suffix'].strip()!=new['suffix'].strip():
         if not new['suffix'].strip():raise ValueError('Removing native table options requires an explicit option adapter')
         additions.append(new['suffix'].strip())
-    result=drops+renamed_indexes+mutations+additions
+    result=drops+mutations+additions
     if not result:raise ValueError('Definition changes do not produce an unambiguous native alteration')
     return 'ALTER TABLE '+identifier(before['native']['database'])+'.'+identifier(before['name'])+' '+', '.join(result)
 
@@ -151,7 +145,7 @@ def plan(baseline,desired,live,execution=None):
         if other!=database or observed['server_uuid']!=identity['server_uuid'] or any(
             document['provenance'].get(key)!=live['provenance'].get(key) for key in ('endpoint_id','database_target_id')):
             raise ValueError('DDN review belongs to another endpoint, database or native server')
-    operations=[];blockers=[];ignored=[];conflicts=[];converged=[]
+    operations=[];blockers=[];ignored=[];conflicts=[]
     for key,after in sorted(desired['rows'].items()):
         before,current=baseline['rows'].get(key),live['rows'].get(key)
         intent=after['native'].get('mysql_change')
@@ -164,12 +158,6 @@ def plan(baseline,desired,live,execution=None):
                 if before['kind']!=after['kind'] or (current is not None and current['kind']!=after['kind']):
                     raise ValueError('Native object kind changed across the review')
             if after['kind'] not in {'table','view','library','event','procedure','function','trigger','database','materialized-view'}:raise ValueError('Native adapter for this object kind is not yet admitted')
-            if before is not None and after['kind']=='table' and not execution:
-                from .mysql_physical import converged as already, renamed_table_converged
-                if already(before,after,current,identity['sql_mode'],'mysql',database) or renamed_table_converged(
-                        before,after,live['rows'],identity['sql_mode'],'mysql',database):
-                    converged.append({'resource_id':key,'name':after['name'],'reason':'The live table already has the reviewed definition'})
-                    continue
             same=current is not None and _equal(schema(before),schema(current)) if before else False
             if execution and before and current and after['kind']=='table':
                 from .mysql_online_policy import structural_definition
@@ -187,7 +175,7 @@ def plan(baseline,desired,live,execution=None):
                     raise ValueError('Removal requires exact native name confirmation')
                 operation='drop'
             else:operation='alter'
-            if execution and (after['kind']!='table' or operation!='alter' or isinstance(intent,dict) and 'rename_table' in intent):
+            if execution and (after['kind']!='table' or operation!='alter'):
                 raise ValueError('Controlled execution requires one existing native table alteration')
             if after['kind']=='database':
                 from .mysql_database_plan import compile_database
@@ -228,9 +216,6 @@ def plan(baseline,desired,live,execution=None):
             operations.append({'resource_id':key,'kind':after['kind'],'name':after['name'],'database':database,'operation':operation,
                 'source':source,'context':context,
                 'baseline_schema_sha256':digest(schema(before)) if before else None,'desired_schema_sha256':digest(schema(after))})
-            if after['kind']=='table' and before is not None:
-                from .mysql_physical import annotate
-                annotate(operations[-1],before,after,identity['sql_mode'],'mysql',database)
             if execution:
                 operations[-1].update(execution=deepcopy(execution),source=statement(source,execution))
         except (ValueError,KeyError,TypeError) as error:
@@ -239,15 +224,12 @@ def plan(baseline,desired,live,execution=None):
         if key not in desired['rows']:ignored.append({'resource_id':key,'reason':'Missing desired selection is not removal intent'})
     if execution and len(operations)!=1:
         blockers.append({'reason':'Controlled ALTER requires exactly one native table per reviewed job'})
-    from .mysql_physical import order_operations, ORDERING_RULE
-    if not execution:operations=order_operations(operations)
     return {'format':'scratchrobin.mysql.schema-plan@1','engine_id':'mysql','operations':operations,'blockers':blockers,
-        'conflicts':conflicts,'converged':converged,'ignored':ignored,'database':database,'server_uuid':identity['server_uuid'],
+        'conflicts':conflicts,'ignored':ignored,'database':database,'server_uuid':identity['server_uuid'],
         'execution_sha256':digest(operations),'ready_for_review':not blockers and not conflicts and bool(operations),
         'native_grammar_validated':False,'application_supported':False,'executed':False,
         'warnings':['Native clause separation is not grammar validation. This preview grants no execution.',
             'MySQL DDL commits implicitly; rollback cannot provide multi-statement atomicity.',
-            ORDERING_RULE,
             'Native baseline/absence revalidation, durable reviewed admission and rediscovery are required before application.'] +
             (['Controlled ALTER uses a cooperating advisory lock and observational structural revalidation. Prevent external DDL during the operation; concurrent DML remains governed by native ALGORITHM/LOCK. Brief metadata locks still occur. Native PREPARE does not prove algorithm support or online feasibility. No automatic fallback or retry is permitted.'] if execution else []) +
             (['View/library/event/routine/trigger updates/removals recheck observed baselines with a cooperating advisory lock only. External DDL is not fenced; use an exclusive DDL maintenance window to prevent replacement races.']

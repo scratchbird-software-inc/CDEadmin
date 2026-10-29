@@ -46,10 +46,7 @@ def parts(row,sql_mode):
 def alteration(before,after,sql_mode):
     old,columns,old_order=parts(before,sql_mode);new,desired,new_order=parts(after,sql_mode)
     intent=after['native'].get('mariadb_change',{})
-    if not isinstance(intent,dict) or set(intent)-{'drop_columns','drop_periods','temporal_history','rename_columns','rename_indexes','rename_table'}:raise ValueError('Unknown table alteration intent')
-    if 'rename_table' in intent:
-        from .mysql_physical import table_rename
-        return table_rename(before,after,intent,sql_mode,'mariadb')
+    if not isinstance(intent,dict) or set(intent)-{'drop_columns','drop_periods','temporal_history','rename_columns'}:raise ValueError('Unknown table alteration intent')
     temporal='WITH SYSTEM VERSIONING' in old['suffix'].upper()
     if temporal and intent.get('temporal_history') != 'KEEP':
         raise ValueError('System-versioned schema alteration requires explicit mariadb_change.temporal_history=KEEP acceptance of native history semantics')
@@ -91,11 +88,9 @@ def alteration(before,after,sql_mode):
     for key in columns.keys() & desired.keys():
         if key[0]=='period' and key not in renamed_periods and columns[key]!=desired[key]:
             raise ValueError('Period boundary replacement requires separately reviewed native DROP and ADD')
-    from .mysql_physical import index_operations
-    renamed_indexes,settled=index_operations(columns,desired,intent,sql_mode,'mariadb',before['native']['database'])
     drops=[];mutations=[];additions=[]
     for key in sorted(columns):
-        if key in automatic_references or key in settled or key in desired and columns[key]==desired[key]:continue
+        if key in automatic_references or key in desired and columns[key]==desired[key]:continue
         kind,value=key
         if kind=='column':
             if key not in desired and value not in renames:drops.append('DROP COLUMN '+identifier(value))
@@ -108,21 +103,20 @@ def alteration(before,after,sql_mode):
         key=('column',value)
         previous=new_order[index-1] if index else None
         original=inverse.get(value,value)
-        kept=[column for column in old_order if column not in removals]   # a dropped neighbour is not a move
-        old_previous=kept[kept.index(original)-1] if original in kept and kept.index(original)>0 else None
+        old_previous=old_order[old_order.index(original)-1] if original in old_order and old_order.index(original)>0 else None
         old_previous=renames.get(old_previous,old_previous)
         if value in inverse or key not in columns or columns[key]!=desired[key] or previous!=old_previous:
             placement=' AFTER '+identifier(previous) if previous is not None else ' FIRST'
             mutations.append(('CHANGE COLUMN '+identifier(inverse[value])+' ' if value in inverse else
                 'ADD COLUMN ' if key not in columns else 'MODIFY COLUMN ')+desired[key]+placement)
     for key in sorted(desired):
-        if key[0]!='column' and key not in automatic_references and key not in settled and (key not in columns or columns[key]!=desired[key]):additions.append('ADD '+desired[key])
+        if key[0]!='column' and key not in automatic_references and (key not in columns or columns[key]!=desired[key]):additions.append('ADD '+desired[key])
     if old['suffix'].strip()!=new['suffix'].strip():
         if 'WITH SYSTEM VERSIONING' in old['suffix'].upper() and 'WITH SYSTEM VERSIONING' not in new['suffix'].upper():
             raise ValueError('Removing system versioning requires a separate explicit native temporal lifecycle operation')
         if not new['suffix'].strip():raise ValueError('Removing native table options requires an explicit option adapter')
         additions.append(new['suffix'].strip())
-    result=drops+renamed_indexes+mutations+additions
+    result=drops+mutations+additions
     if not result:raise ValueError('Definition changes do not produce an unambiguous native alteration')
     return 'ALTER TABLE '+identifier(before['native']['database'])+'.'+identifier(before['name'])+' '+', '.join(result)
 
@@ -197,7 +191,7 @@ def plan(baseline, desired, live):
                 document['provenance'].get(key) != live['provenance'].get(key)
                 for key in ('endpoint_id', 'database_target_id'))):
             raise ValueError('Native review belongs to another endpoint, database or server UID')
-    operations, blockers, conflicts, ignored, converged = [], [], [], [], []
+    operations, blockers, conflicts, ignored = [], [], [], []
     for key, after in sorted(desired['rows'].items()):
         before, current = baseline['rows'].get(key), live['rows'].get(key)
         intent = after['native'].get('mariadb_change')
@@ -205,13 +199,6 @@ def plan(baseline, desired, live):
             continue
         try:
             address(after, database)
-            if before is not None and after['kind'] == 'table':
-                from .mysql_physical import converged as already, renamed_table_converged
-                if current is not None: address(current, database)
-                if already(before, after, current, context['sql_mode'], 'mariadb', database) or renamed_table_converged(
-                        before, after, live['rows'], context['sql_mode'], 'mariadb', database):
-                    converged.append({'resource_id': key, 'name': after['name'], 'reason': 'The live table already has the reviewed definition'})
-                    continue
             if before is not None:
                 address(before, database)
                 if current is None or not _equal(schema(before), schema(current)):
@@ -264,23 +251,17 @@ def plan(baseline, desired, live):
                 'baseline_schema_sha256': digest(schema(before)) if before else None,
                 'desired_schema_sha256': digest(schema(after)),
                 **({'trigger_order':ordering,'trigger_order_baseline':ordering_baseline} if after['kind']=='trigger' else {})})
-            if after['kind'] == 'table' and before is not None:
-                from .mysql_physical import annotate
-                annotate(operations[-1], before, after, context['sql_mode'], 'mariadb', database)
         except (ValueError, KeyError, TypeError) as error:
             blockers.append({'resource_id': key, 'name': after['name'], 'reason': str(error)})
     for key in baseline['rows'].keys() - desired['rows'].keys():
         ignored.append({'resource_id': key, 'reason': 'Missing desired selection is not removal intent'})
-    from .mysql_physical import order_operations, ORDERING_RULE
-    operations = order_operations(operations)
     return {'format': 'scratchrobin.mariadb.schema-plan@1', 'engine_id': 'mariadb',
         'database': database, 'server_uid': facts['server_uid'], 'operations': operations,
-        'execution_sha256': digest(operations), 'blockers': blockers, 'conflicts': conflicts, 'converged': converged,
+        'execution_sha256': digest(operations), 'blockers': blockers, 'conflicts': conflicts,
         'ignored': ignored, 'ready_for_review': bool(operations) and not blockers and not conflicts,
         'native_grammar_validated': False, 'application_supported': False, 'executed': False,
         'warnings': ['Native clause separation is not grammar validation or permission to execute.',
             'MariaDB DDL commits independently; rollback cannot make a sequence of changes atomic.',
-            ORDERING_RULE,
             'The current table adapter preserves temporal clauses. Temporal history removal requires separate explicit lifecycle review.',
             'Package declaration replacement can discard its body and invalidate callers. Sequence restart changes future allocation.',
             'Native baseline/absence revalidation, durable reviewed admission and rediscovery are required before application.']}

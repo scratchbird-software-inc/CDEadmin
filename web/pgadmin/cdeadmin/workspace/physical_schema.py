@@ -13,7 +13,7 @@ import re
 import uuid
 
 VERSION = 'scratchrobin.physical-schema@1'
-ENGINES = ('postgresql', 'sqlite', 'duckdb', 'mysql', 'mariadb')
+ENGINES = ('postgresql', 'sqlite', 'duckdb', 'firebird')
 KINDS = ('index', 'primary-key', 'unique', 'check', 'foreign-key')
 ROLE = {'index': 'index', 'primary-key': 'constraint', 'unique': 'constraint',
         'check': 'constraint', 'foreign-key': 'ref'}
@@ -21,14 +21,11 @@ ACTIONS = ('NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT')
 # Flat x_record keys. *_json values are JSON text, like native_json.
 KEYS = ('physical_kind', 'physical_name', 'rename_from', 'columns_json', 'unique', 'method',
         'predicate', 'expression', 'referenced_columns_json', 'on_delete', 'on_update',
-        'drop', 'drop_confirmation',
-        # MySQL / MariaDB additions (additive; PostgreSQL, SQLite and DuckDB never emit them).
-        'index_type', 'prefix_lengths_json', 'directions_json', 'visible', 'enforced')
+        'drop', 'drop_confirmation', 'descending', 'inactive')
 _TYPES = {'physical_kind': str, 'physical_name': str, 'rename_from': str, 'columns_json': str,
           'unique': bool, 'method': str, 'predicate': str, 'expression': str,
           'referenced_columns_json': str, 'on_delete': str, 'on_update': str,
-          'drop': bool, 'drop_confirmation': str,
-          'index_type': str, 'prefix_lengths_json': str, 'directions_json': str, 'visible': bool, 'enforced': bool}
+          'drop': bool, 'drop_confirmation': str, 'descending': bool, 'inactive': bool}
 
 
 def pick(values):
@@ -62,30 +59,6 @@ def normalize(raw, label='physical record'):
                     len(set(decoded)) != len(decoded)):
                 raise ValueError(key + ' must be 1 to 32 distinct non-empty names')
             result[key[:-5]] = decoded
-    columns = result.get('columns', [])
-    if 'prefix_lengths_json' in result:
-        try:
-            decoded = json.loads(result['prefix_lengths_json'])
-        except ValueError:
-            raise ValueError('prefix_lengths_json must be a JSON array of lengths') from None
-        if (not isinstance(decoded, list) or not 1 <= len(decoded) <= 32 or
-                any(item is not None and (type(item) is not int or not 1 <= item <= 3072) for item in decoded)):
-            raise ValueError('prefix_lengths_json must be 1 to 32 entries of null or a length from 1 to 3072')
-        if columns and len(decoded) != len(columns):
-            raise ValueError('prefix_lengths_json needs one entry per column')
-        result['prefix_lengths'] = decoded
-    if 'directions_json' in result:
-        try:
-            decoded = json.loads(result['directions_json'])
-        except ValueError:
-            raise ValueError('directions_json must be a JSON array of ASC or DESC') from None
-        if not isinstance(decoded, list) or not 1 <= len(decoded) <= 32 or any(item not in ('ASC', 'DESC') for item in decoded):
-            raise ValueError('directions_json must be 1 to 32 entries of ASC or DESC')
-        if columns and len(decoded) != len(columns):
-            raise ValueError('directions_json needs one entry per column')
-        result['directions'] = decoded
-    if result.get('index_type', 'FULLTEXT') not in ('FULLTEXT', 'SPATIAL'):
-        raise ValueError('index_type must be FULLTEXT or SPATIAL')
     for key in ('on_delete', 'on_update'):
         if key in result and result[key] not in ACTIONS:
             raise ValueError('Foreign-key action must be one of: ' + ', '.join(ACTIONS))
@@ -105,7 +78,7 @@ def changes(before, after):
             continue
         if key not in old or old[key] != new[key]:
             changed[key] = new[key]
-    for key in ('columns', 'referenced_columns', 'prefix_lengths', 'directions'):
+    for key in ('columns', 'referenced_columns'):
         if key in new and new[key] != old.get(key):
             changed[key] = new[key]
     return changed

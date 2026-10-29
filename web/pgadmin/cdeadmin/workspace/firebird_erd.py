@@ -3,6 +3,7 @@ import hashlib
 import json
 from . import ddn_source as ddn
 from .firebird_catalog_export import native_metadata, MAX_DDN_UNITS, MAX_BYTES
+from . import firebird_physical as physical
 from ..providers.firebird.column_type_metadata import type_editor_values
 from ..providers.firebird.columns import data_type
 from ..sdk.relational import RelationalClientError
@@ -24,6 +25,7 @@ def build_diagram(resources, provenance):
     domains = {row['display_name']: native_metadata(row) for row in resources if row['resource_kind'] == 'domain'}
     indexes = {row['display_name']: native_metadata(row) for row in resources if row['resource_kind'] == 'index'}
     warnings, declarations, edges, mapping = [], [], [], {}
+    groups, catalog = physical.forward(resources), physical.resource_map(resources)
     children = {}
     for item in resources:
         if item['resource_kind'] == 'column':
@@ -61,11 +63,19 @@ def build_diagram(resources, provenance):
             if str(facts.get('not_null')) == '1' or str(facts.get('domain_not_null')) == '1': props['nullable'] = False
             if facts.get('description'): props['description'] = facts['description']
             fields.append(ddn.native_field(key(column['resource_id']), column['display_name'],
-                prefix + column['resource_id'], props))
+                prefix + column['resource_id'], props, physical.column_values(column['display_name'])))
             mapping[key(column['resource_id'])] = column['resource_id']
         captured = {**native, 'diagram_columns': [{'resource_id': col['resource_id'], 'native': native_metadata(col)} for col in columns]}
+        owned = []
+        for item in groups.get(name, []) if row['resource_kind'] == 'table' else []:
+            child = item['row']['resource_id']
+            owned.append({'identity': key(child), 'title': item['row']['display_name'], 'role': item['role'],
+                'uid': prefix + child, 'values': {'resource_id': child, 'native_kind': item['row']['resource_kind'],
+                    'native_json': quoted(native_metadata(item['row'])), **item['values']}})
+            mapping[key(child)] = child
         declarations.append(ddn.relation_object(key(identity), name, row['resource_kind'], prefix + identity,
-            {'resource_id': identity, 'native_json': quoted(captured)}, fields, module))
+            {'resource_id': identity, 'native_json': quoted(captured)}, fields, module, owned,
+            physical.table_values(name) if row['resource_kind'] == 'table' else None))
         mapping[key(identity)] = identity
     for row in resources:
         facts = native_metadata(row)
@@ -88,7 +98,8 @@ def build_diagram(resources, provenance):
         label = row['display_name'] + ' (' + ', '.join(source_columns) + ') -> (' + ', '.join(target_columns) + ')'
         declarations.append(ddn.relation_edge(key(identity), label, key(source_id), key(target_id),
             prefix + identity, {'resource_id': identity, 'native_json': quoted({**facts,
-                'source_columns': source_columns, 'target_columns': target_columns})}, module))
+                'source_columns': source_columns, 'target_columns': target_columns})}, module,
+            physical.edge_values(row, catalog)))
         edges.append((key(identity), source_id, target_id)); mapping[key(identity)] = identity
     views, blocks = [], []
     for start in range(0, len(relations), 25):
