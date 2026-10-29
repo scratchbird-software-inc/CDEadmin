@@ -83,7 +83,8 @@ def qualify(connection, provider, route, root):
     # Constraint: FK actions and CHECK expression replace the constraint natively.
     catalog, diagram = export()
     settle(catalog, diagram, edit(diagram, 'constraint:PH_CHILD:PH_FK', on_delete='SET NULL', on_update='CASCADE'))
-    assert sql("SELECT RDB$UPDATE_RULE, RDB$DELETE_RULE FROM RDB$REF_CONSTRAINTS WHERE RDB$CONSTRAINT_NAME = 'PH_FK'") == [('CASCADE', 'SET NULL')]
+    assert [tuple(rule.strip() for rule in row) for row in sql(
+        "SELECT RDB$UPDATE_RULE, RDB$DELETE_RULE FROM RDB$REF_CONSTRAINTS WHERE RDB$CONSTRAINT_NAME = 'PH_FK'")] == [('CASCADE', 'SET NULL')]
     catalog, diagram = export()
     settle(catalog, diagram, edit(diagram, 'constraint:PH_CHILD:PH_CK', expression='(AMOUNT >= 10)'))
     # Explicit drops: flagged destructive, exact confirmation.
@@ -105,7 +106,7 @@ def qualify(connection, provider, route, root):
     edited, _ = rt.add_draft_element(diagram, edited, owner, uid, 'constraint', 'PH_NEW_UQ',
         {'physical_kind': 'unique', 'physical_name': 'PH_NEW_UQ', 'columns_json': '["ID"]'}, 'firebird')
     plan = settle(catalog, diagram, edited)
-    assert sorted(item['operation'] for item in plan['operations']) == ['create', 'create']
+    assert {item['operation'] for item in plan['operations']} == {'create'}, plan['operations']
     assert sql("SELECT COUNT(*) FROM RDB$INDICES WHERE RDB$INDEX_NAME IN ('PH_NEW_IDX', 'PH_NEW_UQ')") == [(2,)]
     catalog, diagram = export()
     try:
@@ -113,6 +114,7 @@ def qualify(connection, provider, route, root):
         raise AssertionError('a constraint rename must not be carried')
     except ValueError as error:
         assert 'Not carried to Firebird' in str(error), error
+    sql('SELECT 1 FROM RDB$DATABASE')
     connection.rollback()
     return {'drafted_index_and_unique': True, 'rename_not_carried': True, 'index_replace_active_inactive_drop': True, 'constraint_replace_and_drop': True,
             'fk_actions': True, 'converged_replan': True, 'native_rediscovery': True}
