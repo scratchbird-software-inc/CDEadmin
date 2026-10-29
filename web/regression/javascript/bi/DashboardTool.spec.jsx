@@ -11,6 +11,7 @@ import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/
 import Theme from 'sources/Theme';
 import BIQuestionsTool from 'sources/cdeadmin_ui/modules/bi/BIQuestionsTool';
 import {dashboardFixtures as fixtures} from './dashboardFixtures';
+import {alertFixtures as alerts} from './alertFixtures';
 
 jest.mock('sources/cdeadmin_ui/editors/CodeEditor', () => ({
   __esModule: true, default: ({label, value, onChange, readonly}) =>
@@ -215,6 +216,20 @@ describe('editor', () => {
     const {contract_version: _version, ...expected} = board;
     expect(request.dashboard).toEqual({...expected, name: 'Edited name'});
     expect(await screen.findByText('Saved as revision 4.')).toBeInTheDocument();
+  });
+
+  it('manages subscriptions of a stored dashboard, with no alerts', async () => {
+    const backend = fakeBackend({handlers: {
+      bi_alert_catalog: () => alerts.catalog,
+      bi_alert_list: () => ({items: [alerts.subscription]}),
+    }});
+    renderTool(backend);
+    await edit('Sales board');
+    fireEvent.click(screen.getByRole('button', {name: 'Subscriptions...'}));
+    const panel = await screen.findByRole('region', {name: 'Alerts and subscriptions'});
+    expect(await within(panel).findByText('Daily digest')).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', {name: 'New alert'})).not.toBeInTheDocument();
+    expect(backend.sent('bi_alert_list')[0].request).toMatchObject({resource_type: 'dashboard', resource_id: 'd1'});
   });
 
   it('adds a text card and a tab and sends them on save', async () => {

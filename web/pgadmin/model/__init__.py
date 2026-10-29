@@ -1624,6 +1624,242 @@ class CDEReportScheduleOccurrence(db.Model):
     )
 
 
+class BIAlert(db.Model):
+    """Threshold alert or scheduled snapshot subscription on a BI resource.
+
+    ``definition`` is the validated JSON (schedule, condition, channels);
+    the unattended-run authority lives in ``BIAlertDelegation`` and reuses
+    the report scheduler's credential envelope and lease machinery.
+    """
+    __tablename__ = 'cde_bi_alert'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'user_id', 'endpoint_id', 'kind', 'name',
+            name='uq_cde_bi_alert_name'
+        ),
+        db.CheckConstraint(
+            "kind IN ('alert', 'subscription')",
+            name='ck_cde_bi_alert_kind'
+        ),
+        db.CheckConstraint(
+            "resource_type IN ('question', 'dashboard')",
+            name='ck_cde_bi_alert_resource'
+        ),
+        db.CheckConstraint(
+            "status IN ('active', 'paused')", name='ck_cde_bi_alert_status'
+        ),
+        db.CheckConstraint(
+            "breach_state IN ('unknown', 'ok', 'breach')",
+            name='ck_cde_bi_alert_breach'
+        ),
+        db.Index(
+            'ix_cde_bi_alert_resource',
+            'endpoint_id', 'resource_type', 'resource_id'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    kind = db.Column(db.String(16), nullable=False)
+    name = db.Column(db.String(256), nullable=False)
+    resource_type = db.Column(db.String(16), nullable=False)
+    resource_id = db.Column(db.String(36), nullable=False)
+    resource_revision = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(16), nullable=False, default='active')
+    pause_reason = db.Column(db.String(48), nullable=True)
+    paused_at = db.Column(db.DateTime(), nullable=True)
+    muted_until = db.Column(db.DateTime(), nullable=True)
+    breach_state = db.Column(db.String(16), nullable=False, default='unknown')
+    pending_notify = db.Column(db.Boolean(), nullable=False, default=False)
+    last_value = db.Column(db.Text(), nullable=True)
+    last_evaluated_at = db.Column(db.DateTime(), nullable=True)
+    last_fired_at = db.Column(db.DateTime(), nullable=True)
+    consecutive_failures = db.Column(
+        db.Integer, nullable=False, default=0
+    )
+    schedule_anchor = db.Column(db.DateTime(), nullable=False)
+    revision = db.Column(db.Integer, nullable=False, default=1)
+    definition = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    delegation = db.relationship(
+        'BIAlertDelegation', back_populates='alert', uselist=False,
+        cascade=CASCADE_STR
+    )
+    events = db.relationship(
+        'BIAlertEvent', back_populates='alert', cascade=CASCADE_STR
+    )
+
+
+class BIAlertDelegation(db.Model):
+    """Revocable authority for unattended runs of one alert.
+
+    Shaped like ``CDEReportDelegation`` so the report scheduler's
+    repository and service operate on it unchanged.
+    """
+    __tablename__ = 'cde_bi_alert_delegation'
+    __table_args__ = (
+        db.UniqueConstraint('alert_id', name='uq_cde_bi_alert_delegation'),
+        db.CheckConstraint(
+            "state IN ('active', 'revoked', 'expired')",
+            name='ck_cde_bi_alert_delegation_state'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    alert_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_alert.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    route_id = db.Column(db.String(128), nullable=False)
+    primary_secret_kind = db.Column(db.String(128), nullable=True)
+    endpoint_generation = db.Column(db.String(64), nullable=False)
+    state = db.Column(db.String(16), nullable=False)
+    credential_generation = db.Column(db.Integer, nullable=False, default=1)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    expires_at = db.Column(db.DateTime(), nullable=False)
+    revoked_at = db.Column(db.DateTime(), nullable=True)
+    alert = db.relationship('BIAlert', back_populates='delegation')
+    endpoint = db.relationship('EndpointProfile')
+    credentials = db.relationship(
+        'BIAlertCredential', back_populates='delegation',
+        cascade=CASCADE_STR
+    )
+    occurrences = db.relationship(
+        'BIAlertOccurrence', back_populates='delegation',
+        cascade=CASCADE_STR
+    )
+
+
+class BIAlertCredential(db.Model):
+    """One authenticated-encryption envelope scoped to an alert delegation."""
+    __tablename__ = 'cde_bi_alert_credential'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'delegation_id', 'secret_kind',
+            name='uq_cde_bi_alert_secret_kind'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    delegation_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_alert_delegation.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    secret_kind = db.Column(db.String(128), nullable=False)
+    key_id = db.Column(db.String(64), nullable=False)
+    encrypted_value = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    delegation = db.relationship(
+        'BIAlertDelegation', back_populates='credentials'
+    )
+
+
+class BIAlertOccurrence(db.Model):
+    """Durable claim and outcome record for one scheduled alert instant."""
+    __tablename__ = 'cde_bi_alert_occurrence'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'delegation_id', 'scheduled_for',
+            name='uq_cde_bi_alert_instant'
+        ),
+        db.CheckConstraint(
+            "state IN ('scheduled', 'claimed', 'executing', 'delivering', "
+            "'delivered', 'failed', 'cancel_requested', 'cancelled', "
+            "'outcome_unknown')",
+            name='ck_cde_bi_alert_occurrence_state'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    delegation_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_alert_delegation.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    scheduled_for = db.Column(db.DateTime(), nullable=False)
+    state = db.Column(db.String(32), nullable=False)
+    claim_token_digest = db.Column(db.String(64), nullable=True)
+    claimed_by = db.Column(db.String(128), nullable=True)
+    lease_expires_at = db.Column(db.DateTime(), nullable=True)
+    phase = db.Column(db.String(32), nullable=False)
+    progress = db.Column(db.Text(), nullable=False)
+    delivery_occurrence_ids = db.Column(db.Text(), nullable=True)
+    error_type = db.Column(db.String(128), nullable=True)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    completed_at = db.Column(db.DateTime(), nullable=True)
+    delegation = db.relationship(
+        'BIAlertDelegation', back_populates='occurrences'
+    )
+
+
+class BIAlertEvent(db.Model):
+    """Secret-free, SQL-free history of one evaluation and its deliveries."""
+    __tablename__ = 'cde_bi_alert_event'
+    __table_args__ = (
+        db.Index('ix_cde_bi_alert_event_alert', 'alert_id', 'created_at'),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    alert_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_alert.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    trigger = db.Column(db.String(16), nullable=False)
+    outcome = db.Column(db.String(24), nullable=False)
+    fired = db.Column(db.Boolean(), nullable=False, default=False)
+    suppressed = db.Column(db.String(24), nullable=True)
+    resource_revision = db.Column(db.Integer, nullable=True)
+    value = db.Column(db.Text(), nullable=True)
+    deliveries = db.Column(db.Text(), nullable=False, default='[]')
+    error_class = db.Column(db.String(64), nullable=True)
+    error_message = db.Column(db.String(300), nullable=True)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    alert = db.relationship('BIAlert', back_populates='events')
+
+
+class BINotification(db.Model):
+    """In-app notification for one recipient (alert or subscription)."""
+    __tablename__ = 'cde_bi_notification'
+    __table_args__ = (
+        db.Index(
+            'ix_cde_bi_notification_user',
+            'user_id', 'endpoint_id', 'read_at'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    alert_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_alert.id', ondelete='SET NULL'),
+        nullable=True
+    )
+    kind = db.Column(db.String(16), nullable=False)
+    resource_type = db.Column(db.String(16), nullable=False)
+    resource_id = db.Column(db.String(36), nullable=False)
+    title = db.Column(db.String(256), nullable=False)
+    body = db.Column(db.Text(), nullable=False)
+    data = db.Column(db.Text(), nullable=False, default='{}')
+    created_at = db.Column(db.DateTime(), nullable=False)
+    read_at = db.Column(db.DateTime(), nullable=True)
+
+
 class EndpointRuntimeIdentity(db.Model):
     """Declared target and separately verified runtime identity."""
     __tablename__ = 'cde_endpoint_runtime_identity'

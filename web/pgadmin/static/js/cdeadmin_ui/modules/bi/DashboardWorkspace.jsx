@@ -17,6 +17,7 @@ import {Badge, Banner} from '../../feedback/Indicators';
 import {Tab} from '../../navigation/TabsAndBreadcrumbs';
 import {SaveDialog} from './Dialogs';
 import ShareDialog from './ShareDialog';
+import AlertsPanel from './AlertsPanel';
 import {permissions} from './sharing';
 import {lossLines} from './dashboardImport';
 import {reduce, toDashboard} from './dashboardState';
@@ -39,6 +40,7 @@ export default function DashboardWorkspace({
   const [dialog, setDialog] = useState(null);
   const [notice, setNotice] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [showAlerts, setShowAlerts] = useState(false);
   const [report, setReport] = useState(importLoss ? lossLines(importLoss) : null);
 
   const stored = state.dashboardId !== null;
@@ -113,6 +115,8 @@ export default function DashboardWorkspace({
       <Button onClick={() => setDialog('saveAs')}>{gettext('Save as...')}</Button>
       <Button disabled={!stored} onClick={() => setDialog('history')}>{gettext('History')}</Button>
       {stored && perms.canShare && <Button onClick={() => setDialog('share')}>{gettext('Share...')}</Button>}
+      {stored && <Button aria-pressed={showAlerts} onClick={() => setShowAlerts(!showAlerts)}>
+        {gettext('Subscriptions...')}</Button>}
       <Button onClick={onClose}>{gettext('Close')}</Button>
     </Stack>
     {readOnly && <Banner status="info">
@@ -138,6 +142,10 @@ export default function DashboardWorkspace({
         questions={questions} dashboards={dashboards.filter((item) => item.dashboard_id !== state.dashboardId)}
         collections={collections} /> :
       <DashboardViewer key={state.revision} client={client} dashboardId={state.dashboardId} name={state.name} />}
+    {stored && showAlerts && <AlertsPanel client={client} resourceType="dashboard" resourceId={state.dashboardId}
+      resourceName={state.name} access={perms.access}
+      parameters={state.filters.map((filter) => ({id: filter.id, name: filter.label || filter.id, type: filter.type}))}
+      onClose={() => setShowAlerts(false)} />}
     {(dialog === 'save' || dialog === 'saveAs') &&
       <SaveDialog open title={dialog === 'save' ? gettext('Save dashboard') : gettext('Save a copy')}
         confirmLabel={dialog === 'save' ? gettext('Save') : gettext('Save copy')}

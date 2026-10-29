@@ -58,6 +58,10 @@ class MemoryDirectory:
         name = self.roles.get(role_id)
         return {'type': 'role', 'id': role_id, 'name': name} if name else None
 
+    def email(self, user_id):
+        name = self.users.get(user_id)
+        return f'{name}@corp.example' if name else None
+
     def search(self, caller_id, text='', kinds=PRINCIPAL_TYPES, limit=20):
         mine = self.role_ids(caller_id)
         admin = 1 in mine

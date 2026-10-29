@@ -11,6 +11,7 @@ import {fireEvent, render, screen, waitFor, within} from '@testing-library/react
 import Theme from 'sources/Theme';
 import BIQuestionsTool from 'sources/cdeadmin_ui/modules/bi/BIQuestionsTool';
 import {sharingFixtures as fx} from './sharingFixtures';
+import {alertFixtures as alerts} from './alertFixtures';
 
 jest.mock('sources/cdeadmin_ui/editors/CodeEditor', () => ({
   __esModule: true, default: ({label, value, onChange, readonly}) =>
@@ -30,7 +31,7 @@ const URL = '/browser/server/cde_workspace/1/2';
 beforeEach(() => { window.innerHeight = 1200; });
 
 // The backend as a viewer sees it: nothing of their own, everything shared (real responses).
-function viewerBackend(record) {
+function viewerBackend(record, extra = {}) {
   const calls = [];
   const handlers = {
     bi_collection_list: () => ({items: []}),
@@ -46,6 +47,7 @@ function viewerBackend(record) {
     bi_question_compile: () => ({source: null, warnings: []}),
     semantic_model_list: () => ({items: []}),
     resource_page: () => ({items: []}),
+    ...extra,
   };
   const api = {
     calls,
@@ -96,5 +98,29 @@ describe('a viewer in the BI module', () => {
     expect(screen.getByText(/its SQL is hidden/)).toBeInTheDocument();
     await waitFor(() => expect(api.calls.some((call) => call.action === 'bi_question_get')).toBe(true));
     expect(document.body.textContent).not.toContain('zzz_hidden_filter');
+  });
+
+  it('lets a viewer schedule alerts on a shared question with their own access, in-app and mail only', async () => {
+    const api = viewerBackend(fx.plainForViewer, {
+      bi_alert_catalog: () => alerts.catalog,
+      bi_alert_list: () => ({items: alerts.listForViewer.items}),
+      bi_alert_schedule_preview: () => alerts.schedulePreview,
+    });
+    renderTool(api);
+    const nav = await screen.findByRole('navigation', {name: 'Collections'});
+    fireEvent.click(await within(nav).findByRole('button', {name: /^Shared with me/}));
+    fireEvent.click(await screen.findByRole('button', {name: 'Open East revenue'}));
+    fireEvent.click(await screen.findByRole('button', {name: 'Alerts...'}));
+    const panel = await screen.findByRole('region', {name: 'Alerts and subscriptions'});
+    expect(await within(panel).findByText('Viewer watch')).toBeInTheDocument();
+    expect(within(panel).getByText('The owner can no longer view the resource.')).toBeInTheDocument();
+    await waitFor(() => expect(within(panel).getByRole('button', {name: 'New alert'})).toBeEnabled());
+    expect(api.calls.filter((call) => call.action === 'bi_alert_list')[0].request).toMatchObject({
+      resource_type: 'question'});
+    fireEvent.click(within(panel).getByRole('button', {name: 'New alert'}));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', {name: 'Add a channel'}));
+    expect((await screen.findAllByRole('option')).map((option) => option.textContent))
+      .toEqual(['In-app notification', 'Email']);
   });
 });

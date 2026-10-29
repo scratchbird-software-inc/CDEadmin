@@ -54,6 +54,7 @@ class ProviderWorkspaceService:
         self.result_service = result_service
         self.semantic_model_service = semantic_model_service
         self.bi_service = None
+        self.bi_alert_service = None
         self.operation_bus = operation_bus
         self.report_delivery_service = report_delivery_service
         self.report_scheduler_service = report_scheduler_service
@@ -2679,6 +2680,10 @@ class ProviderWorkspaceService:
         if action in self._BI_SHARING_ACTIONS:
             return self._bi_sharing_action(service, action, request,
                                            user_id, endpoint_id)
+        if action.startswith(('bi_alert_', 'bi_notification_')):
+            return self._bi_alert_action(
+                server, action, request, context, _endpoint, user_id,
+                endpoint_id)
         if action == 'bi_question_list':
             filters = {'collection_id': request['collection_id']} if (
                 'collection_id' in request) else {}
@@ -2721,6 +2726,26 @@ class ProviderWorkspaceService:
         return self._bi_extended_action(
             service, action, request, context, _endpoint, user_id,
             endpoint_id, qid, revision)
+
+    def _bi_alert_action(self, server, action, request, context, endpoint,
+                         user_id, endpoint_id):
+        """Alerts, subscriptions and in-app notifications (bi_alerts.rst).
+
+        A dry run uses the caller's own interactive context; every real
+        evaluation happens in the worker with the owner's delegation.
+        """
+        alerts = self.bi_alert_service
+        if alerts is None or action not in alerts.ACTIONS:
+            raise ProviderWorkspaceError('BI action is unavailable')
+
+        def runtime():
+            binding = self.endpoint_service.provider_registry.resolve(
+                context)
+            return binding.instance, context, endpoint
+
+        return alerts.handle(
+            action, request, user_id=user_id, endpoint_id=endpoint_id,
+            server=server, runtime=runtime)
 
     _BI_SHARING_ACTIONS = frozenset((
         'bi_access_get', 'bi_grant_list', 'bi_grant_add', 'bi_grant_update',
@@ -4074,6 +4099,10 @@ def init_app(
         from pgadmin.cdeadmin.bi import init_app as init_bi
         service.bi_service = init_bi(
             app, semantic_model_service, studio_service, result_service)
+        from pgadmin.cdeadmin.bi.alerts import init_app as init_bi_alerts
+        service.bi_alert_service = init_bi_alerts(
+            app, service.bi_service, endpoint_service,
+            report_scheduler_service, report_delivery_service)
     from .mysql_retention_schedule import init_app as init_mysql_retention_schedule
     init_mysql_retention_schedule(app, service)
     from .mysql_physical_retention_schedule import init_app as init_mysql_physical_schedule

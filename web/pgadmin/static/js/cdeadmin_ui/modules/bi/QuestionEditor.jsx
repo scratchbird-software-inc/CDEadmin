@@ -25,7 +25,12 @@ import ParametersPanel from './ParametersPanel';
 import RevisionHistory from './RevisionHistory';
 import {SaveDialog} from './Dialogs';
 import ShareDialog from './ShareDialog';
+import AlertsPanel from './AlertsPanel';
 import {permissions} from './sharing';
+
+/** The parameter values typed so far, as the text the alert form edits. */
+const filled = (values) => Object.fromEntries(
+  Object.entries(values || {}).filter(([, text]) => String(text ?? '').trim() !== ''));
 
 const OUTPUT_TABS = ['result', 'sql', 'parameters'];
 
@@ -57,6 +62,7 @@ export default function QuestionEditor({client, catalog, collections, initial, p
   const [dialog, setDialog] = useState(null);
   const [notice, setNotice] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [showAlerts, setShowAlerts] = useState(false);
 
   const stored = state.questionId !== null;
   const perms = permissions({access: state.access, is_owner: state.isOwner});
@@ -131,6 +137,8 @@ export default function QuestionEditor({client, catalog, collections, initial, p
         {gettext('Save as...')}</Button>
       <Button disabled={!stored} onClick={() => setDialog('history')}>{gettext('History')}</Button>
       {stored && perms.canShare && <Button onClick={() => setDialog('share')}>{gettext('Share...')}</Button>}
+      {stored && <Button aria-pressed={showAlerts} onClick={() => setShowAlerts(!showAlerts)}>
+        {gettext('Alerts...')}</Button>}
       <Button onClick={onClose}>{gettext('Close')}</Button>
     </Stack>
     {readOnly && <Banner status="info">
@@ -168,6 +176,10 @@ export default function QuestionEditor({client, catalog, collections, initial, p
         </Box>
       </Box>
     </Box>
+    {stored && showAlerts && <AlertsPanel client={client} resourceType="question" resourceId={state.questionId}
+      resourceName={state.name} access={perms.access} parameters={state.parameters}
+      seedValues={filled(state.values)} columns={(run.execution?.table?.columns || []).map((column) => column.name)}
+      onClose={() => setShowAlerts(false)} />}
     {(dialog === 'save' || dialog === 'saveAs') &&
       <SaveDialog open title={dialog === 'save' ? gettext('Save question') : gettext('Save a copy')}
         confirmLabel={dialog === 'save' ? gettext('Save') : gettext('Save copy')}

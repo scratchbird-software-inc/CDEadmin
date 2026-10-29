@@ -239,7 +239,8 @@ class DatabasePrincipalDirectory:
 
     A caller sees the roles they belong to and the active users who share
     one of those roles; an Administrator sees every role and active user.
-    Email addresses are never returned.
+    Email addresses are never returned by ``search``/``user``; ``email`` is
+    for server-side delivery only and its result is never sent to a client.
     """
 
     ADMIN_ROLE = 'Administrator'
@@ -264,6 +265,13 @@ class DatabasePrincipalDirectory:
         row = self.role_model.query.filter_by(id=role_id).first()
         return ({'type': 'role', 'id': row.id, 'name': row.name}
                 if row else None)
+
+    def email(self, user_id):
+        """The delivery address of an active user (server-side use only)."""
+        row = self.user_model.query.filter_by(id=user_id).first()
+        if row is None or not row.active:
+            return None
+        return row.email or None
 
     def _caller(self, caller_id):
         caller = self.user_model.query.filter_by(id=caller_id).first()
@@ -313,6 +321,9 @@ class NullDirectory:
         return None
 
     def role(self, role_id):
+        return None
+
+    def email(self, user_id):
         return None
 
     def can_see(self, caller_id, principal_type, principal_id):

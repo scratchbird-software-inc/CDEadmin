@@ -173,6 +173,30 @@ count sets its maximum to zero in the enforcement file.
 Change log
 ----------
 
+BI alerts and subscriptions (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Stream C4 threshold alerts: alerts on saved questions (row count or column
+aggregate against a number or the previous evaluation, results exist or empty;
+edge triggered by default, optional every-evaluation, re-arm, mute with expiry)
+and scheduled question or dashboard subscriptions (CSV, XLSX, PDF, SVG under the
+export policy). They run on the existing report scheduler with the owner's
+encrypted delegated credentials (BI-specific resolver id and AAD) and pause with
+a recorded reason when the owner loses view access. Channels: in-app
+notifications, report_delivery SMTP and S3, and a signed webhook (HMAC-SHA256,
+host allow-list, DNS resolution with IP pinning, no redirects). Migration
+``cde_bi_alerts_v1`` (``cde_bi_alert``, ``_delegation``, ``_credential``,
+``_occurrence``, ``_event``, ``cde_bi_notification``); ``SCHEMA_VERSION`` not
+bumped. New actions: ``bi_alert_*`` (catalog, schedule_preview, list, get,
+create, update, delete, test, run_now, mute, unmute, rearm, pause, resume,
+history) and ``bi_notification_list`` / ``bi_notification_read``. BI UI: Alerts
+and Subscriptions section on question and dashboard pages with condition
+builder, schedule picker with next-run preview, channel and recipient picker,
+test evaluate, history and mute. Tests:
+``tools/tests/test_cdeadmin_bi_alerts.py`` (fake clock); Jest ``alerts`` and
+``AlertsPanel`` specs on fixtures generated from the real backend. See
+:doc:`bi_alerts` (security model and residual risks).
+
 BI sharing and permissions (2026-10-28)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

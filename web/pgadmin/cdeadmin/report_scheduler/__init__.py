@@ -23,6 +23,18 @@ from .worker import ReportSchedulerWorker
 
 
 APP_EXTENSION_KEY = 'cdeadmin_report_scheduler_service'
+COMPANIONS_KEY = 'cdeadmin_report_scheduler_companions'
+
+
+def register_companion(app, name, run_once):
+    """Run another feature's workers in the same ``cde-report-worker`` cycle.
+
+    ``run_once(worker_id, max_occurrences)`` returns a JSON-able summary
+    that is reported under ``name``.  The cron, lease and recovery code is
+    the report scheduler's; a companion only supplies what one claimed
+    occurrence does.
+    """
+    app.extensions.setdefault(COMPANIONS_KEY, {})[name] = run_once
 
 
 def init_app(
@@ -76,9 +88,11 @@ def _register_worker_command(
                 'CDEADMIN_REPORT_WORKER_MAX_POLLS', 600
             ),
         )
-        click.echo(json.dumps(
-            worker.run_once(worker_id, max_occurrences), sort_keys=True
-        ))
+        summary = worker.run_once(worker_id, max_occurrences)
+        for name, run in sorted(app.extensions.get(
+                COMPANIONS_KEY, {}).items()):
+            summary[name] = run(worker_id, max_occurrences)
+        click.echo(json.dumps(summary, sort_keys=True))
 
     @app.cli.command('cde-report-rotate-keys')
     def rotate_report_keys():
@@ -100,5 +114,5 @@ __all__ = (
     'ReportSchedulerError', 'ReportSchedulerService',
     'ReportSchedulerUnavailable', 'ReportSchedulerWorker',
     'WorkerKeyError', 'WorkerKeyRing',
-    'init_app', 'service_for_app',
+    'init_app', 'register_companion', 'service_for_app',
 )
