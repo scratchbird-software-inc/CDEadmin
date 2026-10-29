@@ -479,7 +479,7 @@ class ProviderRegistry:
                 )
             if registration.state != ACTIVE:
                 raise ProviderUnavailableError(
-                    f'provider registration is {registration.state}'
+                    self._state_message(registration)
                 )
             self._validate_composition(registration, context)
             return frozenset(registration.permission_grants)
@@ -499,7 +499,7 @@ class ProviderRegistry:
                 )
             if registration.state != ACTIVE:
                 raise ProviderUnavailableError(
-                    f'provider registration is {registration.state}'
+                    self._state_message(registration)
                 )
             self._validate_context(registration, context)
             self._retire_superseded_generation(registration, context)
@@ -539,8 +539,11 @@ class ProviderRegistry:
                         self._close_bindings(registration)
                     except ProviderReleaseError:
                         pass
+                # The exception class name is safe to show and is the only
+                # clue to the cause (a missing driver, a bad library, ...).
                 raise ProviderUnavailableError(
                     'provider factory failed and was quarantined'
+                    f' ({type(exc).__name__})'
                 ) from None
             binding = ProviderBinding(
                 context=context,
@@ -550,6 +553,13 @@ class ProviderRegistry:
             )
             registration.bindings[context.isolation_key] = binding
             return binding
+
+    @staticmethod
+    def _state_message(registration: ProviderRegistration) -> str:
+        message = f'provider registration is {registration.state}'
+        if registration.error_type:
+            message += f' ({registration.error_type})'
+        return message
 
     @staticmethod
     def _retire_superseded_generation(
