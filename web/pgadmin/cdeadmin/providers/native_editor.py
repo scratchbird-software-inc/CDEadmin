@@ -383,6 +383,17 @@ def metadata(handle, engine, transaction=None, dialect=None):
                 for (name,) in query(kind, f'SELECT {field} FROM {catalog}'):
                     add(kind, [name])
         inv = inventory(engine)
+        if engine == 'sqlite':
+            # Serve the keyword table of the SQLite actually running; the
+            # reference runtime keeps the contract's inventory. Read the
+            # loaded library's version, never sqlite_version() through SQL,
+            # which a session can redefine.
+            import sqlite3
+            from .sqlite.dialect_versions import inventory_for
+            from .sqlite.provider import PROFILE as SQLITE_PROFILE
+            runtime = sqlite3.sqlite_version
+            if runtime != SQLITE_PROFILE.exact_version:
+                inv = inventory_for(runtime)
         words = [row['native_name'] for row in inv['lexical_rules'] if re.fullmatch(r'[A-Za-z][A-Za-z0-9_$]*', row['native_name'])]
         if engine in {'mysql', 'mariadb'}:
             for group, kind in (('functions', 'function'), ('data_types', 'type')):

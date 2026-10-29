@@ -8,7 +8,12 @@
 #
 ##########################################################################
 
-"""Generate the exact SQLite 3.53.0 dialect inventory."""
+"""Generate one SQLite version's dialect inventory.
+
+The reference profile is 3.53.0. Other tracked versions (owner direction,
+2026-10-29) run the same generator against their own source tree and a
+runtime of exactly that version built with the same compile options.
+"""
 
 from __future__ import annotations
 
@@ -155,10 +160,20 @@ def _source_inventory(source_root):
     return lexical, statements, commands, operators, diagnostics
 
 
-def _runtime_inventory():
-    if sqlite3.sqlite_version != REFERENCE_VERSION:
+def _supports_strict_tables(connection):
+    """STRICT tables are a runtime feature; probe instead of comparing."""
+    try:
+        connection.execute('CREATE TEMP TABLE strict_probe(a INT) STRICT')
+    except sqlite3.OperationalError:
+        return False
+    connection.execute('DROP TABLE temp.strict_probe')
+    return True
+
+
+def _runtime_inventory(version=REFERENCE_VERSION):
+    if sqlite3.sqlite_version != version:
         raise RuntimeError(
-            f'SQLite runtime must be {REFERENCE_VERSION}, got '
+            f'SQLite runtime must be {version}, got '
             f'{sqlite3.sqlite_version}'
         )
     connection = sqlite3.connect(':memory:')
@@ -177,6 +192,7 @@ def _runtime_inventory():
             "SELECT typeof(NULL), typeof(1), typeof(1.5), typeof('text'), "
             "typeof(X'00')"
         ).fetchone()
+        strict_tables = _supports_strict_tables(connection)
     finally:
         connection.close()
     if not {'fts5', 'rtree'}.issubset(modules):
@@ -195,9 +211,11 @@ def _runtime_inventory():
         note='Non-STRICT tables admit provider-defined declared type names.',
     ))
     for name in ('INT', 'INTEGER', 'REAL', 'TEXT', 'BLOB', 'ANY'):
+        if not strict_tables:
+            break
         data_types.append(_record(
             f'data_types.{len(data_types) + 1:04d}', name,
-            'SQLite 3.53.0 STRICT table runtime', strict_table_type=True,
+            f'SQLite {version} STRICT table runtime', strict_table_type=True,
         ))
 
     function_records = [
@@ -221,12 +239,12 @@ def _runtime_inventory():
     return data_types, function_records, settings, modules, compile_options
 
 
-def generate(source_root, source_archive):
+def generate(source_root, source_archive, version=REFERENCE_VERSION):
     lexical, statements, commands, operators, diagnostics = (
         _source_inventory(source_root)
     )
     data_types, functions, settings, modules, compile_options = (
-        _runtime_inventory()
+        _runtime_inventory(version)
     )
     inventories = {
         'lexical_rules': lexical,
@@ -240,11 +258,11 @@ def generate(source_root, source_archive):
     }
     return {
         'schema': 'cdeadmin.engine-dialect-inventory.v1',
-        'inventory_id': 'sqlite.dialect-inventory.3.53.0.v1',
+        'inventory_id': f'sqlite.dialect-inventory.{version}.v1',
         'engine_id': 'sqlite',
-        'reference_version': REFERENCE_VERSION,
+        'reference_version': version,
         'collection_authority': (
-            'SQLite 3.53.0 Lemon grammar, generated-keyword source, '
+            f'SQLite {version} Lemon grammar, generated-keyword source, '
             'public result-code header, and exact runtime catalogs'
         ),
         'source_evidence': {
@@ -273,9 +291,11 @@ def main():
     parser.add_argument('--source-root', type=Path, required=True)
     parser.add_argument('--source-archive', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--version', default=REFERENCE_VERSION)
     options = parser.parse_args()
     document = generate(
-        options.source_root.resolve(), options.source_archive.resolve()
+        options.source_root.resolve(), options.source_archive.resolve(),
+        options.version,
     )
     options.output.parent.mkdir(parents=True, exist_ok=True)
     options.output.write_text(

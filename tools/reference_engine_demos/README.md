@@ -227,3 +227,32 @@ This fixture excludes native ScratchBird by design. A future native fixture can
 be added only when its engine and driver work has completed; legacy-interface
 emulation must continue to be exercised as the corresponding reference engine,
 without special-case behavior in CDEadmin.
+
+## SQLite tracked versions
+
+Owner direction, 2026-10-29: SQLite is supported from the floor declared in
+`web/pgadmin/cdeadmin/ui_descriptors/sqlite/capabilities.json`
+(`version_range.minimum`), with 3.53.0 as the reference profile. The provider
+reads `web/pgadmin/cdeadmin/providers/sqlite/sqlite_dialect_versions.json`,
+which records for every keyword, grammar production, function, pragma, data
+type and result code the tracked versions it exists in. A running SQLite is
+served from the greatest tracked version at or below it.
+
+`sqlite_tracked_versions.json` lists each tracked version's source archive,
+check-in and hashes. To add a version:
+
+1. obtain and verify its source archive (check-in and `sqlite3.c` SHA3-256
+   against that version's sqlite.org release log) and record it in
+   `sqlite_tracked_versions.json`;
+2. build a runtime with `build_sqlite_tracked_runtime.sh`, the one recipe all
+   tracked versions share, so catalog differences come from SQLite rather than
+   from build options;
+3. run `generate_sqlite_dialect_inventory.py --version X` under a Python whose
+   `_sqlite3` loads that runtime (`LD_LIBRARY_PATH`); the generator refuses a
+   runtime of any other version;
+4. merge every tracked inventory with `merge_sqlite_dialect_versions.py`.
+
+Retiring older versions is an owner decision. `merge_sqlite_dialect_versions.py
+--versioned <table> --retire-below X` drops tracked versions below `X` and the
+records only they held, and raises the floor in the UI descriptor. Nothing is
+pruned implicitly.

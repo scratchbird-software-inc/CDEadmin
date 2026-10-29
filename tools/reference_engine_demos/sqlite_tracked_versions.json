@@ -1,0 +1,31 @@
+{
+  "build_recipe": "tools/reference_engine_demos/build_sqlite_tracked_runtime.sh",
+  "purpose": "Source archives and build recipe behind web/pgadmin/cdeadmin/providers/sqlite/sqlite_dialect_versions.json",
+  "recipe_check": "3.53.0 built with the recipe reproduces the committed reference inventory, modules and compile options exactly",
+  "schema": "cdeadmin.sqlite-tracked-versions.v1",
+  "versions": {
+    "3.35.0": {
+      "amalgamation_archive": "https://www.sqlite.org/2021/sqlite-autoconf-3350000.tar.gz",
+      "amalgamation_archive_sha256": "3dfb3f143c83695a555c7dd9e06ed924f9d273c287989874e102656724baf2d0",
+      "check_in": "acd63062eb06748bfe9e4886639e4f2b54ea6a496a83f10716abbaba4115500b",
+      "source_archive": "https://www.sqlite.org/2021/sqlite-src-3350000.zip",
+      "source_archive_sha256": "c72dea7b8148a4c1b00145c9aab52317cffbfb46b6179c476f6e41d4f87c6af2",
+      "sqlite3_c_sha3_256": "73a740d881735bef9de7f7bce8c9e6b9e57fe3e77fa7d76a6e8fc5c262fbaedf",
+      "verified_against": "https://www.sqlite.org/releaselog/3_35_0.html (check-in and sqlite3.c SHA3-256)"
+    },
+    "3.45.1": {
+      "amalgamation": "generated from the source archive (make sqlite3.c)",
+      "check_in": "e876e51a0ed5c5b3126f52e532044363a014bc594cfefa87ffb5b82257cc467a",
+      "source_archive": "sqlite-src-3450100.zip (owner acquisition)",
+      "source_archive_sha256": "7f7b14a68edbcd4a57df3a8c4dbd56d2d3546a6e7cdd50de40ceb03af33d34ba",
+      "sqlite3_c_sha3_256": "0474604df9e1b69a5544295dd046aad954749279780d557da80f44b958100295"
+    },
+    "3.53.0": {
+      "amalgamation": "generated from the source archive (make sqlite3.c)",
+      "check_in": "4525003a53a7fc63ca75c59b22c79608659ca12f0131f52c18637f829977f20b",
+      "source_archive": "https://www.sqlite.org/2026/sqlite-src-3530000.zip (bootstrap.py pin)",
+      "source_archive_sha256": "fbc30cdbfcfa42c78fe7bddd3fd37ab8995369a31d39097a5d0633296c0b6e65",
+      "sqlite3_c_sha3_256": "bb317fbbd2b3bc53233ddd5894bf4d2dc6f533445f350d4235dbcc86f65af4ec"
+    }
+  }
+}
