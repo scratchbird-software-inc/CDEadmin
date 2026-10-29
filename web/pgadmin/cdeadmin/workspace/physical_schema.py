@@ -13,7 +13,7 @@ import re
 import uuid
 
 VERSION = 'scratchrobin.physical-schema@1'
-ENGINES = ('postgresql', 'sqlite', 'duckdb')
+ENGINES = ('postgresql', 'sqlite', 'duckdb', 'firebird')
 KINDS = ('index', 'primary-key', 'unique', 'check', 'foreign-key')
 ROLE = {'index': 'index', 'primary-key': 'constraint', 'unique': 'constraint',
         'check': 'constraint', 'foreign-key': 'ref'}
@@ -21,11 +21,11 @@ ACTIONS = ('NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT')
 # Flat x_record keys. *_json values are JSON text, like native_json.
 KEYS = ('physical_kind', 'physical_name', 'rename_from', 'columns_json', 'unique', 'method',
         'predicate', 'expression', 'referenced_columns_json', 'on_delete', 'on_update',
-        'drop', 'drop_confirmation')
+        'drop', 'drop_confirmation', 'descending', 'inactive')
 _TYPES = {'physical_kind': str, 'physical_name': str, 'rename_from': str, 'columns_json': str,
           'unique': bool, 'method': str, 'predicate': str, 'expression': str,
           'referenced_columns_json': str, 'on_delete': str, 'on_update': str,
-          'drop': bool, 'drop_confirmation': str}
+          'drop': bool, 'drop_confirmation': str, 'descending': bool, 'inactive': bool}
 
 
 def pick(values):

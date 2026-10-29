@@ -35,7 +35,7 @@ def edit(snapshot, identity, **changes):
 def test_native_fields_and_relationships_survive_handoff_and_no_hidden_deletion():
     current = capture(); original = current['diagram']['snapshot']
     mapped = read_relations(original)
-    assert len(mapped) == 5  # two relations, two columns and one foreign key
+    assert len(mapped) == 6  # two relations, two columns, one foreign key and the fixture's standalone PK_IDX index
     desired = edit(original, 'column:Child:Exact"A', description='Authored column comment')
     value = handoff(current['snapshot'], original, desired)
     before, after = (read_catalog(value[key]) for key in ('baseline', 'desired'))

@@ -12,7 +12,7 @@ from .firebird_catalog_import import read_catalog, _decode, _equal, _SLOTS
 
 # Native relation kinds each engine's *_erd.py publishes with a resource_id.
 _KINDS = {
-    'firebird': {'table', 'view', 'column', 'constraint'},
+    'firebird': {'table', 'view', 'column', 'constraint', 'index'},
     'postgresql': {'table', 'partitioned-table', 'foreign-table', 'view', 'materialized-view', 'constraint', 'index'},
     'sqlite': {'table', 'view', 'virtual-table', 'fts-table', 'index'},
     'duckdb': {'table', 'view', 'index'},
@@ -143,9 +143,9 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
     for item in after_drafts:
         if item['uid'] not in known:
             drafts.setdefault(item['parent_resource_id'], []).append(item)
-    if drafts and engine not in {'postgresql', 'sqlite', 'duckdb'}:
+    if drafts and engine not in {'postgresql', 'sqlite', 'duckdb', 'firebird'}:
         raise ValueError('New physical-schema objects are not admitted for this engine')
-    new_rows = []
+    new_rows, mirror = [], {}
     if set(drafts) - set(after):
         raise ValueError('A physical draft names a parent outside the edited relations')
     if engine in {"mysql", "mariadb"}:
@@ -182,9 +182,18 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
                 from .mysql_relational_constraints import merge_constraints
                 facts[1] = merge_constraints({'name':live['name'],'native':facts[0]},facts[1],
                     constraint_changes[identity],mode,engine=engine)
-        if engine == 'firebird' and row.get('parent_resource_id'):
-            from .firebird_relational_fields import merge_fields
-            facts[1] = merge_fields(old, row, current)
+        if engine == 'firebird':
+            from . import firebird_physical as physical
+            if live['kind'] == 'column' and row.get('parent_resource_id'):
+                from .firebird_relational_fields import merge_fields
+                facts[1] = merge_fields(old, row, current)
+                facts[1] = physical.merge_column(old, row, live, facts[1])
+            elif live['kind'] == 'table':
+                facts[1] = physical.merge_table(old, row, live, facts[1])
+            elif live['kind'] == 'index':
+                facts[1] = physical.merge_index(old, row, live, current, facts[1])
+            elif live['kind'] == 'constraint':
+                facts[1] = physical.merge_constraint(old, row, live, current, facts[1], mirror)
         if engine == 'postgresql':
             from .postgresql_relational_fields import merge_fields
             from .postgresql_physical import merge_physical
@@ -222,6 +231,19 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
             text = ddn.record_definition(local_id, live['name'], metadata,
                 module=f'scratchrobin.{engine}.catalog', block=block, uid=live['uid'])
             replacements[index].append({**live['source_location'], 'text': text})
+    for identity, value in mirror.items():
+        # A replaced constraint's matching standalone backing-index row follows it exactly.
+        live = current['rows'][identity]
+        metadata = {key: live[key] for key in ('resource_id', 'kind', 'path_json', 'system')}
+        metadata['native_json'] = _exact_json(value)
+        block, local_id = live['source_location']['definition_id'].rsplit('.', 1)
+        replacements[1].append({**live['source_location'], 'text': ddn.record_definition(
+            local_id, live['name'], metadata, module=f'scratchrobin.{engine}.catalog', block=block, uid=live['uid'])})
+        if not _equal(live['native'], value):
+            changed.append(identity)
+    if engine == 'firebird' and drafts:
+        from . import firebird_physical as physical
+        new_rows.extend(physical.new_objects(drafts, before, current))
     for snapshot, edits in zip((baseline, proposed), replacements):
         for edit in sorted(edits, key=lambda value: value['start'], reverse=True):
             # Public DDN source locations are UTF-16 code-unit offsets.

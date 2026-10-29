@@ -5,7 +5,7 @@ const check = value => { if(!value) throw new Error('Invalid relational mapping'
 // Physical-schema vocabulary (docs/en_US/ddn_physical_schema_vocabulary.rst). Values are
 // passed through verbatim; the Python adapters validate and interpret them.
 const PHYSICAL = ['physical_kind','physical_name','rename_from','columns_json','unique','method','predicate',
-  'expression','referenced_columns_json','on_delete','on_update','drop','drop_confirmation'];
+  'expression','referenced_columns_json','on_delete','on_update','drop','drop_confirmation','descending','inactive'];
 const physicalOf = native => Object.fromEntries(PHYSICAL.filter(name => native && Object.hasOwn(native, name)).map(name => [name, native[name]]));
 let input = '';
 try {
