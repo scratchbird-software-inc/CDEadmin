@@ -18,7 +18,7 @@ import {SurfaceRegistry} from 'sources/cdeadmin_ui/platform/SurfaceRegistry';
 import {ToolFactoryRegistry} from 'sources/cdeadmin_ui/workspace/ToolRegistry';
 import {EmptyState} from 'sources/cdeadmin_ui/feedback/EmptyState';
 import {
-  BI_MODULE_ID, BI_QUESTIONS_SURFACE_ID, BIQuestionsTool, registerBIModule,
+  BI_MODELS_SURFACE_ID, BI_MODULE_ID, BI_QUESTIONS_SURFACE_ID, BIModelsTool, BIQuestionsTool, registerBIModule,
 } from 'sources/cdeadmin_ui/modules/bi';
 import {openRegisteredTool} from 'pgbrowser/ProviderContextMenu';
 
@@ -76,6 +76,41 @@ describe('BI module registration', () => {
     const host = architecture();
     await host.modules.activate(BI_MODULE_ID);
     const surface = host.surfaces.list().find((item) => item.id === BI_QUESTIONS_SURFACE_ID);
+    expect(await surface.canClose({}, {dirty: true})).toMatchObject({allowed: false});
+    expect(await surface.canClose({}, {dirty: false})).toMatchObject({allowed: true});
+  });
+});
+
+describe('BI Models view registration', () => {
+  const modelsDescriptor = (host) => host.surfaces.descriptor(BI_MODELS_SURFACE_ID, {
+    toolInstanceId: 'bi.models:2', projectId: 'p', restoreRef: 'bi.models:2',
+    context: {providerId: 'sqlite', endpointId: 2}});
+
+  it('registers the Models surface next to the questions surface', async () => {
+    const host = architecture();
+    await host.modules.activate(BI_MODULE_ID);
+    const ids = host.surfaces.list().map((surface) => surface.id);
+    expect(ids).toEqual(expect.arrayContaining([BI_QUESTIONS_SURFACE_ID, BI_MODELS_SURFACE_ID]));
+  });
+
+  it('restores into the Models tool when the endpoint route is supplied', async () => {
+    const host = architecture();
+    await host.modules.activate(BI_MODULE_ID);
+    const api = {post: jest.fn()};
+    const setSurfaceState = jest.fn();
+    const element = await host.surfaces.restore(modelsDescriptor(host), {
+      api, endpointUrl: '/browser/server/cde_workspace/1/2', setSurfaceState});
+    expect(element.type).toBe(BIModelsTool);
+    expect(element.props).toMatchObject({api, endpointUrl: '/browser/server/cde_workspace/1/2'});
+    element.props.onDirtyChange(true);
+    expect(setSurfaceState).toHaveBeenCalledWith({dirty: true, persistence: 'dirty'});
+  });
+
+  it('asks to be opened again without an endpoint route and blocks closing unsaved edits', async () => {
+    const host = architecture();
+    await host.modules.activate(BI_MODULE_ID);
+    expect((await host.surfaces.restore(modelsDescriptor(host), {})).type).toBe(EmptyState);
+    const surface = host.surfaces.list().find((item) => item.id === BI_MODELS_SURFACE_ID);
     expect(await surface.canClose({}, {dirty: true})).toMatchObject({allowed: false});
     expect(await surface.canClose({}, {dirty: false})).toMatchObject({allowed: true});
   });

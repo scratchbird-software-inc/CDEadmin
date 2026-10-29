@@ -106,4 +106,5 @@ upstream attribution.
    bi_alerts
    bi_query_builder_ui
    bi_dashboard_ui
+   bi_models_view
    bi_ui_mysql_handoff

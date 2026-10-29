@@ -20,6 +20,7 @@ import {EmptyState} from '../../feedback/EmptyState';
 
 export const BI_MODULE_ID = 'cdeadmin.bi';
 export const BI_QUESTIONS_SURFACE_ID = 'bi.questions';
+export const BI_MODELS_SURFACE_ID = 'bi.models';
 
 async function restoreQuestionsTool(descriptor, context) {
   // A restored layout has the descriptor but not the endpoint route; the route
@@ -37,6 +38,19 @@ async function restoreQuestionsTool(descriptor, context) {
   });
 }
 
+async function restoreModelsTool(descriptor, context) {
+  if(!context.api || !context.endpointUrl) {
+    return createElement(EmptyState, {message: gettext(
+      'Open BI models again from the endpoint in the object tree to reconnect this tool.')});
+  }
+  const {default: BIModelsTool} = await import('./models/BIModelsTool');
+  return createElement(BIModelsTool, {
+    api: context.api, endpointUrl: context.endpointUrl,
+    onDirtyChange: (dirty) => context.setSurfaceState?.({
+      dirty, persistence: dirty ? 'dirty' : 'clean'}),
+  });
+}
+
 export function biModuleDefinition() {
   return {
     id: BI_MODULE_ID, version: '1.0.0', title: 'BI questions', iconKey: 'tool.data-explorer',
@@ -47,6 +61,13 @@ export function biModuleDefinition() {
         restore: restoreQuestionsTool,
         canClose: async (_descriptor, context) => context.dirty ?
           {allowed: false, reason: 'Save or discard the open question or dashboard first.'} :
+          {allowed: true, reason: ''},
+      }, {
+        id: BI_MODELS_SURFACE_ID, title: 'BI models', iconKey: 'tool.data-explorer',
+        readOnly: false, editable: true, detachable: true, duplicable: false, fullscreen: true,
+        restore: restoreModelsTool,
+        canClose: async (_descriptor, context) => context.dirty ?
+          {allowed: false, reason: 'Save or discard the open semantic model first.'} :
           {allowed: true, reason: ''},
       }],
     },

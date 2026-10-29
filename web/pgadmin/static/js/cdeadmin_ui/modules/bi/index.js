@@ -6,3 +6,5 @@ export {default as DashboardWorkspace} from './DashboardWorkspace';
 export {
   emptyDashboard, fromDashboard, reduce as reduceDashboard, toDashboard,
 } from './dashboardState';
+export {default as BIModelsTool} from './models/BIModelsTool';
+export {createModelsClient} from './models/modelsClient';

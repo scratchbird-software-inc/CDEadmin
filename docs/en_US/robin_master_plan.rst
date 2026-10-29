@@ -108,7 +108,9 @@ Stream C: BI editor (goal 3)
    cards, drill-through.
 #. C4 Collections, search, permissions (done, see :doc:`bi_permissions`), threshold alerts and subscriptions (done, see :doc:`bi_alerts`), embedding, result cache.
 #. C5 Retire ``SemanticModelWorkspace`` from ``ProviderWorkspaceContent.jsx`` per the
-   unified design (panel dissolution).
+   unified design (panel dissolution). Done: the Models view of the BI module
+   replaces it (:doc:`bi_models_view`); "Convert to subscription" waits for the
+   alerts/subscriptions branch.
 #. Gate: the same question and dashboard run on each of the six engines through the
    dialect contract; Jest and live round trips for builder state -> SQL -> result.
 

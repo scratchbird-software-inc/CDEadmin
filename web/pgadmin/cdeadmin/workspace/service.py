@@ -2645,7 +2645,58 @@ class ProviderWorkspaceService:
             return self._semantic_materialization_plan(
                 server, context, request
             )
+        if action == 'semantic_model_capabilities':
+            return self._semantic_workspace_catalog(server, context)
+        if action == 'semantic_model_migrate':
+            return self._semantic_model_migrate(user_id, context, request)
         raise ProviderWorkspaceError('semantic model action is unavailable')
+
+    def _semantic_workspace_catalog(self, server, context):
+        """Capabilities, delivery profiles and grants for the Models view.
+
+        The same blocks the workspace bootstrap carries under
+        ``semantic_models``, available on their own so the BI module does
+        not need the legacy workspace payload.
+        """
+        binding = self.endpoint_service.provider_registry.resolve(context)
+        user_id = self._principal_id(server)
+        scheduler = self.report_scheduler_service
+        return {
+            'capabilities': self._semantic_capabilities(binding.instance),
+            'delivery': self.report_delivery_service.catalog()
+            if self.report_delivery_service is not None else {
+                'manual_delivery': False, 'profiles': [],
+                'automatic_scheduling': False,
+            },
+            'scheduler': scheduler.catalog() if scheduler is not None else {
+                'automatic_scheduling': False,
+            },
+            'delegations': scheduler.list_grants(
+                user_id, context.endpoint_id
+            ) if scheduler is not None else [],
+        }
+
+    def _semantic_model_migrate(self, user_id, context, request):
+        """Copy model dashboards and visualizations into BI objects."""
+        from pgadmin.cdeadmin.bi.model_migration import ModelMigration
+        if self.bi_service is None:
+            raise ProviderWorkspaceError('BI service is not initialized')
+        dry_run = request.get('dry_run', True)
+        accept_loss = request.get('accept_loss', False)
+        if not isinstance(dry_run, bool) or not isinstance(
+                accept_loss, bool):
+            raise ProviderWorkspaceError(
+                'dry_run and accept_loss must be booleans'
+            )
+        migration = ModelMigration(
+            self.semantic_model_service, self.bi_service,
+            getattr(self.bi_service, 'dashboards', None)
+        )
+        return migration.run(
+            user_id, context.endpoint_id, request.get('model_id'),
+            dry_run=dry_run, accept_loss=accept_loss,
+            collection_id=request.get('collection_id')
+        )
 
     def bi_action(self, server, action, request):
         """Apply a saved-question, collection, dashboard or sharing action.

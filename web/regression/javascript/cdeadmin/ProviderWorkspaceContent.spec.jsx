@@ -7,7 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {act, configure, getConfig, fireEvent, render as rtlRender, screen, waitFor} from '@testing-library/react';
+import {act, configure, getConfig, fireEvent, render as rtlRender, screen, waitFor, within} from '@testing-library/react';
 import {useLayoutEffect, useState} from 'react';
 import Theme from 'sources/Theme';
 const render = (ui, options) => rtlRender(ui, {wrapper: Theme, ...options});
@@ -21,12 +21,13 @@ import ProviderWorkspaceContent, {
   VisualAdminField,
   inspectorSections,
   initialObjectDraft,
-  semanticCrossFilter,
   visibleFieldOptions,
   changedFieldDraft,
   administrationResourceId,
   administrationOutcomeValue,
 } from '../../../pgadmin/static/js/Dialogs/ProviderWorkspaceContent';
+import * as ProviderWorkspaceModule from '../../../pgadmin/static/js/Dialogs/ProviderWorkspaceContent';
+import {modelFixtures} from '../bi/modelFixtures';
 import getApiInstance from '../../../pgadmin/static/js/api_instance';
 import firebirdManifest from '../../../pgadmin/cdeadmin/providers/firebird/provider_manifest.json';
 
@@ -2362,27 +2363,11 @@ describe('ProviderWorkspaceContent', () => {
     )).not.toBeInTheDocument();
   });
 
-  it('maps chart selections to provider-compiled semantic filters', () => {
-    const definition = {dimensions: [{
-      id: 'region', field: {source_id: 'sales', field: 'region'},
-      hierarchies: [{levels: [{
-        id: 'region_level',
-        field: {source_id: 'sales', field: 'customer.region'},
-      }]}],
-    }]};
-    const chart = {encodings: {x: 'region_level'}};
-    expect(semanticCrossFilter(definition, chart, {value: 'North'}))
-      .toEqual({
-        field: {source_id: 'sales', field: 'customer.region'},
-        operator: 'eq', value: 'North',
-      });
-    expect(semanticCrossFilter(definition, chart, {value: null}))
-      .toEqual({
-        field: {source_id: 'sales', field: 'customer.region'},
-        operator: 'is_null',
-      });
-    expect(semanticCrossFilter(definition, {encodings: {x: 'measure'}},
-      {value: 42})).toBeNull();
+  it('no longer carries the retired semantic workspace helpers', () => {
+    // chart selection filters moved to BI dashboard cross-filters (backend: convert_dashboard; see
+    // tools/tests/test_cdeadmin_bi_model_migration.py) and the workspace opens the BI Models view instead
+    expect(ProviderWorkspaceModule.semanticCrossFilter).toBeUndefined();
+    expect(ProviderWorkspaceModule.default).toBeDefined();
   });
 
   it('delivers a retained export through a named server-side profile', async () => {
@@ -4446,107 +4431,94 @@ describe('ProviderWorkspaceContent', () => {
     });
   });
 
-  it('provides the complete semantic model designer workspace', async () => {
-    api.get.mockResolvedValue({data: {data: {
-      ...bootstrap,
-      resource_page: {items: [{
-        resource_id: 'table:sales', resource_kind: 'table',
-        display_name: 'sales', display_path: ['analytics', 'sales'],
-      }]},
-    }}});
-    render(<ProviderWorkspaceContent closeModal={jest.fn()}
-      endpointUrl="/workspace/1" initialTab="semantic" />);
-    expect(await screen.findByLabelText('Model name')).toBeInTheDocument();
-    expect(screen.getByLabelText('Semantic-model task'))
-      .toHaveTextContent('Model');
-    expect(screen.getByText(/Relational and multidimensional/))
-      .toBeInTheDocument();
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByRole('combobox', {
-      name: 'Semantic-model task',
-    }), {target: {value: 'query'}});
-    expect(screen.getByLabelText('Time operation')).toBeInTheDocument();
-    expect(screen.getByText('Native analytical windows')).toBeInTheDocument();
-    expect(screen.getByLabelText('Window operation')).toHaveTextContent(
-      'running sum'
-    );
-    expect(screen.getByLabelText('Drill-through fields (source.field, ...)'))
-      .toBeInTheDocument();
-  });
+  describe('semantic tab', () => {
+    const catalog = (profile = {}) => ({...modelFixtures.catalog, capabilities: {
+      ...modelFixtures.catalog.capabilities, analytical_profile: {
+        ...modelFixtures.catalog.capabilities.analytical_profile, ...profile}}});
+    const resources = [{resource_id: 'table:sales', resource_kind: 'table', display_name: 'sales',
+      display_path: ['analytics', 'sales']}];
 
-  it('uses provider-family vocabulary in the semantic model designer', async () => {
-    api.get.mockResolvedValue({data: {data: {
-      ...bootstrap,
-      resource_page: {items: [{
-        resource_id: 'node:person', resource_kind: 'node',
-        display_name: 'Person', display_path: ['graph', 'Person'],
-      }]},
-      semantic_models: {...bootstrap.semantic_models, capabilities: {
-        ...bootstrap.semantic_models.capabilities,
-        analytical_profile: {
-          title: 'Graph analytics', semantic_family: 'graph',
-          source_kinds: ['graph', 'node', 'relationship'],
-          source_classifications: ['node-set', 'relationship-set', 'path-set'],
-          dimension_kinds: ['label', 'property', 'path', 'community'],
-          relationship_kinds: ['native-edge', 'path-pattern'],
-          measure_kinds: ['property-aggregate', 'path-count', 'score'],
-          grain_vocabulary: 'node-relationship-path',
-        },
-      }},
-    }}});
-    render(<ProviderWorkspaceContent closeModal={jest.fn()}
-      endpointUrl="/workspace/1" initialTab="semantic" />);
-    expect(await screen.findByText(/Graph analytics/)).toBeInTheDocument();
-    expect(screen.getByRole('combobox', {name: 'Source kind'}))
-      .toHaveTextContent('node');
-    expect(screen.getByRole('combobox', {name: 'Classification'}))
-      .toHaveTextContent('node-set');
-    fireEvent.change(screen.getByRole('combobox', {
-      name: 'Semantic-model task',
-    }), {target: {value: 'relationships'}});
-    expect(await screen.findByLabelText('Semantic relationship diagram'))
-      .toHaveTextContent('node-set · node');
-    expect(screen.getByRole('combobox', {name: 'Relationship kind'}))
-      .toHaveTextContent('native-edge');
-  });
+    function answer(overrides = {}) {
+      const handlers = {
+        semantic_model_capabilities: () => catalog(),
+        semantic_model_list: () => ({items: [{model_id: 'id-001', name: 'Sales cube', status: 'draft', revision: 1,
+          updated_at: '2026-01-01T00:00:00+00:00'}]}),
+        semantic_model_get: () => modelFixtures.draft,
+        resource_page: () => ({items: resources}),
+        semantic_query_diagnostics: () => ({schema: 'cdeadmin.semantic-query-diagnostics.v1',
+          reproducibility: {model_digest: 'model-digest'}}),
+        ...overrides,
+      };
+      api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data:
+        (handlers[payload.action] || (() => ({})))(payload.request)}}));
+    }
+    const actions = () => api.post.mock.calls.map(([, payload]) => payload.action);
 
-  it('provides security, chart, dashboard, report and diagnostics workspaces', async () => {
-    api.post.mockResolvedValue({data: {data: {
-      schema: 'cdeadmin.semantic-query-diagnostics.v1',
-      reproducibility: {model_digest: 'model-digest'},
-    }}});
-    render(<ProviderWorkspaceContent closeModal={jest.fn()}
-      endpointUrl="/workspace/1" initialTab="semantic" />);
-    fireEvent.change(await screen.findByRole('combobox', {
-      name: 'Semantic-model task',
-    }), {target: {value: 'security'}});
-    expect(screen.getByText('Row-level security')).toBeInTheDocument();
-    expect(screen.getByLabelText('Policy field')).toBeInTheDocument();
-    expect(screen.getByLabelText('Trusted principal claim')).toHaveValue('user_id');
-    expect(screen.getByText('Tenant filtering')).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('combobox', {
-      name: 'Semantic-model task',
-    }), {target: {value: 'presentation'}});
-    expect(screen.getByText('Chart builder')).toBeInTheDocument();
-    expect(screen.getByText('Dashboard builder')).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('combobox', {
-      name: 'Semantic-model task',
-    }), {target: {value: 'reports'}});
-    expect(screen.getByText('Report builder')).toBeInTheDocument();
-    expect(screen.getByLabelText('Delivery profile')).toBeInTheDocument();
-    expect(screen.getByLabelText('Scheduled export format'))
-      .toBeInTheDocument();
-    expect(screen.getByLabelText('Recipients or object filename'))
-      .toBeInTheDocument();
-    expect(screen.getByText(/operator-configured worker authority/))
-      .toBeInTheDocument();
-    fireEvent.change(screen.getByRole('combobox', {
-      name: 'Semantic-model task',
-    }), {target: {value: 'diagnostics'}});
-    fireEvent.click(screen.getByText('Refresh query diagnostics'));
-    expect(await screen.findByText(/model-digest/)).toBeInTheDocument();
-    expect(api.post).toHaveBeenLastCalledWith('/workspace/1', {
-      action: 'semantic_query_diagnostics', request: expect.any(Object),
+    it('opens the BI Models view in place of the retired workspace', async () => {
+      answer();
+      render(<ProviderWorkspaceContent closeModal={jest.fn()}
+        endpointUrl="/workspace/1" initialTab="semantic" />);
+      const list = await screen.findByRole('navigation', {name: 'Semantic models'});
+      expect(await within(list).findByRole('button', {name: /Sales cube/})).toBeInTheDocument();
+      expect(screen.queryByLabelText('Semantic-model task')).not.toBeInTheDocument();
+      expect(actions()).toEqual(expect.arrayContaining(['semantic_model_capabilities', 'semantic_model_list']));
+      // the Models view reads its own catalog; the workspace bootstrap no longer has to carry it
+      expect(api.post).toHaveBeenCalledWith('/workspace/1', {action: 'semantic_model_list', request: {}});
+    });
+
+    it('provides the complete semantic model designer', async () => {
+      answer();
+      render(<ProviderWorkspaceContent closeModal={jest.fn()}
+        endpointUrl="/workspace/1" initialTab="semantic" />);
+      fireEvent.click(await screen.findByRole('button', {name: /Sales cube/}));
+      expect(await screen.findByLabelText(/^Model name/)).toHaveValue('Sales cube');
+      expect(screen.getAllByRole('tab').map((item) => item.textContent)).toEqual(expect.arrayContaining([
+        'Model', 'Dimensions', 'Measures', 'Security', 'Try it', 'Charts and reports', 'Lineage', 'Revisions',
+        'Advanced JSON']));
+      fireEvent.click(screen.getByRole('tab', {name: 'Try it'}));
+      expect(screen.getByLabelText('Time operation')).toBeInTheDocument();
+      expect(screen.getByText('Analytical windows')).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Drill mode/)).toBeInTheDocument();
+    });
+
+    it('uses provider-family vocabulary in the semantic model designer', async () => {
+      const graph = {title: 'Graph analytics', semantic_family: 'graph',
+        source_kinds: ['graph', 'node', 'relationship'],
+        source_classifications: ['node-set', 'relationship-set', 'path-set'],
+        dimension_kinds: ['label', 'property', 'path', 'community'],
+        relationship_kinds: ['native-edge', 'path-pattern'],
+        measure_kinds: ['property-aggregate', 'path-count', 'score'], grain_vocabulary: 'node-relationship-path'};
+      answer({
+        semantic_model_capabilities: () => catalog(graph),
+        resource_page: () => ({items: [{resource_id: 'node:person', resource_kind: 'node',
+          display_name: 'Person', display_path: ['graph', 'Person']}]}),
+      });
+      render(<ProviderWorkspaceContent closeModal={jest.fn()}
+        endpointUrl="/workspace/1" initialTab="semantic" />);
+      await screen.findByRole('button', {name: /Sales cube/});
+      await waitFor(() => expect(actions()).toContain('resource_page'));
+      await act(async () => {});
+      fireEvent.click(screen.getByRole('button', {name: 'New model'}));
+      expect(await screen.findByLabelText(/^Model name/)).toHaveValue('New semantic model');
+      expect(screen.getByRole('table', {name: /Data sources/})).toBeInTheDocument();
+      expect(screen.getByRole('combobox', {name: /^Source kind/})).toHaveTextContent('node');
+      expect(screen.getByRole('combobox', {name: /^Classification/})).toHaveTextContent('node-set');
+    });
+
+    it('provides diagnostics through the Try it tab', async () => {
+      answer();
+      render(<ProviderWorkspaceContent closeModal={jest.fn()}
+        endpointUrl="/workspace/1" initialTab="semantic" />);
+      fireEvent.click(await screen.findByRole('button', {name: /Sales cube/}));
+      await screen.findByLabelText(/^Model name/);
+      fireEvent.click(screen.getByRole('tab', {name: 'Try it'}));
+      fireEvent.mouseDown(screen.getByRole('combobox', {name: /^Measures/}));
+      fireEvent.click(await screen.findByRole('option', {name: 'Revenue'}));
+      fireEvent.click(screen.getByRole('button', {name: 'Query diagnostics'}));
+      expect(await screen.findByText(/model-digest/)).toBeInTheDocument();
+      expect(api.post).toHaveBeenLastCalledWith('/workspace/1', {
+        action: 'semantic_query_diagnostics', request: expect.objectContaining({model_id: 'id-001'}),
+      });
     });
   });
 

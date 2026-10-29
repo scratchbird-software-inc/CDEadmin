@@ -164,7 +164,8 @@ count sets its maximum to zero in the enforcement file.
      - 113
      - Phase 4 (target: tool panels only, about 70)
    * - ``ProviderWorkspaceContent.jsx`` lines
-     - 8528 (8230 after the in-panel Resource Explorer was removed, 2026-10-25)
+     - 8528 (8230 after the in-panel Resource Explorer was removed, 2026-10-25;
+       6543 after ``SemanticModelWorkspace`` was retired, 2026-10-28)
      - Phase 5 (deleted)
    * - ``relational_admin.py`` lines
      - 8942
@@ -196,6 +197,30 @@ test evaluate, history and mute. Tests:
 ``tools/tests/test_cdeadmin_bi_alerts.py`` (fake clock); Jest ``alerts`` and
 ``AlertsPanel`` specs on fixtures generated from the real backend. See
 :doc:`bi_alerts` (security model and residual risks).
+
+Semantic-model workspace retired (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Stream C5: ``SemanticModelWorkspace`` and its private helpers
+(``portableId``, ``emptySemanticModel``, ``semanticCrossFilter``,
+``SemanticChartView``) are deleted from ``ProviderWorkspaceContent.jsx``. The
+``semantic`` tab mounts the BI module's Models view
+(``cdeadmin_ui/modules/bi/models/``, surface ``bi.models``), a descriptor and
+``FieldControl``/``RecordGrid`` driven editor with revisions, compare, status
+transitions, lineage, diagnostics and a cellset grid; raw JSON is only the
+Advanced JSON tab. Embedded visualizations and dashboards migrate to saved
+questions and BI dashboards through ``semantic_model_migrate`` (dry run by
+default, idempotent, model unchanged); reports and schedules stay in the model,
+run through ``report_scheduler`` and are read-only in the view. Capability map,
+dropped capabilities, the subscription TODO and owner decisions are in
+:doc:`bi_models_view`. No shared schema, family renderer or MySQL descriptor was
+edited. Counts from ``python3 tools/validate_ui_descriptors.py --counts``,
+before/after: JSON controls 297/297, MUI imports 244/244, engine-literal UI
+branches 111/111, engine panels in Dialogs 113/113, context-menu branches
+14/14, ``ProviderWorkspaceContent.jsx`` lines 8230/6543. The MUI count is a
+count of import statements, and every ``@mui`` import the deleted component used
+is still used by other panels in the file, so it does not move. The maxima in
+``tools/ui_lint_maximums.json`` are left as they are.
 
 BI sharing and permissions (2026-10-28)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
