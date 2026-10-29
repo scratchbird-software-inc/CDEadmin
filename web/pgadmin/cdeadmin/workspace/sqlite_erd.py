@@ -2,11 +2,14 @@
 
 import hashlib
 import json
+from . import ddn_source as ddn
 
 from .firebird_catalog_export import MAX_BYTES, MAX_DDN_UNITS, native_metadata
+from . import embedded_physical
 
 
 def build_diagram(resources, provenance):
+    module = 'scratchrobin.sqlite.relations'
     def quote(value):
         return json.dumps(value, ensure_ascii=False, separators=(',', ':'),
                           allow_nan=False)
@@ -25,6 +28,14 @@ def build_diagram(resources, provenance):
     prefix = ('sqlite:' + provenance['endpoint_id'] + ':' +
               provenance['database_target_id'] + ':')
     declarations, edges, warnings, mapping = [], [], [], {}
+    indexes = embedded_physical.forward('sqlite', resources)
+    def fk_values(table, constraint_id):
+        # A droppable foreign key is its edge: the edge record carries the constraint identity and vocabulary.
+        for item in indexes.get(table, []):
+            if item['role'] == 'ref' and item['row']['resource_id'] == constraint_id:
+                return {'resource_id': constraint_id, 'native_kind': 'constraint', 'native_json': quote(native_metadata(item['row'], 'sqlite')),
+                        **item['values']}
+        return {}
     for row in relations:
         identity = row['resource_id']
         native = native_metadata(row, 'sqlite')
@@ -32,23 +43,22 @@ def build_diagram(resources, provenance):
         for column in sorted(native.get('columns', []),
                              key=lambda item: item['ordinal_position']):
             column_id = column['resource_id']
-            properties = [
-                'uid:' + quote(prefix + column_id),
-                'nullable:' + ('true' if column['nullable'] else 'false'),
-            ]
-            if column['data_type']:
-                properties.append('datatype:' + quote(column['data_type']))
-            fields.append('field ' + key(column_id) + ' ' + quote(column['name']) +
-                          ' {' + ';'.join(properties) + ';}')
+            properties = {'nullable': bool(column['nullable'])}
+            if column['data_type']: properties['datatype'] = column['data_type']
+            fields.append(ddn.native_field(key(column_id), column['name'], prefix + column_id, properties))
             mapping[key(column_id)] = column_id
         label = '.'.join(row['display_path'])
         kind = 'view' if row['resource_kind'] == 'view' else 'table'
-        declarations.append('object ' + key(identity) + ' ' + quote(label) +
-            ' {kind:' + kind + ';uid:' + quote(prefix + identity) +
-            ';x_record:{resource_id:' + quote(identity) +
-            ',native_kind:' + quote(row['resource_kind']) +
-            ',native_json:' + quote(quote(native)) +
-            '};fields {' + '\n'.join(fields) + '}}')
+        children = []
+        for item in [item for item in indexes.get(identity, []) if item['role'] != 'ref'] if row['resource_kind'] == 'table' else []:
+            child = item['row']['resource_id']
+            children.append({'identity': key(child), 'title': item['row']['display_name'], 'role': item['role'],
+                'uid': prefix + child, 'values': {'resource_id': child, 'native_kind': item['role'],
+                    'native_json': quote(native_metadata(item['row'], 'sqlite')), **item['values']}})
+            mapping[key(child)] = child
+        declarations.append(ddn.relation_object(key(identity), label, kind, prefix + identity,
+            {'resource_id': identity, 'native_kind': row['resource_kind'], 'native_json': quote(native)}, fields, module,
+            children))
         mapping[key(identity)] = identity
         for constraint in native.get('constraints', []):
             if constraint.get('constraint_type') != 'FOREIGN KEY':
@@ -63,16 +73,14 @@ def build_diagram(resources, provenance):
             label = (constraint['name'] + ' (' +
                      ', '.join(constraint['columns']) + ') -> (' +
                      ', '.join(constraint['referenced_columns']) + ')')
-            declarations.append('relation ' + key(cid) + ' ' + quote(label) +
-                ' @' + key(identity) + ' -> @' + key(target['resource_id']) +
-                ' {kind:ref;enforcement:database;uid:' + quote(prefix + cid) +
-                ';x_record:{native_json:' + quote(quote(constraint)) + '};}')
-            edges.append((identity, target['resource_id']))
+            declarations.append(ddn.relation_edge(key(cid), label, key(identity), key(target['resource_id']),
+                prefix + cid, {'native_json': quote(constraint), **fk_values(identity, cid)}, module))
+            edges.append((key(cid), identity, target['resource_id']))
             mapping[key(cid)] = cid
     views, pages = [], []
     for start in range(0, len(relations), 25):
         selected = {row['resource_id'] for row in relations[start:start + 25]}
-        selected.update(target for source, target in edges if source in selected)
+        selected.update(target for _, source, target in edges if source in selected)
         if len(selected) > 100 or len(views) >= 64:
             raise ValueError('SQLite diagram exceeds view bounds')
         view = 'relations_' + str(len(views) + 1)
@@ -80,24 +88,14 @@ def build_diagram(resources, provenance):
         views.append({'id': view, 'label': label,
                       'entry': 'relations.ddn'})
         pages.append(selected)
-    blocks = [
-        'view ' + item['id'] + ' ' + quote(item['label']) +
-        ' {data:[@relations];select:[' + ','.join(
-            '@relations.' + key(identity)
-            for identity in sorted(pages[index])) +
-        '];projection {kind:graph;profile:"ddn@1";}' +
-        'layout {algorithm:layered;gap:240px;row_gap:160px;}' +
-        'publication {size:content;fit:none;}}'
-        for index, item in enumerate(views)
-    ]
-    source = ('ddn "0.6";module "scratchrobin.sqlite.relations";\n'
-              'data relations {\n' + '\n'.join(declarations) + '\n}\n' +
-              '\n'.join(blocks))
+    blocks = [ddn.graph_view(item['id'], item['label'], [key(identity) for identity in sorted(pages[index])],
+        [(edge, key(source), key(target)) for edge, source, target in edges]) for index, item in enumerate(views)]
+    source = ddn.header(module) + '\n'.join(declarations + blocks)
     if (len(source.encode('utf8')) > MAX_BYTES or
             len(source.encode('utf-16-le')) // 2 > MAX_DDN_UNITS):
         raise ValueError('SQLite diagram exceeds the paired DDN document bound')
     return {'snapshot': {
-        'format': 'ddn-workspace@1', 'entry': 'relations.ddn',
+        'format': 'ddn-source-workspace@1', 'entry': 'relations.ddn',
         'view': views[0]['id'], 'files': {'relations.ddn': source}},
         'views': views, 'warnings': warnings,
         'resource_mapping': mapping, 'deployment': 'diagram-only',

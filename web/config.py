@@ -481,6 +481,27 @@ CDEADMIN_REPORT_MAX_LATENESS_SECONDS = 3600
 CDEADMIN_REPORT_WORKER_POLL_INTERVAL = 0.1
 CDEADMIN_REPORT_WORKER_MAX_POLLS = 600
 
+# Signed embedding of BI dashboards and questions (docs/en_US/bi_embedding.rst).
+# Off by default: while False the unauthenticated /cdeadmin/embed/ routes are not
+# registered and no embed can be enabled. Needs the worker key ring above (embed
+# signing secrets and the owner's delegated credentials are encrypted with it).
+# Server mode only; desktop mode logs every request in as the desktop user.
+CDEADMIN_BI_EMBED_ENABLED = False
+# Raw SQL questions bypass semantic row policies; refused in embeds unless True
+# (and never together with embed claims).
+CDEADMIN_BI_EMBED_ALLOW_RAW_SQL = False
+# Embeds may offer downloads only when True here AND the embed AND the
+# question's export policy all allow it.
+CDEADMIN_BI_EMBED_ALLOW_DOWNLOADS = False
+# Longest token lifetime any embed may allow, seconds.
+CDEADMIN_BI_EMBED_MAX_TOKEN_LIFETIME = 3600
+# Per-process token buckets (burst, refill per second): per client address, and
+# per embed after its token verified.
+CDEADMIN_BI_EMBED_IP_RATE = (120, 2.0)
+CDEADMIN_BI_EMBED_RATE = (300, 10.0)
+CDEADMIN_BI_EMBED_MAX_PAGE_SIZE = 200
+CDEADMIN_BI_EMBED_MAX_ROWS = 5000
+
 # Flask-Security overrides Flask-Mail's MAIL_DEFAULT_SENDER setting, so
 # that should be set as such:
 SECURITY_EMAIL_SENDER = 'no-reply@localhost'
@@ -661,7 +682,9 @@ SESSION_COOKIE_HTTPONLY = True
 # Skip storing session in files and cache for specific paths
 #########################################################################
 SESSION_SKIP_PATHS = [
-    '/misc/ping'
+    '/misc/ping',
+    # signed BI embeds never use a session (docs/en_US/bi_embedding.rst)
+    '/cdeadmin/embed/'
 ]
 
 ##########################################################################

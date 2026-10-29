@@ -6,6 +6,7 @@ import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import NativeDataImport from './NativeDataImport';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
 import FirebirdCatalogDesigner from './FirebirdCatalogDesigner';
+import FirebirdERD from './FirebirdERD';
 import SQLiteColumnDesign from './SQLiteColumnDesign';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
@@ -99,6 +100,21 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
     } catch(failure) {
       if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'SQLite review failed');
     } finally {if(token === serial.current) setBusy(false);}
+  };
+  // Diagram review: the reviewed desired DDN replaces the draft. Explicit diagram renames return native
+  // rename arguments; the rewritten desired DDN is then generated natively, exactly like the rename dialog.
+  const reviewDiagram = async review => {
+    const token=++serial.current;setBusy(true);setError('');
+    try {
+      let desired=review.desired,renames=[],fts=[];
+      if(review.renames?.length) {
+        const value=await post({action:'sqlite_schema_rename_design',request:{database_target_id:databaseTargetId,
+          baseline:review.baseline,renames:review.renames}});
+        desired=JSON.stringify(value.snapshot,null,2);renames=value.renames;fts=value.fts_rebindings || [];
+      }
+      if(token===serial.current) {setNativeRenames(renames);setFtsRebindings(fts);setSource(desired);setBaselineSource(review.baseline);setComparison(null);setSchemaPlan(null);setSchemaReceipt(null);setConfirmApply(false);setDeletions([]);setRebuilds(review.rebuilds || []);setColumnRenames([]);}
+    } catch(failure) {if(token===serial.current)setError(failure.response?.data?.errormsg || failure.message || 'SQLite diagram review failed');}
+    finally {if(token===serial.current)setBusy(false);}
   };
   const generateRename = async () => {
     const token=++serial.current;setBusy(true);setError('');
@@ -358,7 +374,11 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
       {schemaReceipt.state === 'reviewed' && <Button disabled={busy || !confirmApply} onClick={applySchema}>Apply reviewed change</Button>}
       <Button disabled={busy} onClick={readReceipt}>Read native receipt</Button>
     </Box>}
-    {shown?.snapshot && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
+    {display === 'relations' && result?.diagram?.snapshot && !includeSystem && <FirebirdERD engine="sqlite" diagram={result.diagram}
+      post={post} databaseTargetId={databaseTargetId} onReviewBusyChange={setBusy}
+      onReview={reviewDiagram} />}
+    {display === 'relations' && includeSystem && <Alert severity="info">Diagram review requires user-object-only capture; clear "Include system objects" and capture again.</Alert>}
+    {shown?.snapshot && display !== 'relations' && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
       <DDNViewerSurface presentation snapshot={{...shown.snapshot, view,
         entry: shown.views.find(item => item.id === view)?.entry || shown.snapshot.entry}} />
     </Box>}

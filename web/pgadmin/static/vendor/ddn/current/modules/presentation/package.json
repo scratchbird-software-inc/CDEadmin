@@ -1,0 +1,37 @@
+{
+  "name": "@ddn/presentation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "source": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./native": {
+      "types": "./src/native.d.ts",
+      "import": "./src/native.js"
+    },
+    "./families/graphs": {
+      "types": "./src/family-graphs.d.ts",
+      "import": "./src/family-graphs.js"
+    },
+    "./families/charts": {
+      "types": "./src/family-charts.d.ts",
+      "import": "./src/family-charts.js"
+    },
+    "./families/geography": {
+      "types": "./src/family-geography.d.ts",
+      "import": "./src/family-geography.js"
+    },
+    "./families/surfaces": {
+      "types": "./src/family-surfaces.d.ts",
+      "import": "./src/family-surfaces.js"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "license": "GPL-2.0-or-later"
+}

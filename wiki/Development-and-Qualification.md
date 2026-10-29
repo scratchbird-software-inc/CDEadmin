@@ -16,7 +16,12 @@ repository.
 Before any commit-validation build or test, follow the repository's `AGENTS.md`
 DDN freshness instructions: inspect the sister project's revision and public
 API, refresh the consumed runtime/editor/tool snapshot, then test the same
-captured dependency. Do not edit the sister project's active checkout. Keep
+captured dependency. On Linux this is automated on the dev path: run
+`bash tools/development/dev.sh ddn` (the `frontend` stage runs it first); the
+native Windows/macOS path refreshes DDN inside `native.py` stages. Direct
+webpack, pytest or Jest invocations still require an explicit
+`bash tools/development/dev.sh ddn` (or `tools/refresh_ddn.py`) first.
+Do not edit the sister project's active checkout. Keep
 generated builds, raw logs and fixtures out of source control.
 
 The open-source site is built from versioned files in `website/`; detailed

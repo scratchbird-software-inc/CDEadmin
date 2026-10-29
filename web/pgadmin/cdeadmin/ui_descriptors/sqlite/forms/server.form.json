@@ -5,7 +5,7 @@
   "resource_kinds": [
     "server"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "SQLite",
   "omitted_tabs": [
     {
@@ -17,18 +17,14 @@
       "reason": "embedded file engine: no network transport"
     }
   ],
-  "gaps": [
-    {
-      "concept": "server.attached_databases",
-      "reason": "provider control 'json' needs a typed control"
-    }
-  ],
+  "gaps": [],
   "fields": [
     {
       "field_id": "name",
       "label": "Connection profile name",
       "tab": "Connection",
       "control": "text",
+      "backend_field_id": "name",
       "required": true
     },
     {
@@ -36,6 +32,7 @@
       "label": "File open mode",
       "tab": "Connection",
       "control": "select",
+      "backend_field_id": "cde_route_uri_mode",
       "required": false,
       "options": [
         {
@@ -58,10 +55,36 @@
       "default": "default"
     },
     {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Database file",
+      "control": "file",
+      "required": true,
+      "help": "Absolute path of the database file this profile opens; further files are registered as databases under it."
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
+    },
+    {
       "field_id": "timeout",
       "label": "Busy timeout (seconds)",
       "tab": "Advanced",
       "control": "number",
+      "backend_field_id": "cde_route_timeout",
       "group": "Timeouts and utilities",
       "required": false,
       "default": 5,
@@ -72,7 +95,22 @@
       "field_id": "attached_databases",
       "label": "Attached databases",
       "tab": "Engine",
-      "control": "text",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Alias",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "database",
+          "label": "Database file",
+          "control": "file",
+          "required": true
+        }
+      ],
+      "backend_field_id": "cde_route_attached_databases",
       "required": false
     },
     {
@@ -80,6 +118,7 @@
       "label": "Shared-cache mode",
       "tab": "Engine",
       "control": "select",
+      "backend_field_id": "cde_route_uri_cache",
       "required": false,
       "options": [
         {
@@ -102,6 +141,7 @@
       "label": "Treat database file as immutable",
       "tab": "Engine",
       "control": "boolean",
+      "backend_field_id": "cde_route_uri_immutable",
       "required": false,
       "default": false
     },
@@ -110,6 +150,7 @@
       "label": "Disable VFS locking",
       "tab": "Engine",
       "control": "boolean",
+      "backend_field_id": "cde_route_uri_nolock",
       "required": false,
       "default": false
     },
@@ -118,6 +159,7 @@
       "label": "VFS implementation name",
       "tab": "Engine",
       "control": "text",
+      "backend_field_id": "cde_route_uri_vfs",
       "required": false
     },
     {
@@ -125,6 +167,7 @@
       "label": "Type detection",
       "tab": "Engine",
       "control": "select",
+      "backend_field_id": "cde_route_detect_types",
       "required": false,
       "options": [
         {
@@ -151,6 +194,7 @@
       "label": "Implicit transaction mode",
       "tab": "Engine",
       "control": "select",
+      "backend_field_id": "cde_route_isolation_level",
       "required": false,
       "options": [
         {
@@ -181,11 +225,47 @@
       "label": "Prepared-statement cache size",
       "tab": "Engine",
       "control": "number",
+      "backend_field_id": "cde_route_cached_statements",
       "required": false,
       "default": 128,
       "min": 0,
       "max": 100000
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
     }
   ],
-  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for sqlite-native. Field ids are the registration contract's own. Review tab/group placement."
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for sqlite-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Round-tripped (tools/tests/test_ui_descriptor_server_forms.py): draft -> servers-API payload -> persisted route via the registration contract -> provider connect arguments and attachment initializer on a temporary file -> edit pre-fill. Attached databases are a typed grid (alias, file)."
 }

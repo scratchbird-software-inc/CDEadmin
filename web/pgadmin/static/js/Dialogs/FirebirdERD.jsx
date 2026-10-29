@@ -20,11 +20,12 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
   const [allowColumnRenames, setAllowColumnRenames] = useState(false);
   const [allowForeignKeys, setAllowForeignKeys] = useState(false);
   const [allowTemporalHistory, setAllowTemporalHistory] = useState(false);
+  const [allowRebuilds, setAllowRebuilds] = useState(false);
   const editor = useRef(null);
   const fileToken = useRef(0);
   useEffect(() => {fileToken.current++; setMerging(false); setReviewing(false);}, [diagram.snapshot]);
   useEffect(() => {
-    fileToken.current++; setAllowTemporalHistory(false); setAllowForeignKeys(false); setAllowColumnRenames(false); setAllowNewColumns(false); setEditing(false); setError(null); setDraft(diagram.snapshot);
+    fileToken.current++; setAllowTemporalHistory(false); setAllowRebuilds(false); setAllowForeignKeys(false); setAllowColumnRenames(false); setAllowNewColumns(false); setEditing(false); setError(null); setDraft(diagram.snapshot);
     selected.current = {entry: diagram.snapshot?.entry, view: diagram.snapshot?.view};
     seed.current = baseline.current = diagram.snapshot; editor.current = null;
   }, [engine, databaseTargetId]);
@@ -36,13 +37,13 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     const link = document.createElement('a'); link.href = url; link.download = name; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const captureEditor = () => {
-    const value = editor.current?.snapshot() || draft;
+  const captureEditor = async () => {
+    const value = editor.current ? await editor.current.snapshot() : draft;
     setDraft(value); selected.current = {entry: value.entry, view: value.view};
     return value;
   };
-  const closeEditor = () => {
-    try {captureEditor(); editor.current = null; setEditing(false);}
+  const closeEditor = async () => {
+    try {await captureEditor(); editor.current = null; setEditing(false);}
     catch {setError('Unable to capture the current design. Keep the editor open and download it from DDN.');}
   };
   if (diagram.unavailable) return <Alert severity="warning">Relational diagram unavailable: {diagram.unavailable}</Alert>;
@@ -67,7 +68,7 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
           } catch {if (serial === fileToken.current) setError('Load a valid UTF-8 DDN workspace JSON file, maximum 8 MiB.');}
         }} />
       </Button>
-      <Button onClick={() => download(JSON.stringify(editing ? draft : snapshot()), `${engine}-relations.ddn-workspace.json`, 'application/json')}>Download relational design</Button>
+      <Button onClick={async () => download(JSON.stringify(editing ? await captureEditor() : snapshot()), `${engine}-relations.ddn-workspace.json`, 'application/json')}>Download relational design</Button>
     </Box>
     <FirebirdDesignStorage post={post} databaseTargetId={databaseTargetId} kind="relations" engine={engine} disabled={editing || merging || reviewing}
       capture={() => ({snapshot: snapshot(), baseline: baseline.current})}
@@ -82,14 +83,17 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     {['mysql', 'mariadb'].includes(engine) && post && onReview && <FormControlLabel label="Include foreign key design changes"
       control={<Checkbox checked={allowForeignKeys} disabled={editing || merging || reviewing}
         onChange={event => setAllowForeignKeys(event.target.checked)} />} />}
+    {['sqlite', 'duckdb'].includes(engine) && post && onReview && <FormControlLabel label="Include constraint additions and drops that rebuild the table (copies every row)"
+      control={<Checkbox checked={allowRebuilds} disabled={editing || merging || reviewing}
+        onChange={event => setAllowRebuilds(event.target.checked)} />} />}
     {engine === 'mariadb' && post && onReview && <FormControlLabel label="Accept native KEEP-history semantics for temporal schema changes"
       control={<Checkbox checked={allowTemporalHistory} disabled={editing || merging || reviewing}
         onChange={event => setAllowTemporalHistory(event.target.checked)} />} />}
-    {post && onReview && <Button disabled={editing || merging || reviewing || (!generation && !['mysql', 'mariadb'].includes(engine))} onClick={async () => {
+    {post && onReview && <Button disabled={editing || merging || reviewing || (!generation && !['mysql', 'mariadb', 'sqlite', 'duckdb'].includes(engine))} onClick={async () => {
       const serial = ++fileToken.current; setReviewing(true); onReviewBusyChange?.(true); setError(null);
       const document = value => ({format: value.format, entry: value.entry, view: value.view, files: value.files});
       try {
-        const result = await post({action: `${engine}_relational_review`, request: {...(['mysql', 'mariadb'].includes(engine) ? {database_target_id: databaseTargetId, ...(allowNewColumns ? {allow_new_columns: true} : {}), ...(allowColumnRenames ? {allow_column_renames: true} : {}), ...(allowForeignKeys ? {allow_foreign_keys: true} : {}), ...(engine === 'mariadb' && allowTemporalHistory ? {allow_temporal_history: true} : {})} : {generation}),
+        const result = await post({action: `${engine}_relational_review`, request: {...(['sqlite', 'duckdb'].includes(engine) ? {database_target_id: databaseTargetId, ...(allowRebuilds ? {allow_rebuilds: true} : {})} : ['mysql', 'mariadb'].includes(engine) ? {database_target_id: databaseTargetId, ...(allowNewColumns ? {allow_new_columns: true} : {}), ...(allowColumnRenames ? {allow_column_renames: true} : {}), ...(allowForeignKeys ? {allow_foreign_keys: true} : {}), ...(engine === 'mariadb' && allowTemporalHistory ? {allow_temporal_history: true} : {})} : {generation}),
           original: document(baseline.current), snapshot: document(snapshot())}});
         if (serial !== fileToken.current) return;
         await onReview(result);
@@ -114,7 +118,10 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
       <Box sx={{display: 'flex', alignItems: 'center', gap: 2, p: 1}}>
         <FormReference formKey={`${engine}-relational-diagram`} />
         <Box sx={{flex: 1}}>Relational design — database changes require separate native review and explicit application.</Box>
-        <Button onClick={() => download(JSON.stringify(captureEditor()), `${engine}-relations.ddn-workspace.json`, 'application/json')}>Download edited design</Button>
+        <Button onClick={async () => {
+          try {download(JSON.stringify(await captureEditor()), `${engine}-relations.ddn-workspace.json`, 'application/json');}
+          catch {setError('Unable to capture the current design. Keep the editor open and retry.');}
+        }}>Download edited design</Button>
         <Button onClick={closeEditor}>Return to diagram viewer</Button>
       </Box>
       {error && <Alert severity="error">{error}</Alert>}
@@ -126,5 +133,5 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     </Dialog>
   </Box>;
 }
-FirebirdERD.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb']), diagram: PropTypes.object.isRequired, post: PropTypes.func, databaseTargetId: PropTypes.string,
+FirebirdERD.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb', 'sqlite', 'duckdb']), diagram: PropTypes.object.isRequired, post: PropTypes.func, databaseTargetId: PropTypes.string,
   generation: PropTypes.string, onReview: PropTypes.func, onReviewBusyChange: PropTypes.func};

@@ -1,4 +1,4 @@
-import {retainedTrendFiles} from './firebirdTrends';
+import {retainedTrendFiles} from './firebirdTrends.js';
 
 export const POSTGRESQL_TREND_METRICS = Object.freeze([
   {id: 'numbackends', label: 'Connected backends (includes collector)'},

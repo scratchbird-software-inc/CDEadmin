@@ -11,9 +11,9 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 DEMO = ROOT / 'tools/reference_engine_demos'
 PYTHON = ROOT / '.venv/bin/python'
-ACTIONS = ('doctor', 'python', 'configure', 'frontend', 'clients', 'init',
-           'run', 'register', 'list', 'status', 'start', 'stop', 'seed',
-           'verify', 'prepare')
+ACTIONS = ('doctor', 'python', 'configure', 'frontend', 'ddn', 'clients',
+           'init', 'run', 'register', 'list', 'status', 'start', 'stop',
+           'seed', 'verify', 'prepare')
 
 
 def run(args, cwd=ROOT, env=None):
@@ -83,6 +83,11 @@ def configure():
     print(f'Created {target}; existing configurations are never overwritten.')
 
 
+def ddn():
+    """Refresh the consumed DDN runtime/tool snapshot before builds."""
+    run([sys.executable, ROOT / 'tools/refresh_ddn.py'])
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=ACTIONS)
@@ -118,10 +123,13 @@ def main(argv=None):
              '--receipt', ROOT / '.devstate/mysql-driver.json'])
         run([PYTHON, '-m', 'pip', 'check'])
     elif args.action == 'frontend':
+        ddn()
         run(['corepack', 'yarn', 'install', '--immutable'], ROOT / 'web')
         environment = dict(os.environ, NODE_ENV='production',
                            NODE_OPTIONS='--max-old-space-size=3072')
         run(['corepack', 'yarn', 'webpacker'], ROOT / 'web', environment)
+    elif args.action == 'ddn':
+        ddn()
     else:
         if not PYTHON.exists():
             parser.error('Run the python stage first to create .venv.')

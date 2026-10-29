@@ -354,9 +354,12 @@ class SMTPDeliveryAdapter:
         message = EmailMessage()
         message['From'] = profile['sender']
         message['To'] = ', '.join(target['recipients'])
-        message['Subject'] = f"CDEadmin report: {payload['filename']}"
+        message['Subject'] = payload.get('subject') or (
+            f"CDEadmin report: {payload['filename']}"
+        )
         message['Message-ID'] = make_msgid(domain='cdeadmin.local')
         message.set_content(
+            payload.get('body') or
             'CDEadmin generated the attached bounded, redacted report export.'
         )
         maintype, subtype = payload['media_type'].split('/', 1)
@@ -600,11 +603,22 @@ class ReportDeliveryService:
             raise ReportDeliveryError('delivery owner is invalid')
         endpoint_id = _uuid(endpoint_id, 'endpoint_id')
         self._prune()
-        if not isinstance(request, dict) or set(request) != {
+        required = {
             'request_key', 'result_id', 'format', 'profile_id', 'target',
             'content', 'filename', 'media_type',
-        }:
+        }
+        if not isinstance(request, dict) or not (
+                required <= set(request) <= required | {'subject', 'body'}):
             raise ReportDeliveryError('delivery request fields are invalid')
+        subject = request.get('subject')
+        body = request.get('body')
+        if subject is not None and (
+                not isinstance(subject, str) or not subject.strip() or
+                len(subject) > 200 or '\r' in subject or '\n' in subject):
+            raise ReportDeliveryError('delivery subject is invalid')
+        if body is not None and (
+                not isinstance(body, str) or len(body) > 16384):
+            raise ReportDeliveryError('delivery body is invalid')
         request_key = _uuid(request['request_key'], 'request_key')
         result_id = _required_text(request['result_id'], 'result_id', 128)
         export_format = _required_text(request['format'], 'format', 16)
@@ -676,6 +690,7 @@ class ReportDeliveryService:
             'content': content, 'filename': filename,
             'media_type': media_type, 'request_key': request_key,
             'sha256': hashlib.sha256(content).hexdigest(),
+            'subject': subject, 'body': body,
         }
         try:
             receipt = adapter.deliver(profile, target, payload)

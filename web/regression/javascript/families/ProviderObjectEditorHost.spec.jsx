@@ -138,6 +138,25 @@ describe('OperationDialog', () => {
   });
 });
 
+describe('OperationDialog with a confirm-type operation carrying a typed confirmation field', () => {
+  it('sends the repeated value as the draft confirmation (Firebird limbo and shadow tasks)', async () => {
+    const {loadEngineBundle: load} = require('./familyFixtures');
+    const operation = load('firebird').kinds.database.operations.find((op) => op.operation_id === 'commit_limbo_local');
+    expect(operation.confirmation).toBe('confirm');
+    const plan = jest.fn(async () => ({plan_id: 'p', plan_digest: 'd', state: 'ready', execution_available: true}));
+    render(<Theme><OperationDialog open operation={operation} targetName="employee" plan={plan}
+      apply={async () => ({})} onClose={() => {}} /></Theme>);
+    fireEvent.change(screen.getByLabelText(/^Local transaction ID/), {target: {value: '42'}});
+    fireEvent.change(screen.getByLabelText(/^Repeat the transaction ID/), {target: {value: '42'}});
+    fireEvent.change(screen.getByLabelText(/^Confirm database filename or alias/), {target: {value: 'employee'}});
+    fireEvent.click(screen.getByRole('checkbox', {name: /Coordinator and participant states reviewed/}));
+    fireEvent.click(screen.getByRole('button', {name: 'Preview'}));
+    await waitFor(() => expect(plan).toHaveBeenCalled());
+    expect(plan.mock.calls[0][0].draft).toMatchObject({transaction_id: '42', confirmation: '42', database_confirmation: 'employee',
+      coordinator_reviewed: true});
+  });
+});
+
 describe('recordFromResource with record_children', () => {
   const {recordFromResource, isChildOf} = require('../../../pgadmin/static/js/cdeadmin_ui/objects/ProviderObjectEditorHost');
   it('folds child resources into the declared grid fields', () => {

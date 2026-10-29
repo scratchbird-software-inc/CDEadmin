@@ -298,7 +298,9 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     """Compile one exact PostgreSQL provider-native administration action."""
     kind = request.get('resource_kind')
     operation = request.get('operation_id')
-    if kind not in POSTGRESQL_NATIVE_FORM_KINDS:
+    from .maintenance import MAINTENANCE_OPERATIONS
+    maintenance = operation in MAINTENANCE_OPERATIONS.get(kind, ())
+    if kind not in POSTGRESQL_NATIVE_FORM_KINDS and not maintenance:
         raise PostgreSQLNativeAdminError(
             'operation is owned by the preserved PostgreSQL UI'
         )
@@ -310,6 +312,9 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(draft, Mapping):
         raise PostgreSQLNativeAdminError('PostgreSQL draft is invalid')
     native = _native_target(request)
+    if maintenance:
+        from .maintenance import compile_operation as compile_maintenance
+        return compile_maintenance(kind, operation, native, draft)
     if kind == 'large-object':
         from .large_objects import compile_operation
         return compile_operation(operation, native, draft)

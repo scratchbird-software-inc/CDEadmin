@@ -54,7 +54,7 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
             const scope = engineMode ? 'engine' : targetId ? 'database' : 'server';
             const live = engineMode ? firebirdFleetFiles(response.data.data) :
               firebirdDashboardFiles(response.data.data, 'Firebird dashboard', scope);
-            rendered = bindPublication(libraries.viewer, publication.snapshot, scope, live);
+            rendered = await bindPublication(libraries, publication.snapshot, scope, live);
             version = publication.version;
           }
         }

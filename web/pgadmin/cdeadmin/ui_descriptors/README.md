@@ -109,6 +109,7 @@ engines skip unless an environment variable points at a live server:
 | --- | --- |
 | Firebird | `CDEADMIN_ROUNDTRIP_FIREBIRD='{"host","port","user","password","database_root"}'` plus `CDEADMIN_FIREBIRD_CLIENT_LIBRARY` (a Firebird 5 `libfbclient`) |
 | MariaDB | `CDEADMIN_ROUNDTRIP_MARIADB='{"host","port","user","password"}'` (an account that may create databases and accounts; needs the patched connector from `tools/cdeadmin_build_mariadb_driver.py`) |
+| PostgreSQL (tier 2/3 operations) | `CDEADMIN_ROUNDTRIP_POSTGRESQL='{"host","port","user","password"?,"database"?,"server_file_dir"?}'` (a superuser; `server_file_dir` is a directory the server may write and the test may read, for the large-object server-file operations) |
 
 Each test creates and drops its own database/objects under a unique name.
 

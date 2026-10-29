@@ -78,7 +78,7 @@ describe('provider endpoint verification', () => {
     showProviderWorkspace('Move registration', node, {_id: 7}, {}, 'firebird-registration', {
       database_target_id: 'alias', registration_operation: 'move',
     });
-    const content = pgAdmin.Browser.docker.default_workspace.openTab.mock.calls[0][0].content.props.children;
+    const content = pgAdmin.Browser.docker.default_workspace.openTab.mock.calls[0][0].content.props.children.props.children;
     expect(content.props.targetId).toBe('alias');
     expect(content.props.operation).toBe('move');
   });
@@ -90,7 +90,7 @@ describe('provider endpoint verification', () => {
         database_target_id: targetId,
       });
       const content = pgAdmin.Browser.docker.default_workspace.openTab
-        .mock.calls[0][0].content.props.children;
+        .mock.calls[0][0].content.props.children.props.children;
       const url = new URL(content.props.endpointUrl, 'http://localhost');
       expect(url.searchParams.get('focused_operation_id'))
         .toBe('activate_shadow');
@@ -103,7 +103,7 @@ describe('provider endpoint verification', () => {
         database_target_id: 'target-one',
       });
       const content = pgAdmin.Browser.docker.default_workspace.openTab
-        .mock.calls[0][0].content.props.children;
+        .mock.calls[0][0].content.props.children.props.children;
       expect(content.props.serverId).toBe(7);
       expect(content.props.targetId).toBe('target-one');
       expect(content.props.policyMode).toBe(tab === 'monitoring_policy');
@@ -124,7 +124,7 @@ describe('provider endpoint verification', () => {
         server_mode: 'edit',
       });
       const content = pgAdmin.Browser.docker.default_workspace.openTab
-        .mock.calls[0][0].content.props.children;
+        .mock.calls[0][0].content.props.children.props.children;
       expect(data.runtime_verification_state).toBe('verified');
       content.props.onEndpointProfileSaved({display_name: 'Owned Firebird'});
       expect(data.runtime_verification_state).toBe('stale');
@@ -150,7 +150,7 @@ describe('provider endpoint verification', () => {
       expect(workspace.openTab).toHaveBeenNthCalledWith(1,
         expect.objectContaining({id: first, title: 'Editor', closable: true,
           floatable: true}), BROWSER_PANELS.MAIN, 'middle');
-      const content = workspace.openTab.mock.calls[0][0].content.props.children;
+      const content = workspace.openTab.mock.calls[0][0].content.props.children.props.children;
       expect(content.props.initialContext).toBe(context);
       expect(content.props.initialTab).toBe('object');
       content.props.closeModal();

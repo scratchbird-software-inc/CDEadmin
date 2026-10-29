@@ -8,7 +8,7 @@ jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
 jest.mock('sources/cdeadmin_ui/data/PagedDataGrid', () => function MockGrid(props) {return <div aria-label={props['aria-label']}>{props.rows.length} changes</div>;});
 const Component = withTheme(MariaDBCatalog);
 
-const capture = {snapshot: {format: 'ddn-workspace@1', entry: 'catalog.ddn', view: 'inventory_1', files: {'catalog.ddn': 'native metadata'}},
+const capture = {snapshot: {format: 'ddn-source-workspace@1', entry: 'catalog.ddn', view: 'inventory_1', files: {'catalog.ddn': 'native metadata'}},
   server_uid: 'native-server',
   views: [{id: 'inventory_1', label: 'Native inventory', entry: 'catalog.ddn'}],
   provenance: {coverage: 'partial', objects: 2, warnings: ['Visibility is partial']}};
@@ -42,7 +42,7 @@ describe('MariaDB native catalog form', () => {
   it('reads current relation data only after explicit selection with the captured server UID and row budget', async () => {
     const catalog = {...capture, objects: [{resource_id: 'native-table', kind: 'table', name: 'Exact values'},
       {resource_id: 'native-sequence', kind: 'sequence', name: 'Never advance'}]};
-    const data = {snapshot: {format: 'ddn-workspace@1', entry: 'result-1.ddn', view: 'result_1',
+    const data = {snapshot: {format: 'ddn-source-workspace@1', entry: 'result-1.ddn', view: 'result_1',
       files: {'result-1.ddn': 'exact native data'}}, views: [{id: 'result_1', label: 'Data page 1', entry: 'result-1.ddn'}],
     acquisition: {rows: 1, relation: 'Exact values', mode: 'sample', server_uid: 'native-server'}, warnings: ['Explicit sample coverage']};
     const post = jest.fn().mockResolvedValueOnce(catalog).mockResolvedValueOnce(data);

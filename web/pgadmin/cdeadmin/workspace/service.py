@@ -53,6 +53,9 @@ class ProviderWorkspaceService:
         self.studio_service = studio_service
         self.result_service = result_service
         self.semantic_model_service = semantic_model_service
+        self.bi_service = None
+        self.bi_alert_service = None
+        self.bi_embed_service = None
         self.operation_bus = operation_bus
         self.report_delivery_service = report_delivery_service
         self.report_scheduler_service = report_scheduler_service
@@ -1961,6 +1964,27 @@ class ProviderWorkspaceService:
         except (ValueError, TypeError, KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def _embedded_relational_review(self, engine, catalog, server, request):
+        from .firebird_relational_review import handoff
+        if not isinstance(request, dict) or not {'original', 'snapshot'} <= request.keys():
+            raise ProviderWorkspaceError('Original and edited relational designs are required')
+        options = dict(request)
+        original, snapshot = options.pop('original'), options.pop('snapshot')
+        allow_rebuilds = options.pop('allow_rebuilds', False)
+        if type(allow_rebuilds) is not bool:
+            raise ProviderWorkspaceError('Rebuild-backed constraint additions are a yes or no choice')
+        catalog = catalog(server, options)
+        try:
+            return handoff(catalog['snapshot'], original, snapshot, engine=engine, allow_rebuilds=allow_rebuilds)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_relational_review(self, server, request):
+        return self._embedded_relational_review('sqlite', self.sqlite_catalog, server, request)
+
+    def duckdb_relational_review(self, server, request):
+        return self._embedded_relational_review('duckdb', self.duckdb_catalog, server, request)
+
     def duckdb_catalog(self, server, request, *, compare=False):
         from .duckdb_catalog_service import catalog
         try:
@@ -2625,7 +2649,359 @@ class ProviderWorkspaceService:
             return self._semantic_materialization_plan(
                 server, context, request
             )
+        if action == 'semantic_model_capabilities':
+            return self._semantic_workspace_catalog(server, context)
+        if action == 'semantic_model_migrate':
+            return self._semantic_model_migrate(user_id, context, request)
         raise ProviderWorkspaceError('semantic model action is unavailable')
+
+    def _semantic_workspace_catalog(self, server, context):
+        """Capabilities, delivery profiles and grants for the Models view.
+
+        The same blocks the workspace bootstrap carries under
+        ``semantic_models``, available on their own so the BI module does
+        not need the legacy workspace payload.
+        """
+        binding = self.endpoint_service.provider_registry.resolve(context)
+        user_id = self._principal_id(server)
+        scheduler = self.report_scheduler_service
+        return {
+            'capabilities': self._semantic_capabilities(binding.instance),
+            'delivery': self.report_delivery_service.catalog()
+            if self.report_delivery_service is not None else {
+                'manual_delivery': False, 'profiles': [],
+                'automatic_scheduling': False,
+            },
+            'scheduler': scheduler.catalog() if scheduler is not None else {
+                'automatic_scheduling': False,
+            },
+            'delegations': scheduler.list_grants(
+                user_id, context.endpoint_id
+            ) if scheduler is not None else [],
+        }
+
+    def _semantic_model_migrate(self, user_id, context, request):
+        """Copy model dashboards and visualizations into BI objects."""
+        from pgadmin.cdeadmin.bi.model_migration import ModelMigration
+        if self.bi_service is None:
+            raise ProviderWorkspaceError('BI service is not initialized')
+        dry_run = request.get('dry_run', True)
+        accept_loss = request.get('accept_loss', False)
+        if not isinstance(dry_run, bool) or not isinstance(
+                accept_loss, bool):
+            raise ProviderWorkspaceError(
+                'dry_run and accept_loss must be booleans'
+            )
+        migration = ModelMigration(
+            self.semantic_model_service, self.bi_service,
+            getattr(self.bi_service, 'dashboards', None)
+        )
+        return migration.run(
+            user_id, context.endpoint_id, request.get('model_id'),
+            dry_run=dry_run, accept_loss=accept_loss,
+            collection_id=request.get('collection_id')
+        )
+
+    def bi_action(self, server, action, request):
+        """Apply a saved-question, collection, dashboard or sharing action.
+
+        Authorization is central (``BIAccess``): the service methods receive
+        only the caller's principal and the endpoint, never a pre-filtered
+        owner scope.  Execution always uses the caller's own workspace
+        context, so sharing never lends out the owner's connection.
+        """
+        service = self.bi_service
+        if service is None:
+            raise ProviderWorkspaceError('BI service is not initialized')
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('BI request must be an object')
+        context, _endpoint, _root = self.endpoint_service.workspace(server)
+        user_id = self._principal_id(server)
+        endpoint_id = context.endpoint_id
+        qid = request.get('question_id')
+        revision = request.get('expected_revision')
+        if action == 'bi_collection_list':
+            return {'items': service.list_collections(user_id, endpoint_id)}
+        if action == 'bi_collection_create':
+            return service.create_collection(
+                user_id, request.get('collection'), endpoint_id)
+        if action == 'bi_collection_update':
+            return service.update_collection(
+                user_id, request.get('collection_id'),
+                request.get('collection'), endpoint_id)
+        if action == 'bi_collection_delete':
+            return service.delete_collection(
+                user_id, request.get('collection_id'), endpoint_id)
+        if action in self._BI_SHARING_ACTIONS:
+            return self._bi_sharing_action(service, action, request,
+                                           user_id, endpoint_id)
+        if action.startswith(('bi_alert_', 'bi_notification_')):
+            return self._bi_alert_action(
+                server, action, request, context, _endpoint, user_id,
+                endpoint_id)
+        if action.startswith('bi_embed_'):
+            return self._bi_embed_action(
+                server, action, request, user_id, endpoint_id)
+        if action == 'bi_question_list':
+            filters = {'collection_id': request['collection_id']} if (
+                'collection_id' in request) else {}
+            return {'items': service.list_questions(
+                user_id, endpoint_id, **filters)}
+        if action == 'bi_question_get':
+            return service.get_question(user_id, endpoint_id, qid)
+        if action == 'bi_question_create':
+            return service.create_question(
+                user_id, endpoint_id, request.get('question'))
+        if action == 'bi_question_update':
+            return service.update_question(
+                user_id, endpoint_id, qid, revision, request.get('question'))
+        if action == 'bi_question_status':
+            return service.set_status(
+                user_id, endpoint_id, qid, revision, request.get('status'))
+        if action == 'bi_question_move':
+            return service.move_question(
+                user_id, endpoint_id, qid, revision,
+                request.get('collection_id'))
+        if action == 'bi_question_clone':
+            return service.clone_question(
+                user_id, endpoint_id, qid, request.get('name'))
+        if action == 'bi_question_delete':
+            return service.delete_question(user_id, endpoint_id, qid,
+                                           revision)
+        if action == 'bi_question_history':
+            return {'items': service.history(user_id, endpoint_id, qid)}
+        if action == 'bi_question_revision':
+            return service.revision(user_id, endpoint_id, qid,
+                                    request.get('revision'))
+        if action == 'bi_question_compile':
+            binding = self.endpoint_service.provider_registry.resolve(context)
+            return service.compile(
+                binding.instance, user_id, endpoint_id, question_id=qid,
+                definition=request.get('question'),
+                parameters=request.get('parameters'),
+                revision=request.get('revision'),
+                security_context={'claims': {'user_id': user_id}})
+        return self._bi_extended_action(
+            service, action, request, context, _endpoint, user_id,
+            endpoint_id, qid, revision)
+
+    def _bi_alert_action(self, server, action, request, context, endpoint,
+                         user_id, endpoint_id):
+        """Alerts, subscriptions and in-app notifications (bi_alerts.rst).
+
+        A dry run uses the caller's own interactive context; every real
+        evaluation happens in the worker with the owner's delegation.
+        """
+        alerts = self.bi_alert_service
+        if alerts is None or action not in alerts.ACTIONS:
+            raise ProviderWorkspaceError('BI action is unavailable')
+
+        def runtime():
+            binding = self.endpoint_service.provider_registry.resolve(
+                context)
+            return binding.instance, context, endpoint
+
+        return alerts.handle(
+            action, request, user_id=user_id, endpoint_id=endpoint_id,
+            server=server, runtime=runtime)
+
+    def _bi_embed_action(self, server, action, request, user_id,
+                         endpoint_id):
+        """Signed embedding management (bi_embedding.rst).
+
+        Authenticated like every ``bi_*`` action.  Only the unauthenticated
+        blueprint in ``bi/embed_public.py`` serves the embedded views, and it
+        never goes through here.
+        """
+        embeds = self.bi_embed_service
+        if embeds is None or action not in embeds.ACTIONS:
+            raise ProviderWorkspaceError('BI action is unavailable')
+        from flask import has_request_context, url_for
+
+        def frame_url(embed_id):
+            if has_request_context():
+                try:
+                    return url_for('cdeadmin_bi_embed.frame',
+                                   embed_id=embed_id)
+                except Exception:
+                    pass
+            return '/cdeadmin/embed/%s/frame' % embed_id
+
+        return embeds.handle(
+            action, request, user_id=user_id, endpoint_id=endpoint_id,
+            server=server, frame_url=frame_url)
+
+    _BI_SHARING_ACTIONS = frozenset((
+        'bi_access_get', 'bi_grant_list', 'bi_grant_add', 'bi_grant_update',
+        'bi_grant_remove', 'bi_access_inherit', 'bi_transfer_owner',
+        'bi_shared_with_me', 'bi_principal_search', 'bi_audit_list',
+    ))
+
+    def _bi_sharing_action(self, service, action, request, user_id,
+                           endpoint_id):
+        """Grants, effective access, ownership transfer and discovery."""
+        access = service.access
+        if action == 'bi_shared_with_me':
+            return service.shared_with_me(user_id, endpoint_id)
+        if action == 'bi_principal_search':
+            return {'items': access.search_principals(
+                user_id, request.get('text'), request.get('kinds'),
+                request.get('limit'))}
+        kind, rid = request.get('resource_type'), request.get('resource_id')
+        if kind not in ('collection', 'question', 'dashboard') or not (
+                isinstance(rid, str)):
+            raise ProviderWorkspaceError('BI action is unavailable')
+        if action == 'bi_access_get':
+            return access.effective_access(user_id, kind, endpoint_id, rid)
+        if action == 'bi_grant_list':
+            return access.list_grants(user_id, kind, endpoint_id, rid)
+        if action == 'bi_grant_add':
+            return access.add_grant(
+                user_id, kind, endpoint_id, rid,
+                request.get('principal_type'), request.get('principal_id'),
+                request.get('level'))
+        if action == 'bi_grant_update':
+            return access.update_grant(
+                user_id, kind, endpoint_id, rid, request.get('grant_id'),
+                request.get('level'))
+        if action == 'bi_grant_remove':
+            return access.remove_grant(user_id, kind, endpoint_id, rid,
+                                       request.get('grant_id'))
+        if action == 'bi_access_inherit':
+            return access.set_inherit(user_id, kind, endpoint_id, rid,
+                                      request.get('inherit'))
+        if action == 'bi_audit_list':
+            return {'items': access.audit_trail(user_id, kind, endpoint_id,
+                                                rid)}
+        return service.transfer_owner(
+            user_id, endpoint_id, kind, rid, request.get('new_owner_id'),
+            request.get('confirm'))
+
+    def _bi_extended_action(self, service, action, request, context,
+                            endpoint, user_id, endpoint_id, qid, revision):
+        """Execution, conversion and dashboard actions of ``bi_action``."""
+        if action == 'bi_sql_to_question':
+            from pgadmin.cdeadmin.bi.convert import sql_to_question
+            return sql_to_question(
+                request.get('sql'),
+                name=request.get('name') or 'Converted question',
+                parameter_types=request.get('parameter_types'),
+                collection_id=request.get('collection_id'))
+        dashboards = getattr(service, 'dashboards', None)
+        if action in ('bi_dashboard_from_ddn', 'bi_dashboard_to_ddn'):
+            from pgadmin.cdeadmin.bi import dashboard_ddn
+            if action == 'bi_dashboard_from_ddn':
+                return dashboard_ddn.ddn_to_dashboard(
+                    request.get('snapshot'), name=request.get('name'))
+            dashboard = request.get('dashboard')
+            if request.get('dashboard_id') is not None:
+                dashboard = dashboards.get(
+                    user_id, endpoint_id, request['dashboard_id'])[
+                        'definition']
+            return dashboard_ddn.dashboard_to_ddn(
+                dashboard, strict=bool(request.get('strict', False)))
+        executor = getattr(service, 'executor', None)
+        if action in ('bi_question_execute', 'bi_question_page',
+                      'bi_question_export', 'bi_cache_info',
+                      'bi_cache_invalidate'):
+            if executor is None:
+                raise ProviderWorkspaceError(
+                    'BI execution is not initialized')
+            if action == 'bi_question_execute':
+                binding = self.endpoint_service.provider_registry.resolve(
+                    context)
+                return executor.run(
+                    provider=binding.instance, context=context,
+                    endpoint=endpoint, user_id=user_id, question_id=qid,
+                    revision=request.get('revision'),
+                    definition=request.get('question'),
+                    parameters=request.get('parameters'),
+                    page_size=request.get('page_size'),
+                    bypass_cache=bool(request.get('bypass_cache')),
+                    ttl_seconds=request.get('cache_ttl_seconds'))
+            if action == 'bi_question_page':
+                return executor.page(
+                    user_id, endpoint_id, request.get('result_id'),
+                    cursor=request.get('cursor'),
+                    page_size=request.get('page_size'))
+            if action == 'bi_question_export':
+                export_format = request.get('format')
+                exported = executor.export(
+                    user_id, endpoint_id, request.get('result_id'),
+                    export_format)
+                content = exported.pop('content')
+                return {
+                    **exported,
+                    'content_base64': base64.b64encode(content).decode(
+                        'ascii'),
+                    'media_type': self._export_media_type(export_format),
+                    'filename': 'cdeadmin-question-' + str(
+                        request.get('result_id')) + '.' + str(export_format),
+                }
+            if action == 'bi_cache_info':
+                return {'items': executor.cache_info(user_id, endpoint_id)}
+            # Owner-scoped: a principal can only drop its own entries.
+            return {'released': executor.invalidate(
+                user_id=user_id, endpoint_id=endpoint_id,
+                question_id=qid, result_id=request.get('result_id'))}
+        if dashboards is not None and action.startswith('bi_dashboard_'):
+            did = request.get('dashboard_id')
+            simple = {
+                'bi_dashboard_get': lambda: dashboards.get(
+                    user_id, endpoint_id, did),
+                'bi_dashboard_create': lambda: dashboards.create(
+                    user_id, endpoint_id, request.get('dashboard')),
+                'bi_dashboard_update': lambda: dashboards.update(
+                    user_id, endpoint_id, did, revision,
+                    request.get('dashboard')),
+                'bi_dashboard_status': lambda: dashboards.set_status(
+                    user_id, endpoint_id, did, revision,
+                    request.get('status')),
+                'bi_dashboard_move': lambda: dashboards.move(
+                    user_id, endpoint_id, did, revision,
+                    request.get('collection_id')),
+                'bi_dashboard_clone': lambda: dashboards.clone(
+                    user_id, endpoint_id, did, request.get('name')),
+                'bi_dashboard_delete': lambda: dashboards.delete(
+                    user_id, endpoint_id, did, revision),
+                'bi_dashboard_history': lambda: {
+                    'items': dashboards.history(user_id, endpoint_id, did)},
+                'bi_dashboard_revision': lambda: dashboards.revision(
+                    user_id, endpoint_id, did, request.get('revision')),
+                'bi_dashboard_resolve': lambda: dashboards.resolve(
+                    user_id, endpoint_id, did, request.get('filters'),
+                    revision=request.get('revision')),
+                'bi_dashboard_cross_filter': lambda: dashboards.cross_filter(
+                    user_id, endpoint_id, did,
+                    request.get('cross_filter_id'), request.get('row'),
+                    request.get('filters')),
+                'bi_dashboard_drill': lambda: dashboards.drill(
+                    user_id, endpoint_id, did, request.get('drill_id'),
+                    request.get('row'), request.get('filters')),
+            }
+            if action == 'bi_dashboard_list':
+                filters = {'collection_id': request['collection_id']} if (
+                    'collection_id' in request) else {}
+                return {'items': dashboards.list(
+                    user_id, endpoint_id, **filters)}
+            if action in simple:
+                return simple[action]()
+            if action in ('bi_dashboard_run', 'bi_dashboard_card_run'):
+                binding = self.endpoint_service.provider_registry.resolve(
+                    context)
+                common = dict(
+                    provider=binding.instance, context=context,
+                    endpoint=endpoint, user_id=user_id,
+                    dashboard_id=did, filters=request.get('filters'),
+                    revision=request.get('revision'),
+                    page_size=request.get('page_size'),
+                    bypass_cache=bool(request.get('bypass_cache')),
+                    exclude=request.get('exclude') or ())
+                if action == 'bi_dashboard_card_run':
+                    return dashboards.run_card(
+                        card_id=request.get('card_id'), **common)
+                return dashboards.run(tab_id=request.get('tab_id'), **common)
+        raise ProviderWorkspaceError('BI action is unavailable')
 
     def _semantic_definition(self, context, value):
         if not isinstance(value, dict):
@@ -3803,6 +4179,18 @@ def init_app(
     import atexit
     atexit.register(service.firebird_events.close)
     app.extensions[APP_EXTENSION_KEY] = service
+    if semantic_model_service is not None:
+        from pgadmin.cdeadmin.bi import init_app as init_bi
+        service.bi_service = init_bi(
+            app, semantic_model_service, studio_service, result_service)
+        from pgadmin.cdeadmin.bi.alerts import init_app as init_bi_alerts
+        service.bi_alert_service = init_bi_alerts(
+            app, service.bi_service, endpoint_service,
+            report_scheduler_service, report_delivery_service)
+        from pgadmin.cdeadmin.bi.embeds import init_app as init_bi_embeds
+        service.bi_embed_service = init_bi_embeds(
+            app, service.bi_service, endpoint_service,
+            report_scheduler_service)
     from .mysql_retention_schedule import init_app as init_mysql_retention_schedule
     init_mysql_retention_schedule(app, service)
     from .mysql_physical_retention_schedule import init_app as init_mysql_physical_schedule

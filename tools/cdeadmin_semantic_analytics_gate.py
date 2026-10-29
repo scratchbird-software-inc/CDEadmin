@@ -84,13 +84,24 @@ def _integration_failures(root):
         'web/pgadmin/cdeadmin/workspace/service.py': (
             'spreadsheetml.sheet', 'image/svg+xml', 'application/pdf',
         ),
+        # the retired SemanticModelWorkspace is the BI module's Models view
+        # (docs/en_US/bi_models_view.rst); the chart, dashboard and report
+        # builders were dropped in favour of BI questions and dashboards
         'web/pgadmin/static/js/Dialogs/ProviderWorkspaceContent.jsx': (
-            'Semantic relationship diagram', 'Declared grain fields',
-            'Time role', 'Metric owner', 'Add cross-filter',
-            'Chart builder', 'Dashboard builder', 'Report builder',
-            'Row-level security', 'Tenant filtering', 'Query diagnostics',
-            'semanticCrossFilter', 'Run dashboard', 'allowedFormats',
-            'Native analytical windows', 'Anchor date or datetime',
+            'BIModelsTool',
+        ),
+        'web/pgadmin/static/js/cdeadmin_ui/modules/bi/models/modelForm.js': (
+            'Declared grain fields', 'Time role', 'Metric owner',
+            'Row policies', 'Tenant filtering', 'Anchor date or datetime',
+            'Analytical windows', 'Relationships',
+        ),
+        'web/pgadmin/static/js/cdeadmin_ui/modules/bi/models/QueryPanel.jsx': (
+            'Query diagnostics', 'Cube pivot results',
+        ),
+        'web/pgadmin/static/js/cdeadmin_ui/modules/bi/models/'
+        'EmbeddedPanel.jsx': (
+            'Charts', 'Dashboards', 'Reports', 'Schedules',
+            'Preview migration',
         ),
     }
     failures = []

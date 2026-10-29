@@ -10,7 +10,7 @@ FIELDS = {'parameters', 'metadata_source', 'engine_name', 'entrypoint', 'sql_sec
 DERIVED = {'valid_blr', 'procedure_type', 'function_type', 'return_argument', 'legacy', 'private_flag'}
 NUMERIC_TYPES = {'field_type', 'field_sub_type', 'field_scale', 'field_precision', 'character_length', 'segment_length'}
 PARAMETER_FIELDS = domains.TYPE_FIELDS | {'name', 'mode', 'position', 'domain', 'not_null',
-    'default_source', 'description', 'mechanism', 'argument_mechanism', 'relation_name', 'field_name', 'return_value'}
+    'default_source', 'description', 'mechanism', 'argument_mechanism', 'relation_name', 'field_name', 'return_value', 'type_sql'}
 
 
 def flag(value, label, nullable=False):

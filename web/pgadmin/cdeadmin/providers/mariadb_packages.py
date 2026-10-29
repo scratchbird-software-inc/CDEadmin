@@ -17,7 +17,7 @@ def compile_operation(operation, draft, target, safe_definition):
         raise RelationalClientError('Invalid native MariaDB package operation')
     create = operation == 'create_specification'
     allowed = {'database', 'name', 'definition', 'sql_mode'} if create else {'confirmation'} | (
-        set() if operation == 'drop_body' else {'definition', 'sql_mode'})
+        {'sql_mode'} if operation == 'drop_body' else {'definition', 'sql_mode'})
     if set(draft) - allowed:
         raise RelationalClientError('Unknown native MariaDB package option')
     path = [draft.get('database'), draft.get('name')] if create else (target or {}).get('display_path')
@@ -27,16 +27,18 @@ def compile_operation(operation, draft, target, safe_definition):
         qualified = '.'.join(identifier(part) for part in path)
     except ValueError as error:
         raise RelationalClientError(str(error)) from None
-    if operation == 'drop_body':
-        return [{'source': 'DROP PACKAGE BODY ' + qualified, 'parameters': ()}]
-    definition = safe_definition(draft.get('definition'))
-    if not definition or len(definition.encode('utf8')) > 1024 * 1024:
-        raise RelationalClientError('Native package declaration/body requires text within 1 MiB')
-    mode = draft.get('sql_mode', 'current' if create else 'stored')
+    drop = operation == 'drop_body'
+    definition = None
+    if not drop:
+        definition = safe_definition(draft.get('definition'))
+        if not definition or len(definition.encode('utf8')) > 1024 * 1024:
+            raise RelationalClientError('Native package declaration/body requires text within 1 MiB')
+    # Dropping a body keeps the session's own mode unless the caller selects one (packages parse under Oracle mode).
+    mode = draft.get('sql_mode', 'current' if create or drop else 'stored')
     statements = []
     if mode == 'stored':
         native = (target or {}).get('native') or (target or {}).get('extensions', {}).get('mariadb', {}).get('native', {})
-        part = 'package_body' if operation == 'replace_body' else 'package_specification'
+        part = 'package_body' if operation in {'replace_body', 'drop_body'} else 'package_specification'
         observations = native.get(part, {}).get('show_create', [])
         modes = {row.get('sql_mode') for row in observations if isinstance(row, dict) and isinstance(row.get('sql_mode'), str)}
         if len(modes) != 1:
@@ -46,6 +48,9 @@ def compile_operation(operation, draft, target, safe_definition):
         statements.append({'source': 'SET SESSION sql_mode=%s', 'parameters': ('ORACLE',)})
     elif mode != 'current':
         raise RelationalClientError('Select stored, current or Oracle package SQL mode')
+    if drop:
+        statements.append({'source': 'DROP PACKAGE BODY ' + qualified, 'parameters': ()})
+        return statements
     command = 'CREATE OR REPLACE' if operation.startswith('replace_') else 'CREATE'
     kind = 'PACKAGE BODY' if operation.endswith('_body') else 'PACKAGE'
     statements.append({'source': command + ' ' + kind + ' ' + qualified + ' ' + definition, 'parameters': ()})
@@ -55,6 +60,9 @@ def compile_operation(operation, draft, target, safe_definition):
 def form(operation, field):
     create = operation == 'create_specification'
     fields = [field('database', 'Database', 'text', True), field('name', 'Package name', 'text', True)] if create else []
+    if operation == 'drop_body':
+        fields.append(field('sql_mode', 'Package SQL mode', 'select', True, default='current',
+            options=('current', 'oracle', 'stored')))
     if operation != 'drop_body':
         fields += [field('sql_mode', 'Package SQL mode', 'select', True, default='current' if create else 'stored',
             options=('current', 'oracle') if create else ('stored', 'current', 'oracle')),

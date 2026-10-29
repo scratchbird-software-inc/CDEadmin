@@ -142,3 +142,10 @@ def test_mutual_new_routines_use_noncallable_signatures_and_final_bodies():
     assert 'R = A + 1' in result['script'] and 'RETURN A + 1' in result['script']
     assert any('non-callable signatures' in warning for warning in result['warnings'])
     assert result['script'].startswith('-- Firebird') and 'SET AUTODDL OFF;' in result['script']
+
+
+def test_captured_parameter_type_sql_is_derived_and_never_executed():
+    from pgadmin.cdeadmin.workspace.firebird_routine_plan import parameter
+    result = parameter(param(type_sql='INTEGER); DROP TABLE injected; --'), 'procedure')
+    assert result['declaration'] == '"A" INTEGER'
+    assert 'type_sql' not in result

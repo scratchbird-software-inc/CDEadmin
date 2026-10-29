@@ -1,4 +1,6 @@
-import runtime from '../../../static/vendor/ddn/current/ddn.mjs';
+import * as viewer from '../../../static/vendor/ddn/current/complete/ddn-verifier.js';
+import * as language from '../../../static/vendor/ddn/current/modules/language/src/index.js';
+import * as model from '../../../static/vendor/ddn/current/modules/model/src/index.js';
 import {validatePublication} from '../../../static/js/cdeadmin_ui/integrations/ddn/dashboardPublication.mjs';
 let input = '';
 for await (const part of process.stdin) {
@@ -7,7 +9,7 @@ for await (const part of process.stdin) {
 }
 try {
   const {snapshot, scope, engine} = JSON.parse(input);
-  process.stdout.write(JSON.stringify(validatePublication(runtime, snapshot, scope, engine)));
+  process.stdout.write(JSON.stringify(await validatePublication({viewer,language,model}, snapshot, scope, engine)));
 } catch {
   process.stderr.write('Dashboard source or metric bindings are invalid.');
   process.exitCode = 1;

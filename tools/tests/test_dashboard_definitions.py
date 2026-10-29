@@ -20,9 +20,9 @@ def setup():
 
 def payload(reference):
     return {'schema': 'cdeadmin.ddn-asset.v1', 'assetRef': reference,
-            'snapshot': {'format': 'ddn-workspace@1', 'entry': 'dashboard.ddn',
+            'snapshot': {'format': 'ddn-source-workspace@1', 'entry': 'dashboard.ddn',
                          'view': 'dashboard', 'files': {'dashboard.ddn':
-                            'ddn "0.5"; module "test"; view dashboard "Draft" {}'}}}
+                            'version ddn-next-1\nview dashboard as table.records@1\n'}}}
 
 
 def test_get_has_no_write_and_scope_identity_never_collapses():

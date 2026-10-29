@@ -62,6 +62,6 @@ describe('Registered server catalog capture', () => {
     expect(bundle.complete).toBe(false);
     expect(bundle.entries[0].catalog).toBe(entries[0].catalog);
     expect(bundle.consistency).toContain('not an atomic');
-    expect(bundle.overview.files['server.ddn']).toContain('records: [@databases.db_0]');
+    expect(bundle.overview.files['server.ddn']).toContain('id "db_0"');
   });
 });

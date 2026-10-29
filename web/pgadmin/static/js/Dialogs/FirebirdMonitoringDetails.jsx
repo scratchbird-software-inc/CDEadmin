@@ -1,3 +1,4 @@
+import {observationTable} from '../cdeadmin_ui/integrations/ddn/source';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button} from '@mui/material';
@@ -6,23 +7,13 @@ import url_for from 'sources/url_for';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 
-const quote = (value) => JSON.stringify(String(value ?? 'NULL'));
 export function monitoringDetailFiles(result) {
   const fields = result.operation === 'accounts' ?
     ['user_name', 'plugin', 'active', 'admin', 'first_name', 'middle_name', 'last_name'] :
     result.operation === 'receipts' ? ['operation_id', 'operation_kind', 'database', 'stage',
       'unknown_outcome', 'post_state_required', 'server_completed', 'service_handle_released', 'updated_at'] : ['name', 'value'];
   const rows = (result.rows || []).slice(0, 100);
-  return {'details.ddn': `ddn "0.5"; module "scratchrobin.firebird.monitoring.details";
-    data observations {${rows.length ? rows.map((row, index) => `record r${index} ${quote(row[fields[0]])} {
-      x_record: {${fields.map((field) => `${field}:${quote(row[field])}`).join(',')}}; }`).join('\n') :
-    'record empty "No visible rows" {}'}}
-    view details "Authorized native details" {data: [@observations];
-      projection {kind: table; profile: "table.records@1";
-        records: [${rows.length ? rows.map((_, index) => `@observations.r${index}`).join(',') : '@observations.empty'}];
-        columns: [${rows.length ? fields.map((field) => `{key:${quote('x_record.' + field)},label:${quote(field)}}`).join(',') : '{key:"name",label:"Observation"}'}];
-      } publication {size: content; fit: none;}
-    }`};
+  return observationTable('details.ddn','details','Authorized native details',rows,fields,'scratchrobin.firebird.monitoring.details');
 }
 
 export default function FirebirdMonitoringDetails({serverId, targetId, sample}) {

@@ -10,14 +10,13 @@
 export const DDN_ASSET_SCHEMA = 'cdeadmin.ddn-asset.v1';
 export const DDN_SURFACE_SCHEMA = 'cdeadmin.ddn-surface.v1';
 export const DDN_SNAPSHOT_FORMATS = Object.freeze([
-  'ddn-workspace@1',
-  'ddn-live-snapshot@0.1',
+  'ddn-source-workspace@1',
 ]);
 
 const SAFE_ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,255}$/;
-const MAX_FILES = 1024;
+const MAX_FILES = 64;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
-const MAX_WORKSPACE_BYTES = 64 * 1024 * 1024;
+const MAX_WORKSPACE_BYTES = 8 * 1024 * 1024;
 
 function stableId(value, name) {
   const normalized = String(value ?? '').trim();
@@ -28,7 +27,7 @@ function stableId(value, name) {
 }
 function validPath(path) {
   return typeof path === 'string' && path.length > 0 && path.length <= 1024 &&
-    !path.startsWith('/') && !path.includes('\\') &&
+    !path.startsWith('/') && !path.includes(':') && !path.includes('\\') &&
     !path.split('/').some((part) => !part || part === '.' || part === '..' ||
       part.includes('\0'));
 }
@@ -51,7 +50,7 @@ export function validateDDNFiles(value) {
       throw new TypeError(`DDN source ${path} must be text.`);
     }
     const bytes = new TextEncoder().encode(source).byteLength;
-    if(bytes > MAX_FILE_BYTES) {
+    if(source.length > 2000000 || bytes > MAX_FILE_BYTES) {
       throw new TypeError(`DDN source ${path} exceeds its size limit.`);
     }
     total += bytes;
@@ -86,25 +85,43 @@ export function validateDDNSnapshot(value) {
     throw new TypeError('DDN snapshot must be an object.');
   }
   if(!DDN_SNAPSHOT_FORMATS.includes(value.format)) {
-    throw new TypeError(`Unsupported DDN snapshot format: ${value.format}`);
+    throw new TypeError(`Unsupported DDN snapshot format: ${value.format}. Legacy diagrams require an explicit migration; their source is retained.`);
   }
+  if(value.overrides || value.layoutState) throw new TypeError('Legacy appearance state requires explicit migration into DDN source.');
   const entry = String(value.entry ?? '').trim();
   const view = String(value.view ?? '').trim();
   if(!validPath(entry) || !view) {
     throw new TypeError('DDN snapshot requires a valid entry and view.');
   }
   return Object.freeze({
-    ...value,
+    format: value.format,
     files: validateDDNFiles(value.files),
     entry,
     view,
   });
 }
 
+// Native design baselines are host storage attachments, never DDN source.
+export function splitDDNAssetContent(content) {
+  const sourceKeys=['format','entry','view','files'];
+  const attachments={};
+  for(const key of Object.keys(content || {}).filter(key=>!sourceKeys.includes(key))) {
+    const value=content[key];
+    if(!['firebirdDesign','mysqlDesign','mariadbDesign','duckdbDesign','sqliteDesign'].includes(key) ||
+        Object.keys(attachments).length || !value || Object.keys(value).join()!=='baseline' ||
+        Object.keys(value.baseline || {}).sort().join()!=='entry,files,format,view') {
+      throw new TypeError('Unsupported DDN asset attachment; explicit migration is required.');
+    }
+    attachments[key]={baseline:validateDDNSnapshot(value.baseline)};
+  }
+  return {snapshot:validateDDNSnapshot(content),attachments};
+}
+
 export function ddnAssetPayload(assetRef, snapshot) {
+  const source=splitDDNAssetContent(snapshot);
   return Object.freeze({
     schema: DDN_ASSET_SCHEMA,
     assetRef: validateDDNAssetRef(assetRef),
-    snapshot: validateDDNSnapshot(snapshot),
+    snapshot: {...source.snapshot,...source.attachments},
   });
 }

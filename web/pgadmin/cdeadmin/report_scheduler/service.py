@@ -34,6 +34,7 @@ from .models import (
 
 
 RESOLVER_ID = 'cdeadmin.delegated-report-worker'
+AAD_SCHEMA = 'cdeadmin.report-worker-credential.v1'
 SCHEDULER_PERMISSIONS = frozenset({
     'network', 'secret_read', 'data_read', 'execute',
     'embedded_runtime', 'filesystem',
@@ -54,9 +55,10 @@ def _json(value):
     )
 
 
-def _aad(delegation, credential_id, secret_kind, generation=None):
+def _aad(delegation, credential_id, secret_kind, generation=None,
+         schema=AAD_SCHEMA):
     return {
-        'schema': 'cdeadmin.report-worker-credential.v1',
+        'schema': schema,
         'delegation_id': delegation.id,
         'credential_id': credential_id,
         'endpoint_id': delegation.endpoint_id,
@@ -71,15 +73,24 @@ def _aad(delegation, credential_id, secret_kind, generation=None):
 
 
 class DelegatedCredentialResolver:
-    """Resolve only one active grant for its dedicated worker principal."""
+    """Resolve only one active grant for its dedicated worker principal.
 
-    def __init__(self, key_ring):
+    ``credential_model`` names the envelope table (the report scheduler's by
+    default; BI alerts use their own with a distinct AAD schema, so an
+    envelope of one feature never decrypts for the other).
+    """
+
+    def __init__(self, key_ring, credential_model='CDEReportDelegatedCredential',
+                 aad_schema=AAD_SCHEMA):
         self.key_ring = key_ring
+        self.credential_model = credential_model
+        self.aad_schema = aad_schema
 
     def __call__(self, locator, context, _purpose, principal):
-        from pgadmin.model import CDEReportDelegatedCredential
+        import pgadmin.model as models
 
-        row = CDEReportDelegatedCredential.query.filter_by(id=locator).first()
+        row = getattr(models, self.credential_model).query.filter_by(
+            id=locator).first()
         delegation = row.delegation if row is not None else None
         now = _now()
         if row is None or delegation is None or (
@@ -97,24 +108,32 @@ class DelegatedCredentialResolver:
             )
         return self.key_ring.decrypt(
             row.encrypted_value,
-            _aad(delegation, row.id, row.secret_kind),
+            _aad(delegation, row.id, row.secret_kind, schema=self.aad_schema),
         )
 
 
 class DatabaseReportSchedulerRepository:
-    """Database transitions for grants and at-most-once occurrences."""
+    """Database transitions for grants and at-most-once occurrences.
 
-    def __init__(self):
-        from pgadmin.model import (
-            CDEReportDelegatedCredential,
-            CDEReportDelegation,
-            CDEReportScheduleOccurrence,
-            db,
-        )
-        self.db = db
-        self.credential = CDEReportDelegatedCredential
-        self.delegation = CDEReportDelegation
-        self.occurrence = CDEReportScheduleOccurrence
+    ``models`` names the three tables (credential, delegation, occurrence)
+    in ``pgadmin.model``; BI alerts pass their identically shaped tables so
+    claim, lease, heartbeat and recovery are this one implementation.
+    """
+
+    REPORT_MODELS = {
+        'credential': 'CDEReportDelegatedCredential',
+        'delegation': 'CDEReportDelegation',
+        'occurrence': 'CDEReportScheduleOccurrence',
+    }
+
+    def __init__(self, models=None):
+        import pgadmin.model as model_module
+
+        names = models or self.REPORT_MODELS
+        self.db = model_module.db
+        self.credential = getattr(model_module, names['credential'])
+        self.delegation = getattr(model_module, names['delegation'])
+        self.occurrence = getattr(model_module, names['occurrence'])
 
     def get_grant(self, user_id, endpoint_id, report_id):
         return self.delegation.query.filter_by(
@@ -204,12 +223,15 @@ class DatabaseReportSchedulerRepository:
             self.occurrence.scheduled_for.desc()
         ).limit(limit).all()
 
-    def claim(self, worker_id, lease_seconds):
+    def claim(self, worker_id, lease_seconds, occurrence_id=None):
         now = _now()
-        row = self.occurrence.query.filter(
+        query = self.occurrence.query.filter(
             self.occurrence.state == 'scheduled',
             self.occurrence.scheduled_for <= now,
-        ).order_by(self.occurrence.scheduled_for).first()
+        )
+        if occurrence_id is not None:
+            query = query.filter(self.occurrence.id == occurrence_id)
+        row = query.order_by(self.occurrence.scheduled_for).first()
         if row is None:
             return None
         token = secrets.token_urlsafe(32)
@@ -293,7 +315,18 @@ class DatabaseReportSchedulerRepository:
 
 
 class ReportSchedulerService:
-    """Create owner grants and construct exact worker endpoint authority."""
+    """Create owner grants and construct exact worker endpoint authority.
+
+    The credential, lease and cron machinery is subject-agnostic.  A feature
+    with its own delegation tables (BI alerts) subclasses this, names its
+    resolver, envelope schema and credential model, and supplies the
+    subject-specific ``authorize``/``_schedule_for`` hooks; nothing else is
+    duplicated.
+    """
+
+    resolver_id = RESOLVER_ID
+    aad_schema = AAD_SCHEMA
+    credential_model = 'CDEReportDelegatedCredential'
 
     def __init__(
         self, endpoint_service, security_service, semantic_service,
@@ -313,7 +346,14 @@ class ReportSchedulerService:
             max_lateness_seconds, 'scheduler lateness seconds', 604800
         )
         security_service.secrets.register_resolver(
-            RESOLVER_ID, DelegatedCredentialResolver(self.key_ring)
+            self.resolver_id, DelegatedCredentialResolver(
+                self.key_ring, self.credential_model, self.aad_schema
+            )
+        )
+
+    def _envelope_scope(self, delegation, credential_id, secret_kind):
+        return _aad(
+            delegation, credential_id, secret_kind, schema=self.aad_schema
         )
 
     @property
@@ -331,32 +371,14 @@ class ReportSchedulerService:
         }
 
     def authorize(self, server, model_id, report_id, expires_in_days=30):
-        if not self.available:
-            raise ReportSchedulerUnavailable(
-                'report worker key authority is not configured'
-            )
-        if isinstance(expires_in_days, bool) or not isinstance(
-                expires_in_days, int) or not 1 <= expires_in_days <= 365:
-            raise ReportSchedulerError(
-                'report delegation expiry must be 1 to 365 days'
-            )
+        self._require_authority(expires_in_days)
         endpoint = server.endpoint_profile
         user_id = server.user_id
         record, model, report, schedule = self._definition(
             user_id, endpoint.id, model_id, report_id
         )
-        context, endpoint_payload, _root = self.endpoint_service.workspace(
-            server
-        )
-        route = endpoint_payload['route']
-        endpoint_generation = (
-            endpoint.profile_generation or endpoint.cache_namespace
-        )
-        existing = self.repository.get_grant(
-            user_id, endpoint.id, report_id
-        )
-        now = _now()
-        if existing is None:
+
+        def create(now):
             from pgadmin.model import CDEReportDelegation
             row = CDEReportDelegation(
                 id=str(uuid.uuid4()), user_id=user_id,
@@ -366,6 +388,49 @@ class ReportSchedulerService:
                 created_at=now,
             )
             row.endpoint = endpoint
+            return row
+
+        def fill(row):
+            row.model_id = model_id
+            row.model_revision = record['revision']
+            row.definition_digest = self._definition_digest(model)
+            row.delivery_scope = _json(schedule['delivery'])
+            row.schedule_id = schedule['id']
+
+        row = self._delegate(
+            server,
+            lambda: self.repository.get_grant(
+                user_id, endpoint.id, report_id
+            ),
+            create, fill, expires_in_days,
+        )
+        return self.present_grant(row)
+
+    def _require_authority(self, expires_in_days):
+        if not self.available:
+            raise ReportSchedulerUnavailable(
+                'report worker key authority is not configured'
+            )
+        if isinstance(expires_in_days, bool) or not isinstance(
+                expires_in_days, int) or not 1 <= expires_in_days <= 365:
+            raise ReportSchedulerError(
+                'report delegation expiry must be 1 to 365 days'
+            )
+
+    def _delegate(self, server, find, create, fill, expires_in_days):
+        """Capture the owner's credentials into one revocable delegation."""
+        endpoint = server.endpoint_profile
+        context, endpoint_payload, _root = self.endpoint_service.workspace(
+            server
+        )
+        route = endpoint_payload['route']
+        endpoint_generation = (
+            endpoint.profile_generation or endpoint.cache_namespace
+        )
+        existing = find()
+        now = _now()
+        if existing is None:
+            row = create(now)
         else:
             row = existing
             row.credential_generation += 1
@@ -375,11 +440,7 @@ class ReportSchedulerService:
                 row.primary_secret_kind):
             row.primary_secret_kind = 'database_password'
         row.endpoint_generation = endpoint_generation
-        row.model_id = model_id
-        row.model_revision = record['revision']
-        row.definition_digest = self._definition_digest(model)
-        row.delivery_scope = _json(schedule['delivery'])
-        row.schedule_id = schedule['id']
+        fill(row)
         row.state = 'active'
         row.updated_at = now
         row.expires_at = now + timedelta(days=expires_in_days)
@@ -396,7 +457,7 @@ class ReportSchedulerService:
             if rollback is not None:
                 rollback.rollback()
             raise
-        return self.present_grant(row)
+        return row
 
     def revoke(self, user_id, endpoint_id, report_id):
         row = self._owned_grant(user_id, endpoint_id, report_id)
@@ -416,17 +477,15 @@ class ReportSchedulerService:
         for row in self.repository.active_grants():
             if row.expires_at <= now:
                 self.repository.expire(row, now)
+                self._expired(row)
                 counts['expired'] += 1
                 continue
             try:
-                _record, _model, _report, schedule = self._definition(
-                    row.user_id, row.endpoint_id, row.model_id,
-                    row.report_id, row=row,
-                )
+                schedule = self._schedule_for(row)
             except ReportSchedulerError:
                 continue
             latest = self.repository.latest(row.id)
-            base = latest.scheduled_for if latest else row.created_at
+            base = self._schedule_base(row, latest)
             for due in self._due_instants(schedule, base, now):
                 late = (now - due).total_seconds()
                 state = 'failed' if late > self.max_lateness_seconds else (
@@ -441,7 +500,37 @@ class ReportSchedulerService:
                     counts['missed' if state == 'failed' else 'scheduled'] += 1
         return counts
 
-    def claim(self, worker_id):
+    def _schedule_for(self, row):
+        """The cron schedule of one active delegation (or a refusal)."""
+        return self._definition(
+            row.user_id, row.endpoint_id, row.model_id, row.report_id,
+            row=row,
+        )[3]
+
+    @staticmethod
+    def _schedule_base(row, latest):
+        """The instant after which cron instants become due."""
+        return latest.scheduled_for if latest else row.created_at
+
+    def _expired(self, row):
+        """Hook: a delegation just expired (no-op for reports)."""
+
+    @classmethod
+    def next_instants(cls, schedule, after, count):
+        """The next ``count`` instants (naive UTC) strictly after ``after``."""
+        cls._validate_cron(schedule)
+        zone = ZoneInfo(schedule['timezone'])
+        iterator = croniter(
+            schedule['expression'],
+            after.replace(tzinfo=timezone.utc).astimezone(zone),
+        )
+        return [
+            iterator.get_next(datetime).astimezone(timezone.utc).replace(
+                tzinfo=None)
+            for _index in range(count)
+        ]
+
+    def claim(self, worker_id, occurrence_id=None):
         if not self.available:
             raise ReportSchedulerUnavailable(
                 'report worker key authority is not configured'
@@ -449,7 +538,9 @@ class ReportSchedulerService:
         if not isinstance(worker_id, str) or not worker_id.strip() or (
                 len(worker_id) > 128):
             raise ReportSchedulerError('worker identity is invalid')
-        return self.repository.claim(worker_id.strip(), self.lease_seconds)
+        return self.repository.claim(
+            worker_id.strip(), self.lease_seconds, occurrence_id
+        )
 
     def occurrences(self, user_id, endpoint_id, report_id=None):
         return [self.present_occurrence(row) for row in self.repository.list(
@@ -556,8 +647,8 @@ class ReportSchedulerService:
             raise ReportSchedulerUnavailable(
                 'report worker key authority is not configured'
             )
-        from pgadmin.model import CDEReportDelegatedCredential, db
-        rows = CDEReportDelegatedCredential.query.all()
+        db = self.repository.db
+        rows = self.repository.credential.query.all()
         rotated = 0
         try:
             for item in rows:
@@ -565,7 +656,7 @@ class ReportSchedulerService:
                     continue
                 item.encrypted_value = self.key_ring.rotate(
                     item.encrypted_value,
-                    _aad(
+                    self._envelope_scope(
                         item.delegation, item.id, item.secret_kind
                     ),
                 )
@@ -634,7 +725,9 @@ class ReportSchedulerService:
                 expected_kind=secret_kind,
             ) as lease:
                 encrypted = lease.use(lambda value: self.key_ring.encrypt(
-                    value, _aad(row, credential_id, secret_kind)
+                    value, self._envelope_scope(
+                        row, credential_id, secret_kind
+                    )
                 ))
             credentials.append({
                 'id': credential_id, 'delegation_id': row.id,
@@ -682,7 +775,9 @@ class ReportSchedulerService:
             credential_id = str(uuid.uuid4())
             try:
                 envelope = self.key_ring.encrypt(
-                    plaintext, _aad(row, credential_id, secret_kind)
+                    plaintext, self._envelope_scope(
+                        row, credential_id, secret_kind
+                    )
                 )
             finally:
                 for index in range(len(plaintext)):
@@ -704,7 +799,7 @@ class ReportSchedulerService:
                 endpoint_mode=row.endpoint.endpoint_mode,
                 secret_kind=credential.secret_kind,
                 storage_kind='cdeadmin-worker-envelope',
-                resolver_id=RESOLVER_ID,
+                resolver_id=self.resolver_id,
                 locator=credential.id,
                 allowed_purposes=frozenset({'connect'}),
                 authority_scope='legacy_engine_auth',

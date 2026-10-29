@@ -1,22 +1,20 @@
 """Native relational facts projected through the paired DDN graph renderer."""
 import hashlib
 import json
+from . import ddn_source as ddn
 from .firebird_catalog_export import native_metadata, MAX_DDN_UNITS, MAX_BYTES
+from . import firebird_physical as physical
 from ..providers.firebird.column_type_metadata import type_editor_values
 from ..providers.firebird.columns import data_type
 from ..sdk.relational import RelationalClientError
 
 
 def build_diagram(resources, provenance):
+    module = 'scratchrobin.firebird.relations'
     def quoted(value):
         return json.dumps(value, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
     def key(identity):
         return 'n_' + hashlib.sha256(identity.encode()).hexdigest()
-    def metadata(identity, native=None):
-        values = {'resource_id': identity}
-        if native is not None:
-            values['native_json'] = quoted(native)
-        return 'x_record: {' + ','.join(name + ':' + quoted(value) for name, value in values.items()) + '};'
     relations = [row for row in resources if row['resource_kind'] in {'table', 'view'}]
     if not relations:
         return None
@@ -27,6 +25,7 @@ def build_diagram(resources, provenance):
     domains = {row['display_name']: native_metadata(row) for row in resources if row['resource_kind'] == 'domain'}
     indexes = {row['display_name']: native_metadata(row) for row in resources if row['resource_kind'] == 'index'}
     warnings, declarations, edges, mapping = [], [], [], {}
+    groups, catalog = physical.forward(resources), physical.resource_map(resources)
     children = {}
     for item in resources:
         if item['resource_kind'] == 'column':
@@ -58,23 +57,25 @@ def build_diagram(resources, provenance):
                 warnings.append('Array bounds unavailable: ' + name + '.' + column['display_name'])
             if label is None:
                 warnings.append('Native type unavailable: ' + name + '.' + column['display_name'])
-            props = ['uid: ' + quoted(prefix + column['resource_id']) + ';']
-            if array:
-                props.append('shape: array;')
-            if label is not None:
-                props.append('datatype: ' + quoted(label) + ';')
-            # Domain nullability can add restrictions to the column flag. Do
-            # not assert nullable=true from an absent relation-field flag.
-            if str(facts.get('not_null')) == '1' or str(facts.get('domain_not_null')) == '1':
-                props.append('nullable: false;')
-            if facts.get('description'):
-                props.append('description: ' + quoted(facts['description']) + ';')
-            fields.append('field ' + key(column['resource_id']) + ' ' + quoted(column['display_name']) +
-                          ' {' + ' '.join(props) + '}')
+            props = {}
+            if array: props['shape'] = 'array'
+            if label is not None: props['datatype'] = label
+            if str(facts.get('not_null')) == '1' or str(facts.get('domain_not_null')) == '1': props['nullable'] = False
+            if facts.get('description'): props['description'] = facts['description']
+            fields.append(ddn.native_field(key(column['resource_id']), column['display_name'],
+                prefix + column['resource_id'], props, physical.column_values(column['display_name'])))
             mapping[key(column['resource_id'])] = column['resource_id']
-        declarations.append('object ' + key(identity) + ' ' + quoted(name) + ' {kind: ' + row['resource_kind'] +
-                            '; uid: ' + quoted(prefix + identity) + '; ' + metadata(identity, {**native, 'diagram_columns': [{'resource_id': col['resource_id'], 'native': native_metadata(col)} for col in columns]}) +
-                            ' fields {' + '\n'.join(fields) + '} }')
+        captured = {**native, 'diagram_columns': [{'resource_id': col['resource_id'], 'native': native_metadata(col)} for col in columns]}
+        owned = []
+        for item in groups.get(name, []) if row['resource_kind'] == 'table' else []:
+            child = item['row']['resource_id']
+            owned.append({'identity': key(child), 'title': item['row']['display_name'], 'role': item['role'],
+                'uid': prefix + child, 'values': {'resource_id': child, 'native_kind': item['row']['resource_kind'],
+                    'native_json': quoted(native_metadata(item['row'])), **item['values']}})
+            mapping[key(child)] = child
+        declarations.append(ddn.relation_object(key(identity), name, row['resource_kind'], prefix + identity,
+            {'resource_id': identity, 'native_json': quoted(captured)}, fields, module, owned,
+            physical.table_values(name) if row['resource_kind'] == 'table' else None))
         mapping[key(identity)] = identity
     for row in resources:
         facts = native_metadata(row)
@@ -95,29 +96,27 @@ def build_diagram(resources, provenance):
         source_id, target_id = by_name[source_name]['resource_id'], by_name[target_name]['resource_id']
         identity = row['resource_id']
         label = row['display_name'] + ' (' + ', '.join(source_columns) + ') -> (' + ', '.join(target_columns) + ')'
-        declarations.append('relation ' + key(identity) + ' ' + quoted(label) + ' @' + key(source_id) + ' -> @' + key(target_id) +
-                            ' {kind: ref; enforcement: database; uid: ' + quoted(prefix + identity) + '; ' +
-                            metadata(identity, {**facts, 'source_columns': source_columns, 'target_columns': target_columns}) + '}')
-        edges.append((source_id, target_id)); mapping[key(identity)] = identity
-    callouts = {key(row['resource_id']): number for number, row in enumerate(
-        [row for row in resources if row['resource_kind'] == 'constraint' and key(row['resource_id']) in mapping], 1)}
+        declarations.append(ddn.relation_edge(key(identity), label, key(source_id), key(target_id),
+            prefix + identity, {'resource_id': identity, 'native_json': quoted({**facts,
+                'source_columns': source_columns, 'target_columns': target_columns})}, module,
+            physical.edge_values(row, catalog)))
+        edges.append((key(identity), source_id, target_id)); mapping[key(identity)] = identity
     views, blocks = [], []
     for start in range(0, len(relations), 25):
         selected = {row['resource_id'] for row in relations[start:start + 25]}
-        selected.update(target for source, target in edges if source in selected)
+        selected.update(target for _, source, target in edges if source in selected)
         if len(selected) > 100:
             raise ValueError('Relational diagram view exceeds 100 objects; select a smaller branch')
         if len(views) >= 64:
             raise ValueError('Relational diagram exceeds 64 views; select a smaller branch')
         view_id = 'relations_' + str(len(views) + 1)
         label = 'Firebird relations — page ' + str(len(views) + 1)
-        blocks.append('view ' + view_id + ' ' + quoted(label) + ' {data: [@relations]; select: [' +
-                      ','.join('@relations.' + key(identity) for identity in sorted(selected)) +
-                      ']; projection {kind: graph; profile: "ddn@1";} layout {algorithm: layered; gap: 240px; row_gap: 160px;} legend {mode: numbers; placement: right; keys: ' + quoted(callouts) + ';} publication {size: content; fit: none;} }')
+        blocks.append(ddn.graph_view(view_id, label, [key(identity) for identity in sorted(selected)],
+            [(edge, key(source), key(target)) for edge, source, target in edges]))
         views.append({'id': view_id, 'label': label, 'entry': 'relations.ddn'})
-    source = 'ddn "0.6"; module "scratchrobin.firebird.relations";\ndata relations {\n' + '\n'.join(declarations) + '\n}\n' + '\n'.join(blocks)
+    source = ddn.header(module) + '\n'.join(declarations + blocks)
     if len(source.encode('utf-16-le')) // 2 > MAX_DDN_UNITS or len(source.encode()) > MAX_BYTES:
         raise ValueError('Relational diagram exceeds the paired DDN document limit; select a smaller branch')
-    return {'snapshot': {'format': 'ddn-workspace@1', 'entry': 'relations.ddn', 'view': views[0]['id'], 'files': {'relations.ddn': source}},
+    return {'snapshot': {'format': 'ddn-source-workspace@1', 'entry': 'relations.ddn', 'view': views[0]['id'], 'files': {'relations.ddn': source}},
             'views': views, 'resource_mapping': mapping, 'warnings': warnings,
             'filename': 'firebird-relations.ddn', 'deployment': 'diagram-only', 'foreign_keys': len(edges)}

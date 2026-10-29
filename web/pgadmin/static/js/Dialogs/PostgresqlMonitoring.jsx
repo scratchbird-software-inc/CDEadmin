@@ -55,10 +55,10 @@ export default function PostgresqlMonitoring({serverId, targetId, policyMode=fal
         if(!policyMode || engineMode) {
           const publication = (await getApiInstance().get(definitionEndpoint)).data.data;
           if(publication.state === 'published') {
-            const {viewer} = await loadDDNLibraries();
+            const libraries = await loadDDNLibraries();
             const scope = engineMode ? 'engine' : targetId ? 'database' : 'server';
             const live = engineMode ? postgresqlFleetFiles(response.data.data) : postgresqlDashboardFiles(response.data.data, 'PostgreSQL dashboard', scope);
-            published = bindPublication(viewer, publication.snapshot, scope, live, 'postgresql');
+            published = await bindPublication(libraries, publication.snapshot, scope, live, 'postgresql');
           }
         }
         if(active) { setSnapshot(response.data.data); setPublishedView(published); setPollError(''); }

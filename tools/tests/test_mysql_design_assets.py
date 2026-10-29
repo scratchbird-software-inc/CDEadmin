@@ -8,8 +8,8 @@ from pgadmin.cdeadmin.workspace.assets import ProjectAssetService, ProjectAssetE
 from pgadmin.cdeadmin.workspace.firebird_design_assets import NativeDesignAssets
 
 SCOPE={'endpoint_id':'endpoint','database_target_id':'db'}
-SNAPSHOT={'format':'ddn-workspace@1','entry':'relations.ddn','view':'relations',
- 'files':{'relations.ddn':'ddn "0.6"; module "scratchrobin.mysql.relations"; data relations {} view relations {}'}}
+SNAPSHOT={'format':'ddn-source-workspace@1','entry':'relations.ddn','view':'relations',
+ 'files':{'relations.ddn':'version ddn-next-1\nerd relations\n    with\n        id relations\n    Table\n'}}
 
 
 def test_native_design_revision_cas_baseline_and_engine_namespaces():

@@ -212,13 +212,13 @@ inconsistent or incompatible intake rather than silently testing an old copy.
 Build from an isolated source snapshot if current distributed artifacts are stale.
 
 Original migration finding: ScratchRobin's library.js expected runtime
-0.5.0-draft.2 and DDNDesigner 0.1.0-preview.1. The sister project is currently
-0.8.0, with a unified shipping tool instead of the old separate Designer
-bundle. Its current licensing/notices also differ from the old distribution.
+0.5.0-draft.2 and DDNDesigner 0.1.0-preview.1. The sister project has since moved
+to the standalone ``ddn-next-1`` language and runtime, with a unified shipping
+tool instead of the old separate Designer bundle. Its current licensing/notices also differ from the old distribution.
 A paired runtime/tool adapter migration and refreshed provenance were required;
 changing version strings or replacing just the viewer would not qualify it.
 
-The current implementation uses the 0.8.0 public runtime and unified tool.
+The current implementation uses the ``ddn-next-1`` public runtime and unified tool.
 ``tools/refresh_ddn.py`` captures/rebuilds them together outside the sister
 checkout and records source/artifact hashes. Webpack invokes that gate; direct
 test runs still require explicit intake. The previous distribution is retired.

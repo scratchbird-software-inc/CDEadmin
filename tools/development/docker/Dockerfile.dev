@@ -9,7 +9,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /cdeadmin
-COPY tools/refresh_ddn.py /cdeadmin/tools/refresh_ddn.py
+COPY tools/refresh_ddn.py tools/ddn_intake.py tools/ddn_toolchain.py /cdeadmin/tools/
+ARG CDEADMIN_DDN_SOURCE_URL
+ENV CDEADMIN_DDN_SOURCE_URL=${CDEADMIN_DDN_SOURCE_URL}
 COPY tools/dependency_patches/ /cdeadmin/tools/dependency_patches/
 COPY tools/development/docker/ /cdeadmin/tools/development/docker/
 COPY web/ /cdeadmin/web/
@@ -66,7 +68,9 @@ RUN python3 -m venv /cdeadmin/.venv \
 COPY --from=frontend /cdeadmin/web /cdeadmin/web
 COPY --from=frontend /cdeadmin/web/pgadmin/static/js/generated /cdeadmin/frontend-generated
 COPY --from=frontend /cdeadmin/web/pgadmin/static/css /cdeadmin/frontend-css
-COPY tools/refresh_ddn.py /cdeadmin/tools/refresh_ddn.py
+COPY tools/refresh_ddn.py tools/ddn_intake.py tools/ddn_toolchain.py /cdeadmin/tools/
+ARG CDEADMIN_DDN_SOURCE_URL
+ENV CDEADMIN_DDN_SOURCE_URL=${CDEADMIN_DDN_SOURCE_URL}
 COPY tools/development/docker/ /cdeadmin/tools/development/docker/
 RUN cp /cdeadmin/tools/development/docker/entrypoint.dev.sh /entrypoint.dev.sh
 

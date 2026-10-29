@@ -134,16 +134,24 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(run.call_args_list[2].args[0],
                          [self.python, '-m', 'pip', 'check'])
 
-    def test_frontend_preserves_lockfile(self):
+    def test_frontend_refreshes_ddn_and_preserves_lockfile(self):
         with patch.object(manage, 'run') as run:
             manage.main(['frontend'])
-        self.assertEqual(run.call_args_list[0].args,
+        self.assertEqual(run.call_args_list[0].args[0],
+                         [sys.executable, self.root / 'tools/refresh_ddn.py'])
+        self.assertEqual(run.call_args_list[1].args,
                          (['corepack', 'yarn', 'install', '--immutable'],
                           self.root / 'web'))
-        self.assertEqual(run.call_args_list[1].args[0],
+        self.assertEqual(run.call_args_list[2].args[0],
                          ['corepack', 'yarn', 'webpacker'])
-        self.assertEqual(run.call_args_list[1].args[2]['NODE_ENV'],
+        self.assertEqual(run.call_args_list[2].args[2]['NODE_ENV'],
                          'production')
+
+    def test_ddn_refreshes_snapshot(self):
+        with patch.object(manage, 'run') as run:
+            manage.main(['ddn'])
+        run.assert_called_once_with(
+            [sys.executable, self.root / 'tools/refresh_ddn.py'])
 
     def test_native_non_linux_is_rejected(self):
         with patch.object(manage.platform, 'system', return_value='Darwin'), \

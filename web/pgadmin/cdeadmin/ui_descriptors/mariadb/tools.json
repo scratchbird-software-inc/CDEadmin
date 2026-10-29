@@ -1,0 +1,24 @@
+{
+  "schema": "cdeadmin.ui-tools.v1",
+  "engine": "mariadb",
+  "notes": "Tool openers for this engine. Lifecycle entries come from the family forms and tier 2/3 operations from operations.json; keep only openers here.",
+  "tools": [
+    {
+      "command_id": "endpoint.{engine_id}.bi_questions",
+      "scope": "endpoint",
+      "label": "BI questions...",
+      "description": "Collections, the visual query builder, saved questions and their revision history.",
+      "handler": "open_tool",
+      "slot": "after_verify",
+      "icon": "tool.data-explorer",
+      "group": "information",
+      "priority": 72,
+      "arguments": {
+        "surface": "bi.questions"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    }
+  ]
+}

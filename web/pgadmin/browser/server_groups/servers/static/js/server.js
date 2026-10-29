@@ -17,6 +17,9 @@ import { AllPermissionTypes } from '../../../../static/js/constants';
 import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
 import {openProviderObject} from '../../../../static/js/ProviderContextMenu';
 import {
+  LEGACY_REGISTRATION_RETIRED, reportServerEditorFailure, tryOpenServerForm,
+} from '../../../../static/js/ProviderObjectEditor';
+import {
   beforeOpenProviderDatabase, providerEndpointSessionReady,
   isProviderRegistrationWorkspace,
 } from
@@ -400,13 +403,32 @@ define('pgadmin.node.server', [
             connect_now: profile.workflow !== 'provider_endpoint',
             cde_verify_now: profile.workflow === 'provider_endpoint',
           };
-          pgAdmin.Browser.Node.callbacks.show_obj_properties.call(
-            this, {
-              action: 'create', item, initialData,
-              panelTitle: intentTitles[registrationIntent] ||
-                intentTitles.endpoint,
-            }
+          const panelTitle = intentTitles[registrationIntent] ||
+            intentTitles.endpoint;
+          const legacy = () => pgAdmin.Browser.Node.callbacks.show_obj_properties.call(
+            this, {action: 'create', item, initialData, panelTitle}
           );
+          // Descriptor Server editor for the plain endpoint intent; every other
+          // intent, and engines whose server form is not complete, keep the legacy dialog.
+          if(registrationIntent !== 'endpoint') {
+            legacy();
+            return false;
+          }
+          // Retired engines (see LEGACY_REGISTRATION_RETIRED): no legacy fallback, report instead.
+          // LEGACY-FALLBACK (restore by uncommenting and removing the engine from the set):
+          //   .then((opened) => { if(!opened) legacy(); }).catch(() => legacy());
+          const retired = LEGACY_REGISTRATION_RETIRED.has(profile.engine_id);
+          tryOpenServerForm({
+            item, mode: 'create', engine: profile.engine_id, profileId: profile.profile_id,
+            initialData, intent: registrationIntent, verifyNow: initialData.cde_verify_now, panelTitle,
+          }).then((opened) => {
+            if(opened) return;
+            if(retired) reportServerEditorFailure(profile.engine_id, gettext('server form unavailable'));
+            else legacy();
+          }).catch((error) => {
+            if(retired) reportServerEditorFailure(profile.engine_id, error?.message || String(error));
+            else legacy();
+          });
           return false;
         },
         browse_cde_endpoint: function(args) {

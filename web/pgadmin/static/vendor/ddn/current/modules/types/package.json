@@ -1,0 +1,29 @@
+{
+  "name": "@ddn/types",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Declaration-only contracts for the new DDN language and standalone utilities.",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts"
+    },
+    "./core": {
+      "types": "./src/core.d.ts"
+    },
+    "./scene": {
+      "types": "./src/scene.d.ts"
+    },
+    "./browser": {
+      "types": "./src/browser.d.ts"
+    }
+  },
+  "files": [
+    "src",
+    "contract-manifest.json",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "license": "GPL-2.0-or-later"
+}

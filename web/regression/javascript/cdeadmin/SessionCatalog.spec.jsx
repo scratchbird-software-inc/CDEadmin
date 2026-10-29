@@ -6,7 +6,7 @@ const Component = withTheme(SessionCatalog);
 const catalog = {resources:[{resource_id:'temp',resource_kind:'table',display_name:'Quoted ü',display_path:['db','pg_temp_3','Quoted ü'],
   native:{session_local:true,children:{pg_attribute:[{attname:'Exact column'}]}}}],
 observations:[{section:'pg_subscription',available:false}],
-document:{snapshot:{format:'ddn-workspace@1',entry:'catalog.ddn',view:'inventory_1',files:{'catalog.ddn':'native source'}},
+document:{snapshot:{format:'ddn-source-workspace@1',entry:'catalog.ddn',view:'inventory_1',files:{'catalog.ddn':'native source'}},
   views:[{id:'inventory_1',label:'Inventory'}]}};
 
 describe('Retained-session native catalog', () => {

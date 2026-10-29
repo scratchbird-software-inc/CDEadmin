@@ -23,8 +23,8 @@ def test_graphical_maria_type_edit_reaches_native_catalog_without_execution():
     table = next(row for row in mapped.values() if row['fields'])
     # Edit the public DDN field rather than its embedded native CREATE definition.
     for name, source in desired['files'].items():
-        assert 'datatype:"bigint"' in source
-        desired['files'][name] = source.replace('datatype:"bigint"', 'datatype:"UUID"')
+        assert 'datatype "bigint"' in source
+        desired['files'][name] = source.replace('datatype "bigint"', 'datatype "UUID"')
     value = handoff(result['snapshot'], original, desired, engine='mariadb')
     before, after = [read_catalog(value[key], engine='mariadb') for key in ('baseline', 'desired')]
     identity = table['resource_id']

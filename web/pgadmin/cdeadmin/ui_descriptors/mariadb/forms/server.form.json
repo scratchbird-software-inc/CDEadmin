@@ -5,7 +5,7 @@
   "resource_kinds": [
     "server"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "MariaDB",
   "omitted_tabs": [],
   "gaps": [],
@@ -15,6 +15,7 @@
       "label": "Connection profile name",
       "tab": "Connection",
       "control": "text",
+      "backend_field_id": "name",
       "required": true
     },
     {
@@ -22,6 +23,7 @@
       "label": "Server host or address",
       "tab": "Connection",
       "control": "text",
+      "backend_field_id": "host",
       "required": true
     },
     {
@@ -29,15 +31,42 @@
       "label": "Server port",
       "tab": "Connection",
       "control": "number",
+      "backend_field_id": "port",
       "required": true,
       "min": 1,
       "max": 65535
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Maintenance database",
+      "control": "text",
+      "required": false,
+      "help": "Database the profile connects to first; leave empty for the engine default."
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
     },
     {
       "field_id": "username",
       "label": "User or principal",
       "tab": "Authentication",
       "control": "text",
+      "backend_field_id": "username",
       "required": false
     },
     {
@@ -45,6 +74,7 @@
       "label": "Password",
       "tab": "Authentication",
       "control": "password",
+      "backend_field_id": "cde_secret_password",
       "required": false
     },
     {
@@ -52,6 +82,7 @@
       "label": "Save default connection credentials",
       "tab": "Authentication",
       "control": "boolean",
+      "backend_field_id": "save_password",
       "required": false,
       "default": false,
       "help": "Store the credentials for the default user in CDEadmin. Credentials entered while connecting as another user are never stored as the default credentials."
@@ -61,6 +92,7 @@
       "label": "Require TLS",
       "tab": "SSL/TLS",
       "control": "boolean",
+      "backend_field_id": "cde_route_ssl",
       "required": false,
       "default": false
     },
@@ -69,6 +101,7 @@
       "label": "Certificate authority file",
       "tab": "SSL/TLS",
       "control": "file",
+      "backend_field_id": "cde_route_ssl_ca",
       "required": false
     },
     {
@@ -76,6 +109,7 @@
       "label": "Certificate authority directory",
       "tab": "SSL/TLS",
       "control": "file",
+      "backend_field_id": "cde_route_ssl_capath",
       "required": false
     },
     {
@@ -83,6 +117,7 @@
       "label": "Client certificate",
       "tab": "SSL/TLS",
       "control": "file",
+      "backend_field_id": "cde_route_ssl_cert",
       "required": false
     },
     {
@@ -90,6 +125,7 @@
       "label": "Client key",
       "tab": "SSL/TLS",
       "control": "file",
+      "backend_field_id": "cde_route_ssl_key",
       "required": false
     },
     {
@@ -97,6 +133,7 @@
       "label": "Certificate revocation list",
       "tab": "SSL/TLS",
       "control": "file",
+      "backend_field_id": "cde_route_ssl_crlpath",
       "required": false
     },
     {
@@ -104,6 +141,7 @@
       "label": "TLS cipher list",
       "tab": "SSL/TLS",
       "control": "text",
+      "backend_field_id": "cde_route_ssl_cipher",
       "required": false
     },
     {
@@ -111,6 +149,7 @@
       "label": "Verify server certificate",
       "tab": "SSL/TLS",
       "control": "boolean",
+      "backend_field_id": "cde_route_ssl_verify_cert",
       "required": false,
       "default": true
     },
@@ -119,6 +158,7 @@
       "label": "TLS versions (comma separated)",
       "tab": "SSL/TLS",
       "control": "text",
+      "backend_field_id": "cde_route_tls_version",
       "required": false
     },
     {
@@ -126,6 +166,7 @@
       "label": "Transaction isolation",
       "tab": "Advanced",
       "control": "select",
+      "backend_field_id": "cde_route_transaction_isolation",
       "group": "Transaction defaults",
       "required": false,
       "options": [
@@ -152,6 +193,7 @@
       "label": "MariaDB backup and restore workspace",
       "tab": "Advanced",
       "control": "text",
+      "backend_field_id": "cde_route_tool_workspace",
       "group": "Timeouts and utilities",
       "required": false,
       "help": "Absolute non-root directory explicitly granted to MariaDB logical backup artifacts."
@@ -161,6 +203,7 @@
       "label": "MariaDB tool timeout (seconds)",
       "tab": "Advanced",
       "control": "number",
+      "backend_field_id": "cde_route_tool_timeout",
       "group": "Timeouts and utilities",
       "required": false,
       "default": 3600,
@@ -172,6 +215,7 @@
       "label": "Unix socket",
       "tab": "Engine",
       "control": "file",
+      "backend_field_id": "cde_route_unix_socket",
       "required": false
     },
     {
@@ -179,6 +223,7 @@
       "label": "Connect timeout (seconds)",
       "tab": "Engine",
       "control": "number",
+      "backend_field_id": "cde_route_connection_timeout",
       "required": false,
       "default": 10,
       "min": 1,
@@ -189,6 +234,7 @@
       "label": "Read timeout (seconds)",
       "tab": "Engine",
       "control": "number",
+      "backend_field_id": "cde_route_read_timeout",
       "required": false,
       "min": 1,
       "max": 86400
@@ -198,6 +244,7 @@
       "label": "Write timeout (seconds)",
       "tab": "Engine",
       "control": "number",
+      "backend_field_id": "cde_route_write_timeout",
       "required": false,
       "min": 1,
       "max": 86400
@@ -207,6 +254,7 @@
       "label": "Permit LOAD DATA LOCAL INFILE",
       "tab": "Engine",
       "control": "boolean",
+      "backend_field_id": "cde_route_local_infile",
       "required": false,
       "default": false
     },
@@ -215,6 +263,7 @@
       "label": "Protocol compression",
       "tab": "Engine",
       "control": "boolean",
+      "backend_field_id": "cde_route_compress",
       "required": false,
       "default": false
     },
@@ -224,6 +273,7 @@
       "tab": "Engine",
       "control": "code",
       "language": "text",
+      "backend_field_id": "cde_route_init_command",
       "required": false
     },
     {
@@ -231,6 +281,7 @@
       "label": "Client option file",
       "tab": "Engine",
       "control": "file",
+      "backend_field_id": "cde_route_default_file",
       "required": false
     },
     {
@@ -238,6 +289,7 @@
       "label": "Client option group",
       "tab": "Engine",
       "control": "text",
+      "backend_field_id": "cde_route_default_group",
       "required": false
     },
     {
@@ -245,6 +297,7 @@
       "label": "Authentication plugin directory",
       "tab": "Engine",
       "control": "file",
+      "backend_field_id": "cde_route_plugin_dir",
       "required": false
     },
     {
@@ -252,6 +305,7 @@
       "label": "Autocommit",
       "tab": "Engine",
       "control": "boolean",
+      "backend_field_id": "cde_route_autocommit",
       "required": false,
       "default": false
     },
@@ -260,6 +314,7 @@
       "label": "Connection pool size",
       "tab": "Engine",
       "control": "number",
+      "backend_field_id": "cde_route_pool_size",
       "required": false,
       "min": 1,
       "max": 64
@@ -269,6 +324,7 @@
       "label": "Reset sessions on pool return",
       "tab": "Engine",
       "control": "boolean",
+      "backend_field_id": "cde_route_pool_reset_connection",
       "required": false,
       "default": true
     },
@@ -277,11 +333,47 @@
       "label": "Pool validation interval (ms)",
       "tab": "Engine",
       "control": "number",
+      "backend_field_id": "cde_route_pool_validation_interval",
       "required": false,
       "default": 500,
       "min": 0,
       "max": 3600000
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
     }
   ],
-  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for mariadb-native. Field ids are the registration contract's own. Review tab/group placement."
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for mariadb-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Round-tripped against MariaDB 10.11 (tools/tests/test_ui_descriptor_server_forms.py): draft -> servers-API payload -> persisted route via the registration contract -> live identity -> edit pre-fill. Provider fix: the ssl_verify_cert registration default no longer forces TLS on a route with SSL off."
 }

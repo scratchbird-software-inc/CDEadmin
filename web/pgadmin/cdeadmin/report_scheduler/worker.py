@@ -72,6 +72,10 @@ class ReportSchedulerWorker:
             summary[state] = summary.get(state, 0) + 1
         return summary
 
+    def run_claimed(self, occurrence, token):
+        """Run one already-claimed occurrence (used by run-now actions)."""
+        return self._run_occurrence(occurrence, token)
+
     def _run_occurrence(self, occurrence, token):
         try:
             return self._execute(occurrence, token)

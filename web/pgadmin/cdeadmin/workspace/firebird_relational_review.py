@@ -1,12 +1,23 @@
 """Bridge authoritative relational native facts into ordinary catalog review."""
 from copy import deepcopy
+from . import ddn_source as ddn
 from decimal import Decimal
 import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
-from .firebird_catalog_export import MAX_BYTES, MAX_DDN_UNITS, MAX_FILES, _json
+from .firebird_catalog_export import _json
 from .firebird_catalog_import import read_catalog, _decode, _equal, _SLOTS
+
+
+# Native relation kinds each engine's *_erd.py publishes with a resource_id.
+_KINDS = {
+    'firebird': {'table', 'view', 'column', 'constraint', 'index'},
+    'postgresql': {'table', 'partitioned-table', 'foreign-table', 'view', 'materialized-view', 'constraint', 'index'},
+    'sqlite': {'table', 'view', 'virtual-table', 'fts-table', 'index', 'constraint'},
+    'duckdb': {'table', 'view', 'index', 'constraint'},
+}
 
 
 def _exact_json(value):
@@ -21,26 +32,30 @@ def _exact_json(value):
     return _json(value)
 
 
+_DRAFTS = {}
+
+
+def _draft_key(snapshot, engine):
+    return engine, hashlib.sha256(_json(snapshot).encode('utf-8')).hexdigest()
+
+
 def read_relations(snapshot, *, engine="firebird"):
-    if engine not in {"firebird", "postgresql", "mysql", "mariadb"}:
+    rows, drafts = _read(snapshot, engine)
+    # Physical-schema drafts (new indexes/constraints) are kept beside the rows for handoff().
+    if len(_DRAFTS) > 8:
+        _DRAFTS.clear()
+    _DRAFTS[_draft_key(snapshot, engine)] = drafts
+    return rows
+
+
+def _read(snapshot, engine):
+    if engine not in {"firebird", "postgresql", "mysql", "mariadb", "sqlite", "duckdb"}:
         raise ValueError("Unsupported relational engine")
-    if (not isinstance(snapshot, dict) or set(snapshot) != {'format', 'entry', 'view', 'files'} or
-            snapshot['format'] != 'ddn-workspace@1' or not isinstance(snapshot['files'], dict) or
-            not 1 <= len(snapshot['files']) <= MAX_FILES or not isinstance(snapshot['entry'], str) or
-            not isinstance(snapshot['view'], str) or snapshot['entry'] not in snapshot['files']):
-        raise ValueError('Invalid relational workspace envelope')
-    for name, source in snapshot['files'].items():
-        if (not isinstance(name, str) or not name.endswith('.ddn') or
-                any(part in {'', '.', '..'} for part in name.split('/')) or '\\' in name or '\0' in name or
-                not isinstance(source, str) or len(source.encode('utf-16-le')) // 2 > MAX_DDN_UNITS):
-            raise ValueError('Invalid relational source file')
-    encoded = _json(snapshot)
-    if len(encoded.encode()) > MAX_BYTES:
-        raise ValueError('Relational design exceeds 8 MiB')
+    encoded = ddn.validate_workspace(snapshot, 'relational')
     if not _SLOTS.acquire(timeout=1):
         raise ValueError('Catalog reader is busy; retry shortly')
     try:
-        result = subprocess.run(['node', str(Path(__file__).parent / 'ddn/read_relations.mjs'), engine],
+        result = subprocess.run(['node', ddn.NODE_HEAP_OPTION, str(Path(__file__).parent / 'ddn/read_relations.mjs'), engine],
             input=encoded, text=True, encoding='utf-8', capture_output=True, timeout=20,
             env={key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ})
         if result.returncode:
@@ -52,9 +67,10 @@ def read_relations(snapshot, *, engine="firebird"):
             raise ValueError('Duplicate relational field identity')
         children = []
         for row in rows:
-            if engine in {'firebird', 'postgresql', 'mysql', 'mariadb'}:
+            if engine in {'firebird', 'postgresql', 'mysql', 'mariadb', 'sqlite', 'duckdb'}:
                 row['fields'] = {field['uid']: {**field['properties'], '_label': field['label'],
-                    '_property_names': field['property_names']} for field in parsed['field_records']
+                    '_property_names': field['property_names'], '_physical': field.get('physical', {})}
+                                 for field in parsed['field_records']
                                  if field['parent_resource_id'] == row['resource_id']}
             row['native'] = _decode(row['native_json'])
             if not isinstance(row['native'], dict):
@@ -78,14 +94,50 @@ def read_relations(snapshot, *, engine="firebird"):
         combined = rows + children
         if len({row['resource_id'] for row in combined}) != len(combined):
             raise ValueError('Duplicate relational native identity')
-        return {row['resource_id']: row for row in combined}
+        return {row['resource_id']: row for row in combined}, parsed.get('physical_drafts', [])
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ValueError('Relational reader unavailable') from error
     finally:
         _SLOTS.release()
 
 
-def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new_columns=False, allow_column_renames=False, allow_foreign_keys=False, allow_temporal_history=False):
+def _renamed_id(engine, live, new_name):
+    from .embedded_physical import _resource_id
+    return _resource_id(engine, live['kind'], live['path'][:-1], new_name)
+
+
+def _insert_rows(snapshot, engine, current, rows):
+    """Append new native catalog records beside their owning table's record.
+
+    Only the desired document gains them: the baseline never contained these objects."""
+    import re
+    provenance = current['provenance']
+    for item in rows:
+        owner = current['rows'][item['owner']]['source_location']
+        local = 'o_' + hashlib.sha256(item['resource_id'].encode()).hexdigest()
+        metadata = {'resource_id': item['resource_id'], 'kind': item['kind'], 'path_json': _json(item['path']),
+                    'system': item['system'], 'native_json': _exact_json(item['native'])}
+        uid = engine + ':' + provenance['endpoint_id'] + ':' + provenance['database_target_id'] + ':' + item['resource_id']
+        snapshot['files'][owner['file']] += '\n' + ddn.record_definition(
+            local, item['name'], metadata, module=f'scratchrobin.{engine}.catalog',
+            block=owner['definition_id'].rsplit('.', 1)[0], uid=uid)
+    _shift_count(snapshot, len(rows))
+
+
+def _shift_count(snapshot, delta):
+    import re
+    counted = [(name, match) for name, text in snapshot['files'].items()
+               for match in re.finditer(r'""objects"":([0-9]+)', text)]
+    if len(counted) != 1:
+        raise ValueError('Catalog provenance object count is unavailable')
+    name, match = counted[0]
+    text = snapshot['files'][name]
+    snapshot['files'][name] = text[:match.start(1)] + str(int(match.group(1)) + delta) + text[match.end(1):]
+
+
+def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new_columns=False, allow_column_renames=False, allow_foreign_keys=False, allow_temporal_history=False, allow_rebuilds=False):
+    if type(allow_rebuilds) is not bool or (allow_rebuilds and engine not in {'sqlite', 'duckdb'}):
+        raise ValueError('Rebuild-backed constraint additions are available only for SQLite and DuckDB')
     if type(allow_new_columns) is not bool or (allow_new_columns and engine not in {"mysql", "mariadb"}):
         raise ValueError("New-column admission is available only for MySQL/MariaDB")
     if type(allow_column_renames) is not bool or (allow_column_renames and engine not in {"mysql", "mariadb"}):
@@ -97,25 +149,53 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
     constraint_changes = {}
     current = read_catalog(_json(catalog_snapshot), engine=engine)
     before, after = read_relations(original, engine=engine), read_relations(desired, engine=engine)
+    before_drafts = _DRAFTS.get(_draft_key(original, engine), [])
+    after_drafts = _DRAFTS.get(_draft_key(desired, engine), [])
+    known = {item['uid'] for item in before_drafts}
+    drafts = {}
+    for item in after_drafts:
+        if item['uid'] not in known:
+            drafts.setdefault(item['parent_resource_id'], []).append(item)
+    if drafts and engine not in {'postgresql', 'sqlite', 'duckdb', 'firebird', 'mysql', 'mariadb'}:
+        raise ValueError('New physical-schema objects are not admitted for this engine')
+    new_rows, mirror, renamed, rebuilds = [], {}, [], []
+    if set(drafts) - set(after):
+        raise ValueError('A physical draft names a parent outside the edited relations')
     if engine in {"mysql", "mariadb"}:
-        def relationships(rows):
+        def relationships(rows, physical=False):
             values = [edge for row in rows.values() for edge in row.get('graphical_relationships', [])]
             for edge in values:
                 if isinstance(edge.get('native_json'), str):edge['native_json'] = _decode(edge['native_json'])
+            # Physical-schema vocabulary on an edge is reviewed by mysql_physical, not as a relationship change.
+            if not physical:values = [{key: fact for key, fact in edge.items() if key != 'physical'} for edge in values]
             return sorted(values, key=_exact_json)
+        edges_before = {edge.get('uid'): edge for edge in relationships(before, True)}
+        edges_after = {edge.get('uid'): edge for edge in relationships(after, True)}
         previous={edge.get('uid'):edge for edge in relationships(before)}
         if allow_foreign_keys:
             from .mysql_relational_constraints import relationship_changes
             constraint_changes = relationship_changes(relationships(before), relationships(after), current['rows'],engine=engine)
         elif any(edge.get('uid') is None or not _equal(previous.get(edge['uid']),edge) for edge in relationships(after)):
             raise ValueError('Graphical relationship changes require explicit native foreign-key reconciliation; enable foreign-key design admission or edit the owning table native definition')
+    dropped_constraints, table_drops = set(), {}
+    if engine in {'sqlite', 'duckdb'}:
+        from .embedded_physical import dropping
+        for identity, row in after.items():
+            live = current['rows'].get(identity)
+            if live is not None and live['kind'] == 'constraint' and before.get(identity) is not None and \
+                    dropping(before[identity], row, live):
+                dropped_constraints.add(identity)
+                table_drops.setdefault(live['native'].get('navigator_parent_resource_id'), []).append(live)
+        if set(table_drops) - set(after):
+            raise ValueError('A constraint drop names a table outside the edited relations')
     baseline, proposed = deepcopy(catalog_snapshot), deepcopy(catalog_snapshot)
     replacements = [[], []]
     changed = []
     for identity, row in after.items():
         old, live = before.get(identity), current['rows'].get(identity)
-        if old is None or live is None or live['kind'] not in ({'table', 'view', 'column', 'constraint'} if engine == 'firebird' else
-                {'table', 'partitioned-table', 'foreign-table', 'view', 'materialized-view', 'constraint'}):
+        if engine in {'mysql', 'mariadb'} and live is None and row.get('parent_resource_id') in after:
+            continue   # an index or constraint element: reviewed with its owning table below
+        if old is None or live is None or live['kind'] not in _KINDS.get(engine, _KINDS['postgresql']):
             raise ValueError('Relational definition requires explicit catalog identity reconciliation: ' + identity)
         if old['uid'] != live['uid'] or row['uid'] != live['uid']:
             raise ValueError('Relational design belongs to another database or object')
@@ -132,12 +212,45 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
                 from .mysql_relational_constraints import merge_constraints
                 facts[1] = merge_constraints({'name':live['name'],'native':facts[0]},facts[1],
                     constraint_changes[identity],mode,engine=engine)
-        if engine == 'firebird' and row.get('parent_resource_id'):
-            from .firebird_relational_fields import merge_fields
-            facts[1] = merge_fields(old, row, current)
+            from .mysql_physical import merge as merge_physical
+            facts[1] = merge_physical({**old, 'name': live['name'], 'kind': live['kind']},
+                {**row, 'name': live['name'], 'kind': live['kind'], 'native': facts[1]}, live, current,
+                kids_before={rid: kid for rid, kid in before.items() if kid.get('parent_resource_id') == identity and rid not in current['rows']},
+                kids_after={rid: kid for rid, kid in after.items() if kid.get('parent_resource_id') == identity and rid not in current['rows']},
+                edges_before={uid: edge for uid, edge in edges_before.items() if edge.get('source') == identity},
+                edges_after={uid: edge for uid, edge in edges_after.items() if edge.get('source') == identity},
+                drafts=drafts.get(identity, []), all_drafts=drafts, mode=mode, engine=engine, database=live['native']['database'])
+        if engine == 'firebird':
+            from . import firebird_physical as physical
+            if live['kind'] == 'column' and row.get('parent_resource_id'):
+                from .firebird_relational_fields import merge_fields
+                facts[1] = merge_fields(old, row, current)
+                facts[1] = physical.merge_column(old, row, live, facts[1])
+            elif live['kind'] == 'table':
+                facts[1] = physical.merge_table(old, row, live, facts[1])
+            elif live['kind'] == 'index':
+                facts[1] = physical.merge_index(old, row, live, current, facts[1])
+            elif live['kind'] == 'constraint':
+                facts[1] = physical.merge_constraint(old, row, live, current, facts[1], mirror)
         if engine == 'postgresql':
             from .postgresql_relational_fields import merge_fields
+            from .postgresql_physical import merge_physical
             facts[1] = merge_fields(old, row)
+            facts[1] = merge_physical({**old, 'native': facts[0]}, {**row, 'native': facts[1]}, live, current,
+                                      drafts.get(identity, []))
+        if engine in {'sqlite', 'duckdb'}:
+            from .embedded_physical import merge as merge_index
+            facts[1], created, found, rebuilt = merge_index(engine, old, row, live, current, drafts.get(identity, []), allow_rebuilds, table_drops.get(identity, ()))
+            new_rows.extend(created)
+            renamed.extend(found)
+            rebuilds.extend(rebuilt)
+            # Column rows are separate native resources; a graphical field edit
+            # must not silently diverge from them.
+            for uid, fields in row.get('fields', {}).items():
+                original = old.get('fields', {}).get(uid)
+                if original is None or any(fields.get(name) != original.get(name)
+                        for name in ('datatype', 'nullable', 'description')):
+                    raise ValueError('Edit the native column definition rather than graphical field properties: ' + identity)
         if engine=='mariadb' and facts[0].get('definition')!=facts[1].get('definition') and 'WITH SYSTEM VERSIONING' in facts[0].get('definition','').upper():
             if not allow_temporal_history:raise ValueError('Graphical system-versioned schema edits require explicit native KEEP-history acceptance')
             intent=facts[1].setdefault('mariadb_change',{})
@@ -151,17 +264,85 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
         if not _equal(facts[0], facts[1]): changed.append(identity)
         for index, value in enumerate(facts):
             metadata = {key: live[key] for key in ('resource_id', 'kind', 'path_json', 'system')}
+            name, uid = live['name'], live['uid']
+            if index and engine == 'duckdb' and any(item['identity'] == identity for item in renamed):
+                # Reviewed DuckDB rename: the desired record carries the new identity and the rename intent.
+                item = next(item for item in renamed if item['identity'] == identity)
+                value = {**value, 'duckdb_change': {'action': 'rename', 'from_resource_id': identity, 'confirmation': name}}
+                metadata['resource_id'] = _renamed_id(engine, live, item['new'])
+                metadata['path_json'] = _json([*live['path'][:-1], item['new']])
+                name, uid = item['new'], live['uid'][:-len(identity)] + metadata['resource_id']
             metadata['native_json'] = _exact_json(value)
             key = 'o_' + hashlib.sha256(identity.encode()).hexdigest()
-            text = ('record ' + key + ' ' + _json(live['name']) + ' {uid: ' + _json(live['uid']) +
-                '; x_record: {' + ','.join(name + ':' + _json(fact) for name, fact in metadata.items()) + '};}')
+            declaration_id = live['source_location']['definition_id']
+            block, local_id = declaration_id.rsplit('.', 1)
+            text = ddn.record_definition(local_id, name, metadata,
+                module=f'scratchrobin.{engine}.catalog', block=block, uid=uid)
+            if index and identity in dropped_constraints:
+                text = ''   # the reviewed rebuild discards the constraint: its catalog record leaves the desired design
             replacements[index].append({**live['source_location'], 'text': text})
+    if engine == 'duckdb':
+        for item in renamed:
+            if item['kind'] != 'column':
+                continue
+            live = current['rows'][item['identity']]
+            # A column is its own native catalog record; renaming it rewrites that record only.
+            value = {**deepcopy(live['native']), 'duckdb_change': {'action': 'rename', 'from_resource_id': item['identity'],
+                                                                    'confirmation': live['name']}}
+            metadata = {'resource_id': _renamed_id(engine, live, item['new']),
+                        'kind': live['kind'], 'path_json': _json([*live['path'][:-1], item['new']]),
+                        'system': live['system'], 'native_json': _exact_json(value)}
+            block, local_id = live['source_location']['definition_id'].rsplit('.', 1)
+            replacements[1].append({**live['source_location'], 'text': ddn.record_definition(
+                local_id, item['new'], metadata, module=f'scratchrobin.{engine}.catalog', block=block,
+                uid=live['uid'][:-len(live['resource_id'])] + metadata['resource_id'])})
+            changed.append(item['identity'])
+    for identity, value in mirror.items():
+        # A replaced constraint's matching standalone backing-index row follows it exactly.
+        live = current['rows'][identity]
+        metadata = {key: live[key] for key in ('resource_id', 'kind', 'path_json', 'system')}
+        metadata['native_json'] = _exact_json(value)
+        block, local_id = live['source_location']['definition_id'].rsplit('.', 1)
+        replacements[1].append({**live['source_location'], 'text': ddn.record_definition(
+            local_id, live['name'], metadata, module=f'scratchrobin.{engine}.catalog', block=block, uid=live['uid'])})
+        if not _equal(live['native'], value):
+            changed.append(identity)
+    if engine == 'firebird' and drafts:
+        from . import firebird_physical as physical
+        new_rows.extend(physical.new_objects(drafts, before, current))
     for snapshot, edits in zip((baseline, proposed), replacements):
         for edit in sorted(edits, key=lambda value: value['start'], reverse=True):
             # Public DDN source locations are UTF-16 code-unit offsets.
             encoded = snapshot['files'][edit['file']].encode('utf-16-le')
             snapshot['files'][edit['file']] = (encoded[:edit['start'] * 2] + edit['text'].encode('utf-16-le') +
                 encoded[edit['end'] * 2:]).decode('utf-16-le')
+        if snapshot is proposed and new_rows:
+            _insert_rows(snapshot, engine, current, new_rows)
+        if snapshot is proposed and dropped_constraints:
+            import re
+            for identity in dropped_constraints:
+                # The table's member lists and the views reference the discarded record by its definition id.
+                pattern = r'\n[ ]*item\n[ ]*id ' + re.escape(json.dumps(current['rows'][identity]['source_location']['definition_id']))
+                for name in snapshot['files']:
+                    snapshot['files'][name] = re.sub(pattern, '', snapshot['files'][name])
+            _shift_count(snapshot, -len(dropped_constraints))
         read_catalog(_json(snapshot), engine=engine)
-    return {'baseline': _json(baseline), 'desired': _json(proposed), 'changed_resource_ids': changed,
-            'status': 'prepared-for-native-preview', 'executed': False}
+    changed.extend(item['resource_id'] for item in new_rows)
+    changed.extend(sorted(dropped_constraints))
+    result = {'baseline': _json(baseline), 'desired': _json(proposed), 'changed_resource_ids': changed,
+              'status': 'prepared-for-native-preview', 'executed': False}
+    if engine == 'sqlite' and renamed and rebuilds:
+        raise ValueError('Review SQLite renames separately from rebuild-backed constraint additions')
+    if engine == 'sqlite' and renamed:
+        # SQLite rewrites references with its own ALTER TABLE: the desired model stays equal to the baseline and
+        # the exact renames go to the native rename design (sqlite_schema_rename_design) and plan.
+        # Native renames run in order and name the table as it is at that point: columns first, then tables.
+        result['renames'] = [{'kind': 'column', 'table': item['table'], 'from': item['old'], 'to': item['new']}
+                             for item in renamed if item['kind'] == 'column'] + \
+                            [{'kind': 'table', 'table': item['old'], 'to': item['new']}
+                             for item in renamed if item['kind'] == 'table']
+        changed.extend(item['identity'] for item in renamed)
+    if engine == 'sqlite' and rebuilds:
+        # The reviewed desired DDL carries the new CREATE TABLE; the native rebuild plan needs these identities.
+        result['rebuilds'] = rebuilds
+    return result

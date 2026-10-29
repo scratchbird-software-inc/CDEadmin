@@ -14,7 +14,8 @@
       "confirmation": "none",
       "fields": [],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Not yet round-tripped: the provider runs only the exact 12.2.2-MariaDB tool release (client check \"MariaDB tool must be from the exact 12.2.2 release\") and this host has the 10.11.14 tools, so the dialog draft stops before the tool starts; the draft was verified to plan and run correctly only with that version check bypassed in a scratch run. The test test_check_upgrade_required is written and skips unless the tool reports 12.2.2-MariaDB."
     },
     {
       "operation_id": "analyze_tables",
@@ -24,14 +25,24 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
           "field_id": "tables",
-          "label": "Native table names (JSON array)",
-          "control": "keyvalue",
-          "required": true
+          "label": "Tables",
+          "control": "grid",
+          "required": true,
+          "default": [],
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Name",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "binlog_mode",
@@ -77,18 +88,40 @@
         },
         {
           "field_id": "persistent_columns",
-          "label": "Persistent-statistics columns (JSON array, empty means none)",
-          "control": "keyvalue",
-          "required": false
+          "label": "Persistent-statistics columns",
+          "control": "grid",
+          "required": false,
+          "default": [],
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Name",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "help": "Native column names; used when persistent statistics are Specified."
         },
         {
           "field_id": "persistent_indexes",
-          "label": "Persistent-statistics indexes (JSON array, empty means none)",
-          "control": "keyvalue",
-          "required": false
+          "label": "Persistent-statistics indexes",
+          "control": "grid",
+          "required": false,
+          "default": [],
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Name",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "help": "Native index names (PRIMARY allowed); used when persistent statistics are Specified."
         }
       ],
-      "notes": "typed_from_json: database.analyze_tables.tables, database.analyze_tables.persistent_columns, database.analyze_tables.persistent_indexes"
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "check_objects",
@@ -98,7 +131,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -120,9 +153,19 @@
         },
         {
           "field_id": "objects",
-          "label": "Native object names (JSON array)",
-          "control": "keyvalue",
-          "required": true
+          "label": "Objects",
+          "control": "grid",
+          "required": true,
+          "default": [],
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Name",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "check_options",
@@ -157,7 +200,7 @@
           ]
         }
       ],
-      "notes": "typed_from_json: database.check_objects.objects"
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "optimize_tables",
@@ -167,14 +210,24 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
           "field_id": "tables",
-          "label": "Native table names (JSON array)",
-          "control": "keyvalue",
-          "required": true
+          "label": "Tables",
+          "control": "grid",
+          "required": true,
+          "default": [],
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Name",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "binlog_mode",
@@ -226,7 +279,7 @@
           "default": 0
         }
       ],
-      "notes": "typed_from_json: database.optimize_tables.tables"
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "repair_objects",
@@ -236,7 +289,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -258,9 +311,19 @@
         },
         {
           "field_id": "objects",
-          "label": "Native object names (JSON array)",
-          "control": "keyvalue",
-          "required": true
+          "label": "Objects",
+          "control": "grid",
+          "required": true,
+          "default": [],
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Name",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "binlog_mode",
@@ -316,7 +379,7 @@
           ]
         }
       ],
-      "notes": "typed_from_json: database.repair_objects.objects"
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "checksum_tables",
@@ -326,14 +389,24 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
           "field_id": "tables",
-          "label": "Native table names (JSON array)",
-          "control": "keyvalue",
-          "required": true
+          "label": "Tables",
+          "control": "grid",
+          "required": true,
+          "default": [],
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Name",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "checksum_type",
@@ -357,7 +430,7 @@
           ]
         }
       ],
-      "notes": "typed_from_json: database.checksum_tables.tables"
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "backup_logical",
@@ -559,7 +632,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Not yet round-tripped: the provider runs only the exact 12.2.2-MariaDB tool release (client check \"MariaDB tool must be from the exact 12.2.2 release\") and this host has the 10.11.14 tools, so the dialog draft stops before the tool starts; the draft was verified to plan and run correctly only with that version check bypassed in a scratch run. The test test_logical_backup_and_restore is written and skips unless the tool reports 12.2.2-MariaDB."
     },
     {
       "operation_id": "restore_logical",
@@ -629,7 +703,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Not yet round-tripped: the provider runs only the exact 12.2.2-MariaDB tool release (client check \"MariaDB tool must be from the exact 12.2.2 release\") and this host has the 10.11.14 tools, so the dialog draft stops before the tool starts; the draft was verified to plan and run correctly only with that version check bypassed in a scratch run. The test test_logical_backup_and_restore is written and skips unless the tool reports 12.2.2-MariaDB."
     },
     {
       "operation_id": "add_partitions",
@@ -639,7 +714,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -679,7 +754,8 @@
             "equals": "DEFINITIONS"
           }
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "coalesce_partitions",
@@ -689,7 +765,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -698,7 +774,8 @@
           "control": "number",
           "required": true
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "convert_from_table",
@@ -746,7 +823,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "notes": "Not yet round-tripped: the provider always emits {WITH|WITHOUT} VALIDATION (MariaDB 12.2.2 grammar) and a MariaDB 10.11 server rejects that clause with error 1064. The draft validates and plans (test_exchange_and_convert_partition_operations); applying is gated on a 12.x server."
     },
     {
       "operation_id": "partition_by",
@@ -756,7 +834,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -765,7 +843,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "remove_partitioning",
@@ -775,9 +854,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "create_body",
@@ -787,7 +867,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -819,7 +899,8 @@
           "required": true,
           "help": "Enter the fragment after the qualified package name, including END; native MariaDB validates grammar."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "create_specification",
@@ -829,7 +910,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -869,7 +950,8 @@
           "required": true,
           "help": "Enter the fragment after the qualified package name, including END; native MariaDB validates grammar."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "drop_body",
@@ -879,9 +961,33 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [
+        {
+          "field_id": "sql_mode",
+          "label": "Package SQL mode",
+          "control": "select",
+          "required": true,
+          "default": "current",
+          "options": [
+            {
+              "value": "current",
+              "label": "Current"
+            },
+            {
+              "value": "oracle",
+              "label": "Oracle"
+            },
+            {
+              "value": "stored",
+              "label": "Stored"
+            }
+          ],
+          "help": "Packages parse only under Oracle mode; choose Oracle (or Stored when the body was created in Oracle mode) if the session is not already in it."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "replace_body",
@@ -891,7 +997,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -923,7 +1029,8 @@
           "required": true,
           "help": "Enter the fragment after the qualified package name, including END; native MariaDB validates grammar."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "replace_specification",
@@ -933,7 +1040,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -965,7 +1072,8 @@
           "required": true,
           "help": "Enter the fragment after the qualified package name, including END; native MariaDB validates grammar."
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "analyze",
@@ -975,9 +1083,10 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "check",
@@ -987,9 +1096,10 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "convert_to_table",
@@ -1031,7 +1141,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": "Not yet round-tripped: the provider always emits {WITH|WITHOUT} VALIDATION (MariaDB 12.2.2 grammar) and a MariaDB 10.11 server rejects that clause with error 1064. The draft validates and plans (test_exchange_and_convert_partition_operations); applying is gated on a 12.x server."
     },
     {
       "operation_id": "exchange",
@@ -1073,7 +1184,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": "Not yet round-tripped: the provider always emits {WITH|WITHOUT} VALIDATION (MariaDB 12.2.2 grammar) and a MariaDB 10.11 server rejects that clause with error 1064. The draft validates and plans (test_exchange_and_convert_partition_operations); applying is gated on a 12.x server."
     },
     {
       "operation_id": "optimize",
@@ -1083,9 +1195,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "rebuild",
@@ -1095,9 +1208,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "reorganize",
@@ -1107,14 +1221,24 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
           "field_id": "partitions",
-          "label": "Native partition names (blank uses selected partition)",
-          "control": "keyvalue",
-          "required": false
+          "label": "Partitions",
+          "control": "grid",
+          "required": false,
+          "default": [],
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Partition",
+              "control": "text"
+            }
+          ],
+          "help": "Empty uses the selected partition; otherwise include its exact name in this ordered list."
         },
         {
           "field_id": "definitions",
@@ -1123,7 +1247,7 @@
           "required": true
         }
       ],
-      "notes": "typed_from_json: partition.reorganize.partitions"
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "repair",
@@ -1133,9 +1257,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "set_default",
@@ -1145,7 +1270,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -1171,7 +1296,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "start",
@@ -1181,7 +1307,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -1256,7 +1382,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "stop",
@@ -1266,7 +1393,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -1290,7 +1417,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "reset",
@@ -1300,7 +1428,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -1310,7 +1438,8 @@
           "required": false,
           "default": true
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "terminate_query",
@@ -1320,37 +1449,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
-      "confirmation": "confirm",
-      "fields": [
-        {
-          "field_id": "termination_mode",
-          "label": "Termination mode",
-          "control": "select",
-          "required": true,
-          "default": "SOFT",
-          "options": [
-            {
-              "value": "SOFT",
-              "label": "Soft"
-            },
-            {
-              "value": "HARD",
-              "label": "Hard"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "operation_id": "terminate_connection",
-      "resource_kind": "session",
-      "title": "Terminate connection",
-      "menu": {
-        "category": "maintenance"
-      },
-      "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -1370,7 +1469,39 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+    },
+    {
+      "operation_id": "terminate_connection",
+      "resource_kind": "session",
+      "title": "Terminate connection",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "termination_mode",
+          "label": "Termination mode",
+          "control": "select",
+          "required": true,
+          "default": "SOFT",
+          "options": [
+            {
+              "value": "SOFT",
+              "label": "Soft"
+            },
+            {
+              "value": "HARD",
+              "label": "Hard"
+            }
+          ]
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "set_global",
@@ -1380,7 +1511,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -1410,7 +1541,8 @@
             "equals": "VALUE"
           }
         }
-      ]
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "purge_before",
@@ -1420,9 +1552,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
       "operation_id": "rotate",
@@ -1432,9 +1565,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     }
   ]
 }

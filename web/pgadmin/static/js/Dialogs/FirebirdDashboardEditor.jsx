@@ -41,10 +41,10 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId, en
         const scope = serverId == null ? 'engine' : targetId ? 'database' : 'server';
         const files = engine === 'firebird' ? (serverId == null ? firebirdFleetFiles(current) : firebirdDashboardFiles(current, 'Firebird dashboard draft', scope)) : engine === 'sqlite' ? (serverId == null ? sqliteFleetFiles(current) : sqliteDashboardFiles(current, scope)) : engine === 'duckdb' ? (serverId == null ? duckdbFleetFiles(current) : duckdbDashboardFiles(current, scope)) : ['mysql', 'mariadb'].includes(engine) ? (serverId == null ? mysqlFleetFiles(current, engine) : mysqlDashboardFiles(current, scope, engine)) :
           serverId == null ? postgresqlFleetFiles(current) : postgresqlDashboardFiles(current, 'PostgreSQL dashboard draft', scope);
-        const {viewer} = await loadDDNLibraries();
+        const libraries = await loadDDNLibraries();
         // Discover binding identities, but never persist sampled telemetry in a draft.
-        data = {...data, data: {...data.data, snapshot: validatePublication(viewer,
-          {format: 'ddn-workspace@1', files, entry: 'dashboard.ddn', view: 'dashboard'}, scope, engine)}};
+        data = {...data, data: {...data.data, snapshot: await validatePublication(libraries,
+          {format: 'ddn-source-workspace@1', files, entry: 'dashboard.ddn', view: 'dashboard'}, scope, engine)}};
       }
       if(active) {
         setDefinition(data.data);
@@ -65,13 +65,14 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId, en
     const unload = (event) => {
       if(dirty()) { event.preventDefault(); event.returnValue = ''; }
     };
-    const remove = workspace.eventBus.registerListener(LAYOUT_EVENTS.CLOSING, (id) => {
+    const remove = workspace.eventBus.registerListener(LAYOUT_EVENTS.CLOSING, async (id) => {
       if(id !== panelId) return;
       if(saving.current) {
         pgAdmin.Browser.notifier.alert('Saving dashboard draft', 'Wait for the save to finish before closing.');
         return;
       }
-      if(!dirty()) return workspace.close(panelId, true);
+      try {if(!await controller.current?.beforeClose()) return workspace.close(panelId, true);}
+      catch(failure) {pgAdmin.Browser.notifier.alert('Unapplied dashboard edit',failure.message);return;}
       pgAdmin.Browser.notifier.confirm('Unsaved dashboard draft',
         'Discard the unsaved dashboard changes?', () => workspace.close(panelId, true), () => true);
     });
@@ -79,7 +80,7 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId, en
     return () => { remove(); window.removeEventListener('beforeunload', unload); };
   }, [panelId]);
   const snapshot = useMemo(() => definition?.snapshot || {
-    format: 'ddn-workspace@1', entry: 'dashboard.ddn', view: 'dashboard',
+    format: 'ddn-source-workspace@1', entry: 'dashboard.ddn', view: 'dashboard',
     files: engine === 'sqlite' ? (serverId == null ? sqliteFleetFiles(null) : sqliteDashboardFiles(null, targetId ? 'database' : 'server')) : engine === 'duckdb' ? (serverId == null ? duckdbFleetFiles(null) : duckdbDashboardFiles(null, targetId ? 'database' : 'server')) : ['mysql', 'mariadb'].includes(engine) ? (serverId == null ? mysqlFleetFiles(null, engine) : mysqlDashboardFiles(null, targetId ? 'database' : 'server', engine)) :
       engine === 'postgresql' ? (serverId == null ? postgresqlFleetFiles(null) : postgresqlDashboardFiles(null, 'PostgreSQL dashboard draft', targetId ? 'database' : 'server')) :
         serverId == null ? firebirdFleetFiles(null) : firebirdDashboardFiles(null,
@@ -101,7 +102,7 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId, en
   const publish = async () => {
     let acquired = false;
     try {
-      if(saving.current || controller.current.isDirty()) throw new Error('Save the current draft before publishing.');
+      if(saving.current || await controller.current.beforeClose()) throw new Error('Save the current draft before publishing.');
       setPublishing(true); saving.current = true; acquired = true; setError('');
       const response = await getApiInstance().post(endpoint, {
         source_version: sourceVersion, expected_version: publicationVersion,

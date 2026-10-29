@@ -652,6 +652,8 @@ def build_plan(baseline, desired, current):
     from .postgresql_creation import creation, order_creations
     from ..providers.postgresql.native_admin import PostgreSQLNativeAdminError
     counts = {'unchanged': 0, 'converged': 0, 'preserved_live_changes': 0, 'proposed_creations': 0}
+    from . import postgresql_physical as physical
+    late_operations = []
     for identity in sorted(baseline['rows'].keys() | desired['rows'].keys()):
         before, after, live = (document['rows'].get(identity) for document in (baseline, desired, current))
         try:
@@ -660,6 +662,18 @@ def build_plan(baseline, desired, current):
             if before is None:
                 operations.append(creation(identity, after))
                 counts['proposed_creations'] += 1
+                continue
+            # Diagram-authored indexes/constraints follow any column work on the same table.
+            drafts = physical.table_additions(identity, before, after, live, current, desired)
+            if drafts is not None:
+                late_operations.extend(drafts[0])
+                counts['proposed_creations'] += len(drafts[0])
+                counts['converged'] += drafts[1]
+                after = drafts[2]
+            changed = physical.plan_row(identity, before, after, live, current)
+            if changed is not None:
+                operations.extend(changed[0])
+                counts['converged'] += changed[1]
                 continue
             additions = _add_columns(identity, before, after, live, desired)
             if additions is not None:
@@ -754,6 +768,11 @@ def build_plan(baseline, desired, current):
                 'live_guard': digest(native), 'statement': statement})
         except (ValueError, TypeError, PostgreSQLNativeAdminError) as error:
             blockers.append({'resource_id': identity, 'reason': str(error)})
+    operations.extend(late_operations)
+    for item in operations:
+        # Destructive steps stay visible and carry the exact confirmation the diagram supplied.
+        if item.get('operation') in {'drop_relation', 'drop_table_owned', 'drop_column'}:
+            item['destructive'], item['confirmation'] = True, item['name']
     try:
         draft_ids = [item['resource_id'] for item in operations if item.get('operation') in {'create', 'add_column'}]
         if len(draft_ids) != len(set(draft_ids)):

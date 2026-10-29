@@ -24,7 +24,7 @@ export default function FirebirdCatalogDesigner({baseline, disabled, onReview, p
     if (!baseline) return null;
     try {
       return nativeCatalogSnapshot(baseline.trimStart().startsWith('{') ? JSON.parse(baseline) : {
-        format: 'ddn-workspace@1', entry: 'catalog.ddn', view: 'inventory_1', files: {'catalog.ddn': baseline},
+        format: 'ddn-source-workspace@1', entry: 'catalog.ddn', view: 'inventory_1', files: {'catalog.ddn': baseline},
       });
     } catch {return null;}
   }, [baseline]);
@@ -34,10 +34,10 @@ export default function FirebirdCatalogDesigner({baseline, disabled, onReview, p
     setOpen(false); setReady(false); setError(''); editor.current = null; original.current = initial;
   }, [initial]);
   useEffect(() => () => {epoch.current++;}, []);
-  const capture = (review) => {
+  const capture = async (review) => {
     try {
       if (!editor.current) throw new Error('The DDN editor is not ready.');
-      const value = editor.current.snapshot();
+      const value = await editor.current.snapshot();
       const metadata = nativeCatalogSnapshot(value);
       if (review) onReview(JSON.stringify(metadata), JSON.stringify(original.current));
       setDraft(value); setOpen(false); editor.current = null; setReady(false); setError('');

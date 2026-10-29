@@ -393,6 +393,38 @@
       ]
     },
     {
+      "resource_kind": "large-object",
+      "family": "engine_object",
+      "title": "Large object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1,
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1,
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
       "resource_kind": "schema",
       "family": "engine_object",
       "operations": [

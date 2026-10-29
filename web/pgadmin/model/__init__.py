@@ -1180,6 +1180,286 @@ class SemanticModelRevision(db.Model):
     )
 
 
+class BICollection(db.Model):
+    """Owner-scoped hierarchical folder for saved questions."""
+    __tablename__ = 'cde_bi_collection'
+    __table_args__ = (
+        db.Index('ix_cde_bi_collection_parent', 'user_id', 'parent_id'),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    parent_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_collection.id', ondelete='CASCADE'),
+        nullable=True
+    )
+    name = db.Column(db.String(256), nullable=False)
+    description = db.Column(db.Text(), nullable=False, default='')
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+
+
+class BISavedQuestion(db.Model):
+    """Current endpoint-scoped saved question (builder state or SQL)."""
+    __tablename__ = 'cde_bi_saved_question'
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('active', 'archived')",
+            name='ck_cde_bi_saved_question_status'
+        ),
+        db.Index(
+            'ix_cde_bi_saved_question_scope',
+            'user_id', 'endpoint_id', 'collection_id'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    collection_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_collection.id', ondelete='SET NULL'),
+        nullable=True
+    )
+    name = db.Column(db.String(256), nullable=False)
+    status = db.Column(db.String(16), nullable=False, default='active')
+    semantic_model_id = db.Column(db.String(36), nullable=True)
+    semantic_model_revision = db.Column(db.Integer, nullable=True)
+    revision = db.Column(db.Integer, nullable=False, default=1)
+    __mapper_args__ = {
+        'version_id_col': revision,
+        'version_id_generator': False,
+    }
+    definition = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    revisions = db.relationship(
+        'BISavedQuestionRevision', back_populates='question',
+        cascade=CASCADE_STR
+    )
+
+
+class BISavedQuestionRevision(db.Model):
+    """Immutable saved-question revision snapshot."""
+    __tablename__ = 'cde_bi_saved_question_revision'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'question_id', 'revision', name='uq_cde_bi_question_revision'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    question_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_saved_question.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    revision = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(16), nullable=False)
+    definition = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    # Who saved this revision (owner or a granted editor); additive column.
+    actor_user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='SET NULL'),
+        nullable=True
+    )
+    question = db.relationship(
+        'BISavedQuestion', back_populates='revisions'
+    )
+
+
+@event.listens_for(BISavedQuestionRevision, 'before_update')
+def _bi_revision_is_immutable(_mapper, _connection, _target):
+    raise ValueError('saved question revisions are immutable')
+
+
+class BIDashboard(db.Model):
+    """Current endpoint-scoped, owner-only dashboard document."""
+    __tablename__ = 'cde_bi_dashboard'
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('active', 'archived')",
+            name='ck_cde_bi_dashboard_status'
+        ),
+        db.Index(
+            'ix_cde_bi_dashboard_scope',
+            'user_id', 'endpoint_id', 'collection_id'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    collection_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_collection.id', ondelete='SET NULL'),
+        nullable=True
+    )
+    name = db.Column(db.String(256), nullable=False)
+    status = db.Column(db.String(16), nullable=False, default='active')
+    revision = db.Column(db.Integer, nullable=False, default=1)
+    __mapper_args__ = {
+        'version_id_col': revision,
+        'version_id_generator': False,
+    }
+    definition = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    revisions = db.relationship(
+        'BIDashboardRevision', back_populates='dashboard',
+        cascade=CASCADE_STR
+    )
+
+
+class BIDashboardRevision(db.Model):
+    """Immutable dashboard revision snapshot."""
+    __tablename__ = 'cde_bi_dashboard_revision'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'dashboard_id', 'revision', name='uq_cde_bi_dashboard_revision'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    dashboard_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_dashboard.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    revision = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(16), nullable=False)
+    definition = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    actor_user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='SET NULL'),
+        nullable=True
+    )
+    dashboard = db.relationship(
+        'BIDashboard', back_populates='revisions'
+    )
+
+
+@event.listens_for(BIDashboardRevision, 'before_update')
+def _bi_dashboard_revision_is_immutable(_mapper, _connection, _target):
+    raise ValueError('dashboard revisions are immutable')
+
+
+class BIGrant(db.Model):
+    """Endpoint-scoped access grant on a collection, question or dashboard.
+
+    The principal is a real pgAdmin ``User`` or ``Role`` (exactly one of the
+    two columns is set).  ``resource_id`` is polymorphic and has no foreign
+    key; the BI service removes a resource's grants when it deletes it.
+    """
+    __tablename__ = 'cde_bi_grant'
+    __table_args__ = (
+        db.CheckConstraint(
+            "resource_type IN ('collection', 'question', 'dashboard')",
+            name='ck_cde_bi_grant_resource'
+        ),
+        db.CheckConstraint(
+            "level IN ('view', 'edit', 'manage')",
+            name='ck_cde_bi_grant_level'
+        ),
+        db.CheckConstraint(
+            '(principal_user_id IS NOT NULL AND principal_role_id IS NULL)'
+            ' OR (principal_user_id IS NULL AND '
+            'principal_role_id IS NOT NULL)',
+            name='ck_cde_bi_grant_principal'
+        ),
+        db.UniqueConstraint(
+            'endpoint_id', 'resource_type', 'resource_id',
+            'principal_user_id', name='uq_cde_bi_grant_user'
+        ),
+        db.UniqueConstraint(
+            'endpoint_id', 'resource_type', 'resource_id',
+            'principal_role_id', name='uq_cde_bi_grant_role'
+        ),
+        db.Index(
+            'ix_cde_bi_grant_resource',
+            'endpoint_id', 'resource_type', 'resource_id'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    resource_type = db.Column(db.String(16), nullable=False)
+    resource_id = db.Column(db.String(36), nullable=False)
+    principal_user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'),
+        nullable=True
+    )
+    principal_role_id = db.Column(
+        db.Integer, db.ForeignKey('role.id', ondelete='CASCADE'),
+        nullable=True
+    )
+    level = db.Column(db.String(16), nullable=False)
+    created_by = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='SET NULL'),
+        nullable=True
+    )
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+
+
+class BIAccessOverride(db.Model):
+    """Explicit override: the resource does not inherit collection grants."""
+    __tablename__ = 'cde_bi_access_override'
+    __table_args__ = (
+        db.CheckConstraint(
+            "resource_type IN ('collection', 'question', 'dashboard')",
+            name='ck_cde_bi_access_override_resource'
+        ),
+        db.UniqueConstraint(
+            'endpoint_id', 'resource_type', 'resource_id',
+            name='uq_cde_bi_access_override'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    resource_type = db.Column(db.String(16), nullable=False)
+    resource_id = db.Column(db.String(36), nullable=False)
+    created_by = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='SET NULL'),
+        nullable=True
+    )
+    created_at = db.Column(db.DateTime(), nullable=False)
+
+
+class BIAuditEvent(db.Model):
+    """Append-only record of BI grant, override and ownership changes."""
+    __tablename__ = 'cde_bi_audit'
+    __table_args__ = (
+        db.Index('ix_cde_bi_audit_resource', 'resource_type', 'resource_id'),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    actor_user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='SET NULL'),
+        nullable=True
+    )
+    action = db.Column(db.String(48), nullable=False)
+    endpoint_id = db.Column(db.String(36), nullable=True)
+    resource_type = db.Column(db.String(16), nullable=False)
+    resource_id = db.Column(db.String(36), nullable=False)
+    target_type = db.Column(db.String(16), nullable=True)
+    target_id = db.Column(db.Integer, nullable=True)
+    detail = db.Column(db.Text(), nullable=False, default='{}')
+    created_at = db.Column(db.DateTime(), nullable=False)
+
+
 class CDEReportDeliveryOccurrence(db.Model):
     """Durable, secret-free record of one report delivery attempt."""
     __tablename__ = 'cde_report_delivery_occurrence'
@@ -1342,6 +1622,416 @@ class CDEReportScheduleOccurrence(db.Model):
     delegation = db.relationship(
         'CDEReportDelegation', back_populates='occurrences'
     )
+
+
+class BIAlert(db.Model):
+    """Threshold alert or scheduled snapshot subscription on a BI resource.
+
+    ``definition`` is the validated JSON (schedule, condition, channels);
+    the unattended-run authority lives in ``BIAlertDelegation`` and reuses
+    the report scheduler's credential envelope and lease machinery.
+    """
+    __tablename__ = 'cde_bi_alert'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'user_id', 'endpoint_id', 'kind', 'name',
+            name='uq_cde_bi_alert_name'
+        ),
+        db.CheckConstraint(
+            "kind IN ('alert', 'subscription')",
+            name='ck_cde_bi_alert_kind'
+        ),
+        db.CheckConstraint(
+            "resource_type IN ('question', 'dashboard')",
+            name='ck_cde_bi_alert_resource'
+        ),
+        db.CheckConstraint(
+            "status IN ('active', 'paused')", name='ck_cde_bi_alert_status'
+        ),
+        db.CheckConstraint(
+            "breach_state IN ('unknown', 'ok', 'breach')",
+            name='ck_cde_bi_alert_breach'
+        ),
+        db.Index(
+            'ix_cde_bi_alert_resource',
+            'endpoint_id', 'resource_type', 'resource_id'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    kind = db.Column(db.String(16), nullable=False)
+    name = db.Column(db.String(256), nullable=False)
+    resource_type = db.Column(db.String(16), nullable=False)
+    resource_id = db.Column(db.String(36), nullable=False)
+    resource_revision = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(16), nullable=False, default='active')
+    pause_reason = db.Column(db.String(48), nullable=True)
+    paused_at = db.Column(db.DateTime(), nullable=True)
+    muted_until = db.Column(db.DateTime(), nullable=True)
+    breach_state = db.Column(db.String(16), nullable=False, default='unknown')
+    pending_notify = db.Column(db.Boolean(), nullable=False, default=False)
+    last_value = db.Column(db.Text(), nullable=True)
+    last_evaluated_at = db.Column(db.DateTime(), nullable=True)
+    last_fired_at = db.Column(db.DateTime(), nullable=True)
+    consecutive_failures = db.Column(
+        db.Integer, nullable=False, default=0
+    )
+    schedule_anchor = db.Column(db.DateTime(), nullable=False)
+    revision = db.Column(db.Integer, nullable=False, default=1)
+    definition = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    delegation = db.relationship(
+        'BIAlertDelegation', back_populates='alert', uselist=False,
+        cascade=CASCADE_STR
+    )
+    events = db.relationship(
+        'BIAlertEvent', back_populates='alert', cascade=CASCADE_STR
+    )
+
+
+class BIAlertDelegation(db.Model):
+    """Revocable authority for unattended runs of one alert.
+
+    Shaped like ``CDEReportDelegation`` so the report scheduler's
+    repository and service operate on it unchanged.
+    """
+    __tablename__ = 'cde_bi_alert_delegation'
+    __table_args__ = (
+        db.UniqueConstraint('alert_id', name='uq_cde_bi_alert_delegation'),
+        db.CheckConstraint(
+            "state IN ('active', 'revoked', 'expired')",
+            name='ck_cde_bi_alert_delegation_state'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    alert_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_alert.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    route_id = db.Column(db.String(128), nullable=False)
+    primary_secret_kind = db.Column(db.String(128), nullable=True)
+    endpoint_generation = db.Column(db.String(64), nullable=False)
+    state = db.Column(db.String(16), nullable=False)
+    credential_generation = db.Column(db.Integer, nullable=False, default=1)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    expires_at = db.Column(db.DateTime(), nullable=False)
+    revoked_at = db.Column(db.DateTime(), nullable=True)
+    alert = db.relationship('BIAlert', back_populates='delegation')
+    endpoint = db.relationship('EndpointProfile')
+    credentials = db.relationship(
+        'BIAlertCredential', back_populates='delegation',
+        cascade=CASCADE_STR
+    )
+    occurrences = db.relationship(
+        'BIAlertOccurrence', back_populates='delegation',
+        cascade=CASCADE_STR
+    )
+
+
+class BIAlertCredential(db.Model):
+    """One authenticated-encryption envelope scoped to an alert delegation."""
+    __tablename__ = 'cde_bi_alert_credential'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'delegation_id', 'secret_kind',
+            name='uq_cde_bi_alert_secret_kind'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    delegation_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_alert_delegation.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    secret_kind = db.Column(db.String(128), nullable=False)
+    key_id = db.Column(db.String(64), nullable=False)
+    encrypted_value = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    delegation = db.relationship(
+        'BIAlertDelegation', back_populates='credentials'
+    )
+
+
+class BIAlertOccurrence(db.Model):
+    """Durable claim and outcome record for one scheduled alert instant."""
+    __tablename__ = 'cde_bi_alert_occurrence'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'delegation_id', 'scheduled_for',
+            name='uq_cde_bi_alert_instant'
+        ),
+        db.CheckConstraint(
+            "state IN ('scheduled', 'claimed', 'executing', 'delivering', "
+            "'delivered', 'failed', 'cancel_requested', 'cancelled', "
+            "'outcome_unknown')",
+            name='ck_cde_bi_alert_occurrence_state'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    delegation_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_alert_delegation.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    scheduled_for = db.Column(db.DateTime(), nullable=False)
+    state = db.Column(db.String(32), nullable=False)
+    claim_token_digest = db.Column(db.String(64), nullable=True)
+    claimed_by = db.Column(db.String(128), nullable=True)
+    lease_expires_at = db.Column(db.DateTime(), nullable=True)
+    phase = db.Column(db.String(32), nullable=False)
+    progress = db.Column(db.Text(), nullable=False)
+    delivery_occurrence_ids = db.Column(db.Text(), nullable=True)
+    error_type = db.Column(db.String(128), nullable=True)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    completed_at = db.Column(db.DateTime(), nullable=True)
+    delegation = db.relationship(
+        'BIAlertDelegation', back_populates='occurrences'
+    )
+
+
+class BIAlertEvent(db.Model):
+    """Secret-free, SQL-free history of one evaluation and its deliveries."""
+    __tablename__ = 'cde_bi_alert_event'
+    __table_args__ = (
+        db.Index('ix_cde_bi_alert_event_alert', 'alert_id', 'created_at'),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    alert_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_alert.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    trigger = db.Column(db.String(16), nullable=False)
+    outcome = db.Column(db.String(24), nullable=False)
+    fired = db.Column(db.Boolean(), nullable=False, default=False)
+    suppressed = db.Column(db.String(24), nullable=True)
+    resource_revision = db.Column(db.Integer, nullable=True)
+    value = db.Column(db.Text(), nullable=True)
+    deliveries = db.Column(db.Text(), nullable=False, default='[]')
+    error_class = db.Column(db.String(64), nullable=True)
+    error_message = db.Column(db.String(300), nullable=True)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    alert = db.relationship('BIAlert', back_populates='events')
+
+
+class BINotification(db.Model):
+    """In-app notification for one recipient (alert or subscription)."""
+    __tablename__ = 'cde_bi_notification'
+    __table_args__ = (
+        db.Index(
+            'ix_cde_bi_notification_user',
+            'user_id', 'endpoint_id', 'read_at'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    alert_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_alert.id', ondelete='SET NULL'),
+        nullable=True
+    )
+    kind = db.Column(db.String(16), nullable=False)
+    resource_type = db.Column(db.String(16), nullable=False)
+    resource_id = db.Column(db.String(36), nullable=False)
+    title = db.Column(db.String(256), nullable=False)
+    body = db.Column(db.Text(), nullable=False)
+    data = db.Column(db.Text(), nullable=False, default='{}')
+    created_at = db.Column(db.DateTime(), nullable=False)
+    read_at = db.Column(db.DateTime(), nullable=True)
+
+
+class BIEmbed(db.Model):
+    """Signed-embedding definition of one dashboard or question.
+
+    ``definition`` is the validated JSON (parameter modes, claim names,
+    allowed origins, display options, token lifetime cap).  Signing secrets
+    live encrypted in ``BIEmbedKey``; run-as authority in ``BIEmbedDelegation``.
+    """
+    __tablename__ = 'cde_bi_embed'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'user_id', 'endpoint_id', 'name', name='uq_cde_bi_embed_name'
+        ),
+        db.CheckConstraint(
+            "resource_type IN ('question', 'dashboard')",
+            name='ck_cde_bi_embed_resource'
+        ),
+        db.CheckConstraint(
+            "status IN ('enabled', 'disabled', 'revoked')",
+            name='ck_cde_bi_embed_status'
+        ),
+        db.Index(
+            'ix_cde_bi_embed_resource',
+            'endpoint_id', 'resource_type', 'resource_id'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    name = db.Column(db.String(256), nullable=False)
+    resource_type = db.Column(db.String(16), nullable=False)
+    resource_id = db.Column(db.String(36), nullable=False)
+    resource_revision = db.Column(db.Integer, nullable=True)
+    status = db.Column(db.String(16), nullable=False)
+    disabled_reason = db.Column(db.String(48), nullable=True)
+    expires_at = db.Column(db.DateTime(), nullable=True)
+    revision = db.Column(db.Integer, nullable=False, default=1)
+    definition = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    keys = db.relationship(
+        'BIEmbedKey', back_populates='embed', cascade=CASCADE_STR
+    )
+    delegation = db.relationship(
+        'BIEmbedDelegation', back_populates='embed', uselist=False,
+        cascade=CASCADE_STR
+    )
+
+
+class BIEmbedKey(db.Model):
+    """One signing secret of an embed, encrypted with the worker key ring.
+
+    At most two rows per embed: the ``current`` key (used to mint server
+    side) and the ``previous`` key (still verifies during a rotation).
+    """
+    __tablename__ = 'cde_bi_embed_key'
+    __table_args__ = (
+        db.UniqueConstraint('embed_id', 'kid', name='uq_cde_bi_embed_kid'),
+        db.UniqueConstraint('embed_id', 'slot', name='uq_cde_bi_embed_slot'),
+        db.CheckConstraint(
+            "slot IN ('current', 'previous')", name='ck_cde_bi_embed_slot'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    embed_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_embed.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    kid = db.Column(db.String(32), nullable=False)
+    slot = db.Column(db.String(16), nullable=False)
+    key_id = db.Column(db.String(64), nullable=False)
+    encrypted_value = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    embed = db.relationship('BIEmbed', back_populates='keys')
+
+
+class BIEmbedDelegation(db.Model):
+    """Revocable run-as authority of one embed (the owner's credentials).
+
+    Shaped like ``BIAlertDelegation`` so the report scheduler's credential
+    capture and workspace reconstruction serve it unchanged.
+    """
+    __tablename__ = 'cde_bi_embed_delegation'
+    __table_args__ = (
+        db.UniqueConstraint('embed_id', name='uq_cde_bi_embed_delegation'),
+        db.CheckConstraint(
+            "state IN ('active', 'revoked', 'expired')",
+            name='ck_cde_bi_embed_delegation_state'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    embed_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_embed.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    route_id = db.Column(db.String(128), nullable=False)
+    primary_secret_kind = db.Column(db.String(128), nullable=True)
+    endpoint_generation = db.Column(db.String(64), nullable=False)
+    state = db.Column(db.String(16), nullable=False)
+    credential_generation = db.Column(db.Integer, nullable=False, default=1)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    expires_at = db.Column(db.DateTime(), nullable=False)
+    revoked_at = db.Column(db.DateTime(), nullable=True)
+    embed = db.relationship('BIEmbed', back_populates='delegation')
+    endpoint = db.relationship('EndpointProfile')
+    credentials = db.relationship(
+        'BIEmbedCredential', back_populates='delegation',
+        cascade=CASCADE_STR
+    )
+
+
+class BIEmbedCredential(db.Model):
+    """One authenticated-encryption envelope scoped to an embed delegation."""
+    __tablename__ = 'cde_bi_embed_credential'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'delegation_id', 'secret_kind',
+            name='uq_cde_bi_embed_secret_kind'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    delegation_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_embed_delegation.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    secret_kind = db.Column(db.String(128), nullable=False)
+    key_id = db.Column(db.String(64), nullable=False)
+    encrypted_value = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    delegation = db.relationship(
+        'BIEmbedDelegation', back_populates='credentials'
+    )
+
+
+class BIEmbedJti(db.Model):
+    """Consumed one-time token identifiers (replay protection)."""
+    __tablename__ = 'cde_bi_embed_jti'
+    __table_args__ = (
+        db.Index('ix_cde_bi_embed_jti_expiry', 'expires_at'),
+    )
+    embed_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_embed.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    jti = db.Column(db.String(128), primary_key=True)
+    expires_at = db.Column(db.DateTime(), nullable=False)
+
+
+class BIEmbedStat(db.Model):
+    """Daily view counters of one embed: counts only, no viewer data."""
+    __tablename__ = 'cde_bi_embed_stat'
+    embed_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_embed.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    day = db.Column(db.String(10), primary_key=True)
+    views = db.Column(db.Integer, nullable=False, default=0)
+    card_runs = db.Column(db.Integer, nullable=False, default=0)
+    errors = db.Column(db.Integer, nullable=False, default=0)
 
 
 class EndpointRuntimeIdentity(db.Model):

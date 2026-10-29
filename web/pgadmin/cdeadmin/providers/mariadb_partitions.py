@@ -10,6 +10,11 @@ OPERATIONS = {kind: operations | ({'repair','convert_to_table'} if kind=='partit
 
 
 def compile_operation(kind, operation, draft, target):
+    rows = draft.get('partitions') if isinstance(draft, dict) else None
+    if isinstance(rows, list) and any(isinstance(row, dict) for row in rows):
+        # The dialog's string-list grid emits {'value': name} rows.
+        draft = {**draft, 'partitions': [row.get('value') if isinstance(row, dict) and set(row) <= {'value', '_id'} else row
+                                         for row in rows]}
     if operation in common.OPERATIONS.get(kind, ()):
         return common.compile_operation(kind, operation, draft, target)
     if operation not in OPERATIONS.get(kind, ()) or not isinstance(draft, dict):

@@ -17,8 +17,9 @@ def fixture():
 def edited(snapshot, comment):
     result = deepcopy(snapshot)
     row = read_relations(snapshot, engine='postgresql')['postgresql:pg_class:17000']
-    old = _json(row['native_json'])
-    new = _json(_json({**row['native'], 'comment': comment}))
+    from pgadmin.cdeadmin.workspace.ddn_source import quoted
+    old = quoted(row['native_json'])
+    new = quoted(_json({**row['native'], 'comment': comment}))
     result['files'] = {name: text.replace(old, new) for name, text in result['files'].items()}
     return result
 
@@ -62,7 +63,7 @@ def test_live_change_does_not_replace_authored_baseline():
 def test_graphical_field_nullability_reaches_native_preview():
     catalog = fixture(); original = catalog['diagram']['snapshot']
     authored = deepcopy(original)
-    authored['files'] = {name: text.replace('nullable: false;', 'nullable: true;') for name, text in original['files'].items()}
+    authored['files'] = {name: text.replace('nullable false', 'nullable true') for name, text in original['files'].items()}
     assert authored != original
     result = handoff(catalog['snapshot'], original, authored, engine='postgresql')
     after = read_catalog(result['desired'], engine='postgresql')
@@ -75,7 +76,7 @@ def test_graphical_field_nullability_reaches_native_preview():
 def test_graphical_type_change_reaches_native_metadata():
     catalog = fixture(); original = catalog['diagram']['snapshot']
     authored = deepcopy(original)
-    authored['files'] = {name: text.replace('datatype: "bigint"', 'datatype: "text"') for name, text in original['files'].items()}
+    authored['files'] = {name: text.replace('datatype "bigint"', 'datatype "text"') for name, text in original['files'].items()}
     assert authored != original
     result = handoff(catalog['snapshot'], original, authored, engine='postgresql')
     after = read_catalog(result['desired'], engine='postgresql')
@@ -85,7 +86,7 @@ def test_graphical_type_change_reaches_native_metadata():
 def test_graphical_description_and_native_conflict():
     catalog = fixture(); original = catalog['diagram']['snapshot']
     authored = deepcopy(original)
-    authored['files'] = {name: text.replace('description: "native ü";', 'description: "new description";') for name, text in original['files'].items()}
+    authored['files'] = {name: text.replace('description "native ü"', 'description "new description"') for name, text in original['files'].items()}
     result = handoff(catalog['snapshot'], original, authored, engine='postgresql')
     after = read_catalog(result['desired'], engine='postgresql')
     assert after['rows']['postgresql:pg_class:17000']['native']['children']['pg_attribute'][1]['comment'] == 'new description'
@@ -100,19 +101,35 @@ def test_graphical_description_and_native_conflict():
 def test_graphical_property_omission_is_not_drop_intent():
     catalog = fixture(); original = catalog['diagram']['snapshot']
     authored = deepcopy(original)
-    authored['files'] = {name: text.replace('nullable: false;', '') for name, text in original['files'].items()}
+    authored['files'] = {name: text.replace('nullable false', '') for name, text in original['files'].items()}
     assert handoff(catalog['snapshot'], original, authored, engine='postgresql')['changed_resource_ids'] == []
 
 
-def with_new_field(snapshot, *, property_text='', uid=None):
+def with_new_field(snapshot, *, property_text='', uid=None, annotate=True):
     import uuid
     result = deepcopy(snapshot)
     row = read_relations(snapshot, engine='postgresql')['postgresql:pg_class:17000']
     uid = uid or row['uid'] + ':new:' + str(uuid.uuid4())
-    import re
-    field = 'field owned_new "added column" { uid: ' + _json(uid) + '; datatype: "numeric(12,2)"; nullable: true; ' + property_text + '}'
-    result['files'] = {name: re.sub(r'(field n_[a-f0-9]+)', lambda match: field + '\n' + match[0], text, count=1)
-                       for name, text in snapshot['files'].items()}
+    from pgadmin.cdeadmin.workspace import ddn_source as ddn
+    from hashlib import sha256
+    table_id = 'n_' + sha256(b'postgresql:pg_class:17000').hexdigest()
+    values = {'datatype': 'numeric(12,2)', 'nullable': True}
+    if 'description' in property_text:
+        values['description'] = 'must not vanish'
+    if 'shape' in property_text:
+        values['shape'] = 'array'
+    field = ddn.native_field('owned_new', 'added column', uid, values)
+    for name, text in result['files'].items():
+        # Use the public source edit API for membership, and a typed companion
+        # record for the explicit native draft identity required by the provider.
+        import subprocess
+        request = {'snapshot': {**result, 'files': {**result['files'], name: text + field['source'] + (ddn.annotation(
+            'owned_new', 'added column', uid, {'subject_kind': 'field', 'parent_id': table_id,
+                'field_properties_json': json.dumps(values)}, 'scratchrobin.postgresql.relations') if annotate else '')}},
+            'edits': [{'target': {'file': name, 'id': table_id}, 'path': 'members',
+                'value': [ddn.ref('owned_new'), *[ddn.ref(item) for item in ['n_' + sha256((row['resource_id'] + ':' + str(i)).encode()).hexdigest() for i in (1, 2)]]]}]}
+        changed = subprocess.run(['node', 'tools/ddn_edit.mjs'], input=json.dumps(request), text=True, capture_output=True, check=True)
+        result = json.loads(changed.stdout)
     assert result != snapshot
     return result, uid
 
@@ -142,3 +159,15 @@ def test_new_graphical_field_cannot_cross_parent_identity():
     authored, _ = with_new_field(original, uid='different-parent:new:00000000-0000-4000-8000-000000000001')
     with pytest.raises(ValueError, match='identity reconciliation'):
         handoff(catalog['snapshot'], original, authored, engine='postgresql')
+
+
+def test_unannotated_sdk_field_gets_stable_parent_scoped_draft_identity():
+    catalog = fixture(); original = catalog['diagram']['snapshot']
+    authored, _ = with_new_field(original, annotate=False)
+    first = handoff(catalog['snapshot'], original, authored, engine='postgresql')
+    second = handoff(catalog['snapshot'], original, authored, engine='postgresql')
+    one = read_catalog(first['desired'], engine='postgresql')['rows']['postgresql:pg_class:17000']['native']['add_columns']
+    two = read_catalog(second['desired'], engine='postgresql')['rows']['postgresql:pg_class:17000']['native']['add_columns']
+    assert one == two and len(one) == 1
+    assert one[0]['definition'] == {'name': 'added column', 'data_type': 'numeric(12,2)', 'nullable': True}
+    assert first['executed'] is False

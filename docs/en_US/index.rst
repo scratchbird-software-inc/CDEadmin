@@ -24,6 +24,8 @@ upstream attribution.
    six_engine_remaining_work
    ui_unified_design
    ui_unification_status
+   ui_server_editor_retirement
+   robin_master_plan
    firebird_driver_development
    mysql_driver_development
    mariadb_driver_development
@@ -89,6 +91,8 @@ upstream attribution.
    firebird_catalog_completeness
    monitoring_history
    ddn_database_roundtrip
+   ddn_adopted_runtime
+   ddn_physical_schema_vocabulary
    mysql_functional_completion
    mysql_implementation_priorities
    mysql_router_hosts
@@ -96,3 +100,12 @@ upstream attribution.
    duckdb_functional_completion
    sqlite_functional_completion
    native_dialect_tooling
+   bi_saved_questions
+   bi_dashboards
+   bi_permissions
+   bi_alerts
+   bi_embedding
+   bi_query_builder_ui
+   bi_dashboard_ui
+   bi_models_view
+   bi_ui_mysql_handoff

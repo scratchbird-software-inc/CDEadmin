@@ -53,11 +53,11 @@ def test_view_bound_does_not_drop_source_objects_and_large_export_fails(monkeypa
     rows = [resource(str(i)) for i in range(205)]
     result = export(rows)
     source = result['snapshot']['files']['catalog.ddn']
-    assert source.count('record o_') == 205
+    assert source.count('element "catalog_') == 205
     assert len(result['views']) == 3
-    assert source.count('@catalog_1.o_') == 100
-    assert source.count('@catalog_2.o_') == 100
-    assert source.count('@catalog_3.o_') == 5
+    assert source.count('id "catalog_1.o_') == 300
+    assert source.count('id "catalog_2.o_') == 300
+    assert source.count('id "catalog_3.o_') == 15
     monkeypatch.setattr('pgadmin.cdeadmin.workspace.firebird_catalog_export.MAX_BYTES', 10)
     with pytest.raises(ValueError, match='8 MiB'):
         export(rows)

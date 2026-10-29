@@ -1,4 +1,5 @@
 """Read and compare documentary native metadata without granting execution."""
+from . import ddn_source as ddn
 from decimal import Decimal
 import hashlib
 import json
@@ -8,7 +9,7 @@ from pathlib import Path
 import subprocess
 import threading
 
-from .firebird_catalog_export import MAX_BYTES, MAX_DDN_UNITS, MAX_FILES
+from .firebird_catalog_export import MAX_BYTES, MAX_DDN_UNITS
 
 _RUNNER = Path(__file__).parent / 'ddn/read_catalog.mjs'
 _SLOTS = threading.BoundedSemaphore(2)
@@ -38,30 +39,18 @@ def read_catalog(source, node='node', *, engine='firebird'):
     if not isinstance(source, str) or not source or len(source.encode('utf-8')) > MAX_BYTES:
         raise ValueError('Catalog document must be nonempty UTF-8 text within 8 MiB')
     snapshot = (_decode(source) if source.lstrip().startswith('{') else
-                {'format': 'ddn-workspace@1', 'entry': 'catalog.ddn',
+                {'format': 'ddn-source-workspace@1', 'entry': 'catalog.ddn',
                  'view': 'inventory_1', 'files': {'catalog.ddn': source}})
-    if (not isinstance(snapshot, dict) or
-            set(snapshot) != {'format', 'entry', 'view', 'files'} or
-            snapshot['format'] != 'ddn-workspace@1' or
-            not isinstance(snapshot['files'], dict) or
-            not 1 <= len(snapshot['files']) <= MAX_FILES or
-            not isinstance(snapshot['entry'], str) or
-            snapshot['entry'] not in snapshot['files'] or
-            not isinstance(snapshot['view'], str)):
-        raise ValueError('Invalid catalog workspace envelope')
-    for name, content in snapshot['files'].items():
-        if (not isinstance(name, str) or not name.endswith('.ddn') or len(name) > 255 or
-                name.startswith('/') or ':' in name or '\\' in name or '\0' in name or
-                any(part in {'', '.', '..'} for part in name.split('/')) or
-                not isinstance(content, str) or not content):
-            raise ValueError('Invalid catalog workspace file')
-        if len(content.encode('utf-16-le')) // 2 > MAX_DDN_UNITS:
-            raise ValueError('Catalog document exceeds the paired DDN per-file limit of 2,000,000 UTF-16 units')
+    if isinstance(snapshot, dict) and isinstance(snapshot.get('files'), dict):
+        for content in snapshot['files'].values():
+            if isinstance(content, str) and len(content.encode('utf-16-le')) // 2 > MAX_DDN_UNITS:
+                raise ValueError('Catalog document exceeds the paired DDN per-file limit of 2,000,000 UTF-16 units')
+    ddn.validate_workspace(snapshot, 'catalog')
     if not _SLOTS.acquire(timeout=1):
         raise ValueError('Catalog reader is busy; retry shortly')
     try:
         env = {key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ}
-        result = subprocess.run([node, '--max-old-space-size=192', str(_RUNNER), engine],
+        result = subprocess.run([node, ddn.NODE_HEAP_OPTION, str(_RUNNER), engine],
                                 input=json.dumps(snapshot, ensure_ascii=False), text=True, encoding='utf-8',
                                 capture_output=True, timeout=15, env=env, check=False)
         if result.returncode:

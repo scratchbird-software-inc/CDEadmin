@@ -201,6 +201,31 @@ export function initialDraft(form, {mode='create', record={}}={}) {
   return draft;
 }
 
+/**
+ * Re-key a flat backend payload (the servers API properties response, whose keys are
+ * the form's backend_field_id) by form field_id, so initialDraft can pre-fill an edit.
+ * JSON-text values arrive as strings for grid/keyvalue controls and are decoded.
+ */
+export function recordFromBackend(form, data={}) {
+  const record = {};
+  for(const tab of form.tabs || []) {
+    for(const field of tab.fields) {
+      const target = field.backend_field_id || field.field_id;
+      let value = Object.hasOwn(data, target) ? data[target] : readDotted(data, target);
+      if(value === undefined || value === null) continue;
+      if(['grid', 'keyvalue'].includes(field.control) && typeof value === 'string') {
+        try {
+          value = JSON.parse(value);
+        } catch {
+          continue;
+        }
+      }
+      record[field.field_id] = value;
+    }
+  }
+  return record;
+}
+
 // Record truthiness: catalog flags arrive as '0'/'1' strings too.
 const EMPTYISH = new Set([null, undefined, '', 0, '0', false, 'false', 'FALSE']);
 
@@ -339,9 +364,8 @@ export function toBackendDraft(form, draft, {mode='create', baseline=null}={}) {
         if(diff.rename_columns.length) out.rename_columns = diff.rename_columns;
         continue;
       }
-      if(mode === 'alter' && baseline && JSON.stringify(value ?? null) === JSON.stringify(baseline[field.field_id] ?? null) &&
-         !field.required) {
-        continue; // unchanged fields are not part of the ALTER set
+      if(mode === 'alter' && baseline && JSON.stringify(value ?? null) === JSON.stringify(baseline[field.field_id] ?? null)) {
+        continue; // unchanged fields are not part of the ALTER set, required or not (the target names the object)
       }
       const target = field.backend_field_id || field.field_id;
       const bracket = target.match(/^([a-z0-9_]+)\[([a-z0-9_]+)=([a-z0-9_]+)\]$/i);

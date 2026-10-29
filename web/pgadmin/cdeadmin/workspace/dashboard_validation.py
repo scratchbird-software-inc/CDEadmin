@@ -7,10 +7,11 @@ import subprocess
 import threading
 
 from .assets import ProjectAssetError
+from .ddn_source import NODE_HEAP_OPTION
 
 _ROOT = Path(__file__).resolve().parents[2]
 _RUNNER = Path(__file__).parent / 'ddn/validate_dashboard.mjs'
-_INPUTS = (_RUNNER, _ROOT / 'static/vendor/ddn/current/ddn.mjs',
+_INPUTS = (_RUNNER, _ROOT / 'static/vendor/ddn/current/resource-manifest.json',
            _ROOT / 'static/js/cdeadmin_ui/integrations/ddn/dashboardPublication.mjs')
 _SLOTS = threading.BoundedSemaphore(2)
 
@@ -22,7 +23,7 @@ def _validate(node, payload, generation):
     try:
         env = {key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR')
                if key in os.environ}
-        result = subprocess.run([node, '--max-old-space-size=128', str(_RUNNER)], input=payload, text=True,
+        result = subprocess.run([node, NODE_HEAP_OPTION, str(_RUNNER)], input=payload, text=True,
                                 capture_output=True, timeout=8, env=env, check=False)
         if result.returncode:
             raise ProjectAssetError('Dashboard source or metric bindings are invalid')

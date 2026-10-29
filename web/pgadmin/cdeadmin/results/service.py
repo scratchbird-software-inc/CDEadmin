@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import binascii
 import copy
+import dataclasses
 import hashlib
 import json
 import math
@@ -348,6 +349,56 @@ class ResultService:
             self._descriptors.pop(result_id)
             self._stored_bytes -= stored.encoded_bytes
         return True
+
+    def restrict(
+        self, result_id, *, endpoint_id=None, redact_keys=(),
+        export_enabled=None, export_formats=None,
+    ):
+        """Narrow a stored descriptor's redaction and export policy.
+
+        The provider-admitted policy can only get stricter: redaction keys
+        are added, export formats are intersected and export can be turned
+        off, never on.  Schema and grid contract are rebuilt so redacted
+        columns are masked there too.  Callers (the BI layer) apply their
+        saved-question policy here instead of redacting a second time.
+        """
+        keys = []
+        for item in redact_keys or ():
+            if not isinstance(item, str) or not item.strip():
+                raise ResultDescriptorError(
+                    'export redaction keys are invalid'
+                )
+            keys.append(item)
+        with self._lock:
+            stored = self._stored(result_id)
+            self._require_endpoint(stored, endpoint_id)
+            descriptor = stored.descriptor
+            policy = descriptor.export_policy
+            formats = policy.formats
+            if export_formats is not None:
+                formats = formats & frozenset(export_formats)
+            enabled = policy.enabled and export_enabled is not False and (
+                bool(formats)
+            )
+            merged = frozenset(policy.redact_keys) | frozenset(keys)
+            schema = copy.deepcopy(descriptor.result['schema'])
+            schema['columns'] = normalize_columns(
+                schema.get('columns'), descriptor.records,
+                redact_keys=merged, read_only=True,
+            )
+            grid = result_grid_contract(
+                descriptor.result, descriptor.component_reference,
+                schema['columns'], descriptor.records,
+                redact_keys=merged, read_only=True,
+            )
+            stored.descriptor = dataclasses.replace(
+                descriptor, schema=schema, grid=grid,
+                export_policy=ExportPolicy(
+                    enabled, formats, policy.max_records, policy.max_bytes,
+                    merged,
+                ),
+            )
+            return stored.descriptor.metadata()
 
     def render(
         self, result_id, *, page_size=None, cursor=None,

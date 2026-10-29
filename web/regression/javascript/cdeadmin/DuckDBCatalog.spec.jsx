@@ -14,7 +14,7 @@ jest.mock('sources/cdeadmin_ui/data/PagedDataGrid', () => function MockGrid(prop
   return <div aria-label={props['aria-label']}>{props.rows.length} changes</div>;
 });
 const Component = withTheme(DuckDBCatalog);
-const snapshot = {format: 'ddn-workspace@1', entry: 'catalog.ddn', view: 'inventory_1',
+const snapshot = {format: 'ddn-source-workspace@1', entry: 'catalog.ddn', view: 'inventory_1',
   files: {'catalog.ddn': 'native metadata'}};
 const capture = {snapshot, views: [{id: 'inventory_1', label: 'Native inventory', entry: 'catalog.ddn'}],
   provenance: {objects: 2, coverage: 'partial', warnings: ['Visibility is partial']}};

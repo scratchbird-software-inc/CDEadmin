@@ -20,15 +20,34 @@ import gettext from 'sources/gettext';
 import getApiInstance from 'sources/api_instance';
 import ErrorBoundary from 'sources/helpers/ErrorBoundary';
 import {
-  OperationDialog, ProviderObjectEditorHost, descriptorClient, editorAvailable, makePost, menuForKind,
+  OperationDialog, ProviderObjectEditorHost, ServerRegistrationHost, descriptorClient, editorAvailable, makePost, menuForKind,
   visualAdminCalls,
 } from 'sources/cdeadmin_ui/objects';
 import {createRoot} from 'react-dom/client';
 import Theme from 'sources/Theme';
 import {providerEndpointSessionReady} from 'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 import {BROWSER_PANELS} from './constants';
+import {generateNodeUrl} from './node_ajax';
 
 let editorSequence = 0;
+
+/*
+ * LEGACY REGISTRATION RETIRED (2026-10-28) for these engines. Their Server form in
+ * ui_descriptors/<engine>/forms/server.form.json is `complete`, and register / edit now go only
+ * through tryOpenServerForm -> ServerRegistrationHost. The legacy SchemaView dialog
+ * (servers/static/js/server.ui.js) is NOT removed, only unreachable for them: the fallback calls
+ * in server.js `register_engine_server` and ProviderContextMenu.js `edit_endpoint` are commented
+ * out and marked "LEGACY-FALLBACK". Full trace and restore steps: docs/en_US/ui_server_editor_retirement.rst
+ * To restore one engine, delete it from this set (the fallback then applies to it again) and
+ * uncomment the LEGACY-FALLBACK lines.
+ */
+export const LEGACY_REGISTRATION_RETIRED = new Set(['mariadb', 'firebird', 'duckdb', 'sqlite']);
+
+/** Tell the user the new editor failed and where to look; replaces the retired legacy fallback. */
+export function reportServerEditorFailure(engine, reason) {
+  pgAdmin.Browser.notifier.errorText(gettext(
+    'The %s server editor could not open (%s). See docs ui_server_editor_retirement for how to trace it.', engine, reason));
+}
 
 function serverFor(item) {
   const tree = pgAdmin.Browser.tree;
@@ -220,4 +239,56 @@ export function familyEditorContextActions(itemData, item) {
     }
   }
   return entries;
+}
+
+/**
+ * Open the descriptor Server editor for registering ('create', under a server group item) or
+ * editing ('alter', on a server item) a provider endpoint. Resolves true when it opened and false
+ * when the legacy dialog must handle it: no bundle, or the engine's server form is not complete.
+ */
+export async function tryOpenServerForm({item, mode='create', engine, profileId, initialData={}, intent='endpoint',
+  verifyNow=true, panelTitle}) {
+  if(!engine || !item) return false;
+  const api = getApiInstance();
+  let bundle;
+  try {
+    bundle = await descriptorClient(api).bundle(engine);
+  } catch {
+    return false;
+  }
+  const form = bundle?.forms?.server;
+  if(!form || form.status !== 'complete' || !editorAvailable(bundle, 'server')) return false;
+  const tree = pgAdmin.Browser.tree;
+  const serverNode = pgAdmin.Browser.Nodes.server;
+  const nodeData = tree.itemData(item);
+  const treeNodeInfo = tree.getTreeNodeHierarchy(item);
+  const base = generateNodeUrl.call(serverNode, treeNodeInfo, mode === 'create' ? 'create' : 'edit', nodeData, false,
+    serverNode.url_jump_after_node);
+  const urlFor = (isNew) => base + (isNew ? '' : nodeData._id);
+  const workspace = pgAdmin.Browser.docker.default_workspace;
+  const panelId = mode === 'create' ? `id-server-register-${++editorSequence}` : `id-server-edit-${nodeData._id}`;
+  const onClose = () => workspace.close(panelId);
+  const onSaved = (response) => {
+    setTimeout(() => serverNode.clear_cache?.(item), 0);
+    if(mode === 'create') {
+      pgAdmin.Browser.Events.trigger('pgadmin:browser:tree:add', {...response.node}, {...treeNodeInfo});
+    } else {
+      pgAdmin.Browser.Events.trigger('pgadmin:browser:tree:update', nodeData, response.node, treeNodeInfo, {
+        success: (updated, next, previous) => {
+          pgAdmin.Browser.Events.trigger('pgadmin:browser:node:updated', updated, next, previous);
+          pgAdmin.Browser.Events.trigger('pgadmin:browser:node:server:updated', updated, next, previous);
+        },
+      });
+    }
+    onClose();
+  };
+  workspace.openTab({
+    id: panelId, title: panelTitle || gettext('Register server'), closable: true, floatable: true,
+    content: <ErrorBoundary>
+      <ServerRegistrationHost api={api} engine={engine} version={nodeData.verified_runtime_version}
+        mode={mode === 'create' ? 'create' : 'alter'} urlFor={urlFor} initialData={initialData} profileId={profileId}
+        intent={intent} verifyNow={verifyNow} displayName={panelTitle} onClose={onClose} onSaved={onSaved} />
+    </ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return true;
 }

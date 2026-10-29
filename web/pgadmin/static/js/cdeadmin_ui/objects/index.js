@@ -18,6 +18,7 @@ export {default as OperationDialog} from './OperationDialog';
 export {
   default as ProviderObjectEditorHost, makePost, recordFromResource, resourceNative,
 } from './ProviderObjectEditorHost';
+export {default as ServerRegistrationHost} from './ServerRegistrationHost';
 export {default as FieldControl, fieldHelpText} from './FieldControl';
 export {default as RecordGrid} from './RecordGrid';
 export {default as KeyValueEditor} from './KeyValueEditor';
@@ -36,6 +37,7 @@ export {
   formForKind,
   initialDraft,
   menuForKind,
+  recordFromBackend,
   resolveBundle,
   resolveForm,
   toBackendDraft,

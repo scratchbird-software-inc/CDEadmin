@@ -7,7 +7,7 @@ jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
 const Component=withTheme(PostgresqlDataCapture);
 const objects=[{resource_id:'postgresql:pg_class:81',kind:'table',path:['db','public','orders']},
   {resource_id:'postgresql:pg_proc:90',kind:'function',path:['db','public','orders']}];
-const response={snapshot:{format:'ddn-workspace@1',entry:'result-1.ddn',view:'result_1',files:{}},
+const response={snapshot:{format:'ddn-source-workspace@1',entry:'result-1.ddn',view:'result_1',files:{}},
   views:[{entry:'result-1.ddn',id:'result_1',label:'Data page 1'}],
   coverage:{schema:'public',name:'orders',rows:2,selection_complete:false}};
 const select=(label,value)=>fireEvent.change(screen.getByRole('combobox',{name:label}).parentElement.querySelector('input'),{target:{value}});

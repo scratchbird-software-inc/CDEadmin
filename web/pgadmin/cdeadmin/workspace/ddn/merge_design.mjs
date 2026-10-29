@@ -1,63 +1,52 @@
-import {admitWorkspace} from './workspace_admission.mjs';
-// Source ranges come from the public DDN parser. Preserve authored source
-// outside changed native blocks byte for byte, including view appearance.
-export function mergeDesign(runtime, baseline, draft, incoming) {
+import {admitWorkspace, mapping} from './workspace_admission.mjs';
+
+// Three-way source refresh using public DDN UTF-16 source locations. Authored
+// view/appearance text is retained; a native removal is never deletion intent.
+export async function mergeDesign(_api, baseline, draft, incoming) {
+  const admitted = await Promise.all([baseline, draft, incoming].map(snapshot => admitWorkspace(snapshot)));
   const files = {...draft.files}, conflicts = [];
-  const parse = (snapshot, name) => {
-    if (!(name in snapshot.files)) return null;
-    const parsed = runtime.parse(snapshot.files[name], name);
-    return parsed;
+  const nativeNodes = doc => {
+    const ids = new Set();
+    for(const row of doc?.records || []) {
+      const facts = mapping(row.record);
+      if(facts) {ids.add(row.ref.id);if(facts.record?.subject_id) ids.add(facts.record.subject_id);}
+      if(['data','source'].includes(row.kind)) ids.add(row.ref.id);
+    }
+    return new Map([...ids].flatMap(id => doc.nodes.has(id) ? [[id, doc.nodes.get(id)]] : []));
   };
-  // Validate authored-only files too; imports cannot bypass this boundary by
-  // appearing outside the incoming/native file set.
-  for (const snapshot of [baseline, draft, incoming]) {
-    admitWorkspace(snapshot);
-    for (const name of Object.keys(snapshot.files)) parse(snapshot, name);
-  }
-  const raw = (snapshot, name, node) => node ? snapshot.files[name].slice(node.start, node.end) : null;
-  for (const name of new Set([...Object.keys(baseline.files), ...Object.keys(incoming.files)])) {
-    const old = parse(baseline, name), next = parse(incoming, name), local = parse(draft, name);
-    if (!old) {
-      if (!local) files[name] = incoming.files[name];
-      else if (files[name] !== incoming.files[name]) conflicts.push(name + ': added on both sides');
+  const modules = doc => [...new Set((doc?.records || []).map(row => mapping(row.record)?.module).filter(Boolean))].sort().join();
+  const raw = (snapshot, filename, node) => node ? snapshot.files[filename].slice(node.start,node.end) : null;
+  for(const filename of new Set([...Object.keys(baseline.files),...Object.keys(incoming.files)])) {
+    const [old, local, next] = admitted.map(docs => docs.get(filename));
+    if(!old) {
+      if(!local) files[filename] = incoming.files[filename];
+      else if(files[filename] !== incoming.files[filename]) conflicts.push(filename + ': added on both sides');
       continue;
     }
-    if (!next || !local || old.module !== next.module || old.module !== local.module) {
-      conflicts.push(name + ': file removed or module changed'); continue;
+    if(!next || !local || modules(old) !== modules(next) || modules(old) !== modules(local)) {
+      conflicts.push(filename + ': file removed or native mapping changed');continue;
     }
-    const blocks = parsed => new Map(parsed.declarations.filter(node => node.type === 'data').map(node => [node.id, node]));
-    const before = blocks(old), after = blocks(next), authored = blocks(local), edits = [];
-    for (const id of new Set([...before.keys(), ...after.keys()])) {
-      const original = raw(baseline, name, before.get(id)), refreshed = raw(incoming, name, after.get(id));
-      const retained = raw(draft, name, authored.get(id));
-      if (original === refreshed || retained === refreshed) continue;
-      if (retained !== original) {conflicts.push(name + ': ' + id + ' changed on both sides'); continue;}
-      if (refreshed === null) {conflicts.push(name + ': ' + id + ' removed from native capture'); continue;}
-      const node = authored.get(id);
-      if (node) edits.push({start: node.start, end: node.end, text: refreshed});
-      else edits.push({start: files[name].length, end: files[name].length, text: '\n' + refreshed});
+    const before=nativeNodes(old), after=nativeNodes(next), authored=nativeNodes(local), edits=[];
+    for(const id of new Set([...before.keys(),...after.keys()])) {
+      const original=raw(baseline,filename,before.get(id)), refreshed=raw(incoming,filename,after.get(id));
+      const retained=raw(draft,filename,authored.get(id));
+      if(original === refreshed || retained === refreshed) continue;
+      if(retained !== original) {conflicts.push(filename + ': ' + id + ' changed on both sides');continue;}
+      if(refreshed === null) {conflicts.push(filename + ': ' + id + ' removed from native capture');continue;}
+      const node=authored.get(id);
+      edits.push(node ? {start:node.start,end:node.end,text:refreshed} :
+        {start:files[filename].length,end:files[filename].length,text:'\n'+refreshed});
     }
-    const existing = new Set(local.declarations.map(node => node.id));
-    for (const node of next.declarations.filter(item => item.type === 'view')) {
-      if (!existing.has(node.id)) edits.push({start: files[name].length, end: files[name].length,
-        text: '\n' + raw(incoming, name, node)});
-    }
-    for (const edit of edits.sort((a, b) => b.start - a.start)) files[name] = files[name].slice(0, edit.start) + edit.text + files[name].slice(edit.end);
-  }
-  if (conflicts.length) throw new Error('Design refresh conflicts: ' + conflicts.join('; '));
-  const candidate = {...draft, files};
-  const workspace = runtime.createWorkspace(files);
-  try {
-    const entries = workspace.entries();
-    if (!entries.some(entry => entry.file === candidate.entry && entry.views.some(view => view.id === candidate.view))) {
-      throw new Error('The selected design view does not exist.');
-    }
-    for (const entry of entries) for (const view of entry.views) {
-      const result = workspace.renderSync({entry: entry.file, view: view.id});
-      if (result.diagnostics.some(item => item.severity === 'error' || item.severity === 'incomplete')) {
-        throw new Error(`Design refresh needs manual reconciliation: ${entry.file} / ${view.id}`);
+    for(const row of next.records.filter(row => row.kind === 'view')) {
+      if(!local.nodes.has(row.ref.id)) {
+        const node=next.nodes.get(row.ref.id);
+        edits.push({start:files[filename].length,end:files[filename].length,text:'\n'+raw(incoming,filename,node)});
       }
     }
-  } finally {workspace.destroy();}
+    for(const edit of edits.sort((a,b)=>b.start-a.start)) files[filename]=files[filename].slice(0,edit.start)+edit.text+files[filename].slice(edit.end);
+  }
+  if(conflicts.length) throw new Error('Design refresh conflicts: '+conflicts.join('; '));
+  const candidate={...draft,files};
+  await admitWorkspace(candidate);
   return candidate;
 }

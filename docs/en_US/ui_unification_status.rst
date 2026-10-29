@@ -40,7 +40,7 @@ Phase status
    * - 3
      - Engine descriptors (Firebird, MySQL, MariaDB, DuckDB, SQLite)
      - in progress
-     - Firebird: 9/10 forms ``complete`` by live round trip (server form stays draft). MariaDB: 6/8 ``complete`` (trigger, routine draft: inventory reports no body/parameters). DuckDB: 7/8, SQLite: 5/6 (server forms draft). MySQL: owned by the MySQL stream. PostgreSQL: drafts pass the ui.js schema-id gate; routing is phase 5. Family table below
+     - Firebird 10/10, MariaDB 8/8, DuckDB 8/8, SQLite 6/6 forms ``complete`` by live round trip (server forms through the registration contract, ``tools/tests/test_ui_descriptor_server_forms.py``). MySQL: owned by the MySQL stream. PostgreSQL: drafts pass the ui.js schema-id gate; 5 large-object tier 2/3 operations ``complete`` on PostgreSQL 16.15 (not 18.3); routing is phase 5. Family table below
    * - 4
      - Operations, panels, menus
      - in progress
@@ -91,14 +91,14 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
    * - Routine
      - draft (57f, 4g)
      - draft (15f, 3g)
-     - draft (11f, 4g)
+     - complete (10f, 2g)
      - complete (9f, 0g)
      - complete (7f, 0g)
      - n/a
    * - Trigger
      - draft (30f, 3g)
      - draft (11f, 1g)
-     - draft (8f, 2g)
+     - complete (6f, 2g)
      - complete (7f, 0g)
      - n/a
      - complete (8f, 1g)
@@ -133,10 +133,10 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
    * - Server
      - draft (46f, 5g)
      - draft (41f, 4g)
-     - draft (32f, 0g)
-     - draft (47f, 0g)
-     - draft (4f, 2g)
-     - draft (11f, 1g)
+     - complete (38f, 0g)
+     - complete (53f, 0g)
+     - complete (10f, 0g)
+     - complete (17f, 0g)
 
 Baseline lint counts (2026-10-25)
 ---------------------------------
@@ -164,7 +164,8 @@ count sets its maximum to zero in the enforcement file.
      - 113
      - Phase 4 (target: tool panels only, about 70)
    * - ``ProviderWorkspaceContent.jsx`` lines
-     - 8528 (8230 after the in-panel Resource Explorer was removed, 2026-10-25)
+     - 8528 (8230 after the in-panel Resource Explorer was removed, 2026-10-25;
+       6543 after ``SemanticModelWorkspace`` was retired, 2026-10-28)
      - Phase 5 (deleted)
    * - ``relational_admin.py`` lines
      - 8942
@@ -172,6 +173,235 @@ count sets its maximum to zero in the enforcement file.
 
 Change log
 ----------
+
+Firebird diagram physical edits to reviewed plan (2026-10-29)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Stream B3/B4 for Firebird: the relations diagram now publishes the physical-schema
+vocabulary (indexes with unique/descending/inactive/COMPUTED BY/partial, PRIMARY KEY,
+UNIQUE, CHECK, FOREIGN KEY with ON DELETE/ON UPDATE and constraint-backing indexes),
+and edits to it flow through the hand-off into the existing reviewed plan and the
+owned-transaction applier. Explicit-mapping renames are carried only for columns;
+table, index and constraint renames return "not carried" with the Firebird 5.0 reason;
+drops need ``drop`` plus the exact name and are flagged destructive. A replayed review
+of an index or constraint creation now converges instead of blocking as "added outside
+the baseline" (other objects keep that blocker). Code:
+``workspace/firebird_physical.py``, ``firebird_lifecycle_plan.py``,
+``firebird_schema_plan.py``, ``firebird_relational_review.py``. Live tests:
+``tools/tests/test_firebird_physical_roundtrip.py`` (36 tests, Firebird 5.0.3.1683,
+forward, edit, reverse, plan, apply, re-inspect, converged re-plan); gate scenario
+``physical`` in ``tools/cdeadmin_firebird_ddn_exchange_gate.py``. Matrix per kind in
+:doc:`ddn_physical_schema_vocabulary`.
+
+BI signed embedding (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Stream C4 embedding: a dashboard or question shown in an iframe on another site
+to people without an account, through a short-lived HS256 token the embedding
+site signs (Metabase-style). Off by default (``CDEADMIN_BI_EMBED_ENABLED``),
+server mode only. Embeds run with the owner's delegated credentials (the alert
+delegation machinery, BI-embed resolver id and AAD) under a distinct
+``embedding`` principal; locked parameters and claims are inside the signature
+and claims feed the semantic row policies; the cache key and result ownership
+include the principal. Raw SQL is refused unless a server setting and
+``assert_raw_sql_allowed`` allow it (never with claims). Unauthenticated
+blueprint ``/cdeadmin/embed/`` with uniform 404s, ``frame-ancestors`` from the
+embed's origins, no cookies, no CORS, per-IP and per-embed rate limits, row
+caps and counts-only statistics. Migration ``cde_bi_embeds_v1``
+(``cde_bi_embed``, ``_key``, ``_delegation``, ``_credential``, ``_jti``,
+``_stat``); ``SCHEMA_VERSION`` not bumped. New actions ``bi_embed_*`` (catalog,
+list, get, create, update, enable, disable, rotate, retire_key, revoke, delete,
+mint, preview, check_token, stats). BI UI: Embed dialog on question and
+dashboard pages. Tests: ``tools/tests/test_cdeadmin_bi_embedding.py``; Jest
+``embeds`` and ``EmbedDialog`` specs on fixtures generated from the real
+backend. See :doc:`bi_embedding` (threat model, residual risks, decisions).
+
+BI alerts and subscriptions (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Stream C4 threshold alerts: alerts on saved questions (row count or column
+aggregate against a number or the previous evaluation, results exist or empty;
+edge triggered by default, optional every-evaluation, re-arm, mute with expiry)
+and scheduled question or dashboard subscriptions (CSV, XLSX, PDF, SVG under the
+export policy). They run on the existing report scheduler with the owner's
+encrypted delegated credentials (BI-specific resolver id and AAD) and pause with
+a recorded reason when the owner loses view access. Channels: in-app
+notifications, report_delivery SMTP and S3, and a signed webhook (HMAC-SHA256,
+host allow-list, DNS resolution with IP pinning, no redirects). Migration
+``cde_bi_alerts_v1`` (``cde_bi_alert``, ``_delegation``, ``_credential``,
+``_occurrence``, ``_event``, ``cde_bi_notification``); ``SCHEMA_VERSION`` not
+bumped. New actions: ``bi_alert_*`` (catalog, schedule_preview, list, get,
+create, update, delete, test, run_now, mute, unmute, rearm, pause, resume,
+history) and ``bi_notification_list`` / ``bi_notification_read``. BI UI: Alerts
+and Subscriptions section on question and dashboard pages with condition
+builder, schedule picker with next-run preview, channel and recipient picker,
+test evaluate, history and mute. Tests:
+``tools/tests/test_cdeadmin_bi_alerts.py`` (fake clock); Jest ``alerts`` and
+``AlertsPanel`` specs on fixtures generated from the real backend. See
+:doc:`bi_alerts` (security model and residual risks).
+
+Semantic-model workspace retired (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Stream C5: ``SemanticModelWorkspace`` and its private helpers
+(``portableId``, ``emptySemanticModel``, ``semanticCrossFilter``,
+``SemanticChartView``) are deleted from ``ProviderWorkspaceContent.jsx``. The
+``semantic`` tab mounts the BI module's Models view
+(``cdeadmin_ui/modules/bi/models/``, surface ``bi.models``), a descriptor and
+``FieldControl``/``RecordGrid`` driven editor with revisions, compare, status
+transitions, lineage, diagnostics and a cellset grid; raw JSON is only the
+Advanced JSON tab. Embedded visualizations and dashboards migrate to saved
+questions and BI dashboards through ``semantic_model_migrate`` (dry run by
+default, idempotent, model unchanged); reports and schedules stay in the model,
+run through ``report_scheduler`` and are read-only in the view. Capability map,
+dropped capabilities, the subscription TODO and owner decisions are in
+:doc:`bi_models_view`. No shared schema, family renderer or MySQL descriptor was
+edited. Counts from ``python3 tools/validate_ui_descriptors.py --counts``,
+before/after: JSON controls 297/297, MUI imports 244/244, engine-literal UI
+branches 111/111, engine panels in Dialogs 113/113, context-menu branches
+14/14, ``ProviderWorkspaceContent.jsx`` lines 8230/6543. The MUI count is a
+count of import statements, and every ``@mui`` import the deleted component used
+is still used by other panels in the file, so it does not move. The maxima in
+``tools/ui_lint_maximums.json`` are left as they are.
+
+BI sharing and permissions (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Stream C4 permissions: grants (view, edit, manage) for users or pgAdmin roles on
+collections, saved questions and dashboards, per endpoint, with inheritance down
+the collection tree and per-item overrides (``cde_bi_permissions_v1``:
+``cde_bi_grant``, ``cde_bi_access_override``, ``cde_bi_audit``, revision
+``actor_user_id``; ``SCHEMA_VERSION`` not bumped). Every ``bi_*`` entry point
+goes through ``BIAccess.require``; no grants means owner-only as before. Shared
+questions run with the runner's credentials and row policies, raw SQL is
+redacted below edit, dashboard cards without question access answer
+``no_access``. New actions: ``bi_access_get``, ``bi_grant_*``,
+``bi_access_inherit``, ``bi_transfer_owner``, ``bi_shared_with_me``,
+``bi_principal_search``, ``bi_audit_list``. BI UI: Share dialog, Shared with me
+root, permission-aware controls, read-only banner, redacted-SQL notice, "No
+access" card. Tests: ``tools/tests/test_cdeadmin_bi_permissions.py``; Jest
+``sharing``, ``ShareDialog`` and ``SharedTool`` specs on fixtures generated from
+the real backend. See :doc:`bi_permissions` (residual risks included).
+
+PostgreSQL maintenance actions (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The provider now plans and applies VACUUM, ANALYZE, REINDEX (table, index,
+schema, database), CLUSTER, table TRUNCATE and REFRESH MATERIALIZED VIEW
+(``providers/postgresql/maintenance.py``; ``compile_native_admin`` routes by
+operation, so the other table/index/view actions stay ``legacy-preserved``).
+Identifiers are always double-quoted from catalog identity and every option is
+allow-listed with strict types (VACUUM FULL/FREEZE/ANALYZE/VERBOSE/PARALLEL n,
+ANALYZE VERBOSE/SKIP_LOCKED, REINDEX CONCURRENTLY/VERBOSE, CLUSTER USING,
+TRUNCATE RESTART IDENTITY/CASCADE with the typed table name, REFRESH
+CONCURRENTLY/WITH [NO] DATA). VACUUM, REINDEX SCHEMA/DATABASE and any REINDEX
+CONCURRENTLY are refused by PostgreSQL inside a transaction block, so the plan
+marks them ``autocommit`` and ``apply_admin_operation`` runs them without
+BEGIN/COMMIT (the connection must be idle and in autocommit); the plan warns
+that they cannot be rolled back. Every apply returns a ``maintenance_receipt``
+(action, object, options, executed statement, transaction mode). CLUSTER and
+REINDEX SCHEMA/DATABASE require plan confirmation. ``operations.json`` goes
+from 5 to 14 operations (generated by ``tools/draft_postgresql_operations.py``),
+all ``complete`` by live round trip in
+``tools/tests/test_ui_descriptor_operations_postgresql.py`` (effects observed:
+relfilenode rewrites, statistics, clustered heap order, identity restart,
+materialized-view contents). Evidence is **PostgreSQL 16.15, not 18.3**; the
+18.3 qualification stays open. Not covered: CLUSTER from the index node
+(needs the owning table in the native identity), VACUUM/ANALYZE column lists,
+REINDEX TABLESPACE, and the rename / set schema / owner / grant actions.
+
+PostgreSQL tier 2/3 operations (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``postgresql/operations.json`` goes from 0 to 5 operations (generated by
+``tools/draft_postgresql_operations.py``): large-object ``read``, ``write``,
+``truncate`` (typed OID), ``import-server-file`` and ``export-server-file``
+(typed destination path). All 5 are ``complete``: each dialog draft passes
+provider validate, plan and apply (with the confirmation gate) against a live
+server and the effect is observed (``tools/tests/test_ui_descriptor_operations_postgresql.py``,
+``CDEADMIN_ROUNDTRIP_POSTGRESQL``). Evidence is **PostgreSQL 16.15, not 18.3**:
+the capability profile pins 18.3 and this container has 16, so the 18.3
+qualification stays open. The ``large-object`` kind was added to
+``capabilities.json`` (``engine_object``, tier-1 create/alter/drop/grant/revoke
+listed, no editor until the Engine-object skeleton, Decision 15). The 30
+recorded provider gaps and the ten ``draft`` forms are unchanged.
+
+Not drafted, by finding: the provider exposes no validate/plan/apply for
+VACUUM, ANALYZE, REINDEX, CLUSTER, table TRUNCATE, REFRESH MATERIALIZED VIEW,
+or rename / set schema / owner / grant on tables, indexes, sequences, roles and
+databases. These are ``legacy-preserved`` (``compile_native_admin`` refuses
+them as owned by the preserved pgAdmin UI), so a descriptor would promise a
+dialog nothing can plan. Each is a provider ask: a native compiler per action,
+then a descriptor and a round trip. The provider's other non-lifecycle forms
+(operator-family add/drop members, operator optimization options) are ``alter``
+actions behind an ``action`` discriminator; descriptor ``operation_id`` is sent
+verbatim, so they need a design decision (separate operation ids mapped to
+``alter`` or a fixed hidden ``action``) before they can be drafted. PostgreSQL
+shell routing remains phase 5. Descriptor counts: operations 0 -> 5, kinds
+23 -> 24.
+
+Server editor wired into the tree (2026-10-28; legacy retired, unverified)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+"Register server" (endpoint intent) and "Edit endpoint" open the descriptor
+Server editor (``ServerRegistrationHost``) for engines whose ``server`` form is
+``complete`` (MariaDB, Firebird, DuckDB, SQLite). ``ObjectEditor`` gained a
+``directApply`` mode (no plan, Preview SQL hidden) because registration is not
+DDL; the host posts ``toBackendDraft`` plus ``cde_profile_id``,
+``cde_registration_intent`` and ``cde_verify_now`` to the servers API and feeds
+the tree through the same ``tree:add`` / ``tree:update`` events as the legacy
+dialog. ``create_database`` and ``register_existing`` intents, PostgreSQL,
+MySQL and any engine without a complete form keep the legacy dialog (fallback
+on any bundle error). Not yet exercised in a running browser; the Jest specs
+cover payloads and the edit-only-changed rule. ``confirm``-type operations that
+carry a typed ``confirmation`` field (Firebird limbo and shadow tasks) were
+checked: the field is an ordinary required field and reaches the draft.
+
+Owner decision 2026-10-28: the legacy dialog is retired for these four engines
+without a browser test (fallback commented out, errors reported instead). Risk,
+trace and restore steps: :ref:`ui_server_editor_retirement`.
+
+Firebird and MariaDB operation round trips (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Tier 2/3 operations driven through their dialog drafts against live servers
+(``tools/tests/test_ui_descriptor_operations_{firebird,mariadb}.py``): Firebird
+33 of 35 ``complete`` (Firebird 5.0.3), MariaDB 29 of 35 (MariaDB 10.11). Left
+``draft`` with the reason in each operation's ``notes``: Firebird
+``remove_linger`` (no observable effect) and ``upgrade_database`` (no older-ODS
+database); MariaDB logical backup/restore and the upgrade check (provider pins
+the 12.2.2 tool release) and partition/table exchange (provider always emits
+``WITH|WITHOUT VALIDATION``, rejected by 10.11). Note: the 5.0.3 server refuses
+gfix-class Services API tasks over TCP with Srp256 (auth block over 255 bytes);
+those 13 operations were exercised through the local Services route and
+observed over TCP. Descriptor fixes: string lists are typed grids, hidden-field
+defaults removed, typed-name/confirmation fields aligned with the provider.
+Provider fixes (additive): firebird-driver ``keyholder`` spelling, grid
+``{value: x}`` unwrapping for Firebird and MariaDB string lists, MariaDB
+``DROP PACKAGE BODY`` ``sql_mode``.
+
+MariaDB program objects and the Server family (2026-10-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+MariaDB trigger and routine forms are ``complete``: the MariaDB inventory now
+reports trigger timing/events/position/body, routine body/parameters/returns
+and event schedule/preserve/enabled/body (``mariadb_catalog.program_object_natives``,
+additive), so a re-opened object shows its definition; ``active``/``position``
+are hidden on the MariaDB trigger form because the compiler emits neither, and
+OUT/INOUT parameter modes are recorded as a backend ask. The Server family is
+``complete`` for MariaDB, Firebird (network live; embedded by contract mapping),
+DuckDB and SQLite: ``tools/draft_server_descriptors.py`` now emits the
+servers-API keys (``backend_field_id`` = ``cde_route_<id>`` / ``cde_secret_<id>``
+/ ``db`` ...), the generic registration fields (database or file, connect now,
+comment, colours, tags) and typed controls for the former JSON fields (attached
+databases grid, DuckDB configuration key/value); the round trip is draft ->
+servers-API payload -> persisted route through ``provider_route_options`` ->
+live identity -> edit pre-fill through ``provider_route_form_values``. Provider
+fix found by it: the MariaDB ``ssl_verify_cert`` registration default forced
+TLS on routes with SSL off. Shell rule change: in alter mode an unchanged field
+stays out of the ALTER set whether or not it is required (the target names the
+object); both twins and their tests agree. PostgreSQL server/family forms stay
+``draft`` (phase 5, open decision 1).
 
 Firebird, MariaDB, SQLite and DuckDB round trips (2026-10-25)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -659,3 +889,37 @@ The identified seven backend gaps are implemented; shared UI stays with the
 front-end team. No shared shell, schema, renderer, panel, menu JavaScript or
 family-render test was edited. Lint before/after: JSON297/297, MUI244/244,
 UI engine branches111/111, panels113/113, context-menu branches14/14.
+
+BI questions tool: query builder UI, 2026-10-28
+-----------------------------------------------
+
+The first Metabase-style UI slice is a registered tool, not a new panel:
+module ``cdeadmin.bi`` / surface ``bi.questions`` under
+``cdeadmin_ui/modules/bi/``. It offers a collections tree with search,
+rename, move and archive, a visual query builder (source,
+columns, typed filters, summaries with grouping, sort, limit, parameters, live
+compile preview), execution with paging and redaction notes, the chart set
+through the shared chart wrapper, a SQL mode with SQL-to-question conversion,
+save, save as and revision history. A generic ``open_tool`` context-menu
+handler (``context_menu.py`` and ``ProviderContextMenu.js``) opens any
+registered surface; SQLite, DuckDB, Firebird, MariaDB and PostgreSQL declare the
+entry in ``tools.json``. MySQL awaits its owner (:doc:`bi_ui_mysql_handoff`).
+Structure, state model and gaps are in :doc:`bi_query_builder_ui`. No shared
+schema, form or family renderer was edited. Lint before/after: JSON297/297,
+MUI244/244, UI engine branches111/111, panels113/113, context-menu
+branches14/14.
+
+BI dashboards: editor and viewer UI, 2026-10-28
+-----------------------------------------------
+
+The dashboard editor and viewer extend the same ``cdeadmin.bi`` module and
+``bi.questions`` surface; there is no new surface, panel or engine branch.
+The collection tree gains a dashboards section (create, rename, move,
+archive, duplicate, search), the workspace has Edit and View modes, and
+"Import monitoring dashboard" opens a DDN file through
+``bi_dashboard_from_ddn`` as an unsaved draft. Layout, filter mapping,
+cross-filter and drill-through logic are pure reducers with Jest specs
+against fixtures generated from the real backend validators. Structure, state
+model and gaps are in :doc:`bi_dashboard_ui`. No shared schema, form or family
+renderer was edited. Lint before/after: JSON297/297, MUI244/244, UI engine
+branches111/111, panels113/113, context-menu branches14/14.

@@ -222,7 +222,7 @@ def ddn_asset(version=0, source='diagram example {}'):
             'displayName': 'Example diagram',
         },
         'snapshot': {
-            'format': 'ddn-workspace@1',
+            'format': 'ddn-source-workspace@1',
             'files': {'example.ddn': source},
             'entry': 'example.ddn',
             'view': 'example',

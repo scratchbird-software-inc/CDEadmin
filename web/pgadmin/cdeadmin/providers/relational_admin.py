@@ -715,6 +715,8 @@ class RelationalAdministration:
             })
             return {'errors': errors}
         draft = request.get('draft', {})
+        if self.dialect.engine_id == 'firebird':
+            draft = self._firebird_string_lists(draft)
         if self.dialect.engine_id == 'mariadb' and operation_id in mariadb_server_objects.OPERATIONS.get(resource_kind, ()):
             try:
                 mariadb_server_objects.compile_operation(resource_kind, operation_id, draft, request.get('target_resource'))
@@ -2203,9 +2205,48 @@ class RelationalAdministration:
             })
         return errors
 
+    @staticmethod
+    def _firebird_string_lists(draft):
+        """String-list grids arrive from the operation dialog as
+        ``{'value': name}`` rows; the Firebird tasks take the plain names
+        (plain names stay valid)."""
+        if not isinstance(draft, Mapping):
+            return draft
+        result = dict(draft)
+        for field_id in ('additional_backup_files', 'backup_files',
+                         'column_order', 'tables'):
+            value = result.get(field_id)
+            if isinstance(value, list) and any(
+                    isinstance(row, Mapping) for row in value):
+                result[field_id] = [
+                    row.get('value') if isinstance(row, Mapping) and
+                    set(row) <= {'value', '_id'} else row for row in value
+                ]
+        return result
+
+    @staticmethod
+    def _mariadb_string_lists(draft):
+        """String-list grids arrive from the operation dialog as ``{'value': name}``
+        rows; the native lists below take the plain names (plain names stay valid)."""
+        if not isinstance(draft, Mapping):
+            return draft
+        result = dict(draft)
+        for field_id in ('tables', 'objects', 'persistent_columns',
+                         'persistent_indexes', 'check_options',
+                         'repair_options'):
+            value = result.get(field_id)
+            if isinstance(value, list) and any(
+                    isinstance(row, Mapping) for row in value):
+                result[field_id] = [
+                    row.get('value') if isinstance(row, Mapping) and
+                    set(row) <= {'value', '_id'} else row for row in value
+                ]
+        return result
+
     @classmethod
     def _validate_mariadb_database_operation(
             cls, operation, draft, route):
+        draft = cls._mariadb_string_lists(draft)
         fields = {
             'analyze_tables': {
                 'tables', 'binlog_mode', 'persistent_for',
@@ -3003,6 +3044,9 @@ class RelationalAdministration:
         normalized_request['draft'] = self._normalize_draft(
             resource_kind, operation_id, request.get('draft', {})
         )
+        if self.dialect.engine_id == 'firebird':
+            normalized_request['draft'] = self._firebird_string_lists(
+                normalized_request['draft'])
         compiled = self._compile(normalized_request)
         statements = compiled.get('statements', [])
         preview = []
@@ -4453,7 +4497,7 @@ class RelationalAdministration:
 
     def _compile_mariadb_database_operation(self, request):
         operation = request['operation_id']
-        draft = request.get('draft', {})
+        draft = self._mariadb_string_lists(request.get('draft', {}))
         route = request['_provider_route']
         database = self._identifier(route['database'])
         names_field = (

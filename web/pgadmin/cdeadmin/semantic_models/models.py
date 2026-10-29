@@ -1017,6 +1017,25 @@ def validate_query(model, value):
         query.get('windows', []), symbols, set(selected_measures)
     )
     query['totals'] = bool(query.get('totals', False))
+    order_symbols = (
+        admitted_levels | set(symbols['measure_ids']) |
+        {item['id'] for item in query['windows']}
+    )
+    requested_order = array(query.get('order_by', []), 'query.order_by', 32)
+    query['order_by'] = []
+    for entry in requested_order:
+        entry = mapping(entry, 'query.order_by entry')
+        direction = entry.get('direction', 'asc')
+        if entry.get('id') not in order_symbols or direction not in {
+                'asc', 'desc'}:
+            raise SemanticModelError(
+                'query.order_by must name an output column and asc or desc'
+            )
+        query['order_by'].append({'id': entry['id'], 'direction': direction})
+    bind = query.get('bind')
+    if bind is not None and bind not in {'qmark', 'format'}:
+        raise SemanticModelError('query.bind must be qmark, format or null')
+    query['bind'] = bind
     query['limit'] = query.get('limit', 500)
     if isinstance(query['limit'], bool) or not isinstance(query['limit'], int):
         raise SemanticModelError('query.limit must be an integer')

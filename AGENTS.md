@@ -37,7 +37,7 @@ without a `ui_descriptors` entry does not count as surfaced. Do not introduce un
 ## Diagram-Design-Notation integration and freshness
 
 Owner-designated sister project:
-`/home/dcalford/Sandbox/Diagram-Design-Notation/`.
+`/home/dcalford/Sandbox/ScratchWeaver/project/ddn/`.
 Use its tools for ERD and dashboard display and editing. ScratchRobin owns
 provider metadata/data adapters, authorization, persistence and native-operation
 execution; DDN owns diagram/dashboard rendering and visual editing. Do not build
@@ -59,14 +59,24 @@ Before EVERY build, and before every test run intended to validate a commit:
    during capture, retry capture; later changes are consumed on the next run.
    Review and retain the refreshed dependency and manifest with the commit.
 
-This is a prerequisite even for direct webpack/pytest/Jest invocation. Until an
-automated gate covers those entry points, perform and document it explicitly.
-Do not claim the gate is automated when it is only a contributor instruction.
+This gate is automated on both development paths. On Linux,
+`bash tools/development/dev.sh ddn` runs `tools/refresh_ddn.py`, and the
+`frontend` stage runs the refresh before building. On native Windows/macOS,
+`native.py` runs the same refresh before its build and test stages. Direct
+webpack, pytest or Jest invocations bypass those entry points: run
+`bash tools/development/dev.sh ddn` (or `tools/refresh_ddn.py`) explicitly
+first and record it.
 
-At introduction of this instruction the checked-in loader still expects DDN
-0.5.0-draft.2 and Designer 0.1.0-preview.1. The sister project is 0.8.0 and its
-shipping designer is the unified tool. Migrate that boundary before treating
-ERD/dashboard integration or a build using the old pair as compliant.
+Owner direction, 2026-10-28: migrate generation, dashboard generation and
+DDN-to-native-metadata exchange to ScratchWeaver's standalone open DDN
+`ddn-next-1` utility API 1.0. The old dialect is incompatible. Consume only
+`project/ddn` and its public build dependencies; never consume commercial Weaver.
+Publication of this standalone DDN integration is authorized by the owner
+(2026-10-28); commercial Weaver remains excluded. Source
+workspaces use `ddn-source-workspace@1`; native DDN ModelSnapshot is a different
+contract. Legacy saved designs require an explicit, loss-reported conversion,
+never a format relabel. Refresh with `tools/refresh_ddn.py`; review the exact
+source revision and artifact hashes in the provenance manifest.
 
 ## Bidirectional native metadata and DDN
 

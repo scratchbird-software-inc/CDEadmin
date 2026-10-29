@@ -42,7 +42,7 @@ const asset = {
   assetRef: {schemaVersion: 1, projectId: 'project-one', assetId: 'diagram-one',
     assetType: 'ddn-workspace', assetVersion: 2, path: 'diagram.ddn',
     displayName: 'Diagram'},
-  content: {format: 'ddn-workspace@1', entry: 'diagram.ddn', view: 'main',
+  content: {format: 'ddn-source-workspace@1', entry: 'diagram.ddn', view: 'main',
     files: {'diagram.ddn': 'diagram main {}'}},
 };
 
@@ -67,7 +67,7 @@ describe('DDN first-party module hosting', () => {
     expect(architecture.inspector.resolve({surfaceId: 'diagram.ddn.designer'}))
       .toHaveLength(1);
     expect(architecture.toolbox.resolve({surfaceId: 'diagram.ddn.designer'}))
-      .toHaveLength(1);
+      .toHaveLength(0);
     expect(architecture.status.resolve({surfaceId: 'diagram.ddn.viewer'}))
       .toHaveLength(1);
     expect(architecture.activity.resolve()).toHaveLength(1);
@@ -88,7 +88,7 @@ describe('DDN first-party module hosting', () => {
     });
     expect(React.isValidElement(viewer)).toBe(true);
     expect(viewer.type).toBe(DDNViewerSurface);
-    expect(viewer.props.snapshot).toBe(asset.content);
+    expect(viewer.props.snapshot).toEqual(asset.content);
 
     const designerDescriptor = architecture.surfaces.descriptor(
       'diagram.ddn.designer', {toolInstanceId: 'ddn-designer-one',
@@ -98,7 +98,7 @@ describe('DDN first-party module hosting', () => {
       services: {[PROJECT_ASSET_SERVICE_ID]: service},
     });
     expect(designer.type).toBe(DDNDesignerSurface);
-    await designer.props.saveAsset({assetRef: asset.assetRef});
+    await designer.props.saveAsset({assetRef: asset.assetRef, snapshot:asset.content});
     expect(client.saveDDNAsset).toHaveBeenCalledTimes(1);
     expect(client.asset).toHaveBeenCalledWith('project-one', 'diagram-one');
   });
@@ -155,4 +155,19 @@ describe('DDN first-party module hosting', () => {
       services: {[PROJECT_ASSET_SERVICE_ID]: service},
     })).rejects.toThrow('not a DDN workspace');
   });
+});
+
+
+it('preserves native baseline attachments through generic project editing without sending them to DDN', async () => {
+  const baseline=asset.content;
+  const metadata={scope:{endpoint_id:'owned',database_target_id:'native-target',kind:'relations'}};
+  const nativeAsset={...asset,metadata,content:{...asset.content,mysqlDesign:{baseline}}};
+  const client={asset:jest.fn().mockResolvedValue(nativeAsset),saveDDNAsset:jest.fn().mockResolvedValue({assetRef:asset.assetRef})};
+  const architecture=host(client);await architecture.modules.activate('cdeadmin.ddn');
+  const descriptor=architecture.surfaces.descriptor('diagram.ddn.designer',{toolInstanceId:'native-design',restoreRef:'diagram-one',projectId:'project-one'});
+  const designer=await architecture.surfaces.restore(descriptor,{services:{[PROJECT_ASSET_SERVICE_ID]:client}});
+  expect(Object.keys(designer.props.snapshot).sort()).toEqual(['entry','files','format','view']);
+  const authored={...baseline,files:{'diagram.ddn':baseline.files['diagram.ddn']+'\n// authored'}};
+  await designer.props.saveAsset({assetRef:asset.assetRef,snapshot:authored});
+  expect(client.saveDDNAsset).toHaveBeenCalledWith({assetRef:asset.assetRef,metadata,snapshot:{...authored,mysqlDesign:{baseline}}});
 });

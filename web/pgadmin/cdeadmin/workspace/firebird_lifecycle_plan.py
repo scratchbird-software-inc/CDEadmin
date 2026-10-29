@@ -1,8 +1,11 @@
 """Explicit native identity transitions, never inferred from missing objects."""
+import re
+
 from ..providers.firebird.identity import column_rename, domain_rename, catalog_resource_id
 from ..providers.firebird.character_metadata import identifier
 from .firebird_view_plan import dependencies
 from .firebird_sql_export import grant_statement, DEPENDENCY_KINDS
+from .firebird_physical import NOT_CARRIED
 
 INSTRUCTION = 'lifecycle'
 
@@ -10,11 +13,15 @@ GRANT_FIELDS = ('grantee', 'grantor', 'grant_option', 'user_type', 'object_type'
 
 
 def plan(old, wanted, live, current, desired):
+    """One operation, or None when the live catalog already shows the intended outcome
+    (a replayed review converges instead of failing)."""
     if live is not None and live['system'] != 'false':
         raise ValueError('Lifecycle changes require an explicitly observed user object')
     intent = wanted['native'][INSTRUCTION]
     if isinstance(intent, dict) and intent.get('operation') == 'drop':
-        return drop(old, wanted, live, current)
+        return drop(old, wanted, live, current, desired)
+    if isinstance(intent, dict) and intent.get('operation') == 'replace':
+        return replace_index(old, wanted, live, current)
     if isinstance(intent, dict) and intent.get('operation') == 'type':
         return domain_type(old, wanted, live, current)
     if isinstance(intent, dict) and intent.get('operation') == 'bind_domain':
@@ -97,13 +104,17 @@ def domain_type(old, wanted, live, current):
             'transaction': 'Native conversion; never rebuild or copy values in the application'}
 
 
-def drop(old, wanted, live, current):
+def drop(old, wanted, live, current, desired=None):
     from .firebird_schema_plan import native_guard, _model
     from .firebird_index_plan import context as index_context
     intent = wanted['native'][INSTRUCTION]
-    if set(intent) != {'operation', 'confirmation'} or old is None or live is None or INSTRUCTION in old['native']:
+    if set(intent) != {'operation', 'confirmation'} or old is None or INSTRUCTION in old['native']:
         raise ValueError('DROP requires an observed baseline and exact explicit confirmation')
-    if intent['confirmation'] != old['name'] or not (native_guard(old) == native_guard(wanted) == native_guard(live)):
+    if intent['confirmation'] != old['name']:
+        raise ValueError('DROP requires exact name confirmation and unchanged native properties')
+    if live is None:
+        return None  # Already absent: the drop converged.
+    if not (native_guard(old) == native_guard(wanted) == native_guard(live)):
         raise ValueError('DROP requires exact name confirmation and unchanged native properties')
     kind = wanted['kind']
     kinds = {'table': 'TABLE', 'view': 'VIEW', 'domain': 'DOMAIN', 'sequence': 'SEQUENCE',
@@ -122,6 +133,7 @@ def drop(old, wanted, live, current):
         index_context(live, current, before['segments'])
     if kind == 'constraint' and before['constraint_type'] == 'NOT NULL':
         raise ValueError('NOT NULL removal requires the column nullability workflow')
+    implicit = _removal_guards(kind, live, current, desired) if desired is not None else []
     if kind in {'column', 'constraint'}:
         if not any(row['kind'] == 'table' and row['name'] == live['path'][0]
                    and row['system'] == 'false' for row in current['rows'].values()):
@@ -134,14 +146,153 @@ def drop(old, wanted, live, current):
     children = [key for key, row in current['rows'].items()
                 if kind in {'table', 'view', 'package'} and row['path'][:-1] == live['path']
                 and row['kind'] in {'column', 'index', 'constraint', 'trigger', 'function', 'procedure'}]
+    children = sorted(set(children) | set(implicit))
     return {'resource_id': wanted['resource_id'], 'kind': kind, 'operation': 'drop',
             'source_location': wanted.get('source_location'), 'before': before, 'after': None,
             'statements': [], 'deferred_statements': [statement], 'implicit_child_removals': sorted(children),
             'dependencies': guards, 'order_dependencies': [], 'lifecycle_confirmation': intent['confirmation'],
+            'destructive': True, 'confirmation': intent['confirmation'],
             'native_preconditions': {key: native_guard(current['rows'][key]) for key in guards},
             'precondition': 'Unchanged native object and exact removal confirmation',
             'permissions': 'Native DROP/ALTER authority and dependency admission required',
             'transaction': 'Destructive removal in the owned native transaction'}
+
+
+def _removed(desired, row):
+    """True when the desired document also removes this row (or its table) with its own confirmation."""
+    def dropped(candidate):
+        wanted = desired['rows'].get(candidate['resource_id'])
+        intent = wanted['native'].get(INSTRUCTION) if wanted else None
+        return isinstance(intent, dict) and intent.get('operation') == 'drop' and intent.get('confirmation') == candidate['name']
+    if dropped(row):
+        return True
+    if len(row['path']) > 1:
+        table = desired['rows'].get(catalog_resource_id('table', [], row['path'][0]))
+        return table is not None and dropped(table)
+    return False
+
+
+def _mentions(source, name):
+    """Conservative identifier search in native expression text."""
+    return isinstance(source, str) and re.search(r'(?<![\w$])"?' + re.escape(name) + r'"?(?![\w$])', source, re.I) is not None
+
+
+def _column_users(live, current):
+    """Rows of the same table that use a column: (constraints, standalone indexes, computed indexes)."""
+    table, name = live['path']
+    backed = {row['native'].get('index_name') for row in current['rows'].values()
+              if row['kind'] == 'constraint' and row['path'][0] == table}
+    constraints, indexes, computed = [], [], []
+    for row in current['rows'].values():
+        if row['path'][:1] != [table]:
+            continue
+        native = row['native']
+        if row['kind'] == 'constraint':
+            segments = (native.get('backing_index') or {}).get('segments') or []
+            if (any(item.get('field_name') == name for item in segments) or
+                    (native.get('constraint_type') == 'CHECK' and _mentions(native.get('check_source'), name))):
+                constraints.append(row)
+        elif row['kind'] == 'index' and row['name'] not in backed:
+            if _mentions(native.get('expression_source'), name) or _mentions(native.get('condition_source'), name):
+                computed.append(row)
+            elif any(item.get('field_name') == name for item in native.get('segments') or []):
+                indexes.append(row)
+    return constraints, indexes, computed
+
+
+def _key_users(row, current, desired):
+    """Foreign keys of other constraints that need this PRIMARY KEY/UNIQUE and are not removed with it."""
+    return [item['name'] for item in current['rows'].values() if item['kind'] == 'constraint'
+            and item['native'].get('constraint_type') == 'FOREIGN KEY'
+            and item['native'].get('referenced_relation') == row['path'][0]
+            and item['native'].get('referenced_index') == row['native'].get('index_name')
+            and not _removed(desired, item)]
+
+
+def _removal_guards(kind, live, current, desired):
+    """Dependencies Firebird 5.0 refuses at DROP, proven from the observed catalog, and the
+    constraints and backing indexes that Firebird removes implicitly. Returns the implicit rids."""
+    implicit = []
+    if kind == 'constraint':
+        index = catalog_resource_id('index', live['path'][:1], live['native'].get('index_name'))
+        if live['native'].get('index_name') and index in current['rows']:
+            implicit.append(index)  # The backing index goes with its constraint.
+    if kind == 'constraint' and live['native'].get('constraint_type') in {'PRIMARY KEY', 'UNIQUE'}:
+        users = _key_users(live, current, desired)
+        if users:
+            raise ValueError('Foreign keys depend on this key and are not removed by the same review: ' + ', '.join(sorted(users)))
+    if kind == 'table':
+        users = sorted(row['name'] for row in current['rows'].values() if row['kind'] == 'constraint'
+                       and row['native'].get('constraint_type') == 'FOREIGN KEY'
+                       and row['native'].get('referenced_relation') == live['name'] and row['path'][0] != live['name']
+                       and not _removed(desired, row))
+        if users:
+            raise ValueError('Foreign keys of other tables reference this table and are not removed by the same review: ' + ', '.join(users))
+    if kind == 'column':
+        constraints, indexes, computed = _column_users(live, current)
+        blocking = sorted(row['name'] for row in [*indexes, *computed] if not _removed(desired, row))
+        if blocking:
+            raise ValueError('Firebird refuses to drop column ' + live['name'] + ' while indexes use it; remove them in the same review: ' + ', '.join(blocking))
+        for row in constraints:
+            if row['native'].get('constraint_type') in {'PRIMARY KEY', 'UNIQUE'}:
+                users = _key_users(row, current, desired)
+                if users:
+                    raise ValueError('Dropping column ' + live['name'] + ' would remove ' + row['name'] + ' that foreign keys depend on: ' + ', '.join(sorted(users)))
+            if not _removed(desired, row):
+                implicit.append(row['resource_id'])
+                index = catalog_resource_id('index', row['path'][:1], row['native'].get('index_name'))
+                if row['native'].get('index_name') and index in current['rows']:
+                    implicit.append(index)
+    return sorted(set(implicit))
+
+
+def _rename_blockers(live, current):
+    """Column uses for which Firebird 5.0 refuses ALTER COLUMN ... TO (plain indexes are rewritten)."""
+    constraints, _, computed = _column_users(live, current)
+    return sorted(row['name'] for row in [*constraints, *computed])
+
+
+def replace_index(old, wanted, live, current):
+    """Explicit rebuild of a standalone index whose key, uniqueness, direction, computed
+    expression or condition changed. Firebird has no ALTER INDEX for any of these, so the
+    reviewed outcome is DROP INDEX and CREATE INDEX under the same name inside one
+    transaction. The index data is rebuilt at commit; a uniqueness violation in existing
+    rows fails the whole review and nothing is committed."""
+    from .firebird_schema_plan import native_guard, _model, _native_changes, DERIVED
+    from . import firebird_index_plan as indexes
+    from ..providers.firebird.character_metadata import literal
+    intent = wanted['native'][INSTRUCTION]
+    if (wanted['kind'] != 'index' or set(intent) != {'operation', 'confirmation'} or old is None
+            or INSTRUCTION in old['native']):
+        raise ValueError('Index replacement requires an observed standalone index and exact confirmation')
+    if intent['confirmation'] != old['name']:
+        raise ValueError('Index replacement confirmation must equal the exact index name')
+    if _native_changes(old, wanted, DERIVED | indexes.FIELDS | {'statistics'}):
+        raise ValueError('Index replacement cannot combine unrelated property changes')
+    if live is None:
+        raise ValueError('Native index no longer exists')
+    before, after, actual = _model(old), _model(wanted), _model(live)
+    if actual == after:
+        return None  # The live index already has the reviewed definition.
+    if native_guard(old) != native_guard(live):
+        raise ValueError('Native index changed independently since the baseline')
+    if before == after:
+        raise ValueError('No index definition change was requested')
+    owner = indexes.context(live, current, after['segments'])
+    statements = ['DROP INDEX ' + identifier(live['name']), *indexes.statements(None, after)]
+    if after['description'] is not None:
+        statements.append('COMMENT ON INDEX ' + identifier(live['name']) + ' IS ' + literal(after['description']))
+    guards = sorted({owner, *dependencies(current)})
+    return {'resource_id': wanted['resource_id'], 'kind': 'index', 'operation': 'replace',
+            'source_location': wanted.get('source_location'), 'before': actual, 'after': after,
+            'statements': statements, 'deferred_statements': [], 'dependencies': guards,
+            'order_dependencies': [owner], 'lifecycle_confirmation': intent['confirmation'],
+            'replacement': True,
+            'native_preconditions': {key: native_guard(current['rows'].get(key)) for key in [wanted['resource_id'], *guards]},
+            'precondition': 'Exact native index definition and exact replacement confirmation',
+            'permissions': 'Native DROP INDEX and CREATE INDEX authority on the owning table required',
+            'transaction': ('DROP INDEX then CREATE INDEX in the one owned transaction; the index is rebuilt at '
+                            'commit and any rejected row rolls back the whole review')}
 
 
 def order_removals(operations, current):
@@ -194,15 +345,21 @@ def rename(old, wanted, live, current, desired):
     if (not isinstance(intent, dict) or set(intent) != {'operation', 'confirmation', 'new_name'}
             or intent['operation'] != 'rename'):
         raise ValueError('Explicit rename requires operation, confirmation and new_name')
-    if old is None or live is None or INSTRUCTION in old['native']:
+    kind = wanted['kind']
+    if kind not in {'column', 'domain'}:
+        raise ValueError('Not carried to Firebird: ' + NOT_CARRIED.get(kind, 'this object kind has no native rename statement'))
+    if old is None or INSTRUCTION in old['native']:
         raise ValueError('Rename requires an observed original baseline and current object')
     if intent['confirmation'] != old['name']:
         raise ValueError('Rename confirmation must equal the original native name')
+    if live is None:
+        moved = current['rows'].get((column_rename if kind == 'column' else domain_rename)(
+            old['path'], intent['new_name'])['resource_id'])
+        if moved is not None and _model(moved) == {**_model(old), 'name': intent['new_name']}:
+            return None  # The reviewed rename already happened.
+        raise ValueError('Rename requires an observed original baseline and current object')
     if not (native_guard(old) == native_guard(wanted) == native_guard(live)):
         raise ValueError('Rename cannot combine property changes or overwrite native drift')
-    kind = wanted['kind']
-    if kind not in {'column', 'domain'}:
-        raise ValueError('This kind has no admitted native rename operation')
     before = _model(live)
     transition = (column_rename if kind == 'column' else domain_rename)(
         live['path'], intent['new_name'])
@@ -211,6 +368,10 @@ def rename(old, wanted, live, current, desired):
         raise ValueError('Rename destination is already present or independently authored')
     before_grants, after_grants, revokes, grants = [], [], [], []
     if kind == 'column':
+        blockers = _rename_blockers(live, current)
+        if blockers:
+            raise ValueError('Firebird 5.0 refuses ALTER COLUMN ... TO while a PRIMARY KEY, UNIQUE, FOREIGN KEY, CHECK or '
+                             'computed index uses the column (' + ', '.join(blockers) + '); this rename is not carried')
         parent = next((row for row in current['rows'].values() if row['kind'] == 'table'
                        and row['name'] == transition['table']), None)
         if parent is None or parent['system'] != 'false':

@@ -1,0 +1,45 @@
+{
+  "name": "@ddn/profiles",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "source": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./core": {
+      "types": "./src/core.d.ts",
+      "import": "./src/core.js"
+    },
+    "./native": {
+      "types": "./src/native.d.ts",
+      "import": "./src/native.js"
+    },
+    "./families": {
+      "types": "./src/family-packs.d.ts",
+      "import": "./src/family-packs.js"
+    },
+    "./families/graphs": {
+      "types": "./src/families/graphs.d.ts",
+      "import": "./src/families/graphs.js"
+    },
+    "./families/charts": {
+      "types": "./src/families/charts.d.ts",
+      "import": "./src/families/charts.js"
+    },
+    "./families/geography": {
+      "types": "./src/families/geography.d.ts",
+      "import": "./src/families/geography.js"
+    },
+    "./families/surfaces": {
+      "types": "./src/families/surfaces.d.ts",
+      "import": "./src/families/surfaces.js"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "license": "GPL-2.0-or-later"
+}

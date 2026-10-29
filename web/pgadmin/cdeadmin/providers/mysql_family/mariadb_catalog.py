@@ -215,3 +215,59 @@ def capture(connection, database, *, include_system=False):
     account(root['native'])
     return {'resources': resources, 'generation': str(uuid.uuid4()),
             'database_name': database, 'observations': observations, 'complete': False}
+
+
+SYSTEM_SCHEMAS = "('information_schema', 'mysql', 'performance_schema', 'sys')"
+
+
+def program_object_natives(optional_records, add):
+    """Enrich MariaDB triggers, routines and events with the definition facts
+    the family editor pre-fills (body, parameters, schedule). Additive: every
+    key here is new; the ``details`` list the base inventory records stays."""
+    for record in optional_records(
+            'SELECT TRIGGER_SCHEMA, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE, TRIGGER_NAME, ACTION_TIMING, '
+            'EVENT_MANIPULATION, ACTION_ORDER, ACTION_STATEMENT FROM information_schema.TRIGGERS '
+            f'WHERE TRIGGER_SCHEMA NOT IN {SYSTEM_SCHEMAS} ORDER BY 1, 3, 7, 4'):
+        add('trigger', [record['trigger_schema'], record['event_object_table']], record['trigger_name'], {
+            'timing': record['action_timing'], 'events': [record['event_manipulation']],
+            'position': record['action_order'], 'body': record['action_statement'],
+            'table': [record['event_object_schema'], record['event_object_table']]})
+    parameters = {}
+    for record in optional_records(
+            'SELECT SPECIFIC_SCHEMA, SPECIFIC_NAME, ROUTINE_TYPE, ORDINAL_POSITION, PARAMETER_MODE, PARAMETER_NAME, '
+            f'DTD_IDENTIFIER FROM information_schema.PARAMETERS WHERE SPECIFIC_SCHEMA NOT IN {SYSTEM_SCHEMAS} '
+            'ORDER BY 1, 2, 4'):
+        key = (record['specific_schema'], record['specific_name'], str(record['routine_type']).lower())
+        entry = parameters.setdefault(key, {'parameters': [], 'returns': None})
+        if record['ordinal_position'] == 0:
+            entry['returns'] = record['dtd_identifier']
+            continue
+        entry['parameters'].append({'name': record['parameter_name'], 'type': record['dtd_identifier'],
+                                    'mode': record['parameter_mode']})
+    for record in optional_records(
+            'SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, DTD_IDENTIFIER, ROUTINE_DEFINITION, IS_DETERMINISTIC, '
+            f'SQL_DATA_ACCESS, SECURITY_TYPE, ROUTINE_COMMENT FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA NOT IN {SYSTEM_SCHEMAS} '
+            "AND ROUTINE_TYPE IN ('PROCEDURE', 'FUNCTION') ORDER BY 1, 2"):
+        kind = str(record['routine_type']).lower()
+        signature = parameters.get((record['routine_schema'], record['routine_name'], kind), {})
+        add(kind, [record['routine_schema']], record['routine_name'], {
+            'body': record['routine_definition'], 'parameters': signature.get('parameters', []),
+            'returns': signature.get('returns') or record['dtd_identifier'],
+            'deterministic': str(record['is_deterministic']).upper() == 'YES',
+            'sql_data_access': record['sql_data_access'], 'security_type': record['security_type'],
+            'comment': record['routine_comment']})
+    for record in optional_records(
+            'SELECT EVENT_SCHEMA, EVENT_NAME, EVENT_TYPE, EXECUTE_AT, INTERVAL_VALUE, INTERVAL_FIELD, STARTS, ENDS, '
+            f'STATUS, ON_COMPLETION, EVENT_DEFINITION FROM information_schema.EVENTS WHERE EVENT_SCHEMA NOT IN {SYSTEM_SCHEMAS} '
+            'ORDER BY 1, 2'):
+        if str(record['event_type']).upper() == 'ONE TIME':
+            schedule = f"AT '{record['execute_at']}'"
+        else:
+            schedule = f"EVERY {record['interval_value']} {record['interval_field']}"
+            if record.get('starts'):
+                schedule += f" STARTS '{record['starts']}'"
+            if record.get('ends'):
+                schedule += f" ENDS '{record['ends']}'"
+        add('event', [record['event_schema']], record['event_name'], {
+            'schedule': schedule, 'preserve': str(record['on_completion']).upper() == 'PRESERVE',
+            'enabled': str(record['status']).upper() == 'ENABLED', 'body': record['event_definition']})

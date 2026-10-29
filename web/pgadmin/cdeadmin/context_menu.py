@@ -35,6 +35,9 @@ _HANDLERS = frozenset({
     'edit_endpoint',
     'forget_endpoint',
     'open_workspace',
+    # Engine-neutral opener for a surface registered in the workbench tool
+    # registry; arguments.surface names the registered surface id.
+    'open_tool',
     'open_mysql_fleet', 'open_mysql_dashboard_editor',
     'open_mysql_host', 'open_mysql_routers', 'open_mysql_physical', 'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mysql_instance_backups', 'open_mysql_instance_restores', 'open_mysql_topologies', 'open_mysql_sandboxes', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
     'open_mariadb_fleet', 'open_mariadb_dashboard_editor',

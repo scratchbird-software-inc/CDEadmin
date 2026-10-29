@@ -63,7 +63,9 @@ export default function PostgresqlCatalog({post, databaseTargetId}) {
     const token = ++serial.current;
     setBusy(true); setError('');
     try {
-      const snapshot = editor.current.snapshot(); validateDDNSnapshot(snapshot);
+      const snapshot = await editor.current.snapshot();
+      if(token !== serial.current) return;
+      validateDDNSnapshot(snapshot);
       const {format, entry, view: selectedView, files} = snapshot;
       const draft = {format, entry, view: selectedView, files};
       if(relationalEditing) {
@@ -97,7 +99,7 @@ export default function PostgresqlCatalog({post, databaseTargetId}) {
       <Button disabled={busy || !source} onClick={() => download(true)}>Download draft</Button>
       <Button disabled={busy || !result} onClick={() => {
         try {seed.current = source ? (source.trimStart().startsWith('{') ? JSON.parse(source) : {
-          format: 'ddn-workspace@1', entry: 'catalog.ddn', view: 'inventory_1', files: {'catalog.ddn': source},
+          format: 'ddn-source-workspace@1', entry: 'catalog.ddn', view: 'inventory_1', files: {'catalog.ddn': source},
         }) : result.snapshot; validateDDNSnapshot(seed.current);
         setRelationalEditing(false); setReady(false); setError(''); setEditing(true);
         } catch {setError('Select a valid DDN workspace before editing');}

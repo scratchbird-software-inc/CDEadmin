@@ -13,7 +13,7 @@ export {
   loadDDNLibraries,
   resetDDNLibraryLoaderForTests,
   setDDNLibraryLoaderForTests,
-} from './library';
+} from './library.js';
 export {
   DDN_ASSET_SCHEMA,
   DDN_SNAPSHOT_FORMATS,
@@ -22,11 +22,11 @@ export {
   validateDDNAssetRef,
   validateDDNFiles,
   validateDDNSnapshot,
-} from './contracts';
+} from './contracts.js';
 export {
   DDN_PERSISTENCE_STATES,
   DDNSessionController,
-} from './DDNSessionController';
+} from './DDNSessionController.js';
 export {DDNViewerSurface} from './DDNViewerSurface';
 export {DDNDesignerSurface} from './DDNDesignerSurface';
 export {
@@ -34,4 +34,4 @@ export {
   PROJECT_ASSET_SERVICE_ID,
   ddnModuleDefinition,
   registerDDNModule,
-} from './module';
+} from './module.js';

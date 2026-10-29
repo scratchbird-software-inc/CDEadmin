@@ -8,7 +8,7 @@ jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
 jest.mock('sources/cdeadmin_ui/data/PagedDataGrid', () => function MockGrid(props) {return <div aria-label={props['aria-label']}>{props.rows.length} changes</div>;});
 const Component = withTheme(MySQLCatalog);
 
-const capture = {snapshot: {format: 'ddn-workspace@1', entry: 'catalog.ddn', view: 'inventory_1', files: {'catalog.ddn': 'native metadata'}},
+const capture = {snapshot: {format: 'ddn-source-workspace@1', entry: 'catalog.ddn', view: 'inventory_1', files: {'catalog.ddn': 'native metadata'}},
   views: [{id: 'inventory_1', label: 'Native inventory', entry: 'catalog.ddn'}],
   provenance: {warnings: ['Visibility is partial']}};
 
@@ -57,7 +57,7 @@ describe('MySQL native catalog form', () => {
 
   it('acquires data only after explicit relation/mode/budget selection and shows static DDN coverage', async () => {
     const captured = {...capture, objects: [{resource_id: 'native-table', kind: 'table', name: 'Exact values'}]};
-    const data = {snapshot: {format: 'ddn-workspace@1', entry: 'result-1.ddn', view: 'result_1',
+    const data = {snapshot: {format: 'ddn-source-workspace@1', entry: 'result-1.ddn', view: 'result_1',
       files: {'result-1.ddn': 'static exact data'}}, views: [{id: 'result_1', label: 'Data page 1', entry: 'result-1.ddn'}],
     warnings: ['Explicit sample coverage']};
     const post = jest.fn().mockResolvedValueOnce(captured).mockResolvedValueOnce(data);
@@ -157,7 +157,7 @@ describe('MySQL native encoded download', () => {
 
 it('keeps parent previews disabled until the relational handoff installs its reviewed documents', async () => {
   let finish;
-  const diagram={snapshot:{format:'ddn-workspace@1',entry:'relations.ddn',view:'relations_1',files:{'relations.ddn':'native relations'}},views:[]};
+  const diagram={snapshot:{format:'ddn-source-workspace@1',entry:'relations.ddn',view:'relations_1',files:{'relations.ddn':'native relations'}},views:[]};
   const post=jest.fn().mockImplementation(request => {
     if(request.action==='mysql_catalog_export') return Promise.resolve({...capture,diagram});
     if(request.action==='mysql_relational_review') return new Promise(resolve => {finish=resolve;});

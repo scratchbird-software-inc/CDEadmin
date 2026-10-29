@@ -45,7 +45,7 @@ export default function NativeDataImport({post, databaseTargetId, engine, object
   };
   let snapshot;
   try {snapshot = source.trim().startsWith('{') ? JSON.parse(source) :
-    {format: 'ddn-workspace@1', entry: 'result-1.ddn', view: 'result_1', files: {'result-1.ddn': source}};} catch {snapshot = null;}
+    {format: 'ddn-source-workspace@1', entry: 'result-1.ddn', view: 'result_1', files: {'result-1.ddn': source}};} catch {snapshot = null;}
   return <Box component="details" sx={{my: 1}}>
     <summary>Import native data DDN</summary>
     <Alert severity="info">Select a native table, read the data capture and review its exact typed values before importing.

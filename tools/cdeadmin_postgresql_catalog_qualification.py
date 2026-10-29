@@ -151,8 +151,8 @@ def qualify(provider, route, password, server, user, receipt, evidence):
         assert 'integer[]' in source and 'Native column comment' in source
         import subprocess
         from pathlib import Path
-        runtime = (Path(__file__).resolve().parents[1] / 'web/pgadmin/static/vendor/ddn/current/ddn.mjs').as_uri()
-        script = 'import runtime from ' + json.dumps(runtime) + ";let input='';for await(const part of process.stdin)input+=part;const diagram=JSON.parse(input),w=runtime.createWorkspace(diagram.snapshot.files);try{for(const view of diagram.views){const r=w.renderSync({entry:view.entry,view:view.id});if(r.diagnostics.some(x=>x.severity==='error'))throw Error('Invalid native graph');}}finally{w.destroy();}"
+        runtime = (Path(__file__).resolve().parents[1] / 'tools/ddn_render.mjs').as_uri()
+        script = 'import {renderWorkspace} from '+json.dumps(runtime)+";let input='';for await(const chunk of process.stdin)input+=chunk;await renderWorkspace(JSON.parse(input).snapshot);"
         subprocess.run(['node', '--input-type=module', '-e', script], input=json.dumps(diagram),
                        text=True, capture_output=True, timeout=30, check=True)
         receipt['checks'].append('native-postgresql-relational-ddn-public-renderer')
@@ -1253,8 +1253,8 @@ def qualify_data_capture(provider, route, admin, receipt):
             except ValueError as error:assert '4 MiB' in str(error)
             else:raise AssertionError('Data capture ignored its byte budget')
         assert set(provider._sessions)==sessions
-        runtime=(Path(__file__).resolve().parents[1]/'web/pgadmin/static/vendor/ddn/current/ddn.mjs').as_uri()
-        script='import runtime from '+json.dumps(runtime)+";let input='';for await(const part of process.stdin)input+=part;const doc=JSON.parse(input),w=runtime.createWorkspace(doc.snapshot.files);try{for(const view of doc.views){const r=w.renderSync({entry:view.entry,view:view.id});if(r.diagnostics.some(x=>x.severity==='error'))throw Error('Invalid data capture');}}finally{w.destroy();}"
+        runtime=(Path(__file__).resolve().parents[1]/'tools/ddn_render.mjs').as_uri()
+        script='import {renderWorkspace} from '+json.dumps(runtime)+";let input='';for await(const chunk of process.stdin)input+=chunk;await renderWorkspace(JSON.parse(input).snapshot);"
         subprocess.run(['node','--input-type=module','-e',script],input=json.dumps(full),text=True,capture_output=True,timeout=30,check=True)
         admin.execute(sql.SQL('CREATE ROLE {} NOLOGIN').format(sql.Identifier(role)));role_created=True
         admin.execute(sql.SQL('GRANT USAGE ON SCHEMA {} TO {}').format(sql.Identifier(name),sql.Identifier(role)))

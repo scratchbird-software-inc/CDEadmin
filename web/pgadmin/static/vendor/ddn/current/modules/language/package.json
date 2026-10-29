@@ -1,0 +1,1 @@
+{"name":"@ddn/language","version":"0.0.0","private":true,"type":"module","description":"Lossless indentation-based ddn-next-1 language decoder and source editor","exports":{".":{"types":"./src/index.d.ts","import":"./src/index.js"}},"files":["src"],"license":"GPL-2.0-or-later"}

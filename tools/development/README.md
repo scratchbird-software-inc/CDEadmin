@@ -26,6 +26,10 @@ complementary to the full Linux `dev.sh` workflow below.
 | macOS Intel | Ubuntu 24.04 x86_64 VM or remote x86_64 Linux machine | `remote.py` over SSH, or Linux launcher inside VM |
 | Apple Silicon / Windows ARM / Linux ARM | Remote x86_64 Linux development machine recommended | `remote.py` |
 
+Decision rule: use `dev.sh` for the Linux reference estate (including WSL2/VM
+guests); use `native.py` and NATIVE.md for host-OS development on Windows and
+macOS.
+
 The existing bootstrap extracts Linux `.so` libraries and executable clients.
 Native PowerShell/macOS Python cannot load them. An ARM guest with amd64 Docker
 images alone does not solve host-client architecture or CPU instruction-set
@@ -198,6 +202,15 @@ bash tools/development/dev.sh frontend
 bash tools/development/dev.sh clients
 ```
 
+The DDN freshness protocol (see the repository `AGENTS.md`) is automated on
+this path: `frontend` refreshes the consumed DDN runtime/tool snapshot before
+building. To refresh explicitly — required before any direct webpack, pytest
+or Jest invocation — run:
+
+```bash
+bash tools/development/dev.sh ddn
+```
+
 - `python` creates a repository-local `.venv`, installs the application and demo
   requirements together, builds the corrected native MySQL connector, and runs
   `pip check`. It does not use `pip --user` or
@@ -213,7 +226,8 @@ bash tools/development/dev.sh clients
   records the current installed extension and input hashes; one bounded failure
   log is retained if compilation fails. Repeated setup reuses a matching receipt
   only after checking the installed extension bytes and native version/ABI.
-- `frontend` uses `corepack yarn install --immutable`, compiles the theme, and
+- `frontend` refreshes the consumed DDN snapshot (the `ddn` action), then uses
+  `corepack yarn install --immutable`, compiles the theme, and
   builds production assets. Peer warnings must be assessed separately from a
   successful build. Do not use a blind Yarn upgrade or `npm audit fix --force`.
 - `clients` downloads/builds pinned native tools, checks the SQLite source hash,

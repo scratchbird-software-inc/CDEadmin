@@ -44,6 +44,7 @@ import {
   MIGRATION_MODULE_ID, MIGRATION_SERVICE_ID, registerMigrationModule,
 } from '../modules/migration';
 import {API_MODULE_ID, API_SERVICE_ID, registerAPIModule} from '../modules/api';
+import {BI_MODULE_ID, registerBIModule} from '../modules/bi/module';
 import {
   ML_VECTOR_MODULE_ID, ML_VECTOR_SERVICE_ID, registerMLVectorModule,
 } from '../modules/ml_vector';
@@ -146,6 +147,7 @@ export function initializeCDEadminPlatform({api, services: serviceOptions}={}) {
   if(!moduleRegistry.has(API_MODULE_ID)) registerAPIModule({
     modules: moduleRegistry, services: serviceRegistry, api,
   });
+  if(!moduleRegistry.has(BI_MODULE_ID)) registerBIModule({modules: moduleRegistry});
   if(!moduleRegistry.has(ML_VECTOR_MODULE_ID)) registerMLVectorModule({
     modules: moduleRegistry, services: serviceRegistry, api,
   });
@@ -174,6 +176,7 @@ export function initializeCDEadminPlatform({api, services: serviceOptions}={}) {
       moduleRegistry.activate(TRACING_MODULE_ID),
       moduleRegistry.activate(MIGRATION_MODULE_ID),
       moduleRegistry.activate(API_MODULE_ID),
+      moduleRegistry.activate(BI_MODULE_ID),
       moduleRegistry.activate(ML_VECTOR_MODULE_ID),
       moduleRegistry.activate(DISCOVERY_INTELLIGENCE_MODULE_ID),
     ])).then(async () => {
