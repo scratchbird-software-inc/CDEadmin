@@ -185,7 +185,11 @@ export function optionOffered(option, context={}) {
  */
 export function fieldOptions(field, {context={}, draft={}, resourceKind}={}) {
   if(Array.isArray(field.options) && field.options.length) {
-    return field.options.filter((option) => optionOffered(option, context));
+    // An existing object's current value stays visible even when it is not
+    // offered for new choices (for example a module not loaded this session).
+    const current = draft?.[field.field_id];
+    return field.options.filter((option) => optionOffered(option, context) ||
+      (current !== undefined && option?.value === current));
   }
   const path = field.option_values_path;
   if(Array.isArray(path) && path.length) {

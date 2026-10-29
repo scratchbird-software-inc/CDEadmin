@@ -92,3 +92,10 @@ describe('loadEndpointResources', () => {
     expect(await loadEndpointResources(failing)).toEqual([]);
   });
 });
+
+describe('current values', () => {
+  it('keeps an existing object\'s current value even when it is not offered', () => {
+    const options = fieldOptions(moduleField, {context: {}, draft: {module: 'csv'}});
+    expect(options.map((o) => o.value)).toEqual(['csv', 'plain']);
+  });
+});
