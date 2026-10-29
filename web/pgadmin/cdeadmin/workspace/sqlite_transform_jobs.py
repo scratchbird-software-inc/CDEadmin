@@ -3,6 +3,7 @@ from contextlib import ExitStack
 import hashlib
 import json
 import os
+import sqlite3
 import time
 
 from ..operations.fileio import durable_replace,private_directory,private_file
@@ -64,7 +65,7 @@ class TransformTransport(UploadTransport):
                 if self.jobs.file_identity(os.fstat(stream.fileno()))!=before:raise SessionAPIError('A reviewed native input changed during transformation')
             check();os.fsync(descriptor)
             if not retained and connection.in_transaction:connection.rollback()
-        metadata={'format':'sqlite-native-'+kind+'@3.53.0','native_kind':kind,'input_name':path.name,
+        metadata={'format':'sqlite-native-'+kind+'@'+sqlite3.sqlite_version,'native_kind':kind,'input_name':path.name,
             'program':record['program'],'options':selected,'source':record['source'],'native':observed,'inspection':parsed,
             'database_mutation':False,'database_recovery_verified':False,
             'retained_schema_basis':retained,'source_transaction_open':transaction_open if retained else None}

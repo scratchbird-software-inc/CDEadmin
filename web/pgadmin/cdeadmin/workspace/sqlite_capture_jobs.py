@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import socket
+import sqlite3
 import threading
 import time
 
@@ -265,7 +266,7 @@ class ExportTransport:
         try:observed=self.api.call('inspect_file',input_descriptor,-1)
         finally:os.close(input_descriptor)
         files=[]
-        metadata={'format':'sqlite-native-'+record['options']['kind']+'@3.53.0','source':record['source'],
+        metadata={'format':'sqlite-native-'+record['options']['kind']+'@'+sqlite3.sqlite_version,'source':record['source'],
             'program':record['program'],'native':observed,'source_transaction_open':transaction_open,
             'database_recovery_verified':False,'database_mutation':False}
         with (incoming/'archive.json').open('x',encoding='utf8') as stream:

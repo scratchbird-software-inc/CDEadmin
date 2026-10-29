@@ -17,6 +17,7 @@ from flask import current_app, has_app_context
 
 from ..sdk.tool_process import observe_process
 from .sqlite_fts_rebind import equal, quote
+from ..providers.sqlite.provider import PROFILE
 
 SOURCE_ID = '2026-04-09 11:41:38 4525003a53a7fc63ca75c59b22c79608659ca12f0131f52c18637f829977f20b'
 LIMIT = 24 * 1024 * 1024
@@ -115,10 +116,22 @@ def mappings(connection, selected, rebindings):
     return result
 
 
+def _admitted_runtime(connection):
+    """The connection runs on the loaded library inside the profile range.
+
+    sqlite_version() through SQL can be redefined by a session, so the
+    loaded library's version is the authority and must agree with it.
+    """
+    import sqlite3
+    runtime = sqlite3.sqlite_version
+    observed = connection.execute('SELECT sqlite_version()').fetchone()[0]
+    return observed == runtime and PROFILE.accepts_runtime_version(runtime)
+
 def rewrite(connection, declarations, selected, rebindings, *, view_columns=(),
             schema_declarations=None,native_targets=(),edits_out=None):
-    if connection.execute('SELECT sqlite_version(),sqlite_source_id()').fetchone() != ('3.53.0', SOURCE_ID):
-        raise ValueError('The schema binding connection does not match the pinned SQLite profile')
+    if not _admitted_runtime(connection):
+        raise ValueError(
+            'The schema binding connection is not an admitted SQLite runtime')
     dependencies = [row for row in declarations if row['kind'] in {'view', 'trigger'}]
     changes = mappings(connection, selected, rebindings)
     changes.extend(native_targets)

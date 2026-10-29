@@ -189,7 +189,7 @@ class UploadTransport:
                 self.jobs.update(record,native_returned=True,native_inspection=observed)
             check();after=os.fstat(stream.fileno())
             if self.jobs.file_identity(before)!=self.jobs.file_identity(after):raise SessionAPIError('Native upload bytes changed during validation')
-        metadata={'format':'sqlite-native-'+kind+'@3.53.0','native_kind':kind,'input_name':path.name,
+        metadata={'format':'sqlite-native-'+kind+'@'+sqlite3.sqlite_version,'native_kind':kind,'input_name':path.name,
             'original_client_filename':record['options']['filename'],'native_empty_stream':not bool(header),
             'producer_checksum_provided':record['options']['expected_sha256'] is not None,'program':api.program,'native':observed,
             'database_mutation':False,'database_recovery_verified':False}

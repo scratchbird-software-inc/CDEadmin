@@ -2,7 +2,7 @@
 import sqlite3
 
 from .sqlite_fts_rebind import equal,quote
-from .sqlite_native_rebind import SOURCE_ID
+from ..providers.sqlite.provider import PROFILE
 from .firebird_schema_plan import digest
 
 
@@ -24,8 +24,12 @@ def mapping(baseline,content,renames,*,before_name='rowid',after_name='rowid'):
     if len(owners)!=1:raise ValueError('Native FTS content owner is ambiguous')
     owner=owners[0];connection=sqlite3.connect(':memory:',cached_statements=0)
     try:
-        if connection.execute('SELECT sqlite_version(),sqlite_source_id()').fetchone()!=('3.53.0',SOURCE_ID):
-            raise ValueError('Native FTS row identity requires the pinned SQLite profile')
+        # Before/after fingerprints come from this one runtime, so any
+        # admitted version is comparable; record which one answered.
+        runtime=sqlite3.sqlite_version
+        if not PROFILE.accepts_runtime_version(runtime):
+            raise ValueError(
+                'Native FTS row identity requires an admitted SQLite runtime')
         connection.setconfig(sqlite3.SQLITE_DBCONFIG_DQS_DML,False)
         connection.execute(owner['native']['ddl']);before=fingerprint(connection,owner['name'],before_name);current=owner['name']
         for item in renames:
@@ -36,7 +40,7 @@ def mapping(baseline,content,renames,*,before_name='rowid',after_name='rowid'):
             else:connection.execute(source+'COLUMN '+quote(item['from'])+' TO '+quote(item['to']))
         after=fingerprint(connection,current,after_name)
         result={'owner':current,'changed':before!=after,'expression':after_name,
-                'authority':'sqlite-3.53.0-native-content-select-bytecode',
+                'authority':'sqlite-'+runtime+'-native-content-select-bytecode',
                 'before_sha256':digest(before),'after_sha256':digest(after)}
         if before==after:return result
         candidates=[row[1] for row in connection.execute('PRAGMA table_xinfo('+quote(current)+')')]+['rowid','oid','_rowid_']

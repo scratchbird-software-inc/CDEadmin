@@ -73,7 +73,7 @@ class DiffTransport(UploadTransport):
             if schema_snapshot(connection,selected['source_database'],transient=True)!=record['source']['source_schema']:
                 raise SessionAPIError('The attached source schema changed during native comparison')
             check();os.fsync(descriptor)
-        metadata={'format':'sqlite-native-'+selected['kind']+'@3.53.0','native_kind':selected['kind'],'input_name':path.name,
+        metadata={'format':'sqlite-native-'+selected['kind']+'@'+sqlite3.sqlite_version,'native_kind':selected['kind'],'input_name':path.name,
             'program':record['program'],'options':selected,'source':record['source'],'native':observed,'inspection':parsed,
             'source_transaction_open':transaction_open,'database_mutation':False,'database_recovery_verified':False}
         with (incoming/'archive.json').open('x',encoding='utf8') as stream:

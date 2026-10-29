@@ -27,6 +27,14 @@ def decode(source):
                       parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite data value')))
 
 
+def _native_version_admitted(engine, observed, reference):
+    """Exact for single-version profiles; SQLite captures from any admitted
+    runtime (owner direction 2026-10-29: SQLite from a declared floor)."""
+    if engine == 'sqlite':
+        from ..providers.sqlite.provider import PROFILE
+        return PROFILE.accepts_runtime_version(observed)
+    return observed == reference
+
 def read(source, node='node', *, engine='mysql'):
     versions = {'mysql': '9.7.0', 'mariadb': '12.2.2', 'postgresql': '18.3', 'duckdb': '1.5.2', 'sqlite': '3.53.0'}
     if engine not in versions:
@@ -52,7 +60,10 @@ def read(source, node='node', *, engine='mysql'):
         acquisition = metadata.get('acquisition', {})
         columns = metadata.get('schema', {}).get('columns', [])
         if (metadata.get('mapping') != 'scratchrobin.result.static@1' or acquisition.get('engine_id') != engine or
-                str(acquisition.get('native_version', '')).split('-')[0] != versions[engine] or
+                not _native_version_admitted(
+                    engine,
+                    str(acquisition.get('native_version', '')).split('-')[0],
+                    versions[engine]) or
                 not acquisition.get('transaction_completed') or not 1 <= len(columns) <= 256 or
                 len(parsed['rows']) != acquisition.get('rows') or not isinstance(acquisition.get('native_columns'), list)):
             raise ValueError('A native relation capture with exact column metadata is required')
