@@ -276,16 +276,164 @@ index carrying ``drop`` and the exact name (carried as the existing
 ``duckdb_change = {action: drop, confirmation: name}``). A replacement is a drop plus a
 new index under a new name.
 
+Firebird (``firebird_physical.py``, planned by ``firebird_schema_plan.build_plan`` and
+``firebird_lifecycle_plan``; applied by ``schema_application.apply_review``, which runs
+every statement of a review in one native transaction, commits once and rediscovers).
+Differences from the PostgreSQL vocabulary, all Firebird facts:
+
+* Index extras: ``descending`` (``CREATE DESCENDING INDEX``), ``inactive``
+  (``ALTER INDEX x INACTIVE``/``ACTIVE``), ``expression`` for a ``COMPUTED BY`` index,
+  ``predicate`` for a partial (``WHERE``) index, ``unique``. An index is keyed by columns
+  or by one expression, never both. ``method`` does not apply.
+* PRIMARY KEY, UNIQUE and FOREIGN KEY carry ``descending`` for their backing index. The
+  constraint owns that index: it is edited through the constraint, and a constraint
+  created from a draft creates a backing index of the same name
+  (``USING ASCENDING|DESCENDING INDEX name``).
+* PRIMARY KEY columns must already be NOT NULL (Firebird refuses otherwise); the hand-off
+  says so before any SQL. A table has one PRIMARY KEY, and a PRIMARY KEY or UNIQUE key
+  that a foreign key references cannot be replaced or dropped alone.
+* FOREIGN KEY actions are ``NO ACTION`` (Firebird stores it as ``RESTRICT``), ``CASCADE``,
+  ``SET NULL`` and ``SET DEFAULT``; ``on_update``/``on_delete`` outside that set and a
+  target without a PRIMARY KEY or UNIQUE key on the referenced columns are rejected.
+* Index and constraint names are database-wide; a draft that reuses a name is refused.
+* Renames: only a **column** rename with ``physical_name`` + ``rename_from``
+  (``ALTER TABLE t ALTER COLUMN old TO new``) is carried, and it must be reviewed apart
+  from index and constraint changes on that table. Firebird 5.0 has no rename for tables,
+  views, indexes or constraints; those mappings are rejected at the hand-off with
+  ``Not carried to Firebird: ...`` and the reason, and produce no operation. A rename the engine refuses (for example a column a view
+  depends on) is a blocker with the engine's reason.
+* Drops: ``drop: true`` plus ``drop_confirmation`` equal to the exact name, for indexes,
+  constraints, foreign keys, columns and tables. Operations are ``destructive: true``;
+  column and table drops name the constraints and foreign keys they take with them, and
+  a table that another table references is refused.
+* A replaced index is ``DROP INDEX`` then ``CREATE INDEX`` under the same name in the same
+  transaction (the plan carries ``operation: replace``); a changed constraint (operation
+  ``alter``) is ``DROP CONSTRAINT`` then ``ADD CONSTRAINT``. A row that violates the new definition
+  rolls the whole review back.
+* A replayed review converges: after apply, planning the same baseline and desired
+  documents against the new catalog yields no operations, because a live index or
+  constraint that already equals the reviewed definition counts as converged. Any other
+  object found live that the baseline did not have remains a blocker.
+
+Per-kind matrix, Firebird 5.0.3 (``tools/tests/test_firebird_physical_roundtrip.py``).
+Every cell was exercised live; "n/a" means the engine or the vocabulary has no such
+operation, and "refused" means the hand-off or planner rejects it with a reason before
+any SQL exists.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 17 11 18 12 20 22
+
+   * - Kind
+     - Forward
+     - Edit (vocabulary)
+     - Reverse
+     - Plan (operation)
+     - Apply, re-inspect
+   * - index
+     - ``index`` element, columns, ``unique``, ``descending``, ``inactive``
+     - columns, unique, descending, inactive
+     - hand-off diff
+     - ``replace`` (DROP + CREATE), ``alter`` for active/inactive
+     - ALTER INDEX; re-plan empty; next diagram carries the value
+   * - index, computed / partial
+     - ``expression``, ``predicate``
+     - to and from key columns, expression, predicate
+     - hand-off diff
+     - ``replace``
+     - converged; expression text read back
+   * - index, new draft
+     - n/a
+     - draft element with ``<table uid>:new:<uuid>``; columns or expression; unique, descending, inactive
+     - draft read
+     - ``create`` (plus ``ALTER INDEX ... INACTIVE``)
+     - converged; appears in next diagram
+   * - index rename
+     - ``physical_name``
+     - ``physical_name`` + ``rename_from``
+     - mapping read
+     - not carried (no ``ALTER INDEX RENAME``): the hand-off rejects it with that reason; without ``rename_from``, rejected
+     - nothing applied
+   * - index drop
+     - n/a
+     - ``drop`` + exact name
+     - drop intent
+     - ``drop``, destructive; wrong name refused
+     - DROP INDEX; index gone
+   * - primary key
+     - ``primary-key``, columns, ``descending``
+     - columns; add on a table without one
+     - hand-off diff
+     - ``create`` or ``alter`` (DROP + ADD CONSTRAINT); nullable column, second key, referenced key refused
+     - converged; backing index same name
+   * - unique
+     - ``unique``, columns
+     - columns; new draft
+     - hand-off diff
+     - ``alter`` (DROP + ADD CONSTRAINT) or ``create``
+     - converged
+   * - check
+     - ``check``, ``expression``
+     - expression; new draft
+     - hand-off diff
+     - ``alter`` or ``create``; unparsable expression is a blocker
+     - converged; engine enforces it
+   * - foreign key
+     - ``ref`` edge, columns, referenced columns, ``on_delete``, ``on_update``
+     - actions, columns; new draft edge; ``NO ACTION`` stored as ``RESTRICT``
+     - hand-off diff
+     - ``alter`` or ``create``; bad action or target refused
+     - converged; rules read from ``RDB$REF_CONSTRAINTS``
+   * - constraint rename
+     - ``physical_name``
+     - ``physical_name`` + ``rename_from``
+     - mapping read
+     - not carried (no constraint rename): rejected at the hand-off
+     - nothing applied
+   * - constraint drop
+     - n/a
+     - ``drop`` + exact name
+     - drop intent
+     - ``drop``, destructive; referenced key refused
+     - ALTER TABLE DROP CONSTRAINT
+   * - column rename
+     - ``physical_name`` on the field
+     - ``physical_name`` + ``rename_from``
+     - mapping read
+     - ``rename``; never inferred without mapping; engine refusal is a blocker
+     - ALTER COLUMN ... TO; converged
+   * - column drop
+     - n/a
+     - ``drop`` + exact name
+     - drop intent
+     - ``drop``, destructive, names removed constraints
+     - ALTER TABLE DROP column
+   * - table rename
+     - ``physical_name``
+     - ``physical_name`` + ``rename_from``
+     - mapping read
+     - not carried (no table rename): rejected at the hand-off
+     - nothing applied
+   * - table drop
+     - n/a
+     - ``drop`` + exact name
+     - drop intent
+     - ``drop``, destructive; referenced table refused; parent and child together drop the foreign key first
+     - DROP TABLE
+
+Live drift between the baseline and the database blocks a plan instead of overwriting;
+an object replaced or dropped live since the baseline is not resurrected; an unedited
+diagram, and a diagram with omitted vocabulary keys, yield an empty plan.
+
 What is still missing
 =====================
 
 Vocabulary and engine coverage that no emitter or adapter provides yet. These are the
 open items for Stream B (B1 vocabulary, B3 adapters); none is claimed by this document.
 
-#. **Engines.** MySQL, MariaDB and Firebird emit no physical-schema vocabulary.
-   Firebird has its own per-object plan modules and exchange gate; MySQL and MariaDB
-   have their own graphical column and foreign-key admission. Aligning them to this
-   vocabulary is open.
+#. **Engines.** MySQL and MariaDB emit no physical-schema vocabulary; they have
+   their own graphical column and foreign-key admission. Aligning them to this
+   vocabulary is open. Firebird emits and consumes it (next section).
 #. **SQLite and DuckDB constraints.** UNIQUE, CHECK, PRIMARY KEY and FOREIGN KEY edits
    need a table rebuild (SQLite ``rebuilds``, DuckDB ``rebuild-*`` actions) and are
    not expressed by the diagram. The reader rejects them. Their foreign-key edges are
@@ -328,6 +476,13 @@ Forward, edit, reverse and plan are exercised against real engines:
   ``54329``, superuser ``qa``; override with ``QA_PG_PORT``): every object kind above,
   each followed by executing the planned statements and proving that a re-plan has
   nothing left to do.
+* ``tools/tests/test_firebird_physical_roundtrip.py`` (live Firebird 5.0.x; set
+  ``CDEADMIN_ROUNDTRIP_FIREBIRD`` to ``{"host","port","user","password","database_root"}``
+  and ``CDEADMIN_FIREBIRD_CLIENT_LIBRARY`` to a Firebird 5 ``libfbclient``; skipped
+  otherwise): every row of the matrix above, each applied through the real owned
+  transaction and re-planned to nothing. The qualification gate
+  ``tools/cdeadmin_firebird_ddn_exchange_gate.py`` has a ``physical`` scenario
+  (``tools/firebird_physical_native.py``).
 * ``tools/tests/test_sqlite_physical_roundtrip.py`` (``sqlite3``) and
   ``tools/tests/test_duckdb_physical_roundtrip.py`` (``duckdb``): index create, replace
   or drop, and the rejected edits.

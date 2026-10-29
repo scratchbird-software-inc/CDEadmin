@@ -275,9 +275,9 @@ def _build_plan(baseline, desired, current):
             embedded_constraint = False
             if old is None:
                 if live is not None:
-                    # A replayed review of a creation converges when the live object already carries
-                    # exactly the reviewed definition; anything else was added outside the baseline.
-                    if live['kind'] == kind and live['path'] == wanted['path'] and _model(live) == after:
+                    # A replayed review of an index or constraint creation (the diagram's physical vocabulary)
+                    # converges when the live object already carries exactly the reviewed definition; anything else was added outside the baseline.
+                    if kind in {'index', 'constraint'} and live['kind'] == kind and live['path'] == wanted['path'] and _model(live) == after:
                         stats['converged'] += 1
                     else:
                         block(identity, 'Object was added outside the baseline; capture a new baseline')

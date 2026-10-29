@@ -93,6 +93,26 @@ def qualify(connection, provider, route, root):
     assert sql("SELECT COUNT(*) FROM RDB$INDICES WHERE RDB$INDEX_NAME = 'PH_IDX'") == [(0,)]
     catalog, diagram = export()
     settle(catalog, diagram, edit(diagram, 'constraint:PH_CHILD:PH_FK', drop=True, drop_confirmation='PH_FK'))
+    # New objects drafted in the diagram, and a rename Firebird 5.0 cannot do.
+    catalog, diagram = export()
+    owner = 'table:PH_CHILD'
+    uid = 'firebird:owned:owned:' + owner
+    import sys
+    sys.path.insert(0, str(ROOT / 'tools/tests'))
+    import physical_roundtrip as rt
+    edited, _ = rt.add_draft_element(diagram, diagram['snapshot'], owner, uid, 'index', 'PH_NEW_IDX',
+        {'physical_kind': 'index', 'physical_name': 'PH_NEW_IDX', 'columns_json': '["P","AMOUNT"]', 'unique': True}, 'firebird')
+    edited, _ = rt.add_draft_element(diagram, edited, owner, uid, 'constraint', 'PH_NEW_UQ',
+        {'physical_kind': 'unique', 'physical_name': 'PH_NEW_UQ', 'columns_json': '["ID"]'}, 'firebird')
+    plan = settle(catalog, diagram, edited)
+    assert sorted(item['operation'] for item in plan['operations']) == ['create', 'create']
+    assert sql("SELECT COUNT(*) FROM RDB$INDICES WHERE RDB$INDEX_NAME IN ('PH_NEW_IDX', 'PH_NEW_UQ')") == [(2,)]
+    catalog, diagram = export()
+    try:
+        review(catalog, diagram, edit(diagram, 'constraint:PH_CHILD:PH_NEW_UQ', physical_name='PH_UQ2', rename_from='PH_NEW_UQ'))
+        raise AssertionError('a constraint rename must not be carried')
+    except ValueError as error:
+        assert 'Not carried to Firebird' in str(error), error
     connection.rollback()
-    return {'index_replace_active_inactive_drop': True, 'constraint_replace_and_drop': True,
+    return {'drafted_index_and_unique': True, 'rename_not_carried': True, 'index_replace_active_inactive_drop': True, 'constraint_replace_and_drop': True,
             'fk_actions': True, 'converged_replan': True, 'native_rediscovery': True}

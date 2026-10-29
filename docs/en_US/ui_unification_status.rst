@@ -174,6 +174,25 @@ count sets its maximum to zero in the enforcement file.
 Change log
 ----------
 
+Firebird diagram physical edits to reviewed plan (2026-10-29)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Stream B3/B4 for Firebird: the relations diagram now publishes the physical-schema
+vocabulary (indexes with unique/descending/inactive/COMPUTED BY/partial, PRIMARY KEY,
+UNIQUE, CHECK, FOREIGN KEY with ON DELETE/ON UPDATE and constraint-backing indexes),
+and edits to it flow through the hand-off into the existing reviewed plan and the
+owned-transaction applier. Explicit-mapping renames are carried only for columns;
+table, index and constraint renames return "not carried" with the Firebird 5.0 reason;
+drops need ``drop`` plus the exact name and are flagged destructive. A replayed review
+of an index or constraint creation now converges instead of blocking as "added outside
+the baseline" (other objects keep that blocker). Code:
+``workspace/firebird_physical.py``, ``firebird_lifecycle_plan.py``,
+``firebird_schema_plan.py``, ``firebird_relational_review.py``. Live tests:
+``tools/tests/test_firebird_physical_roundtrip.py`` (36 tests, Firebird 5.0.3.1683,
+forward, edit, reverse, plan, apply, re-inspect, converged re-plan); gate scenario
+``physical`` in ``tools/cdeadmin_firebird_ddn_exchange_gate.py``. Matrix per kind in
+:doc:`ddn_physical_schema_vocabulary`.
+
 BI signed embedding (2026-10-28)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
