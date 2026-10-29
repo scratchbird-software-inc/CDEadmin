@@ -228,6 +228,13 @@ def declared_tool_actions(
                       (_DEFAULT_OWNER_REASON if condition == 'owner'
                        else ''))
             break
+        if enabled and tool.get('version') and state.get('runtime_version'):
+            # Owner direction 2026-10-29: do not offer a tool the verified
+            # runtime cannot serve. Unknown versions are left to the backend.
+            from .ui_descriptors import version_gate_state
+            enabled, reason = version_gate_state(
+                tool['version'], state['runtime_version'])
+            reason = reason or ''
         if tool.get('inherit_base', True):
             arguments = {**(base or {})}
         else:
@@ -773,7 +780,8 @@ _ENDPOINT_WORKSPACES = {
 def endpoint_context_actions(
         profile: Mapping[str, Any], verification_state: str, *,
         is_password_saved: bool = False,
-        can_manage: bool = True) -> list[dict[str, Any]]:
+        can_manage: bool = True,
+        runtime_version: str | None = None) -> list[dict[str, Any]]:
     """Resolve an endpoint's menus without any PostgreSQL inheritance."""
     engine_id = _required(profile.get('engine_id'), 'engine_id')
     ready = verification_state == 'verified'
@@ -792,6 +800,7 @@ def endpoint_context_actions(
         'engine_id': engine_id, 'display': display,
         'route_kind': profile.get('route_kind'),
         'verified': ready, 'verified_reason': blocked, 'owner': can_manage,
+        'runtime_version': runtime_version if ready else None,
     }
     actions.extend(declared_tool_actions(
         engine_id, 'endpoint', 'after_verify', state=tool_state))
@@ -932,8 +941,8 @@ def endpoint_context_actions(
 
 
 def database_target_context_actions(
-        profile: Mapping[str, Any], target: Mapping[str, Any]) -> list[
-            dict[str, Any]]:
+        profile: Mapping[str, Any], target: Mapping[str, Any],
+        runtime_version: str | None = None) -> list[dict[str, Any]]:
     """Resolve actions for one provider-qualified database target."""
     engine_id = _required(profile.get('engine_id'), 'engine_id')
     target_id = _required(target.get('target_id'), 'target_id')
@@ -996,7 +1005,7 @@ def database_target_context_actions(
     ) for index, (tab, label, icon) in enumerate(rows)]
     tool_state = {
         'engine_id': engine_id, 'route_kind': profile.get('route_kind'),
-        'database_target_id': target_id,
+        'database_target_id': target_id, 'runtime_version': runtime_version,
     }
     actions.extend(declared_tool_actions(
         engine_id, 'database', 'pre_lifecycle', state=tool_state, base=base))

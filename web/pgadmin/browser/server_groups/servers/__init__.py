@@ -152,6 +152,8 @@ def _cde_endpoint_actions(server, profile):
         profile, state,
         is_password_saved=bool(server.save_password),
         can_manage=not _is_non_owner(server),
+        runtime_version=_runtime_node_fields(server)[
+            'verified_runtime_version'],
     )
 
 
@@ -174,7 +176,7 @@ def _server_children_url(gid, sid):
     return url_for('NODE-server.children_id', gid=gid, sid=sid)
 
 
-def _cde_database_nodes(gid, sid, profile, catalog):
+def _cde_database_nodes(gid, sid, profile, catalog, runtime_version=None):
     """Place every retained database directly below its owning endpoint."""
     nodes = []
     for entry in database_entries(catalog):
@@ -214,7 +216,8 @@ def _cde_database_nodes(gid, sid, profile, catalog):
             'cde_profile_id': profile['profile_id'],
             'cde_context_actions': (
                 None if entry['legacy'] else
-                database_target_context_actions(profile, target)
+                database_target_context_actions(
+                    profile, target, runtime_version=runtime_version)
             ),
         })
     return nodes
@@ -734,6 +737,8 @@ class ServerModule(sg.ServerGroupPluginModule):
                         profile, verification_state,
                         is_password_saved=bool(server.save_password),
                         can_manage=not _is_non_owner(server),
+                        runtime_version=_runtime_node_fields(server)[
+                            'verified_runtime_version'],
                     ) if provider_endpoint else None
                 ),
             )
@@ -980,7 +985,9 @@ class ServerNode(PGChildNodeView):
                     current_app
                 ).database_catalog(server)
                 return make_json_response(data=_cde_database_nodes(
-                    gid, sid, profile, catalog
+                    gid, sid, profile, catalog,
+                    runtime_version=_runtime_node_fields(server)[
+                        'verified_runtime_version'],
                 ))
             except (EndpointRegistrationError,
                     ProviderNavigatorError) as exc:

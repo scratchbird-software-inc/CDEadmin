@@ -45,6 +45,10 @@
       ],
       "disabled_reasons": {
         "owner": "Only the endpoint owner can recover its files."
+      },
+      "version": {
+        "minimum": "3.45.1",
+        "reason": "SQLite file recovery needs SQLite 3.45.1 or later (native recovery helper)"
       }
     },
     {
@@ -113,6 +117,10 @@
       "mutation": "admin",
       "arguments": {
         "tab": "sqlite-recovery"
+      },
+      "version": {
+        "minimum": "3.45.1",
+        "reason": "SQLite file recovery needs SQLite 3.45.1 or later (native recovery helper)"
       }
     },
     {

@@ -152,6 +152,10 @@
             "type": "string"
           },
           "description": "with inherit_base=false: the base keys to keep (e.g. database_target_id)"
+        },
+        "version": {
+          "$ref": "form.schema.json#/$defs/version_gate",
+          "description": "Disable the tool when the endpoint's verified runtime is outside this range (owner direction 2026-10-29)."
         }
       }
     }
