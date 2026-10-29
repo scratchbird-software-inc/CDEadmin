@@ -259,6 +259,30 @@ check-in and hashes. To add a version:
 5. merge every tracked inventory and live evidence file with
    `merge_sqlite_dialect_versions.py --inventory ... --live ...`.
 
+To build every tracked version and the native helpers each supports, run
+`python3 bootstrap.py --sqlite-tracked` (or `python3 sqlite_tracked.py`). It
+downloads the archives listed in `sqlite_tracked_versions.json`, verifies
+their SHA-256 and the amalgamation's SHA3-256, and builds under the ignored
+`runtime/sqlite-tracked/<version>`; it needs `cc`, `cmake` and, for versions
+built from full source, `tclsh` and `make`. The default bootstrap still builds
+only the 3.53.0 reference.
+
+Native helpers are built only for versions at or above their minimum (session
+and array: 3.53.0; preupdate and recovery: 3.45.1). Each minimum is the oldest
+tracked version whose headers the helper compiles against with no implicit
+declarations and no unresolved SQLite symbols.
+
+`python3 sqlite_version_matrix.py --python <interpreter> --output <dir>` runs
+the SQLite tests once per tracked version with that version's library and
+helpers. The interpreter's `_sqlite3` must link libsqlite3 dynamically; a
+version it does not actually load is reported as not run, never as passed.
+Managed interpreters that embed SQLite (for example uv's CPython) cannot run
+the matrix.
+
+The `tools/cdeadmin_sqlite_*` qualification gates qualify the 3.53.0
+reference profile only. Other versions are qualified by the live task proof in
+`sqlite_qualification/` and by this matrix.
+
 Retiring older versions is an owner decision. `merge_sqlite_dialect_versions.py
 --versioned <table> --retire-below X` drops tracked versions below `X` and the
 records only they held, and raises the floor in the UI descriptor. Nothing is

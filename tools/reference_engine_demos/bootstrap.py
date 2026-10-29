@@ -453,6 +453,11 @@ def arguments():
         "--sqlite-archive", type=Path,
         help="Use this verified SQLite source archive instead of downloading",
     )
+    parser.add_argument(
+        "--sqlite-tracked", action="store_true",
+        help="Also build every tracked SQLite version and its native helpers "
+             "(sqlite_tracked_versions.json) for the version matrix",
+    )
     parser.add_argument("--skip-tikv", action="store_true")
     parser.add_argument("--skip-ignite-fixture", action="store_true")
     parser.add_argument("--skip-foundationdb", action="store_true")
@@ -471,6 +476,9 @@ def main():
         install_python_requirements()
     if not args.skip_sqlite:
         build_sqlite(args.sqlite_archive)
+    if args.sqlite_tracked:
+        from sqlite_tracked import build_tracked
+        build_tracked()
     if not args.skip_tikv:
         build_tikv_helper()
     if not args.skip_ignite_fixture:

@@ -1,7 +1,35 @@
 {
   "build_recipe": "tools/reference_engine_demos/build_sqlite_tracked_runtime.sh",
+  "helpers": {
+    "array": {
+      "directory": "sqlite_arrays",
+      "environment": "CDEADMIN_SQLITE_ARRAY_LIBRARY",
+      "library": "libcdeadmin_sqlite_arrays.so",
+      "minimum": "3.53.0"
+    },
+    "preupdate": {
+      "directory": "sqlite_preupdate",
+      "environment": "CDEADMIN_SQLITE_PREUPDATE_LIBRARY",
+      "library": "libcdeadmin_sqlite_preupdate.so",
+      "minimum": "3.45.1"
+    },
+    "recovery": {
+      "directory": "sqlite_recovery",
+      "environment": "CDEADMIN_SQLITE_RECOVERY_LIBRARY",
+      "library": "libcdeadmin_sqlite_recovery.so",
+      "minimum": "3.45.1",
+      "recover_source_version": "3.53.0"
+    },
+    "session": {
+      "directory": "sqlite_sessions",
+      "environment": "CDEADMIN_SQLITE_SESSION_LIBRARY",
+      "library": "libcdeadmin_sqlite_sessions.so",
+      "minimum": "3.53.0"
+    }
+  },
+  "helpers_note": "Minimums mirror web/pgadmin/cdeadmin/providers/sqlite/native_helpers.HELPER_MINIMUM (a test keeps them equal).",
   "purpose": "Source archives and build recipe behind web/pgadmin/cdeadmin/providers/sqlite/sqlite_dialect_versions.json",
-  "recipe_check": "3.53.0 built with the recipe reproduces the committed reference inventory, modules and compile options exactly",
+  "recipe_check": "3.53.0 built with the recipe reproduces the committed reference inventory, modules, compile options and all 43 single-value PRAGMAs of the reference library",
   "schema": "cdeadmin.sqlite-tracked-versions.v1",
   "versions": {
     "3.35.0": {
@@ -16,16 +44,18 @@
     "3.45.1": {
       "amalgamation": "generated from the source archive (make sqlite3.c)",
       "check_in": "e876e51a0ed5c5b3126f52e532044363a014bc594cfefa87ffb5b82257cc467a",
-      "source_archive": "sqlite-src-3450100.zip (owner acquisition)",
+      "source_archive": "https://www.sqlite.org/2024/sqlite-src-3450100.zip",
       "source_archive_sha256": "7f7b14a68edbcd4a57df3a8c4dbd56d2d3546a6e7cdd50de40ceb03af33d34ba",
-      "sqlite3_c_sha3_256": "0474604df9e1b69a5544295dd046aad954749279780d557da80f44b958100295"
+      "sqlite3_c_sha3_256": "0474604df9e1b69a5544295dd046aad954749279780d557da80f44b958100295",
+      "verified_against": "https://www.sqlite.org/releaselog/3_45_1.html (check-in and sqlite3.c SHA3-256); sqlite.org download byte-identical to the owner acquisition"
     },
     "3.53.0": {
       "amalgamation": "generated from the source archive (make sqlite3.c)",
       "check_in": "4525003a53a7fc63ca75c59b22c79608659ca12f0131f52c18637f829977f20b",
-      "source_archive": "https://www.sqlite.org/2026/sqlite-src-3530000.zip (bootstrap.py pin)",
+      "source_archive": "https://www.sqlite.org/2026/sqlite-src-3530000.zip",
       "source_archive_sha256": "fbc30cdbfcfa42c78fe7bddd3fd37ab8995369a31d39097a5d0633296c0b6e65",
-      "sqlite3_c_sha3_256": "bb317fbbd2b3bc53233ddd5894bf4d2dc6f533445f350d4235dbcc86f65af4ec"
+      "sqlite3_c_sha3_256": "bb317fbbd2b3bc53233ddd5894bf4d2dc6f533445f350d4235dbcc86f65af4ec",
+      "verified_against": "https://www.sqlite.org/releaselog/3_53_0.html (check-in and sqlite3.c SHA3-256); same archive as the bootstrap.py reference pin"
     }
   }
 }
