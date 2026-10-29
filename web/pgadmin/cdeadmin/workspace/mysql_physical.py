@@ -470,11 +470,40 @@ def converged(before, after, current, mode, engine, database):
         live_layout, live, _o = definition_map(current, mode, engine)
     except (ValueError, KeyError):
         return False
+    try:
+        _l, origin, _o = definition_map(before, mode, engine) if before is not None else (None, {}, None)
+    except (ValueError, KeyError):
+        origin = {}
+    # The server names the index it creates for a foreign key after that key, and re-creates it under the new
+    # name when the key is renamed in the same ALTER TABLE: a plain index carrying such a name is not part of
+    # what the review states, so it is compared on neither side.
+    implicit = {key[1] for source in (wanted, live, origin) for key in source if key[0] == 'foreign-key'}
+
+    def explicit(clauses):
+        result = {}
+        for key, clause in clauses.items():
+            if key[0] == 'index' and key[1] in implicit:
+                found = describe(clause, mode)
+                if found['kind'] == 'index' and not found['unique'] and found['index_type'] is None:
+                    continue
+            result[key] = clause
+        return result
+    wanted, live = explicit(wanted), explicit(live)
     if wanted.keys() != live.keys() or _options_text(wanted_layout) != _options_text(live_layout):
         return False
+    keyed = set()   # the server makes every PRIMARY KEY column NOT NULL, whatever the stated definition said
+    for key, clause in wanted.items():
+        if key[0] == 'primary':
+            keyed = set(describe(clause, mode)['columns'])
+
+    def column_text(key, clause):
+        text = ' '.join(t[1] for t in tokens(clause, mode))
+        if key[0] == 'column' and key[1] in keyed:
+            text = ' '.join(re.sub(r'\bDEFAULT NULL\b', '', re.sub(r'\bNOT NULL\b', '', text, flags=re.I), flags=re.I).split()) + ' NOT NULL'
+        return text
     for key, clause in wanted.items():
         if key[0] in {'column', 'period'}:
-            if ' '.join(t[1] for t in tokens(clause, mode)) != ' '.join(t[1] for t in tokens(live[key], mode)):
+            if column_text(key, clause) != column_text(key, live[key]):
                 return False
         elif canonical(key, clause, mode, engine, database) != canonical(key, live[key], mode, engine, database):
             return False
@@ -830,6 +859,7 @@ def merge(old, row, live, current, *, kids_before, kids_after, edges_before, edg
     added_primary = False
     for draft in drafts:
         values = vocab.normalize(draft['physical'], 'physical draft')
+        vocab.draft_identity(engine, old['uid'], draft['uid'])
         kind, name = values.get('physical_kind'), values.get('physical_name')
         if kind is None or name is None or vocab.ROLE[kind] != draft['subject_kind']:
             raise ValueError('A physical draft needs physical_kind and physical_name that match its element role')

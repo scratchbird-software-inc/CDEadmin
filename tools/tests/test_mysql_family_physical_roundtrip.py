@@ -307,7 +307,7 @@ def test_draft_validation_refuses_unknown_columns_duplicates_and_bad_combination
         attempt(index_type='FULLTEXT', unique=True)
     with pytest.raises(ValueError, match='drop or rename_from'):
         attempt(drop=True)
-    with pytest.raises(ValueError, match='draft identity'):
+    with pytest.raises(ValueError, match='canonical draft UUID'):
         # An unannotated-identity draft is rejected rather than guessed.
         from physical_roundtrip import _run
         snapshot = env.draft('child', 'index', 'draft_idx', {'physical_kind': 'index', 'physical_name': 'draft_idx', 'columns_json': '["note"]'})
@@ -412,9 +412,10 @@ def test_primary_key_add_replace_rename_refused_and_referenced_block(env):
     pkey = env.child('parent', 'primary-key', 'PRIMARY')
     with pytest.raises(ValueError, match='PRIMARY KEY is always named PRIMARY'):
         env.handoff_only(env.edit(pkey, physical_name='parent_pk', rename_from='PRIMARY'))
-    # parent's PRIMARY KEY backs child_parent_fk: replacing it alone is refused before any SQL.
+    # parent's PRIMARY KEY backs child_parent_fk: replacing it with a key that no longer starts with `id` (or dropping it)
+    # is refused before any SQL; a key that still starts with the referenced column would be accepted by the server.
     with pytest.raises(ValueError, match='Foreign keys depend'):
-        env.handoff_only(env.edit(pkey, columns_json='["id","code"]'))
+        env.handoff_only(env.edit(pkey, columns_json='["code"]'))
     with pytest.raises(ValueError, match='Foreign keys depend'):
         env.handoff_only(env.edit(pkey, drop=True, drop_confirmation='PRIMARY'))
 
