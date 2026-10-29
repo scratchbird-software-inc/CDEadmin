@@ -78,7 +78,7 @@ PARAMETER_QUERIES = {
     'mysql': ('SELECT %s', (42,)),
     'mariadb': ('SELECT ?', (42,)),
     'duckdb': ('SELECT ?', (42,)),
-    'firebird': ('SELECT ? FROM RDB$DATABASE', (42,)),
+    'firebird': ('SELECT CAST(? AS INTEGER) FROM RDB$DATABASE', (42,)),
     'sqlite': ('SELECT ?', (42,)),
 }
 
