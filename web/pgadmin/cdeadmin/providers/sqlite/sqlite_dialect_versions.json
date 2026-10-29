@@ -35299,7 +35299,6 @@
       "inventory_id": "sqlite.dialect-inventory.3.35.0.v1",
       "runtime_compile_options": [
         "COMPILER=gcc-13.3.0",
-        "DEFAULT_RECURSIVE_TRIGGERS",
         "DIRECT_OVERFLOW_READ",
         "ENABLE_DBSTAT_VTAB",
         "ENABLE_FTS3",
