@@ -46,8 +46,23 @@ not replace each provider's live or platform qualification. Existing Python
    features are gated per runtime, and grammar/keyword tables track older and
    newer features until a version is explicitly retired. The refusal of SQLite
    3.53.1 described above was correct under the earlier rule, which is retained
-   here as history and is being migrated in
-   phases; components not yet migrated still require 3.53.0.
+   here as history.
+
+   Implemented through 2026-10-29: admission, monitoring and in-process
+   checks accept any admitted runtime; contract-planned operations are
+   offered on a non-reference runtime only when they executed live on its
+   tracked version; descriptor fields, options, operations and tools are
+   filtered by the verified runtime. Tracked versions are 3.35.0, 3.45.1
+   and 3.53.0 (``tools/reference_engine_demos/sqlite_tracked_versions.json``,
+   each verified against its sqlite.org release log). Native helpers have
+   their own minimums from a build matrix over the tracked versions
+   (preupdate and recovery 3.45.1; session and array 3.53.0) and refuse a
+   runtime older than the headers they were built with. Tracked builds use
+   one recipe matching the reference library's options (recursive triggers
+   off, corrected 2026-10-29). The ``tools/cdeadmin_sqlite_*`` qualification
+   gates qualify the 3.53.0 reference only; other versions are qualified by
+   the live task proof and the version matrix, which needs a Python whose
+   ``_sqlite3`` links libsqlite3 dynamically.
 
 The root requirement set did **not** install under Linux CPython 3.14.6t.
 ``pymilvus==2.6.5`` depends on ``orjson``; the selected ``orjson==3.13.0``

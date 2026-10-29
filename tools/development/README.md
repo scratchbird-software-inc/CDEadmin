@@ -190,6 +190,15 @@ For SQLite, confirm that the selected interpreter reports exactly SQLite
 different SQLite version; see the
 [SQLite driver contract](../../docs/en_US/sqlite_driver_development.rst).
 
+> Superseded 2026-10-29 (owner direction): SQLite is admitted from the declared
+> floor (3.35.0), with 3.53.0 as the reference profile; the exact-3.53.0 rule
+> above is kept as history. Reference qualification still uses 3.53.0. To test
+> other versions, build them with
+> `python3 tools/reference_engine_demos/bootstrap.py --sqlite-tracked` and run
+> `tools/reference_engine_demos/sqlite_version_matrix.py` with an interpreter
+> whose `_sqlite3` links libsqlite3 dynamically; see
+> `tools/reference_engine_demos/README.md`.
+
 Use the team's release/branch/commit if different. Record the commit for QA.
 `doctor` checks tools, versions, CPU/OS and Docker access without installing
 anything. A pass is not a dependency ABI check or an engine qualification result.
