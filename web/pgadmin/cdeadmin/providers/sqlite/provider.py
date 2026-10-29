@@ -242,6 +242,7 @@ ADMINISTRATION = SQLiteAdministration(RelationalAdminDialect(
     embedded_database=True,
     database_create_mode='embedded-file',
     database_extension='.sqlite',
+    table_options={'without_rowid': 'WITHOUT ROWID', 'strict': 'STRICT'},
     not_applicable_concepts=frozenset({
         'servers', 'materialized_views', 'domains', 'types', 'sequences',
         'functions', 'procedures', 'roles_and_grants', 'partitions',

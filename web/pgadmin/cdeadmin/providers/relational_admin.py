@@ -152,6 +152,9 @@ class RelationalAdminDialect:
     database_forms: Mapping[str, Mapping[str, object]] = field(
         default_factory=dict
     )
+    # Table-level options an engine declares, as draft key -> native clause
+    # appended to CREATE TABLE when the draft sets the key to true.
+    table_options: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def sql_family(self):
@@ -5215,6 +5218,10 @@ class RelationalAdministration:
             if (kind == 'role' and self.dialect.engine_id == 'firebird' and
                     'description' in value):
                 options['description'] = value.pop('description')
+            if kind == 'table':
+                for key in self.dialect.table_options:
+                    if key in value:
+                        options[key] = value.pop(key)
             for key in (
                 'parent', 'table', 'columns', 'constraints', 'unique',
                 'start', 'increment', 'minimum', 'maximum', 'cycle',
@@ -6617,6 +6624,17 @@ class RelationalAdministration:
             'fields': fields,
         }
 
+    def _table_option_clauses(self, options):
+        clauses = []
+        for key, clause in self.dialect.table_options.items():
+            value = options.get(key)
+            if value in (None, False):
+                continue
+            if value is not True:
+                raise RelationalClientError(f'{key} must be true or false')
+            clauses.append(clause)
+        return ' ' + ', '.join(clauses) if clauses else ''
+
     def _compile_create(self, request):
         kind = request['resource_kind']
         draft = request['draft']
@@ -6636,7 +6654,8 @@ class RelationalAdministration:
                 definitions.append(self._constraint_definition(constraint))
             source = (firebird_tables.create(name, definitions, options) if
                       self.dialect.engine_id == 'firebird' else
-                      f'CREATE TABLE {qualified} ({", ".join(definitions)})')
+                      f'CREATE TABLE {qualified} ({", ".join(definitions)})' +
+                      self._table_option_clauses(options))
         elif kind in {'view', 'materialized-view'}:
             query = self._query_body(draft.get('definition'))
             command = (

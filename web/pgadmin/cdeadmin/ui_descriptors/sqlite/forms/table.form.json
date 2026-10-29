@@ -31,10 +31,6 @@
       "tracking": "ui-unification"
     },
     {
-      "concept": "WITHOUT ROWID and STRICT",
-      "reason": "read back as catalog flags (sqlite/provider.py) but not accepted on create; add as Options checkboxes"
-    },
-    {
       "concept": "Column grid depth",
       "reason": "column records carry only name/type/nullable/default/unique/primary_key; add collation, generated columns, autoincrement, check"
     },
@@ -276,6 +272,44 @@
           "language": "sql"
         }
       ]
+    },
+    {
+      "field_id": "without_rowid",
+      "label": "Without row ID",
+      "tab": "Options",
+      "control": "boolean",
+      "default": false,
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "default"
+      },
+      "help": "Store the table as a clustered index on its primary key. Needs a PRIMARY KEY; fixed at creation.",
+      "native_keyword": "WITHOUT ROWID",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "strict",
+      "label": "Strict typing",
+      "tab": "Options",
+      "control": "boolean",
+      "default": false,
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "default"
+      },
+      "version": {
+        "minimum": "3.37.0",
+        "reason": "STRICT tables require SQLite 3.37.0 or later"
+      },
+      "help": "Enforce the declared column types (INT, INTEGER, REAL, TEXT, BLOB, ANY). Fixed at creation.",
+      "native_keyword": "STRICT",
+      "editable_after_create": false
     },
     {
       "field_id": "module",
