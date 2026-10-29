@@ -5,7 +5,7 @@ import os
 import uuid
 
 from ..embedded_route import contained_database
-from .provider import _create_client
+from .provider import PROFILE, _create_client
 from pgadmin.cdeadmin.sdk import RelationalClientError
 
 
@@ -41,8 +41,10 @@ class SQLiteMonitor:
             if database is None or os.path.realpath(database[2]) != self.path:
                 raise ValueError('SQLite monitoring connection changed file identity')
             version = connection.execute('SELECT sqlite_version()').fetchone()[0]
-            if version != '3.53.0':
-                raise ValueError('SQLite monitoring runtime does not match the admitted profile')
+            if not PROFILE.accepts_runtime_version(version):
+                raise ValueError(
+                    'SQLite monitoring runtime is outside the supported '
+                    f'{PROFILE.version_requirement} range')
             def scalar(name):
                 row = connection.execute('PRAGMA main.' + name).fetchone()
                 if row is None:

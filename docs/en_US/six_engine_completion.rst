@@ -66,6 +66,17 @@ compile options, database configuration and session language modes separately.
 Qualification of one installation does not cover another edition, extension,
 compatibility mode or native interface automatically.
 
+.. note::
+
+   Owner direction, 2026-10-29: SQLite is no longer limited to exactly 3.53.0.
+   Any runtime at or above the declared floor (``version_range.minimum`` in
+   ``web/pgadmin/cdeadmin/ui_descriptors/sqlite/capabilities.json``, currently
+   3.35.0) is admitted; 3.53.0 remains the reference profile. Version-specific
+   features are gated per runtime, and grammar/keyword tables track older and
+   newer features until a version is explicitly retired. The exact-version text
+   in this section is retained as the earlier rule and is being migrated in
+   phases; components not yet migrated still require 3.53.0.
+
 A native feature is not ``not applicable`` merely because its adapter is
 missing. An unavailable privilege, uninstalled component or unsupported version
 must be identified separately from an absent implementation. Features that the

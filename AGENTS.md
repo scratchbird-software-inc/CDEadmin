@@ -146,6 +146,19 @@ community source contains core SQL hooks and column-reference handling, but no
 implementation of the required Enterprise object_policy component. Existing
 column-reference tests do not establish working masking.
 
+## SQLite version range (owner direction, 2026-10-29)
+
+SQLite is supported from a declared minimum floor, not one exact version. The
+floor is 3.35.0, declared once in
+`web/pgadmin/cdeadmin/ui_descriptors/sqlite/capabilities.json`
+(`version_range.minimum`); 3.53.0 stays the reference profile. Detect the
+runtime version and its compile options/modules, and gate each
+version-specific feature on both. Grammar, keyword and function tables track
+features added and removed across versions, older and newer, until the owner
+explicitly retires an older version by raising the floor. Never widen a version
+check without the matching gate. The existing 3.53.0 tests stay mandatory; a
+version with no available runtime is reported as not run.
+
 ## MySQL priorities and MariaDB handoff
 
 Owner direction, 2026-10-22: adopt the eleven comparison-derived MySQL work

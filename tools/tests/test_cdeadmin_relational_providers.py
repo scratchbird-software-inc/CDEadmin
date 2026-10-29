@@ -1766,12 +1766,18 @@ class RelationalDBAPIClientTests(unittest.TestCase):
         self.assertEqual([], self.client._connections)
         self.assertEqual([], self.client._tokens)
 
-    def test_target_sqlite_profile_refuses_installed_version_mismatch(self):
-        if sqlite3.sqlite_version == SQLITE.exact_version:
-            self.skipTest('installed SQLite now matches the target profile')
-        provider = SQLiteProvider(
-            context(SQLITE), Permissions(), sqlite_client(SQLITE)
-        )
+    def test_target_sqlite_profile_refuses_runtime_below_declared_floor(self):
+        # Owner direction 2026-10-29: SQLite is admitted from the declared
+        # 3.35.0 floor instead of the exact 3.53.0 reference. A runtime below
+        # the floor must still be refused at runtime identity.
+        client = sqlite_client(SQLITE)
+        original = client.runtime_identity
+
+        def below_floor(*args, **kwargs):
+            return {**original(*args, **kwargs), 'version': '3.34.1'}
+
+        client.runtime_identity = below_floor
+        provider = SQLiteProvider(context(SQLITE), Permissions(), client)
         try:
             with self.assertRaises(RuntimeIdentityError):
                 provider.open_session({
@@ -1780,6 +1786,23 @@ class RelationalDBAPIClientTests(unittest.TestCase):
                         'route_id': 'local',
                     }
                 })
+        finally:
+            provider.close()
+
+    def test_target_sqlite_profile_admits_installed_runtime_in_range(self):
+        if not SQLITE.accepts_runtime_version(sqlite3.sqlite_version):
+            self.fail('installed SQLite is below the declared floor')
+        provider = SQLiteProvider(
+            context(SQLITE), Permissions(), sqlite_client(SQLITE)
+        )
+        try:
+            session = provider.open_session({
+                'route': {
+                    'database': ':memory:', 'allow_memory': True,
+                    'route_id': 'local',
+                }
+            })
+            self.assertIsNotNone(session)
         finally:
             provider.close()
 

@@ -220,10 +220,12 @@ class SQLiteClient(RelationalDBAPIClient):
             if self._closing:
                 raise RelationalClientError('SQLite client is closed')
             observed = getattr(self.module, 'sqlite_version', None)
-            if observed != self.config.profile.exact_version:
+            profile = self.config.profile
+            if not isinstance(observed, str) or (
+                    not profile.accepts_runtime_version(observed)):
                 raise RelationalClientError(
-                    'SQLite native runtime does not match the admitted '
-                    f'{self.config.profile.exact_version} profile')
+                    f'SQLite native runtime {observed} is outside the '
+                    f'supported {profile.version_requirement} range')
             return super()._connect(request)
 
     def _require_idle(self, handle):

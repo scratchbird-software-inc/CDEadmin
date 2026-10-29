@@ -1,4 +1,4 @@
-"""SQLite 3.53.0 exact-version native provider."""
+"""SQLite native provider: 3.53.0 reference, admitted from a floor."""
 
 import json
 from copy import deepcopy
@@ -28,6 +28,26 @@ from ..relational_admin import (
 from ..embedded_route import contained_database, sqlite_arguments
 
 
+def _declared_version_range():
+    """Read the floor and tested versions from the SQLite UI descriptor.
+
+    The descriptor is the single source of the supported range, so the
+    admission check and the UI version gates cannot disagree.
+    """
+    cdeadmin = os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))))
+    path = os.path.join(
+        cdeadmin, 'ui_descriptors', 'sqlite', 'capabilities.json')
+    with open(path, encoding='utf-8') as source:
+        declared = json.load(source)['version_range']
+    reference = '3.53.0'
+    return declared['minimum'], tuple(
+        value for value in declared.get('tested', ()) if value != reference)
+
+
+_MINIMUM_VERSION, _TESTED_VERSIONS = _declared_version_range()
+
+
 PROFILE = PilotProfile(
     'org.cdeadmin.sqlite', 'sqlite-native', 'sqlite', 'SQLite', '3.53.0',
     'embedded_sqlite', 'relational', 'sqlite-sql', 'SQLite SQL',
@@ -53,6 +73,8 @@ PROFILE = PilotProfile(
             'percent_change', 'rank', 'dense_rank',
         ),
     },
+    minimum_version=_MINIMUM_VERSION,
+    tested_versions=_TESTED_VERSIONS,
     parameter_shape='object-or-array',
     parameter_hint=('Named :name or positional ? bindings; '
                     'exact integer and base64 envelopes.'),

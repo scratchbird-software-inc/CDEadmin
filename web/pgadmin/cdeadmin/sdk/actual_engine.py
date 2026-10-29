@@ -96,6 +96,7 @@ class PilotProfile:
     result_worker_required: bool = False
     minimum_version: str | None = None
     maximum_version_exclusive: str | None = None
+    tested_versions: tuple[str, ...] = ()
     semantic_sql_dialect: Mapping[str, Any] | None = None
     semantic_materialization_kind: str | None = None
     semantic_materialization_defaults: Mapping[str, Any] | None = None
@@ -198,6 +199,13 @@ class PilotProfile:
             if value is not None:
                 object.__setattr__(self, name, _required(value, name))
                 self._numeric_version(value)
+        tested = tuple(
+            _required(value, 'tested_versions') for value in
+            self.tested_versions
+        )
+        for value in tested:
+            self._numeric_version(value)
+        object.__setattr__(self, 'tested_versions', tested)
         for name in ('dialect_contract_file', 'metrics_contract_file'):
             value = getattr(self, name)
             if value is not None:
@@ -253,6 +261,15 @@ class PilotProfile:
             raise PilotProviderError(
                 'minimum_version must precede maximum_version_exclusive'
             )
+        if tested and self.minimum_version is None:
+            raise PilotProviderError(
+                'tested_versions require a minimum_version range'
+            )
+        for value in tested:
+            if not self.accepts_runtime_version(value):
+                raise PilotProviderError(
+                    f'tested version {value} is outside the declared range'
+                )
 
     @staticmethod
     def _numeric_version(value):
@@ -300,6 +317,34 @@ class PilotProfile:
         )
         return f'>={self.minimum_version}{maximum}'
 
+    def version_support(self, observed):
+        """Describe an admitted runtime's place against tested versions.
+
+        ``reference`` is the profile's exact version; ``tested`` is another
+        version the provider was qualified on; ``untested_in_range`` lies
+        inside the range without its own qualification; and
+        ``newer_than_tracked`` is newer than every version the provider's
+        tables were built from, so only known features are offered.
+        """
+        known = (self.exact_version, *self.tested_versions)
+        if observed == self.exact_version:
+            status = 'reference'
+        elif observed in self.tested_versions:
+            status = 'tested'
+        elif self.minimum_version is not None and all(
+            self._version_less_than(value, observed) for value in known
+        ):
+            status = 'newer_than_tracked'
+        else:
+            status = 'untested_in_range'
+        return {
+            'observed_version': observed,
+            'requirement': self.version_requirement,
+            'reference_version': self.exact_version,
+            'tested_versions': list(self.tested_versions),
+            'status': status,
+        }
+
 
 @dataclass
 class _Session:
@@ -344,9 +389,24 @@ class ActualEnginePilotProvider:
         if not callable(requires) or not requires(
                 resource_kind, operation_id):
             return True
+        if not self._dialect_contract_covers_runtime():
+            return False
         return self.engine_contract_descriptor()['dialect']['state'] == (
             'passed'
         )
+
+    def _dialect_contract_covers_runtime(self):
+        """Fail closed when a range-admitted runtime lacks its own contract.
+
+        The dialect contract is generated for the reference version. A
+        runtime admitted through a version range may lack syntax the
+        contract's templates use, so contract-planned work stays refused
+        until a contract covering that runtime exists.
+        """
+        if self.profile.minimum_version is None:
+            return True
+        return getattr(self, '_observed_version', None) == (
+            self.profile.exact_version)
 
     def visual_admin_descriptor(self):
         """Return this provider's declarative visual administration surface."""
@@ -633,6 +693,7 @@ class ActualEnginePilotProvider:
             raise RuntimeIdentityError(
                 'runtime identity does not match the provider profile'
             )
+        self._observed_version = identity['version']
         return identity
 
     def _diagnostic(self, code, severity='info', retryable=False,
@@ -675,6 +736,8 @@ class ActualEnginePilotProvider:
             **runtime,
             'verification_state': 'verified',
             'evidence_reference': EVIDENCE_REFERENCE,
+            'version_support': self.profile.version_support(
+                runtime['version']),
         }
         return payload
 

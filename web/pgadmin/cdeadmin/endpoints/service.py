@@ -519,6 +519,7 @@ class EndpointService:
             'verification_state': 'verified',
             'verified_runtime_family': verified.get('engine_id'),
             'verified_runtime_version': verified.get('version'),
+            'version_support': verified.get('version_support'),
             'evidence_reference': verified.get('evidence_reference'),
             'selected_route_id': selected_route.id,
             'connected_as': connect_as or route.get('user'),

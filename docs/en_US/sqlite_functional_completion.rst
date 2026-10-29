@@ -6,6 +6,17 @@ binding. This contract supplements ``sqlite_driver_development.rst``, the
 shared SQL editor, compact forms, navigation and DDN roundtrip contracts.
 Driver qualification alone does not establish management-workflow completion.
 
+.. note::
+
+   Owner direction, 2026-10-29: SQLite is no longer limited to exactly 3.53.0.
+   Any runtime at or above the declared floor (``version_range.minimum`` in
+   ``web/pgadmin/cdeadmin/ui_descriptors/sqlite/capabilities.json``, currently
+   3.35.0) is admitted; 3.53.0 remains the reference profile. Version-specific
+   features are gated per runtime, and grammar/keyword tables track older and
+   newer features until a version is explicitly retired. The exact-version text
+   in this section is retained as the earlier rule and is being migrated in
+   phases; components not yet migrated still require 3.53.0.
+
 SQLITE-COMP-01: File and catalog identity
   An endpoint represents registered database files, not a remote server.
   Opening a registered file must verify its route and SQLite runtime before

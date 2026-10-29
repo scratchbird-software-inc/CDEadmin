@@ -37,6 +37,18 @@ SQLite exact-runtime platform gate also completed with no failures. This does
 not replace each provider's live or platform qualification. Existing Python
 3.12 receipts remain historical evidence only.
 
+.. note::
+
+   Owner direction, 2026-10-29: SQLite is no longer limited to exactly 3.53.0.
+   Any runtime at or above the declared floor (``version_range.minimum`` in
+   ``web/pgadmin/cdeadmin/ui_descriptors/sqlite/capabilities.json``, currently
+   3.35.0) is admitted; 3.53.0 remains the reference profile. Version-specific
+   features are gated per runtime, and grammar/keyword tables track older and
+   newer features until a version is explicitly retired. The refusal of SQLite
+   3.53.1 described above was correct under the earlier rule, which is retained
+   here as history and is being migrated in
+   phases; components not yet migrated still require 3.53.0.
+
 The root requirement set did **not** install under Linux CPython 3.14.6t.
 ``pymilvus==2.6.5`` depends on ``orjson``; the selected ``orjson==3.13.0``
 source build rejects free-threaded Python explicitly. ``psycopg[c]`` is also
