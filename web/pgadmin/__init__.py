@@ -376,6 +376,11 @@ def create_app(app_name=None):
     from config import SQLITE_PATH
     from pgadmin.setup import db_upgrade
 
+    def release_sqlite_file_handles():
+        """Drop ORM connections so the SQLite file can be renamed on Windows."""
+        db.session.remove()
+        db.engine.dispose()
+
     def backup_db_file():
         """
         Create a backup of the current database file
@@ -383,6 +388,7 @@ def create_app(app_name=None):
         """
         backup_file_name = "{0}.{1}".format(
             SQLITE_PATH, datetime.now().strftime('%Y%m%d%H%M%S'))
+        release_sqlite_file_handles()
         os.rename(SQLITE_PATH, backup_file_name)
         app.logger.error('Exception in database migration.')
         app.logger.info('Creating new database file.')
@@ -464,7 +470,19 @@ def create_app(app_name=None):
                         app.logger.error(
                             'Table(s) {0} are missing in the'
                             ' database'.format(invalid_tb_names))
-                        backup_db_file()
+                        # ConfigDB version can be current while Alembic is
+                        # behind; apply pending migrations before rebuilding.
+                        try:
+                            db_upgrade(app)
+                            os.environ['CORRUPTED_DB_BACKUP_FILE'] = ''
+                        except Exception:
+                            app.logger.error('Database migration failed')
+                            app.logger.error(traceback.format_exc())
+                            backup_db_file()
+                        else:
+                            is_db_error, invalid_tb_names = check_db_tables()
+                            if is_db_error:
+                                backup_db_file()
 
                 # Update schema version to the latest
                 if CURRENT_SCHEMA_VERSION > schema_version:

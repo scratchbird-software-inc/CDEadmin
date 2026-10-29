@@ -792,7 +792,7 @@ def setup_db(app: Annotated[str, typer.Argument(
         help="This argument doesn't require in CLI mode.")] = None):
     """Setup the configuration database."""
 
-    app = app or create_app()
+    app = app or create_app(config.APP_NAME + '-cli')
     create_app_data_directory(config)
 
     print("pgAdmin 4 - Application Initialisation")
