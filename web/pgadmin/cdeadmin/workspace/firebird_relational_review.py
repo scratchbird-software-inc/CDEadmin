@@ -100,6 +100,11 @@ def _read(snapshot, engine):
         _SLOTS.release()
 
 
+def _renamed_id(engine, live, new_name):
+    from .embedded_physical import _resource_id
+    return _resource_id(engine, live['kind'], live['path'][:-1], new_name)
+
+
 def _insert_rows(snapshot, engine, current, rows):
     """Append new native catalog records beside their owning table's record.
 
@@ -145,7 +150,7 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
             drafts.setdefault(item['parent_resource_id'], []).append(item)
     if drafts and engine not in {'postgresql', 'sqlite', 'duckdb', 'firebird', 'mysql', 'mariadb'}:
         raise ValueError('New physical-schema objects are not admitted for this engine')
-    new_rows, mirror = [], {}
+    new_rows, mirror, renamed = [], {}, []
     if set(drafts) - set(after):
         raise ValueError('A physical draft names a parent outside the edited relations')
     if engine in {"mysql", "mariadb"}:
@@ -216,8 +221,9 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
                                       drafts.get(identity, []))
         if engine in {'sqlite', 'duckdb'}:
             from .embedded_physical import merge as merge_index
-            facts[1], created = merge_index(engine, old, row, live, current, drafts.get(identity, []))
+            facts[1], created, found = merge_index(engine, old, row, live, current, drafts.get(identity, []))
             new_rows.extend(created)
+            renamed.extend(found)
             # Column rows are separate native resources; a graphical field edit
             # must not silently diverge from them.
             for uid, fields in row.get('fields', {}).items():
@@ -238,13 +244,37 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
         if not _equal(facts[0], facts[1]): changed.append(identity)
         for index, value in enumerate(facts):
             metadata = {key: live[key] for key in ('resource_id', 'kind', 'path_json', 'system')}
+            name, uid = live['name'], live['uid']
+            if index and engine == 'duckdb' and any(item['identity'] == identity for item in renamed):
+                # Reviewed DuckDB rename: the desired record carries the new identity and the rename intent.
+                item = next(item for item in renamed if item['identity'] == identity)
+                value = {**value, 'duckdb_change': {'action': 'rename', 'from_resource_id': identity, 'confirmation': name}}
+                metadata['resource_id'] = _renamed_id(engine, live, item['new'])
+                metadata['path_json'] = _json([*live['path'][:-1], item['new']])
+                name, uid = item['new'], live['uid'][:-len(identity)] + metadata['resource_id']
             metadata['native_json'] = _exact_json(value)
             key = 'o_' + hashlib.sha256(identity.encode()).hexdigest()
             declaration_id = live['source_location']['definition_id']
             block, local_id = declaration_id.rsplit('.', 1)
-            text = ddn.record_definition(local_id, live['name'], metadata,
-                module=f'scratchrobin.{engine}.catalog', block=block, uid=live['uid'])
+            text = ddn.record_definition(local_id, name, metadata,
+                module=f'scratchrobin.{engine}.catalog', block=block, uid=uid)
             replacements[index].append({**live['source_location'], 'text': text})
+    if engine == 'duckdb':
+        for item in renamed:
+            if item['kind'] != 'column':
+                continue
+            live = current['rows'][item['identity']]
+            # A column is its own native catalog record; renaming it rewrites that record only.
+            value = {**deepcopy(live['native']), 'duckdb_change': {'action': 'rename', 'from_resource_id': item['identity'],
+                                                                    'confirmation': live['name']}}
+            metadata = {'resource_id': _renamed_id(engine, live, item['new']),
+                        'kind': live['kind'], 'path_json': _json([*live['path'][:-1], item['new']]),
+                        'system': live['system'], 'native_json': _exact_json(value)}
+            block, local_id = live['source_location']['definition_id'].rsplit('.', 1)
+            replacements[1].append({**live['source_location'], 'text': ddn.record_definition(
+                local_id, item['new'], metadata, module=f'scratchrobin.{engine}.catalog', block=block,
+                uid=live['uid'][:-len(live['resource_id'])] + metadata['resource_id'])})
+            changed.append(item['identity'])
     for identity, value in mirror.items():
         # A replaced constraint's matching standalone backing-index row follows it exactly.
         live = current['rows'][identity]
@@ -268,5 +298,15 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
             _insert_rows(snapshot, engine, current, new_rows)
         read_catalog(_json(snapshot), engine=engine)
     changed.extend(item['resource_id'] for item in new_rows)
-    return {'baseline': _json(baseline), 'desired': _json(proposed), 'changed_resource_ids': changed,
-            'status': 'prepared-for-native-preview', 'executed': False}
+    result = {'baseline': _json(baseline), 'desired': _json(proposed), 'changed_resource_ids': changed,
+              'status': 'prepared-for-native-preview', 'executed': False}
+    if engine == 'sqlite' and renamed:
+        # SQLite rewrites references with its own ALTER TABLE: the desired model stays equal to the baseline and
+        # the exact renames go to the native rename design (sqlite_schema_rename_design) and plan.
+        # Native renames run in order and name the table as it is at that point: columns first, then tables.
+        result['renames'] = [{'kind': 'column', 'table': item['table'], 'from': item['old'], 'to': item['new']}
+                             for item in renamed if item['kind'] == 'column'] + \
+                            [{'kind': 'table', 'table': item['old'], 'to': item['new']}
+                             for item in renamed if item['kind'] == 'table']
+        changed.extend(item['identity'] for item in renamed)
+    return result

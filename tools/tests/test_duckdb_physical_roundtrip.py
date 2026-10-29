@@ -129,9 +129,9 @@ def test_uncarried_edits_fail_loudly_instead_of_vanishing(env):
     with pytest.raises(ValueError, match='not carried'):
         handoff(env.catalog['snapshot'], diagram['snapshot'],
                 rt.edit_vocabulary(diagram, index, physical_name='renamed', rename_from='child_amount_idx'), engine='duckdb')
-    with pytest.raises(ValueError, match='not carried'):
+    with pytest.raises(ValueError, match='drops are not carried'):
         handoff(env.catalog['snapshot'], diagram['snapshot'],
-                rt.edit_vocabulary(diagram, table, physical_name='kid', rename_from='child'), engine='duckdb')
+                rt.edit_vocabulary(diagram, table, drop=True, drop_confirmation='child'), engine='duckdb')
     partial, _ = rt.add_draft_element(diagram, diagram['snapshot'], table, env.uid(table), 'index', 'p_idx',
         {'physical_kind': 'index', 'physical_name': 'p_idx', 'columns_json': '["note"]', 'predicate': 'note IS NOT NULL'}, 'duckdb')
     with pytest.raises(ValueError, match='partial'):
@@ -143,3 +143,66 @@ def test_omitted_vocabulary_is_not_drop_intent(env):
     index = env.rid('index', 'child_amount_idx')
     _, result_plan = env.review(rt.edit_vocabulary(diagram, index, physical_name='child_amount_idx'))
     assert result_plan['operations'] == []
+
+
+# ------------------------------------------------------------------ renames and primary keys
+
+def test_table_rename_with_explicit_mapping(env):
+    # DuckDB itself refuses to rename a table that an index depends on, so use an index-free table.
+    env.connection.execute('CREATE TABLE loose(a INTEGER)')
+    diagram = env.export()
+    table = env.rid('table', 'loose')
+    for values in ({'physical_name': 'kid'}, {'physical_name': 'kid', 'rename_from': 'other'}):
+        with pytest.raises(ValueError, match='rename_from'):
+            handoff(env.catalog['snapshot'], diagram['snapshot'], rt.edit_vocabulary(diagram, table, **values), engine='duckdb')
+    result, result_plan = env.review(rt.edit_vocabulary(diagram, table, physical_name='kid', rename_from='loose'))
+    assert [item['operation'] for item in result_plan['operations']] == ['rename']
+    assert result_plan['operations'][0]['source'].endswith('RENAME TO "kid"')
+    env.execute(result_plan)
+    assert env.connection.execute('SELECT count(*) FROM kid').fetchone() == (0,)
+    env.export()
+    _, again = env.review(env.diagram['snapshot'])
+    assert again['operations'] == []
+
+
+def test_column_rename_from_the_field_record(env):
+    env.connection.execute('CREATE TABLE loose(a INTEGER, label VARCHAR)')  # DuckDB refuses ALTER on indexed tables
+    diagram = env.export()
+    column = env.rid('column', 'label')
+    edited = rt.edit_vocabulary(diagram, column, physical_name='remark', rename_from='label')
+    result, result_plan = env.review(edited)
+    assert [item['operation'] for item in result_plan['operations']] == ['rename']
+    assert 'RENAME COLUMN "label" TO "remark"' in result_plan['operations'][0]['source']
+    env.execute(result_plan)
+    assert env.connection.execute('SELECT remark FROM loose').fetchall() == []
+
+
+def test_rename_cannot_hide_other_vocabulary_or_a_drop(env):
+    diagram = env.export()
+    column = env.rid('column', 'note')  # child.note
+    with pytest.raises(ValueError, match='drops are not carried'):
+        handoff(env.catalog['snapshot'], diagram['snapshot'],
+                rt.edit_vocabulary(diagram, column, drop=True, drop_confirmation='note'), engine='duckdb')
+    with pytest.raises(ValueError, match='only an explicit rename|Only an explicit rename'):
+        handoff(env.catalog['snapshot'], diagram['snapshot'],
+                rt.edit_vocabulary(diagram, column, unique=True), engine='duckdb')
+
+
+def test_primary_key_draft_on_a_table_without_a_key(env):
+    env.connection.execute('CREATE TABLE keyless(a INTEGER NOT NULL, b VARCHAR)')
+    diagram = env.export()
+    table = env.rid('table', 'keyless')
+    edited, _ = rt.add_draft_element(diagram, diagram['snapshot'], table, env.uid(table), 'constraint', 'keyless_pkey',
+        {'physical_kind': 'primary-key', 'physical_name': 'keyless_pkey', 'columns_json': '["a"]'}, 'duckdb')
+    result, result_plan = env.review(edited)
+    assert [item['operation'] for item in result_plan['operations']] == ['alter']
+    assert result_plan['operations'][0]['source'].endswith('ADD PRIMARY KEY ("a")')
+    env.execute(result_plan)
+    assert env.connection.execute('SELECT count(*) FROM duckdb_constraints() WHERE constraint_type=\'PRIMARY KEY\' AND table_name=\'keyless\'').fetchone() == (1,)
+    # A table that already has a key refuses a second one.
+    again = env.export()
+    parent = env.rid('table', 'parent')
+    edited, _ = rt.add_draft_element(again, again['snapshot'], parent, env.uid(parent), 'constraint', 'parent_pk2',
+        {'physical_kind': 'primary-key', 'physical_name': 'parent_pk2', 'columns_json': '["code"]'}, 'duckdb')
+    with pytest.raises(ValueError, match='without a key'):
+        handoff(env.catalog['snapshot'], again['snapshot'], edited, engine='duckdb')

@@ -292,10 +292,32 @@ an index whose columns, uniqueness or predicate changed. The desired row's DDL a
 catalog metadata come from the drafted index built on a throwaway in-memory copy of the
 table, so the post-apply comparison is exact.
 
+SQLite renames: ``physical_name`` plus ``rename_from`` on a table record or on a field
+record names a native table or column rename. The baseline name is read from the live
+catalog (no vocabulary has to be emitted for it); any other vocabulary on that record,
+and any ``drop``, is refused. The review result then carries ``renames`` (columns first,
+then tables, because native renames run in order and name the table as it is at that
+point) while ``desired`` stays equal to ``baseline``: the caller sends ``renames`` to
+``sqlite_schema_rename_design`` to generate the rewritten desired DDN and then plans it
+(``sqlite_rename.plan``). SQLite itself rewrites dependent indexes, views and triggers.
+
 DuckDB (``duckdb_schema_plan.plan``): ``create`` for a drafted index, ``drop`` for an
 index carrying ``drop`` and the exact name (carried as the existing
 ``duckdb_change = {action: drop, confirmation: name}``). A replacement is a drop plus a
 new index under a new name.
+
+DuckDB renames: the same ``physical_name`` + ``rename_from`` on a table, view or field
+record. The reviewed desired record is rewritten in place with the new name, path,
+resource id and uid and ``duckdb_change = {action: rename, from_resource_id,
+confirmation}``, which the plan turns into ``ALTER TABLE|VIEW ... RENAME TO`` or
+``ALTER TABLE ... RENAME COLUMN``. Column renames are carried for tables only. DuckDB
+itself refuses ``ALTER`` on a table that an index depends on; that surfaces when the
+statement runs, not in the plan.
+
+DuckDB primary key: a draft of kind ``primary-key`` (role ``constraint``, columns only)
+on a table whose catalog reports no primary key becomes
+``duckdb_change = {action: add-primary-key, columns}`` and plans as one
+``ALTER TABLE ... ADD PRIMARY KEY``. Review it separately from other edits.
 
 Firebird (``firebird_physical.py``, planned by ``firebird_schema_plan.build_plan`` and
 ``firebird_lifecycle_plan``; applied by ``schema_application.apply_review``, which runs
@@ -508,15 +530,17 @@ open items for Stream B (B1 vocabulary, B3 adapters); none is claimed by this do
    ``COMMENT``/``KEY_BLOCK_SIZE``/``PARSER``, ``WITHOUT OVERLAPS`` and period constraints,
    MariaDB system-versioning, and ``ALGORITHM``/``LOCK`` choice are read from the catalog but
    refused for replacement with a request to edit natively.
-#. **SQLite and DuckDB constraints.** UNIQUE, CHECK, PRIMARY KEY and FOREIGN KEY edits
-   need a table rebuild (SQLite ``rebuilds``, DuckDB ``rebuild-*`` actions) and are
-   not expressed by the diagram. The reader rejects them. Their foreign-key edges are
+#. **SQLite and DuckDB constraints.** DuckDB can add a primary key (above). UNIQUE, CHECK,
+   FOREIGN KEY and key changes on either engine need a table rebuild (SQLite
+   ``rebuilds``, DuckDB ``rebuild-*`` actions) that rewrites data; the diagram does not
+   request one, so the reader rejects them with a reason. Their foreign-key edges are
    not editable rows.
-#. **SQLite and DuckDB renames and drops.** SQLite renames and deletions are plan
-   arguments plus row absence, which the diagram cannot state without removing catalog
-   records; DuckDB renames create a new resource identity. Table, column and SQLite
-   index renames/drops are rejected with a reason. DuckDB index replacement does not
-   exist as a plan.
+#. **SQLite and DuckDB drops and index renames.** Table, column and SQLite index drops
+   need row absence plus a deletion argument (SQLite) or are not carried (DuckDB tables
+   and columns); they are rejected with a reason. Index renames are rejected on both
+   engines (drop plus a new index). DuckDB index replacement does not exist as a plan.
+#. **SQLite and DuckDB diagram review is not yet wired into the Robin UI**; the
+   ``sqlite_relational_review`` and ``duckdb_relational_review`` actions are API-level.
 #. **Index detail.** Per-key ordering, operator class, collation, INCLUDE columns,
    ``NULLS NOT DISTINCT``, storage parameters and tablespace are not in the
    vocabulary; such indexes are read-only for replacement.
@@ -559,7 +583,7 @@ Forward, edit, reverse and plan are exercised against real engines:
   (``tools/firebird_physical_native.py``).
 * ``tools/tests/test_sqlite_physical_roundtrip.py`` (``sqlite3``) and
   ``tools/tests/test_duckdb_physical_roundtrip.py`` (``duckdb``): index create, replace
-  or drop, and the rejected edits.
+  or drop, table and column renames, DuckDB primary-key addition, and the rejected edits.
 * ``tools/tests/physical_roundtrip.py`` edits the vocabulary through DDN's public
   source-patch API (``tools/ddn_edit.mjs``), as a records-table edit would.
 
@@ -592,4 +616,6 @@ Change log
   ``enforced``); ``mysql_physical.py`` and the MySQL/MariaDB plan modules read index,
   UNIQUE, PRIMARY KEY, CHECK, FOREIGN KEY, rename and drop edits into one reviewed
   ``ALTER TABLE`` per table. PostgreSQL, SQLite and DuckDB behaviour is unchanged.
+* 2026-10-29: SQLite and DuckDB carry explicit table/column renames from the diagram;
+  DuckDB carries a primary-key addition. No vocabulary key was added.
 * 2026-10-28: ``scratchrobin.physical-schema@1`` introduced for PostgreSQL, SQLite and DuckDB.

@@ -137,9 +137,13 @@ def test_uncarried_edits_fail_loudly_instead_of_vanishing(env):
         with pytest.raises(ValueError, match=message):
             handoff(env.catalog['snapshot'], diagram['snapshot'], rt.edit_vocabulary(diagram, index, **values), engine='sqlite')
     table = env.rid('table', 'child')
-    with pytest.raises(ValueError, match='not carried'):
+    with pytest.raises(ValueError, match='drops are not carried'):
         handoff(env.catalog['snapshot'], diagram['snapshot'],
-                rt.edit_vocabulary(diagram, table, physical_name='kid', rename_from='child'), engine='sqlite')
+                rt.edit_vocabulary(diagram, table, drop=True, drop_confirmation='child'), engine='sqlite')
+    with pytest.raises(ValueError, match='primary key|Primary-key'):
+        edited, _ = rt.add_draft_element(diagram, diagram['snapshot'], table, env.uid(table), 'constraint', 'child_pk',
+            {'physical_kind': 'primary-key', 'physical_name': 'child_pk', 'columns_json': '["id"]'}, 'sqlite')
+        handoff(env.catalog['snapshot'], diagram['snapshot'], edited, engine='sqlite')
 
 
 def test_omitted_vocabulary_is_not_deletion_or_clear_intent(env):
@@ -147,3 +151,41 @@ def test_omitted_vocabulary_is_not_deletion_or_clear_intent(env):
     index = env.rid('index', 'child_amount_idx')
     _, result_plan, _ = env.review(rt.edit_vocabulary(diagram, index, physical_name='child_amount_idx'))
     assert result_plan['operations'] == []
+
+
+# ------------------------------------------------------------------ renames
+
+def rename_plan(env, result):
+    """Diagram handoff -> native rename design (desired DDN) -> native rename plan."""
+    from pgadmin.cdeadmin.workspace import sqlite_rename
+    baseline = read_catalog(result['baseline'], engine='sqlite')
+    desired, selected, _ = sqlite_rename.generate(baseline, result['renames'])
+    live = build_export(env.resources(), endpoint_id='e', target_id=TARGET, generation='g2', engine='sqlite', native_model=True)
+    return sqlite_rename.plan(baseline, desired, live, selected)
+
+
+def test_table_and_column_renames_become_native_rename_arguments(env):
+    diagram = env.export()
+    table, column = env.rid('table', 'child'), env.rid('column', 'note')
+    edited = rt.edit_vocabulary(diagram, table, physical_name='kid', rename_from='child')
+    edited = rt.edit_vocabulary(diagram, column, snapshot=edited, physical_name='remark', rename_from='note')
+    result = handoff(env.catalog['snapshot'], diagram['snapshot'], edited, engine='sqlite')
+    assert result['renames'] == [{'kind': 'column', 'table': 'child', 'from': 'note', 'to': 'remark'},
+                                 {'kind': 'table', 'table': 'child', 'to': 'kid'}]
+    assert result['baseline'] == result['desired']          # SQLite rewrites references itself
+    result_plan = rename_plan(env, result)
+    assert result_plan['ready_for_review'] and result_plan['application_supported'], result_plan
+    for stage in result_plan['operations'][0]['stages']:
+        env.connection.execute(stage)
+    assert env.connection.execute('SELECT remark FROM kid').fetchall() == []
+    assert 'kid' in env.index_sql('child_amount_idx')       # native ALTER rewrote the dependent index
+
+
+def test_rename_needs_the_exact_baseline_name(env):
+    diagram = env.export()
+    table = env.rid('table', 'child')
+    with pytest.raises(ValueError, match='rename_from'):
+        handoff(env.catalog['snapshot'], diagram['snapshot'], rt.edit_vocabulary(diagram, table, physical_name='kid'), engine='sqlite')
+    with pytest.raises(ValueError, match='rename_from'):
+        handoff(env.catalog['snapshot'], diagram['snapshot'],
+                rt.edit_vocabulary(diagram, table, physical_name='kid', rename_from='parent'), engine='sqlite')

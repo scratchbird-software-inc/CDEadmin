@@ -361,7 +361,7 @@ scratchrobin.firebird.native-capture@1; imported document digests remain hashes
 of their original UTF-8 DDN source. Host capture retains the 20,000-resource and
 8 MiB native JSON bounds. Index namespace checks include system catalog objects.
 
-The paired DDN 0.8 parser additionally limits each source file to 2,000,000
+The paired ddn-next-1 parser additionally limits each source file to 2,000,000
 UTF-16 code units. Single-file export and import enforce that lower effective
 limit alongside the UTF-8 byte bound, before emitting an unreadable document or
 starting a parser process. Large catalogs are packaged as a ddn-source-workspace@1 JSON
