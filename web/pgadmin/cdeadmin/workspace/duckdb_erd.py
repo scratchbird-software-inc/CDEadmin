@@ -19,6 +19,13 @@ def build_diagram(resources, provenance):
     prefix = 'duckdb:' + provenance['endpoint_id'] + ':' + provenance['database_target_id'] + ':'
     declarations, edges, warnings, mapping = [], [], [], {}
     indexes = embedded_physical.forward('duckdb', resources)
+    def fk_values(table, constraint_id):
+        # A droppable foreign key is its edge: the edge record carries the constraint identity and vocabulary.
+        for item in indexes.get(table, []):
+            if item['role'] == 'ref' and item['row']['resource_id'] == constraint_id:
+                return {'resource_id': constraint_id, 'native_kind': 'constraint', 'native_json': quote(native_metadata(item['row'], 'duckdb')),
+                        **item['values']}
+        return {}
     for row in relations:
         identity = row['resource_id']; native = native_metadata(row, 'duckdb')
         fields = []
@@ -30,10 +37,10 @@ def build_diagram(resources, provenance):
             mapping[key(cid)] = cid
         label = '.'.join(row['display_path'])
         children = []
-        for item in indexes.get(identity, []) if row['resource_kind'] == 'table' else []:
+        for item in [item for item in indexes.get(identity, []) if item['role'] != 'ref'] if row['resource_kind'] == 'table' else []:
             child = item['row']['resource_id']
-            children.append({'identity': key(child), 'title': item['row']['display_name'], 'role': 'index',
-                'uid': prefix + child, 'values': {'resource_id': child, 'native_kind': 'index',
+            children.append({'identity': key(child), 'title': item['row']['display_name'], 'role': item['role'],
+                'uid': prefix + child, 'values': {'resource_id': child, 'native_kind': item['role'],
                     'native_json': quote(native_metadata(item['row'], 'duckdb')), **item['values']}})
             mapping[key(child)] = child
         declarations.append(ddn.relation_object(key(identity), label, row['resource_kind'], prefix + identity,
@@ -50,7 +57,7 @@ def build_diagram(resources, provenance):
             cid = constraint['resource_id']
             label = constraint['name'] + ' (' + ', '.join(constraint['column_names']) + ') -> (' + ', '.join(constraint['referenced_column_names']) + ')'
             declarations.append(ddn.relation_edge(key(cid), label, key(identity), key(target['resource_id']),
-                prefix + cid, {'native_json': quote(constraint)}, module))
+                prefix + cid, {'native_json': quote(constraint), **fk_values(identity, cid)}, module))
             edges.append((key(cid), identity, target['resource_id'])); mapping[key(cid)] = cid
     views, blocks = [], []
     for start in range(0, len(relations), 25):

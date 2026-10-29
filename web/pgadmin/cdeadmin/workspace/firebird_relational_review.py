@@ -3,6 +3,7 @@ from copy import deepcopy
 from . import ddn_source as ddn
 from decimal import Decimal
 import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -14,8 +15,8 @@ from .firebird_catalog_import import read_catalog, _decode, _equal, _SLOTS
 _KINDS = {
     'firebird': {'table', 'view', 'column', 'constraint', 'index'},
     'postgresql': {'table', 'partitioned-table', 'foreign-table', 'view', 'materialized-view', 'constraint', 'index'},
-    'sqlite': {'table', 'view', 'virtual-table', 'fts-table', 'index'},
-    'duckdb': {'table', 'view', 'index'},
+    'sqlite': {'table', 'view', 'virtual-table', 'fts-table', 'index', 'constraint'},
+    'duckdb': {'table', 'view', 'index', 'constraint'},
 }
 
 
@@ -120,13 +121,18 @@ def _insert_rows(snapshot, engine, current, rows):
         snapshot['files'][owner['file']] += '\n' + ddn.record_definition(
             local, item['name'], metadata, module=f'scratchrobin.{engine}.catalog',
             block=owner['definition_id'].rsplit('.', 1)[0], uid=uid)
+    _shift_count(snapshot, len(rows))
+
+
+def _shift_count(snapshot, delta):
+    import re
     counted = [(name, match) for name, text in snapshot['files'].items()
                for match in re.finditer(r'""objects"":([0-9]+)', text)]
     if len(counted) != 1:
         raise ValueError('Catalog provenance object count is unavailable')
     name, match = counted[0]
     text = snapshot['files'][name]
-    snapshot['files'][name] = text[:match.start(1)] + str(int(match.group(1)) + len(rows)) + text[match.end(1):]
+    snapshot['files'][name] = text[:match.start(1)] + str(int(match.group(1)) + delta) + text[match.end(1):]
 
 
 def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new_columns=False, allow_column_renames=False, allow_foreign_keys=False, allow_temporal_history=False, allow_rebuilds=False):
@@ -171,6 +177,17 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
             constraint_changes = relationship_changes(relationships(before), relationships(after), current['rows'],engine=engine)
         elif any(edge.get('uid') is None or not _equal(previous.get(edge['uid']),edge) for edge in relationships(after)):
             raise ValueError('Graphical relationship changes require explicit native foreign-key reconciliation; enable foreign-key design admission or edit the owning table native definition')
+    dropped_constraints, table_drops = set(), {}
+    if engine in {'sqlite', 'duckdb'}:
+        from .embedded_physical import dropping
+        for identity, row in after.items():
+            live = current['rows'].get(identity)
+            if live is not None and live['kind'] == 'constraint' and before.get(identity) is not None and \
+                    dropping(before[identity], row, live):
+                dropped_constraints.add(identity)
+                table_drops.setdefault(live['native'].get('navigator_parent_resource_id'), []).append(live)
+        if set(table_drops) - set(after):
+            raise ValueError('A constraint drop names a table outside the edited relations')
     baseline, proposed = deepcopy(catalog_snapshot), deepcopy(catalog_snapshot)
     replacements = [[], []]
     changed = []
@@ -223,7 +240,7 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
                                       drafts.get(identity, []))
         if engine in {'sqlite', 'duckdb'}:
             from .embedded_physical import merge as merge_index
-            facts[1], created, found, rebuilt = merge_index(engine, old, row, live, current, drafts.get(identity, []), allow_rebuilds)
+            facts[1], created, found, rebuilt = merge_index(engine, old, row, live, current, drafts.get(identity, []), allow_rebuilds, table_drops.get(identity, ()))
             new_rows.extend(created)
             renamed.extend(found)
             rebuilds.extend(rebuilt)
@@ -261,6 +278,8 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
             block, local_id = declaration_id.rsplit('.', 1)
             text = ddn.record_definition(local_id, name, metadata,
                 module=f'scratchrobin.{engine}.catalog', block=block, uid=uid)
+            if index and identity in dropped_constraints:
+                text = ''   # the reviewed rebuild discards the constraint: its catalog record leaves the desired design
             replacements[index].append({**live['source_location'], 'text': text})
     if engine == 'duckdb':
         for item in renamed:
@@ -299,8 +318,17 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
                 encoded[edit['end'] * 2:]).decode('utf-16-le')
         if snapshot is proposed and new_rows:
             _insert_rows(snapshot, engine, current, new_rows)
+        if snapshot is proposed and dropped_constraints:
+            import re
+            for identity in dropped_constraints:
+                # The table's member lists and the views reference the discarded record by its definition id.
+                pattern = r'\n[ ]*item\n[ ]*id ' + re.escape(json.dumps(current['rows'][identity]['source_location']['definition_id']))
+                for name in snapshot['files']:
+                    snapshot['files'][name] = re.sub(pattern, '', snapshot['files'][name])
+            _shift_count(snapshot, -len(dropped_constraints))
         read_catalog(_json(snapshot), engine=engine)
     changed.extend(item['resource_id'] for item in new_rows)
+    changed.extend(sorted(dropped_constraints))
     result = {'baseline': _json(baseline), 'desired': _json(proposed), 'changed_resource_ids': changed,
               'status': 'prepared-for-native-preview', 'executed': False}
     if engine == 'sqlite' and renamed and rebuilds:

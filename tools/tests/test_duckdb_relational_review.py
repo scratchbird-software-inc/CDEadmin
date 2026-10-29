@@ -47,7 +47,9 @@ def named(catalog, name):
 
 def test_forward_reverse_identity_reads_every_native_relation_and_field(catalog):
     result = read_relations(catalog.original, engine='duckdb')
-    assert set(result) == {row['resource_id'] for row in catalog.rows}
+    # Foreign-key edges carry their constraint identity and vocabulary (droppable through the rebuild opt-in).
+    keys = {rid for rid, read in result.items() if read['native'].get('catalog_metadata', {}).get('constraint_type') == 'FOREIGN KEY'}
+    assert keys and set(result) - keys == {row['resource_id'] for row in catalog.rows}
     assert set(result) <= set(catalog.export['diagram']['resource_mapping'].values())
     assert {row['resource_kind'] for row in catalog.rows} == {'table', 'view'}
     for source in catalog.rows:

@@ -16,7 +16,7 @@ external access disabled), and the facts the plan checks are read back from that
   ``duckdb_change`` rebuild action (one constraint kind per review); the new constraint
   records come from the copy.
 
-Only additions are carried. Dropping or replacing a constraint, adding to a table whose
+Additions and single-clause drops are carried. Replacing a constraint, adding to a table whose
 existing constraints would be renumbered (which would defeat post-apply rediscovery), and
 mixed kinds in one review are refused with a reason. Nothing executes against the database.
 See docs/en_US/ddn_physical_schema_vocabulary.rst.
@@ -152,7 +152,8 @@ def _item(row, owner):
             'system': 'false', 'native': row['native'], 'owner': owner}
 
 
-def _sqlite(table, ddl, old_rows, wanted):
+def _scratch_sqlite(table, ddl):
+    """Constraint records SQLite reports for the drafted table text, built on a throwaway copy."""
     import sqlite3
     from ..providers.sqlite.provider import _resources
     from .firebird_catalog_export import build_export
@@ -163,25 +164,14 @@ def _sqlite(table, ddl, old_rows, wanted):
         scratch.execute(ddl)
         resources = _resources(scratch, {})
     except sqlite3.Error as error:
-        raise ValueError('SQLite rejected the drafted constraint: ' + str(error)[:200]) from None
+        raise ValueError('SQLite rejected the drafted table: ' + str(error)[:200]) from None
     finally:
         scratch.close()
-    model = build_export(resources, endpoint_id='scratch', target_id='scratch', generation='scratch',
-                         engine='sqlite', native_model=True, include_system=False)
-    fresh = model['rows'].get(table['resource_id'])
-    if fresh is None or fresh['native'].get('columns') != table['native'].get('columns'):
-        raise ValueError('Adding the constraint would change the table columns; edit it natively')
-    after = _children(model['rows'], table['resource_id'])
-    before = _children(old_rows, table['resource_id'])
-    if set(before) - set(after) or any(after[key]['native'] != row['native'] for key, row in before.items()):
-        raise ValueError('Adding the constraint would renumber an existing constraint; edit the table natively')
-    created = [row for key, row in after.items() if key not in before]
-    if len(created) != wanted:
-        raise ValueError('SQLite reported an unexpected set of new constraints')
-    return created
+    return build_export(resources, endpoint_id='scratch', target_id='scratch', generation='scratch',
+                        engine='sqlite', native_model=True, include_system=False)
 
 
-def _duckdb(table, ddl, kind, old_rows, current, extra_tables, wanted):
+def _scratch_duckdb(table, ddl, extra_tables):
     import duckdb
     from ..providers.duckdb.catalog import capture
     from .firebird_catalog_export import build_export
@@ -205,27 +195,163 @@ def _duckdb(table, ddl, kind, old_rows, current, extra_tables, wanted):
             if not hardened:
                 resources = capture(scratch)['resources']
         except duckdb.Error as error:
-            raise ValueError('DuckDB rejected the drafted constraint: ' + str(error)[:200]) from None
+            raise ValueError('DuckDB rejected the drafted table: ' + str(error)[:200]) from None
         finally:
             scratch.close()
-    model = build_export(resources, endpoint_id='scratch', target_id='scratch', generation='scratch',
-                         engine='duckdb', native_model=True)
+    return build_export(resources, endpoint_id='scratch', target_id='scratch', generation='scratch',
+                        engine='duckdb', native_model=True)
+
+
+def _sqlite(table, ddl, old_rows, wanted=None, dropped=None):
+    model = _scratch_sqlite(table, ddl)
+    fresh = model['rows'].get(table['resource_id'])
+    if fresh is None or fresh['native'].get('columns') != table['native'].get('columns'):
+        raise ValueError('The change would alter the table columns; edit it natively')
+    after = _children(model['rows'], table['resource_id'])
+    before = _children(old_rows, table['resource_id'])
+    survivors = {key: row for key, row in before.items() if key != dropped}
+    if set(survivors) - set(after) or any(after[key]['native'] != row['native'] for key, row in survivors.items()):
+        raise ValueError('The change would renumber an existing constraint; edit the table natively')
+    created = [row for key, row in after.items() if key not in before]
+    if wanted is not None and len(created) != wanted:
+        raise ValueError('SQLite reported an unexpected set of new constraints')
+    if dropped is not None and (created or dropped in after):
+        raise ValueError('SQLite still reports the constraint after removing the clause')
+    return created
+
+
+def _duckdb(table, ddl, kind, old_rows, current, extra_tables, wanted=None, dropped=None):
+    model = _scratch_duckdb(table, ddl, extra_tables)
     fresh = model['rows'].get(table['resource_id'])
     if fresh is None:
         raise ValueError('DuckDB reported no drafted table')
     strip = lambda columns: [{key: value for key, value in column.items() if key != 'owner_oid'} for column in columns]
     if strip(fresh['native'].get('columns', [])) != strip(table['native'].get('columns', [])):
-        raise ValueError('Adding the constraint would change the table columns; edit it natively')
+        raise ValueError('The change would alter the table columns; edit it natively')
     changing = _DUCKDB_TYPES[kind]
     retained = lambda items: [item for item in items if item.get('constraint_type') != changing]
-    if retained(fresh['native'].get('constraints', [])) != retained(table['native'].get('constraints', [])):
-        raise ValueError('Adding the constraint would renumber the existing constraints, so the change could not be '
+    baseline = [item for item in table['native'].get('constraints', []) if item['resource_id'] != dropped]
+    if retained(fresh['native'].get('constraints', [])) != retained(baseline):
+        raise ValueError('The change would renumber the existing constraints, so it could not be '
                          'verified after the rebuild; edit the table natively')
     existing = {item['resource_id'] for item in table['native'].get('constraints', [])}
     created = [row for key, row in _children(model['rows'], table['resource_id']).items() if key not in existing]
-    if len(created) != wanted:
+    if wanted is not None and len(created) != wanted:
         raise ValueError('DuckDB reported an unexpected set of new constraints')
+    if dropped is not None and (created or fresh['native'].get('constraints', []) != baseline):
+        raise ValueError('DuckDB would renumber or keep constraints after the removal; edit the table natively')
     return fresh['native'].get('constraints', []), created
+
+
+def _items(ddl):
+    """Top-level comma separated items of the outer parentheses: [(start, end)] (end exclusive)."""
+    close = _closing_paren(ddl)
+    open_ = ddl.index('(')
+    depth, start, spans, index = 0, open_ + 1, [], open_ + 1
+    while index < close:
+        char = ddl[index]
+        if char in '\'"`':
+            end = index + 1
+            while end < close:
+                if ddl[end] == char:
+                    if end + 1 < close and ddl[end + 1] == char:
+                        end += 2
+                        continue
+                    break
+                end += 1
+            index = end
+        elif char == '(':
+            depth += 1
+        elif char == ')':
+            depth -= 1
+        elif char == ',' and depth == 0:
+            spans.append((start, index))
+            start = index + 1
+        index += 1
+    spans.append((start, close))
+    return spans
+
+
+_CLAUSE = re.compile(r'\s*(?:CONSTRAINT\s+(?:"(?:[^"]|"")*"|\S+)\s+)?(UNIQUE|CHECK|FOREIGN\s+KEY)\b', re.I)
+
+
+def _without(ddl, span, spans):
+    """The statement with one top-level item (and its separating comma) removed."""
+    index = spans.index(span)
+    if index == 0 and len(spans) == 1:
+        raise ValueError('The table has no other definition left')
+    start, end = span
+    if index == len(spans) - 1:
+        start = spans[index - 1][1]            # take the comma before the last item
+    else:
+        end = spans[index + 1][0] - 1          # take the comma after this item
+    return ddl[:start] + ddl[end:]
+
+
+def remove(engine, old, table, current, targets, native, allow_rebuilds):
+    """(desired table native, rebuild identity) for dropping one table-level constraint clause.
+
+    Which clause belongs to the constraint is never guessed: every table-level UNIQUE, CHECK or FOREIGN KEY
+    clause is tried, and only the removal after which the copy reports exactly the baseline constraints
+    minus the target is accepted (one such clause, or the review is refused)."""
+    if not allow_rebuilds:
+        raise ValueError('Dropping a constraint rebuilds the table and rewrites its rows; enable rebuild-backed '
+                         'constraint changes to review it')
+    if len(targets) != 1:
+        raise ValueError('Drop one constraint per review')
+    if table['native'].get('catalog_metadata', {}).get('table_list_type', 'table') not in ('table', None):
+        raise ValueError('Constraint changes are carried for ordinary tables only')
+    target = targets[0]
+    ddl = old['native'].get('ddl')
+    if not isinstance(ddl, str) or not ddl or len(ddl.encode('utf8')) > 1024 * 1024:
+        raise ValueError('The table has no bounded native definition to change')
+    ddl = _qualify(ddl, table['path']) if engine == 'duckdb' else ddl
+    suffix = ';' if ddl.rstrip().endswith(';') else ''
+    body = ddl.rstrip()[:-1].rstrip() if suffix else ddl.rstrip()
+    spans = _items(body)
+    candidates = [span for span in spans if _CLAUSE.match(body[span[0]:span[1]])]
+    accepted = []
+    references = {}
+    if engine == 'duckdb':
+        for item in table['native'].get('constraints', []):
+            if item.get('constraint_type') == 'FOREIGN KEY':
+                other = next((row for row in current['rows'].values() if row['kind'] == 'table' and
+                              row['name'] == item.get('referenced_table') and row['path'][:-1] == table['path'][:-1]), None)
+                if other is None:
+                    raise ValueError('An existing foreign key target is unavailable')
+                references[other['resource_id']] = other
+        references.pop(table['resource_id'], None)
+    kind = None
+    if engine == 'duckdb':
+        kind = {'UNIQUE': 'unique', 'CHECK': 'check', 'FOREIGN KEY': 'foreign-key'}.get(
+            next((i.get('constraint_type') for i in table['native'].get('constraints', [])
+                  if i['resource_id'] == target['resource_id']), None))
+        if kind is None:
+            raise ValueError('Only UNIQUE, CHECK and FOREIGN KEY constraints can be dropped')
+    for span in candidates:
+        attempt = _without(body, span, spans) + suffix
+        try:
+            if engine == 'sqlite':
+                _sqlite(table, attempt, current['rows'], dropped=target['resource_id'])
+                accepted.append((attempt, None))
+            else:
+                constraints, _created = _duckdb(table, attempt, kind, current['rows'], current,
+                                                list(references.values()), dropped=target['resource_id'])
+                accepted.append((attempt, constraints))
+        except ValueError:
+            continue
+    if len(accepted) != 1:
+        raise ValueError('The constraint is not a single table-level clause of the native definition (it may be '
+                         'declared inline on a column, share a clause, or its removal would renumber others); '
+                         'edit the table natively')
+    result = deepcopy(native)
+    result['ddl'] = accepted[0][0]
+    if engine == 'sqlite':
+        return result, table['resource_id']
+    result['constraints'] = accepted[0][1]
+    result['duckdb_change'] = {'action': _DUCKDB_ACTIONS[kind], 'complete_definition_confirmed': True,
+                               'preserve_rows_confirmed': True}
+    return result, None
 
 
 def add(engine, old, table, current, drafts, native, allow_rebuilds):
@@ -248,7 +374,7 @@ def add(engine, old, table, current, drafts, native, allow_rebuilds):
     wanted = sum(1 for kind, _, _ in built if kind != 'check') if engine == 'sqlite' else len(built)
     result = deepcopy(native)
     if engine == 'sqlite':
-        created = _sqlite(table, new_ddl, current['rows'], wanted)
+        created = _sqlite(table, new_ddl, current['rows'], wanted=wanted)
         result['ddl'] = new_ddl
         return result, [_item(row, table['resource_id']) for row in created], table['resource_id']
     kind = next(iter(kinds))
@@ -261,7 +387,7 @@ def add(engine, old, table, current, drafts, native, allow_rebuilds):
                 raise ValueError('An existing foreign key target is unavailable')
             references[other['resource_id']] = other
     references.pop(table['resource_id'], None)
-    constraints, created = _duckdb(table, new_ddl, kind, current['rows'], current, list(references.values()), wanted)
+    constraints, created = _duckdb(table, new_ddl, kind, current['rows'], current, list(references.values()), wanted=wanted)
     result['ddl'] = new_ddl
     result['constraints'] = constraints
     result['duckdb_change'] = {'action': _DUCKDB_ACTIONS[kind], 'complete_definition_confirmed': True,

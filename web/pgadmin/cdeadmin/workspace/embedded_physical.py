@@ -68,17 +68,52 @@ def _duckdb_values(row):
     return {'values': values, 'replaceable': False}
 
 
+def _actions(meta):
+    return {key: meta[key] for key in ('on_delete', 'on_update') if meta.get(key) in vocab.ACTIONS}
+
+
+def _constraint_values(engine, row):
+    """Vocabulary of a droppable UNIQUE / CHECK / FOREIGN KEY constraint record (None otherwise)."""
+    native = _native(row, engine)
+    meta = native.get('catalog_metadata', {})
+    if native.get('system_object') is not False:
+        return None
+    names = meta.get('columns') if engine == 'sqlite' else meta.get('column_names')
+    kind = {'UNIQUE': 'unique', 'CHECK': 'check', 'FOREIGN KEY': 'foreign-key'}.get(meta.get('constraint_type'))
+    if kind is None or (kind != 'check' and not names):
+        return None
+    values = {'physical_kind': kind, 'physical_name': row['display_name']}
+    if kind == 'check':
+        if engine == 'sqlite' or not isinstance(meta.get('expression'), str):
+            return None
+        values['expression'] = meta['expression']
+        return values
+    values['columns_json'] = vocab.encode(names)
+    if kind == 'foreign-key':
+        referenced = meta.get('referenced_columns') if engine == 'sqlite' else meta.get('referenced_column_names')
+        if not referenced:
+            return None
+        values['referenced_columns_json'] = vocab.encode(referenced)
+        values.update(_actions(meta))
+    return values
+
+
 def forward(engine, resources):
-    """{table resource id: [{'row', 'values', 'role'}]} for user indexes."""
+    """{table resource id: [{'row', 'values', 'role'}]} for user indexes and droppable constraints."""
     extract = _sqlite_values if engine == 'sqlite' else _duckdb_values
     grouped = {}
     for row in resources:
-        if row['resource_kind'] != 'index':
+        if row['resource_kind'] == 'index':
+            found = extract(row)
+            values, role = (found['values'], 'index') if found is not None else (None, None)
+        elif row['resource_kind'] == 'constraint':
+            values = _constraint_values(engine, row)
+            role = 'ref' if values and values['physical_kind'] == 'foreign-key' else 'constraint'   # an FK is carried by its edge
+        else:
             continue
-        found = extract(row)
         parent = _native(row, engine).get('navigator_parent_resource_id')
-        if found is not None and parent:
-            grouped.setdefault(parent, []).append({'row': row, 'values': found['values'], 'role': 'index'})
+        if values is not None and parent:
+            grouped.setdefault(parent, []).append({'row': row, 'values': values, 'role': role})
     return grouped
 
 
@@ -220,7 +255,22 @@ def _renames(engine, old, row, live, current):
     return found
 
 
-def merge(engine, old, row, live, current, drafts, allow_rebuilds=False):
+def dropping(old, row, live):
+    """True when a constraint record asks to be dropped; any other vocabulary edit is refused."""
+    before, after = old.get('physical') or {}, row.get('physical') or {}
+    if not after:
+        return False
+    if not before:
+        raise ValueError('The baseline diagram carries no physical-schema vocabulary for this constraint; regenerate it')
+    if vocab.rename(before, after, 'constraint'):
+        raise ValueError('Renaming a constraint is not carried for this engine')
+    dropped = vocab.drop(before, after, live['name'], 'constraint')
+    if not dropped and vocab.changes(before, after):
+        raise ValueError('Editing a constraint is not carried; drop it (with drop_confirmation) and add a new one')
+    return dropped
+
+
+def merge(engine, old, row, live, current, drafts, allow_rebuilds=False, drops=()):
     """Returns (desired native facts, new catalog rows, renames, rebuilds) for one relational row.
 
     renames: explicit table/column renames (see _renames). For DuckDB the caller rewrites the
@@ -238,8 +288,16 @@ def merge(engine, old, row, live, current, drafts, allow_rebuilds=False):
             raise ValueError('Review renames separately from new physical objects')
     elif any((item.get('_physical') for item in row.get('fields', {}).values())):
         raise ValueError('Column renames and drops are not carried from the diagram for this engine')
+    if live['kind'] == 'constraint':
+        dropping(old, row, live)
+        return native, created, renames, []
     if live['kind'] == 'table':
         from . import embedded_constraints
+        if drops:
+            if renames or drafts:
+                raise ValueError('Review a constraint drop separately from other edits to the table')
+            native, rebuild = embedded_constraints.remove(engine, old, live, current, list(drops), native, allow_rebuilds)
+            return native, created, renames, [rebuild] if rebuild else []
         constraints = [draft for draft in drafts if embedded_constraints.is_constraint_draft(draft)]
         if constraints:
             drafts = [draft for draft in drafts if draft not in constraints]

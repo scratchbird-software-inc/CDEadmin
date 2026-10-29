@@ -80,7 +80,9 @@ def test_forward_emits_index_vocabulary_and_reverse_reads_it(env):
                                  'columns_json': '["amount"]', 'unique': False}
     assert index['parent_resource_id'] == env.rid('table', 'child')
     # Constraint-backed autoindexes and the primary key are not diagram indexes.
-    assert [row['physical']['physical_name'] for row in rows.values() if row.get('physical')] == ['child_amount_idx']
+    assert sorted(row['physical']['physical_name'] for row in rows.values() if row.get('physical')) == sorted(['child_amount_idx', 'fk_child_0'])
+    foreign = next(row for row in rows.values() if row.get('physical', {}).get('physical_kind') == 'foreign-key')
+    assert foreign['physical']['columns_json'] == '["parent_id"]' and foreign['physical']['referenced_columns_json'] == '["id"]'
 
 
 def test_unedited_diagram_has_nothing_to_plan(env):
@@ -281,3 +283,59 @@ def test_foreign_key_addition_rebuilds_the_table(env):
     env.export()
     _, again, _ = env.review(env.diagram['snapshot'])
     assert again['operations'] == []
+
+
+# ------------------------------------------------------------------ opt-in rebuild-backed constraint drops
+
+def drop_edit(env, diagram, kind, name):
+    rid = env.rid('constraint', name)
+    return rt.edit_vocabulary(diagram, rid, drop=True, drop_confirmation=name), rid
+
+
+def test_unique_constraint_drop_rebuilds_the_table_and_keeps_rows(env):
+    env.connection.execute('CREATE TABLE coded(id INTEGER PRIMARY KEY, code TEXT, CONSTRAINT coded_code_uq UNIQUE (code))')
+    env.connection.execute("INSERT INTO coded VALUES (1, 'a'), (2, 'b')")
+    diagram = env.export()
+    unique = [row['display_name'] for row in env.resources() if row['resource_kind'] == 'constraint' and
+              row['display_name'].startswith('unique_sqlite_autoindex_coded')][0]
+    edited, rid = drop_edit(env, diagram, 'unique', unique)
+    with pytest.raises(ValueError, match='rebuild-backed constraint changes'):
+        handoff(env.catalog['snapshot'], diagram['snapshot'], edited, engine='sqlite')
+    result, result_plan = rebuild_review(env, edited, allow_rebuilds=True)
+    assert result['rebuilds'] == [env.rid('table', 'coded')] and rid in result['changed_resource_ids']
+    assert rid not in {key for key in read_catalog(result['desired'], engine='sqlite')['rows']}
+    env.execute(result_plan)
+    assert env.connection.execute('SELECT id, code FROM coded ORDER BY id').fetchall() == [(1, 'a'), (2, 'b')]
+    env.connection.execute("INSERT INTO coded VALUES (3, 'a')")           # no longer unique
+    env.export()
+    _, again, _ = env.review(env.diagram['snapshot'])
+    assert again['operations'] == []
+
+
+def test_foreign_key_drop_rebuilds_the_table(env):
+    env.connection.execute("INSERT INTO parent VALUES (1, 'p', 'c')")
+    env.connection.execute("INSERT INTO child VALUES (10, 1, 5, 'a')")
+    diagram = env.export()
+    edited, rid = drop_edit(env, diagram, 'foreign-key', 'fk_child_0')
+    result, result_plan = rebuild_review(env, edited, allow_rebuilds=True)
+    env.execute(result_plan)
+    assert env.connection.execute("PRAGMA foreign_key_list('child')").fetchall() == []
+    assert env.connection.execute('SELECT id FROM child').fetchall() == [(10,)]
+
+
+def test_drop_needs_the_exact_name_and_one_clause(env):
+    diagram = env.export()
+    rid = env.rid('constraint', 'fk_child_0')
+    for values in ({'drop': True}, {'drop': True, 'drop_confirmation': 'other'}):
+        with pytest.raises(ValueError, match='drop_confirmation'):
+            handoff(env.catalog['snapshot'], diagram['snapshot'], rt.edit_vocabulary(diagram, rid, **values), engine='sqlite', allow_rebuilds=True)
+    with pytest.raises(ValueError, match='Editing a constraint is not carried'):
+        handoff(env.catalog['snapshot'], diagram['snapshot'], rt.edit_vocabulary(diagram, rid, on_delete='SET NULL'),
+                engine='sqlite', allow_rebuilds=True)
+    env.connection.execute('CREATE TABLE inline_uq(id INTEGER PRIMARY KEY, code TEXT UNIQUE)')   # declared on the column
+    again = env.export()
+    name = [row['display_name'] for row in env.resources() if row['resource_kind'] == 'constraint' and
+            row['display_name'].startswith('unique_sqlite_autoindex_inline_uq')][0]
+    edited, _ = drop_edit(env, again, 'unique', name)
+    with pytest.raises(ValueError, match='table-level clause'):
+        handoff(env.catalog['snapshot'], again['snapshot'], edited, engine='sqlite', allow_rebuilds=True)

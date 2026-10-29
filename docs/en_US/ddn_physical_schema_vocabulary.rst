@@ -314,7 +314,7 @@ confirmation}``, which the plan turns into ``ALTER TABLE|VIEW ... RENAME TO`` or
 itself refuses ``ALTER`` on a table that an index depends on; that surfaces when the
 statement runs, not in the plan.
 
-Opt-in rebuild-backed constraint additions (``allow_rebuilds: true`` on
+Opt-in rebuild-backed constraint additions and drops (``allow_rebuilds: true`` on
 ``sqlite_relational_review`` / ``duckdb_relational_review``; ``embedded_constraints.py``):
 drafts of kind ``unique`` (``columns_json``), ``check`` (``expression``) and
 ``foreign-key`` (``columns_json``, ``referenced_columns_json``, optional ``on_delete`` /
@@ -335,7 +335,21 @@ plan checks are read back from that copy.
   confirmations that the opt-in stands for). One constraint kind per review. DuckDB's own
   plan refuses a rebuild while any other table in the file has a foreign key, and a table
   that other tables reference.
-* Refused with a reason: dropping or replacing a constraint, key changes, an addition that
+* Drops: the forward diagram now carries existing UNIQUE constraints (both engines) and CHECK
+  constraints (DuckDB) as ``constraint`` child elements, and FOREIGN KEY constraints on their
+  edge, each with ``physical_kind`` (``unique`` / ``check`` / ``foreign-key``),
+  ``physical_name``, ``columns_json`` / ``expression`` and, for foreign keys,
+  ``referenced_columns_json`` and the actions. ``drop: true`` with ``drop_confirmation`` equal
+  to the exact name asks for a drop; any other edit of those records is refused. One drop per
+  review, never combined with other edits to the same table. Which clause of the native
+  ``CREATE TABLE`` belongs to the constraint is not guessed: every table-level UNIQUE /
+  CHECK / FOREIGN KEY clause is tried on a throwaway copy and only the removal after which
+  the copy reports exactly the baseline constraints minus the target is accepted. A
+  constraint declared inline on a column, sharing a clause, or whose removal would renumber
+  the others is refused. The dropped constraint's catalog record (and the references to it)
+  leave the desired design, which is how the native plans see the discard. SQLite CHECK
+  constraints have no catalog record, so they cannot be named and are not offered.
+* Refused with a reason: replacing a constraint, key changes, an addition that
   would renumber existing constraints (DuckDB could then not verify the result by
   rediscovery), a check expression that is not one native expression, and DuckDB
   foreign-key actions.
@@ -557,10 +571,10 @@ open items for Stream B (B1 vocabulary, B3 adapters); none is claimed by this do
    MariaDB system-versioning, and ``ALGORITHM``/``LOCK`` choice are read from the catalog but
    refused for replacement with a request to edit natively.
 #. **SQLite and DuckDB constraints.** DuckDB can add a primary key, and both engines can add
-   UNIQUE, CHECK and FOREIGN KEY constraints through the opt-in rebuild (above). Dropping or
-   changing a constraint, and key changes, are not carried: they need record removal or a
-   different rebuild shape, so the reader rejects them with a reason. Existing foreign-key
-   edges are not editable rows.
+   UNIQUE, CHECK and FOREIGN KEY constraints, and drop them, through the opt-in rebuild (above).
+   Changing a constraint in place, and key changes, are not carried: they need a
+   different rebuild shape, so the reader rejects them with a reason. Single-clause drops
+   are carried through the same opt-in (above).
 #. **SQLite and DuckDB drops and index renames.** Table, column and SQLite index drops
    need row absence plus a deletion argument (SQLite) or are not carried (DuckDB tables
    and columns); they are rejected with a reason. Index renames are rejected on both
@@ -648,6 +662,7 @@ Change log
   ``enforced``); ``mysql_physical.py`` and the MySQL/MariaDB plan modules read index,
   UNIQUE, PRIMARY KEY, CHECK, FOREIGN KEY, rename and drop edits into one reviewed
   ``ALTER TABLE`` per table. PostgreSQL, SQLite and DuckDB behaviour is unchanged.
+* 2026-10-29: the SQLite and DuckDB forward diagrams carry existing UNIQUE/CHECK/FOREIGN KEY vocabulary; opt-in rebuild-backed drops.
 * 2026-10-29: opt-in rebuild-backed UNIQUE/CHECK/FOREIGN KEY additions for SQLite and DuckDB (no vocabulary key added).
 * 2026-10-29: the SQLite and DuckDB catalog panels expose diagram review (shared ``FirebirdERD``).
 * 2026-10-29: SQLite and DuckDB carry explicit table/column renames from the diagram;

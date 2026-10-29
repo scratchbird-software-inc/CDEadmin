@@ -83,7 +83,7 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     {['mysql', 'mariadb'].includes(engine) && post && onReview && <FormControlLabel label="Include foreign key design changes"
       control={<Checkbox checked={allowForeignKeys} disabled={editing || merging || reviewing}
         onChange={event => setAllowForeignKeys(event.target.checked)} />} />}
-    {['sqlite', 'duckdb'].includes(engine) && post && onReview && <FormControlLabel label="Include constraint additions that rebuild the table (copies every row)"
+    {['sqlite', 'duckdb'].includes(engine) && post && onReview && <FormControlLabel label="Include constraint additions and drops that rebuild the table (copies every row)"
       control={<Checkbox checked={allowRebuilds} disabled={editing || merging || reviewing}
         onChange={event => setAllowRebuilds(event.target.checked)} />} />}
     {engine === 'mariadb' && post && onReview && <FormControlLabel label="Accept native KEEP-history semantics for temporal schema changes"

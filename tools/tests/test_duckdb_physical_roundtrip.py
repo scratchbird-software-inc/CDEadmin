@@ -71,7 +71,9 @@ def test_forward_emits_index_vocabulary_and_reverse_reads_it(env):
     assert index['physical'] == {'physical_kind': 'index', 'physical_name': 'child_amount_idx',
                                  'columns_json': '["amount"]', 'unique': False}
     assert index['parent_resource_id'] == env.rid('table', 'child')
-    assert [row['physical']['physical_name'] for row in rows.values() if row.get('physical')] == ['child_amount_idx']
+    assert sorted(row['physical']['physical_name'] for row in rows.values() if row.get('physical')) == sorted(['child_amount_idx', 'child_parent_id_id_fkey'])
+    foreign = next(row for row in rows.values() if row.get('physical', {}).get('physical_kind') == 'foreign-key')
+    assert foreign['physical']['columns_json'] == '["parent_id"]' and foreign['physical']['referenced_columns_json'] == '["id"]'
 
 
 def test_unedited_diagram_has_nothing_to_plan(env):
@@ -292,3 +294,60 @@ def test_one_kind_per_review_and_bad_definitions_are_refused(quiet):
                             ({'physical_kind': 'check', 'expression': "id > 0; DROP TABLE parent"}, 'one native expression')):
         with pytest.raises(ValueError, match=message):
             handoff(quiet.catalog['snapshot'], diagram['snapshot'], draft(quiet, diagram, table, values), engine='duckdb', allow_rebuilds=True)
+
+
+# ------------------------------------------------------------------ opt-in rebuild-backed constraint drops
+
+def constraint_rid(env, table, kind):
+    from pgadmin.cdeadmin.workspace.firebird_catalog_export import native_metadata
+    rows = [row for row in env.resources() if row['resource_kind'] == 'constraint' and row['display_path'][-2] == table and
+            native_metadata(row, 'duckdb').get('catalog_metadata', {}).get('constraint_type') == kind]
+    assert len(rows) == 1, rows
+    return rows[0]['resource_id'], rows[0]['display_name']
+
+
+@pytest.mark.parametrize('ddl,kind,probe', [
+    ('CREATE TABLE plain(id INTEGER, note VARCHAR, UNIQUE (note))', 'UNIQUE', "INSERT INTO plain VALUES (3, 'a')"),
+    ('CREATE TABLE plain(id INTEGER, note VARCHAR, CHECK (id > 0))', 'CHECK', 'INSERT INTO plain VALUES (-5, \'z\')'),
+])
+def test_unique_and_check_drops_rebuild_the_table_and_keep_rows(quiet, ddl, kind, probe):
+    quiet.connection.execute(ddl)
+    quiet.connection.execute("INSERT INTO plain VALUES (1, 'a'), (2, 'b')")
+    diagram = quiet.export()
+    rid, name = constraint_rid(quiet, 'plain', kind)
+    edited = rt.edit_vocabulary(diagram, rid, drop=True, drop_confirmation=name)
+    with pytest.raises(ValueError, match='rebuild-backed constraint changes'):
+        handoff(quiet.catalog['snapshot'], diagram['snapshot'], edited, engine='duckdb')
+    result, result_plan = constraint_review(quiet, edited, allow_rebuilds=True)
+    assert rid in result['changed_resource_ids']
+    assert result_plan['application_supported'], result_plan['blockers']
+    quiet.execute(result_plan)
+    assert quiet.connection.execute('SELECT id, note FROM plain ORDER BY id').fetchall() == [(1, 'a'), (2, 'b')]
+    quiet.connection.execute(probe)           # the constraint no longer applies
+    quiet.export()
+    _, again = quiet.review(quiet.diagram['snapshot'])
+    assert again['operations'] == []
+
+
+def test_foreign_key_drop_rebuilds_the_table(quiet):
+    quiet.connection.execute('CREATE TABLE ledger(id INTEGER, parent_id INTEGER, FOREIGN KEY (parent_id) REFERENCES parent (id))')
+    quiet.connection.execute("INSERT INTO parent VALUES (1, 'p', 'c')")
+    quiet.connection.execute('INSERT INTO ledger VALUES (1, 1)')
+    diagram = quiet.export()
+    rid, name = constraint_rid(quiet, 'ledger', 'FOREIGN KEY')
+    result, result_plan = constraint_review(quiet, rt.edit_vocabulary(diagram, rid, drop=True, drop_confirmation=name), allow_rebuilds=True)
+    assert result_plan['application_supported'], result_plan['blockers']
+    quiet.execute(result_plan)
+    quiet.connection.execute('INSERT INTO ledger VALUES (2, 99)')       # no longer enforced
+    assert quiet.connection.execute('SELECT count(*) FROM ledger').fetchone() == (2,)
+
+
+def test_a_drop_needs_the_exact_name(quiet):
+    quiet.connection.execute('CREATE TABLE plain(id INTEGER, note VARCHAR, UNIQUE (note))')
+    diagram = quiet.export()
+    rid, name = constraint_rid(quiet, 'plain', 'UNIQUE')
+    with pytest.raises(ValueError, match='drop_confirmation'):
+        handoff(quiet.catalog['snapshot'], diagram['snapshot'], rt.edit_vocabulary(diagram, rid, drop=True), engine='duckdb', allow_rebuilds=True)
+    with pytest.raises(ValueError, match='Editing a constraint is not carried'):
+        handoff(quiet.catalog['snapshot'], diagram['snapshot'], rt.edit_vocabulary(diagram, rid, columns_json='["id"]'),
+                engine='duckdb', allow_rebuilds=True)
