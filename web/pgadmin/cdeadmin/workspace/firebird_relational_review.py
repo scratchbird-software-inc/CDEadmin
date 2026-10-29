@@ -129,7 +129,9 @@ def _insert_rows(snapshot, engine, current, rows):
     snapshot['files'][name] = text[:match.start(1)] + str(int(match.group(1)) + len(rows)) + text[match.end(1):]
 
 
-def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new_columns=False, allow_column_renames=False, allow_foreign_keys=False, allow_temporal_history=False):
+def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new_columns=False, allow_column_renames=False, allow_foreign_keys=False, allow_temporal_history=False, allow_rebuilds=False):
+    if type(allow_rebuilds) is not bool or (allow_rebuilds and engine not in {'sqlite', 'duckdb'}):
+        raise ValueError('Rebuild-backed constraint additions are available only for SQLite and DuckDB')
     if type(allow_new_columns) is not bool or (allow_new_columns and engine not in {"mysql", "mariadb"}):
         raise ValueError("New-column admission is available only for MySQL/MariaDB")
     if type(allow_column_renames) is not bool or (allow_column_renames and engine not in {"mysql", "mariadb"}):
@@ -150,7 +152,7 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
             drafts.setdefault(item['parent_resource_id'], []).append(item)
     if drafts and engine not in {'postgresql', 'sqlite', 'duckdb', 'firebird', 'mysql', 'mariadb'}:
         raise ValueError('New physical-schema objects are not admitted for this engine')
-    new_rows, mirror, renamed = [], {}, []
+    new_rows, mirror, renamed, rebuilds = [], {}, [], []
     if set(drafts) - set(after):
         raise ValueError('A physical draft names a parent outside the edited relations')
     if engine in {"mysql", "mariadb"}:
@@ -221,9 +223,10 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
                                       drafts.get(identity, []))
         if engine in {'sqlite', 'duckdb'}:
             from .embedded_physical import merge as merge_index
-            facts[1], created, found = merge_index(engine, old, row, live, current, drafts.get(identity, []))
+            facts[1], created, found, rebuilt = merge_index(engine, old, row, live, current, drafts.get(identity, []), allow_rebuilds)
             new_rows.extend(created)
             renamed.extend(found)
+            rebuilds.extend(rebuilt)
             # Column rows are separate native resources; a graphical field edit
             # must not silently diverge from them.
             for uid, fields in row.get('fields', {}).items():
@@ -300,6 +303,8 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
     changed.extend(item['resource_id'] for item in new_rows)
     result = {'baseline': _json(baseline), 'desired': _json(proposed), 'changed_resource_ids': changed,
               'status': 'prepared-for-native-preview', 'executed': False}
+    if engine == 'sqlite' and renamed and rebuilds:
+        raise ValueError('Review SQLite renames separately from rebuild-backed constraint additions')
     if engine == 'sqlite' and renamed:
         # SQLite rewrites references with its own ALTER TABLE: the desired model stays equal to the baseline and
         # the exact renames go to the native rename design (sqlite_schema_rename_design) and plan.
@@ -309,4 +314,7 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
                             [{'kind': 'table', 'table': item['old'], 'to': item['new']}
                              for item in renamed if item['kind'] == 'table']
         changed.extend(item['identity'] for item in renamed)
+    if engine == 'sqlite' and rebuilds:
+        # The reviewed desired DDL carries the new CREATE TABLE; the native rebuild plan needs these identities.
+        result['rebuilds'] = rebuilds
     return result

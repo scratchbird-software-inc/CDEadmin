@@ -206,3 +206,89 @@ def test_primary_key_draft_on_a_table_without_a_key(env):
         {'physical_kind': 'primary-key', 'physical_name': 'parent_pk2', 'columns_json': '["code"]'}, 'duckdb')
     with pytest.raises(ValueError, match='without a key'):
         handoff(env.catalog['snapshot'], again['snapshot'], edited, engine='duckdb')
+
+
+# ------------------------------------------------------------------ opt-in rebuild-backed constraints
+
+@pytest.fixture
+def quiet(tmp_path):
+    """A file without foreign keys: DuckDB's rebuild plan refuses databases where other tables carry them."""
+    instance = Env(tmp_path / 'quiet.duckdb')
+    instance.connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, name VARCHAR NOT NULL, code VARCHAR)')
+    yield instance
+    instance.connection.close()
+
+
+def constraint_review(env, edited, **options):
+    result = handoff(env.catalog['snapshot'], env.diagram['snapshot'], edited, engine='duckdb', **options)
+    baseline, desired = (read_catalog(result[key], engine='duckdb') for key in ('baseline', 'desired'))
+    live = build_export(env.resources(), endpoint_id='e', target_id=TARGET, generation='g2', engine='duckdb', native_model=True)
+    return result, plan(baseline, desired, live)
+
+
+def draft(env, diagram, table, values, snapshot=None):
+    edited, _ = rt.add_draft_element(diagram, snapshot or diagram['snapshot'], table, env.uid(table), 'constraint',
+                                     values.get('physical_name', 'draft'), values, 'duckdb')
+    return edited
+
+
+def test_constraint_additions_need_the_rebuild_opt_in(quiet):
+    quiet.connection.execute('CREATE TABLE plain(id INTEGER, note VARCHAR)')
+    diagram = quiet.export()
+    table = quiet.rid('table', 'plain')
+    edited = draft(quiet, diagram, table, {'physical_kind': 'unique', 'columns_json': '["note"]'})
+    with pytest.raises(ValueError, match='rebuild-backed constraint additions'):
+        handoff(quiet.catalog['snapshot'], diagram['snapshot'], edited, engine='duckdb')
+
+
+@pytest.mark.parametrize('values,probe', [
+    ({'physical_kind': 'unique', 'columns_json': '["note"]'}, "INSERT INTO plain VALUES (3, 'a')"),
+    ({'physical_kind': 'check', 'expression': 'id > 0'}, "INSERT INTO plain VALUES (-5, 'z')"),
+])
+def test_unique_and_check_additions_rebuild_the_table_and_keep_rows(quiet, values, probe):
+    quiet.connection.execute("CREATE TABLE plain(id INTEGER, note VARCHAR)")
+    quiet.connection.execute("INSERT INTO plain VALUES (1, 'a'), (2, 'b')")
+    diagram = quiet.export()
+    edited = draft(quiet, diagram, quiet.rid('table', 'plain'), {**values, 'physical_name': 'plain_new'})
+    result, result_plan = constraint_review(quiet, edited, allow_rebuilds=True)
+    assert result_plan['application_supported'], result_plan['blockers']
+    assert [item['operation'] for item in result_plan['operations']] == ['rebuild']
+    quiet.execute(result_plan)
+    assert quiet.connection.execute('SELECT id, note FROM plain ORDER BY id').fetchall() == [(1, 'a'), (2, 'b')]
+    with pytest.raises(duckdb.ConstraintException):
+        quiet.connection.execute(probe)
+    quiet.export()
+    _, again = quiet.review(quiet.diagram['snapshot'])
+    assert again['operations'] == []
+
+
+def test_foreign_key_addition_rebuilds_the_table(quiet):
+    quiet.connection.execute('CREATE TABLE ledger(id INTEGER, parent_id INTEGER)')
+    quiet.connection.execute("INSERT INTO parent VALUES (1, 'p', 'c')")
+    quiet.connection.execute('INSERT INTO ledger VALUES (1, 1)')
+    diagram = quiet.export()
+    ledger, parent = quiet.rid('table', 'ledger'), quiet.rid('table', 'parent')
+    edited, _ = rt.add_draft_foreign_key(diagram, diagram['snapshot'], ledger, parent, quiet.uid(ledger), 'ledger_parent_fk',
+        {'physical_kind': 'foreign-key', 'physical_name': 'ledger_parent_fk', 'columns_json': '["parent_id"]',
+         'referenced_columns_json': '["id"]'}, 'duckdb')
+    result, result_plan = constraint_review(quiet, edited, allow_rebuilds=True)
+    assert result_plan['application_supported'], result_plan['blockers']
+    quiet.execute(result_plan)
+    assert quiet.connection.execute('SELECT * FROM ledger').fetchall() == [(1, 1)]
+    with pytest.raises(duckdb.ConstraintException):
+        quiet.connection.execute('INSERT INTO ledger VALUES (2, 99)')
+
+
+def test_one_kind_per_review_and_bad_definitions_are_refused(quiet):
+    quiet.connection.execute('CREATE TABLE plain(id INTEGER, note VARCHAR)')
+    diagram = quiet.export()
+    table = quiet.rid('table', 'plain')
+    both = draft(quiet, diagram, table, {'physical_kind': 'unique', 'columns_json': '["note"]'})
+    both = draft(quiet, diagram, table, {'physical_kind': 'check', 'expression': 'id > 0'}, both)
+    with pytest.raises(ValueError, match='one constraint kind per review'):
+        handoff(quiet.catalog['snapshot'], diagram['snapshot'], both, engine='duckdb', allow_rebuilds=True)
+    for values, message in (({'physical_kind': 'unique', 'columns_json': '["nope"]'}, 'existing columns'),
+                            ({'physical_kind': 'check', 'expression': 'id >'}, 'rejected'),
+                            ({'physical_kind': 'check', 'expression': "id > 0; DROP TABLE parent"}, 'one native expression')):
+        with pytest.raises(ValueError, match=message):
+            handoff(quiet.catalog['snapshot'], diagram['snapshot'], draft(quiet, diagram, table, values), engine='duckdb', allow_rebuilds=True)

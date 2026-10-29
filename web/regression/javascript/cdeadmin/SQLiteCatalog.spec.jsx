@@ -296,3 +296,22 @@ it('turns diagram rename arguments into a native rename design before preview', 
   await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'sqlite_schema_plan',request:{database_target_id:'file-1',
     baseline:JSON.stringify(snapshot),desired:expect.any(String),deletions:[],rebuilds:[],column_renames:[],renames,}}));
 });
+
+it('carries the diagram review rebuild identities into the native preview', async () => {
+  const diagram={snapshot:{...snapshot,view:'relations_1'},views:[{id:'relations_1',label:'Relations',entry:'catalog.ddn'}]};
+  const desired=JSON.stringify({...snapshot,files:{'catalog.ddn':'rebuilt table ddl'}});
+  globalThis.__review={baseline:JSON.stringify(snapshot),desired,rebuilds:['sqlite:["table","main","child"]']};
+  const post=jest.fn().mockResolvedValueOnce({snapshot,diagram,views:[{id:'inventory_1',label:'Inventory',entry:'catalog.ddn'}],
+    objects:[],provenance:{objects:1,coverage:'partial'}})
+    .mockResolvedValueOnce({operations:[],blockers:[],conflicts:[],application_supported:false});
+  render(<Component post={post} databaseTargetId="file-1" />);
+  fireEvent.click(screen.getByRole('button',{name:'Capture metadata'}));await screen.findByText('SQLite DDN viewer');
+  fireEvent.mouseDown(screen.getByRole('combobox',{name:'Display'}));
+  fireEvent.click(await screen.findByRole('option',{name:'Relations'}));
+  console.error.mockClear();
+  fireEvent.click(await screen.findByText('Mock diagram review'));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Preview native changes'})).toBeEnabled());
+  fireEvent.click(screen.getByRole('button',{name:'Preview native changes'}));
+  await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'sqlite_schema_plan',request:{database_target_id:'file-1',
+    baseline:JSON.stringify(snapshot),desired,deletions:[],rebuilds:['sqlite:["table","main","child"]'],column_renames:[]}}));
+});

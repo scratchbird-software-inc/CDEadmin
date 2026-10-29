@@ -314,6 +314,32 @@ confirmation}``, which the plan turns into ``ALTER TABLE|VIEW ... RENAME TO`` or
 itself refuses ``ALTER`` on a table that an index depends on; that surfaces when the
 statement runs, not in the plan.
 
+Opt-in rebuild-backed constraint additions (``allow_rebuilds: true`` on
+``sqlite_relational_review`` / ``duckdb_relational_review``; ``embedded_constraints.py``):
+drafts of kind ``unique`` (``columns_json``), ``check`` (``expression``) and
+``foreign-key`` (``columns_json``, ``referenced_columns_json``, optional ``on_delete`` /
+``on_update``; the target comes from the drafted edge) append a table constraint. Neither
+engine can add these in place, so the native plan rebuilds the table and copies every row;
+that is why it is opt-in and why a data violation (duplicates, a failing CHECK, an orphan
+foreign key) rolls the rebuild back at apply time, not at review time. The new
+``CREATE TABLE`` text is the native text with the clause inserted; it is executed on a
+throwaway in-memory database (DuckDB first with external access disabled) and the facts the
+plan checks are read back from that copy.
+
+* SQLite: the review returns ``rebuilds`` (the table identity) for ``sqlite_schema_plan``;
+  the desired table record carries the new DDL and the copy's new constraint records. It
+  cannot be combined with renames in one review.
+* DuckDB: the table record carries the new DDL and constraint list and the reviewed
+  ``duckdb_change`` action (``rebuild-unique-constraints``, ``rebuild-check-constraints`` or
+  ``rebuild-foreign-keys``, with the complete-definition and row-preservation
+  confirmations that the opt-in stands for). One constraint kind per review. DuckDB's own
+  plan refuses a rebuild while any other table in the file has a foreign key, and a table
+  that other tables reference.
+* Refused with a reason: dropping or replacing a constraint, key changes, an addition that
+  would renumber existing constraints (DuckDB could then not verify the result by
+  rediscovery), a check expression that is not one native expression, and DuckDB
+  foreign-key actions.
+
 DuckDB primary key: a draft of kind ``primary-key`` (role ``constraint``, columns only)
 on a table whose catalog reports no primary key becomes
 ``duckdb_change = {action: add-primary-key, columns}`` and plans as one
@@ -530,11 +556,11 @@ open items for Stream B (B1 vocabulary, B3 adapters); none is claimed by this do
    ``COMMENT``/``KEY_BLOCK_SIZE``/``PARSER``, ``WITHOUT OVERLAPS`` and period constraints,
    MariaDB system-versioning, and ``ALGORITHM``/``LOCK`` choice are read from the catalog but
    refused for replacement with a request to edit natively.
-#. **SQLite and DuckDB constraints.** DuckDB can add a primary key (above). UNIQUE, CHECK,
-   FOREIGN KEY and key changes on either engine need a table rebuild (SQLite
-   ``rebuilds``, DuckDB ``rebuild-*`` actions) that rewrites data; the diagram does not
-   request one, so the reader rejects them with a reason. Their foreign-key edges are
-   not editable rows.
+#. **SQLite and DuckDB constraints.** DuckDB can add a primary key, and both engines can add
+   UNIQUE, CHECK and FOREIGN KEY constraints through the opt-in rebuild (above). Dropping or
+   changing a constraint, and key changes, are not carried: they need record removal or a
+   different rebuild shape, so the reader rejects them with a reason. Existing foreign-key
+   edges are not editable rows.
 #. **SQLite and DuckDB drops and index renames.** Table, column and SQLite index drops
    need row absence plus a deletion argument (SQLite) or are not carried (DuckDB tables
    and columns); they are rejected with a reason. Index renames are rejected on both
@@ -589,7 +615,7 @@ Forward, edit, reverse and plan are exercised against real engines:
   (``tools/firebird_physical_native.py``).
 * ``tools/tests/test_sqlite_physical_roundtrip.py`` (``sqlite3``) and
   ``tools/tests/test_duckdb_physical_roundtrip.py`` (``duckdb``): index create, replace
-  or drop, table and column renames, DuckDB primary-key addition, and the rejected edits.
+  or drop, table and column renames, DuckDB primary-key addition, opt-in rebuild-backed constraint additions, and the rejected edits.
 * ``tools/tests/physical_roundtrip.py`` edits the vocabulary through DDN's public
   source-patch API (``tools/ddn_edit.mjs``), as a records-table edit would.
 
@@ -622,6 +648,7 @@ Change log
   ``enforced``); ``mysql_physical.py`` and the MySQL/MariaDB plan modules read index,
   UNIQUE, PRIMARY KEY, CHECK, FOREIGN KEY, rename and drop edits into one reviewed
   ``ALTER TABLE`` per table. PostgreSQL, SQLite and DuckDB behaviour is unchanged.
+* 2026-10-29: opt-in rebuild-backed UNIQUE/CHECK/FOREIGN KEY additions for SQLite and DuckDB (no vocabulary key added).
 * 2026-10-29: the SQLite and DuckDB catalog panels expose diagram review (shared ``FirebirdERD``).
 * 2026-10-29: SQLite and DuckDB carry explicit table/column renames from the diagram;
   DuckDB carries a primary-key addition. No vocabulary key was added.

@@ -189,3 +189,95 @@ def test_rename_needs_the_exact_baseline_name(env):
     with pytest.raises(ValueError, match='rename_from'):
         handoff(env.catalog['snapshot'], diagram['snapshot'],
                 rt.edit_vocabulary(diagram, table, physical_name='kid', rename_from='parent'), engine='sqlite')
+
+
+# ------------------------------------------------------------------ opt-in rebuild-backed constraints
+
+def rebuild_review(env, edited, **options):
+    result = handoff(env.catalog['snapshot'], env.diagram['snapshot'], edited, engine='sqlite', **options)
+    baseline, desired = (read_catalog(result[key], engine='sqlite') for key in ('baseline', 'desired'))
+    live = build_export(env.resources(), endpoint_id='e', target_id=TARGET, generation='g2', engine='sqlite', native_model=True)
+    return result, plan(baseline, desired, live, env.connection, rebuilds=result.get('rebuilds', []))
+
+
+def constraint_edit(env, diagram, drafts):
+    table = env.rid('table', 'child')
+    edited = diagram['snapshot']
+    for title, values in drafts:
+        edited, _ = rt.add_draft_element(diagram, edited, table, env.uid(table), 'constraint', title, values, 'sqlite')
+    return edited
+
+
+def test_constraint_additions_need_the_rebuild_opt_in(env):
+    diagram = env.export()
+    edited = constraint_edit(env, diagram, [('child_note_uq', {'physical_kind': 'unique', 'physical_name': 'child_note_uq',
+                                                               'columns_json': '["note"]'})])
+    with pytest.raises(ValueError, match='rebuild-backed constraint additions'):
+        handoff(env.catalog['snapshot'], diagram['snapshot'], edited, engine='sqlite')
+    with pytest.raises(ValueError, match='only for SQLite and DuckDB'):
+        handoff(env.catalog['snapshot'], diagram['snapshot'], edited, engine='firebird', allow_rebuilds=True)
+
+
+def test_unique_and_check_additions_rebuild_the_table_and_keep_rows(env):
+    env.connection.execute("INSERT INTO parent VALUES (1, 'p', 'c')")
+    env.connection.execute("INSERT INTO child VALUES (10, 1, 5, 'a'), (11, 1, 6, 'b')")
+    diagram = env.export()
+    edited = constraint_edit(env, diagram, [
+        ('child_note_uq', {'physical_kind': 'unique', 'physical_name': 'child_note_uq', 'columns_json': '["note"]'}),
+        ('child_amount_ck', {'physical_kind': 'check', 'physical_name': 'child_amount_ck', 'expression': 'amount > 0'})])
+    result, result_plan = rebuild_review(env, edited, allow_rebuilds=True)
+    assert result['rebuilds'] == [env.rid('table', 'child')]
+    assert [item['operation'] for item in result_plan['operations']] == ['rebuild']
+    env.execute(result_plan)
+    assert env.connection.execute('SELECT id, note FROM child ORDER BY id').fetchall() == [(10, 'a'), (11, 'b')]
+    sql = env.connection.execute("SELECT sql FROM sqlite_schema WHERE name='child'").fetchone()[0]
+    assert 'child_note_uq' in sql and 'amount > 0' in sql
+    with pytest.raises(sqlite3.IntegrityError):
+        env.connection.execute("INSERT INTO child VALUES (12, 1, 7, 'a')")
+    with pytest.raises(sqlite3.IntegrityError):
+        env.connection.execute("INSERT INTO child VALUES (12, 1, -1, 'z')")
+    env.export()
+    _, again, _ = env.review(env.diagram['snapshot'])
+    assert again['operations'] == []
+
+
+def test_a_constraint_the_existing_rows_violate_is_refused_by_the_rebuild(env):
+    env.connection.execute("INSERT INTO parent VALUES (1, 'p', 'c')")
+    env.connection.execute("INSERT INTO child VALUES (10, 1, 5, 'dup'), (11, 1, 6, 'dup')")
+    diagram = env.export()
+    edited = constraint_edit(env, diagram, [('child_note_uq', {'physical_kind': 'unique', 'columns_json': '["note"]'})])
+    _, result_plan = rebuild_review(env, edited, allow_rebuilds=True)
+    assert result_plan['operations'][0]['operation'] == 'rebuild'     # reviewed; the data check happens at apply
+    with pytest.raises(sqlite3.IntegrityError):
+        env.execute(result_plan)
+    assert env.connection.execute('SELECT count(*) FROM child').fetchone() == (2,)
+
+
+def test_constraint_drafts_reject_bad_definitions(env):
+    diagram = env.export()
+    for values, message in (({'physical_kind': 'unique', 'columns_json': '["missing"]'}, 'existing columns'),
+                            ({'physical_kind': 'check', 'expression': '1=1; DROP TABLE parent'}, 'one native expression'),
+                            ({'physical_kind': 'check', 'expression': 'amount >'}, 'rejected')):
+        edited = constraint_edit(env, diagram, [('bad', values)])
+        with pytest.raises(ValueError, match=message):
+            handoff(env.catalog['snapshot'], diagram['snapshot'], edited, engine='sqlite', allow_rebuilds=True)
+
+
+def test_foreign_key_addition_rebuilds_the_table(env):
+    env.connection.execute('CREATE TABLE ledger(id INTEGER PRIMARY KEY, parent_id INTEGER)')
+    env.connection.execute("INSERT INTO parent VALUES (1, 'p', 'c')")
+    env.connection.execute('INSERT INTO ledger VALUES (1, 1)')
+    diagram = env.export()
+    ledger, parent = env.rid('table', 'ledger'), env.rid('table', 'parent')
+    edited, _ = rt.add_draft_foreign_key(diagram, diagram['snapshot'], ledger, parent, env.uid(ledger), 'ledger_parent_fk',
+        {'physical_kind': 'foreign-key', 'physical_name': 'ledger_parent_fk', 'columns_json': '["parent_id"]',
+         'referenced_columns_json': '["id"]', 'on_delete': 'CASCADE'}, 'sqlite')
+    result, result_plan = rebuild_review(env, edited, allow_rebuilds=True)
+    assert result['rebuilds'] == [ledger]
+    env.execute(result_plan)
+    assert env.connection.execute('SELECT * FROM ledger').fetchall() == [(1, 1)]
+    row = env.connection.execute("PRAGMA foreign_key_list('ledger')").fetchone()
+    assert (row[2], row[3], row[4], row[6]) == ('parent', 'parent_id', 'id', 'CASCADE')
+    env.export()
+    _, again, _ = env.review(env.diagram['snapshot'])
+    assert again['operations'] == []

@@ -20,11 +20,12 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
   const [allowColumnRenames, setAllowColumnRenames] = useState(false);
   const [allowForeignKeys, setAllowForeignKeys] = useState(false);
   const [allowTemporalHistory, setAllowTemporalHistory] = useState(false);
+  const [allowRebuilds, setAllowRebuilds] = useState(false);
   const editor = useRef(null);
   const fileToken = useRef(0);
   useEffect(() => {fileToken.current++; setMerging(false); setReviewing(false);}, [diagram.snapshot]);
   useEffect(() => {
-    fileToken.current++; setAllowTemporalHistory(false); setAllowForeignKeys(false); setAllowColumnRenames(false); setAllowNewColumns(false); setEditing(false); setError(null); setDraft(diagram.snapshot);
+    fileToken.current++; setAllowTemporalHistory(false); setAllowRebuilds(false); setAllowForeignKeys(false); setAllowColumnRenames(false); setAllowNewColumns(false); setEditing(false); setError(null); setDraft(diagram.snapshot);
     selected.current = {entry: diagram.snapshot?.entry, view: diagram.snapshot?.view};
     seed.current = baseline.current = diagram.snapshot; editor.current = null;
   }, [engine, databaseTargetId]);
@@ -82,6 +83,9 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     {['mysql', 'mariadb'].includes(engine) && post && onReview && <FormControlLabel label="Include foreign key design changes"
       control={<Checkbox checked={allowForeignKeys} disabled={editing || merging || reviewing}
         onChange={event => setAllowForeignKeys(event.target.checked)} />} />}
+    {['sqlite', 'duckdb'].includes(engine) && post && onReview && <FormControlLabel label="Include constraint additions that rebuild the table (copies every row)"
+      control={<Checkbox checked={allowRebuilds} disabled={editing || merging || reviewing}
+        onChange={event => setAllowRebuilds(event.target.checked)} />} />}
     {engine === 'mariadb' && post && onReview && <FormControlLabel label="Accept native KEEP-history semantics for temporal schema changes"
       control={<Checkbox checked={allowTemporalHistory} disabled={editing || merging || reviewing}
         onChange={event => setAllowTemporalHistory(event.target.checked)} />} />}
@@ -89,7 +93,7 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
       const serial = ++fileToken.current; setReviewing(true); onReviewBusyChange?.(true); setError(null);
       const document = value => ({format: value.format, entry: value.entry, view: value.view, files: value.files});
       try {
-        const result = await post({action: `${engine}_relational_review`, request: {...(['sqlite', 'duckdb'].includes(engine) ? {database_target_id: databaseTargetId} : ['mysql', 'mariadb'].includes(engine) ? {database_target_id: databaseTargetId, ...(allowNewColumns ? {allow_new_columns: true} : {}), ...(allowColumnRenames ? {allow_column_renames: true} : {}), ...(allowForeignKeys ? {allow_foreign_keys: true} : {}), ...(engine === 'mariadb' && allowTemporalHistory ? {allow_temporal_history: true} : {})} : {generation}),
+        const result = await post({action: `${engine}_relational_review`, request: {...(['sqlite', 'duckdb'].includes(engine) ? {database_target_id: databaseTargetId, ...(allowRebuilds ? {allow_rebuilds: true} : {})} : ['mysql', 'mariadb'].includes(engine) ? {database_target_id: databaseTargetId, ...(allowNewColumns ? {allow_new_columns: true} : {}), ...(allowColumnRenames ? {allow_column_renames: true} : {}), ...(allowForeignKeys ? {allow_foreign_keys: true} : {}), ...(engine === 'mariadb' && allowTemporalHistory ? {allow_temporal_history: true} : {})} : {generation}),
           original: document(baseline.current), snapshot: document(snapshot())}});
         if (serial !== fileToken.current) return;
         await onReview(result);

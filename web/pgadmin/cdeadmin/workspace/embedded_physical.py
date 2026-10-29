@@ -220,11 +220,13 @@ def _renames(engine, old, row, live, current):
     return found
 
 
-def merge(engine, old, row, live, current, drafts):
-    """Returns (desired native facts, new catalog rows, renames) for one relational row.
+def merge(engine, old, row, live, current, drafts, allow_rebuilds=False):
+    """Returns (desired native facts, new catalog rows, renames, rebuilds) for one relational row.
 
     renames: explicit table/column renames (see _renames). For DuckDB the caller rewrites the
-    renamed catalog records; for SQLite they are returned as native rename arguments."""
+    renamed catalog records; for SQLite they are returned as native rename arguments.
+    rebuilds: SQLite table identities whose reviewed desired DDL needs the native rebuild plan
+    (opt-in constraint additions, see embedded_constraints)."""
     native, created = deepcopy(row['native']), []
     before, after = old.get('physical') or {}, row.get('physical') or {}
     renames = []
@@ -237,6 +239,14 @@ def merge(engine, old, row, live, current, drafts):
     elif any((item.get('_physical') for item in row.get('fields', {}).values())):
         raise ValueError('Column renames and drops are not carried from the diagram for this engine')
     if live['kind'] == 'table':
+        from . import embedded_constraints
+        constraints = [draft for draft in drafts if embedded_constraints.is_constraint_draft(draft)]
+        if constraints:
+            drafts = [draft for draft in drafts if draft not in constraints]
+            if renames or drafts:
+                raise ValueError('Review constraint additions separately from other edits to the table')
+            native, created, rebuild = embedded_constraints.add(engine, old, live, current, constraints, native, allow_rebuilds)
+            return native, created, renames, [rebuild] if rebuild else []
         key = _primary_key(engine, live, drafts, old)
         if key is not None:
             native['duckdb_change'] = {'action': 'add-primary-key', 'columns': key[1]}
@@ -247,13 +257,13 @@ def merge(engine, old, row, live, current, drafts):
             created.append(_draft_row(engine, live, draft, old['uid']))
         if key is not None and (created or renames):
             raise ValueError('Review a primary-key addition separately from other edits to the table')
-        return native, created, renames
+        return native, created, renames, []
     if live['kind'] == 'view' and engine == 'duckdb' and renames:
-        return native, created, renames
+        return native, created, renames, []
     if drafts:
         raise ValueError('Drafts must belong to a table')
     if live['kind'] != 'index' or not after:
-        return native, created, renames
+        return native, created, renames, []
     if not before:
         raise ValueError('The baseline diagram carries no physical-schema vocabulary for this index; regenerate it')
     name = live['name']
@@ -263,14 +273,14 @@ def merge(engine, old, row, live, current, drafts):
     if engine == 'duckdb':
         if vocab.drop(before, after, name, 'index'):
             native['duckdb_change'] = {'action': 'drop', 'confirmation': name}
-            return native, created, renames
+            return native, created, renames, []
         if changed:
             raise ValueError('DuckDB has no index replacement plan; drop it (with drop_confirmation) and add a new index under a new name')
-        return native, created, renames
+        return native, created, renames, []
     if 'drop' in after and after['drop']:
         raise ValueError('SQLite index deletion needs row absence plus a deletion argument; it is not carried from the diagram')
     if not changed:
-        return native, created, renames
+        return native, created, renames, []
     found = _sqlite_values({'resource_kind': 'index', 'display_name': name, 'native': old['native']})
     if found is None or not found['replaceable']:
         raise ValueError('This index has native properties (expressions, ordering, collations) outside the vocabulary; edit it natively')
@@ -283,4 +293,4 @@ def merge(engine, old, row, live, current, drafts):
         raise ValueError('Index columns must be existing columns of the table')
     scratch = _scratch_sqlite(tables[0], name, columns, wanted['unique'], wanted['predicate'])
     scratch['navigator_parent_resource_id'] = native.get('navigator_parent_resource_id')
-    return {**native, 'ddl': scratch['ddl'], 'catalog_metadata': scratch['catalog_metadata']}, created, renames
+    return {**native, 'ddl': scratch['ddl'], 'catalog_metadata': scratch['catalog_metadata']}, created, renames, []

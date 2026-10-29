@@ -1970,9 +1970,12 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError('Original and edited relational designs are required')
         options = dict(request)
         original, snapshot = options.pop('original'), options.pop('snapshot')
+        allow_rebuilds = options.pop('allow_rebuilds', False)
+        if type(allow_rebuilds) is not bool:
+            raise ProviderWorkspaceError('Rebuild-backed constraint additions are a yes or no choice')
         catalog = catalog(server, options)
         try:
-            return handoff(catalog['snapshot'], original, snapshot, engine=engine)
+            return handoff(catalog['snapshot'], original, snapshot, engine=engine, allow_rebuilds=allow_rebuilds)
         except (ValueError, TypeError, KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 

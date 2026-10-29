@@ -112,7 +112,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
           baseline:review.baseline,renames:review.renames}});
         desired=JSON.stringify(value.snapshot,null,2);renames=value.renames;fts=value.fts_rebindings || [];
       }
-      if(token===serial.current) {setNativeRenames(renames);setFtsRebindings(fts);setSource(desired);setBaselineSource(review.baseline);setComparison(null);setSchemaPlan(null);setSchemaReceipt(null);setConfirmApply(false);setDeletions([]);setRebuilds([]);setColumnRenames([]);}
+      if(token===serial.current) {setNativeRenames(renames);setFtsRebindings(fts);setSource(desired);setBaselineSource(review.baseline);setComparison(null);setSchemaPlan(null);setSchemaReceipt(null);setConfirmApply(false);setDeletions([]);setRebuilds(review.rebuilds || []);setColumnRenames([]);}
     } catch(failure) {if(token===serial.current)setError(failure.response?.data?.errormsg || failure.message || 'SQLite diagram review failed');}
     finally {if(token===serial.current)setBusy(false);}
   };
