@@ -63,8 +63,18 @@ ConversionReport.propTypes = {
   onSwitch: PropTypes.func.isRequired,
 };
 
+/** Shown in place of the SQL text when the caller may run a question but not read it. */
+export function RedactedSql() {
+  return <Section title={gettext('SQL')} qaKey="bi.sql">
+    <Banner status="info">
+      {gettext('The SQL of this question is hidden. You can run it and use the results; ' +
+        'reading or changing the statement needs edit access.')}
+    </Banner>
+  </Section>;
+}
+
 /** Raw SQL editor with the SQL-to-question conversion. */
-export default function SqlPanel({sql, onChange, onConvert, onSwitch, error}) {
+export default function SqlPanel({sql, onChange, onConvert, onSwitch, error, readOnly = false}) {
   const [outcome, setOutcome] = useState(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
@@ -82,11 +92,12 @@ export default function SqlPanel({sql, onChange, onConvert, onSwitch, error}) {
     }
   };
   return <Section title={gettext('SQL')} error={error} qaKey="bi.sql"
-    actions={<Button size="small" loading={busy} disabled={!sql.trim()} onClick={convert}>
+    actions={<Button size="small" loading={busy} disabled={readOnly || !sql.trim()} onClick={convert}>
       {gettext('Convert to builder')}
     </Button>}>
     <Box sx={{height: 220, mb: 1}}>
-      <CodeEditor label={gettext('SQL statement')} language="sql" value={sql} onChange={onChange} />
+      <CodeEditor label={gettext('SQL statement')} language="sql" value={sql} onChange={onChange}
+        readonly={readOnly} />
     </Box>
     {failure && <ValidationMessage>{failure}</ValidationMessage>}
     <ConversionReport outcome={outcome} onSwitch={onSwitch} />
@@ -99,4 +110,5 @@ SqlPanel.propTypes = {
   onConvert: PropTypes.func.isRequired,
   onSwitch: PropTypes.func.isRequired,
   error: PropTypes.string,
+  readOnly: PropTypes.bool,
 };

@@ -113,7 +113,7 @@ export default function ViewerCard({card, run, info, interactive, fullscreen, on
         {run?.status === 'ready' && !running && (run.cacheHit ?
           <Badge status="info" label={gettext('Cached at %s', formatClock(run.producedAt))} /> :
           <Badge status="success" label={gettext('Updated %s', formatClock(run.receivedAt))} />)}
-        <Button size="small" loading={running} aria-label={gettext('Refresh %s', title)}
+        <Button size="small" loading={running} disabled={run?.status === 'denied'} aria-label={gettext('Refresh %s', title)}
           onClick={() => onRefresh(card)}>{gettext('Refresh')}</Button>
       </>}
       <Button size="small" aria-label={fullscreen ? gettext('Exit full screen for %s', title) :
@@ -124,8 +124,10 @@ export default function ViewerCard({card, run, info, interactive, fullscreen, on
       {card.type === 'text' && <MarkdownView markdown={card.text.markdown} />}
       {card.type === 'metric_panel' && <MetricPanel panel={card.metric_panel} />}
       {card.type === 'question' && <>
+        {run?.status === 'denied' && <Banner status="info">
+          {gettext('No access: this card shows a question that is not shared with you.')}</Banner>}
         {run?.error && <Banner status="error">{gettext('This card could not run: %s', run.error)}</Banner>}
-        {!execution && !run?.error && <Box role="status" sx={{fontSize: '0.8125rem'}}>
+        {!execution && !run?.error && run?.status !== 'denied' && <Box role="status" sx={{fontSize: '0.8125rem'}}>
           {running ? gettext('Loading...') : gettext('Waiting to run.')}</Box>}
         {execution && (execution.table.columns.length ?
           <QuestionResult card={card} execution={execution} visualization={visualization}

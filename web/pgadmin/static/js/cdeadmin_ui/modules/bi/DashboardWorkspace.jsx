@@ -16,6 +16,8 @@ import {TextField} from '../../primitives/Field';
 import {Badge, Banner} from '../../feedback/Indicators';
 import {Tab} from '../../navigation/TabsAndBreadcrumbs';
 import {SaveDialog} from './Dialogs';
+import ShareDialog from './ShareDialog';
+import {permissions} from './sharing';
 import {lossLines} from './dashboardImport';
 import {reduce, toDashboard} from './dashboardState';
 import DashboardEditor from './DashboardEditor';
@@ -40,6 +42,9 @@ export default function DashboardWorkspace({
   const [report, setReport] = useState(importLoss ? lossLines(importLoss) : null);
 
   const stored = state.dashboardId !== null;
+  const perms = permissions({access: state.access, is_owner: state.isOwner});
+  // Below edit access a dashboard is for viewing only; a new draft is always yours.
+  const readOnly = stored && perms.readOnly;
   useEffect(() => { onDirtyChange?.(state.dirty); }, [state.dirty, onDirtyChange]);
 
   const conflict = notice?.status === 'error' && /revision has changed/.test(notice.text);
@@ -76,31 +81,44 @@ export default function DashboardWorkspace({
       fail(error);
     }
   };
-  const choose = (next) => { if(next === 'view' && !stored) return; setMode(next); };
+  const choose = (next) => {
+    if(next === 'view' && !stored) return;
+    if(next === 'edit' && readOnly) return;
+    setMode(next);
+  };
 
   return <Box data-cdeadmin-qa-key="bi.dashboard.workspace" sx={{display: 'grid', gap: 1, minWidth: 0, p: 1}}>
     <Stack direction="row" gap="comfortable" sx={{alignItems: 'center', flexWrap: 'wrap'}}>
-      {mode === 'edit' ?
+      {mode === 'edit' && !readOnly ?
         <TextField size="small" label={gettext('Dashboard name')} value={state.name}
           placeholder={gettext('Untitled dashboard')}
           onChange={(event) => dispatch({type: 'rename', name: event.target.value})} sx={{minWidth: 260, flex: 1}} /> :
         <Box component="span" sx={{flex: 1}} />}
       {stored && <Badge status="neutral" label={gettext('Revision %s', state.revision)} />}
       {state.status === 'archived' && <Badge status="warning" label={gettext('Archived')} />}
+      {stored && !state.isOwner && <Badge status="neutral" label={perms.canEdit ?
+        gettext('Shared with you: can edit') : gettext('Shared with you: view only')} />}
       {state.dirty && <Badge status="warning" label={gettext('Unsaved changes')} />}
     </Stack>
     <Stack direction="row" gap="compact" sx={{alignItems: 'center', flexWrap: 'wrap'}}>
       <Box role="tablist" aria-label={gettext('Dashboard mode')} sx={{display: 'flex'}}>
-        <Tab label={gettext('Edit')} active={mode === 'edit'} onActivate={() => choose('edit')} />
-        <Tab label={gettext('View')} active={mode === 'view'} disabled={!stored} onActivate={() => choose('view')} />
+        <Tab label={gettext('Edit')} active={mode === 'edit' && !readOnly} disabled={readOnly}
+          onActivate={() => choose('edit')} />
+        <Tab label={gettext('View')} active={mode === 'view' || readOnly} disabled={!stored}
+          onActivate={() => choose('view')} />
       </Box>
       <Box sx={{flex: 1}} />
-      <Button intent="primary" loading={saving} disabled={!state.name.trim() || (stored && !state.dirty)} onClick={save}>
-        {gettext('Save')}</Button>
+      {!readOnly && <Button intent="primary" loading={saving} disabled={!state.name.trim() || (stored && !state.dirty)}
+        onClick={save}>{gettext('Save')}</Button>}
       <Button onClick={() => setDialog('saveAs')}>{gettext('Save as...')}</Button>
       <Button disabled={!stored} onClick={() => setDialog('history')}>{gettext('History')}</Button>
+      {stored && perms.canShare && <Button onClick={() => setDialog('share')}>{gettext('Share...')}</Button>}
       <Button onClick={onClose}>{gettext('Close')}</Button>
     </Stack>
+    {readOnly && <Banner status="info">
+      {gettext('Read only: you can view this dashboard but not change it. Cards run with your own access, ' +
+        'so a card whose question is not shared with you shows no data.')}
+    </Banner>}
     {notice && <Banner status={notice.status} onClose={() => setNotice(null)}>
       {notice.text}
       {conflict && <Button size="small" onClick={reload}>{gettext('Reload latest')}</Button>}
@@ -115,7 +133,7 @@ export default function DashboardWorkspace({
     {mode === 'view' && state.dirty && <Banner status="info">
       {gettext('Showing saved revision %s. Your unsaved edits are kept in the editor.', state.revision)}
     </Banner>}
-    {mode === 'edit' ?
+    {mode === 'edit' && !readOnly ?
       <DashboardEditor client={client} catalog={catalog} state={state} dispatch={dispatch}
         questions={questions} dashboards={dashboards.filter((item) => item.dashboard_id !== state.dashboardId)}
         collections={collections} /> :
@@ -129,12 +147,21 @@ export default function DashboardWorkspace({
         collections={collections} onConfirm={confirmNew} onClose={() => setDialog(null)} />}
     {dialog === 'history' && stored &&
       <DashboardHistory client={client} dashboardId={state.dashboardId} currentRevision={state.revision}
+        canRestore={!readOnly}
         onRestore={(definition) => {
           dispatch({type: 'restore', definition});
           setMode('edit');
           setNotice({status: 'info', text: gettext('Revision loaded as a draft. Save to append it as a new revision.')});
         }}
         onClose={() => setDialog(null)} />}
+    {dialog === 'share' && stored &&
+      <ShareDialog client={client} resourceType="dashboard" resourceId={state.dashboardId}
+        resourceName={state.name} hasCollection={state.collectionId !== null}
+        onChanged={() => onSaved?.({dashboard_id: state.dashboardId})}
+        onClose={(result) => {
+          setDialog(null);
+          if(result?.transferred) reload();
+        }} />}
   </Box>;
 }
 

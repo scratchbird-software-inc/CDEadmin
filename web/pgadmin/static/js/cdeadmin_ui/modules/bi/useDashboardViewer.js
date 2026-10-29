@@ -59,7 +59,11 @@ export default function useDashboardViewer({client, dashboardId, dashboard, init
         filters: filterPayload(snapshot.values), exclude: snapshot.exclusions,
         pageSize: PAGE_SIZE, bypassCache: fresh});
       if(alive.current) {
-        dispatch({type: 'cardDone', id: card.id, token, execution: executionFrom(response), receivedAt: Date.now()});
+        if(response?.no_access) {
+          dispatch({type: 'cardDenied', id: card.id, token});
+        } else {
+          dispatch({type: 'cardDone', id: card.id, token, execution: executionFrom(response), receivedAt: Date.now()});
+        }
       }
     } catch(error) {
       if(alive.current) dispatch({type: 'cardFail', id: card.id, token, error: message(error)});

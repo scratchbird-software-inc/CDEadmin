@@ -188,11 +188,31 @@ class MemoryBI:
     def new_question(**values):
         return SimpleNamespace(**values)
 
-    def save_question(self, row, snapshot):
+    def save_question(self, row, snapshot, actor_user_id=None):
         self.qs[row.id] = row
         self.snaps.setdefault(row.id, []).append(SimpleNamespace(
             revision=row.revision, status=row.status, definition=snapshot,
-            created_at=datetime.now(timezone.utc)))
+            created_at=datetime.now(timezone.utc),
+            actor_user_id=actor_user_id))
+
+    # unscoped lookups used by the central authorization (BIAccess)
+    def all_collections(self):
+        return sorted(self.cols.values(), key=lambda c: c.name)
+
+    def find_collection(self, collection_id):
+        return self.cols.get(collection_id)
+
+    def find_question(self, endpoint_id, question_id):
+        q = self.qs.get(question_id)
+        return q if q and q.endpoint_id == endpoint_id else None
+
+    def questions_at(self, endpoint_id):
+        return sorted([q for q in self.qs.values()
+                       if q.endpoint_id == endpoint_id],
+                      key=lambda q: q.name)
+
+    def save_owner(self, row):
+        self.qs[row.id] = row
 
     def revisions(self, question_id):
         return sorted(self.snaps.get(question_id, []),

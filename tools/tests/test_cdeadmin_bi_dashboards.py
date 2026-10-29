@@ -75,11 +75,24 @@ class MemoryDashboards:
     def new(**values):
         return SimpleNamespace(**values)
 
-    def save(self, row, snapshot):
+    def save(self, row, snapshot, actor_user_id=None):
         self.rows[row.id] = row
         self.snaps.setdefault(row.id, []).append(SimpleNamespace(
             revision=row.revision, status=row.status, definition=snapshot,
-            created_at=datetime.now(timezone.utc)))
+            created_at=datetime.now(timezone.utc),
+            actor_user_id=actor_user_id))
+
+    def find(self, endpoint_id, dashboard_id):
+        r = self.rows.get(dashboard_id)
+        return r if r and r.endpoint_id == endpoint_id else None
+
+    def dashboards_at(self, endpoint_id):
+        return sorted([r for r in self.rows.values()
+                       if r.endpoint_id == endpoint_id],
+                      key=lambda r: r.name)
+
+    def save_owner(self, row):
+        self.rows[row.id] = row
 
     def revisions(self, dashboard_id):
         return sorted(self.snaps.get(dashboard_id, []),

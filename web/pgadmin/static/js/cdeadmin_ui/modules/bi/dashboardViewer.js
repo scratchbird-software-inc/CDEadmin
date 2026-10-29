@@ -119,6 +119,13 @@ export function viewerReducer(state, action) {
       producedAt: action.receivedAt - (cache?.hit ? Math.round((cache.age_seconds || 0) * 1000) : 0),
     }}};
   }
+  case 'cardDenied': {
+    // The runner has no access to the question behind the card: nothing is known about it.
+    const card = state.cards[action.id];
+    if(!card || card.token !== action.token) return state;
+    return {...state, cards: {...state.cards, [action.id]: {
+      status: 'denied', token: action.token, key: card.key, error: '', stale: false}}};
+  }
   case 'cardFail': {
     const card = state.cards[action.id];
     if(!card || card.token !== action.token) return state;

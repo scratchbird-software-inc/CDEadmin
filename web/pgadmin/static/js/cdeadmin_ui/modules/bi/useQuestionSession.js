@@ -73,13 +73,16 @@ export default function useQuestionSession({client, catalog, initial, previewDel
 
   useEffect(() => { onDirtyChange?.(state.dirty); }, [state.dirty, onDirtyChange]);
 
-  const errors = useMemo(() => validateState(state, {model: model.value}), [state, model.value]);
-  const ready = errors.length === 0 && hasSelection(state);
+  // A raw-SQL question shared read-only arrives without its SQL text: it can be run by id, never edited
+  // or previewed, so nothing here validates or compiles the (empty) draft.
+  const hidden = Boolean(state.sqlRedacted);
+  const errors = useMemo(() => hidden ? [] : validateState(state, {model: model.value}), [hidden, state, model.value]);
+  const ready = hidden ? state.questionId !== null : errors.length === 0 && hasSelection(state);
   const questionJson = useMemo(() => JSON.stringify(toQuestion(state)), [state]);
   const valuesJson = useMemo(() => JSON.stringify(parameterValues(state)), [state]);
 
   useEffect(() => {
-    if(!ready) {
+    if(!ready || hidden) {
       setPreview({status: 'idle'});
       return undefined;
     }
@@ -91,18 +94,20 @@ export default function useQuestionSession({client, catalog, initial, previewDel
         (error) => { if(!cancelled) setPreview({status: 'error', error: message(error)}); });
     }, previewDelay);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [client, ready, questionJson, valuesJson, previewDelay]);
+  }, [client, ready, hidden, questionJson, valuesJson, previewDelay]);
 
   const execute = useCallback(async ({fresh = false} = {}) => {
     setRun((current) => ({status: 'running', execution: current.execution, error: ''}));
     try {
-      const response = await client.execute(JSON.parse(questionJson), {
-        parameters: JSON.parse(valuesJson), pageSize: PAGE_SIZE, bypassCache: fresh});
+      const options = {parameters: JSON.parse(valuesJson), pageSize: PAGE_SIZE, bypassCache: fresh};
+      const response = hidden ?
+        await client.executeStored(latest.current.questionId, latest.current.revision, options) :
+        await client.execute(JSON.parse(questionJson), options);
       setRun({status: 'done', execution: executionFrom(response), error: ''});
     } catch(error) {
       setRun((current) => ({status: 'error', execution: current.execution, error: message(error)}));
     }
-  }, [client, questionJson, valuesJson]);
+  }, [client, hidden, questionJson, valuesJson]);
 
   const loadMore = useCallback(async () => {
     const current = run.execution;

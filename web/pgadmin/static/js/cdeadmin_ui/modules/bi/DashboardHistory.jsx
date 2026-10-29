@@ -33,7 +33,7 @@ export function revisionSummary(definition) {
  * bi_dashboard_revision). Restoring loads a revision into the editor as an
  * unsaved draft; the next save appends a new revision and nothing is lost.
  */
-export default function DashboardHistory({client, dashboardId, currentRevision, onRestore, onClose}) {
+export default function DashboardHistory({client, dashboardId, currentRevision, onRestore, onClose, canRestore = true}) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState('');
   const [summaries, setSummaries] = useState({});
@@ -74,6 +74,8 @@ export default function DashboardHistory({client, dashboardId, currentRevision, 
           <Box sx={{flex: 1, minWidth: 160}}>
             <strong>{gettext('Revision %s', item.revision)}</strong>{' '}
             <Box component="span" sx={{fontSize: '0.75rem', color: 'text.secondary'}}>{when(item.created_at)}</Box>
+            {item.actor_user_id != null && <Box component="span" sx={{fontSize: '0.75rem', color: 'text.secondary'}}>
+              {' '}{item.actor ? gettext('saved by %s', item.actor) : gettext('saved by another user')}</Box>}
             {summaries[item.revision] && <Box sx={{fontSize: '0.75rem'}}>{summaries[item.revision]}</Box>}
           </Box>
           {item.revision === currentRevision && <Badge status="success" label={gettext('Current')} />}
@@ -81,9 +83,9 @@ export default function DashboardHistory({client, dashboardId, currentRevision, 
           <Button size="small" loading={busy === `summary-${item.revision}`}
             aria-label={gettext('Summarize revision %s', item.revision)}
             onClick={() => summarize(item.revision)}>{gettext('Summary')}</Button>
-          <Button size="small" loading={busy === `restore-${item.revision}`}
+          {canRestore && <Button size="small" loading={busy === `restore-${item.revision}`}
             aria-label={gettext('Restore revision %s', item.revision)}
-            onClick={() => restore(item.revision)}>{gettext('Restore as draft')}</Button>
+            onClick={() => restore(item.revision)}>{gettext('Restore as draft')}</Button>}
         </Box>)}
       </Box>}
     </Stack>
@@ -96,4 +98,5 @@ DashboardHistory.propTypes = {
   currentRevision: PropTypes.number,
   onRestore: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
+  canRestore: PropTypes.bool,
 };

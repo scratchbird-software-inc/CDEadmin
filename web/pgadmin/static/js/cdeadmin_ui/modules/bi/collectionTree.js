@@ -13,6 +13,31 @@
  * children: [...]}]) and the flat question summaries from bi_question_list.
  */
 
+import {accessOf, rank} from './sharing';
+
+/** The "Shared with me" entry of the collection list (a selection value, never a collection id). */
+export const SHARED_ROOT = '__shared__';
+
+/** True when `selected` names a real collection (not the all / none / shared selections). */
+export const isCollectionId = (selected) => typeof selected === 'string' && selected !== SHARED_ROOT;
+
+/** Items the caller owns (a backend that predates sharing sends no is_owner: all of them). */
+export const ownedItems = (items) => items.filter((item) => item.is_owner !== false);
+
+/** Items other people shared with the caller. */
+export const sharedItems = (items) => items.filter((item) => item.is_owner === false);
+
+/**
+ * Collections an item may be filed in: the caller's own plus shared ones the
+ * caller can edit, those labelled under `sharedLabel`.
+ */
+export function placementRows(tree, sharedTree, sharedLabel) {
+  const shared = flattenCollections(sharedTree)
+    .filter((row) => rank(accessOf(row.collection)) >= rank('edit'))
+    .map((row) => ({...row, path: [sharedLabel, ...row.path]}));
+  return [...flattenCollections(tree), ...shared];
+}
+
 /** Depth-first rows [{id, name, parentId, depth, path, collection}]. */
 export function flattenCollections(tree, depth = 0, parentPath = []) {
   const rows = [];
@@ -35,6 +60,9 @@ function find(tree, id) {
 }
 
 export const findCollection = find;
+
+/** A collection in either tree (own or shared). */
+export const findAnyCollection = (tree, sharedTree, id) => find(tree, id) || find(sharedTree, id);
 
 /** Ids of a collection and everything below it. */
 export function subtreeIds(tree, id) {

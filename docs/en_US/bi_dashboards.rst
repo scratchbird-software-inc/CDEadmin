@@ -80,10 +80,12 @@ Like saved questions, every create, update, archive or move bumps
 revision row; the ORM refuses updates to revision rows. As owner-confirmed,
 the migration does not bump ``SCHEMA_VERSION``.
 
-Permissions are owner-only. Every lookup filters on ``user_id`` and the
-endpoint, so another user sees "unavailable"; cards can only pin the owner's
-own question revisions. A question used by a dashboard cannot be deleted, and
-a collection holding a dashboard cannot be deleted. Sharing is C4.
+Permissions default to owner-only: every lookup goes through
+``BIAccess.require``, so a user with no access sees "unavailable"; cards can
+only pin question revisions the saver can view. A question used by a dashboard cannot be deleted, and
+a collection holding a dashboard cannot be deleted. Sharing (view, edit and
+manage grants) is described in :doc:`bi_permissions`; with no grants this
+owner-only behaviour is unchanged.
 
 Because cards pin revisions, editing a question never changes a saved
 dashboard; the dashboard editor re-pins deliberately.

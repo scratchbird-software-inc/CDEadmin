@@ -9,6 +9,7 @@
 
 """CDEadmin provider-neutral BI saved questions and collections."""
 
+from .access import BIAccess, BIPermissionDenied
 from .models import (
     BIConflict, BIError, validate_collection, validate_question,
 )
@@ -37,6 +38,6 @@ def init_app(app, semantic_model_service, studio_service=None,
 
 
 __all__ = (
-    'BIConflict', 'BIError', 'BIService', 'DatabaseBIRepository',
+    'BIAccess', 'BIConflict', 'BIError', 'BIPermissionDenied', 'BIService', 'DatabaseBIRepository',
     'init_app', 'validate_collection', 'validate_question',
 )

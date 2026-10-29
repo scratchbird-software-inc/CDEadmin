@@ -80,9 +80,10 @@ Access
 Requests use the existing workspace action route
 (``POST`` workspace action, handled in ``servers/__init__.py``) with an
 ``action`` prefixed ``bi_``, dispatched to ``ProviderWorkspaceService.bi_action``
-which resolves the owned server first. Every repository lookup filters on the
-owner's ``user_id`` (and ``endpoint_id`` for questions), so another user sees
-"unavailable", the same as semantic models.
+which resolves the owned server first. Every lookup goes through
+``BIAccess.require`` (:doc:`bi_permissions`): without a grant only the owner
+has access, and anyone else sees "unavailable", the same as semantic models.
+Sharing actions are listed in :doc:`bi_permissions`.
 
 Actions: ``bi_collection_list|create|update|delete``,
 ``bi_question_list|get|create|update|status|move|clone|delete|history|revision``,

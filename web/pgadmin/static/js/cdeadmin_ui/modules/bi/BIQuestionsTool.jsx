@@ -19,7 +19,7 @@ import {makePost} from '../../objects/ProviderObjectEditorHost';
 import {createBIClient} from './biClient';
 import {emptyState, fromQuestion} from './queryState';
 import {emptyDashboard, fromDashboard} from './dashboardState';
-import {flattenCollections} from './collectionTree';
+import {isCollectionId, placementRows} from './collectionTree';
 import useBICatalog from './useBICatalog';
 import CollectionBrowser from './CollectionBrowser';
 import QuestionEditor from './QuestionEditor';
@@ -42,7 +42,8 @@ export default function BIQuestionsTool({api, endpointUrl, client: suppliedClien
   const client = useMemo(() => suppliedClient || createBIClient(makePost(api, endpointUrl)),
     [suppliedClient, api, endpointUrl]);
   const catalog = useBICatalog(client);
-  const [data, setData] = useState({status: 'loading', tree: [], questions: [], dashboards: []});
+  const [data, setData] = useState({
+    status: 'loading', tree: [], questions: [], dashboards: [], shared: {collections: [], questions: [], dashboards: []}});
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(undefined);
   const [search, setSearch] = useState('');
@@ -56,10 +57,12 @@ export default function BIQuestionsTool({api, endpointUrl, client: suppliedClien
   const refresh = useCallback(async () => {
     // The questions stay usable when the dashboards cannot be listed.
     let dashboardProblem = '';
-    const [tree, questions, dashboards] = await Promise.all([
+    const [tree, questions, dashboards, shared] = await Promise.all([
       client.listCollections(), client.listQuestions(),
-      client.listDashboards().catch((caught) => { dashboardProblem = message(caught); return []; })]);
-    setData({status: 'ready', tree, questions, dashboards});
+      client.listDashboards().catch((caught) => { dashboardProblem = message(caught); return []; }),
+      // A server without sharing simply has nothing shared with the caller.
+      client.sharedWithMe().catch(() => ({collections: [], questions: [], dashboards: []}))]);
+    setData({status: 'ready', tree, questions, dashboards, shared});
     if(dashboardProblem) setError(gettext('Dashboards are unavailable: %s', dashboardProblem));
   }, [client]);
 
@@ -123,7 +126,7 @@ export default function BIQuestionsTool({api, endpointUrl, client: suppliedClien
   };
   const guarded = (intent) => dirty ? setPending(intent) : perform(intent);
 
-  const collectionOf = () => typeof selected === 'string' ? selected : null;
+  const collectionOf = () => isCollectionId(selected) ? selected : null;
   const changed = async (questionId) => {
     await refresh();
     if(questionId && open?.kind === 'question' && open.questionId === questionId) await loadQuestion(questionId);
@@ -134,7 +137,9 @@ export default function BIQuestionsTool({api, endpointUrl, client: suppliedClien
       await loadDashboard(dashboardId, open.mode);
     }
   };
-  const collections = useMemo(() => flattenCollections(data.tree), [data.tree]);
+  // Where an item may be filed: own collections plus shared ones the caller can edit.
+  const collections = useMemo(() => placementRows(data.tree, data.shared.collections, gettext('Shared with me')),
+    [data.tree, data.shared.collections]);
   const openQuestionId = open?.kind === 'question' ? open.questionId || undefined : undefined;
   const openDashboardId = open?.kind === 'dashboard' ? open.dashboardId || undefined : undefined;
 
@@ -143,7 +148,8 @@ export default function BIQuestionsTool({api, endpointUrl, client: suppliedClien
     {error && <Box sx={{gridColumn: '1 / -1'}}>
       <Banner status="error" onClose={() => setError('')}>{error}</Banner>
     </Box>}
-    <CollectionBrowser client={client} tree={data.tree} questions={data.questions} dashboards={data.dashboards}
+    <CollectionBrowser client={client} tree={data.tree} shared={data.shared} questions={data.questions}
+      dashboards={data.dashboards}
       selected={selected} onSelect={setSelected} search={search} onSearch={setSearch} showArchived={showArchived}
       onShowArchived={setShowArchived} activeQuestionId={openQuestionId}
       dirtyQuestionId={dirty ? openQuestionId : undefined}

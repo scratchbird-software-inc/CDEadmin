@@ -16,6 +16,7 @@
  */
 
 import {createDashboardClient} from './dashboardClient';
+import {createSharingClient} from './sharingClient';
 
 const RESOURCE_PAGE_LIMIT = 20;
 
@@ -23,6 +24,7 @@ export function createBIClient(post) {
   const call = (action, request = {}) => post({action, request});
   return {
     ...createDashboardClient(call),
+    ...createSharingClient(call),
 
     // collections
     listCollections: async () => (await call('bi_collection_list')).items || [],

@@ -2647,7 +2647,13 @@ class ProviderWorkspaceService:
         raise ProviderWorkspaceError('semantic model action is unavailable')
 
     def bi_action(self, server, action, request):
-        """Apply an owner-scoped saved-question or collection action."""
+        """Apply a saved-question, collection, dashboard or sharing action.
+
+        Authorization is central (``BIAccess``): the service methods receive
+        only the caller's principal and the endpoint, never a pre-filtered
+        owner scope.  Execution always uses the caller's own workspace
+        context, so sharing never lends out the owner's connection.
+        """
         service = self.bi_service
         if service is None:
             raise ProviderWorkspaceError('BI service is not initialized')
@@ -2659,17 +2665,20 @@ class ProviderWorkspaceService:
         qid = request.get('question_id')
         revision = request.get('expected_revision')
         if action == 'bi_collection_list':
-            return {'items': service.list_collections(user_id)}
+            return {'items': service.list_collections(user_id, endpoint_id)}
         if action == 'bi_collection_create':
-            return service.create_collection(user_id,
-                                             request.get('collection'))
+            return service.create_collection(
+                user_id, request.get('collection'), endpoint_id)
         if action == 'bi_collection_update':
             return service.update_collection(
                 user_id, request.get('collection_id'),
-                request.get('collection'))
+                request.get('collection'), endpoint_id)
         if action == 'bi_collection_delete':
-            return service.delete_collection(user_id,
-                                             request.get('collection_id'))
+            return service.delete_collection(
+                user_id, request.get('collection_id'), endpoint_id)
+        if action in self._BI_SHARING_ACTIONS:
+            return self._bi_sharing_action(service, action, request,
+                                           user_id, endpoint_id)
         if action == 'bi_question_list':
             filters = {'collection_id': request['collection_id']} if (
                 'collection_id' in request) else {}
@@ -2712,6 +2721,52 @@ class ProviderWorkspaceService:
         return self._bi_extended_action(
             service, action, request, context, _endpoint, user_id,
             endpoint_id, qid, revision)
+
+    _BI_SHARING_ACTIONS = frozenset((
+        'bi_access_get', 'bi_grant_list', 'bi_grant_add', 'bi_grant_update',
+        'bi_grant_remove', 'bi_access_inherit', 'bi_transfer_owner',
+        'bi_shared_with_me', 'bi_principal_search', 'bi_audit_list',
+    ))
+
+    def _bi_sharing_action(self, service, action, request, user_id,
+                           endpoint_id):
+        """Grants, effective access, ownership transfer and discovery."""
+        access = service.access
+        if action == 'bi_shared_with_me':
+            return service.shared_with_me(user_id, endpoint_id)
+        if action == 'bi_principal_search':
+            return {'items': access.search_principals(
+                user_id, request.get('text'), request.get('kinds'),
+                request.get('limit'))}
+        kind, rid = request.get('resource_type'), request.get('resource_id')
+        if kind not in ('collection', 'question', 'dashboard') or not (
+                isinstance(rid, str)):
+            raise ProviderWorkspaceError('BI action is unavailable')
+        if action == 'bi_access_get':
+            return access.effective_access(user_id, kind, endpoint_id, rid)
+        if action == 'bi_grant_list':
+            return access.list_grants(user_id, kind, endpoint_id, rid)
+        if action == 'bi_grant_add':
+            return access.add_grant(
+                user_id, kind, endpoint_id, rid,
+                request.get('principal_type'), request.get('principal_id'),
+                request.get('level'))
+        if action == 'bi_grant_update':
+            return access.update_grant(
+                user_id, kind, endpoint_id, rid, request.get('grant_id'),
+                request.get('level'))
+        if action == 'bi_grant_remove':
+            return access.remove_grant(user_id, kind, endpoint_id, rid,
+                                       request.get('grant_id'))
+        if action == 'bi_access_inherit':
+            return access.set_inherit(user_id, kind, endpoint_id, rid,
+                                      request.get('inherit'))
+        if action == 'bi_audit_list':
+            return {'items': access.audit_trail(user_id, kind, endpoint_id,
+                                                rid)}
+        return service.transfer_owner(
+            user_id, endpoint_id, kind, rid, request.get('new_owner_id'),
+            request.get('confirm'))
 
     def _bi_extended_action(self, service, action, request, context,
                             endpoint, user_id, endpoint_id, qid, revision):

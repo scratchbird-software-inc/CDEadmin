@@ -43,8 +43,21 @@ class DatabaseDashboardRepository:
         return query.order_by(self.dashboard.name).all()
 
     def in_collection(self, user_id, collection_id):
+        # any owner's dashboard keeps a shared collection non-empty
         return self.dashboard.query.filter_by(
-            user_id=user_id, collection_id=collection_id).first() is not None
+            collection_id=collection_id).first() is not None
+
+    def find(self, endpoint_id, dashboard_id):
+        return self.dashboard.query.filter_by(
+            id=dashboard_id, endpoint_id=endpoint_id).first()
+
+    def dashboards_at(self, endpoint_id):
+        return self.dashboard.query.filter_by(
+            endpoint_id=endpoint_id).order_by(self.dashboard.name).all()
+
+    def save_owner(self, row):
+        self.db.session.add(row)
+        self.db.session.commit()
 
     def get(self, user_id, endpoint_id, dashboard_id):
         return self.dashboard.query.filter_by(
@@ -53,7 +66,7 @@ class DatabaseDashboardRepository:
     def new(self, **values):
         return self.dashboard(**values)
 
-    def save(self, row, snapshot):
+    def save(self, row, snapshot, actor_user_id=None):
         from sqlalchemy.exc import IntegrityError
         from sqlalchemy.orm.exc import StaleDataError
         try:
@@ -63,6 +76,7 @@ class DatabaseDashboardRepository:
                 id=str(uuid.uuid4()), dashboard_id=row.id,
                 revision=row.revision, status=row.status,
                 definition=snapshot, created_at=datetime.now(timezone.utc),
+                actor_user_id=actor_user_id,
             ))
             self.db.session.commit()
         except StaleDataError as exc:
@@ -87,7 +101,9 @@ def _now():
 
 
 class DashboardService:
-    """Own dashboards.  Every lookup is scoped to the owner and endpoint."""
+    """Own dashboards.  Every lookup goes through ``bi.access`` (the one
+    authorization point) for the endpoint; owner-only when nothing is
+    shared."""
 
     def __init__(self, bi_service, executor=None, repository=None):
         self.bi = bi_service
@@ -95,29 +111,53 @@ class DashboardService:
         self.repository = repository or DatabaseDashboardRepository()
         bi_service.add_collection_guard(self._collection_in_use)
         bi_service.add_question_guard(self._question_in_use)
+        bi_service.access.register(
+            'dashboard',
+            find=lambda ep, rid: self.repository.find(ep, rid),
+            rows=lambda ep: self.repository.dashboards_at(ep),
+            set_owner=self._set_owner)
+
+    def _set_owner(self, row, new_owner_id):
+        row.user_id = new_owner_id
+        self.repository.save_owner(row)
+
+    def transfer_owner(self, user_id, endpoint_id, dashboard_id,
+                       new_owner_id, confirm=None):
+        return self.bi.access.transfer_owner(
+            user_id, 'dashboard', endpoint_id, dashboard_id, new_owner_id,
+            confirm)
 
     # guards on the question/collection side -------------------------------
     def _collection_in_use(self, user_id, collection_id):
         return self.repository.in_collection(user_id, collection_id)
 
     def _question_in_use(self, user_id, endpoint_id, question_id):
-        for row in self.repository.dashboards(user_id, endpoint_id):
+        # every owner's dashboards pin it; never name one the caller cannot
+        # see
+        for row in self.repository.dashboards_at(endpoint_id):
             definition = json.loads(row.definition)
             if any(q == question_id
                    for q, _r in question_references(definition)):
-                return row.name
+                if self.bi.access.level(user_id, 'dashboard', endpoint_id,
+                                        row.id) is not None:
+                    return row.name
+                return 'owned by another user'
         return None
 
     # lifecycle -------------------------------------------------------------
     def list(self, user_id, endpoint_id, **filters):
+        """Dashboards the caller may view (owned and shared)."""
         scoped = 'collection_id' in filters
-        return [self._summary(row) for row in self.repository.dashboards(
-            user_id, endpoint_id, filters.get('collection_id'),
-            every_collection=not scoped)]
+        return [self._summary(row, level, owned)
+                for row, level, owned in self.bi.access.visible(
+                    user_id, 'dashboard', endpoint_id)
+                if not scoped or row.collection_id == filters[
+                    'collection_id']]
 
     def get(self, user_id, endpoint_id, dashboard_id):
-        return self._present(self._required(user_id, endpoint_id,
-                                            dashboard_id))
+        row, level = self.bi.access.require(
+            user_id, 'dashboard', endpoint_id, dashboard_id)
+        return self._present(row, level, user_id)
 
     def create(self, user_id, endpoint_id, value):
         dashboard = self._admit(user_id, endpoint_id, value)
@@ -127,60 +167,78 @@ class DashboardService:
             status='active', revision=1, created_at=now, updated_at=now,
             name=dashboard['name'], collection_id=dashboard['collection_id'],
             definition=json.dumps(dashboard))
-        self.repository.save(row, row.definition)
-        return self._present(row)
+        self.repository.save(row, row.definition, actor_user_id=user_id)
+        return self._present(row, 'manage', user_id)
 
     def update(self, user_id, endpoint_id, dashboard_id, expected_revision,
                value):
-        row = self._required(user_id, endpoint_id, dashboard_id)
+        row, level = self._required(user_id, endpoint_id, dashboard_id,
+                                    'edit', 'change')
         self._check_revision(row, expected_revision)
-        dashboard = self._admit(user_id, endpoint_id, value, exclude=row.id)
+        dashboard = self._admit(user_id, endpoint_id, value, exclude=row.id,
+                                row=row)
         row.name, row.collection_id = (dashboard['name'],
                                        dashboard['collection_id'])
         row.definition = json.dumps(dashboard)
         row.revision += 1
         row.updated_at = _now()
-        self.repository.save(row, row.definition)
-        return self._present(row)
+        self.repository.save(row, row.definition, actor_user_id=user_id)
+        return self._present(row, level, user_id)
 
     def set_status(self, user_id, endpoint_id, dashboard_id,
                    expected_revision, status):
-        row = self._required(user_id, endpoint_id, dashboard_id)
+        row, level = self._required(user_id, endpoint_id, dashboard_id,
+                                    'edit', 'archive or restore')
         self._check_revision(row, expected_revision)
         if status not in DASHBOARD_STATUSES:
             raise BIError('dashboard status is unsupported')
         row.status = status
         row.revision += 1
         row.updated_at = _now()
-        self.repository.save(row, row.definition)
-        return self._present(row)
+        self.repository.save(row, row.definition, actor_user_id=user_id)
+        return self._present(row, level, user_id)
 
     def move(self, user_id, endpoint_id, dashboard_id, expected_revision,
              collection_id):
-        value = self.get(user_id, endpoint_id, dashboard_id)['definition']
+        row, _ = self._required(user_id, endpoint_id, dashboard_id, 'edit',
+                                'move')
+        value = json.loads(row.definition)
         value['collection_id'] = collection_id
         return self.update(user_id, endpoint_id, dashboard_id,
                            expected_revision, value)
 
     def clone(self, user_id, endpoint_id, dashboard_id, name):
-        value = self.get(user_id, endpoint_id, dashboard_id)['definition']
+        row, _ = self._required(user_id, endpoint_id, dashboard_id)
+        value = json.loads(row.definition)
         value['name'] = name
+        target = value.get('collection_id')
+        if target is not None and self.bi.access.level(
+                user_id, 'collection', endpoint_id, target) not in (
+                'edit', 'manage'):
+            value['collection_id'] = None  # the copy goes to the root
+        # the copy is admitted like any new dashboard: every pinned
+        # question must be viewable by the cloner
         return self.create(user_id, endpoint_id, value)
 
     def delete(self, user_id, endpoint_id, dashboard_id, expected_revision):
-        row = self._required(user_id, endpoint_id, dashboard_id)
+        row, _ = self._required(user_id, endpoint_id, dashboard_id,
+                                'manage', 'delete')
         self._check_revision(row, expected_revision)
         self.repository.delete(row)
+        self.bi.access.purge('dashboard', dashboard_id)
         return {'dashboard_id': dashboard_id, 'deleted': True}
 
     def history(self, user_id, endpoint_id, dashboard_id):
-        row = self._required(user_id, endpoint_id, dashboard_id)
+        row, _ = self._required(user_id, endpoint_id, dashboard_id)
         return [{'revision': item.revision, 'status': item.status,
-                 'created_at': item.created_at.isoformat()}
+                 'created_at': item.created_at.isoformat(),
+                 'actor_user_id': getattr(item, 'actor_user_id', None),
+                 'actor': self.bi.access.actor_name(
+                     user_id, getattr(item, 'actor_user_id', None))}
                 for item in self.repository.revisions(row.id)]
 
     def revision(self, user_id, endpoint_id, dashboard_id, revision):
-        row = self._required(user_id, endpoint_id, dashboard_id)
+        row, _ = self._required(user_id, endpoint_id, dashboard_id)
         for item in self.repository.revisions(row.id):
             if item.revision == revision:
                 return {'dashboard_id': row.id, 'revision': revision,
@@ -231,7 +289,11 @@ class DashboardService:
             bypass_cache=False, exclude=()):
         """Run every question card (optionally one tab).
 
-        A failing card reports its error and does not stop the others.
+        Needs ``view`` on the dashboard.  Each card runs as the RUNNER and
+        only when the runner also has ``view`` on the card's question;
+        otherwise the card reports ``no_access`` and nothing about the
+        question.  A failing card reports its error and does not stop the
+        others.
         """
         dashboard, _ = self._loaded(user_id, context.endpoint_id,
                                     dashboard_id, revision)
@@ -250,6 +312,9 @@ class DashboardService:
                                          'metric_panel': card.get(
                                              'metric_panel')}}
                 continue
+            if not self._can_run(user_id, context.endpoint_id, card):
+                cards[card['id']] = {'type': 'question', 'no_access': True}
+                continue
             try:
                 cards[card['id']] = {'type': 'question', 'run': (
                     self._run_card(provider, context, endpoint, user_id,
@@ -260,6 +325,11 @@ class DashboardService:
         return {'dashboard_id': dashboard_id, 'filters': resolved['filters'],
                 'unapplied_filters': resolved['unapplied'], 'cards': cards}
 
+    def _can_run(self, user_id, endpoint_id, card):
+        return self.bi.access.level(
+            user_id, 'question', endpoint_id,
+            card['question']['question_id']) is not None
+
     def _run_card(self, provider, context, endpoint, user_id, dashboard,
                   resolved, card_id, page_size, bypass_cache):
         card = next((c for c in dashboard['cards'] if c['id'] == card_id),
@@ -268,6 +338,8 @@ class DashboardService:
             raise BIError('card is not a runnable question card')
         if self.executor is None:
             raise BIError('dashboard execution is not initialized')
+        if not self._can_run(user_id, context.endpoint_id, card):
+            return {'card_id': card_id, 'no_access': True}
         binding = resolved['cards'][card_id]
         extra = binding['extra_filters']
         parameters = dict(binding['parameters'])
@@ -282,19 +354,25 @@ class DashboardService:
         return outcome
 
     # helpers -----------------------------------------------------------------
-    def _admit(self, user_id, endpoint_id, value, exclude=None):
+    def _admit(self, user_id, endpoint_id, value, exclude=None, row=None):
         dashboard = validate_dashboard(value)
-        if dashboard['collection_id'] is not None:
-            self.bi._collection_row(user_id, dashboard['collection_id'])
+        owner_id = row.user_id if row is not None else user_id
+        collection_id = dashboard['collection_id']
+        if collection_id is not None and (
+                row is None or collection_id != row.collection_id):
+            self.bi._collection_row(user_id, collection_id, endpoint_id,
+                                    'edit', 'add items to')
         definitions = {}
         for question_id, revision in question_references(dashboard):
-            stored = self.bi.revision(user_id, endpoint_id, question_id,
-                                      revision)
+            # pinning needs view on the question; the editor never sees
+            # raw SQL through this path
+            stored = self.bi.stored_for_run(user_id, endpoint_id,
+                                            question_id, revision)
             definitions[(question_id, revision)] = stored['definition']
         check_mappings(dashboard, definitions)
-        for row in self.repository.dashboards(user_id, endpoint_id):
-            if row.id != exclude and row.name == dashboard['name'] and (
-                    row.collection_id == dashboard['collection_id']):
+        for other in self.repository.dashboards(owner_id, endpoint_id):
+            if other.id != exclude and other.name == dashboard['name'] and (
+                    other.collection_id == dashboard['collection_id']):
                 raise BIError('dashboard name already exists')
         return dashboard
 
@@ -309,11 +387,10 @@ class DashboardService:
     def _definition(self, user_id, endpoint_id, dashboard_id):
         return self.get(user_id, endpoint_id, dashboard_id)['definition']
 
-    def _required(self, user_id, endpoint_id, dashboard_id):
-        row = self.repository.get(user_id, endpoint_id, dashboard_id)
-        if row is None:
-            raise BIError('dashboard is unavailable')
-        return row
+    def _required(self, user_id, endpoint_id, dashboard_id, minimum='view',
+                  action=None):
+        return self.bi.access.require(user_id, 'dashboard', endpoint_id,
+                                      dashboard_id, minimum, action)
 
     @staticmethod
     def _check_revision(row, expected):
@@ -323,13 +400,13 @@ class DashboardService:
             raise BIConflict('dashboard revision has changed')
 
     @staticmethod
-    def _summary(row):
+    def _summary(row, access='manage', owned=True):
         return {'dashboard_id': row.id, 'name': row.name,
                 'collection_id': row.collection_id, 'status': row.status,
-                'revision': row.revision,
-                'updated_at': row.updated_at.isoformat()}
+                'revision': row.revision, 'access': access,
+                'is_owner': owned, 'updated_at': row.updated_at.isoformat()}
 
     @classmethod
-    def _present(cls, row):
-        return cls._summary(row) | {
+    def _present(cls, row, access='manage', viewer_id=None):
+        return cls._summary(row, access, row.user_id == viewer_id) | {
             'definition': copy.deepcopy(json.loads(row.definition))}

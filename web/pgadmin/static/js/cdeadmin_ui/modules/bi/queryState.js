@@ -60,6 +60,8 @@ export function emptyState(overrides = {}) {
     parameters: [], values: {},
     visualization: {type: 'table', settings: {}},
     resultPolicy: null,
+    // sharing: what the caller may do, and whether the SQL text was withheld
+    access: 'manage', isOwner: true, sqlRedacted: false,
     dirty: false, nextKey: 1,
     ...overrides,
   };
@@ -237,6 +239,8 @@ export function fromQuestion(record) {
       settings: {...(definition.visualization?.settings || {})},
     },
     resultPolicy: definition.result_policy || null,
+    access: record.access || 'manage', isOwner: record.is_owner !== false,
+    sqlRedacted: Boolean(record.sql_redacted),
   });
   const query = definition.query;
   if(query.kind === 'sql') {
@@ -450,6 +454,7 @@ export function reduce(state, action) {
       parameters: converted.parameters.length ? converted.parameters : state.parameters,
       visualization: state.visualization, resultPolicy: state.resultPolicy,
       values: state.values, dirty: true,
+      access: state.access, isOwner: state.isOwner, sqlRedacted: state.sqlRedacted,
     };
   }
   case 'restore': {
@@ -458,6 +463,7 @@ export function reduce(state, action) {
     return {
       ...restored, questionId: state.questionId, revision: state.revision,
       status: state.status, values: state.values, dirty: true,
+      access: state.access, isOwner: state.isOwner, sqlRedacted: state.sqlRedacted,
     };
   }
   case 'saved': {

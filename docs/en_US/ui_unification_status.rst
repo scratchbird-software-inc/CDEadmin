@@ -173,6 +173,25 @@ count sets its maximum to zero in the enforcement file.
 Change log
 ----------
 
+BI sharing and permissions (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Stream C4 permissions: grants (view, edit, manage) for users or pgAdmin roles on
+collections, saved questions and dashboards, per endpoint, with inheritance down
+the collection tree and per-item overrides (``cde_bi_permissions_v1``:
+``cde_bi_grant``, ``cde_bi_access_override``, ``cde_bi_audit``, revision
+``actor_user_id``; ``SCHEMA_VERSION`` not bumped). Every ``bi_*`` entry point
+goes through ``BIAccess.require``; no grants means owner-only as before. Shared
+questions run with the runner's credentials and row policies, raw SQL is
+redacted below edit, dashboard cards without question access answer
+``no_access``. New actions: ``bi_access_get``, ``bi_grant_*``,
+``bi_access_inherit``, ``bi_transfer_owner``, ``bi_shared_with_me``,
+``bi_principal_search``, ``bi_audit_list``. BI UI: Share dialog, Shared with me
+root, permission-aware controls, read-only banner, redacted-SQL notice, "No
+access" card. Tests: ``tools/tests/test_cdeadmin_bi_permissions.py``; Jest
+``sharing``, ``ShareDialog`` and ``SharedTool`` specs on fixtures generated from
+the real backend. See :doc:`bi_permissions` (residual risks included).
+
 PostgreSQL maintenance actions (2026-10-28)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

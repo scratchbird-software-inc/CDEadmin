@@ -1263,6 +1263,11 @@ class BISavedQuestionRevision(db.Model):
     status = db.Column(db.String(16), nullable=False)
     definition = db.Column(db.Text(), nullable=False)
     created_at = db.Column(db.DateTime(), nullable=False)
+    # Who saved this revision (owner or a granted editor); additive column.
+    actor_user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='SET NULL'),
+        nullable=True
+    )
     question = db.relationship(
         'BISavedQuestion', back_populates='revisions'
     )
@@ -1333,6 +1338,10 @@ class BIDashboardRevision(db.Model):
     status = db.Column(db.String(16), nullable=False)
     definition = db.Column(db.Text(), nullable=False)
     created_at = db.Column(db.DateTime(), nullable=False)
+    actor_user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='SET NULL'),
+        nullable=True
+    )
     dashboard = db.relationship(
         'BIDashboard', back_populates='revisions'
     )
@@ -1341,6 +1350,114 @@ class BIDashboardRevision(db.Model):
 @event.listens_for(BIDashboardRevision, 'before_update')
 def _bi_dashboard_revision_is_immutable(_mapper, _connection, _target):
     raise ValueError('dashboard revisions are immutable')
+
+
+class BIGrant(db.Model):
+    """Endpoint-scoped access grant on a collection, question or dashboard.
+
+    The principal is a real pgAdmin ``User`` or ``Role`` (exactly one of the
+    two columns is set).  ``resource_id`` is polymorphic and has no foreign
+    key; the BI service removes a resource's grants when it deletes it.
+    """
+    __tablename__ = 'cde_bi_grant'
+    __table_args__ = (
+        db.CheckConstraint(
+            "resource_type IN ('collection', 'question', 'dashboard')",
+            name='ck_cde_bi_grant_resource'
+        ),
+        db.CheckConstraint(
+            "level IN ('view', 'edit', 'manage')",
+            name='ck_cde_bi_grant_level'
+        ),
+        db.CheckConstraint(
+            '(principal_user_id IS NOT NULL AND principal_role_id IS NULL)'
+            ' OR (principal_user_id IS NULL AND '
+            'principal_role_id IS NOT NULL)',
+            name='ck_cde_bi_grant_principal'
+        ),
+        db.UniqueConstraint(
+            'endpoint_id', 'resource_type', 'resource_id',
+            'principal_user_id', name='uq_cde_bi_grant_user'
+        ),
+        db.UniqueConstraint(
+            'endpoint_id', 'resource_type', 'resource_id',
+            'principal_role_id', name='uq_cde_bi_grant_role'
+        ),
+        db.Index(
+            'ix_cde_bi_grant_resource',
+            'endpoint_id', 'resource_type', 'resource_id'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    resource_type = db.Column(db.String(16), nullable=False)
+    resource_id = db.Column(db.String(36), nullable=False)
+    principal_user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'),
+        nullable=True
+    )
+    principal_role_id = db.Column(
+        db.Integer, db.ForeignKey('role.id', ondelete='CASCADE'),
+        nullable=True
+    )
+    level = db.Column(db.String(16), nullable=False)
+    created_by = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='SET NULL'),
+        nullable=True
+    )
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+
+
+class BIAccessOverride(db.Model):
+    """Explicit override: the resource does not inherit collection grants."""
+    __tablename__ = 'cde_bi_access_override'
+    __table_args__ = (
+        db.CheckConstraint(
+            "resource_type IN ('collection', 'question', 'dashboard')",
+            name='ck_cde_bi_access_override_resource'
+        ),
+        db.UniqueConstraint(
+            'endpoint_id', 'resource_type', 'resource_id',
+            name='uq_cde_bi_access_override'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    resource_type = db.Column(db.String(16), nullable=False)
+    resource_id = db.Column(db.String(36), nullable=False)
+    created_by = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='SET NULL'),
+        nullable=True
+    )
+    created_at = db.Column(db.DateTime(), nullable=False)
+
+
+class BIAuditEvent(db.Model):
+    """Append-only record of BI grant, override and ownership changes."""
+    __tablename__ = 'cde_bi_audit'
+    __table_args__ = (
+        db.Index('ix_cde_bi_audit_resource', 'resource_type', 'resource_id'),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    actor_user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='SET NULL'),
+        nullable=True
+    )
+    action = db.Column(db.String(48), nullable=False)
+    endpoint_id = db.Column(db.String(36), nullable=True)
+    resource_type = db.Column(db.String(16), nullable=False)
+    resource_id = db.Column(db.String(36), nullable=False)
+    target_type = db.Column(db.String(16), nullable=True)
+    target_id = db.Column(db.Integer, nullable=True)
+    detail = db.Column(db.Text(), nullable=False, default='{}')
+    created_at = db.Column(db.DateTime(), nullable=False)
 
 
 class CDEReportDeliveryOccurrence(db.Model):

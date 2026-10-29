@@ -18,12 +18,14 @@ import {Tab} from '../../navigation/TabsAndBreadcrumbs';
 import {errorAt} from './validateState';
 import useQuestionSession from './useQuestionSession';
 import BuilderPanel from './BuilderPanel';
-import SqlPanel from './SqlPanel';
+import SqlPanel, {RedactedSql} from './SqlPanel';
 import SqlPreview from './SqlPreview';
 import ResultPane from './ResultPane';
 import ParametersPanel from './ParametersPanel';
 import RevisionHistory from './RevisionHistory';
 import {SaveDialog} from './Dialogs';
+import ShareDialog from './ShareDialog';
+import {permissions} from './sharing';
 
 const OUTPUT_TABS = ['result', 'sql', 'parameters'];
 
@@ -57,6 +59,9 @@ export default function QuestionEditor({client, catalog, collections, initial, p
   const [saving, setSaving] = useState(false);
 
   const stored = state.questionId !== null;
+  const perms = permissions({access: state.access, is_owner: state.isOwner});
+  // Sharing grants view/edit/manage; below edit the question is read-only. A new draft is always yours.
+  const readOnly = stored && perms.readOnly;
   const conflict = notice?.status === 'error' && /revision has changed/.test(notice.text);
 
   const save = async () => {
@@ -99,38 +104,54 @@ export default function QuestionEditor({client, catalog, collections, initial, p
 
   return <Box data-cdeadmin-qa-key="bi.editor" sx={{display: 'grid', gap: 1, minWidth: 0, p: 1}}>
     <Stack direction="row" gap="comfortable" sx={{alignItems: 'center', flexWrap: 'wrap'}}>
-      <TextField size="small" label={gettext('Question name')} value={state.name}
+      <TextField size="small" label={gettext('Question name')} value={state.name} disabled={readOnly}
         placeholder={gettext('Untitled question')}
         onChange={(event) => dispatch({type: 'rename', name: event.target.value})} sx={{minWidth: 260, flex: 1}} />
       {stored && <Badge status="neutral" label={gettext('Revision %s', state.revision)} />}
       {state.status === 'archived' && <Badge status="warning" label={gettext('Archived')} />}
+      {stored && !state.isOwner && <Badge status="neutral" label={perms.canEdit ?
+        gettext('Shared with you: can edit') : gettext('Shared with you: view only')} />}
       {state.dirty && <Badge status="warning" label={gettext('Unsaved changes')} />}
     </Stack>
     <Stack direction="row" gap="compact" sx={{alignItems: 'center', flexWrap: 'wrap'}}>
       <Box role="tablist" aria-label={gettext('Query mode')} sx={{display: 'flex'}}>
-        <Tab label={gettext('Builder')} active={state.mode === 'builder'} onActivate={() => switchMode('builder')} />
-        <Tab label={gettext('SQL')} active={state.mode === 'sql'} onActivate={() => switchMode('sql')} />
+        <Tab label={gettext('Builder')} active={state.mode === 'builder'} disabled={readOnly}
+          onActivate={() => switchMode('builder')} />
+        <Tab label={gettext('SQL')} active={state.mode === 'sql'} disabled={readOnly}
+          onActivate={() => switchMode('sql')} />
       </Box>
       <Box sx={{flex: 1}} />
       <Button intent="primary" loading={run.status === 'running'} disabled={!ready}
         onClick={() => runQuestion(false)}>{gettext('Run')}</Button>
       <Button disabled={!ready || !run.execution} onClick={() => runQuestion(true)}>{gettext('Refresh')}</Button>
-      <Button loading={saving} disabled={!ready || (stored && !state.dirty)} onClick={save}>{gettext('Save')}</Button>
-      <Button disabled={!ready} onClick={() => setDialog('saveAs')}>{gettext('Save as...')}</Button>
+      {!readOnly && <Button loading={saving} disabled={!ready || (stored && !state.dirty)} onClick={save}>
+        {gettext('Save')}</Button>}
+      <Button disabled={!ready || state.sqlRedacted} onClick={() => setDialog('saveAs')}
+        title={state.sqlRedacted ? gettext('A copy needs edit access to the SQL.') : undefined}>
+        {gettext('Save as...')}</Button>
       <Button disabled={!stored} onClick={() => setDialog('history')}>{gettext('History')}</Button>
+      {stored && perms.canShare && <Button onClick={() => setDialog('share')}>{gettext('Share...')}</Button>}
       <Button onClick={onClose}>{gettext('Close')}</Button>
     </Stack>
+    {readOnly && <Banner status="info">
+      {state.sqlRedacted ?
+        gettext('Read only: you can run this question but not change it, and its SQL is hidden.') :
+        gettext('Read only: you can run this question but not change it. Save as... makes a copy you own.')}
+    </Banner>}
     {notice && <Banner status={notice.status} onClose={() => setNotice(null)}>
       {notice.text}
       {conflict && <Button size="small" onClick={reload}>{gettext('Reload latest')}</Button>}
     </Banner>}
     <Box sx={{display: 'grid', gap: 1, alignItems: 'start',
       gridTemplateColumns: {xs: 'minmax(0, 1fr)', lg: 'minmax(340px, 0.9fr) minmax(0, 1.4fr)'}}}>
-      {state.mode === 'builder' ?
-        <BuilderPanel state={state} dispatch={dispatch} catalog={catalog} columns={columns.items}
-          columnsLoading={columns.status === 'loading'} model={model.value}
-          modelLoading={model.status === 'loading'} errors={errors} /> :
-        <SqlPanel sql={state.sql} error={errorAt(errors, 'sql')}
+      {state.sqlRedacted ? <RedactedSql /> : state.mode === 'builder' ?
+        <Box component="fieldset" disabled={readOnly}
+          sx={{border: 0, m: 0, p: 0, minWidth: 0, opacity: readOnly ? 0.85 : 1}}>
+          <BuilderPanel state={state} dispatch={dispatch} catalog={catalog} columns={columns.items}
+            columnsLoading={columns.status === 'loading'} model={model.value}
+            modelLoading={model.status === 'loading'} errors={errors} />
+        </Box> :
+        <SqlPanel sql={state.sql} error={errorAt(errors, 'sql')} readOnly={readOnly}
           onChange={(sql) => dispatch({type: 'setSql', sql})}
           onConvert={session.convertSql}
           onSwitch={(question) => dispatch({type: 'convert', question})} />}
@@ -141,7 +162,7 @@ export default function QuestionEditor({client, catalog, collections, initial, p
             error={run.error} visualization={state.visualization} loadingMore={paging}
             onVisualization={(visualization) => dispatch({type: 'setVisualization', visualization})}
             onLoadMore={session.loadMore} />}
-          {output === 'sql' && <SqlPreview preview={preview} />}
+          {output === 'sql' && <SqlPreview preview={preview} redacted={state.sqlRedacted} />}
           {output === 'parameters' && <ParametersPanel parameters={state.parameters} values={state.values}
             sql={state.mode === 'sql' ? state.sql : ''} errors={errors} dispatch={dispatch} />}
         </Box>
@@ -155,11 +176,22 @@ export default function QuestionEditor({client, catalog, collections, initial, p
         collections={collections} onConfirm={confirmNew} onClose={() => setDialog(null)} />}
     {dialog === 'history' && stored &&
       <RevisionHistory client={client} questionId={state.questionId} currentRevision={state.revision}
+        canRestore={!readOnly} canPreviewSql={!state.sqlRedacted}
         onRestore={(definition) => {
           dispatch({type: 'restore', definition});
           setNotice({status: 'info', text: gettext('Revision loaded as a draft. Save to append it as a new revision.')});
         }}
         onClose={() => setDialog(null)} />}
+    {dialog === 'share' && stored &&
+      <ShareDialog client={client} resourceType="question" resourceId={state.questionId}
+        resourceName={state.name} hasCollection={state.collectionId !== null}
+        onChanged={() => onSaved?.({question_id: state.questionId})}
+        onClose={(result) => {
+          setDialog(null);
+          if(result?.transferred) {
+            reload().catch(() => { /* the list refresh tells the user */ });
+          }
+        }} />}
   </Box>;
 }
 

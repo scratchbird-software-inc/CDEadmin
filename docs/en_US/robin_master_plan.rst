@@ -106,7 +106,7 @@ Stream C: BI editor (goal 3)
    semantic layer, SQL view, SQL-to-question).
 #. C3 Chart set and formatting, dashboard editor with filter widgets, tabs, text
    cards, drill-through.
-#. C4 Collections, search, permissions, embedding, result cache, threshold alerts.
+#. C4 Collections, search, permissions (done, see :doc:`bi_permissions`), embedding, result cache, threshold alerts.
 #. C5 Retire ``SemanticModelWorkspace`` from ``ProviderWorkspaceContent.jsx`` per the
    unified design (panel dissolution).
 #. Gate: the same question and dashboard run on each of the six engines through the

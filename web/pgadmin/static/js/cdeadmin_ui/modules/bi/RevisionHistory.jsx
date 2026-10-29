@@ -27,7 +27,9 @@ function when(value) {
  * bi_question_revision). Restoring loads the revision into the editor as an
  * unsaved draft, so the next save appends a new revision and nothing is lost.
  */
-export default function RevisionHistory({client, questionId, currentRevision, onRestore, onClose}) {
+export default function RevisionHistory({
+  client, questionId, currentRevision, onRestore, onClose, canRestore = true, canPreviewSql = true,
+}) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null);
@@ -68,15 +70,17 @@ export default function RevisionHistory({client, questionId, currentRevision, on
           <Box sx={{flex: 1, minWidth: 160}}>
             <strong>{gettext('Revision %s', item.revision)}</strong>{' '}
             <Box component="span" sx={{fontSize: '0.75rem', color: 'text.secondary'}}>{when(item.created_at)}</Box>
+            {item.actor_user_id != null && <Box component="span" sx={{fontSize: '0.75rem', color: 'text.secondary'}}>
+              {' '}{item.actor ? gettext('saved by %s', item.actor) : gettext('saved by another user')}</Box>}
           </Box>
           {item.revision === currentRevision && <Badge status="success" label={gettext('Current')} />}
           {item.status === 'archived' && <Badge status="warning" label={gettext('Archived')} />}
-          <Button size="small" loading={busy === `sql-${item.revision}`}
+          {canPreviewSql && <Button size="small" loading={busy === `sql-${item.revision}`}
             aria-label={gettext('Preview SQL of revision %s', item.revision)}
-            onClick={() => showSql(item.revision)}>{gettext('Preview SQL')}</Button>
-          <Button size="small" loading={busy === `restore-${item.revision}`}
+            onClick={() => showSql(item.revision)}>{gettext('Preview SQL')}</Button>}
+          {canRestore && <Button size="small" loading={busy === `restore-${item.revision}`}
             aria-label={gettext('Restore revision %s', item.revision)}
-            onClick={() => restore(item.revision)}>{gettext('Restore as draft')}</Button>
+            onClick={() => restore(item.revision)}>{gettext('Restore as draft')}</Button>}
         </Box>)}
       </Box>}
       {preview && <Box>
@@ -98,4 +102,6 @@ RevisionHistory.propTypes = {
   currentRevision: PropTypes.number,
   onRestore: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
+  canRestore: PropTypes.bool,
+  canPreviewSql: PropTypes.bool,
 };

@@ -15,6 +15,12 @@ Nothing here executes SQL itself or renders rows.  A question is compiled by
 typed descriptor, narrowed by the question's result policy
 (``ResultService.restrict``) and paged/exported by ``ResultService``.
 
+Sharing never widens run-time data access: a shared question always runs
+with the RUNNER's connection (the ``context``/``endpoint`` of the runner's
+own workspace) and the RUNNER's ``security_context`` (so semantic row
+policies see the runner's claims), never the owner's.  A runner below
+``edit`` on a raw-SQL question never receives its SQL text.
+
 The cache keeps the admitted ``result_id`` per ``(question, revision,
 parameters, principal, endpoint)``.  The rows stay in ``ResultService``'s
 bounded store; a cache hit re-renders from it, and eviction or invalidation
@@ -88,10 +94,10 @@ class BIExecutor:
         self._lock = threading.RLock()
         self.stats = {'hits': 0, 'misses': 0, 'evictions': 0,
                       'invalidations': 0}
+        # a shared question changes for every principal that ran it
         bi_service.on_question_change(
-            lambda user_id, endpoint_id, question_id: self.invalidate(
-                user_id=user_id, endpoint_id=endpoint_id,
-                question_id=question_id))
+            lambda _user_id, endpoint_id, question_id: self.invalidate(
+                endpoint_id=endpoint_id, question_id=question_id))
 
     # execution -----------------------------------------------------------
     def run(self, *, provider, context, endpoint, user_id,
@@ -99,7 +105,7 @@ class BIExecutor:
             parameters=None, extra_filters=(), page_size=None,
             bypass_cache=False, ttl_seconds=None, security_context=None):
         endpoint_id = context.endpoint_id
-        question, resolved_revision = self._resolve(
+        question, resolved_revision, owner_id, redact = self._resolve(
             user_id, endpoint_id, question_id, revision, definition)
         policy = question['result_policy']
         try:
@@ -108,7 +114,8 @@ class BIExecutor:
                 parameters=parameters, bind=True,
                 extra_filters=list(extra_filters or ()),
                 security_context=security_context or {
-                    'claims': {'user_id': user_id}})
+                    'claims': {'user_id': user_id}},
+                owner_id=owner_id)
         except BIError:
             raise
         except SemanticModelError as exc:
@@ -139,10 +146,10 @@ class BIExecutor:
                 entry.hits += 1
                 self.stats['hits'] += 1
                 return self._response(entry, compiled, size, None, hit=True,
-                                      now=now)
+                                      now=now, redact=redact)
         self.stats['misses'] += 1
         result_id = self._execute(
-            provider, context, endpoint, compiled, policy)
+            provider, context, endpoint, compiled, policy, redact)
         entry = _Entry(
             key=key, result_id=result_id, user_id=user_id,
             endpoint_id=endpoint_id, question_id=question_id,
@@ -167,21 +174,25 @@ class BIExecutor:
                 self.stats['evictions'] += 1
                 self._drop(oldest)
         return self._response(entry, compiled, size, None, hit=False,
-                              now=now)
+                              now=now, redact=redact)
 
     def _resolve(self, user_id, endpoint_id, question_id, revision,
                  definition):
+        """``(question, revision, owner_id, redact_sql)`` for the RUNNER.
+
+        Access is re-checked on every run (before any cache lookup), so a
+        revoked viewer cannot be served from the cache.
+        """
         from .models import validate_question
         if question_id is None:
-            return validate_question(definition), None
-        stored = self.bi.get_question(user_id, endpoint_id, question_id)
+            return validate_question(definition), None, None, False
+        stored = self.bi.stored_for_run(user_id, endpoint_id, question_id,
+                                        revision)
         if stored['status'] != 'active':
             # archiving retires the question, pinned revisions included
             raise BIError('archived saved questions do not run')
-        if revision is None:
-            return self._normalized(stored['definition']), stored['revision']
-        pinned = self.bi.revision(user_id, endpoint_id, question_id, revision)
-        return self._normalized(pinned['definition']), revision
+        return (self._normalized(stored['definition']), stored['revision'],
+                stored['owner_id'], stored['redact_sql'])
 
     @staticmethod
     def _normalized(definition):
@@ -192,7 +203,8 @@ class BIExecutor:
             item.get('result_policy'))
         return item
 
-    def _execute(self, provider, context, endpoint, compiled, policy):
+    def _execute(self, provider, context, endpoint, compiled, policy,
+                 hide_sql=False):
         language = compiled.get('language_profile')
         if not language:
             raise BIError('provider did not name a language profile')
@@ -222,6 +234,8 @@ class BIExecutor:
         except BIError:
             raise
         except Exception as exc:  # native messages may carry SQL or paths
+            if hide_sql:  # the caller may not read the statement text
+                raise BIError('question execution failed') from None
             raise BIError(self._failure(exc)) from None
         finally:
             if session_id is not None:
@@ -254,7 +268,8 @@ class BIExecutor:
                       'requested')
 
     # response / paging / export -------------------------------------------
-    def _response(self, entry, compiled, size, cursor, *, hit, now):
+    def _response(self, entry, compiled, size, cursor, *, hit, now,
+                  redact=False):
         try:
             page = self.results.render(
                 entry.result_id, page_size=size, cursor=cursor,
@@ -270,7 +285,8 @@ class BIExecutor:
             'result': descriptor,
             'columns': entry.columns,
             'page': page,
-            'sql': entry.sql,
+            'sql': None if redact else entry.sql,
+            'sql_redacted': redact,
             'bound_parameter_count': entry.parameter_count,
             'cache': {
                 'hit': hit, 'cacheable': entry.cacheable,
@@ -323,6 +339,11 @@ class BIExecutor:
             entry = self._by_result.get(result_id)
         if entry is None or entry.user_id != user_id or (
                 entry.endpoint_id != endpoint_id):
+            raise BIError('result is unavailable')
+        if entry.question_id is not None and self.bi.access.level(
+                user_id, 'question', endpoint_id,
+                entry.question_id) is None:
+            # access was revoked after the run: the page lease ends with it
             raise BIError('result is unavailable')
         return entry
 

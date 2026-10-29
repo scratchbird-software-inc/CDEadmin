@@ -102,6 +102,7 @@ upstream attribution.
    native_dialect_tooling
    bi_saved_questions
    bi_dashboards
+   bi_permissions
    bi_query_builder_ui
    bi_dashboard_ui
    bi_ui_mysql_handoff

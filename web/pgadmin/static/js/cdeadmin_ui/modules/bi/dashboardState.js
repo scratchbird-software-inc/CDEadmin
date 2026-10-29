@@ -79,6 +79,7 @@ export function fromDashboard(record) {
     crossFilters: copy(definition.cross_filters || []),
     drillThroughs: copy(definition.drill_throughs || []),
     settings: copy({auto_refresh_seconds: 0, ...(definition.settings || {})}),
+    access: record?.access || 'manage', isOwner: record?.is_owner !== false,
   });
 }
 
@@ -292,7 +293,8 @@ export function reduce(state, action) {
   case 'restore': {
     // A past revision becomes an unsaved draft of the stored dashboard.
     const loaded = fromDashboard({definition: action.definition});
-    return {...loaded, dashboardId: state.dashboardId, revision: state.revision, status: state.status, dirty: true};
+    return {...loaded, dashboardId: state.dashboardId, revision: state.revision, status: state.status,
+      access: state.access, isOwner: state.isOwner, dirty: true};
   }
   case 'rename':
     return touch(state, {name: action.name});

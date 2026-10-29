@@ -15,6 +15,7 @@ import {Button} from '../../primitives/Button';
 import {Badge} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import {MoveDialog, NameDialog} from './Dialogs';
+import {permissions} from './sharing';
 
 /**
  * The dashboards of the collection being browsed (the list follows the same
@@ -24,7 +25,7 @@ import {MoveDialog, NameDialog} from './Dialogs';
  */
 export default function DashboardList({
   client, dashboards, collections, searching, activeDashboardId, dirtyDashboardId,
-  onOpen, onChanged, onError,
+  onOpen, onChanged, onError, onShare,
 }) {
   const [dialog, setDialog] = useState(null);
   const pathOf = (id) => collections.find((row) => row.id === id)?.path.join(' / ') || '';
@@ -42,6 +43,9 @@ export default function DashboardList({
         const archived = dashboard.status === 'archived';
         const stop = dashboard.dashboard_id === dirtyDashboardId;
         const active = dashboard.dashboard_id === activeDashboardId;
+        const perms = permissions(dashboard);
+        const off = (allowed) => stop || !allowed;
+        const why = (allowed) => !allowed ? gettext('Needs edit access.') : stop ? blockedHint : undefined;
         return <Box component="li" key={dashboard.dashboard_id} aria-current={active ? 'true' : undefined}
           sx={{borderBottom: '1px solid', borderColor: 'divider', py: 0.5, bgcolor: active ? 'action.selected' : 'transparent'}}>
           <Stack direction="row" gap="compact" sx={{alignItems: 'center', flexWrap: 'wrap'}}>
@@ -49,26 +53,31 @@ export default function DashboardList({
               onClick={() => onOpen(dashboard, 'view')}>{dashboard.name}</Button>
             <Badge status="neutral" label={gettext('Dashboard')} />
             {archived && <Badge status="warning" label={gettext('Archived')} />}
+            {!perms.isOwner && <Badge status="neutral" label={perms.canEdit ?
+              gettext('Shared: can edit') : gettext('Shared: view only')} />}
             {searching && dashboard.collection_id && <Box component="span" sx={{fontSize: '0.7rem', color: 'text.secondary'}}>
               {pathOf(dashboard.collection_id)}</Box>}
           </Stack>
           <Stack direction="row" gap="compact" role="group" aria-label={gettext('Actions for dashboard %s', dashboard.name)}
             sx={{flexWrap: 'wrap', mt: 0.5}}>
-            <Button size="small" aria-label={gettext('Edit dashboard %s', dashboard.name)}
+            <Button size="small" disabled={!perms.canEdit} title={perms.canEdit ? undefined : gettext('Needs edit access.')}
+              aria-label={gettext('Edit dashboard %s', dashboard.name)}
               onClick={() => onOpen(dashboard, 'edit')}>{gettext('Edit')}</Button>
-            <Button size="small" disabled={stop} title={stop ? blockedHint : undefined}
+            <Button size="small" disabled={off(perms.canEdit)} title={why(perms.canEdit)}
               aria-label={gettext('Rename dashboard %s', dashboard.name)}
               onClick={() => setDialog({kind: 'rename', dashboard})}>{gettext('Rename')}</Button>
-            <Button size="small" disabled={stop} title={stop ? blockedHint : undefined}
+            <Button size="small" disabled={off(perms.canMove)} title={why(perms.canMove)}
               aria-label={gettext('Move dashboard %s', dashboard.name)}
               onClick={() => setDialog({kind: 'move', dashboard})}>{gettext('Move')}</Button>
-            <Button size="small" disabled={stop} title={stop ? blockedHint : undefined}
+            <Button size="small" disabled={off(perms.canArchive)} title={why(perms.canArchive)}
               aria-label={archived ? gettext('Restore dashboard %s', dashboard.name) : gettext('Archive dashboard %s', dashboard.name)}
               onClick={direct(() => client.setDashboardStatus(dashboard.dashboard_id, dashboard.revision,
                 archived ? 'active' : 'archived'), dashboard.dashboard_id)}>
               {archived ? gettext('Restore') : gettext('Archive')}</Button>
             <Button size="small" aria-label={gettext('Duplicate dashboard %s', dashboard.name)}
               onClick={() => setDialog({kind: 'clone', dashboard})}>{gettext('Duplicate')}</Button>
+            {perms.canShare && onShare && <Button size="small" aria-label={gettext('Share dashboard %s', dashboard.name)}
+              onClick={() => onShare(dashboard)}>{gettext('Share')}</Button>}
           </Stack>
         </Box>;
       })}
@@ -104,4 +113,5 @@ DashboardList.propTypes = {
   onOpen: PropTypes.func.isRequired,
   onChanged: PropTypes.func.isRequired,
   onError: PropTypes.func.isRequired,
+  onShare: PropTypes.func,
 };

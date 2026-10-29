@@ -136,7 +136,7 @@ class EndpointPersistenceSourceTests(unittest.TestCase):
             if predecessor:
                 predecessors.add(predecessor.group(1))
         self.assertEqual(
-            {'cde_bi_dashboards_v1'},
+            {'cde_bi_permissions_v1'},
             revisions - predecessors,
         )
 
