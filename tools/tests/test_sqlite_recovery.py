@@ -9,6 +9,7 @@ import uuid
 
 import pytest
 
+from pgadmin.cdeadmin.providers.sqlite.native_helpers import helper_supported
 from pgadmin.cdeadmin.providers.sqlite.recovery import options, program, source_state, digest_file, RecoveryError
 from pgadmin.cdeadmin.workspace.sqlite_recovery_jobs import SQLiteRecoveryJobs, ACTIVE
 
@@ -17,7 +18,7 @@ from pgadmin.cdeadmin.workspace.sqlite_recovery_jobs import SQLiteRecoveryJobs, 
 def native(tmp_path):
     library = os.environ.get('CDEADMIN_SQLITE_RECOVERY_LIBRARY')
     if not library: pytest.skip('Set CDEADMIN_SQLITE_RECOVERY_LIBRARY to the qualified native build')
-    assert sqlite3.sqlite_version == '3.53.0'
+    if not helper_supported('recovery'): pytest.skip('The recovery helper does not support this SQLite runtime')
     runtime = program(library, tmp_path)
     source, target = tmp_path / 'source.sqlite', tmp_path / 'recovered.sqlite'
     jobs = SQLiteRecoveryJobs(tmp_path / 'receipts.json', tmp_path / 'jobs')

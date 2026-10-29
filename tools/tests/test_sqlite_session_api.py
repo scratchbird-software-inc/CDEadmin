@@ -7,6 +7,7 @@ import sqlite3
 
 import pytest
 
+from pgadmin.cdeadmin.providers.sqlite.native_helpers import helper_supported
 from pgadmin.cdeadmin.providers.sqlite.driver import SQLiteConnection
 from pgadmin.cdeadmin.providers.sqlite.session_api import SessionAPI,SessionAPIError,_LIVE
 
@@ -15,7 +16,7 @@ from pgadmin.cdeadmin.providers.sqlite.session_api import SessionAPI,SessionAPIE
 def native(tmp_path):
     filename=os.environ.get('CDEADMIN_SQLITE_SESSION_LIBRARY')
     if not filename or not Path(filename).is_file():pytest.skip('An explicit native session bridge is required')
-    if sqlite3.sqlite_version!='3.53.0':pytest.skip('The pinned native SQLite3.53.0 binding is required')
+    if not helper_supported('session'):pytest.skip('The session helper does not support this SQLite runtime')
     connection=sqlite3.connect(':memory:',factory=SQLiteConnection)
     try:yield connection,filename,tmp_path
     finally:connection.close()

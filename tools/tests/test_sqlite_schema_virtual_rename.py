@@ -8,6 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from pgadmin.cdeadmin.providers.sqlite.provider import PROFILE
 from pgadmin.cdeadmin.operations.store import JsonOperationStore
 from pgadmin.cdeadmin.providers.sqlite.provider import SQLiteProvider,_create_client
 from pgadmin.cdeadmin.workspace.firebird_catalog_export import build_export
@@ -24,7 +25,7 @@ def test_native_virtual_rename_uses_real_module_and_preserves_native_queries(tmp
     path=tmp_path/'virtual.sqlite';name='source:雪';target='renamed:雪';wide=9007199254740993
     columns='body' if module.startswith('fts') else 'id,x1,x2,y1,y2' if module.startswith('rtree') else 'label'
     with closing(sqlite3.connect(path)) as connection:
-        assert sqlite3.sqlite_version=='3.53.0'
+        assert PROFILE.accepts_runtime_version(sqlite3.sqlite_version)
         connection.execute('CREATE VIRTUAL TABLE "'+name+'" USING "'+module+'"('+columns+')')
         if module.startswith('fts'):connection.execute('INSERT INTO "'+name+'"(rowid,body) VALUES(?,?)',(wide,'native token 雪'))
         elif module.startswith('rtree'):connection.execute('INSERT INTO "'+name+'" VALUES(?,?,?,?,?)',(wide,1,2,3,4))

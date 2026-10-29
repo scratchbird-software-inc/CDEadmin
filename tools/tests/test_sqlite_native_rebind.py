@@ -39,7 +39,7 @@ def test_native_ast_preserves_unbound_names_and_aliases(source,expected):
                 {'from':'body','to':'intermediate'},{'from':'intermediate','to':'text:雪'},
                 {'from':'search','to':'intermediate_search'},{'from':'intermediate_search','to':'found:雪'}]}])
         assert changes[0][1]==expected
-        assert runtime['version']=='3.53.0' and len(runtime['sha256'])==64
+        assert runtime['version']==sqlite3.sqlite_version and len(runtime['sha256'])==64
         assert connection.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()==before
         # Internal test functions have never been enabled in the caller.
         with pytest.raises(sqlite3.OperationalError,match='no such function'):

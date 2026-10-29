@@ -13,7 +13,18 @@ import sys
 import time
 
 
-SOURCE_ID = '2026-04-09 11:41:38 4525003a53a7fc63ca75c59b22c79608659ca12f0131f52c18637f829977f20b'
+
+
+def _runtime_supported(version, spec):
+    """Floor and recovery minimum come from the parent (native_helpers)."""
+    def key(text):
+        return tuple(int(part) for part in str(text).split('.'))
+    try:
+        observed = key(version)
+        return (observed >= key(spec['runtime_range']['floor']) and
+                observed >= key(spec['runtime_range']['minimum']))
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def fingerprint(path):
@@ -75,10 +86,14 @@ def library(spec):
     try: binding_source = binding.execute('SELECT sqlite_source_id()').fetchone()[0]
     finally: binding.close()
     identity['verification_binding_version'] = sqlite3.sqlite_version
-    if sqlite3.sqlite_version != '3.53.0' or binding_source != SOURCE_ID:
-        raise ValueError('Recovered-file verification requires the qualified SQLite 3.53.0 binding')
-    if identity['version'] != '3.53.0' or identity['source_id'] != SOURCE_ID or not identity['dbpage']:
-        raise ValueError('SQLite 3.53.0 recovery requires the qualified source and DBPAGE runtime')
+    # The helper's library and the verifying binding must be one SQLite
+    # build (same version and source); that build must be admitted, new
+    # enough for the recovery helper, and compiled with DBPAGE.
+    if (identity['version'] != sqlite3.sqlite_version or
+            identity['source_id'] != binding_source):
+        raise ValueError('Recovery helper and verifying binding are different SQLite builds')
+    if not _runtime_supported(identity['version'], spec) or not identity['dbpage']:
+        raise ValueError('SQLite recovery needs a supported runtime compiled with DBPAGE')
     return api, identity
 
 

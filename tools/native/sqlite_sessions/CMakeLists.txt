@@ -1,9 +1,16 @@
 cmake_minimum_required(VERSION 3.20)
 project(cdeadmin_sqlite_sessions LANGUAGES C)
-find_package(SQLite3 3.53.0 EXACT REQUIRED)
+# Owner direction 2026-10-29: SQLite from the 3.35.0 floor; the helper
+# refuses at load time any runtime older than the headers it was built with.
+find_package(SQLite3 3.35.0 REQUIRED)
 add_library(cdeadmin_sqlite_sessions SHARED api.c)
 target_link_libraries(cdeadmin_sqlite_sessions PRIVATE SQLite::SQLite3)
 target_compile_definitions(cdeadmin_sqlite_sessions PRIVATE SQLITE_CORE SQLITE_ENABLE_SESSION SQLITE_ENABLE_PREUPDATE_HOOK)
+# An API newer than the build headers must fail the build, not leave an
+# unresolved symbol (or an int-sized pointer) for load time.
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(cdeadmin_sqlite_sessions PRIVATE -Werror=implicit-function-declaration -Werror=int-conversion)
+endif()
 set_target_properties(cdeadmin_sqlite_sessions PROPERTIES C_STANDARD 99 WINDOWS_EXPORT_ALL_SYMBOLS ON)
 if(WIN32)
   target_compile_definitions(cdeadmin_sqlite_sessions PRIVATE "SQLITE_API=__declspec(dllimport)")

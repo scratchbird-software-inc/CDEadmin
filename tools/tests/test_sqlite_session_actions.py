@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from pgadmin.cdeadmin.providers.sqlite.native_helpers import helper_supported
 from pgadmin.cdeadmin.providers.sqlite.driver import SQLiteConnection
 from pgadmin.cdeadmin.providers.sqlite.session_actions import action
 from pgadmin.cdeadmin.providers.sqlite.session_api import SessionAPIError
@@ -14,7 +15,7 @@ from pgadmin.cdeadmin.providers.sqlite.session_api import SessionAPIError
 @pytest.fixture
 def native():
     library=os.environ.get('CDEADMIN_SQLITE_SESSION_LIBRARY')
-    if not library or not Path(library).is_file() or sqlite3.sqlite_version!='3.53.0':pytest.skip('A qualified SQLite3.53.0 session bridge is required')
+    if not library or not Path(library).is_file() or not helper_supported('session'):pytest.skip('Native session helper required (built, and supported by this SQLite runtime)')
     connection=sqlite3.connect(':memory:',factory=SQLiteConnection)
     client=SimpleNamespace(close=connection.close)
     def run(operation,**fields):return action(client,connection,{'operation':operation,**fields},library)

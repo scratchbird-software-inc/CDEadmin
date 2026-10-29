@@ -3,6 +3,7 @@
 The internal rename helpers are version specific. They are enabled only in a
 safe CLI child, never on a registered database or a user's connection.
 """
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -19,7 +20,6 @@ from ..sdk.tool_process import observe_process
 from .sqlite_fts_rebind import equal, quote
 from ..providers.sqlite.provider import PROFILE
 
-SOURCE_ID = '2026-04-09 11:41:38 4525003a53a7fc63ca75c59b22c79608659ca12f0131f52c18637f829977f20b'
 LIMIT = 24 * 1024 * 1024
 
 
@@ -116,6 +116,23 @@ def mappings(connection, selected, rebindings):
     return result
 
 
+def _runtime_build():
+    """Version and source ID of the SQLite build this process loaded.
+
+    The external rewriter must be that same build: its rewritten DDL is
+    parsed by the application's own SQLite. A fresh internal connection has
+    no session-defined functions, so its answers come from the library.
+    """
+    import sqlite3
+    with closing(sqlite3.connect(':memory:')) as probe:
+        version, source = probe.execute(
+            'SELECT sqlite_version(), sqlite_source_id()').fetchone()
+    if version != sqlite3.sqlite_version or not (
+            PROFILE.accepts_runtime_version(version)):
+        raise ValueError('The loaded SQLite library is not an admitted runtime')
+    return {'version': version, 'source_id': source}
+
+
 def _admitted_runtime(connection):
     """The connection runs on the loaded library inside the profile range.
 
@@ -183,7 +200,8 @@ def rewrite(connection, declarations, selected, rebindings, *, view_columns=(),
     try:
         replies = json.loads(observed['stdout'])
         header = replies[0]
-        if (header != {'probe': -1, 'rewritten': nonce, 'version': '3.53.0', 'source_id': SOURCE_ID} or len(replies) != len(probes) + 1): raise ValueError()
+        expected = {'probe': -1, 'rewritten': nonce, **_runtime_build()}
+        if (header != expected or len(replies) != len(probes) + 1): raise ValueError()
     except (ValueError, TypeError, KeyError, IndexError):
         raise ValueError('Native SQLite schema binding returned an unqualified reply') from None
     edits = [{} for row in dependencies]
@@ -212,7 +230,8 @@ def rewrite(connection, declarations, selected, rebindings, *, view_columns=(),
         source = row['native']['ddl']
         for start, (stop, value) in sorted(changes.items(), reverse=True): source = source[:start] + value + source[stop:]
         definitions.append((row, source))
-    runtime = {'authority': 'sqlite-3.53.0-native-rename-ast', 'path': str(executable), 'sha256': before,
-               'version': '3.53.0', 'source_id': SOURCE_ID, 'execution_host': socket.getfqdn(),
+    build = _runtime_build()
+    runtime = {'authority': 'sqlite-' + build['version'] + '-native-rename-ast', 'path': str(executable),
+               'sha256': before, **build, 'execution_host': socket.getfqdn(),
                'scope': 'isolated-empty-schema; no registered file or user connection'}
     return definitions, runtime

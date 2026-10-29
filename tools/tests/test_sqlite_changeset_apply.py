@@ -5,6 +5,7 @@ import sqlite3
 
 import pytest
 
+from pgadmin.cdeadmin.providers.sqlite.native_helpers import helper_supported
 from pgadmin.cdeadmin.providers.sqlite.driver import SQLiteConnection
 from pgadmin.cdeadmin.providers.sqlite.session_api import SessionAPI,SessionAPIError
 from pgadmin.cdeadmin.providers.sqlite.changeset_apply import ApplyFailure,connect,options,stage,target_snapshot
@@ -13,7 +14,7 @@ from pgadmin.cdeadmin.providers.sqlite.changeset_apply import ApplyFailure,conne
 @pytest.fixture
 def native(tmp_path):
     library=os.environ.get('CDEADMIN_SQLITE_SESSION_LIBRARY')
-    if not library or not Path(library).is_file() or sqlite3.sqlite_version!='3.53.0':pytest.skip('Pinned native SQLite bridge required')
+    if not library or not Path(library).is_file() or not helper_supported('session'):pytest.skip('Native session helper required (built, and supported by this SQLite runtime)')
     counter=0
     def changeset(schema,seed,mutations,*,kind='changeset',rowids=False):
         nonlocal counter

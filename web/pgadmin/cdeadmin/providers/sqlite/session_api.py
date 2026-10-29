@@ -51,13 +51,14 @@ def identity(filename,component='session'):
     path=Path(filename).resolve(strict=True);metadata=Path(str(path)+'.json')
     if not path.is_file() or metadata.stat().st_size>65536:raise SessionAPIError('Native SQLite '+component+' helper metadata is unavailable')
     value=json.loads(metadata.read_text(encoding='utf8'))
-    if not isinstance(value,dict) or value.get('adapter_abi')!=1 or value.get('sqlite_version')!='3.53.0':
-        raise SessionAPIError('Native SQLite '+component+' helper ABI or version differs')
+    from .native_helpers import built_against_admitted
+    if not isinstance(value,dict) or value.get('adapter_abi')!=1 or not built_against_admitted(component,value.get('sqlite_version')):
+        raise SessionAPIError('Native SQLite '+component+' helper ABI or version is not supported by this SQLite runtime')
     digest=hashlib.sha256()
     with path.open('rb') as source:
         while block:=source.read(1048576):digest.update(block)
     if digest.hexdigest()!=value.get('library_sha256'):raise SessionAPIError('Native SQLite '+component+' helper differs from its provenance')
-    return path,{'adapter_abi':1,'sqlite_version':'3.53.0','library_sha256':digest.hexdigest()}
+    return path,{'adapter_abi':1,'sqlite_version':value['sqlite_version'],'runtime_sqlite_version':sqlite3.sqlite_version,'library_sha256':digest.hexdigest()}
 
 
 class SessionAPI:

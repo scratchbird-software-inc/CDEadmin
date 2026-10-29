@@ -111,6 +111,13 @@ def process(spec, directory, timeout, *, cancel=None, progress=None):
     return result, public
 
 
+def _runtime_range():
+    from .native_helpers import HELPER_MINIMUM
+    from .provider import PROFILE
+    return {'floor': PROFILE.minimum_version,
+            'minimum': HELPER_MINIMUM['recovery']}
+
+
 def program(path, directory):
     if not isinstance(path, str) or not path:
         raise RecoveryError('SQLite recovery runtime is unavailable on this application host')
@@ -120,15 +127,18 @@ def program(path, directory):
     manifest = Path(str(library) + '.json')
     if manifest.stat().st_size > 16384: raise RecoveryError('Native recovery provenance is too large')
     provenance = json.loads(manifest.read_text(encoding='utf8'))
-    if (provenance.get('library_sha256') != checksum or provenance.get('sqlite_version') != '3.53.0' or
+    from .native_helpers import built_against_admitted
+    if (provenance.get('library_sha256') != checksum or
+            not built_against_admitted('recovery', provenance.get('sqlite_version')) or
             provenance.get('adapter_abi') != 1 or
             any(provenance.get(name) != value for name, value in RECOVERY_SOURCES.items())):
         raise RecoveryError('Native SQLite recovery build provenance does not match the qualified profile')
     worker_sha = digest_file(Path(__file__).with_name('recovery_worker.py'))
-    spec = {'action': 'probe', 'library': str(library), 'library_sha256': checksum, 'worker_sha256': worker_sha}
+    spec = {'action': 'probe', 'library': str(library), 'library_sha256': checksum, 'worker_sha256': worker_sha,
+            'runtime_range': _runtime_range()}
     result, observed = process(spec, directory, 15)
     if observed['return_code'] != 0 or observed['cleanup_confirmed'] is not True or result.get('available') is not True:
-        raise RecoveryError('The native SQLite recovery library does not match the qualified 3.53.0 profile')
+        raise RecoveryError('The native SQLite recovery library is not usable with this SQLite runtime')
     return {**spec, 'native': result['native'], 'execution_host': host(),
             'provenance_sha256': digest_file(manifest), 'recovery_sources': RECOVERY_SOURCES,
             'worker_sha256': worker_sha}
@@ -195,7 +205,8 @@ def recover(record, directory, *, cancel, progress):
     result, execution = process({'action': 'recover', 'library': runtime['library'],
         'library_sha256': runtime['library_sha256'], 'worker_sha256': runtime['worker_sha256'],
         'source': str(image), 'target': str(target),
-        'progress_file': str(progress_path), 'options': native_options}, directory,
+        'progress_file': str(progress_path), 'options': native_options,
+        'runtime_range': _runtime_range()}, directory,
         max(.01, deadline - time.monotonic()), cancel=cancel, progress=observed)
     result.update(process_observation=execution, source_images=images,
                   original_files_opened_read_only=True, automatic_retry=False)

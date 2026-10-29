@@ -10,12 +10,19 @@ foreach(name sqlite3recover.c sqlite3recover.h dbdata.c)
     message(FATAL_ERROR "SCRATCHROBIN_SQLITE_SOURCE must contain ext/recover/${name}")
   endif()
 endforeach()
-find_package(SQLite3 3.53.0 EXACT REQUIRED)
+# Owner direction 2026-10-29: SQLite from the 3.35.0 floor; the helper
+# refuses at load time any runtime older than the headers it was built with.
+find_package(SQLite3 3.35.0 REQUIRED)
 add_library(cdeadmin_sqlite_recovery SHARED
   "${recovery_source}/sqlite3recover.c" "${recovery_source}/dbdata.c" api.c)
 target_include_directories(cdeadmin_sqlite_recovery PRIVATE "${recovery_source}")
 target_compile_definitions(cdeadmin_sqlite_recovery PRIVATE SQLITE_CORE)
 target_link_libraries(cdeadmin_sqlite_recovery PRIVATE SQLite::SQLite3)
+# An API newer than the build headers must fail the build, not leave an
+# unresolved symbol (or an int-sized pointer) for load time.
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(cdeadmin_sqlite_recovery PRIVATE -Werror=implicit-function-declaration -Werror=int-conversion)
+endif()
 set_target_properties(cdeadmin_sqlite_recovery PROPERTIES
   C_STANDARD 99 WINDOWS_EXPORT_ALL_SYMBOLS ON)
 if(APPLE)

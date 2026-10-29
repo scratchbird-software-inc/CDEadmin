@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import sqlite3
 import pytest
+from pgadmin.cdeadmin.providers.sqlite.native_helpers import helper_supported
 from pgadmin.cdeadmin.providers.sqlite.driver import SQLiteConnection
 from pgadmin.cdeadmin.providers.sqlite.preupdate_api import PreupdateAPI
 from pgadmin.cdeadmin.providers.sqlite.session_api import SessionAPI,SessionAPIError
@@ -11,7 +12,7 @@ from pgadmin.cdeadmin.providers.sqlite.session_api import SessionAPI,SessionAPIE
 @pytest.fixture
 def native():
     library=os.environ.get('CDEADMIN_SQLITE_PREUPDATE_LIBRARY');sessions=os.environ.get('CDEADMIN_SQLITE_SESSION_LIBRARY')
-    if not library or not Path(library).is_file() or not sessions or not Path(sessions).is_file() or sqlite3.sqlite_version!='3.53.0':pytest.skip('Pinned native preupdate and session bridges required')
+    if not library or not Path(library).is_file() or not sessions or not Path(sessions).is_file() or not helper_supported('preupdate') or not helper_supported('session'):pytest.skip('Native preupdate and session helpers required (built, and supported by this SQLite runtime)')
     connection=sqlite3.connect(':memory:',factory=SQLiteConnection)
     try:yield connection,PreupdateAPI(connection,library),sessions
     finally:connection.close()

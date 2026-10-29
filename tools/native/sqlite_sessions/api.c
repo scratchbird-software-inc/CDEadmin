@@ -623,10 +623,10 @@ __declspec(dllexport)
 int sqlite3_cdeadminsessions_init(sqlite3 *db,char **error,const sqlite3_api_routines *api){
   State *state;int result,fresh,index;unsigned char random[16];
   const char hex[]="0123456789abcdef";char suffix[33],binding[96],calling[96];
-  if(api->libversion!=sqlite3_libversion || sqlite3_libversion_number()!=3053000 ||
-      strcmp(sqlite3_sourceid(),SQLITE_SOURCE_ID)!=0 || !sqlite3_compileoption_used("ENABLE_SESSION") ||
+  if(api->libversion!=sqlite3_libversion || sqlite3_libversion_number()<SQLITE_VERSION_NUMBER ||
+      !sqlite3_compileoption_used("ENABLE_SESSION") ||
       !sqlite3_compileoption_used("ENABLE_PREUPDATE_HOOK")){
-    *error=sqlite3_mprintf("Native session adapter requires the connection's exact SQLite3.53.0 library and session/preupdate APIs");return SQLITE_MISMATCH;
+    *error=sqlite3_mprintf("Native session adapter requires the connection's own SQLite " SQLITE_VERSION " or later library and session/preupdate APIs");return SQLITE_MISMATCH;
   }
   state=sqlite3_get_clientdata(db,"org.cdeadmin.sqlite.sessions.v1");fresh=state==0;
   if(state && !sqlite3_get_clientdata(db,"org.cdeadmin.sqlite.session.layout.v2")){

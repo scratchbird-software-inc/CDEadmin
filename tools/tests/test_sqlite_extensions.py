@@ -21,7 +21,7 @@ def libraries(tmp_path_factory):
     headers = Path(os.environ.get('CDEADMIN_SQLITE_HEADERS', str(Path(__file__).resolve().parents[2] / '.native/sqlite')))
     if not (headers / 'sqlite3ext.h').is_file():
         pytest.skip('Native extension fixture requires CDEADMIN_SQLITE_HEADERS or provisioned .native/sqlite; absence is unqualified coverage')
-    assert sqlite3.sqlite_version == '3.53.0'
+    assert PROFILE.accepts_runtime_version(sqlite3.sqlite_version)
     assert hasattr(sqlite3.Connection, 'load_extension'), 'Native loader binding required'
     root = tmp_path_factory.mktemp('native-extensions')
     source = Path(__file__).resolve().parents[1] / 'fixtures/sqlite_loadable_probe.c'

@@ -41,7 +41,7 @@ def test_lazy_native_modules_include_hidden_arguments_without_running_wrapped_pr
         assert not any(name in {'wal_checkpoint', 'optimize', 'incremental_vacuum', 'integrity_check'} for name, _value in pragmas)
         assert not calls and connection._cdeadmin_authorizer is policy
         root = next(row for row in resources if row['resource_kind'] == 'database')
-        assert root['native']['sqlite_source_id'] == source_id and root['native']['sqlite_runtime_version'] == '3.53.0'
+        assert root['native']['sqlite_source_id'] == source_id and root['native']['sqlite_runtime_version'] == sqlite3.sqlite_version
         assert connection.in_transaction and connection.execute('PRAGMA defer_foreign_keys').fetchone() == (1,)
         connection.execute('ROLLBACK TO retained')
         assert connection.execute('SELECT count(*) FROM owned').fetchone() == (2,)

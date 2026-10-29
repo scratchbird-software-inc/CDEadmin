@@ -88,7 +88,7 @@ __declspec(dllexport)
 #endif
 int sqlite3_cdeadminpreupdate_init(sqlite3 *db,char **error,const sqlite3_api_routines *api){
   State *s;int result,fresh,index;unsigned char random[16];const char digits[]="0123456789abcdef";char suffix[33],binding[96],calling[96];
-  if(api->libversion!=sqlite3_libversion || sqlite3_libversion_number()!=3053000 || strcmp(sqlite3_sourceid(),SQLITE_SOURCE_ID)!=0 || !sqlite3_compileoption_used("ENABLE_PREUPDATE_HOOK")){*error=sqlite3_mprintf("Native preupdate adapter requires the exact SQLite3.53.0 connection library and public preupdate API");return SQLITE_MISMATCH;}
+  if(api->libversion!=sqlite3_libversion || sqlite3_libversion_number()<SQLITE_VERSION_NUMBER || !sqlite3_compileoption_used("ENABLE_PREUPDATE_HOOK")){*error=sqlite3_mprintf("Native preupdate adapter requires its own connection library at SQLite " SQLITE_VERSION " or later and the public preupdate API");return SQLITE_MISMATCH;}
   s=sqlite3_get_clientdata(db,"org.cdeadmin.sqlite.preupdate.v1");fresh=s==0;
   if(fresh){s=sqlite3_malloc64(sizeof(*s));if(!s)return SQLITE_NOMEM;memset(s,0,sizeof(*s));s->db=db;s->refs=1;}else s->refs++;
   sqlite3_randomness(sizeof(random),random);for(index=0;index<16;index++){suffix[index*2]=digits[random[index]>>4];suffix[index*2+1]=digits[random[index]&15];}suffix[32]=0;

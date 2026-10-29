@@ -135,8 +135,8 @@ __declspec(dllexport)
 #endif
 int sqlite3_cdeadminarrays_init(sqlite3 *db,char **error,const sqlite3_api_routines *api){
   State *state;int result,fresh,index;unsigned char random[16];const char hex[]="0123456789abcdef";char suffix[33],binding[96],calling[96],getter[96];
-  if(api->libversion!=sqlite3_libversion || sqlite3_libversion_number()!=3053000 || strcmp(sqlite3_sourceid(),SQLITE_SOURCE_ID)!=0 || !sqlite3_compileoption_used("ENABLE_CARRAY")){
-    *error=sqlite3_mprintf("Native array adapter requires the connection's exact SQLite3.53.0 library and CARRAY API");return SQLITE_MISMATCH;
+  if(api->libversion!=sqlite3_libversion || sqlite3_libversion_number()<SQLITE_VERSION_NUMBER || !sqlite3_compileoption_used("ENABLE_CARRAY")){
+    *error=sqlite3_mprintf("Native array adapter requires the connection's own SQLite " SQLITE_VERSION " or later library and CARRAY API");return SQLITE_MISMATCH;
   }
   state=sqlite3_get_clientdata(db,"org.cdeadmin.sqlite.arrays.v1");fresh=state==0;
   if(fresh){state=sqlite3_malloc64(sizeof(*state));if(!state)return SQLITE_NOMEM;memset(state,0,sizeof(*state));state->db=db;state->refs=1;}

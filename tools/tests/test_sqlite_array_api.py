@@ -6,6 +6,7 @@ import sqlite3
 
 import pytest
 
+from pgadmin.cdeadmin.providers.sqlite.native_helpers import helper_supported
 from pgadmin.cdeadmin.providers.sqlite.array_api import ArrayAPI
 from pgadmin.cdeadmin.providers.sqlite.array_values import encode
 from pgadmin.cdeadmin.providers.sqlite.driver import SQLiteConnection
@@ -15,7 +16,7 @@ from pgadmin.cdeadmin.providers.sqlite.session_api import SessionAPIError
 @pytest.fixture
 def native():
     library=os.environ.get('CDEADMIN_SQLITE_ARRAY_LIBRARY')
-    if not library or not Path(library).is_file() or sqlite3.sqlite_version!='3.53.0':pytest.skip('Pinned native CARRAY bridge required')
+    if not library or not Path(library).is_file() or not helper_supported('array'):pytest.skip('Native CARRAY helper required (built, and supported by this SQLite runtime)')
     connection=sqlite3.connect(':memory:',factory=SQLiteConnection);api=ArrayAPI(connection,library)
     try:yield connection,api
     finally:connection.close()
