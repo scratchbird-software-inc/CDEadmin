@@ -104,6 +104,7 @@ upstream attribution.
    bi_dashboards
    bi_permissions
    bi_alerts
+   bi_embedding
    bi_query_builder_ui
    bi_dashboard_ui
    bi_models_view

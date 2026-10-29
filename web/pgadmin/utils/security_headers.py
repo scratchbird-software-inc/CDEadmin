@@ -24,8 +24,18 @@ class SecurityHeaders:
             'CROSS_ORIGIN_OPENER_POLICY': 'Cross-Origin-Opener-Policy'
         }
 
+        # Signed BI embeds (cdeadmin/bi/embed_public.py) set their own
+        # per-embed CSP (frame-ancestors) and must not carry the
+        # application's CSP or X-Frame-Options: both would override or
+        # defeat the embed's allowed origins.
+        if getattr(response, 'cdeadmin_own_security_headers', False):
+            del params_dict['CONTENT_SECURITY_POLICY']
+            own_frame_policy = True
+        else:
+            own_frame_policy = False
+
         # X-Frame-Options for security
-        if config.X_FRAME_OPTIONS != "" and \
+        if not own_frame_policy and config.X_FRAME_OPTIONS != "" and \
                 config.X_FRAME_OPTIONS.lower() != "deny":
             response.headers["X-Frame-Options"] = config.X_FRAME_OPTIONS
 

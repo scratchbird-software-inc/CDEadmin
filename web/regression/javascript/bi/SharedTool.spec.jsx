@@ -86,6 +86,7 @@ describe('a viewer in the BI module', () => {
     expect(await screen.findByText(/Read only: you can run this question but not change it/)).toBeInTheDocument();
     expect(screen.getByLabelText('Question name')).toBeDisabled();
     expect(screen.queryByRole('button', {name: 'Share...'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Embed...'})).not.toBeInTheDocument();
   });
 
   it('never shows the SQL of a raw question and runs it by id', async () => {

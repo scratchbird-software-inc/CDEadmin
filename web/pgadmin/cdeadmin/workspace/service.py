@@ -55,6 +55,7 @@ class ProviderWorkspaceService:
         self.semantic_model_service = semantic_model_service
         self.bi_service = None
         self.bi_alert_service = None
+        self.bi_embed_service = None
         self.operation_bus = operation_bus
         self.report_delivery_service = report_delivery_service
         self.report_scheduler_service = report_scheduler_service
@@ -2735,6 +2736,9 @@ class ProviderWorkspaceService:
             return self._bi_alert_action(
                 server, action, request, context, _endpoint, user_id,
                 endpoint_id)
+        if action.startswith('bi_embed_'):
+            return self._bi_embed_action(
+                server, action, request, user_id, endpoint_id)
         if action == 'bi_question_list':
             filters = {'collection_id': request['collection_id']} if (
                 'collection_id' in request) else {}
@@ -2797,6 +2801,32 @@ class ProviderWorkspaceService:
         return alerts.handle(
             action, request, user_id=user_id, endpoint_id=endpoint_id,
             server=server, runtime=runtime)
+
+    def _bi_embed_action(self, server, action, request, user_id,
+                         endpoint_id):
+        """Signed embedding management (bi_embedding.rst).
+
+        Authenticated like every ``bi_*`` action.  Only the unauthenticated
+        blueprint in ``bi/embed_public.py`` serves the embedded views, and it
+        never goes through here.
+        """
+        embeds = self.bi_embed_service
+        if embeds is None or action not in embeds.ACTIONS:
+            raise ProviderWorkspaceError('BI action is unavailable')
+        from flask import has_request_context, url_for
+
+        def frame_url(embed_id):
+            if has_request_context():
+                try:
+                    return url_for('cdeadmin_bi_embed.frame',
+                                   embed_id=embed_id)
+                except Exception:
+                    pass
+            return '/cdeadmin/embed/%s/frame' % embed_id
+
+        return embeds.handle(
+            action, request, user_id=user_id, endpoint_id=endpoint_id,
+            server=server, frame_url=frame_url)
 
     _BI_SHARING_ACTIONS = frozenset((
         'bi_access_get', 'bi_grant_list', 'bi_grant_add', 'bi_grant_update',
@@ -4154,6 +4184,10 @@ def init_app(
         service.bi_alert_service = init_bi_alerts(
             app, service.bi_service, endpoint_service,
             report_scheduler_service, report_delivery_service)
+        from pgadmin.cdeadmin.bi.embeds import init_app as init_bi_embeds
+        service.bi_embed_service = init_bi_embeds(
+            app, service.bi_service, endpoint_service,
+            report_scheduler_service)
     from .mysql_retention_schedule import init_app as init_mysql_retention_schedule
     init_mysql_retention_schedule(app, service)
     from .mysql_physical_retention_schedule import init_app as init_mysql_physical_schedule

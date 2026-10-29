@@ -1860,6 +1860,180 @@ class BINotification(db.Model):
     read_at = db.Column(db.DateTime(), nullable=True)
 
 
+class BIEmbed(db.Model):
+    """Signed-embedding definition of one dashboard or question.
+
+    ``definition`` is the validated JSON (parameter modes, claim names,
+    allowed origins, display options, token lifetime cap).  Signing secrets
+    live encrypted in ``BIEmbedKey``; run-as authority in ``BIEmbedDelegation``.
+    """
+    __tablename__ = 'cde_bi_embed'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'user_id', 'endpoint_id', 'name', name='uq_cde_bi_embed_name'
+        ),
+        db.CheckConstraint(
+            "resource_type IN ('question', 'dashboard')",
+            name='ck_cde_bi_embed_resource'
+        ),
+        db.CheckConstraint(
+            "status IN ('enabled', 'disabled', 'revoked')",
+            name='ck_cde_bi_embed_status'
+        ),
+        db.Index(
+            'ix_cde_bi_embed_resource',
+            'endpoint_id', 'resource_type', 'resource_id'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    name = db.Column(db.String(256), nullable=False)
+    resource_type = db.Column(db.String(16), nullable=False)
+    resource_id = db.Column(db.String(36), nullable=False)
+    resource_revision = db.Column(db.Integer, nullable=True)
+    status = db.Column(db.String(16), nullable=False)
+    disabled_reason = db.Column(db.String(48), nullable=True)
+    expires_at = db.Column(db.DateTime(), nullable=True)
+    revision = db.Column(db.Integer, nullable=False, default=1)
+    definition = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    keys = db.relationship(
+        'BIEmbedKey', back_populates='embed', cascade=CASCADE_STR
+    )
+    delegation = db.relationship(
+        'BIEmbedDelegation', back_populates='embed', uselist=False,
+        cascade=CASCADE_STR
+    )
+
+
+class BIEmbedKey(db.Model):
+    """One signing secret of an embed, encrypted with the worker key ring.
+
+    At most two rows per embed: the ``current`` key (used to mint server
+    side) and the ``previous`` key (still verifies during a rotation).
+    """
+    __tablename__ = 'cde_bi_embed_key'
+    __table_args__ = (
+        db.UniqueConstraint('embed_id', 'kid', name='uq_cde_bi_embed_kid'),
+        db.UniqueConstraint('embed_id', 'slot', name='uq_cde_bi_embed_slot'),
+        db.CheckConstraint(
+            "slot IN ('current', 'previous')", name='ck_cde_bi_embed_slot'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    embed_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_embed.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    kid = db.Column(db.String(32), nullable=False)
+    slot = db.Column(db.String(16), nullable=False)
+    key_id = db.Column(db.String(64), nullable=False)
+    encrypted_value = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    embed = db.relationship('BIEmbed', back_populates='keys')
+
+
+class BIEmbedDelegation(db.Model):
+    """Revocable run-as authority of one embed (the owner's credentials).
+
+    Shaped like ``BIAlertDelegation`` so the report scheduler's credential
+    capture and workspace reconstruction serve it unchanged.
+    """
+    __tablename__ = 'cde_bi_embed_delegation'
+    __table_args__ = (
+        db.UniqueConstraint('embed_id', name='uq_cde_bi_embed_delegation'),
+        db.CheckConstraint(
+            "state IN ('active', 'revoked', 'expired')",
+            name='ck_cde_bi_embed_delegation_state'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    embed_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_embed.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    user_id = db.Column(
+        db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    endpoint_id = db.Column(
+        db.String(36), db.ForeignKey(ENDPOINT_ID, ondelete='CASCADE'),
+        nullable=False
+    )
+    route_id = db.Column(db.String(128), nullable=False)
+    primary_secret_kind = db.Column(db.String(128), nullable=True)
+    endpoint_generation = db.Column(db.String(64), nullable=False)
+    state = db.Column(db.String(16), nullable=False)
+    credential_generation = db.Column(db.Integer, nullable=False, default=1)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    updated_at = db.Column(db.DateTime(), nullable=False)
+    expires_at = db.Column(db.DateTime(), nullable=False)
+    revoked_at = db.Column(db.DateTime(), nullable=True)
+    embed = db.relationship('BIEmbed', back_populates='delegation')
+    endpoint = db.relationship('EndpointProfile')
+    credentials = db.relationship(
+        'BIEmbedCredential', back_populates='delegation',
+        cascade=CASCADE_STR
+    )
+
+
+class BIEmbedCredential(db.Model):
+    """One authenticated-encryption envelope scoped to an embed delegation."""
+    __tablename__ = 'cde_bi_embed_credential'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'delegation_id', 'secret_kind',
+            name='uq_cde_bi_embed_secret_kind'
+        ),
+    )
+    id = db.Column(db.String(36), primary_key=True)
+    delegation_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_bi_embed_delegation.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    secret_kind = db.Column(db.String(128), nullable=False)
+    key_id = db.Column(db.String(64), nullable=False)
+    encrypted_value = db.Column(db.Text(), nullable=False)
+    created_at = db.Column(db.DateTime(), nullable=False)
+    delegation = db.relationship(
+        'BIEmbedDelegation', back_populates='credentials'
+    )
+
+
+class BIEmbedJti(db.Model):
+    """Consumed one-time token identifiers (replay protection)."""
+    __tablename__ = 'cde_bi_embed_jti'
+    __table_args__ = (
+        db.Index('ix_cde_bi_embed_jti_expiry', 'expires_at'),
+    )
+    embed_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_embed.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    jti = db.Column(db.String(128), primary_key=True)
+    expires_at = db.Column(db.DateTime(), nullable=False)
+
+
+class BIEmbedStat(db.Model):
+    """Daily view counters of one embed: counts only, no viewer data."""
+    __tablename__ = 'cde_bi_embed_stat'
+    embed_id = db.Column(
+        db.String(36), db.ForeignKey('cde_bi_embed.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    day = db.Column(db.String(10), primary_key=True)
+    views = db.Column(db.Integer, nullable=False, default=0)
+    card_runs = db.Column(db.Integer, nullable=False, default=0)
+    errors = db.Column(db.Integer, nullable=False, default=0)
+
+
 class EndpointRuntimeIdentity(db.Model):
     """Declared target and separately verified runtime identity."""
     __tablename__ = 'cde_endpoint_runtime_identity'

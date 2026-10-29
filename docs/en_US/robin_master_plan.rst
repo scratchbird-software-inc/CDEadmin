@@ -106,7 +106,7 @@ Stream C: BI editor (goal 3)
    semantic layer, SQL view, SQL-to-question).
 #. C3 Chart set and formatting, dashboard editor with filter widgets, tabs, text
    cards, drill-through.
-#. C4 Collections, search, permissions (done, see :doc:`bi_permissions`), threshold alerts and subscriptions (done, see :doc:`bi_alerts`), embedding, result cache.
+#. C4 Collections, search, permissions (done, see :doc:`bi_permissions`), threshold alerts and subscriptions (done, see :doc:`bi_alerts`), signed embedding (done, see :doc:`bi_embedding`), result cache.
 #. C5 Retire ``SemanticModelWorkspace`` from ``ProviderWorkspaceContent.jsx`` per the
    unified design (panel dissolution). Done: the Models view of the BI module
    replaces it (:doc:`bi_models_view`); "Convert to subscription" waits for the

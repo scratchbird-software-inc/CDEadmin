@@ -72,6 +72,7 @@ class _Entry:
     hits: int = 0
     parameter_count: int = 0
     meta: dict = field(default_factory=dict)
+    principal: str | None = None
 
 
 class BIExecutor:
@@ -103,7 +104,17 @@ class BIExecutor:
     def run(self, *, provider, context, endpoint, user_id,
             question_id=None, revision=None, definition=None,
             parameters=None, extra_filters=(), page_size=None,
-            bypass_cache=False, ttl_seconds=None, security_context=None):
+            bypass_cache=False, ttl_seconds=None, security_context=None,
+            principal=None):
+        """Run a question.
+
+        ``principal`` names a non-interactive principal context (signed
+        embedding, ``embed:<id>:<claims digest>``).  It is part of the cache
+        key together with the digest of the security context, and the result
+        can later be paged or exported only by the same principal; an
+        interactive run (``principal=None``) never sees such an entry and the
+        other way round.
+        """
         endpoint_id = context.endpoint_id
         question, resolved_revision, owner_id, redact = self._resolve(
             user_id, endpoint_id, question_id, revision, definition)
@@ -125,7 +136,9 @@ class BIExecutor:
             question_id or ('adhoc:' + _digest(question)),
             resolved_revision, _digest([parameters or {},
                                         list(extra_filters or ())]),
-            plan, user_id, endpoint_id])
+            plan, user_id, endpoint_id] + (
+            [principal, _digest(security_context)]
+            if principal is not None else []))
         ttl = policy['cache_ttl_seconds']
         if ttl_seconds is not None:
             if isinstance(ttl_seconds, bool) or not isinstance(
@@ -160,7 +173,8 @@ class BIExecutor:
             lease_until=now + max(ttl, PAGE_LEASE_SECONDS),
             cacheable=ttl > 0,
             reproducibility=copy.deepcopy(compiled.get('reproducibility')),
-            parameter_count=len(compiled['parameters']))
+            parameter_count=len(compiled['parameters']),
+            principal=principal)
         with self._lock:
             previous = self._by_key.get(key)
             if previous is not None and previous.result_id != result_id:
@@ -305,8 +319,8 @@ class BIExecutor:
         }
 
     def page(self, user_id, endpoint_id, result_id, cursor=None,
-             page_size=None):
-        entry = self._owned(user_id, endpoint_id, result_id)
+             page_size=None, principal=None):
+        entry = self._owned(user_id, endpoint_id, result_id, principal)
         size = page_size if page_size is not None else (
             entry.policy['page_size'])
         if isinstance(size, bool) or not isinstance(size, int) or size < 1:
@@ -318,8 +332,9 @@ class BIExecutor:
         except ResultRegistryError as exc:
             raise BIError(f'result page is unavailable: {exc}') from None
 
-    def export(self, user_id, endpoint_id, result_id, export_format):
-        entry = self._owned(user_id, endpoint_id, result_id)
+    def export(self, user_id, endpoint_id, result_id, export_format,
+               principal=None):
+        entry = self._owned(user_id, endpoint_id, result_id, principal)
         export = entry.policy['export']
         if not export['enabled']:
             raise BIError('export is not enabled by this question\'s '
@@ -333,12 +348,20 @@ class BIExecutor:
         except ResultRegistryError as exc:
             raise BIError(f'export is unavailable: {exc}') from None
 
-    def _owned(self, user_id, endpoint_id, result_id):
+    def entry_info(self, result_id):
+        """``(question_id, principal)`` of a held result, else ``None``."""
+        with self._lock:
+            entry = self._by_result.get(result_id)
+        return None if entry is None else (entry.question_id,
+                                           entry.principal)
+
+    def _owned(self, user_id, endpoint_id, result_id, principal=None):
         with self._lock:
             self._sweep(self.clock())
             entry = self._by_result.get(result_id)
         if entry is None or entry.user_id != user_id or (
-                entry.endpoint_id != endpoint_id):
+                entry.endpoint_id != endpoint_id) or (
+                entry.principal != principal):
             raise BIError('result is unavailable')
         if entry.question_id is not None and self.bi.access.level(
                 user_id, 'question', endpoint_id,
@@ -380,7 +403,8 @@ class BIExecutor:
                 'hits': e.hits,
                 'expires_in_seconds': round(max(0.0, e.reuse_until - now), 3),
             } for e in self._by_result.values()
-                if e.user_id == user_id and e.endpoint_id == endpoint_id]
+                if e.user_id == user_id and e.endpoint_id == endpoint_id
+                and e.principal is None]
 
     def _alive(self, entry):
         try:

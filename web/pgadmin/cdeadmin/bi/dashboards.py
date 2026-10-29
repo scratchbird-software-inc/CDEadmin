@@ -276,13 +276,14 @@ class DashboardService:
     # execution ---------------------------------------------------------------
     def run_card(self, *, provider, context, endpoint, user_id, dashboard_id,
                  card_id, filters=None, revision=None, page_size=None,
-                 bypass_cache=False, exclude=()):
+                 bypass_cache=False, exclude=(), security_context=None,
+                 principal=None):
         dashboard, _ = self._loaded(user_id, context.endpoint_id,
                                     dashboard_id, revision)
         resolved = resolve_filters(dashboard, filters, exclude)
         return self._run_card(provider, context, endpoint, user_id,
                               dashboard, resolved, card_id, page_size,
-                              bypass_cache)
+                              bypass_cache, security_context, principal)
 
     def run(self, *, provider, context, endpoint, user_id, dashboard_id,
             filters=None, revision=None, tab_id=None, page_size=None,
@@ -331,7 +332,8 @@ class DashboardService:
             card['question']['question_id']) is not None
 
     def _run_card(self, provider, context, endpoint, user_id, dashboard,
-                  resolved, card_id, page_size, bypass_cache):
+                  resolved, card_id, page_size, bypass_cache,
+                  security_context=None, principal=None):
         card = next((c for c in dashboard['cards'] if c['id'] == card_id),
                     None)
         if card is None or card['type'] != 'question':
@@ -348,7 +350,9 @@ class DashboardService:
             user_id=user_id, question_id=card['question']['question_id'],
             revision=card['question']['revision'], parameters=parameters,
             extra_filters=extra, page_size=page_size,
-            bypass_cache=bypass_cache)
+            bypass_cache=bypass_cache,
+            **({'security_context': security_context,
+                'principal': principal} if principal is not None else {}))
         outcome['card_id'] = card_id
         outcome['visualization'] = card.get('visualization')
         return outcome

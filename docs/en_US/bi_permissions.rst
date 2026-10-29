@@ -10,7 +10,8 @@ describes how they are shared. The code is ``web/pgadmin/cdeadmin/bi/access.py``
 (``BIAccess``); ``service.py``, ``dashboards.py`` and ``execution.py`` call it
 for every decision. The UI is in :doc:`bi_query_builder_ui` and
 :doc:`bi_dashboard_ui` (``cdeadmin_ui/modules/bi/ShareDialog.jsx``). Public
-links and embedding are not part of this and do not exist.
+links do not exist; signed embedding for people without an account is a
+separate feature (:doc:`bi_embedding`).
 
 The model
 =========
@@ -181,7 +182,7 @@ What is deliberately not shared
 * Semantic models. A shared question refers to the owner's model; the model
   itself is not listed or editable through the grant. Share it separately.
 * Result cache entries, result ids and exports of other users.
-* Public or unauthenticated links and embedding (separate task).
+* Public or unauthenticated links. Signed embedding is separate (:doc:`bi_embedding`).
 * Folder membership: filing a question in someone else's collection needs
   ``edit`` on the destination collection (and on the item).
 

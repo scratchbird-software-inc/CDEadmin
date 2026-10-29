@@ -12,6 +12,7 @@ import Theme from 'sources/Theme';
 import BIQuestionsTool from 'sources/cdeadmin_ui/modules/bi/BIQuestionsTool';
 import {dashboardFixtures as fixtures} from './dashboardFixtures';
 import {alertFixtures as alerts} from './alertFixtures';
+import {embedFixtures as embeds} from './embedFixtures';
 
 jest.mock('sources/cdeadmin_ui/editors/CodeEditor', () => ({
   __esModule: true, default: ({label, value, onChange, readonly}) =>
@@ -230,6 +231,21 @@ describe('editor', () => {
     expect(await within(panel).findByText('Daily digest')).toBeInTheDocument();
     expect(within(panel).queryByRole('button', {name: 'New alert'})).not.toBeInTheDocument();
     expect(backend.sent('bi_alert_list')[0].request).toMatchObject({resource_type: 'dashboard', resource_id: 'd1'});
+  });
+
+  it('opens the Embed dialog of a stored dashboard it manages', async () => {
+    const backend = fakeBackend({handlers: {
+      bi_embed_catalog: () => embeds.catalog,
+      bi_embed_list: () => embeds.list,
+    }});
+    renderTool(backend);
+    await edit('Sales board');
+    fireEvent.click(screen.getByRole('button', {name: 'Embed...'}));
+    const dialog = await screen.findByRole('dialog', {name: /^Embed /});
+    expect(await within(dialog).findByText('Partner portal')).toBeInTheDocument();
+    expect(backend.sent('bi_embed_list')[0].request).toEqual({resource_type: 'dashboard', resource_id: 'd1'});
+    fireEvent.click(within(dialog).getByRole('button', {name: 'Close'}));
+    await waitFor(() => expect(screen.queryByRole('dialog', {name: /^Embed /})).not.toBeInTheDocument());
   });
 
   it('adds a text card and a tab and sends them on save', async () => {

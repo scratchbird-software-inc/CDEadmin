@@ -174,6 +174,29 @@ count sets its maximum to zero in the enforcement file.
 Change log
 ----------
 
+BI signed embedding (2026-10-28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Stream C4 embedding: a dashboard or question shown in an iframe on another site
+to people without an account, through a short-lived HS256 token the embedding
+site signs (Metabase-style). Off by default (``CDEADMIN_BI_EMBED_ENABLED``),
+server mode only. Embeds run with the owner's delegated credentials (the alert
+delegation machinery, BI-embed resolver id and AAD) under a distinct
+``embedding`` principal; locked parameters and claims are inside the signature
+and claims feed the semantic row policies; the cache key and result ownership
+include the principal. Raw SQL is refused unless a server setting and
+``assert_raw_sql_allowed`` allow it (never with claims). Unauthenticated
+blueprint ``/cdeadmin/embed/`` with uniform 404s, ``frame-ancestors`` from the
+embed's origins, no cookies, no CORS, per-IP and per-embed rate limits, row
+caps and counts-only statistics. Migration ``cde_bi_embeds_v1``
+(``cde_bi_embed``, ``_key``, ``_delegation``, ``_credential``, ``_jti``,
+``_stat``); ``SCHEMA_VERSION`` not bumped. New actions ``bi_embed_*`` (catalog,
+list, get, create, update, enable, disable, rotate, retire_key, revoke, delete,
+mint, preview, check_token, stats). BI UI: Embed dialog on question and
+dashboard pages. Tests: ``tools/tests/test_cdeadmin_bi_embedding.py``; Jest
+``embeds`` and ``EmbedDialog`` specs on fixtures generated from the real
+backend. See :doc:`bi_embedding` (threat model, residual risks, decisions).
+
 BI alerts and subscriptions (2026-10-28)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

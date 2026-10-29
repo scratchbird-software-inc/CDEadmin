@@ -18,6 +18,7 @@ import {Tab} from '../../navigation/TabsAndBreadcrumbs';
 import {SaveDialog} from './Dialogs';
 import ShareDialog from './ShareDialog';
 import AlertsPanel from './AlertsPanel';
+import EmbedDialog from './EmbedDialog';
 import {permissions} from './sharing';
 import {lossLines} from './dashboardImport';
 import {reduce, toDashboard} from './dashboardState';
@@ -115,6 +116,7 @@ export default function DashboardWorkspace({
       <Button onClick={() => setDialog('saveAs')}>{gettext('Save as...')}</Button>
       <Button disabled={!stored} onClick={() => setDialog('history')}>{gettext('History')}</Button>
       {stored && perms.canShare && <Button onClick={() => setDialog('share')}>{gettext('Share...')}</Button>}
+      {stored && perms.canShare && <Button onClick={() => setDialog('embed')}>{gettext('Embed...')}</Button>}
       {stored && <Button aria-pressed={showAlerts} onClick={() => setShowAlerts(!showAlerts)}>
         {gettext('Subscriptions...')}</Button>}
       <Button onClick={onClose}>{gettext('Close')}</Button>
@@ -161,6 +163,12 @@ export default function DashboardWorkspace({
           setMode('edit');
           setNotice({status: 'info', text: gettext('Revision loaded as a draft. Save to append it as a new revision.')});
         }}
+        onClose={() => setDialog(null)} />}
+    {dialog === 'embed' && stored &&
+      <EmbedDialog client={client} resourceType="dashboard" resourceId={state.dashboardId}
+        resourceName={state.name} access={perms.access}
+        parameters={state.filters.map((filter) => ({id: filter.id, name: filter.label || filter.id, type: filter.type,
+          required: filter.required, default: filter.default, multiple: filter.multiple}))}
         onClose={() => setDialog(null)} />}
     {dialog === 'share' && stored &&
       <ShareDialog client={client} resourceType="dashboard" resourceId={state.dashboardId}

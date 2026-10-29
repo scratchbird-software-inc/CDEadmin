@@ -26,6 +26,7 @@ import RevisionHistory from './RevisionHistory';
 import {SaveDialog} from './Dialogs';
 import ShareDialog from './ShareDialog';
 import AlertsPanel from './AlertsPanel';
+import EmbedDialog from './EmbedDialog';
 import {permissions} from './sharing';
 
 /** The parameter values typed so far, as the text the alert form edits. */
@@ -139,6 +140,7 @@ export default function QuestionEditor({client, catalog, collections, initial, p
       {stored && perms.canShare && <Button onClick={() => setDialog('share')}>{gettext('Share...')}</Button>}
       {stored && <Button aria-pressed={showAlerts} onClick={() => setShowAlerts(!showAlerts)}>
         {gettext('Alerts...')}</Button>}
+      {stored && perms.canShare && <Button onClick={() => setDialog('embed')}>{gettext('Embed...')}</Button>}
       <Button onClick={onClose}>{gettext('Close')}</Button>
     </Stack>
     {readOnly && <Banner status="info">
@@ -194,6 +196,10 @@ export default function QuestionEditor({client, catalog, collections, initial, p
           setNotice({status: 'info', text: gettext('Revision loaded as a draft. Save to append it as a new revision.')});
         }}
         onClose={() => setDialog(null)} />}
+    {dialog === 'embed' && stored &&
+      <EmbedDialog client={client} resourceType="question" resourceId={state.questionId}
+        resourceName={state.name} access={perms.access} parameters={state.parameters}
+        rawSql={state.mode === 'sql'} onClose={() => setDialog(null)} />}
     {dialog === 'share' && stored &&
       <ShareDialog client={client} resourceType="question" resourceId={state.questionId}
         resourceName={state.name} hasCollection={state.collectionId !== null}

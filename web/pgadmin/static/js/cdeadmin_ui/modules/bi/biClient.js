@@ -18,6 +18,7 @@
 import {createDashboardClient} from './dashboardClient';
 import {createSharingClient} from './sharingClient';
 import {createAlertsClient} from './alertsClient';
+import {createEmbedClient} from './embedClient';
 
 const RESOURCE_PAGE_LIMIT = 20;
 
@@ -27,6 +28,7 @@ export function createBIClient(post) {
     ...createDashboardClient(call),
     ...createSharingClient(call),
     ...createAlertsClient(call),
+    ...createEmbedClient(call),
 
     // collections
     listCollections: async () => (await call('bi_collection_list')).items || [],

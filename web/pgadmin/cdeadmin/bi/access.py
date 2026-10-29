@@ -402,6 +402,7 @@ class BIAccess:
         self.grants = grants or NullGrantRepository()
         self.directory = directory or NullDirectory()
         self.kinds = {}
+        self._purge_listeners = []
 
     def register(self, kind, *, find, rows, set_owner):
         """``find(endpoint_id, id)``, ``rows(endpoint_id)``, owner setter."""
@@ -655,9 +656,16 @@ class BIAccess:
                 'owner_user_id': new_owner_id, 'previous_owner': previous,
                 'previous_owner_level': 'edit'}
 
+    def on_purge(self, callback):
+        """Register ``callback(kind, resource_id)`` for deleted resources."""
+        self._purge_listeners.append(callback)
+
     def purge(self, kind, resource_id):
         """Drop grants/overrides of a deleted resource."""
-        return self.grants.purge(kind, resource_id)
+        count = self.grants.purge(kind, resource_id)
+        for callback in self._purge_listeners:
+            callback(kind, resource_id)
+        return count
 
     def search_principals(self, actor_id, text='', kinds=None, limit=20):
         kinds = tuple(kinds or PRINCIPAL_TYPES)
@@ -684,6 +692,12 @@ class BIAccess:
         if not self.directory.can_see(viewer_id, 'user', user_id):
             return None
         return self._name('user', user_id)
+
+    def record(self, actor_id, action, endpoint_id, kind, resource_id,
+               detail=None):
+        """Append a secret-free audit event for another BI feature."""
+        self._audit(actor_id, action, endpoint_id, kind, resource_id, None,
+                    None, detail or {})
 
     def _audit(self, actor_id, action, endpoint_id, kind, resource_id,
                target_type, target_id, detail):
