@@ -161,6 +161,9 @@ def apply_review(connection, record, runtime=None):
                 result.update(native_copy_cutover_acknowledged=runtime.copy_swapped,
                     utility_cleanup_confirmed=getattr(runtime,'copy_cleanup_confirmed',False))
             if runtime is not None:runtime.event('native-acknowledged')
+        if operation.get('rename_to'):
+            # A reviewed table rename is rediscovered under its new name.
+            show_source = 'SHOW CREATE TABLE ' + identifier(database) + '.' + identifier(operation['rename_to'])
         if operation['operation'] == 'drop':
             try:
                 cursor.execute(show_source)
