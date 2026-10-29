@@ -222,11 +222,7 @@ def _build_plan(baseline, desired, current):
             continue
         if lifecycle.INSTRUCTION in wanted['native']:
             try:
-                operation = lifecycle.plan(old, wanted, live, current, desired)
-                if operation is None:
-                    stats['converged'] += 1
-                else:
-                    operations.append(operation)
+                operations.append(lifecycle.plan(old, wanted, live, current, desired))
             except (ValueError, RelationalClientError) as error:
                 block(identity, str(error))
             continue
@@ -275,12 +271,7 @@ def _build_plan(baseline, desired, current):
             embedded_constraint = False
             if old is None:
                 if live is not None:
-                    # A replayed review of a creation converges when the live object already carries
-                    # exactly the reviewed definition; anything else was added outside the baseline.
-                    if live['kind'] == kind and live['path'] == wanted['path'] and _model(live) == after:
-                        stats['converged'] += 1
-                    else:
-                        block(identity, 'Object was added outside the baseline; capture a new baseline')
+                    block(identity, 'Object was added outside the baseline; capture a new baseline')
                     continue
                 effective = after
                 if kind == 'domain':
@@ -429,14 +420,6 @@ def _build_plan(baseline, desired, current):
             raise ValueError('Rename operations claim the same destination')
         operations = [item for item in operations if item['operation'] != 'rename'] + renames
         operations = lifecycle.order_removals(operations, current)
-        # Statements for indexes and constraints are written with the pre-rename column
-        # names; Firebird rewrites segments on ALTER COLUMN ... TO, so mixing them is unsafe.
-        renamed = {item['before']['table'] for item in operations
-                   if item['operation'] == 'rename' and item['kind'] == 'column'}
-        mixed = sorted(item['resource_id'] for item in operations if item['kind'] in {'index', 'constraint'}
-                       and item['operation'] != 'drop' and (item.get('after') or {}).get('table') in renamed)
-        if mixed:
-            raise ValueError('Review a column rename separately from index and constraint changes on the same table: ' + ', '.join(mixed))
         for conversion in ('alter_type', 'bind_domain'):
             if any(item['operation'] == conversion for item in operations) and any(item['operation'] != conversion for item in operations):
                 raise ValueError('Domain conversion/rebinding requires a separate review before dependent definition/property edits')
@@ -455,8 +438,7 @@ def _build_plan(baseline, desired, current):
               'catalog_coverage': current['provenance'].get('coverage', 'unknown'),
               'coverage': sorted(SUPPORTED | {'privilege'}), 'statistics': stats,
               'lifecycle_coverage': {'rename': ['column', 'domain'], 'alter_type': ['domain'],
-                 'bind_domain': ['column'], 'replace': ['index'],
-                 'drop': sorted(SUPPORTED | {'collation', 'external-function'})},
+                 'bind_domain': ['column'], 'drop': sorted(SUPPORTED | {'collation', 'external-function'})},
               'baseline_sha256': baseline['sha256'], 'desired_sha256': desired['sha256'],
               'current_sha256': current['sha256'], 'operations': operations,
               'current_hash_format': current.get('format', 'scratchrobin.firebird.catalog-ddn@1'),
@@ -470,10 +452,6 @@ def _build_plan(baseline, desired, current):
         result['warnings'].append(ROUTINE_STAGE_WARNING)
     if any(operation['operation'] == 'alter_type' for operation in operations):
         result['warnings'].append('Native domain conversion can affect dependent columns. Firebird ALTER DOMAIN TYPE uses the target character set default collation; it does not retain an explicit nondefault collation.')
-    if any(operation['operation'] == 'replace' for operation in operations):
-        result['warnings'].append('Firebird has no ALTER INDEX for key, uniqueness, direction, computed or partial definitions: an index replacement is DROP INDEX and CREATE INDEX under the same name inside this transaction. The index is rebuilt at commit; a row that violates the new definition rolls back the whole review.')
-    if any(operation['kind'] in {'index', 'constraint'} for operation in operations):
-        result['warnings'].append('Firebird DDL runs in the one transaction of this review with every other statement and becomes visible only at commit. Firebird 5.0 has no rename for tables, views, indexes or constraints; those renames are not carried.')
     if any(operation['operation'] == 'drop' for operation in operations):
         result['warnings'].append('Explicit DROP permanently removes the selected objects and their owned children/data on commit. This review does not create a backup.')
     if any(operation.get('before_column_grants') for operation in operations):

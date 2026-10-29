@@ -12,7 +12,7 @@ from .firebird_catalog_import import read_catalog, _decode, _equal, _SLOTS
 
 # Native relation kinds each engine's *_erd.py publishes with a resource_id.
 _KINDS = {
-    'firebird': {'table', 'view', 'column', 'constraint', 'index'},
+    'firebird': {'table', 'view', 'column', 'constraint'},
     'postgresql': {'table', 'partitioned-table', 'foreign-table', 'view', 'materialized-view', 'constraint', 'index'},
     'sqlite': {'table', 'view', 'virtual-table', 'fts-table', 'index'},
     'duckdb': {'table', 'view', 'index'},
@@ -143,17 +143,21 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
     for item in after_drafts:
         if item['uid'] not in known:
             drafts.setdefault(item['parent_resource_id'], []).append(item)
-    if drafts and engine not in {'postgresql', 'sqlite', 'duckdb', 'firebird'}:
+    if drafts and engine not in {'postgresql', 'sqlite', 'duckdb', 'mysql', 'mariadb'}:
         raise ValueError('New physical-schema objects are not admitted for this engine')
-    new_rows, mirror = [], {}
+    new_rows = []
     if set(drafts) - set(after):
         raise ValueError('A physical draft names a parent outside the edited relations')
     if engine in {"mysql", "mariadb"}:
-        def relationships(rows):
+        def relationships(rows, physical=False):
             values = [edge for row in rows.values() for edge in row.get('graphical_relationships', [])]
             for edge in values:
                 if isinstance(edge.get('native_json'), str):edge['native_json'] = _decode(edge['native_json'])
+            # Physical-schema vocabulary on an edge is reviewed by mysql_physical, not as a relationship change.
+            if not physical:values = [{key: fact for key, fact in edge.items() if key != 'physical'} for edge in values]
             return sorted(values, key=_exact_json)
+        edges_before = {edge.get('uid'): edge for edge in relationships(before, True)}
+        edges_after = {edge.get('uid'): edge for edge in relationships(after, True)}
         previous={edge.get('uid'):edge for edge in relationships(before)}
         if allow_foreign_keys:
             from .mysql_relational_constraints import relationship_changes
@@ -165,6 +169,8 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
     changed = []
     for identity, row in after.items():
         old, live = before.get(identity), current['rows'].get(identity)
+        if engine in {'mysql', 'mariadb'} and live is None and row.get('parent_resource_id') in after:
+            continue   # an index or constraint element: reviewed with its owning table below
         if old is None or live is None or live['kind'] not in _KINDS.get(engine, _KINDS['postgresql']):
             raise ValueError('Relational definition requires explicit catalog identity reconciliation: ' + identity)
         if old['uid'] != live['uid'] or row['uid'] != live['uid']:
@@ -182,18 +188,17 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
                 from .mysql_relational_constraints import merge_constraints
                 facts[1] = merge_constraints({'name':live['name'],'native':facts[0]},facts[1],
                     constraint_changes[identity],mode,engine=engine)
-        if engine == 'firebird':
-            from . import firebird_physical as physical
-            if live['kind'] == 'column' and row.get('parent_resource_id'):
-                from .firebird_relational_fields import merge_fields
-                facts[1] = merge_fields(old, row, current)
-                facts[1] = physical.merge_column(old, row, live, facts[1])
-            elif live['kind'] == 'table':
-                facts[1] = physical.merge_table(old, row, live, facts[1])
-            elif live['kind'] == 'index':
-                facts[1] = physical.merge_index(old, row, live, current, facts[1])
-            elif live['kind'] == 'constraint':
-                facts[1] = physical.merge_constraint(old, row, live, current, facts[1], mirror)
+            from .mysql_physical import merge as merge_physical
+            facts[1] = merge_physical({**old, 'name': live['name'], 'kind': live['kind']},
+                {**row, 'name': live['name'], 'kind': live['kind'], 'native': facts[1]}, live, current,
+                kids_before={rid: kid for rid, kid in before.items() if kid.get('parent_resource_id') == identity and rid not in current['rows']},
+                kids_after={rid: kid for rid, kid in after.items() if kid.get('parent_resource_id') == identity and rid not in current['rows']},
+                edges_before={uid: edge for uid, edge in edges_before.items() if edge.get('source') == identity},
+                edges_after={uid: edge for uid, edge in edges_after.items() if edge.get('source') == identity},
+                drafts=drafts.get(identity, []), all_drafts=drafts, mode=mode, engine=engine, database=live['native']['database'])
+        if engine == 'firebird' and row.get('parent_resource_id'):
+            from .firebird_relational_fields import merge_fields
+            facts[1] = merge_fields(old, row, current)
         if engine == 'postgresql':
             from .postgresql_relational_fields import merge_fields
             from .postgresql_physical import merge_physical
@@ -231,19 +236,6 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
             text = ddn.record_definition(local_id, live['name'], metadata,
                 module=f'scratchrobin.{engine}.catalog', block=block, uid=live['uid'])
             replacements[index].append({**live['source_location'], 'text': text})
-    for identity, value in mirror.items():
-        # A replaced constraint's matching standalone backing-index row follows it exactly.
-        live = current['rows'][identity]
-        metadata = {key: live[key] for key in ('resource_id', 'kind', 'path_json', 'system')}
-        metadata['native_json'] = _exact_json(value)
-        block, local_id = live['source_location']['definition_id'].rsplit('.', 1)
-        replacements[1].append({**live['source_location'], 'text': ddn.record_definition(
-            local_id, live['name'], metadata, module=f'scratchrobin.{engine}.catalog', block=block, uid=live['uid'])})
-        if not _equal(live['native'], value):
-            changed.append(identity)
-    if engine == 'firebird' and drafts:
-        from . import firebird_physical as physical
-        new_rows.extend(physical.new_objects(drafts, before, current))
     for snapshot, edits in zip((baseline, proposed), replacements):
         for edit in sorted(edits, key=lambda value: value['start'], reverse=True):
             # Public DDN source locations are UTF-16 code-unit offsets.

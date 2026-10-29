@@ -12,7 +12,7 @@ a DDN language change, and nothing relies on invented syntax.
 Stream B items B1 (contract) and B3 (diagram-delta to plan adapters) of
 :doc:`robin_master_plan` use this vocabulary. The code is
 ``workspace/physical_schema.py`` (shared rules), ``postgresql_physical.py`` and
-``embedded_physical.py`` (SQLite, DuckDB), the reverse reader
+``embedded_physical.py`` (SQLite, DuckDB), ``mysql_physical.py`` (MySQL, MariaDB), the reverse reader
 ``workspace/ddn/read_relations.mjs`` and the hand-off in
 ``firebird_relational_review.py``.
 
@@ -118,7 +118,9 @@ ignored.
    * - ``physical_name``
      - text
      - The native name of the table, column, index or constraint as of this design.
-       Emitted for every table, column, index and constraint on PostgreSQL.
+       Emitted for every table, column, index and constraint on PostgreSQL; on MySQL
+       and MariaDB for every table, index, constraint and foreign key (columns are
+       edited through their existing column annotation).
    * - ``rename_from``
      - text
      - The explicit rename mapping: the baseline native name. A rename is
@@ -132,7 +134,7 @@ ignored.
      - Index uniqueness.
    * - ``method``
      - text
-     - Index access method (PostgreSQL: ``btree``, ``hash``, ...).
+     - Index access method (PostgreSQL: ``btree``, ``hash``, ...). Not used by MySQL or MariaDB (see ``index_type``).
    * - ``predicate``
      - text
      - Partial-index predicate (PostgreSQL, SQLite).
@@ -145,7 +147,26 @@ ignored.
        endpoint, so re-pointing the edge in the designer is a retarget.
    * - ``on_delete``, ``on_update``
      - text
-     - ``NO ACTION``, ``RESTRICT``, ``CASCADE``, ``SET NULL`` or ``SET DEFAULT``.
+     - ``NO ACTION``, ``RESTRICT``, ``CASCADE``, ``SET NULL`` or ``SET DEFAULT``
+       (MariaDB has no ``SET DEFAULT``; an absent clause means ``NO ACTION`` on MySQL
+       and ``RESTRICT`` on MariaDB).
+   * - ``index_type``
+     - text
+     - MySQL, MariaDB: ``FULLTEXT`` or ``SPATIAL``; absent for an ordinary index.
+   * - ``prefix_lengths_json``
+     - JSON array
+     - MySQL, MariaDB: one entry per key column, ``null`` or a prefix length 1 to 3072.
+   * - ``directions_json``
+     - JSON array
+     - MySQL, MariaDB: one ``ASC`` or ``DESC`` per key column.
+   * - ``visible``
+     - bool
+     - MySQL ``VISIBLE``/``INVISIBLE``; MariaDB ``NOT IGNORED``/``IGNORED``. Indexes
+       and UNIQUE keys only. Changing it alone is ``ALTER INDEX``, not a replacement.
+   * - ``enforced``
+     - bool
+     - MySQL CHECK ``ENFORCED``/``NOT ENFORCED``. MariaDB has no such clause and never
+       emits it.
    * - ``drop``
      - bool
      - Explicit deletion intent. Never inferred.
@@ -276,16 +297,68 @@ index carrying ``drop`` and the exact name (carried as the existing
 ``duckdb_change = {action: drop, confirmation: name}``). A replacement is a drop plus a
 new index under a new name.
 
+MySQL and MariaDB (``mysql_schema_plan`` / ``mariadb_schema_plan`` through
+``mysql_physical``): the whole native definition is one ``SHOW CREATE TABLE`` text, so
+the vocabulary edits are applied to the desired definition's clauses and the clause
+difference becomes **one ``ALTER TABLE`` per table** (``operation`` ``alter``; a
+rename-only change is ``ALTER TABLE ... RENAME TO``). Each operation lists its
+``changes`` (``object`` = ``index``, ``primary-key``, ``check``, ``foreign-key`` or
+``column``; ``action`` = ``add``, ``drop``, ``replace``, ``rename`` or
+``alter-visibility``).
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Change
+     - Clause in the ``ALTER TABLE``
+   * - add / replace index, UNIQUE
+     - ``ADD [UNIQUE | FULLTEXT | SPATIAL] INDEX name (col[(prefix)] [DESC], ...)`` and
+       ``INVISIBLE`` (MySQL) or ``IGNORED`` (MariaDB) when not visible
+   * - rename index
+     - ``RENAME INDEX old TO new``
+   * - visibility only
+     - ``ALTER INDEX name INVISIBLE | VISIBLE`` (MySQL), ``IGNORED | NOT IGNORED`` (MariaDB)
+   * - PRIMARY KEY
+     - ``ADD PRIMARY KEY (cols)``
+   * - CHECK
+     - ``ADD CONSTRAINT name CHECK (expr)`` (MySQL ``[NOT] ENFORCED``)
+   * - FOREIGN KEY
+     - ``ADD CONSTRAINT name FOREIGN KEY (cols) REFERENCES t (cols) ON DELETE ... ON UPDATE ...``
+   * - drop (+ ``destructive``)
+     - ``DROP INDEX``, ``DROP PRIMARY KEY``, ``DROP FOREIGN KEY``, ``DROP CHECK`` (MySQL) or
+       ``DROP CONSTRAINT`` (MariaDB), ``DROP COLUMN``, ``DROP TABLE``
+   * - column / table rename
+     - ``CHANGE COLUMN old new <definition>`` (indexes follow the column), ``RENAME TO``
+
+Rules specific to these engines: DDL is **not transactional**. Every statement commits
+on its own and a failure cannot be rolled back, which the plan states
+(``ordering_rule``): operations run creations, additions and in-place changes, foreign
+key additions after the keys they need, table renames, and every drop last, so a failure
+part-way leaves the schema a superset of the old one. Foreign-key checks are never
+disabled and no ``ALGORITHM``/``LOCK`` hint is invented. A foreign key whose definition
+changes needs a new name with ``rename_from``. Dropping a key a foreign key uses, a
+column a key uses, or renaming a table and a column together is refused. A CHECK edit
+accepts only ``expression`` and ``enforced``.
+
+Convergence after apply tolerates what the server adds on its own: the plain index it
+creates for a foreign key is named after that key (and is re-created under the new name
+when the key is renamed), and every PRIMARY KEY column becomes ``NOT NULL``. A re-plan
+ignores such an index and a missing ``DEFAULT NULL`` on key columns; every other
+difference is still reported.
+
 What is still missing
 =====================
 
 Vocabulary and engine coverage that no emitter or adapter provides yet. These are the
 open items for Stream B (B1 vocabulary, B3 adapters); none is claimed by this document.
 
-#. **Engines.** MySQL, MariaDB and Firebird emit no physical-schema vocabulary.
-   Firebird has its own per-object plan modules and exchange gate; MySQL and MariaDB
-   have their own graphical column and foreign-key admission. Aligning them to this
-   vocabulary is open.
+#. **Engines.** Firebird emits no physical-schema vocabulary; it has its own
+   per-object plan modules and exchange gate. MySQL and MariaDB are covered as
+   described above except: functional (expression) key parts, ``USING BTREE|HASH``,
+   index ``COMMENT``/``KEY_BLOCK_SIZE``/``PARSER``, ``WITHOUT OVERLAPS`` and period
+   constraints, MariaDB system-versioning, and ``ALGORITHM``/``LOCK`` choice are read
+   from the catalog but refused for replacement with a request to edit natively.
 #. **SQLite and DuckDB constraints.** UNIQUE, CHECK, PRIMARY KEY and FOREIGN KEY edits
    need a table rebuild (SQLite ``rebuilds``, DuckDB ``rebuild-*`` actions) and are
    not expressed by the diagram. The reader rejects them. Their foreign-key edges are
@@ -338,3 +411,29 @@ The container runs PostgreSQL 16 and the PostgreSQL 18.3 catalog capture reads
 subscription columns that only exist in 17 and later; the live test drops
 ``pg_subscription`` from the capture for that reason, which does not affect tables,
 indexes or constraints.
+
+MySQL and MariaDB verification
+------------------------------
+
+* ``tools/tests/test_mysql_family_physical_roundtrip.py`` runs every scenario (index
+  kinds, UNIQUE, CHECK, PRIMARY KEY, FOREIGN KEY actions, visibility, renames, drops,
+  refusals) against three fixtures: ``mysql-golden`` (MySQL 9.7 profile), ``mariadb-golden``
+  (MariaDB 12.2.2 profile) and ``mariadb-live``. The live fixture needs
+  ``CDEADMIN_ROUNDTRIP_MARIADB='{"host":..,"port":..,"user":..,"password":..}'``; it applies
+  each plan and proves the re-plan has nothing left to do.
+* Evidence level: the container has MariaDB 10.11.14 only (``/usr/sbin/mariadbd``); no
+  MySQL server is installed. MySQL behaviour is therefore compile and golden level
+  against hand-built catalogs in the capture module's shape, not live. The MariaDB live
+  fixture reads the 10.11.14 server's own catalog; only the 12.2.2 version pin and the two
+  12.x-only tables (``PERIODS``, ``KEY_PERIOD_USAGE``) are masked. MariaDB 12.2 behaviour
+  that differs from 10.11 is not exercised live. A live MySQL 9.7 run remains open.
+
+Change log
+==========
+
+* 2026-10-28: ``scratchrobin.physical-schema@1`` extended for MySQL and MariaDB (additive
+  keys ``index_type``, ``prefix_lengths_json``, ``directions_json``, ``visible``,
+  ``enforced``); ``mysql_physical.py`` and the MySQL/MariaDB plan modules read index,
+  UNIQUE, PRIMARY KEY, CHECK, FOREIGN KEY, rename and drop edits into one reviewed
+  ``ALTER TABLE`` per table. PostgreSQL, SQLite and DuckDB behaviour is unchanged.
+* 2026-10-28: ``scratchrobin.physical-schema@1`` introduced for PostgreSQL, SQLite and DuckDB.

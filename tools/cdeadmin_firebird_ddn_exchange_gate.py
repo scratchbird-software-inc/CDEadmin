@@ -152,7 +152,7 @@ def dialect_one(native, route, password, provider, evidence, temporary):
 
 
 SCENARIOS = ('graphical', 'embedded', 'dialect-one', 'data', 'sql-replay', 'unknown-commit', 'column', 'table', 'view', 'package', 'routine', 'trigger',
-             'constraint', 'lifecycle', 'grant', 'external-function', 'import-order', 'erd', 'physical')
+             'constraint', 'lifecycle', 'grant', 'external-function', 'import-order', 'erd')
 
 
 def run(runtime, evidence, selected):
@@ -211,7 +211,7 @@ def run(runtime, evidence, selected):
                     from tools.firebird_erd_native import qualify
                     details.update(qualify(admin, target))
                 else:
-                    module = importlib.import_module('tools.firebird_' + scenario.replace('-', '_') + ('_native' if scenario in {'lifecycle', 'import-order', 'physical'} else '_plan_native'))
+                    module = importlib.import_module('tools.firebird_' + scenario.replace('-', '_') + ('_native' if scenario in {'lifecycle', 'import-order'} else '_plan_native'))
                     args = (admin, provider, scoped) if scenario in {'table', 'view'} else (admin, provider, scoped, target)
                     value = module.qualify(*args)
                     details.update(value if isinstance(value, dict) else {'result': value})
