@@ -389,24 +389,34 @@ class ActualEnginePilotProvider:
         if not callable(requires) or not requires(
                 resource_kind, operation_id):
             return True
-        if not self._dialect_contract_covers_runtime():
+        if not self._dialect_contract_covers_runtime(
+                resource_kind, operation_id):
             return False
         return self.engine_contract_descriptor()['dialect']['state'] == (
             'passed'
         )
 
-    def _dialect_contract_covers_runtime(self):
-        """Fail closed when a range-admitted runtime lacks its own contract.
+    def _dialect_contract_covers_runtime(self, resource_kind, operation_id):
+        """Fail closed when a range-admitted runtime lacks its own proof.
 
         The dialect contract is generated for the reference version. A
         runtime admitted through a version range may lack syntax the
-        contract's templates use, so contract-planned work stays refused
-        until a contract covering that runtime exists.
+        contract's templates use, so contract-planned work on any other
+        version needs that task's live proof for the runtime's version.
         """
         if self.profile.minimum_version is None:
             return True
-        return getattr(self, '_observed_version', None) == (
-            self.profile.exact_version)
+        observed = getattr(self, '_observed_version', None)
+        if observed is None:
+            return False
+        if observed == self.profile.exact_version:
+            return True
+        return bool(self._dialect_task_proven(
+            f'visual_admin.{resource_kind}.{operation_id}', observed))
+
+    def _dialect_task_proven(self, task_id, observed_version):
+        """Providers with per-version task proof override this."""
+        return False
 
     def visual_admin_descriptor(self):
         """Return this provider's declarative visual administration surface."""

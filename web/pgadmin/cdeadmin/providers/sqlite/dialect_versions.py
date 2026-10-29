@@ -73,6 +73,20 @@ def inventory_for(runtime_version):
     return result
 
 
+def task_proven(task_id, runtime_version):
+    """Whether a dialect task executed live on the runtime's table version.
+
+    The proof covers the drafts the live qualification exercised on that
+    tracked version; untracked versions inherit the nearest older proof.
+    """
+    try:
+        selected, _newer = table_version_for(runtime_version)
+    except ValueError:
+        return False
+    proof = versioned_table().get('task_proof', {}).get(selected)
+    return bool(proof) and task_id in proof['proven_tasks']
+
+
 def function_available(name, runtime_version):
     """Whether a built-in function name exists in the runtime's table."""
     selected, _newer = table_version_for(runtime_version)

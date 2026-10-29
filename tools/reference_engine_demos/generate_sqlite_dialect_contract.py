@@ -132,6 +132,8 @@ def generate(inventory_path, live_path, driver_path):
     if (
             live.get('dialect_qualification_ready') is not True or
             live.get('exact_profile') != REFERENCE_VERSION or
+            live.get('observed_runtime_version', REFERENCE_VERSION) != (
+                REFERENCE_VERSION) or
             live.get('missing_dialect_task_ids') != [] or
             live.get('credential_values_exported') is not False):
         raise RuntimeError('SQLite dialect live evidence is not admissible')

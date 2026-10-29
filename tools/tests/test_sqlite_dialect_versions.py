@@ -172,3 +172,18 @@ def test_conditional_keywords_keep_their_compile_option_mask(table):
     within = next(item for item in table['inventories']['lexical_rules']
                   if item['key'] == 'WITHIN')
     assert within['record']['feature_mask'] == 'ORDERSET'
+
+
+def test_task_proof_matches_committed_live_evidence(table):
+    import hashlib
+    assert set(table['task_proof']) == set(table['tracked_versions'])
+    for version, proof in table['task_proof'].items():
+        evidence = ROOT / proof['evidence']
+        assert hashlib.sha256(evidence.read_bytes()).hexdigest() == (
+            proof['evidence_sha256'])
+        document = json.loads(evidence.read_text())
+        assert document['observed_runtime_version'] == version
+        assert document['unactivated_dialect_qualification'] is True
+        assert sorted(document['qualified_dialect_task_ids']) == (
+            proof['proven_tasks'])
+    assert table['task_proof']['3.53.0']['unproven_tasks'] == []

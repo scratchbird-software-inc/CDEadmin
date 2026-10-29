@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 from pathlib import Path
 
@@ -65,6 +66,36 @@ def _without_position(record):
     value = copy.deepcopy(record)
     value.pop('item_id', None)
     return value
+
+
+def task_proof(live_paths, versions):
+    """Summarise live dialect-task qualification per tracked version.
+
+    Each input is ``cdeadmin_relational_provider_live_verify.py --engine
+    sqlite --dialect-qualification`` output from a runtime of exactly that
+    version. A task is proven for a version only when it executed live there.
+    """
+    proof = {}
+    for path in live_paths:
+        document = json.loads(path.read_text(encoding='utf-8'))
+        version = document.get('observed_runtime_version')
+        if version not in versions:
+            raise RuntimeError(f'{path.name}: {version} is not tracked')
+        if version in proof:
+            raise RuntimeError(f'two live evidence files for {version}')
+        if document.get('unactivated_dialect_qualification') is not True or (
+                document.get('credential_values_exported') is not False):
+            raise RuntimeError(f'{path.name} is not dialect qualification')
+        evidence = document['object_experience_evidence']
+        proof[version] = {
+            'evidence': path.relative_to(ROOT).as_posix(),
+            'evidence_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+            'proven_tasks': sorted(document['qualified_dialect_task_ids']),
+            'unproven_tasks': sorted(document['missing_dialect_task_ids']),
+            'operation_failures': dict(sorted(
+                evidence.get('operation_failures', {}).items())),
+        }
+    return proof
 
 
 def merge(documents, reference=REFERENCE_VERSION):
@@ -266,6 +297,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--inventory', action='append', type=Path,
                         default=[], help='per-version inventory JSON')
+    parser.add_argument('--live', action='append', type=Path, default=[],
+                        help='per-version dialect qualification evidence')
     parser.add_argument('--versioned', type=Path,
                         help='existing versioned table (for retirement)')
     parser.add_argument('--retire-below',
@@ -275,9 +308,12 @@ def main():
     if options.retire_below:
         if options.versioned is None:
             parser.error('--retire-below needs --versioned')
-        document = retire_below(
-            json.loads(options.versioned.read_text(encoding='utf-8')),
-            options.retire_below)
+        existing = json.loads(options.versioned.read_text(encoding='utf-8'))
+        document = retire_below(existing, options.retire_below)
+        document['task_proof'] = {
+            version: proof for version, proof in
+            existing.get('task_proof', {}).items()
+            if version in document['tracked_versions']}
         descriptor = json.loads(DESCRIPTOR.read_text(encoding='utf-8'))
         descriptor['version_range']['minimum'] = options.retire_below
         descriptor['version_range']['tested'] = [
@@ -292,6 +328,9 @@ def main():
             document = json.loads(path.read_text(encoding='utf-8'))
             documents[document['reference_version']] = document
         document = merge(documents)
+        document['task_proof'] = task_proof(
+            [path.resolve() for path in options.live],
+            document['tracked_versions'])
     _write(options.output, document)
     print(json.dumps({
         'tracked_versions': document['tracked_versions'],

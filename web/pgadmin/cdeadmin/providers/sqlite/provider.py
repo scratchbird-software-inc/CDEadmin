@@ -290,6 +290,10 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 
+    def _dialect_task_proven(self, task_id, observed_version):
+        from .dialect_versions import task_proven
+        return task_proven(task_id, observed_version)
+
     def extension_action(self, request, manifest):
         from .extensions import action
         self._require('execute')

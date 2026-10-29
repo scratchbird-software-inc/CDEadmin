@@ -1,0 +1,918 @@
+{
+  "activation_ready": false,
+  "categories": {
+    "admin": "passed",
+    "fault": "passed",
+    "language_api": "passed",
+    "resource": "passed",
+    "result": "passed",
+    "security": "passed",
+    "semantic_query": "excluded_from_dialect_qualification",
+    "transaction": "passed"
+  },
+  "common_transaction_finality_interpreted": false,
+  "credential_values_exported": false,
+  "dialect_qualification_ready": true,
+  "engine_id": "sqlite",
+  "error_message": null,
+  "error_type": null,
+  "exact_profile": "3.53.0",
+  "filesystem_escape_refused": true,
+  "graphical_object_activation_ready": true,
+  "missing_dialect_task_ids": [],
+  "object_experience_evidence": {
+    "concepts": {
+      "relational": {
+        "columns": {
+          "operations": {
+            "column": [
+              "create",
+              "drop",
+              "inspect",
+              "rename"
+            ]
+          },
+          "status": "passed"
+        },
+        "constraints": {
+          "operations": {
+            "constraint": [
+              "inspect"
+            ]
+          },
+          "status": "passed"
+        },
+        "databases": {
+          "operations": {
+            "attached-database": [
+              "inspect"
+            ],
+            "database": [
+              "alter",
+              "analyze",
+              "backup",
+              "create",
+              "drop",
+              "foreign_key_check",
+              "incremental_vacuum",
+              "inspect",
+              "integrity_check",
+              "optimize",
+              "quick_check",
+              "reindex",
+              "restore",
+              "vacuum",
+              "wal_checkpoint"
+            ]
+          },
+          "status": "passed"
+        },
+        "extensions_and_plugins": {
+          "operations": {
+            "extension": [
+              "inspect"
+            ]
+          },
+          "status": "passed"
+        },
+        "indexes": {
+          "operations": {
+            "index": [
+              "create",
+              "drop",
+              "inspect"
+            ]
+          },
+          "status": "passed"
+        },
+        "schemas": {
+          "operations": {
+            "attached-database": [
+              "inspect"
+            ],
+            "database": [
+              "alter",
+              "analyze",
+              "backup",
+              "create",
+              "drop",
+              "foreign_key_check",
+              "incremental_vacuum",
+              "inspect",
+              "integrity_check",
+              "optimize",
+              "quick_check",
+              "reindex",
+              "restore",
+              "vacuum",
+              "wal_checkpoint"
+            ]
+          },
+          "status": "passed"
+        },
+        "tables": {
+          "operations": {
+            "table": [
+              "alter",
+              "create",
+              "delete",
+              "drop",
+              "insert",
+              "inspect",
+              "rename",
+              "update"
+            ]
+          },
+          "status": "passed"
+        },
+        "triggers": {
+          "operations": {
+            "trigger": [
+              "create",
+              "drop",
+              "inspect"
+            ]
+          },
+          "status": "passed"
+        },
+        "views": {
+          "operations": {
+            "view": [
+              "create",
+              "drop",
+              "inspect"
+            ]
+          },
+          "status": "passed"
+        }
+      }
+    },
+    "dialect_task_evidence": {
+      "visual_admin.column.create": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "create_column",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "ALTER TABLE \"main\".\"qualification\" ADD \"editor_note\" INTEGER"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.column.drop": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "drop_column",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "ALTER TABLE \"main\".\"qualification\" DROP COLUMN \"editor_comment\""
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.column.rename": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "rename_column",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "ALTER TABLE \"main\".\"qualification\" RENAME COLUMN \"editor_note\" TO \"editor_comment\""
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.database.alter": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "alter_database",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "PRAGMA journal_mode = DELETE"
+            },
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "PRAGMA synchronous = FULL"
+            },
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "PRAGMA user_version = 53"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.database.analyze": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "analyze_database",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "ANALYZE"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.database.foreign_key_check": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "foreign_key_check_database",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "PRAGMA foreign_key_check"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.database.incremental_vacuum": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "incremental_vacuum_database",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "PRAGMA incremental_vacuum(0)"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.database.integrity_check": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "integrity_check_database",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "PRAGMA integrity_check(100)"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.database.optimize": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "optimize_database",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "PRAGMA optimize"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.database.quick_check": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "quick_check_database",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "PRAGMA quick_check(100)"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.database.reindex": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "reindex_database",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "REINDEX"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.database.vacuum": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "vacuum_database",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "VACUUM"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.database.wal_checkpoint": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "wal_checkpoint_database",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "PRAGMA wal_checkpoint(PASSIVE)"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.fts-table.create": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "create_fts-table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "CREATE VIRTUAL TABLE \"main\".\"cde_editor_fts_contentless\" USING fts5 (\"content\", content='')"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.fts-table.drop": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "drop_fts-table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "DROP TABLE \"main\".\"cde_editor_fts_contentless\""
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.fts-table.fts_delete_all": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "fts_delete_all_fts-table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 1,
+              "parameters_redacted": true,
+              "source": "INSERT INTO \"main\".\"cde_editor_fts_contentless\"(\"cde_editor_fts_contentless\") VALUES('delete-all')"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.fts-table.fts_flush": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "fts_flush_fts-table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 1,
+              "parameters_redacted": true,
+              "source": "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\") VALUES('flush')"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.fts-table.fts_integrity_check": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "fts_integrity_check_fts-table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 2,
+              "parameters_redacted": true,
+              "source": "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\",rank) VALUES('integrity-check',0)"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.fts-table.fts_merge": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "fts_merge_fts-table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 2,
+              "parameters_redacted": true,
+              "source": "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\",rank) VALUES('merge',128)"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.fts-table.fts_optimize": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "fts_optimize_fts-table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 1,
+              "parameters_redacted": true,
+              "source": "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\") VALUES('optimize')"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.fts-table.fts_rebuild": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "fts_rebuild_fts-table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 1,
+              "parameters_redacted": true,
+              "source": "INSERT INTO \"main\".\"cde_editor_fts\"(\"cde_editor_fts\") VALUES('rebuild')"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.fts-table.rename": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "rename_fts-table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "ALTER TABLE \"main\".\"cde_editor_fts\" RENAME TO \"cde_editor_fts_renamed\""
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.index.create": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "create_index",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "CREATE INDEX \"main\".\"cde_editor_index\" ON \"qualification\" (\"value\")"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.index.drop": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "drop_index",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "DROP INDEX \"main\".\"cde_editor_index\""
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.table.alter": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "alter_table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "ALTER TABLE \"main\".\"cde_editor_probe\" ADD \"note\" INTEGER"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.table.create": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "create_table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "CREATE TABLE \"main\".\"cde_editor_probe\" (\"id\" INTEGER NOT NULL PRIMARY KEY, \"value\" INTEGER)"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.table.delete": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "delete_table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 2,
+              "parameters_redacted": true,
+              "source": "DELETE FROM \"main\".\"qualification\" WHERE \"id\" = ? AND \"value\" = ? AND \"event_date\" IS NULL"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.table.drop": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "drop_table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "DROP TABLE \"main\".\"cde_editor_probe_renamed\""
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.table.insert": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "insert_table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 2,
+              "parameters_redacted": true,
+              "source": "INSERT INTO \"main\".\"qualification\" (\"id\", \"value\") VALUES (?, ?)"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.table.rename": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "rename_table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "ALTER TABLE \"main\".\"cde_editor_probe\" RENAME TO \"cde_editor_probe_renamed\""
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.table.update": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "update_table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 3,
+              "parameters_redacted": true,
+              "source": "UPDATE \"main\".\"qualification\" SET \"value\" = ? WHERE \"id\" = ? AND \"value\" = ? AND \"event_date\" IS NULL"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.trigger.create": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "create_trigger",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "CREATE TRIGGER \"main\".\"cde_editor_trigger\" AFTER INSERT ON \"main\".\"qualification\" BEGIN SELECT 1; END"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.trigger.drop": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "drop_trigger",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "DROP TRIGGER \"main\".\"cde_editor_trigger\""
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.view.create": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "create_view",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "CREATE VIEW \"main\".\"cde_editor_view\" AS SELECT id, value FROM qualification"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.view.drop": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "drop_view",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "DROP VIEW \"main\".\"cde_editor_view\""
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.virtual-table.create": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "create_virtual-table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "CREATE VIRTUAL TABLE \"main\".\"cde_editor_rtree\" USING rtree (\"id\", \"min_x\", \"max_x\", \"min_y\", \"max_y\")"
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.virtual-table.drop": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "drop_virtual-table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "DROP TABLE \"main\".\"cde_editor_rtree_renamed\""
+            }
+          ]
+        },
+        "live_execution": "passed"
+      },
+      "visual_admin.virtual-table.rename": {
+        "command_preview": {
+          "driver_operation": null,
+          "engine_id": "sqlite",
+          "operation": "rename_virtual-table",
+          "provider_constructed": true,
+          "statements": [
+            {
+              "parameter_count": 0,
+              "parameters_redacted": false,
+              "source": "ALTER TABLE \"main\".\"cde_editor_rtree\" RENAME TO \"cde_editor_rtree_renamed\""
+            }
+          ]
+        },
+        "live_execution": "passed"
+      }
+    },
+    "engine_id": "sqlite",
+    "evidence_scope": "inspection-and-visual-editor-operations",
+    "exact_profile": "3.53.0",
+    "native_operation_observations": {
+      "database.backup": {},
+      "database.create": {},
+      "database.restore": {}
+    },
+    "operation_failures": {},
+    "passed_resource_operations": {
+      "attached-database": [
+        "inspect"
+      ],
+      "collation": [
+        "inspect"
+      ],
+      "column": [
+        "create",
+        "drop",
+        "inspect",
+        "rename"
+      ],
+      "compile-option": [
+        "inspect"
+      ],
+      "constraint": [
+        "inspect"
+      ],
+      "database": [
+        "alter",
+        "analyze",
+        "backup",
+        "create",
+        "drop",
+        "foreign_key_check",
+        "incremental_vacuum",
+        "inspect",
+        "integrity_check",
+        "optimize",
+        "quick_check",
+        "reindex",
+        "restore",
+        "vacuum",
+        "wal_checkpoint"
+      ],
+      "extension": [
+        "inspect"
+      ],
+      "fts-table": [
+        "create",
+        "drop",
+        "fts_delete_all",
+        "fts_flush",
+        "fts_integrity_check",
+        "fts_merge",
+        "fts_optimize",
+        "fts_rebuild",
+        "inspect",
+        "rename"
+      ],
+      "index": [
+        "create",
+        "drop",
+        "inspect"
+      ],
+      "native-function": [
+        "inspect"
+      ],
+      "pragma": [
+        "inspect"
+      ],
+      "table": [
+        "alter",
+        "create",
+        "delete",
+        "drop",
+        "insert",
+        "inspect",
+        "rename",
+        "update"
+      ],
+      "trigger": [
+        "create",
+        "drop",
+        "inspect"
+      ],
+      "view": [
+        "create",
+        "drop",
+        "inspect"
+      ],
+      "virtual-table": [
+        "create",
+        "drop",
+        "inspect",
+        "rename"
+      ]
+    },
+    "raw_commands_used": false,
+    "schema": "cdeadmin.provider-object-live-evidence.v1"
+  },
+  "observed_runtime_version": "3.45.1",
+  "qualified_dialect_task_ids": [
+    "visual_admin.column.create",
+    "visual_admin.column.drop",
+    "visual_admin.column.rename",
+    "visual_admin.database.alter",
+    "visual_admin.database.analyze",
+    "visual_admin.database.foreign_key_check",
+    "visual_admin.database.incremental_vacuum",
+    "visual_admin.database.integrity_check",
+    "visual_admin.database.optimize",
+    "visual_admin.database.quick_check",
+    "visual_admin.database.reindex",
+    "visual_admin.database.vacuum",
+    "visual_admin.database.wal_checkpoint",
+    "visual_admin.fts-table.create",
+    "visual_admin.fts-table.drop",
+    "visual_admin.fts-table.fts_delete_all",
+    "visual_admin.fts-table.fts_flush",
+    "visual_admin.fts-table.fts_integrity_check",
+    "visual_admin.fts-table.fts_merge",
+    "visual_admin.fts-table.fts_optimize",
+    "visual_admin.fts-table.fts_rebuild",
+    "visual_admin.fts-table.rename",
+    "visual_admin.index.create",
+    "visual_admin.index.drop",
+    "visual_admin.table.alter",
+    "visual_admin.table.create",
+    "visual_admin.table.delete",
+    "visual_admin.table.drop",
+    "visual_admin.table.insert",
+    "visual_admin.table.rename",
+    "visual_admin.table.update",
+    "visual_admin.trigger.create",
+    "visual_admin.trigger.drop",
+    "visual_admin.view.create",
+    "visual_admin.view.drop",
+    "visual_admin.virtual-table.create",
+    "visual_admin.virtual-table.drop",
+    "visual_admin.virtual-table.rename"
+  ],
+  "schema": "cdeadmin.relational-provider-live-verification.v1",
+  "secret_access_events": 0,
+  "semantic_query_blocker": null,
+  "semantic_query_evidence": null,
+  "temporary_database_removed": true,
+  "unactivated_dialect_qualification": true
+}

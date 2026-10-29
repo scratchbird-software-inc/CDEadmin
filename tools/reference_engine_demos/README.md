@@ -250,7 +250,14 @@ check-in and hashes. To add a version:
 3. run `generate_sqlite_dialect_inventory.py --version X` under a Python whose
    `_sqlite3` loads that runtime (`LD_LIBRARY_PATH`); the generator refuses a
    runtime of any other version;
-4. merge every tracked inventory with `merge_sqlite_dialect_versions.py`.
+4. under the same runtime, run
+   `cdeadmin_relational_provider_live_verify.py --engine sqlite
+   --dialect-qualification` and keep its output in
+   `sqlite_qualification/live-X.json`; a contract-planned task is offered
+   on a non-reference runtime only if it executed live on that runtime's
+   tracked version;
+5. merge every tracked inventory and live evidence file with
+   `merge_sqlite_dialect_versions.py --inventory ... --live ...`.
 
 Retiring older versions is an owner decision. `merge_sqlite_dialect_versions.py
 --versioned <table> --retire-below X` drops tracked versions below `X` and the

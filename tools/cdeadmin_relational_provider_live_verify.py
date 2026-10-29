@@ -4715,10 +4715,12 @@ def _prepare_embedded(engine, database):
 
         module = sqlite3
         runtime = sqlite3.sqlite_version
-    expected = PROFILES[engine].exact_version
-    if runtime != expected:
+    # A range-admitted profile (SQLite, owner direction 2026-10-29) is
+    # qualified on whichever admitted version is loaded; exact profiles are
+    # unchanged because accepts_runtime_version() is exact without a range.
+    if not PROFILES[engine].accepts_runtime_version(runtime):
         raise RuntimeError(
-            f'{engine} embedded runtime is not exact ({runtime})'
+            f'{engine} embedded runtime is not admitted ({runtime})'
         )
     connection = module.connect(str(database))
     try:
@@ -4744,8 +4746,17 @@ def _prepare_embedded(engine, database):
         connection.close()
 
 
+def _embedded_runtime_version(engine):
+    if engine == 'duckdb':
+        import duckdb
+        return duckdb.__version__
+    import sqlite3
+    return sqlite3.sqlite_version
+
+
 def verify_embedded(engine, dialect_qualification=False):
     profile = PROFILES[engine]
+    observed_runtime = _embedded_runtime_version(engine)
     context = _context(profile)
     categories = {name: 'not_run' for name in CATEGORIES}
     error_type = None
@@ -4759,6 +4770,7 @@ def verify_embedded(engine, dialect_qualification=False):
         'schema': 'cdeadmin.provider-object-live-evidence.v1',
         'engine_id': engine,
         'exact_profile': profile.exact_version,
+        'observed_runtime_version': observed_runtime,
         'evidence_scope': 'discovered-resource-inspection',
         'concepts': {},
         'inspected_resource_kinds': [],
@@ -4791,9 +4803,9 @@ def verify_embedded(engine, dialect_qualification=False):
             ))
             discovered = provider.discover_endpoint(request)
             if discovered['verified_runtime']['version'] != (
-                profile.exact_version
+                observed_runtime
             ):
-                raise RuntimeError('exact runtime identity was not verified')
+                raise RuntimeError('runtime identity was not verified')
             provider.close()
             context = _verified_context(context, discovered)
             provider = admit_unactivated_dialect(PROVIDER_FACTORIES[engine](
@@ -4955,6 +4967,7 @@ def verify_embedded(engine, dialect_qualification=False):
         'schema': 'cdeadmin.relational-provider-live-verification.v1',
         'engine_id': engine,
         'exact_profile': profile.exact_version,
+        'observed_runtime_version': observed_runtime,
         'activation_ready': passed,
         'graphical_object_activation_ready': graphical_ready,
         'categories': categories,

@@ -100,9 +100,11 @@ def _provider_reporting(version):
     return provider
 
 
-def test_contract_planned_work_is_refused_off_the_reference_runtime():
-    """Fail closed: the 3.53.0 contract does not cover other versions."""
-    assert PROFILE.dialect_contract_id == 'sqlite.dialect.3.53.0.v1'
+def test_contract_planned_work_without_proof_is_refused(monkeypatch):
+    """Fail closed: off the reference runtime, a task needs live proof."""
+    from pgadmin.cdeadmin.providers.sqlite import dialect_versions
+    monkeypatch.setattr(dialect_versions, 'task_proven',
+                        lambda _task, _version: False)
     provider = _provider_reporting('3.45.1')
     try:
         assert provider._visual_admin_operation_gate('table', 'create') is (
@@ -111,6 +113,33 @@ def test_contract_planned_work_is_refused_off_the_reference_runtime():
         requires = provider.client.admin_operation_requires_dialect
         assert not requires('database', 'inspect')
         assert provider._visual_admin_operation_gate('database', 'inspect')
+    finally:
+        provider.close()
+
+
+def test_task_proven_on_the_runtime_version_follows_contract():
+    provider = _provider_reporting('3.45.1')
+    try:
+        state = provider.engine_contract_descriptor()['dialect']['state']
+        assert provider._visual_admin_operation_gate('table', 'create') is (
+            state == 'passed')
+    finally:
+        provider.close()
+
+
+def test_task_failed_live_on_its_version_stays_refused():
+    """FTS5 'flush' fails live on 3.35.0 (SQL logic error) and is not
+    offered on runtimes served from the 3.35.0 table."""
+    from pgadmin.cdeadmin.providers.sqlite.dialect_versions import (
+        task_proven)
+    assert not task_proven('visual_admin.fts-table.fts_flush', '3.35.0')
+    assert not task_proven('visual_admin.fts-table.fts_flush', '3.44.2')
+    assert task_proven('visual_admin.fts-table.fts_flush', '3.45.1')
+    assert task_proven('visual_admin.table.create', '3.35.0')
+    provider = _provider_reporting('3.40.1')
+    try:
+        assert provider._visual_admin_operation_gate(
+            'fts-table', 'fts_flush') is False
     finally:
         provider.close()
 
