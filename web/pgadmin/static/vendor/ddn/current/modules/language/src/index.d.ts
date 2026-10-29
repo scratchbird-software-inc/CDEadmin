@@ -22,6 +22,7 @@ export interface SyntaxNode {
     titleEnd?: number;
     implicit?: boolean;
     generated?: boolean;
+    literalBody?: boolean;
     identityKey?: string;
 }
 export interface ReferenceSite {

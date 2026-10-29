@@ -5,7 +5,7 @@
  * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
  * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
  */
-(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-cc6b5c75a915","version":"ddn-next-1","releaseHash":"3a8a08e0de181224d2ea68fe4e723d8925be7c4165927abbf9a6d63554e103a8","dependencies":["shared-c0332320f91a"],"modules":[{"id":"standalone/src/modular-verifier-api.js","bytes":940,"sha256":"9347cf5d7a9c201750ebcbc36e15a0a7f0b8f13be8831eca08c0f5cbce81f170","dependencies":["standalone/src/modular-loading.js","standalone/src/modular-verifier.js"]}],"hash":"4d8af505c6009714dc14abab11cb1a3486c3bb6be87c604c2fc5feb1fb5382e6"},{"standalone/src/modular-verifier-api.js":function(module,exports,require){
+(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-a67aa111fa97","version":"ddn-next-1","releaseHash":"4f601dab202a346b52c70ff1ec6bfdfb7c17ab3fbd59854e38cda422320d3131","dependencies":["shared-ebd47c4e1fef"],"modules":[{"id":"standalone/src/modular-verifier-api.js","bytes":940,"sha256":"9347cf5d7a9c201750ebcbc36e15a0a7f0b8f13be8831eca08c0f5cbce81f170","dependencies":["standalone/src/modular-loading.js","standalone/src/modular-verifier.js"]}],"hash":"b0d29295831d218fb9baef4f48bb0bec2934b214fa03232ab4a0d65fa98c539b"},{"standalone/src/modular-verifier-api.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createVerifier = exports.createBrowserRuntimeOptions = exports.createModularRuntimeOptions = void 0;

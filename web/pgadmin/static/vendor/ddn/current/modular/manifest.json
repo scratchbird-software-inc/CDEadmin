@@ -1,7 +1,7 @@
 {
   "format": "ddn-modular-1",
   "version": "ddn-next-1",
-  "releaseHash": "3a8a08e0de181224d2ea68fe4e723d8925be7c4165927abbf9a6d63554e103a8",
+  "releaseHash": "4f601dab202a346b52c70ff1ec6bfdfb7c17ab3fbd59854e38cda422320d3131",
   "license": "GPL-2.0-or-later",
   "licenseFile": "LICENSE",
   "notices": "NOTICE.md",
@@ -12,272 +12,294 @@
     "api:designer": {
       "kind": "api",
       "moduleId": "standalone/src/modular-designer-api.js",
-      "chunkId": "shared-7ffdd3196bf7",
+      "chunkId": "shared-673390dbad9b",
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-27149a72b67b",
-        "shared-2f1e15abcacd",
-        "shared-45f6b699ca1c",
-        "shared-4d0c8910f2dc",
-        "shared-957e9e2a3bbc",
-        "shared-90accf46a20e",
-        "shared-c0332320f91a",
-        "shared-f819ef245126",
-        "shared-9eb6624f1d40",
-        "shared-a3cf0afb56c8",
-        "shared-be0d56f8d05c",
-        "shared-7ffdd3196bf7"
+        "shared-6cf9d24a4527",
+        "shared-89ca0b52749b",
+        "shared-aea9ceabbf71",
+        "shared-5331ef8070e8",
+        "shared-73905c5bd21c",
+        "shared-30b5187aadd6",
+        "shared-e89a1c8e2b2d",
+        "shared-f98a38a4da4d",
+        "shared-ebd47c4e1fef",
+        "shared-822f2cb38cc6",
+        "shared-8f37b97a0edc",
+        "shared-a1e32f51fc2a",
+        "shared-673390dbad9b"
       ],
       "moduleCount": 94,
-      "rawBytes": 2079963,
-      "gzipBytes": 419553
+      "rawBytes": 2083710,
+      "gzipBytes": 420231
     },
     "api:verifier": {
       "kind": "api",
       "moduleId": "standalone/src/modular-verifier-api.js",
-      "chunkId": "shared-cc6b5c75a915",
+      "chunkId": "shared-a67aa111fa97",
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-27149a72b67b",
-        "shared-90accf46a20e",
-        "shared-c0332320f91a",
-        "shared-cc6b5c75a915"
+        "shared-89ca0b52749b",
+        "shared-e89a1c8e2b2d",
+        "shared-f98a38a4da4d",
+        "shared-ebd47c4e1fef",
+        "shared-a67aa111fa97"
       ],
       "moduleCount": 26,
-      "rawBytes": 1014060,
-      "gzipBytes": 169204
+      "rawBytes": 1017807,
+      "gzipBytes": 169887
     },
     "api:viewer": {
       "kind": "api",
       "moduleId": "standalone/src/modular-viewer-api.js",
-      "chunkId": "shared-b954ff0d3573",
+      "chunkId": "shared-1d7e2e746c2a",
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-27149a72b67b",
-        "shared-2f1e15abcacd",
-        "shared-45f6b699ca1c",
-        "shared-4d0c8910f2dc",
-        "shared-90accf46a20e",
-        "shared-957e9e2a3bbc",
-        "shared-c0332320f91a",
-        "shared-f819ef245126",
-        "shared-9eb6624f1d40",
-        "shared-b954ff0d3573"
+        "shared-6cf9d24a4527",
+        "shared-30b5187aadd6",
+        "shared-89ca0b52749b",
+        "shared-aea9ceabbf71",
+        "shared-5331ef8070e8",
+        "shared-73905c5bd21c",
+        "shared-e89a1c8e2b2d",
+        "shared-f98a38a4da4d",
+        "shared-ebd47c4e1fef",
+        "shared-822f2cb38cc6",
+        "shared-1d7e2e746c2a"
       ],
       "moduleCount": 70,
-      "rawBytes": 1593134,
-      "gzipBytes": 308120
+      "rawBytes": 1596881,
+      "gzipBytes": 308795
     },
     "designer": {
       "kind": "utility",
       "moduleId": "standalone/src/modular-designer-entry.js",
-      "chunkId": "designer-f0c69783274d",
+      "chunkId": "designer-296e54f2516f",
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-27149a72b67b",
-        "shared-2f1e15abcacd",
-        "shared-45f6b699ca1c",
-        "shared-4d0c8910f2dc",
-        "shared-957e9e2a3bbc",
-        "shared-90accf46a20e",
-        "shared-c0332320f91a",
-        "shared-f819ef245126",
-        "shared-9eb6624f1d40",
-        "shared-a3cf0afb56c8",
-        "shared-be0d56f8d05c",
-        "shared-7ffdd3196bf7",
-        "shared-9d235030a726",
-        "designer-f0c69783274d"
+        "shared-6cf9d24a4527",
+        "shared-89ca0b52749b",
+        "shared-aea9ceabbf71",
+        "shared-5331ef8070e8",
+        "shared-73905c5bd21c",
+        "shared-30b5187aadd6",
+        "shared-e89a1c8e2b2d",
+        "shared-f98a38a4da4d",
+        "shared-ebd47c4e1fef",
+        "shared-822f2cb38cc6",
+        "shared-8f37b97a0edc",
+        "shared-a1e32f51fc2a",
+        "shared-673390dbad9b",
+        "shared-e37dea31afcf",
+        "designer-296e54f2516f"
       ],
       "moduleCount": 102,
-      "rawBytes": 2257981,
-      "gzipBytes": 462534
+      "rawBytes": 2261728,
+      "gzipBytes": 463207
     },
     "render:charts": {
       "kind": "rendering",
       "moduleId": "standalone/src/families/charts.js",
-      "chunkId": "render-charts-4b9684e69142",
+      "chunkId": "render-charts-875491bc3a3b",
       "chunks": [
-        "shared-2f1e15abcacd",
-        "shared-da593b1d80b5",
-        "shared-30d874e36969",
-        "shared-f819ef245126",
-        "shared-53b1375e60be",
-        "render-charts-4b9684e69142"
+        "shared-6cf9d24a4527",
+        "shared-30b5187aadd6",
+        "shared-6502a4606789",
+        "shared-89ca0b52749b",
+        "shared-98e37fe0f266",
+        "render-charts-875491bc3a3b"
       ],
       "moduleCount": 24,
       "rawBytes": 1028554,
-      "gzipBytes": 181292
+      "gzipBytes": 181293
     },
     "render:geography": {
       "kind": "rendering",
       "moduleId": "standalone/src/families/geography.js",
-      "chunkId": "render-geography-bf877a421604",
+      "chunkId": "render-geography-a05e8125ccba",
       "chunks": [
-        "shared-2f1e15abcacd",
-        "shared-f819ef245126",
-        "shared-53b1375e60be",
-        "shared-8e440530605d",
-        "render-geography-bf877a421604"
+        "shared-6cf9d24a4527",
+        "shared-30b5187aadd6",
+        "shared-6502a4606789",
+        "shared-75a64c87e8fc",
+        "render-geography-a05e8125ccba"
       ],
       "moduleCount": 10,
       "rawBytes": 77520,
-      "gzipBytes": 23591
+      "gzipBytes": 23594
     },
     "render:graphs": {
       "kind": "rendering",
       "moduleId": "standalone/src/families/graphs.js",
-      "chunkId": "render-graphs-b1f407355aef",
+      "chunkId": "render-graphs-7fe3f90de312",
       "chunks": [
-        "shared-2f1e15abcacd",
-        "shared-da593b1d80b5",
-        "shared-30d874e36969",
-        "shared-4d0c8910f2dc",
-        "shared-957e9e2a3bbc",
-        "shared-a3cf0afb56c8",
-        "render-graphs-b1f407355aef"
+        "shared-6cf9d24a4527",
+        "shared-89ca0b52749b",
+        "shared-aea9ceabbf71",
+        "shared-5331ef8070e8",
+        "shared-8f37b97a0edc",
+        "shared-98e37fe0f266",
+        "render-graphs-7fe3f90de312"
       ],
       "moduleCount": 28,
       "rawBytes": 1150070,
-      "gzipBytes": 206825
+      "gzipBytes": 206821
     },
     "render:surfaces": {
       "kind": "rendering",
       "moduleId": "standalone/src/families/surfaces.js",
-      "chunkId": "render-surfaces-ed072ebb93ca",
+      "chunkId": "render-surfaces-27d8be99e458",
       "chunks": [
-        "shared-2f1e15abcacd",
-        "shared-da593b1d80b5",
-        "shared-30d874e36969",
-        "shared-4d0c8910f2dc",
-        "shared-f819ef245126",
-        "shared-53b1375e60be",
-        "shared-8e440530605d",
-        "render-surfaces-ed072ebb93ca"
+        "shared-6cf9d24a4527",
+        "shared-30b5187aadd6",
+        "shared-6502a4606789",
+        "shared-75a64c87e8fc",
+        "shared-89ca0b52749b",
+        "shared-98e37fe0f266",
+        "shared-aea9ceabbf71",
+        "render-surfaces-27d8be99e458"
       ],
       "moduleCount": 22,
       "rawBytes": 982286,
-      "gzipBytes": 174003
+      "gzipBytes": 173999
     },
     "verifier": {
       "kind": "utility",
       "moduleId": "standalone/src/modular-verifier-entry.js",
-      "chunkId": "verifier-a92aa39dd4bd",
+      "chunkId": "verifier-48faa5330b54",
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-27149a72b67b",
-        "shared-45f6b699ca1c",
-        "shared-be0d56f8d05c",
-        "shared-90accf46a20e",
-        "shared-c0332320f91a",
-        "shared-9d235030a726",
-        "shared-cc6b5c75a915",
-        "verifier-a92aa39dd4bd"
+        "shared-89ca0b52749b",
+        "shared-e89a1c8e2b2d",
+        "shared-f98a38a4da4d",
+        "shared-ebd47c4e1fef",
+        "shared-a67aa111fa97",
+        "shared-73905c5bd21c",
+        "shared-a1e32f51fc2a",
+        "shared-e37dea31afcf",
+        "verifier-48faa5330b54"
       ],
       "moduleCount": 44,
-      "rawBytes": 1290911,
-      "gzipBytes": 238497
+      "rawBytes": 1294658,
+      "gzipBytes": 239173
     },
     "verify:charts": {
       "kind": "verification",
       "moduleId": "profiles/src/families/charts.js",
-      "chunkId": "verify-charts-1f598b7d57ba",
+      "chunkId": "verify-charts-caa2720e883d",
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-30d874e36969",
-        "shared-90accf46a20e",
-        "verify-charts-1f598b7d57ba"
+        "shared-89ca0b52749b",
+        "shared-98e37fe0f266",
+        "shared-e89a1c8e2b2d",
+        "verify-charts-caa2720e883d"
       ],
       "moduleCount": 16,
       "rawBytes": 945963,
-      "gzipBytes": 150637
+      "gzipBytes": 150632
     },
     "verify:geography": {
       "kind": "verification",
       "moduleId": "profiles/src/families/geography.js",
-      "chunkId": "verify-geography-72edd281a0be",
+      "chunkId": "verify-geography-bcc5a9b92d5c",
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-30d874e36969",
-        "shared-90accf46a20e",
-        "verify-geography-72edd281a0be"
+        "shared-89ca0b52749b",
+        "shared-98e37fe0f266",
+        "shared-e89a1c8e2b2d",
+        "verify-geography-bcc5a9b92d5c"
       ],
       "moduleCount": 16,
       "rawBytes": 883182,
-      "gzipBytes": 144551
+      "gzipBytes": 144552
     },
     "verify:graphs": {
       "kind": "verification",
       "moduleId": "profiles/src/families/graphs.js",
-      "chunkId": "verify-graphs-2f61d2f4a428",
+      "chunkId": "verify-graphs-772258308814",
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-30d874e36969",
-        "shared-90accf46a20e",
-        "verify-graphs-2f61d2f4a428"
+        "shared-89ca0b52749b",
+        "shared-98e37fe0f266",
+        "shared-e89a1c8e2b2d",
+        "verify-graphs-772258308814"
       ],
       "moduleCount": 16,
       "rawBytes": 1082276,
-      "gzipBytes": 174772
+      "gzipBytes": 174769
     },
     "verify:surfaces": {
       "kind": "verification",
       "moduleId": "profiles/src/families/surfaces.js",
-      "chunkId": "verify-surfaces-75f505521ed3",
+      "chunkId": "verify-surfaces-0dc5102a6fd9",
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-30d874e36969",
-        "shared-90accf46a20e",
-        "verify-surfaces-75f505521ed3"
+        "shared-89ca0b52749b",
+        "shared-98e37fe0f266",
+        "shared-e89a1c8e2b2d",
+        "verify-surfaces-0dc5102a6fd9"
       ],
       "moduleCount": 16,
       "rawBytes": 993529,
-      "gzipBytes": 156589
+      "gzipBytes": 156581
     },
     "viewer": {
       "kind": "utility",
       "moduleId": "standalone/src/modular-viewer-entry.js",
-      "chunkId": "viewer-3ded8044c5c2",
+      "chunkId": "viewer-defe0ef52de3",
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-27149a72b67b",
-        "shared-45f6b699ca1c",
-        "shared-be0d56f8d05c",
-        "shared-90accf46a20e",
-        "shared-c0332320f91a",
-        "shared-9d235030a726",
-        "shared-2f1e15abcacd",
-        "shared-4d0c8910f2dc",
-        "shared-957e9e2a3bbc",
-        "shared-f819ef245126",
-        "shared-9eb6624f1d40",
-        "shared-b954ff0d3573",
-        "viewer-3ded8044c5c2"
+        "shared-6cf9d24a4527",
+        "shared-30b5187aadd6",
+        "shared-89ca0b52749b",
+        "shared-aea9ceabbf71",
+        "shared-5331ef8070e8",
+        "shared-73905c5bd21c",
+        "shared-e89a1c8e2b2d",
+        "shared-f98a38a4da4d",
+        "shared-ebd47c4e1fef",
+        "shared-822f2cb38cc6",
+        "shared-1d7e2e746c2a",
+        "shared-a1e32f51fc2a",
+        "shared-e37dea31afcf",
+        "viewer-defe0ef52de3"
       ],
       "moduleCount": 79,
-      "rawBytes": 1784722,
-      "gzipBytes": 355473
+      "rawBytes": 1788469,
+      "gzipBytes": 356140
     },
     "worker": {
       "kind": "worker",
       "moduleId": "standalone/src/modular-worker.js",
-      "chunkId": "worker-286113c36adf",
+      "chunkId": "worker-f621ec472de9",
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-27149a72b67b",
-        "shared-90accf46a20e",
-        "worker-286113c36adf"
+        "shared-89ca0b52749b",
+        "shared-e89a1c8e2b2d",
+        "shared-f98a38a4da4d",
+        "worker-f621ec472de9"
       ],
       "moduleCount": 21,
-      "rawBytes": 986151,
-      "gzipBytes": 162654
+      "rawBytes": 989898,
+      "gzipBytes": 163345
     }
   },
   "chunks": [
     {
-      "id": "shared-da593b1d80b5",
-      "file": "chunks/shared-da593b1d80b5.js",
-      "hash": "63d26571e2feb7efe4dc4247b3bcc0b0404b6b3c7903aa04fe2b7206225be16a",
+      "id": "shared-6cf9d24a4527",
+      "file": "chunks/shared-6cf9d24a4527.js",
+      "hash": "bfb87fc63c461203438ff7a63ed517d51b327a8704b1fb09a099ec6e4582b911",
+      "dependencies": [],
+      "moduleIds": [
+        "presentation/src/adapters.js",
+        "presentation/src/model.js"
+      ],
+      "entries": [
+        "api:designer",
+        "api:viewer",
+        "designer",
+        "render:charts",
+        "render:geography",
+        "render:graphs",
+        "render:surfaces",
+        "viewer"
+      ],
+      "rawBytes": 9132,
+      "gzipBytes": 2996
+    },
+    {
+      "id": "shared-89ca0b52749b",
+      "file": "chunks/shared-89ca0b52749b.js",
+      "hash": "6ca3bc9d0d1f0ab9c4de7a3471ee03b4a3730ee814ef9ba464250ccde94002d6",
       "dependencies": [],
       "moduleIds": [
         "profiles/src/catalogue-store.js",
@@ -308,61 +330,58 @@
       "gzipBytes": 102387
     },
     {
-      "id": "shared-27149a72b67b",
-      "file": "chunks/shared-27149a72b67b.js",
-      "hash": "9097d25ebdbbff04888d374027330b0778a324d2a8cf548e2d1b3961b314281c",
-      "dependencies": [
-        "shared-da593b1d80b5"
-      ],
-      "moduleIds": [
-        "defaults/src/index.js",
-        "defaults/src/method-names.js",
-        "execution/src/compute.js",
-        "execution/src/index.js",
-        "language/src/index.js",
-        "language/src/schema.js",
-        "model/src/index.js",
-        "profiles/src/view-surfaces.js",
-        "verifier/src/index.js"
-      ],
-      "entries": [
-        "api:designer",
-        "api:verifier",
-        "api:viewer",
-        "designer",
-        "verifier",
-        "viewer",
-        "worker"
-      ],
-      "rawBytes": 257957,
-      "gzipBytes": 55548
-    },
-    {
-      "id": "shared-2f1e15abcacd",
-      "file": "chunks/shared-2f1e15abcacd.js",
-      "hash": "a853d86d6228d8daecedfe686d68dc439ad6ab818b406cc55c1ddc55df8ff86f",
+      "id": "shared-aea9ceabbf71",
+      "file": "chunks/shared-aea9ceabbf71.js",
+      "hash": "f2abe8a3107ecffe9d75b65294fc17588bff8118cd6b776c9b4c7eed9f373ea7",
       "dependencies": [],
       "moduleIds": [
-        "presentation/src/adapters.js",
-        "presentation/src/model.js"
+        "presentation/src/table.js"
       ],
       "entries": [
         "api:designer",
         "api:viewer",
         "designer",
-        "render:charts",
-        "render:geography",
         "render:graphs",
         "render:surfaces",
         "viewer"
       ],
-      "rawBytes": 9132,
-      "gzipBytes": 2990
+      "rawBytes": 4695,
+      "gzipBytes": 1960
     },
     {
-      "id": "shared-45f6b699ca1c",
-      "file": "chunks/shared-45f6b699ca1c.js",
-      "hash": "8d3eef7f52060be8fd9de1444115b5a935ea0e31be894b24b53ee62b5fbae275",
+      "id": "shared-5331ef8070e8",
+      "file": "chunks/shared-5331ef8070e8.js",
+      "hash": "ac4dfe5356bc64c1a90c624c08c867b6b4dba34b33d87398ac3b9061c44ebc8b",
+      "dependencies": [
+        "shared-6cf9d24a4527",
+        "shared-89ca0b52749b",
+        "shared-aea9ceabbf71"
+      ],
+      "moduleIds": [
+        "presentation/src/card-text.js",
+        "presentation/src/graph-common.js",
+        "presentation/src/graph-glyphs.js",
+        "presentation/src/graph-layouts.js",
+        "presentation/src/graph-native.js",
+        "presentation/src/markdown.js",
+        "presentation/src/mindmap.js",
+        "presentation/src/relation-presentation.js",
+        "presentation/src/symbol-presentation.js"
+      ],
+      "entries": [
+        "api:designer",
+        "api:viewer",
+        "designer",
+        "render:graphs",
+        "viewer"
+      ],
+      "rawBytes": 177803,
+      "gzipBytes": 41705
+    },
+    {
+      "id": "shared-73905c5bd21c",
+      "file": "chunks/shared-73905c5bd21c.js",
+      "hash": "30acc2156c8aa4f46cf732357a6d4e47957b0ade583f70b597a5705033d0c1f3",
       "dependencies": [],
       "moduleIds": [
         "viewer/src/dialogs.js",
@@ -386,60 +405,33 @@
       "gzipBytes": 21982
     },
     {
-      "id": "shared-4d0c8910f2dc",
-      "file": "chunks/shared-4d0c8910f2dc.js",
-      "hash": "809ccf349de2fc4f2a4047a89d8eedb19cb07ff5ae91bd4d7996686648cba683",
-      "dependencies": [],
+      "id": "shared-30b5187aadd6",
+      "file": "chunks/shared-30b5187aadd6.js",
+      "hash": "b0cc2743b6f16df38a75d3ec66411b32930b7fc47cb8a01d89f7310eef40d2bf",
+      "dependencies": [
+        "shared-6cf9d24a4527"
+      ],
       "moduleIds": [
-        "presentation/src/table.js"
+        "presentation/src/stationery.js"
       ],
       "entries": [
         "api:designer",
         "api:viewer",
         "designer",
-        "render:graphs",
+        "render:charts",
+        "render:geography",
         "render:surfaces",
         "viewer"
       ],
-      "rawBytes": 4695,
-      "gzipBytes": 1963
+      "rawBytes": 18631,
+      "gzipBytes": 5410
     },
     {
-      "id": "shared-957e9e2a3bbc",
-      "file": "chunks/shared-957e9e2a3bbc.js",
-      "hash": "6bcf2602a406401199f8e1d9256acd64c37cda82efc3bca2b838da9765384762",
+      "id": "shared-e89a1c8e2b2d",
+      "file": "chunks/shared-e89a1c8e2b2d.js",
+      "hash": "50621f2128363c4d3e3d646e4a9d9144c4621cf3f175df7aed3e2d9cbdb4e0af",
       "dependencies": [
-        "shared-2f1e15abcacd",
-        "shared-4d0c8910f2dc",
-        "shared-da593b1d80b5"
-      ],
-      "moduleIds": [
-        "presentation/src/card-text.js",
-        "presentation/src/graph-common.js",
-        "presentation/src/graph-glyphs.js",
-        "presentation/src/graph-layouts.js",
-        "presentation/src/graph-native.js",
-        "presentation/src/markdown.js",
-        "presentation/src/mindmap.js",
-        "presentation/src/relation-presentation.js",
-        "presentation/src/symbol-presentation.js"
-      ],
-      "entries": [
-        "api:designer",
-        "api:viewer",
-        "designer",
-        "render:graphs",
-        "viewer"
-      ],
-      "rawBytes": 177803,
-      "gzipBytes": 41707
-    },
-    {
-      "id": "shared-90accf46a20e",
-      "file": "chunks/shared-90accf46a20e.js",
-      "hash": "1a9114ae8ea6d40b9a5fa7cf51d7301d906a258d34ec0de1b82e6d8483afc12a",
-      "dependencies": [
-        "shared-da593b1d80b5"
+        "shared-89ca0b52749b"
       ],
       "moduleIds": [
         "profiles/src/family-packs.js",
@@ -460,16 +452,46 @@
         "worker"
       ],
       "rawBytes": 9517,
-      "gzipBytes": 2883
+      "gzipBytes": 2884
     },
     {
-      "id": "shared-c0332320f91a",
-      "file": "chunks/shared-c0332320f91a.js",
-      "hash": "dff85034dc07e9c032138b9e45a1a0c4fe52d421c16b29c63d68f0ab05ab557f",
+      "id": "shared-f98a38a4da4d",
+      "file": "chunks/shared-f98a38a4da4d.js",
+      "hash": "393615f4f4643cbbcd63e28898cc9b88ce418cebab5baa683dadb0984667a3f5",
       "dependencies": [
-        "shared-27149a72b67b",
-        "shared-90accf46a20e",
-        "shared-da593b1d80b5"
+        "shared-89ca0b52749b"
+      ],
+      "moduleIds": [
+        "defaults/src/index.js",
+        "defaults/src/method-names.js",
+        "execution/src/compute.js",
+        "execution/src/index.js",
+        "language/src/index.js",
+        "language/src/schema.js",
+        "model/src/index.js",
+        "profiles/src/view-surfaces.js",
+        "verifier/src/index.js"
+      ],
+      "entries": [
+        "api:designer",
+        "api:verifier",
+        "api:viewer",
+        "designer",
+        "verifier",
+        "viewer",
+        "worker"
+      ],
+      "rawBytes": 261704,
+      "gzipBytes": 56238
+    },
+    {
+      "id": "shared-ebd47c4e1fef",
+      "file": "chunks/shared-ebd47c4e1fef.js",
+      "hash": "b2a6f3f77c2d41402934bee079e3742d7a77a5792704c3a8a4667a58da2857d0",
+      "dependencies": [
+        "shared-89ca0b52749b",
+        "shared-e89a1c8e2b2d",
+        "shared-f98a38a4da4d"
       ],
       "moduleIds": [
         "execution/src/browser-verifier.js",
@@ -488,44 +510,22 @@
         "viewer"
       ],
       "rawBytes": 30441,
-      "gzipBytes": 7483
+      "gzipBytes": 7477
     },
     {
-      "id": "shared-f819ef245126",
-      "file": "chunks/shared-f819ef245126.js",
-      "hash": "7630a2403f99f3b9f3e984b36aa091dbd64692c1bd390e18ee65c4415ad5efb2",
+      "id": "shared-822f2cb38cc6",
+      "file": "chunks/shared-822f2cb38cc6.js",
+      "hash": "bb7f980cee32d1121397983a48e5d4acab7333d5f7700366049ca3040fb63c8d",
       "dependencies": [
-        "shared-2f1e15abcacd"
-      ],
-      "moduleIds": [
-        "presentation/src/stationery.js"
-      ],
-      "entries": [
-        "api:designer",
-        "api:viewer",
-        "designer",
-        "render:charts",
-        "render:geography",
-        "render:surfaces",
-        "viewer"
-      ],
-      "rawBytes": 18631,
-      "gzipBytes": 5410
-    },
-    {
-      "id": "shared-9eb6624f1d40",
-      "file": "chunks/shared-9eb6624f1d40.js",
-      "hash": "78148bc944c4a541aa182110473a7c3f0afff0a98fbcf15992842ad5c2532911",
-      "dependencies": [
-        "shared-27149a72b67b",
-        "shared-2f1e15abcacd",
-        "shared-45f6b699ca1c",
-        "shared-4d0c8910f2dc",
-        "shared-90accf46a20e",
-        "shared-957e9e2a3bbc",
-        "shared-c0332320f91a",
-        "shared-da593b1d80b5",
-        "shared-f819ef245126"
+        "shared-30b5187aadd6",
+        "shared-5331ef8070e8",
+        "shared-6cf9d24a4527",
+        "shared-73905c5bd21c",
+        "shared-89ca0b52749b",
+        "shared-aea9ceabbf71",
+        "shared-e89a1c8e2b2d",
+        "shared-ebd47c4e1fef",
+        "shared-f98a38a4da4d"
       ],
       "moduleIds": [
         "presentation/src/graph-isometric.js",
@@ -558,16 +558,16 @@
         "viewer"
       ],
       "rawBytes": 282732,
-      "gzipBytes": 64762
+      "gzipBytes": 64752
     },
     {
-      "id": "shared-a3cf0afb56c8",
-      "file": "chunks/shared-a3cf0afb56c8.js",
-      "hash": "a924dc307b75f18402191e32b009a1171c31a3bafd59943d0c8c780e8523841b",
+      "id": "shared-8f37b97a0edc",
+      "file": "chunks/shared-8f37b97a0edc.js",
+      "hash": "e32b5b628ab2521fc105e9f7164b8a4284ca47313fc89de1e09894e1daf0c4e4",
       "dependencies": [
-        "shared-2f1e15abcacd",
-        "shared-957e9e2a3bbc",
-        "shared-da593b1d80b5"
+        "shared-5331ef8070e8",
+        "shared-6cf9d24a4527",
+        "shared-89ca0b52749b"
       ],
       "moduleIds": [
         "presentation/src/node-dimensions.js"
@@ -578,14 +578,14 @@
         "render:graphs"
       ],
       "rawBytes": 3785,
-      "gzipBytes": 1583
+      "gzipBytes": 1584
     },
     {
-      "id": "shared-be0d56f8d05c",
-      "file": "chunks/shared-be0d56f8d05c.js",
-      "hash": "3fe406ca909f30b6eda05359c6bc68061bca059312bec3cb8a3c5411c78f8749",
+      "id": "shared-a1e32f51fc2a",
+      "file": "chunks/shared-a1e32f51fc2a.js",
+      "hash": "ed1a7322694de1e832ea1470ec4713b966a1cc2d58876cba9b4503d13216e177",
       "dependencies": [
-        "shared-45f6b699ca1c"
+        "shared-73905c5bd21c"
       ],
       "moduleIds": [
         "viewer/src/choice-field.js"
@@ -600,19 +600,19 @@
       "gzipBytes": 4557
     },
     {
-      "id": "shared-7ffdd3196bf7",
-      "file": "chunks/shared-7ffdd3196bf7.js",
-      "hash": "d1acb28d7039fd5e4bf8251bbabbf648e81204a35daca616e8956e9246c70130",
+      "id": "shared-673390dbad9b",
+      "file": "chunks/shared-673390dbad9b.js",
+      "hash": "63a770fcf3b872d131b8a49b9dd8816a437c145a19cba27c113d055d1a5b2e62",
       "dependencies": [
-        "shared-27149a72b67b",
-        "shared-2f1e15abcacd",
-        "shared-45f6b699ca1c",
-        "shared-957e9e2a3bbc",
-        "shared-9eb6624f1d40",
-        "shared-a3cf0afb56c8",
-        "shared-be0d56f8d05c",
-        "shared-c0332320f91a",
-        "shared-da593b1d80b5"
+        "shared-5331ef8070e8",
+        "shared-6cf9d24a4527",
+        "shared-73905c5bd21c",
+        "shared-822f2cb38cc6",
+        "shared-89ca0b52749b",
+        "shared-8f37b97a0edc",
+        "shared-a1e32f51fc2a",
+        "shared-ebd47c4e1fef",
+        "shared-f98a38a4da4d"
       ],
       "moduleIds": [
         "designer/src/appearance.js",
@@ -644,17 +644,17 @@
         "designer"
       ],
       "rawBytes": 471708,
-      "gzipBytes": 106298
+      "gzipBytes": 106299
     },
     {
-      "id": "shared-9d235030a726",
-      "file": "chunks/shared-9d235030a726.js",
-      "hash": "954ea8ef6eee0cc2519a33bb5a93db0758263a90506513ec9f2e333b418c760a",
+      "id": "shared-e37dea31afcf",
+      "file": "chunks/shared-e37dea31afcf.js",
+      "hash": "9d3a2c343e5d3d30f3bab6e1a1a30057c205086d96db9798bc7aa951ea787491",
       "dependencies": [
-        "shared-27149a72b67b",
-        "shared-45f6b699ca1c",
-        "shared-be0d56f8d05c",
-        "shared-c0332320f91a"
+        "shared-73905c5bd21c",
+        "shared-a1e32f51fc2a",
+        "shared-ebd47c4e1fef",
+        "shared-f98a38a4da4d"
       ],
       "moduleIds": [
         "standalone/src/brand.js",
@@ -671,15 +671,15 @@
         "viewer"
       ],
       "rawBytes": 175872,
-      "gzipBytes": 41901
+      "gzipBytes": 41896
     },
     {
-      "id": "designer-f0c69783274d",
-      "file": "chunks/designer-f0c69783274d.js",
-      "hash": "c90d75ff823fb606aec8ac6dc7d86c62cc5c30c3d97fa13ea22875be7daabd5e",
+      "id": "designer-296e54f2516f",
+      "file": "chunks/designer-296e54f2516f.js",
+      "hash": "a4e5a7c2e294a94965ab441454b54dde70513d0fee8aa1f25a1459a4ed320e56",
       "dependencies": [
-        "shared-7ffdd3196bf7",
-        "shared-9d235030a726"
+        "shared-673390dbad9b",
+        "shared-e37dea31afcf"
       ],
       "moduleIds": [
         "standalone/src/modular-designer-entry.js"
@@ -691,11 +691,32 @@
       "gzipBytes": 1080
     },
     {
-      "id": "shared-30d874e36969",
-      "file": "chunks/shared-30d874e36969.js",
-      "hash": "987c1e72735564f529c905874fbdcd6323200e4dccfb6825a62ba849dcfa380d",
+      "id": "shared-6502a4606789",
+      "file": "chunks/shared-6502a4606789.js",
+      "hash": "9f5835bb182a80fa783d7fef6c6681586e545861f469312d8cd2f3212af377f9",
       "dependencies": [
-        "shared-da593b1d80b5"
+        "shared-30b5187aadd6",
+        "shared-6cf9d24a4527"
+      ],
+      "moduleIds": [
+        "presentation/src/data-adapter.js",
+        "presentation/src/data-catalogue.js",
+        "presentation/src/data-common.js"
+      ],
+      "entries": [
+        "render:charts",
+        "render:geography",
+        "render:surfaces"
+      ],
+      "rawBytes": 21359,
+      "gzipBytes": 6733
+    },
+    {
+      "id": "shared-98e37fe0f266",
+      "file": "chunks/shared-98e37fe0f266.js",
+      "hash": "ed76d8c00864af0e785d2e0879426fc905f2612e496d2e138e6875328c05d1a4",
+      "dependencies": [
+        "shared-89ca0b52749b"
       ],
       "moduleIds": [
         "profiles/src/analysis-profile.js",
@@ -713,37 +734,16 @@
         "verify:surfaces"
       ],
       "rawBytes": 144506,
-      "gzipBytes": 34892
+      "gzipBytes": 34888
     },
     {
-      "id": "shared-53b1375e60be",
-      "file": "chunks/shared-53b1375e60be.js",
-      "hash": "79bc33d6055de528c8a1160f528064b404e1d2290e2d01468e4d508efbc2e41d",
+      "id": "render-charts-875491bc3a3b",
+      "file": "chunks/render-charts-875491bc3a3b.js",
+      "hash": "2a9e05d23acda8c123cacef0d55e0238b975ad2e7ba54a70501fcdbbc09fa303",
       "dependencies": [
-        "shared-2f1e15abcacd",
-        "shared-f819ef245126"
-      ],
-      "moduleIds": [
-        "presentation/src/data-adapter.js",
-        "presentation/src/data-catalogue.js",
-        "presentation/src/data-common.js"
-      ],
-      "entries": [
-        "render:charts",
-        "render:geography",
-        "render:surfaces"
-      ],
-      "rawBytes": 21359,
-      "gzipBytes": 6731
-    },
-    {
-      "id": "render-charts-4b9684e69142",
-      "file": "chunks/render-charts-4b9684e69142.js",
-      "hash": "661d5aba26538b10d2e8555a85f589659ce465d83b0e63468205db93b32c1362",
-      "dependencies": [
-        "shared-2f1e15abcacd",
-        "shared-30d874e36969",
-        "shared-53b1375e60be"
+        "shared-6502a4606789",
+        "shared-6cf9d24a4527",
+        "shared-98e37fe0f266"
       ],
       "moduleIds": [
         "presentation/src/data-charts.js",
@@ -758,15 +758,15 @@
         "render:charts"
       ],
       "rawBytes": 120794,
-      "gzipBytes": 28882
+      "gzipBytes": 28879
     },
     {
-      "id": "shared-8e440530605d",
-      "file": "chunks/shared-8e440530605d.js",
-      "hash": "1d7caeb56eb9ebf53e940690786cc79de947046506807baffe25cbb9c9592a08",
+      "id": "shared-75a64c87e8fc",
+      "file": "chunks/shared-75a64c87e8fc.js",
+      "hash": "96054e000d6bf1dc8a27443324d0e70ed345ecafb36a0dd987b2b50e99475254",
       "dependencies": [
-        "shared-2f1e15abcacd",
-        "shared-53b1375e60be"
+        "shared-6502a4606789",
+        "shared-6cf9d24a4527"
       ],
       "moduleIds": [
         "presentation/src/data-encoding.js"
@@ -776,16 +776,16 @@
         "render:surfaces"
       ],
       "rawBytes": 5982,
-      "gzipBytes": 2201
+      "gzipBytes": 2199
     },
     {
-      "id": "render-geography-bf877a421604",
-      "file": "chunks/render-geography-bf877a421604.js",
-      "hash": "2b28648748dcd91741fa9f381090de09cd87cf3e4f6bbf7af186d998eaa40009",
+      "id": "render-geography-a05e8125ccba",
+      "file": "chunks/render-geography-a05e8125ccba.js",
+      "hash": "a80094f5e16916dcdc7d8d357765ccd047b5ec0f36d21cd4ccc59d3492c4d21e",
       "dependencies": [
-        "shared-2f1e15abcacd",
-        "shared-53b1375e60be",
-        "shared-8e440530605d"
+        "shared-6502a4606789",
+        "shared-6cf9d24a4527",
+        "shared-75a64c87e8fc"
       ],
       "moduleIds": [
         "presentation/src/data-geo.js",
@@ -796,19 +796,19 @@
         "render:geography"
       ],
       "rawBytes": 22416,
-      "gzipBytes": 6259
+      "gzipBytes": 6256
     },
     {
-      "id": "render-graphs-b1f407355aef",
-      "file": "chunks/render-graphs-b1f407355aef.js",
-      "hash": "403675d7aad3308cbd6db2834c50364ecdc2d0170019370c5622a9181e9ca279",
+      "id": "render-graphs-7fe3f90de312",
+      "file": "chunks/render-graphs-7fe3f90de312.js",
+      "hash": "b8d129fa40910da92c50c010fc3202b32311da5e6235e4df5bedf2b0e5de539f",
       "dependencies": [
-        "shared-2f1e15abcacd",
-        "shared-30d874e36969",
-        "shared-4d0c8910f2dc",
-        "shared-957e9e2a3bbc",
-        "shared-a3cf0afb56c8",
-        "shared-da593b1d80b5"
+        "shared-5331ef8070e8",
+        "shared-6cf9d24a4527",
+        "shared-89ca0b52749b",
+        "shared-8f37b97a0edc",
+        "shared-98e37fe0f266",
+        "shared-aea9ceabbf71"
       ],
       "moduleIds": [
         "presentation/src/family-graphs.js",
@@ -820,18 +820,18 @@
         "render:graphs"
       ],
       "rawBytes": 96017,
-      "gzipBytes": 21303
+      "gzipBytes": 21301
     },
     {
-      "id": "render-surfaces-ed072ebb93ca",
-      "file": "chunks/render-surfaces-ed072ebb93ca.js",
-      "hash": "2346c17710201b5df6ed7095e851b784c64feca83a6498c9941ee94f2e752b33",
+      "id": "render-surfaces-27d8be99e458",
+      "file": "chunks/render-surfaces-27d8be99e458.js",
+      "hash": "8d597f1c627ba021287f0f38346b6b86826a866154f94f95090f7c5ddb77c45a",
       "dependencies": [
-        "shared-2f1e15abcacd",
-        "shared-30d874e36969",
-        "shared-4d0c8910f2dc",
-        "shared-53b1375e60be",
-        "shared-8e440530605d"
+        "shared-6502a4606789",
+        "shared-6cf9d24a4527",
+        "shared-75a64c87e8fc",
+        "shared-98e37fe0f266",
+        "shared-aea9ceabbf71"
       ],
       "moduleIds": [
         "presentation/src/data-surfaces.js",
@@ -842,15 +842,15 @@
         "render:surfaces"
       ],
       "rawBytes": 63849,
-      "gzipBytes": 17429
+      "gzipBytes": 17426
     },
     {
-      "id": "shared-b954ff0d3573",
-      "file": "chunks/shared-b954ff0d3573.js",
-      "hash": "9a5b937d6c0ecfdf3b9dc53be7f0c99fcce489f8a58cdd044ba400725f43d074",
+      "id": "shared-1d7e2e746c2a",
+      "file": "chunks/shared-1d7e2e746c2a.js",
+      "hash": "1e99a6850dbb53e23c3f3f417c9189c08ada06a59d8af7e50ff60f533af20274",
       "dependencies": [
-        "shared-9eb6624f1d40",
-        "shared-c0332320f91a"
+        "shared-822f2cb38cc6",
+        "shared-ebd47c4e1fef"
       ],
       "moduleIds": [
         "standalone/src/modular-viewer-api.js"
@@ -860,14 +860,14 @@
         "viewer"
       ],
       "rawBytes": 2735,
-      "gzipBytes": 1005
+      "gzipBytes": 1004
     },
     {
-      "id": "shared-cc6b5c75a915",
-      "file": "chunks/shared-cc6b5c75a915.js",
-      "hash": "4d8af505c6009714dc14abab11cb1a3486c3bb6be87c604c2fc5feb1fb5382e6",
+      "id": "shared-a67aa111fa97",
+      "file": "chunks/shared-a67aa111fa97.js",
+      "hash": "b0d29295831d218fb9baef4f48bb0bec2934b214fa03232ab4a0d65fa98c539b",
       "dependencies": [
-        "shared-c0332320f91a"
+        "shared-ebd47c4e1fef"
       ],
       "moduleIds": [
         "standalone/src/modular-verifier-api.js"
@@ -877,15 +877,15 @@
         "verifier"
       ],
       "rawBytes": 2013,
-      "gzipBytes": 903
+      "gzipBytes": 901
     },
     {
-      "id": "verifier-a92aa39dd4bd",
-      "file": "chunks/verifier-a92aa39dd4bd.js",
-      "hash": "b6a88f109453f3bc5e46093aa812c14f5e551affbfb09dd1cb8fa1bc447b45ef",
+      "id": "verifier-48faa5330b54",
+      "file": "chunks/verifier-48faa5330b54.js",
+      "hash": "6b8cbc3e720214676ced4e10fea00845feb0e0749febe80b0c5c146c9df75afa",
       "dependencies": [
-        "shared-9d235030a726",
-        "shared-cc6b5c75a915"
+        "shared-a67aa111fa97",
+        "shared-e37dea31afcf"
       ],
       "moduleIds": [
         "standalone/src/modular-verifier-entry.js"
@@ -894,16 +894,16 @@
         "verifier"
       ],
       "rawBytes": 1549,
-      "gzipBytes": 853
+      "gzipBytes": 851
     },
     {
-      "id": "verify-charts-1f598b7d57ba",
-      "file": "chunks/verify-charts-1f598b7d57ba.js",
-      "hash": "66b93ec6bdcdb7a0864e0531d418226a7d4d354ccf6bf646badc69079e21a71d",
+      "id": "verify-charts-caa2720e883d",
+      "file": "chunks/verify-charts-caa2720e883d.js",
+      "hash": "a507f78f4bbed465d0b1169473affb8eb2f80e2acf338150fab66b5b684c6330",
       "dependencies": [
-        "shared-30d874e36969",
-        "shared-90accf46a20e",
-        "shared-da593b1d80b5"
+        "shared-89ca0b52749b",
+        "shared-98e37fe0f266",
+        "shared-e89a1c8e2b2d"
       ],
       "moduleIds": [
         "profiles/src/families/charts.js",
@@ -913,16 +913,16 @@
         "verify:charts"
       ],
       "rawBytes": 77808,
-      "gzipBytes": 10475
+      "gzipBytes": 10473
     },
     {
-      "id": "verify-geography-72edd281a0be",
-      "file": "chunks/verify-geography-72edd281a0be.js",
-      "hash": "fdb129acaafd87d5d3553588e1c3e27ecc01a6eeecf174f2e5daab32ca3e4264",
+      "id": "verify-geography-bcc5a9b92d5c",
+      "file": "chunks/verify-geography-bcc5a9b92d5c.js",
+      "hash": "e82c81e520e56be94439d57c7dc3bb4e3d7b71a3a31bc06133161e1c158bb2d3",
       "dependencies": [
-        "shared-30d874e36969",
-        "shared-90accf46a20e",
-        "shared-da593b1d80b5"
+        "shared-89ca0b52749b",
+        "shared-98e37fe0f266",
+        "shared-e89a1c8e2b2d"
       ],
       "moduleIds": [
         "profiles/src/families/geography.js",
@@ -932,16 +932,16 @@
         "verify:geography"
       ],
       "rawBytes": 15027,
-      "gzipBytes": 4389
+      "gzipBytes": 4393
     },
     {
-      "id": "verify-graphs-2f61d2f4a428",
-      "file": "chunks/verify-graphs-2f61d2f4a428.js",
-      "hash": "bb120ff6ce6771c569074001739f964dccbf4792564f8dd65dd31d538f588093",
+      "id": "verify-graphs-772258308814",
+      "file": "chunks/verify-graphs-772258308814.js",
+      "hash": "e70cedeeb94c43de6489e408d1332f9e361a771cb1557fe12c5e38b4328394dc",
       "dependencies": [
-        "shared-30d874e36969",
-        "shared-90accf46a20e",
-        "shared-da593b1d80b5"
+        "shared-89ca0b52749b",
+        "shared-98e37fe0f266",
+        "shared-e89a1c8e2b2d"
       ],
       "moduleIds": [
         "profiles/src/families/graphs.js",
@@ -954,13 +954,13 @@
       "gzipBytes": 34610
     },
     {
-      "id": "verify-surfaces-75f505521ed3",
-      "file": "chunks/verify-surfaces-75f505521ed3.js",
-      "hash": "d5b59ca5924ec468950cf3004b0e43bf5716f239dc799e54fba0e2105d872cbf",
+      "id": "verify-surfaces-0dc5102a6fd9",
+      "file": "chunks/verify-surfaces-0dc5102a6fd9.js",
+      "hash": "f6ec30d4f276c1687ccc03cb16a319d301de53aa7d9e9f4ff5715c6add2a8a10",
       "dependencies": [
-        "shared-30d874e36969",
-        "shared-90accf46a20e",
-        "shared-da593b1d80b5"
+        "shared-89ca0b52749b",
+        "shared-98e37fe0f266",
+        "shared-e89a1c8e2b2d"
       ],
       "moduleIds": [
         "profiles/src/families/surfaces.js",
@@ -970,15 +970,15 @@
         "verify:surfaces"
       ],
       "rawBytes": 125374,
-      "gzipBytes": 16427
+      "gzipBytes": 16422
     },
     {
-      "id": "viewer-3ded8044c5c2",
-      "file": "chunks/viewer-3ded8044c5c2.js",
-      "hash": "af158e0efcd93829b69abe95c22360066f5c3bb62d66493fcbb26dfca11b5c0e",
+      "id": "viewer-defe0ef52de3",
+      "file": "chunks/viewer-defe0ef52de3.js",
+      "hash": "19c2694753882f76000f39a6292db4e05abfa548e4c8ee27ecc8b3c148244d62",
       "dependencies": [
-        "shared-9d235030a726",
-        "shared-b954ff0d3573"
+        "shared-1d7e2e746c2a",
+        "shared-e37dea31afcf"
       ],
       "moduleIds": [
         "standalone/src/modular-viewer-entry.js"
@@ -987,15 +987,15 @@
         "viewer"
       ],
       "rawBytes": 1645,
-      "gzipBytes": 895
+      "gzipBytes": 892
     },
     {
-      "id": "worker-286113c36adf",
-      "file": "chunks/worker-286113c36adf.js",
-      "hash": "15275a3a335f280a371ac767e490ee0e0ce0b295990fd4afa33c99fa33c39095",
+      "id": "worker-f621ec472de9",
+      "file": "chunks/worker-f621ec472de9.js",
+      "hash": "f79008172d50c608127ef92c62f9a17c26ba4850da530947665edb7a889446de",
       "dependencies": [
-        "shared-27149a72b67b",
-        "shared-90accf46a20e"
+        "shared-e89a1c8e2b2d",
+        "shared-f98a38a4da4d"
       ],
       "moduleIds": [
         "execution/src/worker-entry.js",
@@ -1011,74 +1011,74 @@
   "totals": {
     "modules": 141,
     "chunks": 31,
-    "rawBytes": 3177721,
-    "gzipBytes": 651624
+    "rawBytes": 3181468,
+    "gzipBytes": 652271
   },
   "loader": {
     "file": "ddn-loader.js",
-    "sha256": "9612efb7a2ac8a0b1a23bb2a922826888112bc7ce25b00879312e70178a62cd2",
+    "sha256": "4a0bfc929adc1ec3b09e76cb5c6586c45c779ae51ef6912da8f984acfb5a7368",
     "rawBytes": 32165,
-    "gzipBytes": 7827
+    "gzipBytes": 7841
   },
   "startup": {
     "viewer": {
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-27149a72b67b",
-        "shared-90accf46a20e",
-        "worker-286113c36adf",
-        "shared-45f6b699ca1c",
-        "shared-be0d56f8d05c",
-        "shared-c0332320f91a",
-        "shared-9d235030a726",
-        "shared-2f1e15abcacd",
-        "shared-4d0c8910f2dc",
-        "shared-957e9e2a3bbc",
-        "shared-f819ef245126",
-        "shared-9eb6624f1d40",
-        "shared-b954ff0d3573",
-        "viewer-3ded8044c5c2"
+        "shared-89ca0b52749b",
+        "shared-e89a1c8e2b2d",
+        "shared-f98a38a4da4d",
+        "worker-f621ec472de9",
+        "shared-6cf9d24a4527",
+        "shared-30b5187aadd6",
+        "shared-aea9ceabbf71",
+        "shared-5331ef8070e8",
+        "shared-73905c5bd21c",
+        "shared-ebd47c4e1fef",
+        "shared-822f2cb38cc6",
+        "shared-1d7e2e746c2a",
+        "shared-a1e32f51fc2a",
+        "shared-e37dea31afcf",
+        "viewer-defe0ef52de3"
       ],
-      "rawBytes": 1821432,
-      "gzipBytes": 365136
+      "rawBytes": 1825179,
+      "gzipBytes": 365817
     },
     "designer": {
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-27149a72b67b",
-        "shared-90accf46a20e",
-        "worker-286113c36adf",
-        "shared-2f1e15abcacd",
-        "shared-45f6b699ca1c",
-        "shared-4d0c8910f2dc",
-        "shared-957e9e2a3bbc",
-        "shared-c0332320f91a",
-        "shared-f819ef245126",
-        "shared-9eb6624f1d40",
-        "shared-a3cf0afb56c8",
-        "shared-be0d56f8d05c",
-        "shared-7ffdd3196bf7",
-        "shared-9d235030a726",
-        "designer-f0c69783274d"
+        "shared-89ca0b52749b",
+        "shared-e89a1c8e2b2d",
+        "shared-f98a38a4da4d",
+        "worker-f621ec472de9",
+        "shared-6cf9d24a4527",
+        "shared-aea9ceabbf71",
+        "shared-5331ef8070e8",
+        "shared-73905c5bd21c",
+        "shared-30b5187aadd6",
+        "shared-ebd47c4e1fef",
+        "shared-822f2cb38cc6",
+        "shared-8f37b97a0edc",
+        "shared-a1e32f51fc2a",
+        "shared-673390dbad9b",
+        "shared-e37dea31afcf",
+        "designer-296e54f2516f"
       ],
-      "rawBytes": 2294691,
-      "gzipBytes": 472197
+      "rawBytes": 2298438,
+      "gzipBytes": 472884
     },
     "verifier": {
       "chunks": [
-        "shared-da593b1d80b5",
-        "shared-27149a72b67b",
-        "shared-90accf46a20e",
-        "worker-286113c36adf",
-        "shared-45f6b699ca1c",
-        "shared-be0d56f8d05c",
-        "shared-c0332320f91a",
-        "shared-9d235030a726",
-        "shared-cc6b5c75a915",
-        "verifier-a92aa39dd4bd"
+        "shared-89ca0b52749b",
+        "shared-e89a1c8e2b2d",
+        "shared-f98a38a4da4d",
+        "worker-f621ec472de9",
+        "shared-ebd47c4e1fef",
+        "shared-a67aa111fa97",
+        "shared-73905c5bd21c",
+        "shared-a1e32f51fc2a",
+        "shared-e37dea31afcf",
+        "verifier-48faa5330b54"
       ],
-      "rawBytes": 1327621,
-      "gzipBytes": 248160
+      "rawBytes": 1331368,
+      "gzipBytes": 248850
     }
   }
 }

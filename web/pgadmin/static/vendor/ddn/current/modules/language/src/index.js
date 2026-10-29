@@ -197,6 +197,7 @@ function ownerShape(owner, record, path) {
         shape = childShape(shape, segment);
     return shape;
 }
+function admitsString(shape) { return variants(shape).some(choice => choice.type === 'string' || Array.isArray(choice.type) && choice.type.includes('string')); }
 function isReferenceShape(shape) { return variants(shape).some(v => v.properties?.name && v.properties?.file && v.properties?.id); }
 function typedValue(raw, shape, file) {
     const text = decodeText(raw), quoted = /^["']/.test(raw.trim());
@@ -470,6 +471,28 @@ class Decoder {
             a.title = title;
         return a;
     }
+    explicitText(raw, shape, index, end) {
+        const marker = /^text(?:[ \t]+([0-9]+))?$/.exec(raw.trim());
+        if (!marker || !this.ls.slice(index + 1, end).some(line => line.indent > this.ls[index].indent))
+            return undefined;
+        if (!admitsString(shape))
+            throw Error('An explicit text body requires a property or item type that admits string');
+        const width = marker[1] === undefined ? 4 : Number(marker[1]);
+        if (!Number.isInteger(width) || width < 1 || width > 128)
+            throw Error('An explicit text indentation width must be from 1 to 128');
+        return width;
+    }
+    explicitTextBody(start, end, prefix) {
+        return this.ls.slice(start, end).map(line => {
+            const raw = this.current.text.slice(line.start, line.end - line.eol.length);
+            const spaces = /^ */.exec(raw)[0].length;
+            if (spaces >= prefix)
+                return raw.slice(prefix);
+            if (!raw.trim())
+                return '';
+            throw Error('An explicit text body line must reach its declared indentation prefix');
+        }).join('\n');
+    }
     rawBody(start, end) {
         const body = this.ls.slice(start, end);
         if (!body.length)
@@ -478,7 +501,7 @@ class Decoder {
         const first = raw.find(line => line.trim());
         // Only spaces establish the literal container's indentation. A following
         // tab is authored content, including on the first literal line.
-        const indent = first === undefined ? Math.min(...raw.map(line => /^ */.exec(line)[0].length)) : /^ */.exec(first)[0].length;
+        const indent = first === undefined ? raw.reduce((width, line) => Math.min(width, /^ */.exec(line)[0].length), Infinity) : /^ */.exec(first)[0].length;
         return raw.map(line => line.slice(Math.min(indent, /^ */.exec(line)[0].length))).join('\n');
     }
     sequence(start, end, parent, ctx, nodes) {
@@ -573,7 +596,12 @@ class Decoder {
                 if (exists)
                     this.diagnostic('property.duplicate', 'Repeated supplied property: ' + path, line, node.ref);
                 let value;
-                if (raw) {
+                const textWidth = this.explicitText(raw, shape, i, stop);
+                if (textWidth !== undefined) {
+                    n.literalBody = true;
+                    value = this.explicitTextBody(i + 1, stop, line.indent + textWidth);
+                }
+                else if (raw) {
                     this.scalarChildren(i, stop);
                     const valueWords = words(raw);
                     if (valueWords[0]?.raw === 'parameter' && owner === 'template_record')
@@ -649,7 +677,12 @@ class Decoder {
             node.children.push(n);
             const raw = l.text.slice(w[1]?.start ?? l.text.length);
             let value;
-            if (raw) {
+            const textWidth = this.explicitText(raw, child, i, stop);
+            if (textWidth !== undefined) {
+                n.literalBody = true;
+                value = this.explicitTextBody(i + 1, stop, l.indent + textWidth);
+            }
+            else if (raw) {
                 this.scalarChildren(i, stop);
                 value = this.value(raw, child, n.valueStart);
             }
@@ -689,6 +722,12 @@ class Decoder {
         if (!first)
             return arrays[0];
         const index = this.ls.indexOf(first), stop = this.blockEnd(index, end);
+        const tokens = words(first.text), raw = first.text.slice(tokens[1]?.start ?? first.text.length);
+        if (/^text(?:[ \t]+[0-9]+)?$/.test(raw.trim()) && this.ls.slice(index + 1, stop).some(line => line.indent > first.indent)) {
+            const textItems = arrays.find(shape => admitsString(shape.items));
+            if (textItems)
+                return textItems;
+        }
         const body = this.ls.slice(index + 1, stop).filter(line => line.text.trim() && !line.text.trimStart().startsWith('//'));
         const indent = body[0]?.indent;
         const keys = body.filter(line => line.indent === indent).map(line => decodeText(words(line.text)[0].raw));
@@ -737,7 +776,12 @@ class Decoder {
             node.children.push(n);
             sites.push({ start: n.valueStart, end: n.valueEnd, node: n });
             const raw = l.text.slice(w[1]?.start ?? l.text.length);
-            if (raw) {
+            const textWidth = this.explicitText(raw, shape, i, stop);
+            if (textWidth !== undefined) {
+                n.literalBody = true;
+                result.push(this.explicitTextBody(i + 1, stop, l.indent + textWidth));
+            }
+            else if (raw) {
                 this.scalarChildren(i, stop);
                 result.push(this.value(raw, shape, n.valueStart));
             }
@@ -1888,12 +1932,29 @@ function textBodyShape(shape) {
     const choices = variants(shape), types = choices.flatMap(choice => typeof choice.type === 'string' ? [choice.type] : choice.type ?? []);
     return types.includes('string') && !types.includes('object') && !types.includes('array') && !choices.some(choice => choice.properties);
 }
+function implicitTextPreservesIndent(value) {
+    const lines = value.replace(/\r\n/g, '\n').split('\n'), first = lines.find(line => line.trim());
+    return (first === undefined ? lines.reduce((width, line) => Math.min(width, /^ */.exec(line)[0].length), Infinity) : /^ */.exec(first)[0].length) === 0;
+}
+function serializeLiteralText(value, indent, newline) {
+    // A final lone CR is data. Using CRLF for that structural terminator leaves
+    // the data CR separate instead of folding it into the LF line ending.
+    const eol = value.endsWith('\r') ? '\r\n' : newline;
+    return value.replace(/\r\n/g, '\n').split('\n').map(line => indent + line).join(eol) + eol;
+}
 function serializeList(values, indent, newline, shape) {
-    return values.map(value => Array.isArray(value)
-        ? value.length ? indent + 'item' + newline + serializeList(value, indent + '    ', newline, variants(shape).find(choice => choice.type === 'array')?.items) : indent + 'item empty list' + newline
-        : isRecord(value)
-            ? Object.keys(value).length ? indent + 'item' + newline + serializePropertyRecord(value, indent + '    ', newline, key => childShape(shape, key)) : indent + 'item empty record' + newline
-            : indent + 'item ' + scalar(value) + newline).join('');
+    return values.map(value => {
+        if (Array.isArray(value))
+            return value.length ? indent + 'item' + newline + serializeList(value, indent + '    ', newline, variants(shape).find(choice => choice.type === 'array')?.items) : indent + 'item empty list' + newline;
+        if (isRecord(value))
+            return Object.keys(value).length ? indent + 'item' + newline + serializePropertyRecord(value, indent + '    ', newline, key => childShape(shape, key)) : indent + 'item empty record' + newline;
+        if (typeof value === 'string' && /[\r\n]/.test(value)) {
+            if (!admitsString(shape))
+                throw Error('A multiline collection item requires a type that admits string');
+            return indent + 'item text' + newline + serializeLiteralText(value, indent + '    ', newline);
+        }
+        return indent + 'item ' + scalar(value) + newline;
+    }).join('');
 }
 function serializePropertyRecord(properties, indent, newline, resolve) {
     return Object.entries(properties).map(([key, value]) => {
@@ -1905,9 +1966,9 @@ function serializePropertyRecord(properties, indent, newline, resolve) {
         if (isRecord(value))
             return Object.keys(value).length ? indent + label + newline + serializePropertyRecord(value, indent + '    ', newline, child => childShape(shape, child)) : indent + label + ' empty record' + newline;
         if (typeof value === 'string' && /[\r\n]/.test(value)) {
-            if (!textBodyShape(shape))
-                throw Error('Multiline text requires an unambiguous registered text-body property');
-            return indent + label + newline + value.replace(/\r\n/g, '\n').split('\n').map(line => indent + '    ' + line).join(newline) + newline;
+            if (!admitsString(shape))
+                throw Error('Multiline text requires a property type that admits string');
+            return indent + label + (textBodyShape(shape) && implicitTextPreservesIndent(value) ? '' : ' text') + newline + serializeLiteralText(value, indent + '    ', newline);
         }
         return indent + label + ' ' + scalar(value) + newline;
     }).join('');
@@ -2057,7 +2118,9 @@ export function replaceRecordData(result, target, columns, rows) {
     // typed rows. No other declaration's bytes or source spans are changed.
     const properties = { ...record, columns: columns, rows: rows };
     delete properties.name;
-    const comments = document.file.text.slice(node.bodyStart, node.end).split(/\r?\n/).filter(line => line.trimStart().startsWith('//'));
+    const literals = allNodes(result).filter(child => child.file === target.file && child.literalBody && child.start >= node.bodyStart && child.end <= node.end);
+    const comments = lines(document.file.text).filter(line => line.start >= node.bodyStart && line.start < node.end && line.text.trimStart().startsWith('//')
+        && !literals.some(literal => line.start >= literal.bodyStart && line.start < literal.end)).map(line => document.file.text.slice(line.start, line.end - line.eol.length));
     const indent = ' '.repeat(node.indent + 4);
     const text = (comments.length ? comments.join(document.newline) + document.newline : '') + indent + 'with' + document.newline + serializePropertyRecord(properties, indent + '    ', document.newline, key => ownerShape('data_record', record, key));
     return [patch(result, target.file, node.bodyStart, node.end, text)];

@@ -5,7 +5,7 @@
  * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
  * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
  */
-(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-27149a72b67b","version":"ddn-next-1","releaseHash":"3a8a08e0de181224d2ea68fe4e723d8925be7c4165927abbf9a6d63554e103a8","dependencies":["shared-da593b1d80b5"],"modules":[{"id":"defaults/src/index.js","bytes":36886,"sha256":"14acd964f86cad4cbcf930b48e97c24dd0cf25e022b52aed632ab6200979918e","dependencies":["profiles/src/schema-core.js","profiles/src/core.js","profiles/src/view-surfaces.js","defaults/src/method-names.js"]},{"id":"defaults/src/method-names.js","bytes":708,"sha256":"ae651ed9a4cf426dbc6577a4a8824efbd2a45ee90e172d2a59466f419e96585a","dependencies":[]},{"id":"execution/src/compute.js","bytes":3539,"sha256":"77700d3fb5bd5ddc261864f5ccd456630d1a00a2b56cfc9642d969a8435b85f5","dependencies":["language/src/index.js","verifier/src/index.js","execution/src/index.js"]},{"id":"execution/src/index.js","bytes":10957,"sha256":"15ecd00834ea6e1403abaacf606aaf98894b4b4640d4565afe143bf95f5cd4cc","dependencies":[]},{"id":"language/src/index.js","bytes":122870,"sha256":"5c6fe8eb773feaf99d792b8ec78d9553dc1867ffb5f9ca80762804b2866020cf","dependencies":["model/src/index.js","language/src/schema.js"]},{"id":"language/src/schema.js","bytes":1572,"sha256":"edc9dfd9697f21ec59d860804243265333142daeae550ea4500d43545e91135a","dependencies":["profiles/src/schema-core.js"]},{"id":"model/src/index.js","bytes":7704,"sha256":"ef309bcf235d6d10ec6c21c889c43882ecbb36956a62c56c93ba16c68f3bda7d","dependencies":[]},{"id":"profiles/src/view-surfaces.js","bytes":1426,"sha256":"c31c88b49fc8263b9e98dd49fafa9266bfc2ce7d06f7eee2833eb1c3a828b296","dependencies":[]},{"id":"verifier/src/index.js","bytes":69282,"sha256":"3709c98b354ba804a89aee63e2257d9f278f9b65403b945bb6408aee8b101368","dependencies":["language/src/index.js","execution/src/index.js","model/src/index.js","profiles/src/core.js","profiles/src/schema-core.js","defaults/src/index.js"]}],"hash":"9097d25ebdbbff04888d374027330b0778a324d2a8cf548e2d1b3961b314281c"},{"defaults/src/index.js":function(module,exports,require){
+(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-f98a38a4da4d","version":"ddn-next-1","releaseHash":"4f601dab202a346b52c70ff1ec6bfdfb7c17ab3fbd59854e38cda422320d3131","dependencies":["shared-89ca0b52749b"],"modules":[{"id":"defaults/src/index.js","bytes":36886,"sha256":"14acd964f86cad4cbcf930b48e97c24dd0cf25e022b52aed632ab6200979918e","dependencies":["profiles/src/schema-core.js","profiles/src/core.js","profiles/src/view-surfaces.js","defaults/src/method-names.js"]},{"id":"defaults/src/method-names.js","bytes":708,"sha256":"ae651ed9a4cf426dbc6577a4a8824efbd2a45ee90e172d2a59466f419e96585a","dependencies":[]},{"id":"execution/src/compute.js","bytes":3539,"sha256":"77700d3fb5bd5ddc261864f5ccd456630d1a00a2b56cfc9642d969a8435b85f5","dependencies":["language/src/index.js","verifier/src/index.js","execution/src/index.js"]},{"id":"execution/src/index.js","bytes":10957,"sha256":"15ecd00834ea6e1403abaacf606aaf98894b4b4640d4565afe143bf95f5cd4cc","dependencies":[]},{"id":"language/src/index.js","bytes":126617,"sha256":"b8eb9ee97db89add0e0a6e40009dc1d355b22a549d5547d7ac384137174c5e4c","dependencies":["model/src/index.js","language/src/schema.js"]},{"id":"language/src/schema.js","bytes":1572,"sha256":"edc9dfd9697f21ec59d860804243265333142daeae550ea4500d43545e91135a","dependencies":["profiles/src/schema-core.js"]},{"id":"model/src/index.js","bytes":7704,"sha256":"ef309bcf235d6d10ec6c21c889c43882ecbb36956a62c56c93ba16c68f3bda7d","dependencies":[]},{"id":"profiles/src/view-surfaces.js","bytes":1426,"sha256":"c31c88b49fc8263b9e98dd49fafa9266bfc2ce7d06f7eee2833eb1c3a828b296","dependencies":[]},{"id":"verifier/src/index.js","bytes":69282,"sha256":"3709c98b354ba804a89aee63e2257d9f278f9b65403b945bb6408aee8b101368","dependencies":["language/src/index.js","execution/src/index.js","model/src/index.js","profiles/src/core.js","profiles/src/schema-core.js","defaults/src/index.js"]}],"hash":"393615f4f4643cbbcd63e28898cc9b88ce418cebab5baa683dadb0984667a3f5"},{"defaults/src/index.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.previewPaths = void 0;
@@ -1183,6 +1183,7 @@ function ownerShape(owner, record, path) {
         shape = childShape(shape, segment);
     return shape;
 }
+function admitsString(shape) { return variants(shape).some(choice => choice.type === 'string' || Array.isArray(choice.type) && choice.type.includes('string')); }
 function isReferenceShape(shape) { return variants(shape).some(v => v.properties?.name && v.properties?.file && v.properties?.id); }
 function typedValue(raw, shape, file) {
     const text = decodeText(raw), quoted = /^["']/.test(raw.trim());
@@ -1446,13 +1447,35 @@ class Decoder {
             a.title = title;
         return a;
     }
+    explicitText(raw, shape, index, end) {
+        const marker = /^text(?:[ \t]+([0-9]+))?$/.exec(raw.trim());
+        if (!marker || !this.ls.slice(index + 1, end).some(line => line.indent > this.ls[index].indent))
+            return undefined;
+        if (!admitsString(shape))
+            throw Error('An explicit text body requires a property or item type that admits string');
+        const width = marker[1] === undefined ? 4 : Number(marker[1]);
+        if (!Number.isInteger(width) || width < 1 || width > 128)
+            throw Error('An explicit text indentation width must be from 1 to 128');
+        return width;
+    }
+    explicitTextBody(start, end, prefix) {
+        return this.ls.slice(start, end).map(line => {
+            const raw = this.current.text.slice(line.start, line.end - line.eol.length);
+            const spaces = /^ */.exec(raw)[0].length;
+            if (spaces >= prefix)
+                return raw.slice(prefix);
+            if (!raw.trim())
+                return '';
+            throw Error('An explicit text body line must reach its declared indentation prefix');
+        }).join('\n');
+    }
     rawBody(start, end) {
         const body = this.ls.slice(start, end);
         if (!body.length)
             return '';
         const raw = body.map(line => this.current.text.slice(line.start, line.end - line.eol.length));
         const first = raw.find(line => line.trim());
-        const indent = first === undefined ? Math.min(...raw.map(line => /^ */.exec(line)[0].length)) : /^ */.exec(first)[0].length;
+        const indent = first === undefined ? raw.reduce((width, line) => Math.min(width, /^ */.exec(line)[0].length), Infinity) : /^ */.exec(first)[0].length;
         return raw.map(line => line.slice(Math.min(indent, /^ */.exec(line)[0].length))).join('\n');
     }
     sequence(start, end, parent, ctx, nodes) {
@@ -1544,7 +1567,12 @@ class Decoder {
                 if (exists)
                     this.diagnostic('property.duplicate', 'Repeated supplied property: ' + path, line, node.ref);
                 let value;
-                if (raw) {
+                const textWidth = this.explicitText(raw, shape, i, stop);
+                if (textWidth !== undefined) {
+                    n.literalBody = true;
+                    value = this.explicitTextBody(i + 1, stop, line.indent + textWidth);
+                }
+                else if (raw) {
                     this.scalarChildren(i, stop);
                     const valueWords = words(raw);
                     if (valueWords[0]?.raw === 'parameter' && owner === 'template_record')
@@ -1620,7 +1648,12 @@ class Decoder {
             node.children.push(n);
             const raw = l.text.slice(w[1]?.start ?? l.text.length);
             let value;
-            if (raw) {
+            const textWidth = this.explicitText(raw, child, i, stop);
+            if (textWidth !== undefined) {
+                n.literalBody = true;
+                value = this.explicitTextBody(i + 1, stop, l.indent + textWidth);
+            }
+            else if (raw) {
                 this.scalarChildren(i, stop);
                 value = this.value(raw, child, n.valueStart);
             }
@@ -1659,6 +1692,12 @@ class Decoder {
         if (!first)
             return arrays[0];
         const index = this.ls.indexOf(first), stop = this.blockEnd(index, end);
+        const tokens = words(first.text), raw = first.text.slice(tokens[1]?.start ?? first.text.length);
+        if (/^text(?:[ \t]+[0-9]+)?$/.test(raw.trim()) && this.ls.slice(index + 1, stop).some(line => line.indent > first.indent)) {
+            const textItems = arrays.find(shape => admitsString(shape.items));
+            if (textItems)
+                return textItems;
+        }
         const body = this.ls.slice(index + 1, stop).filter(line => line.text.trim() && !line.text.trimStart().startsWith('//'));
         const indent = body[0]?.indent;
         const keys = body.filter(line => line.indent === indent).map(line => decodeText(words(line.text)[0].raw));
@@ -1705,7 +1744,12 @@ class Decoder {
             node.children.push(n);
             sites.push({ start: n.valueStart, end: n.valueEnd, node: n });
             const raw = l.text.slice(w[1]?.start ?? l.text.length);
-            if (raw) {
+            const textWidth = this.explicitText(raw, shape, i, stop);
+            if (textWidth !== undefined) {
+                n.literalBody = true;
+                result.push(this.explicitTextBody(i + 1, stop, l.indent + textWidth));
+            }
+            else if (raw) {
                 this.scalarChildren(i, stop);
                 result.push(this.value(raw, shape, n.valueStart));
             }
@@ -2848,12 +2892,27 @@ function textBodyShape(shape) {
     const choices = variants(shape), types = choices.flatMap(choice => typeof choice.type === 'string' ? [choice.type] : choice.type ?? []);
     return types.includes('string') && !types.includes('object') && !types.includes('array') && !choices.some(choice => choice.properties);
 }
+function implicitTextPreservesIndent(value) {
+    const lines = value.replace(/\r\n/g, '\n').split('\n'), first = lines.find(line => line.trim());
+    return (first === undefined ? lines.reduce((width, line) => Math.min(width, /^ */.exec(line)[0].length), Infinity) : /^ */.exec(first)[0].length) === 0;
+}
+function serializeLiteralText(value, indent, newline) {
+    const eol = value.endsWith('\r') ? '\r\n' : newline;
+    return value.replace(/\r\n/g, '\n').split('\n').map(line => indent + line).join(eol) + eol;
+}
 function serializeList(values, indent, newline, shape) {
-    return values.map(value => Array.isArray(value)
-        ? value.length ? indent + 'item' + newline + serializeList(value, indent + '    ', newline, variants(shape).find(choice => choice.type === 'array')?.items) : indent + 'item empty list' + newline
-        : (0, index_js_1.isRecord)(value)
-            ? Object.keys(value).length ? indent + 'item' + newline + serializePropertyRecord(value, indent + '    ', newline, key => childShape(shape, key)) : indent + 'item empty record' + newline
-            : indent + 'item ' + scalar(value) + newline).join('');
+    return values.map(value => {
+        if (Array.isArray(value))
+            return value.length ? indent + 'item' + newline + serializeList(value, indent + '    ', newline, variants(shape).find(choice => choice.type === 'array')?.items) : indent + 'item empty list' + newline;
+        if ((0, index_js_1.isRecord)(value))
+            return Object.keys(value).length ? indent + 'item' + newline + serializePropertyRecord(value, indent + '    ', newline, key => childShape(shape, key)) : indent + 'item empty record' + newline;
+        if (typeof value === 'string' && /[\r\n]/.test(value)) {
+            if (!admitsString(shape))
+                throw Error('A multiline collection item requires a type that admits string');
+            return indent + 'item text' + newline + serializeLiteralText(value, indent + '    ', newline);
+        }
+        return indent + 'item ' + scalar(value) + newline;
+    }).join('');
 }
 function serializePropertyRecord(properties, indent, newline, resolve) {
     return Object.entries(properties).map(([key, value]) => {
@@ -2865,9 +2924,9 @@ function serializePropertyRecord(properties, indent, newline, resolve) {
         if ((0, index_js_1.isRecord)(value))
             return Object.keys(value).length ? indent + label + newline + serializePropertyRecord(value, indent + '    ', newline, child => childShape(shape, child)) : indent + label + ' empty record' + newline;
         if (typeof value === 'string' && /[\r\n]/.test(value)) {
-            if (!textBodyShape(shape))
-                throw Error('Multiline text requires an unambiguous registered text-body property');
-            return indent + label + newline + value.replace(/\r\n/g, '\n').split('\n').map(line => indent + '    ' + line).join(newline) + newline;
+            if (!admitsString(shape))
+                throw Error('Multiline text requires a property type that admits string');
+            return indent + label + (textBodyShape(shape) && implicitTextPreservesIndent(value) ? '' : ' text') + newline + serializeLiteralText(value, indent + '    ', newline);
         }
         return indent + label + ' ' + scalar(value) + newline;
     }).join('');
@@ -3012,7 +3071,9 @@ function replaceRecordData(result, target, columns, rows) {
     const document = result.documents.find(d => d.file.id === target.file);
     const properties = { ...record, columns: columns, rows: rows };
     delete properties.name;
-    const comments = document.file.text.slice(node.bodyStart, node.end).split(/\r?\n/).filter(line => line.trimStart().startsWith('//'));
+    const literals = allNodes(result).filter(child => child.file === target.file && child.literalBody && child.start >= node.bodyStart && child.end <= node.end);
+    const comments = lines(document.file.text).filter(line => line.start >= node.bodyStart && line.start < node.end && line.text.trimStart().startsWith('//')
+        && !literals.some(literal => line.start >= literal.bodyStart && line.start < literal.end)).map(line => document.file.text.slice(line.start, line.end - line.eol.length));
     const indent = ' '.repeat(node.indent + 4);
     const text = (comments.length ? comments.join(document.newline) + document.newline : '') + indent + 'with' + document.newline + serializePropertyRecord(properties, indent + '    ', document.newline, key => ownerShape('data_record', record, key));
     return [patch(result, target.file, node.bodyStart, node.end, text)];
