@@ -71,7 +71,8 @@ function treeContext(itemData, item) {
   if(!endpoint.data || !providerEndpointSessionReady(endpoint.data)) return null;
   const engine = itemData?.cde_engine_id || endpoint.data.cde_engine_id;
   if(!engine) return null;
-  return {endpoint, engine, version: endpoint.data.verified_runtime_version, api: getApiInstance()};
+  return {endpoint, engine, version: endpoint.data.verified_runtime_version,
+    versionSupport: endpoint.data.version_support, api: getApiInstance()};
 }
 
 function refreshNode(item, {parent=false}={}) {
@@ -95,7 +96,7 @@ function openEditorPanel({context, itemData, item, resourceKind, resourceId, mod
     floatable: true,
     content: <ErrorBoundary>
       <ProviderObjectEditorHost api={context.api} endpointUrl={endpointUrl} engine={context.engine}
-        version={context.version} resourceId={resourceId} resourceKind={resourceKind}
+        version={context.version} versionSupport={context.versionSupport} resourceId={resourceId} resourceKind={resourceKind}
         databaseTargetId={itemData.cde_database_target_id} mode={mode} displayName={displayName}
         onClose={onClose} onApplied={() => refreshNode(item, {parent: mode === 'alter'})}
         onOpenData={() => serverNode.callbacks.open_cde_workspace.call(serverNode, {item: context.endpoint.item}, 'data', {
@@ -227,12 +228,16 @@ export function familyEditorContextActions(itemData, item) {
         intent: 'default', enabled: true, execute: () => openFamilyCreate(itemData, item, kind)}))});
   }
   if(itemData._type !== 'cde_resource_group') {
+    // The endpoint's provider decides per runtime (version and proof).
+    const unsupported = new Set(itemData.cde_unsupported_operations || []);
     for(const group of menuForKind(bundle, resourceKind)) {
       for(const entry of group.items) {
         if(!entry.tier || entry.tier === 1) continue; // tier 1 is the editor; legacy items cover the rest for now
+        const providerSupported = !unsupported.has(entry.operation_id);
         entries.push({category: CATEGORY_MAP[group.category] || 'operations', id: `descriptor-op-${entry.operation_id}`,
           label: entry.label, iconKey: 'action.operation', intent: entry.tier === 3 ? 'default' : 'default',
-          enabled: entry.enabled !== false, disabledReason: entry.disabled_reason,
+          enabled: entry.enabled !== false && providerSupported,
+          disabledReason: providerSupported ? entry.disabled_reason : gettext('Not supported by this engine version.'),
           execute: () => openDescriptorOperation(itemData, item,
             bundle.kinds[resourceKind].operations.find((op) => op.operation_id === entry.operation_id))});
       }
@@ -286,6 +291,7 @@ export async function tryOpenServerForm({item, mode='create', engine, profileId,
     id: panelId, title: panelTitle || gettext('Register server'), closable: true, floatable: true,
     content: <ErrorBoundary>
       <ServerRegistrationHost api={api} engine={engine} version={nodeData.verified_runtime_version}
+        versionSupport={nodeData.version_support}
         mode={mode === 'create' ? 'create' : 'alter'} urlFor={urlFor} initialData={initialData} profileId={profileId}
         intent={intent} verifyNow={verifyNow} displayName={panelTitle} onClose={onClose} onSaved={onSaved} />
     </ErrorBoundary>,

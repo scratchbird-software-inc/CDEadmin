@@ -269,6 +269,12 @@
               "value": {},
               "label": {
                 "type": "string"
+              },
+              "version": {
+                "$ref": "#/$defs/version_gate"
+              },
+              "requires_resource": {
+                "$ref": "#/$defs/requires_resource"
               }
             }
           }
@@ -410,6 +416,23 @@
         "record_pattern": {
           "type": "string",
           "description": "regular expression applied to the record text; the first group pre-fills the field (e.g. strip a DEFAULT keyword)"
+        }
+      }
+    },
+    "requires_resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resource_kind",
+        "native_name"
+      ],
+      "description": "Offer this option only when the connected endpoint reports a resource of this kind with this native name (owner direction 2026-10-29: surface every feature, filter per engine).",
+      "properties": {
+        "resource_kind": {
+          "type": "string"
+        },
+        "native_name": {
+          "type": "string"
         }
       }
     }

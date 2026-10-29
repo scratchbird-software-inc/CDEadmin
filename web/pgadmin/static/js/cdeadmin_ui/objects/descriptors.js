@@ -140,6 +140,40 @@ function readPath(root, path) {
 }
 
 /**
+ * Notice for a verified runtime that is not the reference or a tested
+ * version (server `version_support`); null when nothing needs saying.
+ */
+export function versionSupportNotice(support) {
+  if(!support?.observed_version) return null;
+  if(support.status === 'newer_than_tracked') {
+    return `Server version ${support.observed_version} is newer than the versions this release ` +
+      `was built against (reference ${support.reference_version}); only features known to work are offered.`;
+  }
+  if(support.status === 'untested_in_range') {
+    return `Server version ${support.observed_version} is supported (${support.requirement}) but not ` +
+      'separately tested; features are offered from the nearest older compatibility baseline.';
+  }
+  return null;
+}
+
+/**
+ * Whether an option is offered on this connection (owner direction
+ * 2026-10-29: surface every feature, filter per engine). A value the
+ * resolver marked unavailable for the runtime version is not offered, and a
+ * value declaring `requires_resource` is offered only when the endpoint
+ * reports a resource of that kind with that native name.
+ */
+export function optionOffered(option, context={}) {
+  if(typeof option !== 'object' || option === null) return true;
+  if(option.available === false) return false;
+  const required = option.requires_resource;
+  if(!required) return true;
+  const rows = context.resources?.[required.resource_kind] || [];
+  return rows.some((row) => [row.display_name, row.native?.native_name, row.native?.name]
+    .includes(required.native_name));
+}
+
+/**
  * Options for a select/multiselect/reference field.
  *
  * `context` carries whatever the host can supply: `dialect` (type lists,
@@ -150,7 +184,9 @@ function readPath(root, path) {
  * from the draft (`$resource_kind`, `$object_type`).
  */
 export function fieldOptions(field, {context={}, draft={}, resourceKind}={}) {
-  if(Array.isArray(field.options) && field.options.length) return field.options;
+  if(Array.isArray(field.options) && field.options.length) {
+    return field.options.filter((option) => optionOffered(option, context));
+  }
   const path = field.option_values_path;
   if(Array.isArray(path) && path.length) {
     const [head, ...rest] = path;
@@ -164,7 +200,7 @@ export function fieldOptions(field, {context={}, draft={}, resourceKind}={}) {
       values = readPath(context[head], substituted);
     }
     if(Array.isArray(values)) {
-      return values.map((item) => typeof item === 'object' && item !== null ?
+      return values.filter((item) => optionOffered(item, context)).map((item) => typeof item === 'object' && item !== null ?
         {value: item.value ?? item.name ?? item.resource_id, label: item.label ?? item.display_name ?? item.name ?? String(item.value)} :
         {value: item, label: String(item)});
     }

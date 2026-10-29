@@ -194,6 +194,18 @@ class UIDescriptorService:
                 item['unavailable_reason'] = reason
             for column in item.get('columns', []) or []:
                 mark(column)
+            mark_values(item.get('options'))
+
+        def mark_values(values):
+            # Option values carry their own gates (schema: options and
+            # field options); plain string values have none.
+            for value in values or []:
+                if isinstance(value, dict) and 'version' in value:
+                    available, reason = version_gate_state(
+                        value['version'], observed_version)
+                    value['available'] = available
+                    if reason:
+                        value['unavailable_reason'] = reason
 
         for form in bundle['forms'].values():
             for tab in form['tabs']:
@@ -203,6 +215,20 @@ class UIDescriptorService:
             mark(op)
             for field in op.get('fields', []):
                 mark(field)
+        for kind in bundle['capabilities'].get('kinds', []):
+            for op in kind.get('operations', []):
+                if isinstance(op, dict) and 'version' in op:
+                    available, reason = version_gate_state(
+                        op['version'], observed_version)
+                    op['available'] = available
+                    if reason:
+                        op['unavailable_reason'] = reason
+        for values in bundle['options'].get('dialect', {}).values():
+            if isinstance(values, dict):
+                for nested in values.values():
+                    mark_values(nested)
+            else:
+                mark_values(values)
         bundle['observed_version'] = observed_version
         return bundle
 

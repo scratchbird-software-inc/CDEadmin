@@ -809,3 +809,21 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     provider endpoint. Target changes remount the viewer. Collector policy
     and layout editing remain separate tools. This does not add workspace
     tabs or change the object-family editor landing behavior in Decision3.
+
+19. Engine-filtered option values and provider operation support (owner
+    direction, 2026-10-29: forms are shared as far as possible but never
+    lowest common denominator; every feature is surfaced and filtered so an
+    engine is not offered anything it does not directly support). Option
+    values (field ``options`` and ``options.json`` dialect lists) may carry a
+    ``version`` gate and a ``requires_resource`` (resource kind and native
+    name); the resolver marks gated values, and the shell offers a value only
+    when it is available and the connected endpoint reports the required
+    resource. Unknown resources mean the value is not offered. Declared
+    ``capabilities.json`` operation gates are evaluated too. Descriptor menu
+    operations are disabled, with a reason, when the endpoint's provider
+    reports them unsupported (``cde_unsupported_operations`` on tree nodes),
+    so per-version provider proof is not copied into descriptors. Endpoint
+    tree nodes also carry ``verified_runtime_version`` and
+    ``version_support`` after a reload. Capability-filtered bundles for
+    network engines must not be cached by engine and version alone; key them
+    on the endpoint or a capability digest when those engines adopt this.

@@ -42,6 +42,9 @@
                     },
                     "version": {
                       "$ref": "form.schema.json#/$defs/version_gate"
+                    },
+                    "requires_resource": {
+                      "$ref": "form.schema.json#/$defs/requires_resource"
                     }
                   }
                 }

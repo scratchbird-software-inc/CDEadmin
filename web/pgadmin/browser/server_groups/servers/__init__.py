@@ -220,6 +220,58 @@ def _cde_database_nodes(gid, sid, profile, catalog):
     return nodes
 
 
+def _version_support(server):
+    """Where the endpoint's verified runtime sits against its profile.
+
+    Recomputed from the stored verified version (reference / tested /
+    untested_in_range / newer_than_tracked) so it survives a reload.
+    """
+    endpoint = getattr(server, 'endpoint_profile', None)
+    runtime = getattr(endpoint, 'runtime_identity', None)
+    version = getattr(runtime, 'verified_runtime_version', None)
+    if not version:
+        return None
+    try:
+        registry = endpoint_service_for_app(current_app).provider_registry
+    except EndpointRegistrationError:
+        return None  # endpoint service not initialised for this app
+    profile = registry.profile_for(
+        endpoint.provider_id, endpoint.provider_version)
+    if getattr(profile, 'minimum_version', None) is None:
+        return None
+    return profile.version_support(version)
+
+
+def _runtime_node_fields(server):
+    """Verified runtime facts every endpoint tree node carries.
+
+    The editor and descriptor gates need the verified version after a
+    reload too, not only right after a verification response.
+    """
+    runtime = getattr(getattr(server, 'endpoint_profile', None),
+                      'runtime_identity', None)
+    return {
+        'verified_runtime_version': getattr(
+            runtime, 'verified_runtime_version', None),
+        'version_support': _version_support(server),
+    }
+
+
+def _unsupported_operations(visual_admin, resource_kind):
+    """Operations the endpoint's provider reports as unsupported.
+
+    The provider's flags already account for the runtime version and any
+    per-version proof, so descriptor menus can filter without a copy.
+    """
+    for item in (visual_admin or {}).get('objects', []):
+        if item.get('resource_kind') == resource_kind:
+            return sorted(
+                operation['operation_id']
+                for operation in item.get('operations', [])
+                if operation.get('native_supported') is False)
+    return []
+
+
 def _cde_resource_nodes(gid, sid, profile, state, snapshot):
     """Convert provider-neutral navigator presentations to browser nodes."""
     nodes = []
@@ -324,6 +376,8 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
             'cde_engine_id': profile['engine_id'],
             'cde_profile_id': profile['profile_id'],
             'cde_context_actions': actions,
+            'cde_unsupported_operations': _unsupported_operations(
+                snapshot.get('visual_admin'), value['resource_kind']),
             'cde_section': value.get('section'),
         })
     return nodes if profile['engine_id'] == 'firebird' else sorted(nodes, key=lambda item: item['label'].casefold())
@@ -671,6 +725,7 @@ class ServerModule(sg.ServerGroupPluginModule):
                 tags=server.tags,
                 cde_profile_id=profile['profile_id'],
                 cde_endpoint=provider_endpoint,
+                **_runtime_node_fields(server),
                 cde_engine_id=engine_id,
                 children_url=_server_children_url(gid, server.id),
                 runtime_verification_state=verification_state,
@@ -1082,6 +1137,7 @@ class ServerNode(PGChildNodeView):
                     shared=server.shared,
                     cde_profile_id=profile['profile_id'],
                     cde_endpoint=provider_endpoint,
+                    **_runtime_node_fields(server),
                     runtime_verification_state=verification_state,
                     cde_engine_id=profile['engine_id'],
                     cde_context_actions=_cde_endpoint_actions(
@@ -1174,6 +1230,7 @@ class ServerNode(PGChildNodeView):
                 shared=server.shared,
                 cde_profile_id=profile['profile_id'],
                 cde_endpoint=provider_endpoint,
+                **_runtime_node_fields(server),
                 runtime_verification_state=verification_state,
                 cde_engine_id=profile['engine_id'],
                 cde_context_actions=_cde_endpoint_actions(server, profile),
@@ -1585,6 +1642,7 @@ class ServerNode(PGChildNodeView):
                 connected=connected,
                 cde_profile_id=endpoint_registration['profile_id'],
                 cde_endpoint=provider_endpoint,
+                **_runtime_node_fields(server),
                 runtime_verification_state=(
                     server.endpoint_profile.runtime_identity.verification_state
                     if provider_endpoint else 'legacy'
@@ -2370,6 +2428,7 @@ class ServerNode(PGChildNodeView):
                     tags=data.get('tags', None),
                     cde_profile_id=endpoint_registration['profile_id'],
                     cde_endpoint=provider_endpoint,
+                    **_runtime_node_fields(server),
                     runtime_verification_state=(
                         verification['verification_state']
                         if verification else 'unverified'
@@ -3517,6 +3576,7 @@ class ServerNode(PGChildNodeView):
                 'runtime_verification_state': runtime.verification_state,
                 'verified_runtime_family': runtime.verified_runtime_family,
                 'verified_runtime_version': runtime.verified_runtime_version,
+                'version_support': _version_support(server),
             })
         manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
         conn = manager.connection()

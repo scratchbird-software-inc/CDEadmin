@@ -287,43 +287,83 @@
       "options": [
         {
           "value": "fts3",
-          "label": "Fts3"
+          "label": "Fts3",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "fts3"
+          }
         },
         {
           "value": "fts4",
-          "label": "Fts4"
+          "label": "Fts4",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "fts4"
+          }
         },
         {
           "value": "fts5",
-          "label": "Fts5"
+          "label": "Fts5",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "fts5"
+          }
         },
         {
           "value": "rtree",
-          "label": "Rtree"
+          "label": "Rtree",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "rtree"
+          }
         },
         {
           "value": "rtree_i32",
-          "label": "Rtree I32"
+          "label": "Rtree I32",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "rtree_i32"
+          }
         },
         {
           "value": "geopoly",
-          "label": "Geopoly"
+          "label": "Geopoly",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "geopoly"
+          }
         },
         {
           "value": "fts4aux",
-          "label": "Fts4Aux"
+          "label": "Fts4Aux",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "fts4aux"
+          }
         },
         {
           "value": "fts5vocab",
-          "label": "Fts5Vocab"
+          "label": "Fts5Vocab",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "fts5vocab"
+          }
         },
         {
           "value": "fts3tokenize",
-          "label": "Fts3Tokenize"
+          "label": "Fts3Tokenize",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "fts3tokenize"
+          }
         },
         {
           "value": "dbstat",
-          "label": "Dbstat"
+          "label": "Dbstat",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "dbstat"
+          }
         }
       ],
       "visible_when": {

@@ -34,12 +34,54 @@
     "auth_plugins": [],
     "grantable_kinds": [],
     "modules": [
-      "fts5",
-      "fts4",
-      "rtree",
-      "geopoly",
-      "csv",
-      "dbstat"
+      {
+        "value": "fts5",
+        "label": "fts5",
+        "requires_resource": {
+          "resource_kind": "extension",
+          "native_name": "fts5"
+        }
+      },
+      {
+        "value": "fts4",
+        "label": "fts4",
+        "requires_resource": {
+          "resource_kind": "extension",
+          "native_name": "fts4"
+        }
+      },
+      {
+        "value": "rtree",
+        "label": "rtree",
+        "requires_resource": {
+          "resource_kind": "extension",
+          "native_name": "rtree"
+        }
+      },
+      {
+        "value": "geopoly",
+        "label": "geopoly",
+        "requires_resource": {
+          "resource_kind": "extension",
+          "native_name": "geopoly"
+        }
+      },
+      {
+        "value": "csv",
+        "label": "csv",
+        "requires_resource": {
+          "resource_kind": "extension",
+          "native_name": "csv"
+        }
+      },
+      {
+        "value": "dbstat",
+        "label": "dbstat",
+        "requires_resource": {
+          "resource_kind": "extension",
+          "native_name": "dbstat"
+        }
+      }
     ]
   },
   "catalog": {

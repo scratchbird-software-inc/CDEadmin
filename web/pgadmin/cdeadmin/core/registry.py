@@ -484,6 +484,14 @@ class ProviderRegistry:
             self._validate_composition(registration, context)
             return frozenset(registration.permission_grants)
 
+    def profile_for(self, provider_id, provider_version):
+        """Return a registered provider module's declared PROFILE, if any."""
+        with self._lock:
+            registration = self._registrations.get(
+                (provider_id, provider_version))
+        module = getattr(registration, 'module', None)
+        return getattr(module, 'PROFILE', None)
+
     def resolve(self, context: EndpointContext) -> ProviderBinding:
         """Return or create a provider instance isolated to one endpoint."""
         if context.provider_version is None:

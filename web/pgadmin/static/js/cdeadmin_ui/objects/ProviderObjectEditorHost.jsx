@@ -20,11 +20,11 @@ import PropTypes from 'prop-types';
 import {Box} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
 import {EmptyState} from '../feedback/EmptyState';
-import {ValidationMessage} from '../feedback/Indicators';
+import {Banner, ValidationMessage} from '../feedback/Indicators';
 import {ProgressOverlay} from '../feedback/ProgressOverlay';
 import ObjectEditor from './ObjectEditor';
 import {DescriptorClient, visualAdminCalls} from './DescriptorClient';
-import {buildOptionContext, formForKind, editorAvailable} from './descriptors';
+import {buildOptionContext, formForKind, editorAvailable, versionSupportNotice} from './descriptors';
 import {Stack} from '../primitives/Layout';
 
 const DATABASE_SCOPED = new Set(['resource_inspect', 'resource_page', 'visual_admin_validate',
@@ -127,6 +127,22 @@ function NativeDependencies({resource}) {
 }
 NativeDependencies.propTypes = {resource: PropTypes.object};
 
+const RESOURCE_PAGE_LIMIT = 20;
+
+/** Read the endpoint's resource pages (bounded); a failed read yields none. */
+export async function loadEndpointResources(post) {
+  const items = [];
+  let request = {};
+  for(let page = 0; page < RESOURCE_PAGE_LIMIT; page++) {
+    const result = await post({action: 'resource_page', request}).catch(() => null);
+    if(!result) break;
+    items.push(...(result.items || []));
+    if(!result.next_cursor) break;
+    request = {continuation: result.next_cursor, generation: result.generation};
+  }
+  return items;
+}
+
 function NativeChildList({resource, resources, kind}) {
   const children = (resources || []).filter((row) => row.resource_kind === kind && isChildOf(row, resource));
   if(!children.length) return <EmptyState message={`No ${kind}s on this object.`} />;
@@ -136,7 +152,7 @@ function NativeChildList({resource, resources, kind}) {
 }
 NativeChildList.propTypes = {resource: PropTypes.object, resources: PropTypes.array, kind: PropTypes.string};
 
-export default function ProviderObjectEditorHost({api, endpointUrl, engine, version, resourceId, resourceKind,
+export default function ProviderObjectEditorHost({api, endpointUrl, engine, version, versionSupport, resourceId, resourceKind,
   databaseTargetId, mode='alter', displayName, context={}, tabRenderers: tabRenderersProp={}, onClose, onApplied,
   onOpenData, descriptorClient}) {
   const client = useMemo(() => descriptorClient || new DescriptorClient(api), [api, descriptorClient]);
@@ -148,12 +164,13 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
     (async () => {
       try {
         const bundle = await client.bundle(engine, {version});
-        const [resource, page] = await Promise.all([
+        const [resource, resources] = await Promise.all([
           mode === 'alter' && resourceId ? post({action: 'resource_inspect', request: {resource_id: resourceId}}) : null,
-          // One page of the endpoint's resources feeds catalog lists and reference pickers.
-          post({action: 'resource_page', request: {}}).catch(() => null),
+          // The endpoint's resources feed catalog lists, reference pickers
+          // and options offered only where the engine reports a resource.
+          loadEndpointResources(post),
         ]);
-        if(!cancelled) setState({status: 'ready', bundle, resource, resources: page?.items || [], error: null});
+        if(!cancelled) setState({status: 'ready', bundle, resource, resources, error: null});
       } catch(error) {
         if(!cancelled) setState({status: 'error', bundle: null, resource: null, resources: [], error: error?.message || String(error)});
       }
@@ -193,13 +210,15 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
   };
   const variant = bundle.kinds[resourceKind]?.variant;
   const record = {...recordFromResource(resource, {form, resources}), ...(variant ? {variant} : {})};
-  return <ObjectEditor form={form} mode={mode} resourceKind={resourceKind}
+  const notice = versionSupportNotice(versionSupport);
+  const editor = <ObjectEditor form={form} mode={mode} resourceKind={resourceKind}
     record={record} context={{...context, ...optionContext, target}}
     tabRenderers={tabRenderers}
     title={displayName ? `${mode === 'create' ? 'Create' : 'Edit'} ${form.family_title.toLowerCase()} — ${displayName}` : undefined}
     plan={({draft}) => calls.plan({draft})}
     apply={({plan}) => calls.apply({plan})}
     onClose={onClose} onApplied={onApplied} />;
+  return notice ? <Box><Banner status="info">{notice}</Banner>{editor}</Box> : editor;
 }
 
 ProviderObjectEditorHost.propTypes = {
@@ -211,6 +230,7 @@ ProviderObjectEditorHost.propTypes = {
   resourceKind: PropTypes.string.isRequired,
   databaseTargetId: PropTypes.string,
   mode: PropTypes.oneOf(['create', 'alter']),
+  versionSupport: PropTypes.object,
   displayName: PropTypes.string,
   context: PropTypes.object,
   onClose: PropTypes.func,

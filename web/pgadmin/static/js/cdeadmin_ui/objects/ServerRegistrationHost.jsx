@@ -18,12 +18,12 @@ import {useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Box} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
-import {ValidationMessage} from '../feedback/Indicators';
+import {Banner, ValidationMessage} from '../feedback/Indicators';
 import {ProgressOverlay} from '../feedback/ProgressOverlay';
 import {EmptyState} from '../feedback/EmptyState';
 import ObjectEditor from './ObjectEditor';
 import {DescriptorClient} from './DescriptorClient';
-import {formForKind, editorAvailable, recordFromBackend} from './descriptors';
+import {formForKind, editorAvailable, recordFromBackend, versionSupportNotice} from './descriptors';
 
 /** Envelope keys the servers API reads besides the form's own fields. */
 export function registrationPayload(form, draft, {profileId, intent='endpoint', verifyNow=true}={}) {
@@ -34,7 +34,7 @@ export function registrationPayload(form, draft, {profileId, intent='endpoint', 
   return {...data, cde_profile_id: profile ?? profileId, cde_registration_intent: intent, cde_verify_now: verifyNow};
 }
 
-export default function ServerRegistrationHost({api, engine, version, mode='create', urlFor, initialData={}, profileId,
+export default function ServerRegistrationHost({api, engine, version, versionSupport, mode='create', urlFor, initialData={}, profileId,
   intent='endpoint', verifyNow=true, displayName, onClose, onSaved, descriptorClient}) {
   const client = useMemo(() => descriptorClient || new DescriptorClient(api), [api, descriptorClient]);
   const [state, setState] = useState({status: 'loading', bundle: null, record: {}, error: null});
@@ -82,15 +82,18 @@ export default function ServerRegistrationHost({api, engine, version, mode='crea
     onSaved?.(response.data);
     return response.data;
   };
-  return <ObjectEditor form={form} mode={mode} resourceKind="server" record={fromBackend} context={{}}
+  const notice = versionSupportNotice(versionSupport);
+  const editor = <ObjectEditor form={form} mode={mode} resourceKind="server" record={fromBackend} context={{}}
     title={displayName} directApply applyLabel={mode === 'create' ? 'Register' : 'Save'}
     apply={apply} onClose={onClose} />;
+  return notice ? <Box><Banner status="info">{notice}</Banner>{editor}</Box> : editor;
 }
 
 ServerRegistrationHost.propTypes = {
   api: PropTypes.oneOfType([PropTypes.object, PropTypes.func]).isRequired,
   engine: PropTypes.string.isRequired,
   version: PropTypes.string,
+  versionSupport: PropTypes.object,
   mode: PropTypes.oneOf(['create', 'alter']),
   urlFor: PropTypes.func.isRequired,
   initialData: PropTypes.object,
