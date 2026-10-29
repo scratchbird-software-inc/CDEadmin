@@ -9656,7 +9656,7 @@
       "version": "3.53.0",
       "root": {
         "id": "b408725ea210c9cbba1c",
-        "label": "SQLite \u2014 3.53.0",
+        "label": "SQLite \u2014 3.35.0 and later (reference 3.53.0)",
         "kind": "engine",
         "condition": "",
         "note": "No native network server, users, roles, stored procedures or separate schemas. A virtual-table module determines its children.",
