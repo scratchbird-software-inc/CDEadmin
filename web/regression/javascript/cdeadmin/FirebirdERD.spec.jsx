@@ -147,3 +147,14 @@ it('awaits source capture before downloading an edited relational design', async
     expect(JSON.parse(text).files['relations.ddn']).toBe('instant edit');
   } finally {URL.createObjectURL=previousCreate;URL.revokeObjectURL=previousRevoke;click.mockRestore();}
 });
+
+it.each(['sqlite', 'duckdb'])('binds %s relational review to the registered database target without Firebird generation admission', async (engine) => {
+  const Component = withTheme(FirebirdERD);
+  const diagram = {snapshot: {format:'ddn-source-workspace@1',entry:'relations.ddn',view:'relations_1',files:{'relations.ddn':'native design'}},views:[]};
+  const post=jest.fn().mockResolvedValue({baseline:'before',desired:'after'}),onReview=jest.fn();
+  render(<Component diagram={diagram} engine={engine} databaseTargetId={engine + '-target'} post={post} onReview={onReview} />);
+  fireEvent.click(screen.getByText('Review relational metadata changes'));
+  await waitFor(() => expect(onReview).toHaveBeenCalledWith({baseline:'before',desired:'after'}));
+  expect(post).toHaveBeenCalledWith({action:engine + '_relational_review',request:{database_target_id:engine + '-target',original:diagram.snapshot,snapshot:diagram.snapshot}});
+  expect(screen.queryByText('Include new graphical columns')).toBeNull();
+});

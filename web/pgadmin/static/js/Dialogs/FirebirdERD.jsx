@@ -85,11 +85,11 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     {engine === 'mariadb' && post && onReview && <FormControlLabel label="Accept native KEEP-history semantics for temporal schema changes"
       control={<Checkbox checked={allowTemporalHistory} disabled={editing || merging || reviewing}
         onChange={event => setAllowTemporalHistory(event.target.checked)} />} />}
-    {post && onReview && <Button disabled={editing || merging || reviewing || (!generation && !['mysql', 'mariadb'].includes(engine))} onClick={async () => {
+    {post && onReview && <Button disabled={editing || merging || reviewing || (!generation && !['mysql', 'mariadb', 'sqlite', 'duckdb'].includes(engine))} onClick={async () => {
       const serial = ++fileToken.current; setReviewing(true); onReviewBusyChange?.(true); setError(null);
       const document = value => ({format: value.format, entry: value.entry, view: value.view, files: value.files});
       try {
-        const result = await post({action: `${engine}_relational_review`, request: {...(['mysql', 'mariadb'].includes(engine) ? {database_target_id: databaseTargetId, ...(allowNewColumns ? {allow_new_columns: true} : {}), ...(allowColumnRenames ? {allow_column_renames: true} : {}), ...(allowForeignKeys ? {allow_foreign_keys: true} : {}), ...(engine === 'mariadb' && allowTemporalHistory ? {allow_temporal_history: true} : {})} : {generation}),
+        const result = await post({action: `${engine}_relational_review`, request: {...(['sqlite', 'duckdb'].includes(engine) ? {database_target_id: databaseTargetId} : ['mysql', 'mariadb'].includes(engine) ? {database_target_id: databaseTargetId, ...(allowNewColumns ? {allow_new_columns: true} : {}), ...(allowColumnRenames ? {allow_column_renames: true} : {}), ...(allowForeignKeys ? {allow_foreign_keys: true} : {}), ...(engine === 'mariadb' && allowTemporalHistory ? {allow_temporal_history: true} : {})} : {generation}),
           original: document(baseline.current), snapshot: document(snapshot())}});
         if (serial !== fileToken.current) return;
         await onReview(result);
@@ -129,5 +129,5 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     </Dialog>
   </Box>;
 }
-FirebirdERD.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb']), diagram: PropTypes.object.isRequired, post: PropTypes.func, databaseTargetId: PropTypes.string,
+FirebirdERD.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb', 'sqlite', 'duckdb']), diagram: PropTypes.object.isRequired, post: PropTypes.func, databaseTargetId: PropTypes.string,
   generation: PropTypes.string, onReview: PropTypes.func, onReviewBusyChange: PropTypes.func};

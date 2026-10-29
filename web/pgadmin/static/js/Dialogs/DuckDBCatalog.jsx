@@ -6,6 +6,7 @@ import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import NativeDataImport from './NativeDataImport';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
 import FirebirdCatalogDesigner from './FirebirdCatalogDesigner';
+import FirebirdERD from './FirebirdERD';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
 export default function DuckDBCatalog({post, databaseTargetId}) {
@@ -178,7 +179,11 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
       {schemaReceipt.state === 'reviewed' && <Button disabled={busy || !confirmApply} onClick={applySchema}>Apply reviewed change</Button>}
       <Button disabled={busy} onClick={readReceipt}>Read native receipt</Button>
     </Box>}
-    {shown?.snapshot && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
+    {display === 'relations' && result?.diagram?.snapshot && !includeSystem && <FirebirdERD engine="duckdb" diagram={result.diagram}
+      post={post} databaseTargetId={databaseTargetId} onReviewBusyChange={setBusy}
+      onReview={review => {setSource(review.desired); setBaselineSource(review.baseline); setComparison(null); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false);}} />}
+    {display === 'relations' && includeSystem && <Alert severity="info">Diagram review requires user-object-only capture; clear "Include system objects" and capture again.</Alert>}
+    {shown?.snapshot && display !== 'relations' && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
       <DDNViewerSurface presentation snapshot={{...shown.snapshot, view,
         entry: shown.views.find(item => item.id === view)?.entry || shown.snapshot.entry}} />
     </Box>}

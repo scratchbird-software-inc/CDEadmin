@@ -539,8 +539,14 @@ open items for Stream B (B1 vocabulary, B3 adapters); none is claimed by this do
    need row absence plus a deletion argument (SQLite) or are not carried (DuckDB tables
    and columns); they are rejected with a reason. Index renames are rejected on both
    engines (drop plus a new index). DuckDB index replacement does not exist as a plan.
-#. **SQLite and DuckDB diagram review is not yet wired into the Robin UI**; the
-   ``sqlite_relational_review`` and ``duckdb_relational_review`` actions are API-level.
+#. **SQLite and DuckDB diagram review in the UI.** The SQLite and DuckDB catalog panels show
+   the Relations display through the shared diagram editor (``FirebirdERD``), whose
+   *Review relational metadata changes* button calls ``sqlite_relational_review`` /
+   ``duckdb_relational_review`` for the registered file and hands the reviewed baseline and
+   desired DDN to the existing native preview. For SQLite a review that carries ``renames``
+   first calls ``sqlite_schema_rename_design`` and previews with those exact renames. The
+   review needs a user-object-only capture ("Include system objects" off). Browser
+   verification against a live Robin session is still outstanding.
 #. **Index detail.** Per-key ordering, operator class, collation, INCLUDE columns,
    ``NULLS NOT DISTINCT``, storage parameters and tablespace are not in the
    vocabulary; such indexes are read-only for replacement.
@@ -616,6 +622,7 @@ Change log
   ``enforced``); ``mysql_physical.py`` and the MySQL/MariaDB plan modules read index,
   UNIQUE, PRIMARY KEY, CHECK, FOREIGN KEY, rename and drop edits into one reviewed
   ``ALTER TABLE`` per table. PostgreSQL, SQLite and DuckDB behaviour is unchanged.
+* 2026-10-29: the SQLite and DuckDB catalog panels expose diagram review (shared ``FirebirdERD``).
 * 2026-10-29: SQLite and DuckDB carry explicit table/column renames from the diagram;
   DuckDB carries a primary-key addition. No vocabulary key was added.
 * 2026-10-28: ``scratchrobin.physical-schema@1`` introduced for PostgreSQL, SQLite and DuckDB.
