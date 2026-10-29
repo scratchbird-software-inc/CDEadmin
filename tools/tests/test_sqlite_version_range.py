@@ -121,8 +121,8 @@ def test_task_proven_on_the_runtime_version_follows_contract():
     provider = _provider_reporting('3.45.1')
     try:
         state = provider.engine_contract_descriptor()['dialect']['state']
-        assert provider._visual_admin_operation_gate('table', 'create') is (
-            state == 'passed')
+        assert state == 'passed'
+        assert provider._visual_admin_operation_gate('table', 'create')
     finally:
         provider.close()
 
@@ -148,7 +148,50 @@ def test_contract_planned_work_on_the_reference_runtime_follows_contract():
     provider = _provider_reporting('3.53.0')
     try:
         state = provider.engine_contract_descriptor()['dialect']['state']
-        assert provider._visual_admin_operation_gate('table', 'create') is (
-            state == 'passed')
+        assert state == 'passed'
+        assert provider._visual_admin_operation_gate('table', 'create')
+    finally:
+        provider.close()
+
+
+def test_fresh_provider_gates_on_the_loaded_runtime_before_any_session():
+    """An embedded provider knows its runtime before a session opens; the
+    descriptor must not hide contract-planned work in that window."""
+    from test_cdeadmin_relational_providers import Permissions, context
+    from pgadmin.cdeadmin.providers.sqlite.dialect_versions import (
+        task_proven)
+    from pgadmin.cdeadmin.providers.sqlite.provider import SQLiteProvider
+    provider = SQLiteProvider(context(PROFILE), Permissions(),
+                              _create_client())
+    try:
+        assert getattr(provider, '_observed_version', None) is None
+        state = provider.engine_contract_descriptor()['dialect']['state']
+        assert state == 'passed'
+        runtime = sqlite3.sqlite_version
+        for kind, operation in (('table', 'create'),
+                                ('fts-table', 'fts_flush')):
+            expected = runtime == PROFILE.exact_version or task_proven(
+                f'visual_admin.{kind}.{operation}', runtime)
+            assert provider._visual_admin_operation_gate(
+                kind, operation) is bool(expected), (kind, operation)
+        flags = []
+
+        def walk(value):
+            if isinstance(value, dict):
+                if 'operation_id' in value and 'native_supported' in value:
+                    flags.append((value['operation_id'],
+                                  value['native_supported']))
+                for item in value.values():
+                    walk(item)
+            elif isinstance(value, list):
+                for item in value:
+                    walk(item)
+
+        walk(provider.visual_admin_descriptor())
+        unsupported = {name for name, supported in flags if not supported}
+        assert unsupported <= {'fts_flush'}
+        assert ('fts_flush' in unsupported) == (not task_proven(
+            'visual_admin.fts-table.fts_flush', runtime) and
+            runtime != PROFILE.exact_version)
     finally:
         provider.close()

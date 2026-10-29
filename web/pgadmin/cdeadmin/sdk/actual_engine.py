@@ -408,6 +408,8 @@ class ActualEnginePilotProvider:
             return True
         observed = getattr(self, '_observed_version', None)
         if observed is None:
+            observed = self._runtime_version_without_session()
+        if observed is None:
             return False
         if observed == self.profile.exact_version:
             return True
@@ -417,6 +419,10 @@ class ActualEnginePilotProvider:
     def _dialect_task_proven(self, task_id, observed_version):
         """Providers with per-version task proof override this."""
         return False
+
+    def _runtime_version_without_session(self):
+        """In-process engines know their runtime before any session."""
+        return None
 
     def visual_admin_descriptor(self):
         """Return this provider's declarative visual administration surface."""

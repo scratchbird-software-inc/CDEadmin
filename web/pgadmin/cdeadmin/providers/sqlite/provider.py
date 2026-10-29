@@ -294,6 +294,15 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
         from .dialect_versions import task_proven
         return task_proven(task_id, observed_version)
 
+    def _runtime_version_without_session(self):
+        # Embedded: the library this process loaded is the runtime, and the
+        # driver admits connections only when it is inside the range.
+        observed = getattr(self.client.module, 'sqlite_version', None)
+        if isinstance(observed, str) and PROFILE.accepts_runtime_version(
+                observed):
+            return observed
+        return None
+
     def extension_action(self, request, manifest):
         from .extensions import action
         self._require('execute')
