@@ -40,6 +40,7 @@ upstream attribution.
    vitess_driver_development
    dolt_driver_development
    mysql_wire_parity
+   postgresql_wire_parity
    xtdb_driver_development
    immudb_driver_development
    ignite_driver_development

@@ -54,6 +54,9 @@ def administrations():
     found["tidb"] = tidb.ADMINISTRATION
     from pgadmin.cdeadmin.providers.vitess import provider as vitess
     found["vitess"] = vitess.ADMINISTRATION
+    # PostgreSQL-wire engines brought to full parity (same direction).
+    from pgadmin.cdeadmin.providers.cockroachdb import provider as cockroachdb
+    found["cockroachdb"] = cockroachdb.ADMINISTRATION
     return found
 
 
