@@ -35,11 +35,14 @@ Read the results with these limits:
 -  Results are for the pinned demo versions and their demo configuration
    (PostgreSQL 18.3, CockroachDB 26.1.3), probed 2026-10-30. Settings change
    results; each result file records the settings that gate features.
--  The CockroachDB demo is one insecure node with no locality, an empty
-   ``enterprise.license`` setting and ``kv.rangefeed.enabled`` off. Probes
-   that need regions, passwords or rangefeeds fail on it for that reason, not
-   because the engine lacks the feature (see below). Whether an unlicensed
-   cluster is otherwise limited was not checked.
+-  The CockroachDB demo is one insecure node with no locality and an empty
+   ``enterprise.license`` setting. Probes that need regions or passwords fail
+   on it for that reason, not because the engine lacks the feature (see
+   below). Whether an unlicensed cluster is otherwise limited was not
+   checked.
+-  The demo turns ``kv.rangefeed.enabled`` on at each start, so changefeeds
+   run (owner direction, 2026-10-30). The first probe run, with it off,
+   refused them; the committed result is the second run.
 
 Regenerate a column with the probe (password from
 ``CDEADMIN_PROBE_PASSWORD``; for CockroachDB use ``--maintenance-database
@@ -79,7 +82,7 @@ constraint-unique                       yes              yes
 crdb-alter-primary-key                  no (42601)       yes
 crdb-backup                             no (42601)       yes
 crdb-backup-schedule                    no (42601)       yes
-crdb-changefeed                         no (42601)       no (XXUUU)
+crdb-changefeed                         no (42601)       yes
 crdb-column-families                    no (42704)       yes
 crdb-column-not-visible                 no (42601)       yes
 crdb-column-on-update                   no (42601)       yes
@@ -239,7 +242,9 @@ enable it):
    mode". Passwordless users work.
 -  Temporary tables: refused unless the session sets
    ``experimental_enable_temp_tables`` (then they work).
--  Changefeeds: need ``kv.rangefeed.enabled``.
+-  Changefeeds: need ``kv.rangefeed.enabled``. The demo now sets it and
+   ``crdb-changefeed`` passes (a ``null://`` sink, so no sink delivery is
+   checked).
 -  Multi-region (primary region, survival goals, table locality): the node
    has no locality, so the cluster has no regions.
 
@@ -253,6 +258,26 @@ schedules, ``EXPORT`` (with a deprecation notice), ``SHOW RANGES`` and
 session settings. Row-level security (``ENABLE ROW LEVEL SECURITY``,
 ``CREATE``/``ALTER``/``DROP POLICY``) runs, as do PL/pgSQL functions,
 procedures and enum and composite types.
+
+Untested on CockroachDB
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Owner decision, 2026-10-30: no multi-node, multi-region demo. These need more
+than the demo's one node without locality, so neither the probe nor any live
+round trip has exercised them. Where the editor offers them, they rest on
+CockroachDB's documentation, not on evidence here:
+
+-  Regions: database primary and added regions, survival goals (zone and
+   region), table locality (``REGIONAL BY TABLE``, ``REGIONAL BY ROW``,
+   ``GLOBAL``), super regions, ``PLACEMENT RESTRICTED``.
+-  Range placement across nodes: zone-configuration replica counts and
+   constraints actually being satisfied, lease preferences, replica
+   relocation and rebalancing. ``SPLIT AT``, ``SCATTER`` and ``UNSPLIT`` pass
+   on one node, which proves only that they run.
+-  Node operations: decommission, recommission and drain, and node status
+   for more than one node.
+-  Changefeed delivery: the probe uses the ``null://`` sink, so no Kafka,
+   webhook or cloud-storage sink has been checked.
 
 Provider findings (2026-10-30)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -306,6 +331,10 @@ Plan
    the owner to decide: an opt-in demo setting for rangefeeds, and an
    opt-in multi-node, multi-region demo for the region and range
    operations, which one node cannot prove.
+
+   Owner decision, 2026-10-30: rangefeeds are on in the demo; there is no
+   multi-node demo, and what it would have proved is listed under
+   "Untested on CockroachDB" below.
 #. Provider forms per family, reusing the PostgreSQL provider's field ids:
    table (columns, constraints, families, TTL, locality), index (method,
    storing, hash-sharded, partial, visibility), trigger (row-level only),

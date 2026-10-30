@@ -1,6 +1,6 @@
 {
  "engine": "cockroachdb",
- "external_storage_prefix": "nodelocal://1/cde_probe/3c2cde21",
+ "external_storage_prefix": "nodelocal://1/cde_probe/9b27ac0a",
  "leftover_roles": [],
  "notices_on_supported": {
   "column-identity": [
@@ -79,19 +79,14 @@
   "crdb-alter-primary-key": "supported",
   "crdb-backup": "supported",
   "crdb-backup-schedule": "supported",
-  "crdb-changefeed": {
-   "msg": "rangefeeds require the kv.rangefeed.enabled setting. See https://www.cockroachlabs.com/docs/v26.1/create-and-configure-changefeeds.html#enable-rangefeeds",
-   "sqlstate": "XXUUU",
-   "statement": "CREATE CHANGEFEED FOR TABLE",
-   "step": 1
-  },
+  "crdb-changefeed": "supported",
   "crdb-column-families": "supported",
   "crdb-column-not-visible": "supported",
   "crdb-column-on-update": "supported",
   "crdb-database-placement": {
    "msg": "region \"local\" does not exist",
    "sqlstate": "42602",
-   "statement": "ALTER DATABASE cde_probe_3c2cde21 SET",
+   "statement": "ALTER DATABASE cde_probe_9b27ac0a SET",
    "step": 0
   },
   "crdb-export": "supported",
@@ -273,7 +268,7 @@
   "role-password": {
    "msg": "setting or updating a password is not supported in insecure mode",
    "sqlstate": "28P01",
-   "statement": "CREATE USER u3c2cde21 WITH",
+   "statement": "CREATE USER u9b27ac0a WITH",
    "step": 0
   },
   "row-level-security": "supported",
@@ -365,7 +360,7 @@
  "settings": {
   "license": "",
   "locality": "",
-  "rangefeeds": "False",
+  "rangefeeds": "True",
   "regions": "0",
   "user": "root"
  },

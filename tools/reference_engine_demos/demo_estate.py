@@ -401,6 +401,22 @@ def start_standard(engine):
         wait_until(lambda: _http_engine_ready(actual), timeout=300, interval=2)
     elif actual == 'yugabytedb':
         _check_yugabyte_master_addresses(name)
+    elif actual == 'cockroachdb':
+        wait_until(lambda: _cockroach_settings(name), timeout=180, interval=2)
+
+
+# Cluster settings the demo turns on so their features can be exercised.
+# They live in the store volume; setting them each start is idempotent.
+COCKROACH_SETTINGS = (
+    # Changefeeds need rangefeeds; off by default.
+    'SET CLUSTER SETTING kv.rangefeed.enabled = true',
+)
+
+
+def _cockroach_settings(name):
+    run(['docker', 'exec', name, 'cockroach', 'sql', '--insecure', '-e',
+         '; '.join(COCKROACH_SETTINGS)], capture=True)
+    return True
 
 
 def _mysql_greeting_ready(port):
