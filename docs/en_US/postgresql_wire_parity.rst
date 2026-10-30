@@ -358,6 +358,22 @@ removal. Field ids match the CockroachDB forms where the concept is the
 same. Trigger records come from ``pg_trigger`` (WHEN and ``UPDATE OF`` from
 ``pg_get_triggerdef``), one per trigger. The other families are drafts.
 
+The table form is ``complete`` the same day (``providers/yugabytedb/
+tables.py``): columns with identity, stored generated expressions,
+collations and comments; primary keys with leading ``HASH`` columns and a
+range order; unique, deferrable foreign-key and check constraints;
+tablespace, ``SPLIT INTO``/``SPLIT AT``, colocation, partitioning, comment
+and row-level security. Alter diffs columns and constraint grids against
+the record (as for CockroachDB), changes identity, drops a stored
+expression, restates the type to change a collation (the record carries
+each column's type), rewrites the table to change its primary key (with a
+warning) and moves it between tablespaces. Found live: deferrable
+``UNIQUE`` constraints are refused ("not supported yet"; deferrable foreign
+keys run), so the editor refuses them; the probe's deferrable row used a
+foreign key. The constraint records now come from ``pg_constraint``
+(``information_schema`` listed each NOT NULL column as a check). Table
+DDL is slow on the one-node demo (the round trip takes about 11 minutes).
+
 Provider finding, 2026-10-30: the shared relational apply runs a plan in
 one transaction, and YugabyteDB refuses ``CREATE DATABASE`` and ``CREATE
 TABLESPACE`` there ("cannot run inside a transaction block"), so the

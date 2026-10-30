@@ -16,10 +16,11 @@ from ..distributed_sql import (
     create_sql_client,
     optional_rows,
     postgresql_catalog,
+    postgresql_constraint_details,
     resource,
     sql_administration,
 )
-from . import objects
+from . import objects, tables as tables_sql
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
 from .control_plane import (
@@ -125,12 +126,19 @@ class YugabyteDBAdministration(RelationalAdministration):
 
     @staticmethod
     def _native_object(kind, operation):
-        return operation in objects.OPERATIONS.get(kind, ())
+        return operation in objects.OPERATIONS.get(kind, ()) or (
+            kind == 'table' and operation in {'create', 'alter'})
 
     def _native_compile(self, request):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if request['resource_kind'] == 'table':
+            if request['operation_id'] == 'create':
+                return {'statements': tables_sql.create(self, draft)}
+            statements, warnings = tables_sql.alter(
+                self, draft, request.get('target_resource'))
+            return {'statements': statements, 'warnings': warnings}
         return {'statements': objects.compile_operation(
             self, request['resource_kind'], request['operation_id'], draft,
             request.get('target_resource'))}
@@ -144,6 +152,9 @@ class YugabyteDBAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def _form(self, kind, operation):
+        if kind == 'table' and operation in {'create', 'alter'}:
+            return tables_sql.extend_form(
+                super()._form(kind, operation), self._field, operation)
         if self._native_object(kind, operation):
             return objects.form(kind, operation, self._field)
         if operation == 'create' and kind == 'materialized-view':
@@ -447,19 +458,35 @@ def _version(row):
     return match.group(1)
 
 
+_CONSTRAINT_TYPES = {'p': 'PRIMARY KEY', 'u': 'UNIQUE', 'f': 'FOREIGN KEY',
+                     'c': 'CHECK'}
+
+
 def _extras(cursor, _request, generation):
     values = [resource('universe', [], 'YugabyteDB', generation)]
     excluded = "('pg_catalog', 'information_schema')"
-    for schema, table, name, constraint_type in optional_rows(
+    # From pg_constraint: information_schema.table_constraints also lists
+    # each NOT NULL column as a CHECK, which is nullability, not a
+    # constraint an editor should re-create.
+    details = postgresql_constraint_details(cursor)
+    for schema, table, name, kind, deferrable, deferred in optional_rows(
         cursor,
-        'SELECT constraint_schema, table_name, constraint_name, '
-        'constraint_type FROM information_schema.table_constraints '
-        f'WHERE constraint_schema NOT IN {excluded} ORDER BY 1, 2, 3',
+        'SELECT n.nspname, cl.relname, co.conname, co.contype, '
+        'co.condeferrable, co.condeferred '
+        'FROM pg_catalog.pg_constraint co '
+        'JOIN pg_catalog.pg_class cl ON cl.oid = co.conrelid '
+        'JOIN pg_catalog.pg_namespace n ON n.oid = cl.relnamespace '
+        f"WHERE co.contype IN ('p', 'u', 'f', 'c') AND n.nspname NOT IN "
+        f'{excluded} ORDER BY 1, 2, 3',
     ):
+        key = (str(schema), str(table), str(name))
         values.append(resource(
-            'constraint', [schema, table], name, generation,
-            {'constraint_type': str(constraint_type)},
-        ))
+            'constraint', [schema, table], name, generation, {
+                'constraint_type': _CONSTRAINT_TYPES[str(kind)],
+                'deferrable': bool(deferrable),
+                'initially_deferred': bool(deferred),
+                **details.get(key, {}),
+            }))
     for schema, name in optional_rows(
         cursor,
         'SELECT sequence_schema, sequence_name '
@@ -618,13 +645,142 @@ def _extras(cursor, _request, generation):
     return values
 
 
+def _annotate_catalog(connection, values):
+    """The table editor's field ids, from YSQL's PostgreSQL catalogs."""
+    cursor = connection.cursor()
+    try:
+        columns = {(str(row[0]), str(row[1]), str(row[2])): row[3:]
+                   for row in optional_rows(
+                       cursor,
+                       'SELECT n.nspname, c.relname, a.attname, '
+                       'format_type(a.atttypid, a.atttypmod), a.attnotnull, '
+                       'a.attidentity, a.attgenerated, '
+                       'pg_get_expr(d.adbin, d.adrelid), '
+                       "CASE WHEN a.attcollation <> t.typcollation "
+                       'THEN co.collname END, '
+                       'col_description(c.oid, a.attnum) '
+                       'FROM pg_catalog.pg_attribute a '
+                       'JOIN pg_catalog.pg_class c ON c.oid = a.attrelid '
+                       'JOIN pg_catalog.pg_namespace n '
+                       'ON n.oid = c.relnamespace '
+                       'JOIN pg_catalog.pg_type t ON t.oid = a.atttypid '
+                       'LEFT JOIN pg_catalog.pg_attrdef d '
+                       'ON d.adrelid = c.oid AND d.adnum = a.attnum '
+                       'LEFT JOIN pg_catalog.pg_collation co '
+                       'ON co.oid = a.attcollation '
+                       'WHERE a.attnum > 0 AND NOT a.attisdropped')}
+        tables = {(str(row[0]), str(row[1])): row[2:]
+                  for row in optional_rows(
+                      cursor,
+                      'SELECT n.nspname, c.relname, ts.spcname, '
+                      "obj_description(c.oid, 'pg_class'), "
+                      'c.relrowsecurity, c.relforcerowsecurity, '
+                      'pg_get_partkeydef(c.oid) '
+                      'FROM pg_catalog.pg_class c '
+                      'JOIN pg_catalog.pg_namespace n '
+                      'ON n.oid = c.relnamespace '
+                      'LEFT JOIN pg_catalog.pg_tablespace ts '
+                      'ON ts.oid = c.reltablespace '
+                      "WHERE c.relkind IN ('r', 'p')")}
+        keys = {(str(row[0]), str(row[1])): str(row[2])
+                for row in optional_rows(
+                    cursor,
+                    'SELECT n.nspname, cl.relname, '
+                    'pg_get_indexdef(co.conindid) '
+                    'FROM pg_catalog.pg_constraint co '
+                    'JOIN pg_catalog.pg_class cl ON cl.oid = co.conrelid '
+                    'JOIN pg_catalog.pg_namespace n '
+                    "ON n.oid = cl.relnamespace WHERE co.contype = 'p'")}
+    finally:
+        cursor.close()
+    membership = {}
+    held = {}
+    for item in values:
+        if item['resource_kind'] != 'constraint':
+            continue
+        native = item.setdefault('native', {})
+        schema, table = (str(part) for part in item['display_path'][:2])
+        kind = native.get('constraint_type')
+        row = {'kind': kind, 'columns': list(native.get('columns') or [])}
+        if kind == 'PRIMARY KEY':
+            hashed, order = tables_sql.primary_key_shape(
+                keys.get((schema, table), ''))
+            row.update(hash_columns=hashed, order=order)
+            for column in row['columns']:
+                membership[(schema, table, column)] = 'PRI'
+        elif kind == 'UNIQUE' and len(row['columns']) == 1:
+            membership.setdefault((schema, table, row['columns'][0]), 'UNI')
+        if kind == 'FOREIGN KEY':
+            row.update(
+                references_table=[native.get('referenced_schema'),
+                                  native.get('referenced_table')],
+                references_columns=list(
+                    native.get('referenced_columns') or []),
+                on_delete=native.get('delete_rule') or 'NO ACTION',
+                on_update=native.get('update_rule') or 'NO ACTION')
+        if kind == 'FOREIGN KEY':
+            row.update(deferrable=native.get('deferrable', False),
+                       initially_deferred=native.get(
+                           'initially_deferred', False))
+        if kind == 'CHECK':
+            row = {'kind': kind, 'expression': tables_sql._unwrap(
+                str(native.get('check_clause') or ''))}
+        native.update(row)
+        if 'references_table' in row:
+            # The grid shows the table as the front end's picker sends it.
+            native['references_table'] = '.'.join(
+                str(part) for part in row['references_table'])
+        held.setdefault((schema, table), []).append(
+            {'name': item['display_name'], **row})
+    for item in values:
+        native = item.setdefault('native', {})
+        path = tuple(str(part) for part in item.get('display_path') or [])
+        if item['resource_kind'] == 'column':
+            facts = columns.get(path)
+            if not facts:
+                continue
+            (data_type, not_null, identity, generated, default, collation,
+             comment) = facts
+            identity = {'a': 'ALWAYS', 'd': 'BY DEFAULT'}.get(
+                str(identity or ''), '')
+            stored = str(generated or '') == 's'
+            native.update(
+                type=str(data_type), nullable=not not_null,
+                identity=identity,
+                generated_expression=str(default) if stored else None,
+                default=None if identity or stored or default is None
+                else str(default),
+                collation=None if collation is None else str(collation),
+                comment=None if comment is None else str(comment),
+                column_key=membership.get(path, ''))
+        elif item['resource_kind'] == 'table':
+            facts = tables.get(path)
+            if not facts:
+                continue
+            tablespace, comment, secured, forced, partition_key = facts
+            strategy, _, key = str(partition_key or '').partition(' ')
+            native.update(
+                tablespace=None if tablespace is None else str(tablespace),
+                comment=None if comment is None else str(comment),
+                row_level_security=bool(secured),
+                force_row_level_security=bool(forced),
+                partition_by=strategy or None,
+                partition_key=key.strip()[1:-1] if key else None,
+                constraints=held.get(path, []),
+                # A collation change restates the type (ALTER ... TYPE).
+                column_types={column: str(facts[0]) for (
+                    schema, table, column), facts in columns.items()
+                    if (schema, table) == path})
+    return values
+
+
 def _catalog(connection, request):
     generation = str(request.get('capability_generation') or 'current')
     values = {
         item['resource_id']: item
-        for item in postgresql_catalog(
+        for item in _annotate_catalog(connection, postgresql_catalog(
             connection, request, 'YugabyteDB', _extras
-        )
+        ))
     }
     route = request.get('route') or request.get('_provider_route') or {}
     for item in control_catalog_resources(route, generation):

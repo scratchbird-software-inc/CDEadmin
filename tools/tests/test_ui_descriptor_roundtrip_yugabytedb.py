@@ -224,3 +224,141 @@ def test_users_and_roles(live):
             target=find(client, route, kind, name)[0])
     assert not query(f"SELECT 1 FROM pg_roles WHERE rolname LIKE "
                      f"'rt\\_%{UNIQUE}'")
+
+
+def by_name(rows):
+    return {row['name']: row for row in rows}
+
+
+PLACEMENT = ('{"num_replicas":1,"placement_blocks":[{"cloud":"cloud1",'
+             '"region":"datacenter1","zone":"rack1","min_num_replicas":1}]}')
+
+
+def test_table_create_reopen_alter_drop(live):
+    route, client = live
+    space = f'rt_ts_{UNIQUE}'
+    with connect() as connection:
+        connection.execute(f"CREATE TABLESPACE {space} WITH "
+                           f"(replica_placement='{PLACEMENT}')")
+    try:
+        query('CREATE TABLE public.parent (k INT PRIMARY KEY)')
+        form = resolved_form('yugabytedb', 'table')
+        run(client, route, 'table', 'create', backend_draft(form, {
+            'name': 'rt_orders', 'parent': 'public', 'comment': 'orders',
+            'tablespace': space, 'split_into': 3,
+            'columns': [
+                {'name': 'region', 'type': 'text', 'nullable': False},
+                {'name': 'id', 'type': 'bigint', 'nullable': False,
+                 'identity': 'BY DEFAULT'},
+                {'name': 'note', 'type': 'varchar(40)', 'collation': 'C',
+                 'default': "'x'", 'comment': 'a note'},
+                {'name': 'twice', 'type': 'bigint',
+                 'generated_expression': 'id * 2'},
+                {'name': 'ref', 'type': 'int'},
+            ],
+            'primary_key': [{'name': 'rt_orders_pkey',
+                             'columns': ['region', 'id'],
+                             'hash_columns': ['region', 'id']}],
+            'unique_constraints': [{'name': 'uq_note',
+                                    'columns': ['note']}],
+            'foreign_keys': [{'name': 'fk_ref', 'columns': ['ref'],
+                              'references_table': 'public.parent',
+                              'references_columns': ['k'],
+                              'on_delete': 'SET NULL', 'deferrable': True,
+                              'initially_deferred': True}],
+            'check_constraints': [{'name': 'ck_id',
+                                   'expression': 'id > 0'}]}))
+        assert query("SELECT num_tablets FROM yb_table_properties("
+                     "'public.rt_orders'::regclass)") == [(3,)]
+        target, baseline = record(client, route, 'table', 'rt_orders',
+                                  'table')
+        columns = by_name(baseline['columns'])
+        assert list(columns) == ['region', 'id', 'note', 'twice', 'ref']
+        assert (columns['id']['identity'], columns['id']['default'],
+                columns['note']['type'], columns['note']['collation'],
+                columns['note']['default'], columns['note']['comment'],
+                columns['twice']['generated_expression']) == (
+            'BY DEFAULT', None, 'character varying(40)', 'C',
+            "'x'::character varying", 'a note', '(id * 2)')
+        pk = baseline['primary_key'][0]
+        assert (pk['columns'], pk['hash_columns']) == (
+            ['region', 'id'], ['region', 'id'])
+        assert [row['name'] for row in baseline['unique_constraints']] \
+            == ['uq_note']
+        # Live: "DEFERRABLE unique constraints are not supported yet".
+        assert 'deferrable unique' in refused('table', 'create', {
+            'name': 'x', 'columns': [{'name': 'a', 'type': 'int'}],
+            'unique_constraints': [{'columns': ['a'],
+                                    'deferrable': True}]})
+        fk = baseline['foreign_keys'][0]
+        assert (fk['references_table'], fk['on_delete'], fk['deferrable'],
+                fk['initially_deferred']) == (
+            'public.parent', 'SET NULL', True, True)
+        assert (baseline['tablespace'], baseline['comment']) == (
+            space, 'orders')
+        assert backend_draft(form, baseline, mode='alter',
+                             baseline=baseline) == {}
+
+        changed = [dict(row) for row in baseline['columns']]
+        for row in changed:
+            if row['name'] == 'ref':
+                row.update(name='ref_id', type='bigint', comment='renamed')
+            if row['name'] == 'note':
+                row.update(default='', nullable=False, collation='')
+            if row['name'] == 'id':
+                row.update(identity='')
+            if row['name'] == 'twice':
+                row.update(generated_expression='')
+        changed.append({'name': 'extra', 'type': 'int'})
+        alter = backend_draft(form, {
+            **baseline, 'columns': changed,
+            'unique_constraints': [{'name': 'uq_extra',
+                                    'columns': ['extra']}],
+            'primary_key': [{'name': 'rt_orders_pkey',
+                             'columns': ['region', 'id'],
+                             'hash_columns': [], 'order': 'ASC'}],
+            'tablespace': '', 'row_level_security': True,
+            'comment': 'orders v2'}, mode='alter', baseline=baseline)
+        planned = run(client, route, 'table', 'alter', alter, target=target)
+        assert any('rewrites' in item
+                   for item in planned.get('warnings') or [])
+        target, after = record(client, route, 'table', 'rt_orders', 'table')
+        columns = by_name(after['columns'])
+        assert (columns['ref_id']['type'], columns['ref_id']['comment'],
+                columns['note']['default'], columns['note']['nullable'],
+                columns['note']['collation'], columns['id']['identity'],
+                columns['twice']['generated_expression']) == (
+            'bigint', 'renamed', None, False, None, '', None)
+        assert [row['name'] for row in after['unique_constraints']] == [
+            'uq_extra']
+        assert after['primary_key'][0]['hash_columns'] == []
+        assert [row['name'] for row in after['check_constraints']] == [
+            'ck_id']
+        assert after['foreign_keys'][0]['columns'] == ['ref_id']
+        assert (after['tablespace'], after['row_level_security'],
+                after['comment']) == (None, True, 'orders v2')
+
+        run(client, route, 'table', 'create', backend_draft(form, {
+            'name': 'rt_events', 'parent': 'public',
+            'columns': [{'name': 'id', 'type': 'int'},
+                        {'name': 'at', 'type': 'date', 'nullable': False}],
+            'partition_by': 'RANGE', 'partition_key': 'at'}))
+        _, events = record(client, route, 'table', 'rt_events', 'table')
+        assert (events['partition_by'], events['partition_key']) == (
+            'RANGE', 'at')
+        run(client, route, 'table', 'create', backend_draft(form, {
+            'name': 'rt_ranges', 'parent': 'public',
+            'columns': [{'name': 'id', 'type': 'int', 'nullable': False}],
+            'primary_key': [{'columns': ['id'], 'order': 'ASC'}],
+            'split_at': [{'value': '10'}, {'value': '20'}]}))
+        assert query("SELECT num_tablets FROM yb_table_properties("
+                     "'public.rt_ranges'::regclass)") == [(3,)]
+        for name in ('rt_orders', 'rt_events', 'rt_ranges'):
+            run(client, route, 'table', 'drop', {'confirmation': name},
+                target=find(client, route, 'table', name)[0])
+        assert not query("SELECT 1 FROM pg_class WHERE relname LIKE "
+                         "'rt\\_%'")
+    finally:
+        query('DROP TABLE IF EXISTS public.rt_orders')
+        with connect() as connection:
+            connection.execute(f'DROP TABLESPACE IF EXISTS {space}')
