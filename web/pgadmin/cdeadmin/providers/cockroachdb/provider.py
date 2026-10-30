@@ -22,7 +22,7 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
-from . import indexes as index_sql, objects, tables
+from . import indexes as index_sql, objects, tables, types
 from .driver import CockroachDBClient
 from ..distributed_control_plane import DistributedSQLControlPlane
 from pgadmin.cdeadmin.visual_admin import (
@@ -82,6 +82,10 @@ for _kind in ('function', 'procedure', 'trigger'):
 # In place: rename, visibility and comment (providers/cockroachdb/indexes).
 _COCKROACH_SUPPORTED['index'] = frozenset({
     'inspect', 'create', 'alter', 'drop', 'scatter',
+})
+# Enums and composites (providers/cockroachdb/types).
+_COCKROACH_SUPPORTED['type'] = frozenset({
+    'inspect', 'create', 'alter', 'drop',
 })
 _COCKROACH_SUPPORTED['materialized-view'] = frozenset({
     'inspect', 'create', 'rename', 'drop',
@@ -1281,13 +1285,19 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
     @staticmethod
     def _native_object(kind, operation):
         return operation in objects.OPERATIONS.get(kind, ()) or (
-            kind in {'table', 'index'} and operation in {'create', 'alter'})
+            kind in {'table', 'index', 'type'} and
+            operation in {'create', 'alter'})
 
     def _native_compile(self, request):
         kind, operation = request['resource_kind'], request['operation_id']
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if kind == 'type':
+            if operation == 'create':
+                return {'statements': types.create(self, draft)}
+            return {'statements': types.alter(
+                self, draft, request.get('target_resource'))}
         if kind == 'index':
             if operation == 'create':
                 return {'statements': index_sql.create(self, draft)}
@@ -1332,6 +1342,8 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
         return super()._compile(request)
 
     def _form(self, kind, operation):
+        if kind == 'type' and operation in {'create', 'alter'}:
+            return types.form(self._field, operation)
         if kind == 'index' and operation in {'create', 'alter'}:
             return index_sql.form(super()._form(kind, 'create'),
                                   self._field, operation)
@@ -1432,18 +1444,47 @@ def _extras(cursor, request, generation):
         values.append(resource(
             'materialized-view', [schema], name, generation
         ))
-    for schema, name, type_kind in optional_rows(
+    # pg_type also lists every table's row type as typtype 'c'; a composite
+    # type is the one whose pg_class row is relkind 'c'.
+    enum_values = {(str(row[0]), str(row[1])): list(row[2] or [])
+                   for row in optional_rows(cursor, 'SHOW ENUMS')}
+    fields = {}
+    for schema, name, field, field_type in optional_rows(
         cursor,
-        'SELECT n.nspname, t.typname, t.typtype '
-        'FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n '
-        'ON n.oid = t.typnamespace WHERE t.typisdefined '
-        "AND n.nspname NOT IN ('pg_catalog', 'information_schema') "
-        "AND t.typtype IN ('c', 'd', 'e') ORDER BY 1, 2",
+        'SELECT n.nspname, t.typname, a.attname, '
+        'format_type(a.atttypid, a.atttypmod) '
+        'FROM pg_catalog.pg_type t '
+        'JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace '
+        'JOIN pg_catalog.pg_class c ON c.oid = t.typrelid '
+        'JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid '
+        "WHERE c.relkind = 'c' AND a.attnum > 0 ORDER BY 1, 2, a.attnum",
     ):
-        values.append(resource(
-            'type', [schema], name, generation,
-            {'type_kind': str(type_kind)},
-        ))
+        fields.setdefault((str(schema), str(name)), []).append(
+            {'name': str(field), 'type': str(field_type)})
+    for schema, name, type_kind, comment in optional_rows(
+        cursor,
+        'SELECT n.nspname, t.typname, t.typtype, d.description '
+        'FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n '
+        'ON n.oid = t.typnamespace '
+        'LEFT JOIN pg_catalog.pg_class c ON c.oid = t.typrelid '
+        # Live, 26.1.3: a user type's pg_type oid is its descriptor id plus
+        # 100000, but pg_description keeps the bare id.
+        'LEFT JOIN pg_catalog.pg_description d '
+        'ON d.objoid::INT8 = t.oid::INT8 - 100000 '
+        "AND d.classoid = 'pg_catalog.pg_type'::REGCLASS "
+        "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', "
+        "'crdb_internal') AND (t.typtype = 'e' OR (t.typtype = 'c' "
+        "AND c.relkind = 'c')) ORDER BY 1, 2",
+    ):
+        key = (str(schema), str(name))
+        enum = str(type_kind) == 'e'
+        values.append(resource('type', [schema], name, generation, {
+            'parent': str(schema),
+            'type_kind': 'ENUM' if enum else 'COMPOSITE',
+            'values': enum_values.get(key, []) if enum else None,
+            'fields': None if enum else fields.get(key, []),
+            'comment': None if comment is None else str(comment),
+        }))
     for schema, name, routine_kind in optional_rows(
         cursor,
         'SELECT n.nspname, p.proname, p.prokind '

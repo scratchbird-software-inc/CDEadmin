@@ -345,3 +345,47 @@ def test_index_create_reopen_alter_drop(live):
             target=find(client, route, 'index', name)[0])
     assert query("SELECT indexname FROM pg_indexes WHERE tablename='ix'") \
         == [('ix_pkey',)]
+
+
+def test_enum_and_composite_types(live):
+    route, client = live
+    form = resolved_form('cockroachdb', 'type')
+    query('CREATE TABLE public.not_a_type (id INT8 PRIMARY KEY)')
+    run(client, route, 'type', 'create', backend_draft(form, {
+        'name': 'rt_status', 'parent': 'public', 'type_kind': 'ENUM',
+        'values': [{'value': 'new'}, {'value': "it's"}, {'value': 'done'}],
+        'comment': 'status'}))
+    run(client, route, 'type', 'create', backend_draft(form, {
+        'name': 'rt_point', 'parent': 'public', 'type_kind': 'COMPOSITE',
+        'fields': [{'name': 'x', 'type': 'INT8'},
+                   {'name': 'label', 'type': 'STRING'}]}))
+    kinds = {row['display_name'] for row in resources(client, route)
+             if row['resource_kind'] == 'type'}
+    # Tables' row types are not types (pg_type lists them as 'c').
+    assert kinds == {'rt_status', 'rt_point'}
+    target, baseline = record(client, route, 'type', 'rt_status', 'type')
+    assert ([row['value'] for row in baseline['values']],
+            baseline['comment'], baseline['parent']) == (
+        ['new', "it's", 'done'], 'status', 'public')
+    _, point = record(client, route, 'type', 'rt_point', 'type')
+    assert [(row['name'], row['type']) for row in point['fields']] == [
+        ('x', 'bigint'), ('label', 'text')]
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    alter = backend_draft(form, {
+        **baseline, 'name': 'rt_state',
+        'rename_values': [{'from': 'done', 'to': 'closed'}],
+        'values': [{'value': 'draft'}, {'value': 'new'}, {'value': 'closed'},
+                   {'value': 'archived'}],
+        'comment': ''}, mode='alter', baseline=baseline)
+    run(client, route, 'type', 'alter', alter, target=target)
+    target, after = record(client, route, 'type', 'rt_state', 'type')
+    assert ([row['value'] for row in after['values']], after['comment']) \
+        == (['draft', 'new', 'closed', 'archived'], None)
+    assert 'reorder' in refused('type', 'alter', {
+        'values': ['closed', 'new', 'draft', 'archived']}, target)
+    for name in ('rt_state', 'rt_point'):
+        run(client, route, 'type', 'drop', {'confirmation': name},
+            target=find(client, route, 'type', name)[0])
+    assert not query("SELECT 1 FROM pg_type WHERE typname IN "
+                     "('rt_state', 'rt_point')")

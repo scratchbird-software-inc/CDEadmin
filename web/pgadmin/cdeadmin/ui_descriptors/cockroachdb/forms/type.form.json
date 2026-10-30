@@ -5,10 +5,147 @@
   "resource_kinds": [
     "type"
   ],
-  "status": "pending",
-  "engine_tab_title": "cockroachdb",
+  "status": "complete",
+  "engine_tab_title": "CockroachDB",
   "omitted_tabs": [],
-  "gaps": [],
-  "fields": [],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. type: provider exposes no create form (inspect)"
+  "gaps": [
+    {
+      "concept": "Domains and range types",
+      "reason": "Refused by CockroachDB 26.1.3 (probe)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Composite ADD/DROP/RENAME/ALTER ATTRIBUTE",
+      "reason": "Unimplemented in CockroachDB 26.1.3 (live)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Type ownership and SET SCHEMA",
+      "reason": "Run on 26.1.3 but have no editor yet",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "Renaming runs ALTER TYPE ... RENAME TO."
+    },
+    {
+      "field_id": "parent",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "type_kind",
+      "label": "Kind",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "ENUM",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "ENUM",
+          "label": "Enum"
+        },
+        {
+          "value": "COMPOSITE",
+          "label": "Composite"
+        }
+      ]
+    },
+    {
+      "field_id": "values",
+      "label": "Enum values",
+      "tab": "General",
+      "control": "grid",
+      "item_kind": "string",
+      "reorderable": true,
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "ENUM"
+      },
+      "help": "In order. Add or remove values; existing values cannot be reordered, and a value in use cannot be dropped.",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true,
+          "editable_after_create": false
+        }
+      ]
+    },
+    {
+      "field_id": "rename_values",
+      "label": "Rename values",
+      "tab": "General",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "ENUM"
+      },
+      "help": "ALTER TYPE ... RENAME VALUE; applied before additions and removals.",
+      "columns": [
+        {
+          "field_id": "from",
+          "label": "Current value",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "to",
+          "label": "New value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "fields",
+      "label": "Fields",
+      "tab": "General",
+      "control": "grid",
+      "required": true,
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "COMPOSITE"
+      },
+      "editable_after_create": false,
+      "help": "A composite type's fields are fixed once created (CockroachDB 26.1.3).",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Field",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Type",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON TYPE"
+    }
+  ],
+  "notes": "Hand-finished from providers/cockroachdb/types.py. Existing enum values are locked cells (rename them in Rename values); the record reads values from SHOW ENUMS, fields from pg_attribute of the relkind c class, the comment from pg_description. Round trip verified live on CockroachDB 26.1.3 by tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py (2026-10-30)."
 }

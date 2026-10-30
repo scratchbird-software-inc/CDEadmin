@@ -356,7 +356,15 @@ Checked live on 26.1.3 for those forms (not yet in the probe):
    DATABASE] SET`` and ``GRANT SYSTEM`` run but have no editor yet.
 -  Enum types: ``ADD VALUE`` (with ``BEFORE``/``AFTER``), ``RENAME VALUE``,
    ``DROP VALUE`` and ``RENAME TO`` run; composite ``ADD ATTRIBUTE`` is
-   refused.
+   refused. Later the same day: composite ``DROP``, ``RENAME`` and
+   ``ALTER ATTRIBUTE`` are unimplemented too; ``DROP VALUE`` is refused
+   while a row holds the value. ``pg_type`` lists every table's row type
+   as ``typtype 'c'`` (the old catalog reported each table as a composite
+   type; fixed: a composite is the one whose ``pg_class`` row is
+   ``relkind 'c'``). A user type's ``pg_type`` oid is its descriptor id
+   plus 100000 while ``pg_description`` keeps the bare id, so
+   ``obj_description`` finds no type comment; the catalog joins with the
+   offset, restricted to ``pg_type`` descriptions.
 -  Policies: ``CREATE``/``ALTER``/``DROP POLICY`` run and ``pg_policy`` and
    ``SHOW POLICIES`` read them back; ``COMMENT ON POLICY`` is refused.
 -  ``ALTER COLUMN ... TYPE`` is refused while a policy expression references
@@ -449,5 +457,6 @@ TTL and a table comment; in alter mode it changes existing columns (type,
 default, nullability, visibility, ON UPDATE, identity, stored to regular,
 comment) and diffs each changed constraint grid against the table record.
 Key membership and family stay fixed on existing columns.
-The index form is ``complete`` the same day
-(``providers/cockroachdb/indexes.py``).
+The index and type forms are ``complete`` the same day
+(``providers/cockroachdb/indexes.py``, ``types.py``; the provider admits
+type create, alter and drop).
