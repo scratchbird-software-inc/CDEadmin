@@ -23,7 +23,7 @@ import {Select} from '../primitives/Choice';
 import {Banner, ValidationMessage} from '../feedback/Indicators';
 import CodeEditor from '../editors/CodeEditor';
 import FieldControl from './FieldControl';
-import {activeFields, fieldVisible} from './descriptors';
+import {activeFields, fieldVisible, toOperationDraft} from './descriptors';
 import {planSqlText} from './ObjectEditor';
 
 function initialValues(fields) {
@@ -63,7 +63,10 @@ export default function OperationDialog({open, operation, targetName, context={}
   // Providers validate a typed confirmation as the draft's `confirmation`
   // field (the route database for database-level tasks, the object name
   // otherwise); the dialog's own match hint never replaces that check.
-  const draft = needsTypedName && confirmText.trim() ? {...values, confirmation: confirmText.trim()} : values;
+  // The provider takes its own field shapes: string grids as plain lists,
+  // rows without the grid's _id, dotted backend ids nested.
+  const draft = toOperationDraft(operation,
+    needsTypedName && confirmText.trim() ? {...values, confirmation: confirmText.trim()} : values);
 
   const setValue = (fieldId, value) => {
     setValues((current) => ({...current, [fieldId]: value}));

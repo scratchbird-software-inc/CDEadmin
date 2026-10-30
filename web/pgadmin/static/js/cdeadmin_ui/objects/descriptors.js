@@ -421,20 +421,36 @@ export function toBackendDraft(form, draft, {mode='create', baseline=null}={}) {
       if(bracket) {
         const [, list, key, discriminator] = bracket;
         out[list] = (out[list] || []).concat((Array.isArray(value) ? value : []).map((row) => ({[key]: discriminator, ...stripMeta(row)})));
-      } else if(target.includes('.')) {
+        continue;
+      }
+      if(field.control === 'grid' && field.item_kind === 'string') {
+        const column = field.columns?.[0]?.field_id || 'value';
+        value = (Array.isArray(value) ? value : []).map((row) => (row && typeof row === 'object') ? row[column] : row)
+          .filter((item) => item !== undefined && item !== null && item !== '');
+      } else if(Array.isArray(value)) {
+        value = value.map((row) => (row && typeof row === 'object' && '_id' in row) ? stripMeta(row) : row);
+      }
+      if(target.includes('.')) {
         const parts = target.split('.');
         let node = out;
         for(const part of parts.slice(0, -1)) node = (node[part] = node[part] || {});
         node[parts.at(-1)] = value;
-      } else if(field.control === 'grid' && field.item_kind === 'string') {
-        const column = field.columns?.[0]?.field_id || 'value';
-        out[target] = (Array.isArray(value) ? value : []).map((row) => (row && typeof row === 'object') ? row[column] : row)
-          .filter((item) => item !== undefined && item !== null && item !== '');
       } else {
-        out[target] = Array.isArray(value) ? value.map((row) => (row && typeof row === 'object' && '_id' in row) ? stripMeta(row) : row) : value;
+        out[target] = value;
       }
     }
   }
+  return out;
+}
+
+/**
+ * Map an OperationDialog's values onto the provider draft, as toBackendDraft
+ * does for editors: string grids become plain lists, grid rows lose their
+ * _id, dotted backend ids nest. A typed-name confirmation travels as-is.
+ */
+export function toOperationDraft(operation, values) {
+  const out = toBackendDraft({tabs: [{fields: operation.fields || []}]}, values);
+  if(Object.hasOwn(values, 'confirmation')) out.confirmation = values.confirmation;
   return out;
 }
 

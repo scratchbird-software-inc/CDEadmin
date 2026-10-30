@@ -104,18 +104,30 @@ def backend_draft(form: dict, draft: dict, mode: str = "create", baseline: dict 
             if match:
                 list_name, key, discriminator = match.groups()
                 out.setdefault(list_name, []).extend({key: discriminator, **_strip(row)} for row in (value or []))
-            elif "." in target:
+                continue
+            if field.get("control") == "grid" and field.get("item_kind") == "string":
+                column = (field.get("columns") or [{"field_id": "value"}])[0]["field_id"]
+                value = [row.get(column) if isinstance(row, dict) else row for row in (value or [])
+                         if (row.get(column) if isinstance(row, dict) else row) not in (None, "")]
+            elif isinstance(value, list):
+                value = [_strip(row) for row in value]
+            if "." in target:
                 node = out
                 parts = target.split(".")
                 for part in parts[:-1]:
                     node = node.setdefault(part, {})
                 node[parts[-1]] = value
-            elif field.get("control") == "grid" and field.get("item_kind") == "string":
-                column = (field.get("columns") or [{"field_id": "value"}])[0]["field_id"]
-                out[target] = [row.get(column) if isinstance(row, dict) else row for row in (value or [])
-                               if (row.get(column) if isinstance(row, dict) else row) not in (None, "")]
             else:
-                out[target] = [_strip(row) for row in value] if isinstance(value, list) else value
+                out[target] = value
+    return out
+
+
+def operation_backend_draft(operation: dict, values: dict) -> dict:
+    """What the OperationDialog sends (twin of toOperationDraft): the values
+    mapped as backend_draft maps an editor's, plus a typed confirmation."""
+    out = backend_draft({"tabs": [{"fields": operation.get("fields", [])}]}, values)
+    if "confirmation" in values:
+        out["confirmation"] = values["confirmation"]
     return out
 
 
@@ -285,7 +297,8 @@ def form_field_ids(form: dict) -> set:
 
 
 __all__ = ("backend_draft", "diff_columns", "resolved_form", "active_fields", "field_visible", "form_field_ids", "record_draft",
-           "record_value", "record_from_resource", "is_child_of", "operation_draft", "engine_operations",
+           "record_value", "record_from_resource", "is_child_of", "operation_draft",
+           "operation_backend_draft", "engine_operations",
            "registration_data", "registration_route", "registration_prefill")
 
 

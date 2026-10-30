@@ -1,6 +1,6 @@
 import {
   activeFields, editorAvailable, fieldOptions, fieldVisible, formForKind, initialDraft, menuForKind,
-  resolveBundle, resolveForm, toBackendDraft, validateDraft,
+  resolveBundle, resolveForm, toBackendDraft, toOperationDraft, validateDraft,
 } from '../../../pgadmin/static/js/cdeadmin_ui/objects/descriptors';
 import {loadEngineBundle, loadFamilies} from './familyFixtures';
 
@@ -250,5 +250,27 @@ describe('record pre-fill and list projections (kept in step with tools/ui_descr
     expect(draft.cols.map((row) => [row.name, row.type, row.mode])).toEqual([['a', 'INTEGER', 'STORED'], ['b', undefined, 'COMPUTED']]);
     expect(draft.pk).toEqual([{name: 'pk', constraint_type: 'PRIMARY KEY', backing_index: {segments: [{field_name: 'a'}]}, columns: ['a'], _id: '0'}]);
     expect(gridRowFromRecord({item_kind: 'string', columns: [{field_id: 'value'}]}, 'x', 3)).toEqual({value: 'x', _id: '3'});
+  });
+});
+
+describe('operation dialog drafts (kept in step with operation_backend_draft)', () => {
+  const operation = {fields: [
+    {field_id: 'cells', control: 'grid', item_kind: 'string', columns: [{field_id: 'value'}]},
+    {field_id: 'rules', control: 'grid', backend_field_id: 'rules.rules',
+      columns: [{field_id: 'fromTable'}, {field_id: 'toTable'}]},
+    {field_id: 'skip_rebuild', control: 'boolean'},
+    {field_id: 'hidden', control: 'text', visible_when: {field: 'skip_rebuild', equals: true}},
+  ]};
+
+  it('sends string grids as plain lists and grid rows without _id', () => {
+    expect(toOperationDraft(operation, {
+      cells: [{value: 'zone1', _id: '0'}, {value: '', _id: '1'}],
+      rules: [{fromTable: 'a.t', toTable: 'b.t', _id: '0'}],
+      skip_rebuild: false, hidden: 'x',
+    })).toEqual({cells: ['zone1'], rules: {rules: [{fromTable: 'a.t', toTable: 'b.t'}]}, skip_rebuild: false});
+  });
+
+  it('keeps a typed-name confirmation', () => {
+    expect(toOperationDraft(operation, {cells: [], confirmation: 'ks'})).toEqual({cells: [], confirmation: 'ks'});
   });
 });

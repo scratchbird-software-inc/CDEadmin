@@ -41,5 +41,6 @@ export {
   resolveBundle,
   resolveForm,
   toBackendDraft,
+  toOperationDraft,
   validateDraft,
 } from './descriptors';
