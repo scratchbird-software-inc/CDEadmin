@@ -22,7 +22,7 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
-from . import indexes as index_sql, objects, tables, types
+from . import indexes as index_sql, objects, tables, types, views
 from .driver import CockroachDBClient
 from ..distributed_control_plane import DistributedSQLControlPlane
 from pgadmin.cdeadmin.visual_admin import (
@@ -87,8 +87,9 @@ _COCKROACH_SUPPORTED['index'] = frozenset({
 _COCKROACH_SUPPORTED['type'] = frozenset({
     'inspect', 'create', 'alter', 'drop',
 })
+# alter: rename (and a view's query); providers/cockroachdb/views.
 _COCKROACH_SUPPORTED['materialized-view'] = frozenset({
-    'inspect', 'create', 'rename', 'drop',
+    'inspect', 'create', 'alter', 'rename', 'drop',
 })
 _COCKROACH_DIALECT = replace(
     _BASE_ADMINISTRATION.dialect,
@@ -1279,20 +1280,29 @@ def _post_validate_control_plane(client, request):
     }
 
 
+# Kinds whose create and alter are CockroachDB's own modules.
+_EDITED_KINDS = frozenset({'table', 'index', 'type', 'view',
+                           'materialized-view'})
+
+
 class CockroachDBAdministration(DistributedSQLControlPlane):
     """CockroachDB-specific relational forms plus native controls."""
 
     @staticmethod
     def _native_object(kind, operation):
         return operation in objects.OPERATIONS.get(kind, ()) or (
-            kind in {'table', 'index', 'type'} and
-            operation in {'create', 'alter'})
+            operation in {'create', 'alter'} and kind in _EDITED_KINDS)
 
     def _native_compile(self, request):
         kind, operation = request['resource_kind'], request['operation_id']
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if kind in {'view', 'materialized-view'}:
+            if operation == 'create':
+                return {'statements': views.create(self, kind, draft)}
+            return {'statements': views.alter(
+                self, kind, draft, request.get('target_resource'))}
         if kind == 'type':
             if operation == 'create':
                 return {'statements': types.create(self, draft)}
@@ -1350,42 +1360,14 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
         if kind == 'table' and operation in {'create', 'alter'}:
             return tables.extend_form(
                 super()._form(kind, operation), self._field, operation)
+        if kind in {'view', 'materialized-view'} and operation in {
+                'create', 'alter'}:
+            return views.form(super()._form(kind, 'create')
+                              if operation == 'create' else None,
+                              self._field, kind, operation)
         if self._native_object(kind, operation):
             return objects.form(kind, operation, self._field)
-        if kind == 'materialized-view' and operation == 'create':
-            return {
-                'form_id': 'materialized-view.create',
-                'title': 'Create materialized view',
-                'fields': [
-                    self._field('name', 'Name', 'text', True),
-                    self._field('parent', 'Parent schema', 'text', False),
-                    self._field(
-                        'query', 'Materialized query', 'code', True,
-                        'Enter one SELECT or WITH query; complete DDL is not '
-                        'accepted.',
-                    ),
-                    self._field(
-                        'with_data', 'Populate now', 'boolean',
-                        default=True),
-                ],
-            }
         return super()._form(kind, operation)
-
-    def _compile_create(self, request):
-        if request['resource_kind'] != 'materialized-view':
-            return super()._compile_create(request)
-        draft = request['draft']
-        options = draft.get('options') or {}
-        name = self._identifier(draft['name'])
-        qualified = self._new_object_name(name, options)
-        query = self._query_body(draft.get('definition'))
-        suffix = '' if options.get('with_data', True) else ' WITH NO DATA'
-        return [{
-            'source': (
-                f'CREATE MATERIALIZED VIEW {qualified} AS {query}{suffix}'
-            ),
-            'parameters': (),
-        }]
 
 
 ADMINISTRATION = CockroachDBAdministration(
@@ -1706,6 +1688,29 @@ def _annotate_catalog(connection, values):
                 'JOIN pg_catalog.pg_class t ON t.oid = x.indrelid '
                 'JOIN pg_catalog.pg_namespace n ON n.oid = t.relnamespace')
             if row[3] is not None}
+        queries = {('view', str(row[0]), str(row[1])): (str(row[2]), None)
+                   for row in optional_rows(
+                       cursor, 'SELECT schemaname, viewname, definition '
+                       'FROM pg_catalog.pg_views')}
+        # Not ispopulated: live, 26.1.3, it stays true after WITH NO DATA.
+        queries.update({
+            ('materialized-view', str(row[0]), str(row[1])): (
+                str(row[2]), None)
+            for row in optional_rows(
+                cursor, 'SELECT schemaname, matviewname, definition '
+                'FROM pg_catalog.pg_matviews')})
+        view_columns = {}
+        for schema, table, column in optional_rows(
+                cursor, 'SELECT c.table_schema, c.table_name, c.column_name '
+                'FROM information_schema.columns c '
+                'JOIN pg_catalog.pg_class r ON r.relname = c.table_name '
+                'JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace '
+                "AND n.nspname = c.table_schema WHERE r.relkind IN ('v', 'm') "
+                # A materialized view has a hidden rowid.
+                "AND c.is_hidden = 'NO' "
+                'ORDER BY 1, 2, c.ordinal_position'):
+            view_columns.setdefault((str(schema), str(table)), []).append(
+                str(column))
         created = {}
         for row in optional_rows(cursor, 'SHOW CREATE ALL TABLES'):
             parsed = tables.parse_create(str(row[0]))
@@ -1823,6 +1828,14 @@ def _annotate_catalog(connection, values):
             native.update(row)
             held.setdefault(tuple(item['display_path'][:2]), []).append(
                 {'name': item['display_name'], **row})
+    for item in kept:
+        found = queries.get((item['resource_kind'],
+                             *map(str, item['display_path'])))
+        if found:
+            item.setdefault('native', {}).update(
+                query=found[0], parent=str(item['display_path'][0]),
+                column_names=view_columns.get(
+                    tuple(map(str, item['display_path'])), []))
     for item in kept:
         if item['resource_kind'] != 'table':
             continue

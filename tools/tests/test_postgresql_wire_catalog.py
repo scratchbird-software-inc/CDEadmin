@@ -102,11 +102,11 @@ def test_hidden_columns_and_the_engines_own_constraints_stay_out():
     ]
     cursor = Cursor({
         # is_hidden, crdb_sql_type, column_comment, column_default
-        'is_hidden': [('public', 't', 'v', 'NO', 'INT8', None, None),
-                      ('public', 't', 'rowid', 'YES', 'INT8', None,
-                       'unique_rowid()'),
-                      ('public', 't', 'crdb_internal_ts_shard_8', 'YES',
-                       'INT8', None, None)],
+        'crdb_sql_type': [
+            ('public', 't', 'v', 'NO', 'INT8', None, None),
+            ('public', 't', 'rowid', 'YES', 'INT8', None, 'unique_rowid()'),
+            ('public', 't', 'crdb_internal_ts_shard_8', 'YES', 'INT8', None,
+             None)],
         'information_schema.statistics': [
             ('public', 't', 't_pkey', 'rowid', 'ASC', 'NO', 'NO', 'NO', 1.0),
             # The primary index stores every column.
@@ -150,7 +150,7 @@ def test_a_users_not_visible_column_is_kept_and_the_table_carries_its_facts():
                constraint_type='PRIMARY KEY', columns=['id']),
     ]
     cursor = Cursor({
-        'is_hidden': [
+        'crdb_sql_type': [
             ('public', 'u', 'id', 'NO', 'INT8', None, None),
             ('public', 'u', 'secret', 'YES', 'STRING', 'kept', "'x'"),
             ('public', 'u', 'crdb_internal_expiration', 'YES',

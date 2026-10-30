@@ -401,6 +401,15 @@ Checked live on 26.1.3 for those forms (not yet in the probe):
       built-in function descriptions: an uncommented table read back a
       function's help text as its comment. Fixed 2026-10-30 (table and
       index comments now name ``'pg_class'``); a live check covers it.
+-  Views: ``CREATE OR REPLACE VIEW`` refuses to rename an existing column
+   ("cannot change name of view column") or drop one, so the editor always
+   sends the column list with a replacement. ``COMMENT ON VIEW`` and
+   ``COMMENT ON MATERIALIZED VIEW`` are syntax errors, and ``COMMENT ON
+   TABLE`` refuses a view; ``CREATE OR REPLACE MATERIALIZED VIEW`` is a
+   syntax error. ``pg_matviews.ispopulated`` stays true after ``WITH NO
+   DATA`` (selecting says "has not been populated"), so the record does not
+   report it. A materialized view has a hidden ``rowid`` column.
+   ``REFRESH`` (``CONCURRENTLY``, ``WITH NO DATA``) runs.
 -  Indexes: keys with directions and expressions, ``UNIQUE``, inverted
    (``USING GIN`` or ``CREATE INVERTED INDEX``), hash-sharded with a bucket
    count, ``STORING`` (``INCLUDE`` is accepted and read back as
@@ -461,6 +470,8 @@ TTL and a table comment; in alter mode it changes existing columns (type,
 default, nullability, visibility, ON UPDATE, identity, stored to regular,
 comment) and diffs each changed constraint grid against the table record.
 Key membership and family stay fixed on existing columns.
-The index and type forms are ``complete`` the same day
+The view (with materialized views; alter is admitted for them, which
+``portfolio_catalog.json`` had excluded), index and type forms are
+``complete`` the same day
 (``providers/cockroachdb/indexes.py``, ``types.py``; the provider admits
 type create, alter and drop).

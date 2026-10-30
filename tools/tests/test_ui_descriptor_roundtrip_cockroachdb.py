@@ -119,6 +119,14 @@ def record(client, route, kind, name, family):
     return row, record_draft(form, record_from_resource(form, row, rows))
 
 
+def refused_sql(sql):
+    try:
+        query(sql)
+    except psycopg.Error as error:
+        return str(error)
+    return ''
+
+
 def refused(kind, operation, draft, target=None):
     request = {'resource_kind': kind, 'operation_id': operation,
                'target_resource': target, 'draft': draft}
@@ -393,3 +401,46 @@ def test_enum_and_composite_types(live):
             target=find(client, route, 'type', name)[0])
     assert not query("SELECT 1 FROM pg_type WHERE typname IN "
                      "('rt_state', 'rt_point')")
+
+
+def test_view_and_materialized_view(live):
+    route, client = live
+    query('CREATE TABLE public.vt (id INT8 PRIMARY KEY, v INT8)')
+    query('INSERT INTO public.vt VALUES (1, 10)')
+    form = resolved_form('cockroachdb', 'view')
+    run(client, route, 'view', 'create', backend_draft(form, {
+        'name': 'rt_v', 'parent': 'public',
+        'query': 'SELECT id, v FROM public.vt',
+        'column_names': [{'value': 'a'}, {'value': 'b'}]}))
+    run(client, route, 'materialized-view', 'create', backend_draft(form, {
+        'variant': 'materialized', 'name': 'rt_m', 'parent': 'public',
+        'query': 'SELECT id FROM public.vt', 'with_data': False}))
+    target, baseline = record(client, route, 'view', 'rt_v', 'view')
+    assert 'FROM' in baseline['query'] and baseline['parent'] == 'public'
+    assert query('SELECT a, b FROM public.rt_v') == [(1, 10)]
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    assert [row['value'] for row in baseline['column_names']] == ['a', 'b']
+    # Replacing keeps the existing names and adds one at the end.
+    run(client, route, 'view', 'alter', backend_draft(form, {
+        **baseline, 'name': 'rt_v2',
+        'query': 'SELECT id, v, v * 2 FROM public.vt',
+        'column_names': baseline['column_names'] + [{'value': 'c'}]},
+        mode='alter', baseline=baseline), target=target)
+    assert query('SELECT a, b, c FROM public.rt_v2') == [(1, 10, 20)]
+    mtarget, mbase = record(client, route, 'materialized-view', 'rt_m',
+                            'view')
+    assert [row['value'] for row in mbase['column_names']] == ['id']
+    # WITH NO DATA took effect; pg_matviews.ispopulated would still say
+    # true, so the record does not report it.
+    assert 'not been populated' in refused_sql('SELECT id FROM public.rt_m')
+    assert 'cannot change in place' in refused(
+        'materialized-view', 'alter', {'query': 'SELECT 2'}, mtarget)
+    run(client, route, 'materialized-view', 'refresh', {}, target=mtarget)
+    assert query('SELECT id FROM public.rt_m') == [(1,)]
+    run(client, route, 'materialized-view', 'alter', {'name': 'rt_m2'},
+        target=mtarget)
+    for kind, name in (('view', 'rt_v2'), ('materialized-view', 'rt_m2')):
+        run(client, route, kind, 'drop', {'confirmation': name},
+            target=find(client, route, kind, name)[0])
+    assert not query("SELECT 1 FROM pg_class WHERE relname LIKE 'rt_%'")
