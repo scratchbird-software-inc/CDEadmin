@@ -231,6 +231,18 @@ Plan
    (Dolt accepts them; the provider does not expose them), schema- and
    table-level grants in the inventory, trigger ordering, and creating
    passwordless users (owner decision).
+   Later the same day: database character set and collation (create and
+   alter), database- and table-level grants in the inventory, trigger
+   FOLLOWS/PRECEDES, and passwordless users (owner direction: allowed on
+   engines that support them; Dolt and TiDB through an explicit
+   authentication mode) were added; all seven Dolt family forms are
+   ``complete``. Remaining Dolt gap: the grant dialog's privilege list is a
+   JSON field. One unexplained Dolt server exit was seen once during
+   trigger probes and did not recur on the same statements.
+-  Correction, 2026-10-29: MariaDB 12.2.2 accepts several events per
+   trigger (``BEFORE INSERT OR UPDATE``; MDEV-10164, fix version 12.0.1).
+   Dolt does not (live). Both refuse ``INSTEAD OF``, which MariaDB's trigger
+   form offered and no longer does.
 #. For each engine, run the forms through the draft and review tools in
    ``ui_descriptors/README.md`` to make a descriptor folder. Reuse MySQL's
    field ids where the backend field is the same, and filter by this matrix.

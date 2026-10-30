@@ -5,7 +5,7 @@
   "resource_kinds": [
     "database"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "Dolt",
   "omitted_tabs": [],
   "gaps": [],
@@ -16,7 +16,36 @@
       "tab": "General",
       "control": "text",
       "required": true
+    },
+    {
+      "field_id": "if_not_exists",
+      "label": "If not exists",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "character_set",
+      "label": "Character set",
+      "tab": "Options",
+      "control": "text",
+      "required": false,
+      "record_key": "default_character_set",
+      "help": "DEFAULT CHARACTER SET"
+    },
+    {
+      "field_id": "collation",
+      "label": "Collation",
+      "tab": "Options",
+      "control": "text",
+      "required": false,
+      "record_key": "default_collation",
+      "help": "DEFAULT COLLATE"
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Round trip verified live on Dolt 1.86.6 by tools/tests/test_ui_descriptor_roundtrip_dolt.py (2026-10-29)."
 }

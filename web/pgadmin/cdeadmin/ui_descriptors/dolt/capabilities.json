@@ -40,6 +40,11 @@
           "mutation_class": "admin"
         },
         {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"

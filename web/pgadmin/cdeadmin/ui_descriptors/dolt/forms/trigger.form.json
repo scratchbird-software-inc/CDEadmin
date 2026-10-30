@@ -8,13 +8,7 @@
   "status": "complete",
   "engine_tab_title": "Dolt",
   "omitted_tabs": [],
-  "gaps": [
-    {
-      "concept": "FOLLOWS / PRECEDES ordering",
-      "reason": "Not exposed by the provider; Dolt support not yet probed",
-      "tracking": "mysql-wire-parity"
-    }
-  ],
+  "gaps": [],
   "fields": [
     {
       "field_id": "name",
@@ -72,6 +66,52 @@
       "wrap_list": true,
       "help": "A MySQL-dialect trigger fires on exactly one event.",
       "record_key": "event"
+    },
+    {
+      "field_id": "order",
+      "label": "Order",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "default": "NONE",
+      "options": [
+        {
+          "value": "NONE",
+          "label": "None"
+        },
+        {
+          "value": "FOLLOWS",
+          "label": "Follows"
+        },
+        {
+          "value": "PRECEDES",
+          "label": "Precedes"
+        }
+      ],
+      "group": "Ordering",
+      "modes": [
+        "create"
+      ],
+      "help": "Fire after (FOLLOWS) or before (PRECEDES) another trigger on the same table, timing and event."
+    },
+    {
+      "field_id": "other_trigger",
+      "label": "Other trigger",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "trigger",
+      "required": false,
+      "group": "Ordering",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "order",
+        "in": [
+          "FOLLOWS",
+          "PRECEDES"
+        ]
+      }
     },
     {
       "field_id": "body",

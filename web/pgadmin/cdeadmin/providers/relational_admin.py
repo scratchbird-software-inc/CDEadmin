@@ -108,6 +108,22 @@ _DUCKDB_DATABASE_OPERATIONS = frozenset({
     'checkpoint', 'force_checkpoint', 'vacuum', 'analyze',
     'export_database', 'import_database',
 })
+# Owner direction 2026-10-29: passwordless accounts may be created on the
+# engines that allow them. MySQL and MariaDB have their own account forms
+# (authentication mode NONE); these are the generic MySQL-dialect engines,
+# each verified live to accept CREATE USER without IDENTIFIED BY and a
+# passwordless login.
+_PASSWORDLESS_USER_ENGINES = frozenset({'dolt', 'tidb'})
+
+# Object types an engine can grant on, where narrower than its SQL family.
+# Dolt refuses stored functions and sequences (live probe, 1.86.6).
+_PRIVILEGE_OBJECT_TYPES = {
+    'dolt': ('TABLE', 'VIEW', 'PROCEDURE', 'DATABASE'),
+}
+
+# FOLLOWS / PRECEDES trigger ordering, verified live (Dolt 1.86.6).
+_TRIGGER_ORDER_ENGINES = frozenset({'dolt'})
+
 _MYSQL_DATABASE_OPERATIONS = frozenset({
     'analyze_tables', 'check_tables', 'optimize_tables',
     'repair_tables', 'checksum_tables',
@@ -1293,6 +1309,15 @@ class RelationalAdministration:
             resource_kind == 'database' and operation_id in {'create', 'alter'}
         ):
             errors.extend(self._validate_mysql_database(operation_id, draft))
+        if (
+            self.dialect.engine_id == 'dolt' and
+            resource_kind == 'database' and operation_id in {'create', 'alter'}
+        ):
+            errors.extend(self._validate_mysql_database(
+                operation_id, draft,
+                create_fields={'name', 'if_not_exists', 'character_set',
+                               'collation'},
+                alter_fields={'character_set', 'collation'}))
         if (
             self.dialect.engine_id == 'mariadb' and
             resource_kind == 'database' and operation_id in {'create', 'alter'}
@@ -2591,11 +2616,14 @@ class RelationalAdministration:
         return errors
 
     @staticmethod
-    def _validate_mysql_database(operation, draft):
+    def _validate_mysql_database(operation, draft, create_fields=None,
+                                 alter_fields=None):
         fields = (
+            create_fields or
             {'name', 'if_not_exists', 'character_set', 'collation',
              'encryption'}
             if operation == 'create' else
+            alter_fields or
             {'character_set', 'collation', 'encryption', 'read_only'}
         )
         errors = []
@@ -5194,11 +5222,13 @@ class RelationalAdministration:
                     if key in value:
                         options[key] = value.pop(key)
             if kind == 'database' and self.dialect.engine_id in {
-                    'mysql', 'mariadb'}:
+                    'mysql', 'mariadb', 'dolt'}:
                 database_keys = (
                     ('if_not_exists', 'character_set', 'collation',
                      'encryption')
                     if self.dialect.engine_id == 'mysql' else
+                    ('if_not_exists', 'character_set', 'collation')
+                    if self.dialect.engine_id == 'dolt' else
                     ('or_replace', 'if_not_exists', 'character_set',
                      'collation', 'comment')
                 )
@@ -5231,7 +5261,7 @@ class RelationalAdministration:
                 'password', 'plugin', 'administrator', 'active',
                 'system_privileges', 'drop_system_privileges', 'members',
                 'position', 'return_parameters', 'header', 'message',
-                'schedule', 'preserve', 'enabled',
+                'schedule', 'preserve', 'enabled', 'order', 'other_trigger',
                 'type_kind', 'base_type', 'enum_values', 'fields',
                 'expression', 'table_macro', 'secret_type', 'scope',
                 'storage', 'persistent', 'module', 'library', 'database',
@@ -5639,7 +5669,8 @@ class RelationalAdministration:
         if kind == 'privilege' and operation in {'grant', 'revoke'}:
             if self.dialect.engine_id == 'firebird':
                 return firebird_privileges.form(operation, self._field)
-            object_types = (
+            object_types = _PRIVILEGE_OBJECT_TYPES.get(
+                self.dialect.engine_id,
                 ('TABLE', 'VIEW', 'PROCEDURE', 'FUNCTION', 'SEQUENCE',
                  'DATABASE')
                 if self.dialect.sql_family == 'mysql'
@@ -5843,6 +5874,16 @@ class RelationalAdministration:
                         'Enter only the trigger body, not CREATE TRIGGER.',
                     ),
                 ))
+                if self.dialect.engine_id in _TRIGGER_ORDER_ENGINES:
+                    fields.extend((
+                        self._field('order', 'Order', 'select', False,
+                                    'Fire before or after another trigger '
+                                    'on the same table, timing and event.',
+                                    default='NONE',
+                                    options=('NONE', 'FOLLOWS', 'PRECEDES')),
+                        self._field('other_trigger', 'Other trigger', 'text',
+                                    False),
+                    ))
             elif kind in {'procedure', 'function', 'package'} and not (
                 kind == 'function' and self.dialect.engine_id == 'duckdb'
             ):
@@ -5992,18 +6033,38 @@ class RelationalAdministration:
                                 options=('fts5', 'rtree')),
                     self._field('columns', 'Module columns', 'json', True),
                 ))
+            elif kind == 'database' and self.dialect.engine_id == 'dolt':
+                # CHARACTER SET / COLLATE on create and alter verified live
+                # (Dolt 1.86.6).
+                fields.extend((
+                    self._field('if_not_exists', 'If not exists', 'boolean',
+                                default=False),
+                    self._field('character_set', 'Default character set',
+                                'text'),
+                    self._field('collation', 'Default collation', 'text'),
+                ))
             elif kind == 'user' and self.dialect.engine_id == 'mariadb':
                 fields.extend(self._mariadb_user_fields(creating=True))
             elif kind == 'user':
+                passwordless = (
+                    self.dialect.engine_id in _PASSWORDLESS_USER_ENGINES)
                 user_fields = [
                     self._field('host', 'Host', 'text', False,
                                 default='%'),
-                    self._field(
-                        'password', 'Password', 'password', True,
-                        'The value is redacted from validation and plans.',
-                        sensitive=True,
-                    ),
                 ]
+                if passwordless:
+                    user_fields.append(self._field(
+                        'authentication_mode', 'Authentication', 'select',
+                        True,
+                        'PASSWORD sets a password; NONE creates an account '
+                        'with no password.',
+                        default='PASSWORD', options=('PASSWORD', 'NONE'),
+                    ))
+                user_fields.append(self._field(
+                    'password', 'Password', 'password', not passwordless,
+                    'The value is redacted from validation and plans.',
+                    sensitive=True,
+                ))
                 if self.dialect.engine_id != 'dolt':
                     user_fields.extend((
                         self._field(
@@ -6815,7 +6876,7 @@ class RelationalAdministration:
                     },
                 ]
         elif kind == 'database' and self.dialect.engine_id in {
-                'mysql', 'mariadb'}:
+                'mysql', 'mariadb', 'dolt'}:
             prefix = 'CREATE DATABASE'
             if (
                 self.dialect.engine_id == 'mariadb' and
@@ -7925,6 +7986,11 @@ class RelationalAdministration:
         target_kind = self._safe_fragment(
             draft.get('object_type'), 'privilege object type'
         ).upper()
+        allowed_kinds = _PRIVILEGE_OBJECT_TYPES.get(self.dialect.engine_id)
+        if allowed_kinds is not None and target_kind not in allowed_kinds:
+            raise RelationalClientError(
+                'this engine cannot grant privileges on '
+                f'{target_kind.lower()} objects')
         target_name = ('*.*' if self.dialect.engine_id == 'mysql' and target_kind == 'GLOBAL' else
                        self._qualified(self._path_value(draft.get('object_name'))))
         preposition = 'TO' if operation == 'GRANT' else 'FROM'
@@ -8309,9 +8375,25 @@ class RelationalAdministration:
                     f'{event_sql} POSITION {position} AS {body}'
                 )
             if self.dialect.sql_family == 'mysql':
+                ordering = ''
+                if self.dialect.engine_id in _TRIGGER_ORDER_ENGINES:
+                    order = str(options.get('order') or 'NONE').upper()
+                    anchor = options.get('other_trigger')
+                    if order not in {'NONE', 'FOLLOWS', 'PRECEDES'}:
+                        raise RelationalClientError(
+                            'trigger order must be NONE, FOLLOWS or PRECEDES')
+                    if order != 'NONE':
+                        if not anchor:
+                            raise RelationalClientError(
+                                f'{order} needs the trigger to order against')
+                        ordering = f'{order} {self._quote(anchor)} '
+                    elif anchor:
+                        raise RelationalClientError(
+                            'select FOLLOWS or PRECEDES for the ordering '
+                            'anchor')
                 return (
                     f'CREATE TRIGGER {name} {timing} {event_sql} ON {table} '
-                    f'FOR EACH ROW {body}'
+                    f'FOR EACH ROW {ordering}{body}'
                 )
             if self.dialect.engine_id == 'sqlite':
                 # SQLite triggers fire on exactly one event and require a
@@ -8402,6 +8484,20 @@ class RelationalAdministration:
                 preview += ' ' + ' '.join(previews)
             return source, preview
         password = options.get('password')
+        mode = options.get('authentication_mode', 'PASSWORD')
+        if engine in _PASSWORDLESS_USER_ENGINES and mode == 'NONE':
+            # Explicit, never inferred from an empty password field.
+            if password not in (None, ''):
+                raise RelationalClientError(
+                    'a passwordless account cannot also set a password')
+            account = self._account(name, options.get('host', '%'))
+            source = f'CREATE USER {account}'
+            if options.get('active') is False:
+                source += ' ACCOUNT LOCK'
+            return source, source
+        if mode not in ('PASSWORD', None) and (
+                engine in _PASSWORDLESS_USER_ENGINES):
+            raise RelationalClientError('authentication mode is invalid')
         if not isinstance(password, str) or not password:
             raise RelationalClientError('user password is required')
         if family == 'mysql':

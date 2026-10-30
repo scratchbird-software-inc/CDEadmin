@@ -68,7 +68,8 @@ _BASE_ADMINISTRATION = sql_administration('dolt', 'mysql', (
 _DOLT_SUPPORTED = dict(_BASE_ADMINISTRATION.dialect.supported)
 _DOLT_SUPPORTED.pop('schema')
 _DOLT_SUPPORTED.pop('sequence')
-_DOLT_SUPPORTED['database'] = frozenset({'inspect', 'create', 'drop'})
+_DOLT_SUPPORTED['database'] = frozenset({
+    'inspect', 'create', 'alter', 'drop'})
 _DOLT_SUPPORTED['procedure'] = frozenset({'inspect', 'create', 'drop'})
 _DOLT_SUPPORTED['trigger'] = frozenset({'inspect', 'create', 'drop'})
 _DOLT_SUPPORTED['event'] = frozenset({
@@ -897,6 +898,18 @@ def _rebase_plan(cursor):
     return True, cursor.fetchall()
 
 
+def _grant(grantee, object_type, object_name, privilege, grantable):
+    """Native facts for one grant; GRANTEE arrives as 'user'@'host'."""
+    principal = '@'.join(
+        part.strip("'") for part in str(grantee).split("'@'", 1))
+    return {
+        'principal': principal, 'object_type': object_type,
+        'object_name': object_name, 'privilege': str(privilege),
+        'grantable': None if grantable is None else
+        str(grantable).upper() == 'YES',
+    }
+
+
 def _event_schedule(event_type, execute_at, interval_value, interval_field,
                     starts, ends):
     """The ON SCHEDULE clause as the server keeps it (STARTS included)."""
@@ -1118,6 +1131,29 @@ def _extras(cursor, _request, generation):
     ):
         values.append(resource(
             'privilege', [grantee], privilege, generation,
+            _grant(grantee, 'GLOBAL', '*.*', privilege, None),
+        ))
+    # Database- and table-level grants, so the tree shows every grant a
+    # REVOKE can name, not only global ones.
+    for grantee, schema, privilege, grantable in optional_rows(
+        cursor,
+        'SELECT GRANTEE, TABLE_SCHEMA, PRIVILEGE_TYPE, IS_GRANTABLE '
+        'FROM information_schema.SCHEMA_PRIVILEGES ORDER BY 1, 2, 3',
+    ):
+        values.append(resource(
+            'privilege', [grantee, schema], privilege, generation,
+            _grant(grantee, 'DATABASE', schema, privilege, grantable),
+        ))
+    for grantee, schema, table, privilege, grantable in optional_rows(
+        cursor,
+        'SELECT GRANTEE, TABLE_SCHEMA, TABLE_NAME, PRIVILEGE_TYPE, '
+        'IS_GRANTABLE FROM information_schema.TABLE_PRIVILEGES '
+        'ORDER BY 1, 2, 3, 4',
+    ):
+        values.append(resource(
+            'privilege', [grantee, schema, table], privilege, generation,
+            _grant(grantee, 'TABLE', f'{schema}.{table}', privilege,
+                   grantable),
         ))
     tables = (
         ('branch', 'SELECT name, hash, latest_committer, latest_commit_date '

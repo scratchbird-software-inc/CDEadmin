@@ -83,8 +83,10 @@ def live():
         cleanup = admin()
         for statement in (
                 f'DROP DATABASE IF EXISTS `{DATABASE}`',
+                f'DROP DATABASE IF EXISTS `{DATABASE}_child`',
                 f"DROP USER IF EXISTS 'rt_user_{UNIQUE}'@'localhost'",
-                f"DROP ROLE IF EXISTS 'rt_role_{UNIQUE}'"):
+                f"DROP ROLE IF EXISTS 'rt_role_{UNIQUE}'",
+                f"DROP USER IF EXISTS 'rt_nopw_{UNIQUE}'@'%'"):
             cleanup.cursor().execute(statement)
         cleanup.close()
 
@@ -109,7 +111,8 @@ def record(client, route, kind, name, family):
     rows = resources(client, route)
     row = next(item for item in rows if item['resource_kind'] == kind and
                item['display_name'] == name and
-               (kind in {'user', 'role'} or DATABASE in item['display_path']))
+               (kind in {'user', 'role', 'database'} or
+                DATABASE in item['display_path']))
     form = resolved_form('dolt', family)
     return row, record_draft(form, record_from_resource(form, row, rows))
 
@@ -203,6 +206,15 @@ def test_view_index_trigger_forms(live):
             trigger_record['events']) == ('owner', 'BEFORE', 'INSERT')
     assert trigger_record['body'] == \
         "SET NEW.label = COALESCE(NEW.label, '-')"
+    # FOLLOWS ordering (verified Dolt syntax) places the new trigger after.
+    run(client, route, 'trigger', 'create', backend_draft(trigger_form, {
+        'name': 'rt_trg_after', 'parent': DATABASE, 'table': 'owner',
+        'timing': 'BEFORE', 'events': 'INSERT', 'order': 'FOLLOWS',
+        'other_trigger': 'rt_trg', 'body': 'SET NEW.label = NEW.label'}))
+    assert query(
+        "SELECT TRIGGER_NAME FROM information_schema.TRIGGERS "
+        f"WHERE TRIGGER_SCHEMA='{DATABASE}' ORDER BY ACTION_ORDER") == [
+        ('rt_trg',), ('rt_trg_after',)]
 
 
 def test_procedure_and_event_forms(live):
@@ -256,3 +268,76 @@ def test_role_and_user_forms(live):
         f"SELECT FROM_USER, TO_USER FROM mysql.role_edges "
         f"WHERE FROM_USER='rt_role_{UNIQUE}'") == [
         (f'rt_role_{UNIQUE}', f'rt_user_{UNIQUE}')]
+
+
+def test_passwordless_user_form(live):
+    # Owner direction 2026-10-29: passwordless accounts may be created.
+    route, client = live
+    role_form = resolved_form('dolt', 'role')
+    draft = backend_draft(role_form, {
+        'variant': 'user', 'name': f'rt_nopw_{UNIQUE}', 'host': '%',
+        'authentication_mode': 'NONE'})
+    assert 'password' not in draft
+    sql = run(client, route, 'user', 'create', draft)
+    assert 'IDENTIFIED' not in sql
+    login = mysql_connector.connect(
+        host=SETTINGS['host'], port=int(SETTINGS['port']),
+        user=f'rt_nopw_{UNIQUE}')
+    login.close()
+
+
+def test_database_form_create_and_alter(live):
+    route, client = live
+    form = resolved_form('dolt', 'database')
+    run(client, route, 'database', 'create', backend_draft(form, {
+        'name': f'{DATABASE}_child', 'character_set': 'utf8mb4',
+        'collation': 'utf8mb4_0900_ai_ci'}))
+    database, baseline = record(client, route, 'database',
+                                f'{DATABASE}_child', 'database')
+    assert (baseline['character_set'], baseline['collation']) == (
+        'utf8mb4', 'utf8mb4_0900_ai_ci')
+    alter = backend_draft(form, {**baseline, 'collation': 'utf8mb4_bin'},
+                          mode='alter', baseline=baseline)
+    assert alter == {'collation': 'utf8mb4_bin'}, alter
+    run(client, route, 'database', 'alter', alter, target=database)
+    assert query(
+        'SELECT DEFAULT_COLLATION_NAME FROM information_schema.SCHEMATA '
+        f"WHERE SCHEMA_NAME='{DATABASE}_child'") == [('utf8mb4_bin',)]
+
+
+def test_user_password_change(live):
+    route, client = live
+    role_form = resolved_form('dolt', 'role')
+    user, baseline = record(client, route, 'user',
+                            f'rt_user_{UNIQUE}@localhost', 'role')
+    alter = backend_draft(role_form, {
+        **baseline, 'variant': 'user', 'password': 'Rt-pw-changed-2026!'},
+        mode='alter', baseline=baseline)
+    assert alter == {'password': 'Rt-pw-changed-2026!'}, alter
+    hashed = (
+        "SELECT authentication_string FROM mysql.user "
+        f"WHERE User='rt_user_{UNIQUE}' AND Host='localhost'")
+    before = query(hashed)
+    run(client, route, 'user', 'alter', alter, target=user)
+    after = query(hashed)
+    assert before and after and before != after
+
+
+def test_grant_and_revoke_appear_in_the_inventory(live):
+    route, client = live
+    principal = f'rt_user_{UNIQUE}@localhost'
+    grant = {'principal': principal, 'object_type': 'DATABASE',
+             'object_name': DATABASE, 'privileges': ['SELECT']}
+
+    def grants():
+        return sorted(
+            (row['native']['object_type'], row['native']['privilege'])
+            for row in resources(client, route)
+            if row['resource_kind'] == 'privilege' and
+            row['native'].get('principal') == principal)
+
+    run(client, route, 'privilege', 'grant', grant)
+    assert ('DATABASE', 'SELECT') in grants()
+    run(client, route, 'privilege', 'revoke',
+        {**grant, 'confirmation': 'REVOKE'})
+    assert ('DATABASE', 'SELECT') not in grants()

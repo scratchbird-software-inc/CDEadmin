@@ -7,18 +7,13 @@
     "role",
     "privilege"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "Dolt",
   "omitted_tabs": [],
   "gaps": [
     {
-      "concept": "Schema- and table-level grants in the inventory",
-      "reason": "Dolt reads only global privileges (USER_PRIVILEGES); SCHEMA_PRIVILEGES and TABLE_PRIVILEGES are not read yet",
-      "tracking": "mysql-wire-parity"
-    },
-    {
-      "concept": "Passwordless user creation",
-      "reason": "The MySQL-dialect compiler requires a password for CREATE USER; owner decision pending",
+      "concept": "Grant dialog privilege list",
+      "reason": "Grant/revoke use the provider dialog (as MariaDB does); its privilege list is a JSON field, not a typed picker",
       "tracking": "mysql-wire-parity"
     }
   ],
@@ -61,11 +56,38 @@
       "default": "%"
     },
     {
+      "field_id": "authentication_mode",
+      "label": "Primary authentication",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "PASSWORD",
+      "options": [
+        {
+          "value": "PASSWORD",
+          "label": "Password"
+        },
+        {
+          "value": "NONE",
+          "label": "None"
+        }
+      ],
+      "group": "Authentication",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      },
+      "help": "None creates an account with no password (owner direction 2026-10-29)."
+    },
+    {
       "field_id": "password",
       "label": "Password",
       "tab": "General",
       "control": "password",
-      "required": true,
+      "required": false,
       "help": "The value is redacted from validation and plans.",
       "group": "Authentication",
       "visible_when": {
@@ -91,5 +113,5 @@
       ]
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. privilege: provider exposes no create form (grant, inspect, revoke)"
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. privilege: provider exposes no create form (grant, inspect, revoke) Round trip verified live on Dolt 1.86.6 by tools/tests/test_ui_descriptor_roundtrip_dolt.py (2026-10-29)."
 }
