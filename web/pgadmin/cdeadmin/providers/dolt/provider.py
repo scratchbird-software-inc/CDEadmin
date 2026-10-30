@@ -880,10 +880,11 @@ def _rebase_plan(cursor):
         raise RelationalClientError('Dolt system-table visibility is invalid')
     try:
         cursor.execute('SET @@SESSION.dolt_show_system_tables = 1')
-        cursor.execute(
-            'SELECT TABLE_NAME FROM information_schema.TABLES '
-            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'dolt_rebase'"
-        )
+        # Dolt 1.86.6 fails information_schema.TABLES with system tables
+        # shown while an uncommitted stored procedure exists ("dolt_procedures
+        # can not have conflicts"), which broke the whole inventory; SHOW
+        # TABLES is unaffected and still finds dolt_rebase during a rebase.
+        cursor.execute("SHOW TABLES LIKE 'dolt_rebase'")
         present = bool(cursor.fetchall())
     finally:
         cursor.execute('SET @@SESSION.dolt_show_system_tables = ' +
@@ -894,6 +895,68 @@ def _rebase_plan(cursor):
         'SELECT rebase_order, action, commit_hash, commit_message '
         'FROM dolt_rebase ORDER BY rebase_order')
     return True, cursor.fetchall()
+
+
+def _event_schedule(event_type, execute_at, interval_value, interval_field,
+                    starts, ends):
+    """The ON SCHEDULE clause as the server keeps it (STARTS included)."""
+    if str(event_type).upper() != 'RECURRING':
+        return None if execute_at is None else f"AT '{execute_at}'"
+    clause = f'EVERY {interval_value} {interval_field}'
+    if starts is not None:
+        clause += f" STARTS '{starts}'"
+    if ends is not None:
+        clause += f" ENDS '{ends}'"
+    return clause
+
+
+def _constraint_details(cursor):
+    """Key columns, references, rules and check clauses per constraint.
+
+    Lets an editor re-open an existing table's constraints. Each catalog is
+    optional: a missing one leaves only the constraint type.
+    """
+    found = {}
+    for database, table, name, column, ref_database, ref_table, \
+            ref_column in optional_rows(
+                cursor,
+                'SELECT TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, '
+                'COLUMN_NAME, REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME, '
+                'REFERENCED_COLUMN_NAME '
+                'FROM information_schema.KEY_COLUMN_USAGE '
+                'ORDER BY 1, 2, 3, ORDINAL_POSITION'):
+        entry = found.setdefault((database, table, name), {'columns': []})
+        entry['columns'].append(str(column))
+        if ref_table is not None:
+            entry['referenced_database'] = str(ref_database)
+            entry['referenced_table'] = str(ref_table)
+            entry.setdefault('referenced_columns', []).append(
+                str(ref_column))
+    for database, table, name, update_rule, delete_rule in optional_rows(
+            cursor,
+            'SELECT CONSTRAINT_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, '
+            'UPDATE_RULE, DELETE_RULE '
+            'FROM information_schema.REFERENTIAL_CONSTRAINTS'):
+        entry = found.setdefault((database, table, name), {})
+        entry.update(update_rule=str(update_rule),
+                     delete_rule=str(delete_rule))
+    checks = {
+        (database, name): str(clause) for database, name, clause in
+        optional_rows(
+            cursor,
+            'SELECT CONSTRAINT_SCHEMA, CONSTRAINT_NAME, CHECK_CLAUSE '
+            'FROM information_schema.CHECK_CONSTRAINTS')
+    }
+    for database, table, name in optional_rows(
+            cursor,
+            "SELECT TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME "
+            "FROM information_schema.TABLE_CONSTRAINTS "
+            "WHERE CONSTRAINT_TYPE = 'CHECK'"):
+        clause = checks.get((database, name))
+        if clause is not None:
+            found.setdefault((database, table, name), {})[
+                'check_clause'] = clause
+    return found
 
 
 def _extras(cursor, _request, generation):
@@ -922,31 +985,95 @@ def _extras(cursor, _request, generation):
             'FROM information_schema.TRIGGERS ORDER BY 1, 2, 3',
         ),
     )
+    constraint_details = _constraint_details(cursor)
+    trigger_details = {
+        (database, name): {
+            'table': str(table), 'timing': str(timing),
+            'events': [str(event)], 'event': str(event),
+            'position': position,
+            'body': str(body),
+        }
+        for database, name, table, timing, event, position, body in
+        optional_rows(
+            cursor,
+            'SELECT TRIGGER_SCHEMA, TRIGGER_NAME, EVENT_OBJECT_TABLE, '
+            'ACTION_TIMING, EVENT_MANIPULATION, ACTION_ORDER, '
+            'ACTION_STATEMENT FROM information_schema.TRIGGERS')
+    }
+    for database, name, definition, check_option, security_type, \
+            definer in optional_rows(
+                cursor,
+                'SELECT TABLE_SCHEMA, TABLE_NAME, VIEW_DEFINITION, '
+                'CHECK_OPTION, SECURITY_TYPE, DEFINER '
+                'FROM information_schema.VIEWS ORDER BY 1, 2'):
+        values.append(resource('view', [database], name, generation, {
+            'table_type': 'VIEW', 'query': str(definition),
+            'check_option': str(check_option),
+            'sql_security': str(security_type), 'definer': str(definer),
+        }))
     for kind, source in relational_objects:
         for database, parent, name, *details in optional_rows(cursor, source):
+            native = {'details': [
+                None if item is None else str(item)
+                for item in details
+            ]}
+            if kind == 'constraint':
+                native['constraint_type'] = native['details'][0]
+                native.update(constraint_details.get(
+                    (database, parent, name), {}))
+            elif kind == 'trigger':
+                native.update(trigger_details.get((database, name), {}))
             values.append(resource(
-                kind, [database, parent], name, generation,
-                {'details': [
-                    None if item is None else str(item)
-                    for item in details
-                ]},
+                kind, [database, parent], name, generation, native,
             ))
-    for database, name, routine_type, data_type in optional_rows(
+    parameters = {}
+    for database, routine, mode, name, data_type in optional_rows(
         cursor,
-        'SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, DATA_TYPE '
-        'FROM information_schema.ROUTINES ORDER BY 1, 2',
+        'SELECT SPECIFIC_SCHEMA, SPECIFIC_NAME, PARAMETER_MODE, '
+        'PARAMETER_NAME, DTD_IDENTIFIER FROM information_schema.PARAMETERS '
+        'WHERE PARAMETER_NAME IS NOT NULL ORDER BY 1, 2, ORDINAL_POSITION',
     ):
+        parameters.setdefault((database, routine), []).append({
+            'name': str(name), 'type': str(data_type),
+            'mode': str(mode or 'IN'),
+        })
+    routines = optional_rows(
+        cursor,
+        'SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, DATA_TYPE, '
+        'ROUTINE_DEFINITION, SECURITY_TYPE, IS_DETERMINISTIC, '
+        'SQL_DATA_ACCESS, ROUTINE_COMMENT '
+        'FROM information_schema.ROUTINES ORDER BY 1, 2',
+    )
+    for database, name, routine_type, data_type, body, security_type, \
+            deterministic, data_access, comment in routines:
         if str(routine_type).upper() == 'PROCEDURE':
             values.append(resource('procedure', [database], name, generation, {
                 'routine_type': 'PROCEDURE', 'data_type': str(data_type),
+                'body': None if body is None else str(body),
+                'parameters': parameters.get((database, name), []),
+                'sql_security': str(security_type),
+                'deterministic': str(deterministic).upper() == 'YES',
+                'data_access': str(data_access),
+                'comment': str(comment or ''),
             }))
-    for database, name, status, event_type in optional_rows(
+    events = optional_rows(
         cursor,
-        'SELECT EVENT_SCHEMA, EVENT_NAME, STATUS, EVENT_TYPE '
+        'SELECT EVENT_SCHEMA, EVENT_NAME, STATUS, EVENT_TYPE, '
+        'EVENT_DEFINITION, EXECUTE_AT, INTERVAL_VALUE, INTERVAL_FIELD, '
+        'STARTS, ENDS, ON_COMPLETION '
         'FROM information_schema.EVENTS ORDER BY 1, 2',
-    ):
+    )
+    for database, name, status, event_type, body, execute_at, \
+            interval_value, interval_field, starts, ends, \
+            on_completion in events:
         values.append(resource('event', [database], name, generation, {
             'status': str(status), 'event_type': str(event_type),
+            'schedule': _event_schedule(
+                event_type, execute_at, interval_value, interval_field,
+                starts, ends),
+            'preserve': str(on_completion).upper() == 'PRESERVE',
+            'enabled': str(status).upper() == 'ENABLED',
+            'body': None if body is None else str(body),
         }))
     roles = set()
     for user, host in optional_rows(
@@ -958,6 +1085,7 @@ def _extras(cursor, _request, generation):
         roles.add(account)
         values.append(resource(
             'role', [], f'{account[0]}@{account[1]}', generation,
+            {'user': account[0], 'host': account[1]},
         ))
     accounts = optional_rows(
         cursor,
@@ -975,11 +1103,13 @@ def _extras(cursor, _request, generation):
             roles.add(account)
             values.append(resource(
                 'role', [], f'{account[0]}@{account[1]}', generation,
+                {'user': account[0], 'host': account[1]},
             ))
         elif account not in roles:
             values.append(resource(
                 'user', [], f'{account[0]}@{account[1]}', generation,
-                {'account_locked': str(locked)},
+                {'account_locked': str(locked), 'user': account[0],
+                 'host': account[1]},
             ))
     for grantee, privilege in optional_rows(
         cursor,

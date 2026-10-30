@@ -36,6 +36,32 @@ from .relational_admin import (
 )
 
 
+_MYSQL_LITERAL_TYPES = re.compile(
+    r'^(tinyint|smallint|mediumint|int|integer|bigint|decimal|numeric|'
+    r'float|double|real|bit|bool|boolean|year)\b', re.IGNORECASE)
+_MYSQL_TIME_DEFAULTS = re.compile(
+    r'^(current_timestamp|now|localtime|localtimestamp)(\(\d*\))?$',
+    re.IGNORECASE)
+
+
+def mysql_default_expression(data_type, default, extra):
+    """Render information_schema COLUMN_DEFAULT as a DEFAULT expression.
+
+    The catalog reports a string literal unquoted ('x' as x) and marks
+    expression defaults with DEFAULT_GENERATED; an editor needs the clause
+    text it would write back.
+    """
+    if default is None:
+        return None
+    text = str(default)
+    if 'DEFAULT_GENERATED' in str(extra or '').upper() or (
+            _MYSQL_TIME_DEFAULTS.match(text)):
+        return text
+    if _MYSQL_LITERAL_TYPES.match(str(data_type or '')):
+        return text
+    return "'" + text.replace('\\', '\\\\').replace("'", "''") + "'"
+
+
 def resource(kind, path, name, generation, native=None):
     """Build one provider-native resource before common normalization."""
     parts = [str(item) for item in path]
@@ -444,27 +470,70 @@ def mysql_catalog(connection, request, engine_name, extras=None):
                 'table_type': str(table_type),
             })
             values[item['resource_id']] = item
+        # Definition order, defaults and key membership let an editor re-open
+        # an existing table; the narrower query remains the fallback.
         rows = optional_rows(
             cursor,
             'SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, '
-            'IS_NULLABLE FROM information_schema.COLUMNS ORDER BY 1, 2, 3',
-        )
-        for database, table, name, data_type, nullable in rows:
-            item = resource('column', [database, table], name, generation, {
+            'IS_NULLABLE, ORDINAL_POSITION, COLUMN_DEFAULT, COLUMN_KEY, '
+            'EXTRA FROM information_schema.COLUMNS '
+            'ORDER BY 1, 2, ORDINAL_POSITION',
+        ) or [
+            (*row, None, None, None, None) for row in optional_rows(
+                cursor,
+                'SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, '
+                'IS_NULLABLE FROM information_schema.COLUMNS '
+                'ORDER BY 1, 2, 3',
+            )
+        ]
+        for database, table, name, data_type, nullable, position, \
+                default, column_key, extra in rows:
+            native = {
                 'data_type': str(data_type), 'is_nullable': str(nullable),
-            })
+            }
+            if position is not None:
+                native.update({
+                    'ordinal_position': int(position),
+                    'column_default': (
+                        None if default is None else str(default)),
+                    'default_expression': mysql_default_expression(
+                        data_type, default, extra),
+                    'column_key': str(column_key or ''),
+                    'extra': str(extra or ''),
+                })
+            item = resource('column', [database, table], name, generation,
+                            native)
             values[item['resource_id']] = item
         rows = optional_rows(
             cursor,
-            'SELECT DISTINCT TABLE_SCHEMA, TABLE_NAME, INDEX_NAME, '
-            'NON_UNIQUE, INDEX_TYPE FROM information_schema.STATISTICS '
-            'ORDER BY 1, 2, 3',
-        )
-        for database, table, name, non_unique, index_type in rows:
+            'SELECT TABLE_SCHEMA, TABLE_NAME, INDEX_NAME, NON_UNIQUE, '
+            'INDEX_TYPE, SEQ_IN_INDEX, COLUMN_NAME '
+            'FROM information_schema.STATISTICS ORDER BY 1, 2, 3, 6',
+        ) or [
+            (*row, None, None) for row in optional_rows(
+                cursor,
+                'SELECT DISTINCT TABLE_SCHEMA, TABLE_NAME, INDEX_NAME, '
+                'NON_UNIQUE, INDEX_TYPE FROM information_schema.STATISTICS '
+                'ORDER BY 1, 2, 3',
+            )
+        ]
+        for database, table, name, non_unique, index_type, _sequence, \
+                column in rows:
+            # TiDB reports NON_UNIQUE as the string '0'/'1', so bool() would
+            # call every index non-unique.
             item = resource('index', [database, table], name, generation, {
-                'unique': not bool(non_unique),
+                'unique': str(non_unique).strip() in {'0', 'False', 'false'},
                 'index_type': str(index_type),
             })
+            existing = values.get(item['resource_id'])
+            if existing is not None:
+                item = existing
+            elif column is not None:
+                item['native']['columns'] = []
+                item['native']['definition']['columns'] = []
+            if column is not None:
+                item['native']['columns'].append(str(column))
+                item['native']['definition']['columns'].append(str(column))
             values[item['resource_id']] = item
         if extras:
             for item in extras(cursor, request, generation):
