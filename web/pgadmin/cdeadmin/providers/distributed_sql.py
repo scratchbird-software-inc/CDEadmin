@@ -123,6 +123,52 @@ def mysql_constraint_details(cursor):
     return found
 
 
+def mysql_procedures(cursor, schema=None):
+    """[(schema, name, native)] for stored procedures.
+
+    ``schema`` adds ``ROUTINE_SCHEMA = %s`` (Vitess routes
+    ``information_schema`` reads to the keyspace that predicate names).
+    """
+    where, parameters = '', ()
+    if schema is not None:
+        where, parameters = 'AND SPECIFIC_SCHEMA = %s ', (schema,)
+    found = {}
+    for database, routine, mode, name, data_type in optional_rows(
+        cursor,
+        'SELECT SPECIFIC_SCHEMA, SPECIFIC_NAME, PARAMETER_MODE, '
+        'PARAMETER_NAME, DTD_IDENTIFIER FROM information_schema.PARAMETERS '
+        f'WHERE PARAMETER_NAME IS NOT NULL {where}'
+        'ORDER BY 1, 2, ORDINAL_POSITION', parameters,
+    ):
+        found.setdefault((database, routine), []).append({
+            'name': str(name), 'type': str(data_type),
+            'mode': str(mode or 'IN'),
+        })
+    where = '' if schema is None else 'WHERE ROUTINE_SCHEMA = %s '
+    routines = optional_rows(
+        cursor,
+        'SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, DATA_TYPE, '
+        'ROUTINE_DEFINITION, SECURITY_TYPE, IS_DETERMINISTIC, '
+        'SQL_DATA_ACCESS, ROUTINE_COMMENT '
+        f'FROM information_schema.ROUTINES {where}ORDER BY 1, 2', parameters,
+    )
+    values = []
+    for database, name, routine_type, data_type, body, security_type, \
+            deterministic, data_access, comment in routines:
+        if str(routine_type).upper() != 'PROCEDURE':
+            continue
+        values.append((database, name, {
+            'routine_type': 'PROCEDURE', 'data_type': str(data_type),
+            'body': None if body is None else str(body),
+            'parameters': found.get((database, name), []),
+            'sql_security': str(security_type),
+            'deterministic': str(deterministic).upper() == 'YES',
+            'data_access': str(data_access),
+            'comment': str(comment or ''),
+        }))
+    return values
+
+
 def resource(kind, path, name, generation, native=None):
     """Build one provider-native resource before common normalization."""
     parts = [str(item) for item in path]

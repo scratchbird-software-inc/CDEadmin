@@ -142,9 +142,10 @@ class DistributedRelationalObjectGateTests(unittest.TestCase):
             for family in coverage['families']
             for concept in family['concepts']
         }
+        # Procedures: unsharded keyspaces only (live, Vitess 23.0.3).
         for concept_id in (
             'databases', 'schemas', 'views', 'sequences', 'partitions',
-            'replication_objects', 'jobs_and_events',
+            'replication_objects', 'jobs_and_events', 'procedures',
         ):
             self.assertIn(
                 concepts[concept_id]['declared_status'],
@@ -152,7 +153,7 @@ class DistributedRelationalObjectGateTests(unittest.TestCase):
             )
         for concept_id in (
             'materialized_views', 'domains', 'types', 'functions',
-            'procedures', 'triggers', 'roles_and_grants',
+            'triggers', 'roles_and_grants',
             'extensions_and_plugins', 'tablespaces_and_filespaces',
         ):
             self.assertEqual(

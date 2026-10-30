@@ -1255,6 +1255,10 @@ class DistributedProviderTests(unittest.TestCase):
         def response(_route, arguments, timeout=30):
             documents = {
                 'GetRoutingRules': {'rules': []},
+                'GetKeyspaces': [{
+                    'name': 'analytics',
+                    'keyspace': {'durability_policy': 'semi_sync'},
+                }],
                 'FindAllShardsInKeyspace': {
                     'shards': {'-': {'name': '-'}},
                 },
@@ -1280,7 +1284,7 @@ class DistributedProviderTests(unittest.TestCase):
         )
         self.assertEqual({
             'backup', 'routing-rule', 'workflow', 'materialize',
-            'vreplication-stream',
+            'vreplication-stream', 'keyspace', 'shard',
         }, {item['resource_kind'] for item in resources})
         backup = next(
             item for item in resources
@@ -1290,7 +1294,45 @@ class DistributedProviderTests(unittest.TestCase):
             ['analytics', '-', '2026-09-10.010203.test-0000000102'],
             backup['display_path'],
         )
-        self.assertEqual(4, run.call_count)
+        # vtctld is the topology authority for keyspaces and shards.
+        keyspace = next(item for item in resources
+                        if item['resource_kind'] == 'keyspace')
+        self.assertEqual(('semi_sync', False, ['-']), (
+            keyspace['native']['durability_policy'],
+            keyspace['native']['sharded'], keyspace['native']['shards']))
+        shard = next(item for item in resources
+                     if item['resource_kind'] == 'shard')
+        self.assertEqual(('analytics/-', 'analytics', '-'), (
+            shard['display_name'], shard['native']['keyspace'],
+            shard['native']['key_range']))
+        self.assertEqual(5, run.call_count)
+
+    @patch('pgadmin.cdeadmin.providers.vitess.control_plane._run')
+    def test_vitess_catalog_keeps_vtgate_keyspaces_without_topology(
+            self, run):
+        def response(_route, arguments, timeout=30):
+            if arguments[0] == 'GetKeyspaces':
+                raise RelationalClientError('vtctld refused GetKeyspaces')
+            documents = {
+                'GetRoutingRules': {'rules': []},
+                'FindAllShardsInKeyspace': {'shards': {}},
+                'GetWorkflows': {'workflows': []},
+            }
+            return {'stdout': json.dumps(documents[arguments[0]])}
+
+        run.side_effect = response
+        resources = vitess_control_resources(
+            {'vtctldclient_path': '/trusted/client',
+             'vtctld_server': '127.0.0.1:15999'},
+            'generation-one', {'analytics'},
+        )
+        # No topology answer: no vtctld keyspace records, and the vtgate
+        # keyspaces are still walked for workflows.
+        self.assertEqual(['routing-rule'],
+                         [item['resource_kind'] for item in resources])
+        self.assertIn(
+            ['GetWorkflows', '--show-all', 'analytics'],
+            [call.args[1] for call in run.call_args_list])
 
     def test_vitess_routing_rules_are_structured_and_fail_closed(self):
         rules = {

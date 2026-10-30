@@ -11,7 +11,7 @@ if 'pgadmin' not in sys.modules:
     sys.modules['pgadmin'] = package
 
 from pgadmin.cdeadmin.providers.distributed_sql import (  # noqa: E402
-    mysql_catalog, mysql_default_expression,
+    mysql_catalog, mysql_default_expression, mysql_procedures,
 )
 
 
@@ -19,9 +19,10 @@ class Cursor:
     """Answers each catalog query by a substring of its SQL."""
 
     def __init__(self, answers):
-        self.answers, self.rows = answers, []
+        self.answers, self.rows, self.seen = answers, [], []
 
-    def execute(self, source, _parameters=()):
+    def execute(self, source, parameters=()):
+        self.seen.append((source, tuple(parameters)))
         for needle, rows in self.answers.items():
             if needle in source:
                 if isinstance(rows, Exception):
@@ -112,3 +113,31 @@ def test_narrow_catalogs_fall_back_to_the_previous_columns():
         'data_type': 'int', 'is_nullable': 'NO'}
     assert native(rows, 'index:db:t:PRIMARY') == {
         'unique': True, 'index_type': 'BTREE'}
+
+
+def test_procedures_carry_parameters_and_skip_functions():
+    cursor = Cursor({
+        'information_schema.PARAMETERS': [
+            ('ks', 'p', 'IN', 'a', 'int'), ('ks', 'p', 'OUT', 'b', 'text')],
+        'information_schema.ROUTINES': [
+            ('ks', 'p', 'PROCEDURE', '', 'begin end', 'DEFINER', 'NO',
+             'CONTAINS SQL', ''),
+            ('ks', 'f', 'FUNCTION', 'int', 'return 1', 'DEFINER', 'YES',
+             'NO SQL', '')],
+    })
+    assert mysql_procedures(cursor) == [('ks', 'p', {
+        'routine_type': 'PROCEDURE', 'data_type': '', 'body': 'begin end',
+        'parameters': [{'name': 'a', 'type': 'int', 'mode': 'IN'},
+                       {'name': 'b', 'type': 'text', 'mode': 'OUT'}],
+        'sql_security': 'DEFINER', 'deterministic': False,
+        'data_access': 'CONTAINS SQL', 'comment': ''})]
+    assert all(parameters == () for _source, parameters in cursor.seen)
+
+
+def test_procedures_for_one_schema_name_it_in_both_queries():
+    # Vitess routes information_schema reads by the schema predicate.
+    cursor = Cursor({})
+    assert mysql_procedures(cursor, 'lookup_keyspace') == []
+    assert [parameters for _source, parameters in cursor.seen] == [
+        ('lookup_keyspace',), ('lookup_keyspace',)]
+    assert all('SCHEMA = %s' in source for source, _ in cursor.seen)

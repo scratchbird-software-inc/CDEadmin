@@ -1348,6 +1348,7 @@
         {"resource_kind": "table", "title": "Table", "operation_profile": "data_container"},
         {"resource_kind": "column", "title": "Column", "operation_profile": "definition"},
         {"resource_kind": "view", "title": "View", "operation_profile": "definition"},
+        {"resource_kind": "procedure", "title": "Procedure", "operation_profile": "definition"},
         {"resource_kind": "index", "title": "Index", "operation_profile": "definition"},
         {"resource_kind": "constraint", "title": "Constraint", "operation_profile": "definition"},
         {"resource_kind": "partition", "title": "Physical partition", "operation_profile": "read_only"},

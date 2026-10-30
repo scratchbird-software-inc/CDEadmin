@@ -19,6 +19,8 @@ from pgadmin.cdeadmin.sdk import (
 from ..distributed_sql import (
     create_sql_client,
     mysql_catalog,
+    mysql_constraint_details,
+    mysql_procedures,
     optional_rows,
     resource,
     sql_administration,
@@ -467,13 +469,16 @@ _VITESS_SUPPORTED['sequence'] = frozenset({
 })
 _VITESS_SUPPORTED['vindex'] = frozenset({'inspect', 'create', 'drop'})
 _VITESS_SUPPORTED['partition'] = frozenset({'inspect'})
+# Unsharded keyspaces only: vtgate refuses CREATE PROCEDURE on a sharded one
+# with VT12001, which names the restriction (live, 23.0.3).
+_VITESS_SUPPORTED['procedure'] = frozenset({'inspect', 'create', 'drop'})
 _VITESS_SUPPORTED['replica'] = frozenset({'inspect'})
 _VITESS_DIALECT = replace(
     _BASE_ADMINISTRATION.dialect,
     supported=_VITESS_SUPPORTED,
     not_applicable_concepts=frozenset({
-        'materialized_views', 'domains', 'types', 'functions', 'procedures',
-        'triggers', 'roles_and_grants', 'extensions_and_plugins',
+        'materialized_views', 'domains', 'types', 'functions', 'triggers',
+        'roles_and_grants', 'extensions_and_plugins',
         'tablespaces_and_filespaces',
     }),
     concept_resource_kinds={
@@ -525,7 +530,29 @@ class VitessControlAdministration(VitessAdministration):
             return _CONTROL_ADMINISTRATION.apply(
                 client, request, connection=connection
             )
+        if plan.get('resource_kind') == 'procedure' and plan.get(
+                'operation_id') == 'create':
+            self._refuse_sharded_procedure(client, request)
         return super().apply(client, request, connection=connection)
+
+    @staticmethod
+    def _refuse_sharded_procedure(client, request):
+        # vtgate refuses with VT12001, but driver text is redacted on the way
+        # to the user; refuse first with the reason instead.
+        route = (request.get('provider_payload') or {}).get('route')
+        if not isinstance(route, Mapping):
+            return
+        draft = (request.get('plan') or {}).get('draft') or {}
+        keyspace = str(draft.get('parent') or route.get('database') or '')
+        keyspace = keyspace.split(':', 1)[0].split('@', 1)[0]
+        record = next((
+            item for item in client.list_resources({'route': route})
+            if item.get('resource_kind') == 'keyspace' and
+            item.get('display_name') == keyspace), None)
+        if record and (record.get('native') or {}).get('sharded'):
+            raise RelationalClientError(
+                f'Vitess refuses stored procedures on sharded keyspace '
+                f'{keyspace} (VT12001); choose an unsharded keyspace')
 
     @staticmethod
     def _control_request(request):
@@ -721,21 +748,32 @@ def _keyspace_name(schema, keyspaces):
 def _extras(cursor, _request, generation, keyspaces=None):
     keyspaces = set(keyspaces or ())
     values = [resource('vtgate', [], 'connected-vtgate', generation)]
+    shard_names = [str(row[0]) for row in optional_rows(
+        cursor, 'SHOW VITESS_SHARDS')]
     for row in optional_rows(cursor, 'SHOW VITESS_KEYSPACES'):
         name = str(row[0])
         keyspaces.add(name)
-        values.append(resource('keyspace', [], name, generation))
-    for row in optional_rows(cursor, 'SHOW VITESS_SHARDS'):
-        name = str(row[0])
+        own = [shard.split('/', 1)[1] for shard in shard_names
+               if shard.startswith(name + '/')]
+        values.append(resource('keyspace', [], name, generation, {
+            'sharded': any(shard != '-' for shard in own),
+            'shards': own,
+        }))
+    for name in shard_names:
         parent = name.split('/', 1)[0] if '/' in name else ''
+        key_range = name.split('/', 1)[1] if '/' in name else name
         values.append(resource('shard', [parent] if parent else [], name,
-                               generation))
+                               generation, {
+            'keyspace': parent, 'key_range': key_range,
+        }))
     for row in optional_rows(cursor, 'SHOW VITESS_TABLETS'):
         cell, keyspace, shard, tablet_type, state, alias, *details = row
         native = {
             'cell': str(cell), 'keyspace': str(keyspace),
             'shard': str(shard), 'tablet_type': str(tablet_type),
-            'state': str(state),
+            # Not 'state': the shared record builder reserves that key for
+            # tablet records and overwrote this value.
+            'serving_state': str(state),
             'details': [str(item) for item in details],
         }
         values.append(resource(
@@ -767,15 +805,34 @@ def _extras(cursor, _request, generation, keyspaces=None):
         'CONSTRAINT_TYPE FROM information_schema.TABLE_CONSTRAINTS '
         'ORDER BY 1, 2, 3',
     )
+    details = mysql_constraint_details(cursor)
     for schema, table, name, constraint_type in constraints:
         keyspace = _keyspace_name(schema, keyspaces)
         if keyspace is None:
             continue
+        native = {'constraint_type': str(constraint_type),
+                  **details.get((schema, table, name), {})}
+        if native.get('referenced_database'):
+            native['referenced_database'] = _keyspace_name(
+                native['referenced_database'], keyspaces) or native[
+                    'referenced_database']
         values.append(resource(
-            'constraint', [keyspace, table], name, generation, {
-                'constraint_type': str(constraint_type),
-            }
-        ))
+            'constraint', [keyspace, table], name, generation, native))
+    for schema, name, definition, check_option, security in optional_rows(
+            cursor,
+            'SELECT TABLE_SCHEMA, TABLE_NAME, VIEW_DEFINITION, CHECK_OPTION, '
+            'SECURITY_TYPE FROM information_schema.VIEWS ORDER BY 1, 2'):
+        keyspace = _keyspace_name(schema, keyspaces)
+        if keyspace is None:
+            continue
+        # Shards store the physical vt_<keyspace> schema; vtgate needs the
+        # keyspace name to run the definition again.
+        query = str(definition).replace(f'`{schema}`.', f'`{keyspace}`.')
+        values.append(resource('view', [keyspace], name, generation, {
+            'table_type': 'VIEW', 'query': query,
+            'check_option': str(check_option),
+            'sql_security': str(security),
+        }))
     partitions = optional_rows(
         cursor,
         'SELECT TABLE_SCHEMA, TABLE_NAME, PARTITION_NAME, '
@@ -793,6 +850,11 @@ def _extras(cursor, _request, generation, keyspaces=None):
                 'description': str(description),
             }
         ))
+    for keyspace in sorted(keyspaces):
+        # Without the schema predicate vtgate reads the session keyspace only.
+        for _schema, name, native in mysql_procedures(cursor, keyspace):
+            values.append(resource('procedure', [keyspace], name, generation,
+                                   native))
     sequences = optional_rows(
         cursor,
         'SELECT TABLE_SCHEMA, TABLE_NAME FROM information_schema.TABLES '
@@ -838,6 +900,33 @@ def _extras(cursor, _request, generation, keyspaces=None):
     return values
 
 
+def _annotate_table_vindexes(connection, values):
+    """Each table's column vindexes (SHOW VSCHEMA VINDEXES ON ks.table)."""
+    tables = [item for item in values.values()
+              if item['resource_kind'] == 'table'][:500]
+    if not tables:
+        return
+    cursor = connection.cursor()
+    try:
+        for item in tables:
+            keyspace, table = item['display_path'][0], item['display_path'][-1]
+            quoted = '.'.join('`' + str(part).replace('`', '``') + '`'
+                              for part in (keyspace, table))
+            rows = optional_rows(cursor, f'SHOW VSCHEMA VINDEXES ON {quoted}')
+            vindexes = [{
+                'columns': [value.strip() for value in str(columns).split(',')
+                            if value.strip()],
+                'name': str(name), 'type': str(vindex_type),
+                'params': str(params or ''), 'owner': str(owner or ''),
+            } for columns, name, vindex_type, params, owner in rows]
+            native = item.setdefault('native', {})
+            native['vindexes'] = vindexes
+            native['primary_vindex'] = vindexes[0]['name'] if vindexes \
+                else None
+    finally:
+        cursor.close()
+
+
 def _catalog(connection, request):
     """Normalize physical ``vt_`` schemas to routed Vitess keyspaces."""
     generation = str(request.get('capability_generation') or 'current')
@@ -874,6 +963,15 @@ def _catalog(connection, request):
     route = request.get('route') or request.get('_provider_route') or {}
     for item in control_catalog_resources(route, generation, keyspaces):
         values[item['resource_id']] = item
+    topology = {item['display_name'] for item in values.values()
+                if item['resource_kind'] == 'keyspace' and
+                (item.get('native') or {}).get('topology') == 'vtctld'}
+    if topology:
+        # vtctld answered: keyspaces only vtgate's cache still lists are gone.
+        values = {key: item for key, item in values.items()
+                  if item['resource_kind'] != 'keyspace' or
+                  item['display_name'] in topology}
+    _annotate_table_vindexes(connection, values)
     for item in values.values():
         path = item['display_path']
         if item['resource_kind'] == 'vschema':

@@ -15,6 +15,7 @@ from ..distributed_sql import (
     mysql_account_resources,
     mysql_catalog,
     mysql_constraint_details,
+    mysql_procedures,
     optional_rows,
     resource,
     sql_administration,
@@ -980,36 +981,9 @@ def _extras(cursor, _request, generation):
             values.append(resource(
                 kind, [database, parent], name, generation, native,
             ))
-    parameters = {}
-    for database, routine, mode, name, data_type in optional_rows(
-        cursor,
-        'SELECT SPECIFIC_SCHEMA, SPECIFIC_NAME, PARAMETER_MODE, '
-        'PARAMETER_NAME, DTD_IDENTIFIER FROM information_schema.PARAMETERS '
-        'WHERE PARAMETER_NAME IS NOT NULL ORDER BY 1, 2, ORDINAL_POSITION',
-    ):
-        parameters.setdefault((database, routine), []).append({
-            'name': str(name), 'type': str(data_type),
-            'mode': str(mode or 'IN'),
-        })
-    routines = optional_rows(
-        cursor,
-        'SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, DATA_TYPE, '
-        'ROUTINE_DEFINITION, SECURITY_TYPE, IS_DETERMINISTIC, '
-        'SQL_DATA_ACCESS, ROUTINE_COMMENT '
-        'FROM information_schema.ROUTINES ORDER BY 1, 2',
-    )
-    for database, name, routine_type, data_type, body, security_type, \
-            deterministic, data_access, comment in routines:
-        if str(routine_type).upper() == 'PROCEDURE':
-            values.append(resource('procedure', [database], name, generation, {
-                'routine_type': 'PROCEDURE', 'data_type': str(data_type),
-                'body': None if body is None else str(body),
-                'parameters': parameters.get((database, name), []),
-                'sql_security': str(security_type),
-                'deterministic': str(deterministic).upper() == 'YES',
-                'data_access': str(data_access),
-                'comment': str(comment or ''),
-            }))
+    for database, name, native in mysql_procedures(cursor):
+        values.append(resource('procedure', [database], name, generation,
+                               native))
     events = optional_rows(
         cursor,
         'SELECT EVENT_SCHEMA, EVENT_NAME, STATUS, EVENT_TYPE, '

@@ -37,6 +37,13 @@ OPERATIONS = (
                      'boolean', False, default=False),
         ), target_required=False, impact_scope='cluster'
     ),
+    # vtgate's DROP VIEW does not drop: the qualified form returns success
+    # and leaves the view on every shard, the unqualified one is refused
+    # (verified live, Vitess 23.0.3). ApplySchema through vtctld drops it.
+    ControlPlaneOperation(
+        'view', 'drop', 'Drop view', 'destructive', 'maintenance_admin',
+        impact_scope='database'
+    ),
     ControlPlaneOperation(
         'keyspace', 'drop', 'Delete keyspace', 'destructive',
         'topology_admin', (
@@ -837,6 +844,13 @@ def compile_action(request):
             arguments.extend(['--backup-timestamp', timestamp])
         if operation in {'backup', 'restore'}:
             arguments.append(tablet)
+    elif kind == 'view' and operation == 'drop':
+        path = _target(request)
+        if len(path) < 2:
+            raise RelationalClientError('Vitess view keyspace is unavailable')
+        keyspace = _safe_name(path[-2], 'keyspace')
+        view = '`' + str(path[-1]).replace('`', '``') + '`'
+        arguments = ['ApplySchema', '--sql', f'DROP VIEW {view}', keyspace]
     elif kind == 'backup' and operation == 'drop':
         path = _target(request)
         if len(path) < 3:
@@ -849,16 +863,22 @@ def compile_action(request):
     if not arguments:
         raise RelationalClientError(
             'Vitess control-plane operation is unavailable')
+    # DeleteKeyspace leaves the keyspace in each cell's SrvVSchema, so vtgate
+    # kept routing to and listing it (live, 23.0.3); rebuild the graph.
+    follow_up = (['RebuildVSchemaGraph'] if arguments[0] == 'DeleteKeyspace'
+                 else None)
     return {
         'provider_action': {
             'arguments': arguments,
             'cancel_arguments': cancel_arguments,
+            **({'follow_up_arguments': follow_up} if follow_up else {}),
         },
         'action_preview': {
             'tool': 'vtctldclient',
             'verb': arguments[0],
             'argument_count': len(arguments) - 1,
             'provider_constructed': True,
+            **({'follow_up_verb': follow_up[0]} if follow_up else {}),
         },
         'impact': {
             'scope': 'shard' if kind in {'shard', 'tablet'} else 'cluster',
@@ -1050,12 +1070,17 @@ def execute_action(_client, request):
     payload = request.get('provider_payload') or {}
     compiled = payload.get('compiled') or {}
     action = compiled.get('provider_action') or {}
-    return {
+    route = _route(request)
+    result = {
         'accepted': True,
-        'provider_response': _run(_route(request), action.get('arguments')),
+        'provider_response': _run(route, action.get('arguments')),
         'provider_finality_authority': True,
         'automatic_mutation_retry': False,
     }
+    follow_up = action.get('follow_up_arguments')
+    if follow_up == ['RebuildVSchemaGraph']:
+        result['follow_up_response'] = _run(route, follow_up)
+    return result
 
 
 def _parts(request):
@@ -1284,6 +1309,61 @@ def _workflow_streams(document):
     return workflows if isinstance(workflows, list) else []
 
 
+def _topology_keyspaces(route):
+    """{keyspace: settings} from vtctld GetKeyspaces, or None."""
+    try:
+        response = _run(route, ['GetKeyspaces'], timeout=30)
+        document = json.loads(response.get('stdout') or 'null')
+    except (RelationalClientError, TypeError, ValueError):
+        return None
+    if not isinstance(document, list):
+        return None
+    found = {}
+    for item in document:
+        if isinstance(item, dict) and isinstance(item.get('name'), str):
+            settings = item.get('keyspace')
+            found[item['name']] = settings if isinstance(
+                settings, dict) else {}
+    return found
+
+
+def _topology_records(keyspace, settings, shards, generation):
+    shards = shards if isinstance(shards, dict) else {}
+    names = sorted(shards)
+    records = [{
+        'resource_id': f'keyspace:{keyspace}', 'resource_kind': 'keyspace',
+        'display_name': keyspace, 'display_path': [keyspace],
+        'authority_path': ['keyspace', keyspace], 'generation': generation,
+        'native': {
+            'topology': 'vtctld', 'sharded': any(n != '-' for n in names),
+            'shards': names,
+            'durability_policy': settings.get('durability_policy'),
+            'sidecar_db_name': settings.get('sidecar_db_name'),
+        },
+    }]
+    for name in names:
+        entry = shards[name] if isinstance(shards[name], dict) else {}
+        shard = entry.get('shard') if isinstance(
+            entry.get('shard'), dict) else {}
+        alias = shard.get('primary_alias')
+        if isinstance(alias, dict):
+            alias = f"{alias.get('cell')}-{int(alias.get('uid', 0)):010d}"
+        full = f'{keyspace}/{name}'
+        records.append({
+            'resource_id': f'shard:{keyspace}:{full}',
+            'resource_kind': 'shard', 'display_name': full,
+            'display_path': [keyspace, full],
+            'authority_path': [keyspace, 'shard', full],
+            'generation': generation,
+            'native': {
+                'topology': 'vtctld', 'keyspace': keyspace,
+                'key_range': name, 'primary_alias': alias,
+                'is_primary_serving': bool(shard.get('is_primary_serving')),
+            },
+        })
+    return records
+
+
 def catalog_resources(route, generation, keyspaces):
     """Read exact native workflow and VReplication objects for navigation."""
     if not isinstance(route, dict) or not route.get(
@@ -1304,6 +1384,12 @@ def catalog_resources(route, generation, keyspaces):
         })
     except (RelationalClientError, TypeError, ValueError):
         pass
+    # vtctld is the topology authority: it lists keyspaces and shards that
+    # have no serving tablets (vtgate's SHOW VITESS_* omit them) and drops
+    # deleted keyspaces that vtgate's cache still reports.
+    topology = _topology_keyspaces(route)
+    if topology is not None:
+        keyspaces = set(topology)
     for keyspace in sorted(set(keyspaces or ())):
         try:
             response = _run(
@@ -1315,6 +1401,9 @@ def catalog_resources(route, generation, keyspaces):
             ) else None
         except (RelationalClientError, TypeError, ValueError):
             shards = None
+        if topology is not None:
+            resources.extend(_topology_records(
+                keyspace, topology[keyspace], shards, generation))
         for shard in sorted(shards if isinstance(shards, dict) else ()):
             try:
                 response = _run(
