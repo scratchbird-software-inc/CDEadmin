@@ -1,0 +1,419 @@
+{
+ "engine": "yugabytedb",
+ "external_storage_prefix": null,
+ "leftover_roles": [],
+ "notices_on_supported": {
+  "column-alter-type": [
+   "table rewrite may lead to inconsistencies"
+  ],
+  "constraint-primary-key-change": [
+   "table rewrite may lead to inconsistencies"
+  ],
+  "constraint-primary-key-change-not-null": [
+   "table rewrite may lead to inconsistencies"
+  ],
+  "extension": [
+   "extension \"fuzzystrmatch\" already exists, skipping"
+  ],
+  "foreign-data": [
+   "extension \"postgres_fdw\" already exists, skipping",
+   "no server_type specified. Defaulting to PostgreSQL."
+  ],
+  "index-hash": [
+   "substituting access method \"lsm\" for \"hash\" in YugabyteDB"
+  ],
+  "procedure": [
+   "x"
+  ],
+  "sequence": [
+   "overriding cache option with cache flag or previous cache value"
+  ],
+  "table-inherits": [
+   "'inheritance' is a beta feature!"
+  ],
+  "ysql-tablegroup": [
+   "'tablegroup' is a beta feature!",
+   "'tablegroup' feature is deprecated and will be removed in a future release",
+   "'tablegroup' is a beta feature!",
+   "'tablegroup' feature is deprecated and will be removed in a future release"
+  ]
+ },
+ "results": {
+  "aggregate": "supported",
+  "collation": "supported",
+  "column-alter-type": "supported",
+  "column-collate": "supported",
+  "column-collate-icu": {
+   "msg": "collation \"en-US\" for encoding \"UTF8\" does not exist",
+   "sqlstate": "42704",
+   "statement": "CREATE TABLE ci (id",
+   "step": 0
+  },
+  "column-generated-stored": "supported",
+  "column-generated-virtual": {
+   "msg": "syntax error at or near \"VIRTUAL\"",
+   "sqlstate": "42601",
+   "statement": "CREATE TABLE gv (a",
+   "step": 0
+  },
+  "column-identity": "supported",
+  "column-rename-drop": "supported",
+  "comment": "supported",
+  "constraint-check": "supported",
+  "constraint-deferrable": "supported",
+  "constraint-exclusion": {
+   "msg": "EXCLUDE constraint not supported yet",
+   "sqlstate": "0A000",
+   "statement": "CREATE TABLE ex (id",
+   "step": 0
+  },
+  "constraint-foreign-key": "supported",
+  "constraint-not-valid": "supported",
+  "constraint-primary-key-change": "supported",
+  "constraint-primary-key-change-not-null": "supported",
+  "constraint-unique": "supported",
+  "crdb-alter-primary-key": {
+   "msg": "syntax error at or near \"PRIMARY\"",
+   "sqlstate": "42601",
+   "statement": "ALTER TABLE t ALTER",
+   "step": 2
+  },
+  "crdb-backup": {
+   "msg": "syntax error at or near \"BACKUP\"",
+   "sqlstate": "42601",
+   "statement": "BACKUP TABLE t INTO",
+   "step": 1
+  },
+  "crdb-backup-schedule": {
+   "msg": "syntax error at or near \"SCHEDULE\"",
+   "sqlstate": "42601",
+   "statement": "CREATE SCHEDULE cs2d79d8a9 FOR",
+   "step": 1
+  },
+  "crdb-changefeed": {
+   "msg": "syntax error at or near \"CHANGEFEED\"",
+   "sqlstate": "42601",
+   "statement": "CREATE CHANGEFEED FOR TABLE",
+   "step": 1
+  },
+  "crdb-column-families": {
+   "msg": "type \"f1\" does not exist",
+   "sqlstate": "42704",
+   "statement": "CREATE TABLE cf (a",
+   "step": 0
+  },
+  "crdb-column-not-visible": {
+   "msg": "syntax error at or near \"VISIBLE\"",
+   "sqlstate": "42601",
+   "statement": "ALTER TABLE t ADD",
+   "step": 1
+  },
+  "crdb-column-on-update": {
+   "msg": "syntax error at or near \"ON\"",
+   "sqlstate": "42601",
+   "statement": "CREATE TABLE ou (id",
+   "step": 0
+  },
+  "crdb-database-placement": {
+   "msg": "syntax error at or near \"PRIMARY\"",
+   "sqlstate": "42601",
+   "statement": "ALTER DATABASE cde_probe_2d79d8a9 SET",
+   "step": 0
+  },
+  "crdb-export": {
+   "msg": "syntax error at or near \"EXPORT\"",
+   "sqlstate": "42601",
+   "statement": "EXPORT INTO CSV 'nodelocal://1/cde_probe/e2d79d8a9'",
+   "step": 1
+  },
+  "crdb-external-connection": {
+   "msg": "syntax error at or near \"EXTERNAL\"",
+   "sqlstate": "42601",
+   "statement": "CREATE EXTERNAL CONNECTION ec2d79d8a9",
+   "step": 0
+  },
+  "crdb-index-hash-sharded": {
+   "msg": "syntax error at or near \"USING\"",
+   "sqlstate": "42601",
+   "statement": "CREATE INDEX hsi ON",
+   "step": 1
+  },
+  "crdb-index-inverted": {
+   "msg": "syntax error at or near \"INVERTED\"",
+   "sqlstate": "42601",
+   "statement": "CREATE INVERTED INDEX ij",
+   "step": 1
+  },
+  "crdb-index-storing": {
+   "msg": "syntax error at or near \"STORING\"",
+   "sqlstate": "42601",
+   "statement": "CREATE INDEX st ON",
+   "step": 1
+  },
+  "crdb-index-visibility": {
+   "msg": "syntax error at or near \"NOT\"",
+   "sqlstate": "42601",
+   "statement": "CREATE INDEX nvi ON",
+   "step": 1
+  },
+  "crdb-retained-families": {
+   "msg": "type \"f1\" does not exist",
+   "sqlstate": "42704",
+   "step": "setup 0"
+  },
+  "crdb-retained-hash-sharded": {
+   "msg": "syntax error at or near \"(\"",
+   "sqlstate": "42601",
+   "step": "setup 0"
+  },
+  "crdb-retained-not-visible-column": {
+   "msg": "syntax error at or near \"VISIBLE\"",
+   "sqlstate": "42601",
+   "step": "setup 1"
+  },
+  "crdb-retained-not-visible-index": {
+   "msg": "syntax error at or near \"NOT\"",
+   "sqlstate": "42601",
+   "step": "setup 1"
+  },
+  "crdb-retained-on-update": {
+   "msg": "syntax error at or near \"ON\"",
+   "sqlstate": "42601",
+   "step": "setup 0"
+  },
+  "crdb-retained-partition": {
+   "msg": "syntax error at or near \"(\"",
+   "sqlstate": "42601",
+   "step": "setup 0"
+  },
+  "crdb-retained-row-ttl": {
+   "msg": "unrecognized parameter \"ttl_expire_after\"",
+   "sqlstate": "22023",
+   "step": "setup 0"
+  },
+  "crdb-retained-storing": {
+   "msg": "syntax error at or near \"STORING\"",
+   "sqlstate": "42601",
+   "step": "setup 1"
+  },
+  "crdb-row-ttl": {
+   "msg": "unrecognized parameter \"ttl_expire_after\"",
+   "sqlstate": "22023",
+   "statement": "CREATE TABLE ttl (id",
+   "step": 0
+  },
+  "crdb-session-setting": {
+   "msg": "unrecognized configuration parameter \"sql_safe_updates\"",
+   "sqlstate": "42704",
+   "statement": "SET sql_safe_updates = true",
+   "step": 0
+  },
+  "crdb-show-ranges": {
+   "msg": "syntax error at or near \"FROM\"",
+   "sqlstate": "42601",
+   "statement": "SHOW RANGES FROM TABLE",
+   "step": 1
+  },
+  "crdb-split-scatter": {
+   "msg": "syntax error at or near \"SPLIT\"",
+   "sqlstate": "42601",
+   "statement": "ALTER TABLE t SPLIT",
+   "step": 1
+  },
+  "crdb-statistics": {
+   "msg": "extended statistics require at least 2 columns",
+   "sqlstate": "42P17",
+   "statement": "CREATE STATISTICS sv ON",
+   "step": 1
+  },
+  "crdb-table-partition-list": {
+   "msg": "syntax error at or near \"(\"",
+   "sqlstate": "42601",
+   "statement": "CREATE TABLE pl (k",
+   "step": 0
+  },
+  "crdb-table-temporary-opt-in": {
+   "msg": "unrecognized configuration parameter \"experimental_enable_temp_tables\"",
+   "sqlstate": "42704",
+   "statement": "SET experimental_enable_temp_tables = 'on'",
+   "step": 0
+  },
+  "crdb-zone-config": {
+   "msg": "syntax error at or near \"CONFIGURE\"",
+   "sqlstate": "42601",
+   "statement": "ALTER TABLE t CONFIGURE",
+   "step": 1
+  },
+  "database": "supported",
+  "default-privileges": "supported",
+  "domain": "supported",
+  "event-trigger": "supported",
+  "extension": "supported",
+  "foreign-data": "supported",
+  "function-plpgsql": "supported",
+  "function-set-returning": "supported",
+  "function-sql": "supported",
+  "grant-column": "supported",
+  "grant-table": "supported",
+  "index": "supported",
+  "index-brin": {
+   "msg": "index method \"brin\" not supported yet",
+   "sqlstate": "XX000",
+   "statement": "CREATE INDEX ib ON",
+   "step": 1
+  },
+  "index-concurrently": {
+   "msg": "DROP INDEX CONCURRENTLY not supported yet",
+   "sqlstate": "0A000",
+   "statement": "DROP INDEX CONCURRENTLY ic",
+   "step": 2
+  },
+  "index-desc": "supported",
+  "index-expression": "supported",
+  "index-gin": "supported",
+  "index-gist": {
+   "msg": "index method \"gist\" not supported yet",
+   "sqlstate": "XX000",
+   "statement": "CREATE INDEX igs ON",
+   "step": 1
+  },
+  "index-hash": "supported",
+  "index-include": "supported",
+  "index-nulls-not-distinct": "supported",
+  "index-partial": "supported",
+  "index-rename": "supported",
+  "index-unique": "supported",
+  "large-object": {
+   "msg": "Transaction for catalog table write operation 'pg_largeobject_metadata' not found",
+   "sqlstate": "XX000",
+   "statement": "SELECT lo_unlink(lo_create(0))",
+   "step": 0
+  },
+  "listen-notify": {
+   "notices": [
+    "LISTEN not supported yet and will be ignored",
+    "NOTIFY not supported yet and will be ignored",
+    "UNLISTEN not supported yet and will be ignored"
+   ],
+   "status": "accepted_with_notice"
+  },
+  "maintenance-analyze": "supported",
+  "maintenance-cluster": {
+   "msg": "CLUSTER not supported yet",
+   "sqlstate": "0A000",
+   "statement": "CLUSTER t USING cx",
+   "step": 2
+  },
+  "maintenance-reindex": {
+   "msg": "REINDEX not supported yet",
+   "sqlstate": "0A000",
+   "statement": "REINDEX TABLE t",
+   "step": 2
+  },
+  "maintenance-vacuum": {
+   "notices": [
+    "VACUUM is a no-op statement since YugabyteDB performs garbage collection of dead tuples automatically"
+   ],
+   "status": "accepted_with_notice"
+  },
+  "materialized-view": "supported",
+  "materialized-view-concurrently": "supported",
+  "operator": "supported",
+  "owner-change": "supported",
+  "procedure": "supported",
+  "publication": "supported",
+  "retained-check": "supported",
+  "retained-deferrable": "supported",
+  "retained-fk-actions": "supported",
+  "retained-generated-virtual": {
+   "msg": "syntax error at or near \"VIRTUAL\"",
+   "sqlstate": "42601",
+   "step": "setup 0"
+  },
+  "retained-identity": "supported",
+  "retained-include": "supported",
+  "retained-index-method-brin": {
+   "msg": "index method \"brin\" not supported yet",
+   "sqlstate": "XX000",
+   "step": "setup 1"
+  },
+  "retained-index-method-hash": {
+   "msg": "accepted but not retained: CREATE INDEX rih ON public.t USING lsm (v HASH)"
+  },
+  "retained-nulls-not-distinct": "supported",
+  "retained-partial-index": "supported",
+  "retained-security-barrier": "supported",
+  "retained-sequence-options": {
+   "msg": "accepted but not retained: 10,2,100"
+  },
+  "retained-table-comment": "supported",
+  "retained-unlogged": {
+   "msg": "accepted but not retained: p"
+  },
+  "retained-view-check-option": {
+   "msg": "VIEW WITH CHECK OPTION not supported yet",
+   "sqlstate": "0A000",
+   "step": "setup 1"
+  },
+  "role": "supported",
+  "role-membership": "supported",
+  "role-password": "supported",
+  "row-level-security": "supported",
+  "rule": "supported",
+  "schema": "supported",
+  "sequence": "supported",
+  "sequence-owned-by": "supported",
+  "statistics-extended": "supported",
+  "table": "supported",
+  "table-as": "supported",
+  "table-inherits": "supported",
+  "table-like": "supported",
+  "table-partitioned": "supported",
+  "table-temporary": "supported",
+  "table-unlogged": {
+   "notices": [
+    "unlogged option is currently ignored in YugabyteDB, all non-temp relations will be logged"
+   ],
+   "status": "accepted_with_notice"
+  },
+  "text-search": "supported",
+  "trigger": "supported",
+  "trigger-statement": "supported",
+  "truncate": "supported",
+  "type-composite": "supported",
+  "type-enum": "supported",
+  "type-range": "supported",
+  "view": "supported",
+  "view-check-option": {
+   "msg": "VIEW WITH CHECK OPTION not supported yet",
+   "sqlstate": "0A000",
+   "statement": "CREATE VIEW vc AS",
+   "step": 1
+  },
+  "view-recursive": "supported",
+  "view-security-barrier": "supported",
+  "ysql-colocated-database": "supported",
+  "ysql-hash-code": "supported",
+  "ysql-index-hash": "supported",
+  "ysql-index-nonconcurrently": "supported",
+  "ysql-index-split": "supported",
+  "ysql-primary-key-hash": "supported",
+  "ysql-retained-primary-key-hash": "supported",
+  "ysql-retained-split-at": "supported",
+  "ysql-retained-split-into": "supported",
+  "ysql-retained-tablespace-placement": "supported",
+  "ysql-split-at": "supported",
+  "ysql-split-into": "supported",
+  "ysql-table-properties": "supported",
+  "ysql-tablegroup": "supported",
+  "ysql-tablespace-placement": "supported"
+ },
+ "scratch_drop_error": null,
+ "settings": {
+  "placement": "cloud1.datacenter1.rack1",
+  "servers": "1",
+  "superuser": "on",
+  "user": "yugabyte"
+ },
+ "version": "PostgreSQL 15.12-YB-2025.2.2.2-b0 on x86_64-pc-linux-gnu, compiled by clang version 19.1.0 (https://github.com/yugabyte/llvm-project.git a2a6b655e14e7fa1fcf1011a6cb29cb8575249c0), 64-bit"
+}

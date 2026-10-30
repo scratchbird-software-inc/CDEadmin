@@ -1,6 +1,6 @@
 {
  "engine": "cockroachdb",
- "external_storage_prefix": "nodelocal://1/cde_probe/9b27ac0a",
+ "external_storage_prefix": "nodelocal://1/cde_probe/a3fd25d8",
  "leftover_roles": [],
  "notices_on_supported": {
   "column-identity": [
@@ -86,7 +86,7 @@
   "crdb-database-placement": {
    "msg": "region \"local\" does not exist",
    "sqlstate": "42602",
-   "statement": "ALTER DATABASE cde_probe_9b27ac0a SET",
+   "statement": "ALTER DATABASE cde_probe_a3fd25d8 SET",
    "step": 0
   },
   "crdb-export": "supported",
@@ -268,7 +268,7 @@
   "role-password": {
    "msg": "setting or updating a password is not supported in insecure mode",
    "sqlstate": "28P01",
-   "statement": "CREATE USER u9b27ac0a WITH",
+   "statement": "CREATE USER ua3fd25d8 WITH",
    "step": 0
   },
   "row-level-security": "supported",
@@ -354,6 +354,92 @@
    "sqlstate": "42601",
    "statement": "CREATE VIEW vb WITH",
    "step": 1
+  },
+  "ysql-colocated-database": {
+   "msg": "at or near \"colocation\": syntax error",
+   "sqlstate": "42601",
+   "statement": "CREATE DATABASE cde_probe_a3fd25d8_colo WITH",
+   "step": 0
+  },
+  "ysql-hash-code": {
+   "msg": "unknown function: yb_hash_code()",
+   "sqlstate": "42883",
+   "statement": "SELECT yb_hash_code(1)",
+   "step": 0
+  },
+  "ysql-index-hash": {
+   "msg": "operator classes are only allowed for the last column of an inverted or vector index",
+   "sqlstate": "42804",
+   "statement": "CREATE INDEX yih ON",
+   "step": 1
+  },
+  "ysql-index-nonconcurrently": {
+   "msg": "at or near \"yin\": syntax error",
+   "sqlstate": "42601",
+   "statement": "CREATE INDEX NONCONCURRENTLY yin",
+   "step": 1
+  },
+  "ysql-index-split": {
+   "msg": "at or near \"split\": syntax error",
+   "sqlstate": "42601",
+   "statement": "CREATE INDEX yis ON",
+   "step": 1
+  },
+  "ysql-primary-key-hash": {
+   "msg": "operator classes are only allowed for the last column of an inverted or vector index",
+   "sqlstate": "42804",
+   "statement": "CREATE TABLE yh (id",
+   "step": 0
+  },
+  "ysql-retained-primary-key-hash": {
+   "msg": "operator classes are only allowed for the last column of an inverted or vector index",
+   "sqlstate": "42804",
+   "step": "setup 0"
+  },
+  "ysql-retained-split-at": {
+   "msg": "at or near \"split\": syntax error",
+   "sqlstate": "42601",
+   "step": "setup 0"
+  },
+  "ysql-retained-split-into": {
+   "msg": "at or near \"split\": syntax error",
+   "sqlstate": "42601",
+   "step": "setup 0"
+  },
+  "ysql-retained-tablespace-placement": {
+   "msg": "at or near \"ytra3fd25d8\": syntax error: unimplemented: this syntax",
+   "sqlstate": "0A000",
+   "step": "setup 0"
+  },
+  "ysql-split-at": {
+   "msg": "at or near \"split\": syntax error",
+   "sqlstate": "42601",
+   "statement": "CREATE TABLE yr (id",
+   "step": 0
+  },
+  "ysql-split-into": {
+   "msg": "at or near \"split\": syntax error",
+   "sqlstate": "42601",
+   "statement": "CREATE TABLE ys (id",
+   "step": 0
+  },
+  "ysql-table-properties": {
+   "msg": "unknown function: yb_table_properties()",
+   "sqlstate": "42883",
+   "statement": "SELECT * FROM yb_table_properties('t'::regclass)",
+   "step": 1
+  },
+  "ysql-tablegroup": {
+   "msg": "at or near \"tablegroup\": syntax error",
+   "sqlstate": "42601",
+   "statement": "CREATE TABLEGROUP ytg",
+   "step": 0
+  },
+  "ysql-tablespace-placement": {
+   "msg": "at or near \"ytsa3fd25d8\": syntax error: unimplemented: this syntax",
+   "sqlstate": "0A000",
+   "statement": "CREATE TABLESPACE ytsa3fd25d8 WITH",
+   "step": 0
   }
  },
  "scratch_drop_error": null,

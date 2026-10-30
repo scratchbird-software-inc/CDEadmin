@@ -2,11 +2,31 @@
  "engine": "postgresql",
  "external_storage_prefix": null,
  "leftover_roles": [],
+ "notices_on_supported": {
+  "extension": [
+   "extension \"fuzzystrmatch\" already exists, skipping"
+  ],
+  "foreign-data": [
+   "extension \"postgres_fdw\" already exists, skipping"
+  ],
+  "procedure": [
+   "x"
+  ],
+  "publication": [
+   "\"wal_level\" is insufficient to publish logical changes"
+  ]
+ },
  "results": {
   "aggregate": "supported",
   "collation": "supported",
   "column-alter-type": "supported",
   "column-collate": "supported",
+  "column-collate-icu": {
+   "msg": "collation \"en-US\" for encoding \"UTF8\" does not exist",
+   "sqlstate": "42704",
+   "statement": "CREATE TABLE ci (id",
+   "step": 0
+  },
   "column-generated-stored": "supported",
   "column-generated-virtual": "supported",
   "column-identity": "supported",
@@ -18,6 +38,7 @@
   "constraint-foreign-key": "supported",
   "constraint-not-valid": "supported",
   "constraint-primary-key-change": "supported",
+  "constraint-primary-key-change-not-null": "supported",
   "constraint-unique": "supported",
   "crdb-alter-primary-key": {
    "msg": "syntax error at or near \"PRIMARY\"",
@@ -34,7 +55,7 @@
   "crdb-backup-schedule": {
    "msg": "syntax error at or near \"SCHEDULE\"",
    "sqlstate": "42601",
-   "statement": "CREATE SCHEDULE cs36228130 FOR",
+   "statement": "CREATE SCHEDULE csb8d6e05d FOR",
    "step": 1
   },
   "crdb-changefeed": {
@@ -64,19 +85,19 @@
   "crdb-database-placement": {
    "msg": "syntax error at or near \"PRIMARY\"",
    "sqlstate": "42601",
-   "statement": "ALTER DATABASE cde_probe_36228130 SET",
+   "statement": "ALTER DATABASE cde_probe_b8d6e05d SET",
    "step": 0
   },
   "crdb-export": {
    "msg": "syntax error at or near \"EXPORT\"",
    "sqlstate": "42601",
-   "statement": "EXPORT INTO CSV 'nodelocal://1/cde_probe/e36228130'",
+   "statement": "EXPORT INTO CSV 'nodelocal://1/cde_probe/eb8d6e05d'",
    "step": 1
   },
   "crdb-external-connection": {
    "msg": "syntax error at or near \"EXTERNAL\"",
    "sqlstate": "42601",
-   "statement": "CREATE EXTERNAL CONNECTION ec36228130",
+   "statement": "CREATE EXTERNAL CONNECTION ecb8d6e05d",
    "step": 0
   },
   "crdb-index-hash-sharded": {
@@ -179,6 +200,12 @@
    "statement": "CREATE TABLE pl (k",
    "step": 0
   },
+  "crdb-table-temporary-opt-in": {
+   "msg": "unrecognized configuration parameter \"experimental_enable_temp_tables\"",
+   "sqlstate": "42704",
+   "statement": "SET experimental_enable_temp_tables = 'on'",
+   "step": 0
+  },
   "crdb-zone-config": {
    "msg": "syntax error at or near \"CONFIGURE\"",
    "sqlstate": "42601",
@@ -262,7 +289,93 @@
   "view": "supported",
   "view-check-option": "supported",
   "view-recursive": "supported",
-  "view-security-barrier": "supported"
+  "view-security-barrier": "supported",
+  "ysql-colocated-database": {
+   "msg": "option \"colocation\" not recognized",
+   "sqlstate": "42601",
+   "statement": "CREATE DATABASE cde_probe_b8d6e05d_colo WITH",
+   "step": 0
+  },
+  "ysql-hash-code": {
+   "msg": "function yb_hash_code(integer) does not exist",
+   "sqlstate": "42883",
+   "statement": "SELECT yb_hash_code(1)",
+   "step": 0
+  },
+  "ysql-index-hash": {
+   "msg": "operator class \"hash\" does not exist for access method \"btree\"",
+   "sqlstate": "42704",
+   "statement": "CREATE INDEX yih ON",
+   "step": 1
+  },
+  "ysql-index-nonconcurrently": {
+   "msg": "syntax error at or near \"yin\"",
+   "sqlstate": "42601",
+   "statement": "CREATE INDEX NONCONCURRENTLY yin",
+   "step": 1
+  },
+  "ysql-index-split": {
+   "msg": "syntax error at or near \"SPLIT\"",
+   "sqlstate": "42601",
+   "statement": "CREATE INDEX yis ON",
+   "step": 1
+  },
+  "ysql-primary-key-hash": {
+   "msg": "syntax error at or near \"HASH\"",
+   "sqlstate": "42601",
+   "statement": "CREATE TABLE yh (id",
+   "step": 0
+  },
+  "ysql-retained-primary-key-hash": {
+   "msg": "syntax error at or near \"HASH\"",
+   "sqlstate": "42601",
+   "step": "setup 0"
+  },
+  "ysql-retained-split-at": {
+   "msg": "syntax error at or near \"ASC\"",
+   "sqlstate": "42601",
+   "step": "setup 0"
+  },
+  "ysql-retained-split-into": {
+   "msg": "syntax error at or near \"SPLIT\"",
+   "sqlstate": "42601",
+   "step": "setup 0"
+  },
+  "ysql-retained-tablespace-placement": {
+   "msg": "syntax error at or near \"WITH\"",
+   "sqlstate": "42601",
+   "step": "setup 0"
+  },
+  "ysql-split-at": {
+   "msg": "syntax error at or near \"ASC\"",
+   "sqlstate": "42601",
+   "statement": "CREATE TABLE yr (id",
+   "step": 0
+  },
+  "ysql-split-into": {
+   "msg": "syntax error at or near \"SPLIT\"",
+   "sqlstate": "42601",
+   "statement": "CREATE TABLE ys (id",
+   "step": 0
+  },
+  "ysql-table-properties": {
+   "msg": "function yb_table_properties(regclass) does not exist",
+   "sqlstate": "42883",
+   "statement": "SELECT * FROM yb_table_properties('t'::regclass)",
+   "step": 1
+  },
+  "ysql-tablegroup": {
+   "msg": "syntax error at or near \"TABLEGROUP\"",
+   "sqlstate": "42601",
+   "statement": "CREATE TABLEGROUP ytg",
+   "step": 0
+  },
+  "ysql-tablespace-placement": {
+   "msg": "syntax error at or near \"WITH\"",
+   "sqlstate": "42601",
+   "statement": "CREATE TABLESPACE ytsb8d6e05d WITH",
+   "step": 0
+  }
  },
  "scratch_drop_error": null,
  "settings": {

@@ -328,6 +328,39 @@ PROBES = {
     'crdb-show-ranges': [TABLE, 'SHOW RANGES FROM TABLE t', 'DROP TABLE t'],
     'crdb-session-setting': ['SET sql_safe_updates = true',
                              'RESET sql_safe_updates'],
+    # YugabyteDB YSQL native surface (placement values are the demo node's).
+    'ysql-primary-key-hash': [
+        'CREATE TABLE yh (id INT, v INT, PRIMARY KEY (id HASH, v ASC))',
+        'DROP TABLE yh'],
+    'ysql-split-into': [
+        'CREATE TABLE ys (id INT PRIMARY KEY) SPLIT INTO 4 TABLETS',
+        'DROP TABLE ys'],
+    'ysql-split-at': [
+        'CREATE TABLE yr (id INT, PRIMARY KEY (id ASC)) '
+        'SPLIT AT VALUES ((10), (20))', 'DROP TABLE yr'],
+    'ysql-index-hash': [TABLE, 'CREATE INDEX yih ON t (v HASH)',
+                        'DROP INDEX yih', 'DROP TABLE t'],
+    'ysql-index-split': [TABLE, 'CREATE INDEX yis ON t (v ASC) '
+                         'SPLIT AT VALUES ((5))', 'DROP INDEX yis',
+                         'DROP TABLE t'],
+    'ysql-index-nonconcurrently': [
+        TABLE, 'CREATE INDEX NONCONCURRENTLY yin ON t (v)',
+        'DROP INDEX yin', 'DROP TABLE t'],
+    'ysql-tablespace-placement': [
+        "CREATE TABLESPACE yts{suffix} WITH (replica_placement="
+        "'{{\"num_replicas\":1,\"placement_blocks\":[{{\"cloud\":"
+        "\"cloud1\",\"region\":\"datacenter1\",\"zone\":\"rack1\","
+        "\"min_num_replicas\":1}}]}}')",
+        'CREATE TABLE ytt (id INT PRIMARY KEY) TABLESPACE yts{suffix}',
+        'DROP TABLE ytt', 'DROP TABLESPACE yts{suffix}'],
+    'ysql-colocated-database': [
+        'CREATE DATABASE {db}_colo WITH COLOCATION = true',
+        'DROP DATABASE {db}_colo'],
+    'ysql-tablegroup': ['CREATE TABLEGROUP ytg', 'DROP TABLEGROUP ytg'],
+    'ysql-hash-code': ['SELECT yb_hash_code(1)'],
+    'ysql-table-properties': [
+        TABLE, "SELECT * FROM yb_table_properties('t'::regclass)",
+        'DROP TABLE t'],
 }
 
 # kind: (setup statements, check query, any of these needles, cleanup)
@@ -445,6 +478,27 @@ RETENTION = {
          'PARTITION BY LIST (k) (PARTITION p1 VALUES IN (1))'],
         'SELECT create_statement FROM [SHOW CREATE TABLE rpl]',
         ['PARTITION p1'], ['DROP TABLE rpl']),
+    'ysql-retained-primary-key-hash': (
+        ['CREATE TABLE ykh (id INT, v INT, PRIMARY KEY (id HASH, v ASC))'],
+        "SELECT indexdef FROM pg_indexes WHERE tablename = 'ykh'",
+        ['id HASH'], ['DROP TABLE ykh']),
+    'ysql-retained-split-into': (
+        ['CREATE TABLE ysi (id INT PRIMARY KEY) SPLIT INTO 4 TABLETS'],
+        "SELECT num_tablets FROM yb_table_properties('ysi'::regclass)",
+        ['4'], ['DROP TABLE ysi']),
+    'ysql-retained-split-at': (
+        ['CREATE TABLE ysa (id INT, PRIMARY KEY (id ASC)) '
+         'SPLIT AT VALUES ((10), (20))'],
+        "SELECT num_tablets FROM yb_table_properties('ysa'::regclass)",
+        ['3'], ['DROP TABLE ysa']),
+    'ysql-retained-tablespace-placement': (
+        ["CREATE TABLESPACE ytr{suffix} WITH (replica_placement="
+         "'{{\"num_replicas\":1,\"placement_blocks\":[{{\"cloud\":"
+         "\"cloud1\",\"region\":\"datacenter1\",\"zone\":\"rack1\","
+         "\"min_num_replicas\":1}}]}}')"],
+        "SELECT array_to_string(spcoptions, ',') FROM pg_tablespace "
+        "WHERE spcname = 'ytr{suffix}'",
+        ['placement_blocks'], ['DROP TABLESPACE ytr{suffix}']),
 }
 
 # Notices that mean a statement was accepted but not carried out as asked.
@@ -460,6 +514,13 @@ SETTINGS = {
         'rangefeeds': 'SHOW CLUSTER SETTING kv.rangefeed.enabled',
         'regions': 'SELECT count(*) FROM [SHOW REGIONS FROM CLUSTER]',
         'locality': 'SHOW LOCALITY',
+        'user': 'SELECT current_user',
+    },
+    'yugabytedb': {
+        'superuser': "SELECT current_setting('is_superuser')",
+        'placement': "SELECT string_agg(cloud || '.' || region || '.' || "
+                     "zone, ',') FROM yb_servers()",
+        'servers': 'SELECT count(*) FROM yb_servers()',
         'user': 'SELECT current_user',
     },
     'postgresql': {
@@ -577,7 +638,7 @@ def probe_retention(psycopg, options, database, setup, check, needles,
                 return {'step': f'setup {index}', **error}
         failure = {'step': 'check', 'msg': 'nothing to read back'}
         try:
-            text = session.value(check)
+            text = session.value(check.format(**values))
         except psycopg.Error as error:
             text = None
             failure['msg'] = str(error).strip()[:200]
@@ -608,7 +669,8 @@ def main():
     database = 'cde_probe_' + suffix
     admin = Session(psycopg, options, options.maintenance_database)
     version = admin.value('SELECT version()')
-    family = 'cockroachdb' if 'CockroachDB' in version else 'postgresql'
+    family = ('cockroachdb' if 'CockroachDB' in version else
+              'yugabytedb' if '-YB-' in version else 'postgresql')
     settings = {}
     for key, query in SETTINGS[family].items():
         try:

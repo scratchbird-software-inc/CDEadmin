@@ -43,6 +43,12 @@ Read the results with these limits:
 -  The demo turns ``kv.rangefeed.enabled`` on at each start, so changefeeds
    run (owner direction, 2026-10-30). The first probe run, with it off,
    refused them; the committed result is the second run.
+-  YugabyteDB YSQL 2025.2.2.2 (PostgreSQL 15.12 based) joined later the
+   same day, with ``ysql-`` probes for its own syntax. Its demo is one node
+   placed at ``cloud1.datacenter1.rack1``, so tablespace placement can be
+   probed there (the probes use that placement). The PostgreSQL and
+   CockroachDB columns were re-run with the extended probe; their earlier
+   rows did not change.
 
 Regenerate a column with the probe (password from
 ``CDEADMIN_PROBE_PASSWORD``; for CockroachDB use ``--maintenance-database
@@ -60,136 +66,151 @@ Matrix
 
 .. parity-matrix-start
 
-======================================  ===============  ==================
-Probe                                   postgresql-18.3  cockroachdb-26.1.3
-======================================  ===============  ==================
-aggregate                               yes              no (0A000)
-collation                               yes              no (42601)
-column-alter-type                       yes              yes
-column-collate                          yes              no (42601)
-column-generated-stored                 yes              yes
-column-generated-virtual                yes              yes
-column-identity                         yes              yes
-column-rename-drop                      yes              yes
-comment                                 yes              yes
-constraint-check                        yes              yes
-constraint-deferrable                   yes              no (42601)
-constraint-exclusion                    yes              no (0A000)
-constraint-foreign-key                  yes              yes
-constraint-not-valid                    yes              yes
-constraint-primary-key-change           yes              no (42P15)
-constraint-unique                       yes              yes
-crdb-alter-primary-key                  no (42601)       yes
-crdb-backup                             no (42601)       yes
-crdb-backup-schedule                    no (42601)       yes
-crdb-changefeed                         no (42601)       yes
-crdb-column-families                    no (42704)       yes
-crdb-column-not-visible                 no (42601)       yes
-crdb-column-on-update                   no (42601)       yes
-crdb-database-placement                 no (42601)       no (42602)
-crdb-export                             no (42601)       yes
-crdb-external-connection                no (42601)       yes
-crdb-index-hash-sharded                 no (42601)       yes
-crdb-index-inverted                     no (42601)       yes
-crdb-index-storing                      no (42601)       yes
-crdb-index-visibility                   no (42601)       yes
-crdb-retained-families                  no (42704)       yes
-crdb-retained-hash-sharded              no (42601)       yes
-crdb-retained-not-visible-column        no (42601)       yes
-crdb-retained-not-visible-index         no (42601)       yes
-crdb-retained-on-update                 no (42601)       yes
-crdb-retained-partition                 no (42601)       yes
-crdb-retained-row-ttl                   no (22023)       yes
-crdb-retained-storing                   no (42601)       yes
-crdb-row-ttl                            no (22023)       yes
-crdb-session-setting                    no (42704)       yes
-crdb-show-ranges                        no (42601)       yes
-crdb-split-scatter                      no (42601)       yes
-crdb-statistics                         no (42P17)       yes
-crdb-table-partition-list               no (42601)       yes
-crdb-zone-config                        no (42601)       yes
-database                                yes              yes
-default-privileges                      yes              yes
-domain                                  yes              no (0A000)
-event-trigger                           yes              no (42704)
-extension                               yes              yes
-foreign-data                            yes              no (0A000)
-function-plpgsql                        yes              yes
-function-set-returning                  yes              yes
-function-sql                            yes              yes
-grant-column                            yes              no (42601)
-grant-table                             yes              yes
-index                                   yes              yes
-index-brin                              yes              no (0A000)
-index-concurrently                      yes              yes
-index-desc                              yes              yes
-index-expression                        yes              yes
-index-gin                               yes              yes
-index-gist                              yes              no (42704)
-index-hash                              yes              no (0A000)
-index-include                           yes              yes
-index-nulls-not-distinct                yes              no (42601)
-index-partial                           yes              yes
-index-rename                            yes              yes
-index-unique                            yes              yes
-large-object                            yes              no (42883)
-listen-notify                           yes              no (42601)
-maintenance-analyze                     yes              yes
-maintenance-cluster                     yes              no (42601)
-maintenance-reindex                     yes              no (42601)
-maintenance-vacuum                      yes              no (42601)
-materialized-view                       yes              yes
-materialized-view-concurrently          yes              yes
-operator                                yes              no (0A000)
-owner-change                            yes              yes
-procedure                               yes              yes
-publication                             yes              no (0A000)
-retained-check                          yes              yes
-retained-deferrable                     yes              no (0A000)
-retained-fk-actions                     yes              yes
-retained-generated-virtual              yes              yes
-retained-identity                       yes              yes
-retained-include                        yes              yes
-retained-index-method-brin              yes              no (0A000)
-retained-index-method-hash              yes              no (0A000)
-retained-nulls-not-distinct             yes              no (42601)
-retained-partial-index                  yes              yes
-retained-security-barrier               yes              no (42601)
-retained-sequence-options               yes              yes
-retained-table-comment                  yes              yes
-retained-unlogged                       yes              not kept
-retained-view-check-option              yes              no (42601)
-role                                    yes              yes
-role-membership                         yes              yes
-role-password                           yes              no (28P01)
-row-level-security                      yes              yes
-rule                                    yes              no (0A000)
-schema                                  yes              yes
-sequence                                yes              yes
-sequence-owned-by                       yes              yes
-statistics-extended                     yes              no (42601)
-table                                   yes              yes
-table-as                                yes              yes
-table-inherits                          yes              no (0A000)
-table-like                              yes              yes
-table-partitioned                       yes              no (42601)
-table-temporary                         yes              no (XCEXF)
-table-unlogged                          yes              notice
-text-search                             yes              no (0A000)
-trigger                                 yes              yes
-trigger-statement                       yes              no (0A000)
-truncate                                yes              yes
-type-composite                          yes              yes
-type-enum                               yes              yes
-type-range                              yes              no (0A000)
-view                                    yes              yes
-view-check-option                       yes              no (42601)
-view-recursive                          yes              no (0A000)
-view-security-barrier                   yes              no (42601)
-column-collate-icu                      not run          yes
-constraint-primary-key-change-not-null  not run          yes
-crdb-table-temporary-opt-in             not run          yes
-======================================  ===============  ==================
+======================================  ===============  ==================  =====================
+Probe                                   postgresql-18.3  cockroachdb-26.1.3  yugabytedb-2025.2.2.2
+======================================  ===============  ==================  =====================
+aggregate                               yes              no (0A000)          yes
+collation                               yes              no (42601)          yes
+column-alter-type                       yes              yes                 yes
+column-collate                          yes              no (42601)          yes
+column-collate-icu                      no (42704)       yes                 no (42704)
+column-generated-stored                 yes              yes                 yes
+column-generated-virtual                yes              yes                 no (42601)
+column-identity                         yes              yes                 yes
+column-rename-drop                      yes              yes                 yes
+comment                                 yes              yes                 yes
+constraint-check                        yes              yes                 yes
+constraint-deferrable                   yes              no (42601)          yes
+constraint-exclusion                    yes              no (0A000)          no (0A000)
+constraint-foreign-key                  yes              yes                 yes
+constraint-not-valid                    yes              yes                 yes
+constraint-primary-key-change           yes              no (42P15)          yes
+constraint-primary-key-change-not-null  yes              yes                 yes
+constraint-unique                       yes              yes                 yes
+crdb-alter-primary-key                  no (42601)       yes                 no (42601)
+crdb-backup                             no (42601)       yes                 no (42601)
+crdb-backup-schedule                    no (42601)       yes                 no (42601)
+crdb-changefeed                         no (42601)       yes                 no (42601)
+crdb-column-families                    no (42704)       yes                 no (42704)
+crdb-column-not-visible                 no (42601)       yes                 no (42601)
+crdb-column-on-update                   no (42601)       yes                 no (42601)
+crdb-database-placement                 no (42601)       no (42602)          no (42601)
+crdb-export                             no (42601)       yes                 no (42601)
+crdb-external-connection                no (42601)       yes                 no (42601)
+crdb-index-hash-sharded                 no (42601)       yes                 no (42601)
+crdb-index-inverted                     no (42601)       yes                 no (42601)
+crdb-index-storing                      no (42601)       yes                 no (42601)
+crdb-index-visibility                   no (42601)       yes                 no (42601)
+crdb-retained-families                  no (42704)       yes                 no (42704)
+crdb-retained-hash-sharded              no (42601)       yes                 no (42601)
+crdb-retained-not-visible-column        no (42601)       yes                 no (42601)
+crdb-retained-not-visible-index         no (42601)       yes                 no (42601)
+crdb-retained-on-update                 no (42601)       yes                 no (42601)
+crdb-retained-partition                 no (42601)       yes                 no (42601)
+crdb-retained-row-ttl                   no (22023)       yes                 no (22023)
+crdb-retained-storing                   no (42601)       yes                 no (42601)
+crdb-row-ttl                            no (22023)       yes                 no (22023)
+crdb-session-setting                    no (42704)       yes                 no (42704)
+crdb-show-ranges                        no (42601)       yes                 no (42601)
+crdb-split-scatter                      no (42601)       yes                 no (42601)
+crdb-statistics                         no (42P17)       yes                 no (42P17)
+crdb-table-partition-list               no (42601)       yes                 no (42601)
+crdb-table-temporary-opt-in             no (42704)       yes                 no (42704)
+crdb-zone-config                        no (42601)       yes                 no (42601)
+database                                yes              yes                 yes
+default-privileges                      yes              yes                 yes
+domain                                  yes              no (0A000)          yes
+event-trigger                           yes              no (42704)          yes
+extension                               yes              yes                 yes
+foreign-data                            yes              no (0A000)          yes
+function-plpgsql                        yes              yes                 yes
+function-set-returning                  yes              yes                 yes
+function-sql                            yes              yes                 yes
+grant-column                            yes              no (42601)          yes
+grant-table                             yes              yes                 yes
+index                                   yes              yes                 yes
+index-brin                              yes              no (0A000)          no (XX000)
+index-concurrently                      yes              yes                 no (0A000)
+index-desc                              yes              yes                 yes
+index-expression                        yes              yes                 yes
+index-gin                               yes              yes                 yes
+index-gist                              yes              no (42704)          no (XX000)
+index-hash                              yes              no (0A000)          yes
+index-include                           yes              yes                 yes
+index-nulls-not-distinct                yes              no (42601)          yes
+index-partial                           yes              yes                 yes
+index-rename                            yes              yes                 yes
+index-unique                            yes              yes                 yes
+large-object                            yes              no (42883)          no (XX000)
+listen-notify                           yes              no (42601)          notice
+maintenance-analyze                     yes              yes                 yes
+maintenance-cluster                     yes              no (42601)          no (0A000)
+maintenance-reindex                     yes              no (42601)          no (0A000)
+maintenance-vacuum                      yes              no (42601)          notice
+materialized-view                       yes              yes                 yes
+materialized-view-concurrently          yes              yes                 yes
+operator                                yes              no (0A000)          yes
+owner-change                            yes              yes                 yes
+procedure                               yes              yes                 yes
+publication                             yes              no (0A000)          yes
+retained-check                          yes              yes                 yes
+retained-deferrable                     yes              no (0A000)          yes
+retained-fk-actions                     yes              yes                 yes
+retained-generated-virtual              yes              yes                 no (42601)
+retained-identity                       yes              yes                 yes
+retained-include                        yes              yes                 yes
+retained-index-method-brin              yes              no (0A000)          no (XX000)
+retained-index-method-hash              yes              no (0A000)          not kept
+retained-nulls-not-distinct             yes              no (42601)          yes
+retained-partial-index                  yes              yes                 yes
+retained-security-barrier               yes              no (42601)          yes
+retained-sequence-options               yes              yes                 not kept
+retained-table-comment                  yes              yes                 yes
+retained-unlogged                       yes              not kept            not kept
+retained-view-check-option              yes              no (42601)          no (0A000)
+role                                    yes              yes                 yes
+role-membership                         yes              yes                 yes
+role-password                           yes              no (28P01)          yes
+row-level-security                      yes              yes                 yes
+rule                                    yes              no (0A000)          yes
+schema                                  yes              yes                 yes
+sequence                                yes              yes                 yes
+sequence-owned-by                       yes              yes                 yes
+statistics-extended                     yes              no (42601)          yes
+table                                   yes              yes                 yes
+table-as                                yes              yes                 yes
+table-inherits                          yes              no (0A000)          yes
+table-like                              yes              yes                 yes
+table-partitioned                       yes              no (42601)          yes
+table-temporary                         yes              no (XCEXF)          yes
+table-unlogged                          yes              notice              notice
+text-search                             yes              no (0A000)          yes
+trigger                                 yes              yes                 yes
+trigger-statement                       yes              no (0A000)          yes
+truncate                                yes              yes                 yes
+type-composite                          yes              yes                 yes
+type-enum                               yes              yes                 yes
+type-range                              yes              no (0A000)          yes
+view                                    yes              yes                 yes
+view-check-option                       yes              no (42601)          no (0A000)
+view-recursive                          yes              no (0A000)          yes
+view-security-barrier                   yes              no (42601)          yes
+ysql-colocated-database                 no (42601)       no (42601)          yes
+ysql-hash-code                          no (42883)       no (42883)          yes
+ysql-index-hash                         no (42704)       no (42804)          yes
+ysql-index-nonconcurrently              no (42601)       no (42601)          yes
+ysql-index-split                        no (42601)       no (42601)          yes
+ysql-primary-key-hash                   no (42601)       no (42804)          yes
+ysql-retained-primary-key-hash          no (42601)       no (42804)          yes
+ysql-retained-split-at                  no (42601)       no (42601)          yes
+ysql-retained-split-into                no (42601)       no (42601)          yes
+ysql-retained-tablespace-placement      no (42601)       no (0A000)          yes
+ysql-split-at                           no (42601)       no (42601)          yes
+ysql-split-into                         no (42601)       no (42601)          yes
+ysql-table-properties                   no (42883)       no (42883)          yes
+ysql-tablegroup                         no (42601)       no (42601)          yes
+ysql-tablespace-placement               no (42601)       no (0A000)          yes
+======================================  ===============  ==================  =====================
 
 .. parity-matrix-end
 
@@ -258,6 +279,42 @@ schedules, ``EXPORT`` (with a deprecation notice), ``SHOW RANGES`` and
 session settings. Row-level security (``ENABLE ROW LEVEL SECURITY``,
 ``CREATE``/``ALTER``/``DROP POLICY``) runs, as do PL/pgSQL functions,
 procedures and enum and composite types.
+
+YugabyteDB YSQL 2025.2.2.2
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+92 of the 141 probes run (the shared PostgreSQL surface is close to
+PostgreSQL 15's). Shared surface it does not have (refused, so not
+offered):
+
+-  Index methods ``brin`` and ``gist``; ``EXCLUDE`` constraints; ``VIEW
+   WITH CHECK OPTION``; virtual generated columns (PostgreSQL 15 syntax has
+   only ``STORED``).
+-  ``CLUSTER``, ``REINDEX``, ``DROP INDEX CONCURRENTLY``, ``REFRESH
+   MATERIALIZED VIEW CONCURRENTLY``, large objects.
+
+Accepted but not carried out (the notice says so):
+
+-  ``UNLOGGED`` ("currently ignored"); ``VACUUM`` (a no-op: garbage
+   collection is automatic); ``LISTEN``/``NOTIFY``/``UNLISTEN`` ("not
+   supported yet and will be ignored").
+-  ``USING hash`` becomes YugabyteDB's ``lsm (v HASH)`` ("substituting
+   access method"); a sequence's ``CACHE`` is overridden by the server
+   flag; table inheritance is a beta feature; tablegroups are beta and
+   deprecated.
+-  ``ALTER COLUMN TYPE`` and primary-key changes rewrite the table, with a
+   notice that the rewrite "may lead to inconsistencies".
+
+YSQL-native surface that runs: ``HASH`` and ``ASC``/``DESC`` key columns in
+primary keys and indexes, ``SPLIT INTO n TABLETS`` and ``SPLIT AT VALUES``
+(read back from ``yb_table_properties``), ``CREATE INDEX NONCONCURRENTLY``,
+tablespaces with ``replica_placement`` (read back from ``pg_tablespace``),
+colocated databases, ``yb_hash_code``. Partitioning, triggers (statement
+level too), publications, row-level security and a large extension set
+(``pg_trgm``, ``hstore``, ``vector``, ``pgcrypto``, ``pg_partman`` and
+others) run as on PostgreSQL. Multi-node behaviour (tablet placement
+across zones, leader preferences, xCluster) is untested on the one-node
+demo.
 
 Untested on CockroachDB
 ~~~~~~~~~~~~~~~~~~~~~~~
