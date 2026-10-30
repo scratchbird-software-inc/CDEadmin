@@ -558,3 +558,47 @@ def test_functions_and_procedures(live):
         run(client, route, kind, 'drop', {'confirmation': name},
             target=find(client, route, kind, name)[0])
     assert not query("SELECT 1 FROM pg_proc WHERE proname LIKE 'rt\\_%'")
+
+
+def test_database_create_reopen_alter_drop(live):
+    route, client = live
+    name = f'rt_db_{UNIQUE}'
+    owner = f'rt_owner_{UNIQUE}'
+    with connect() as connection:
+        connection.execute(f'CREATE ROLE {owner}')
+    form = resolved_form('cockroachdb', 'database')
+    try:
+        run(client, route, 'database', 'create', backend_draft(form, {
+            'name': name, 'owner': owner, 'comment': 'rt',
+            'settings': [{'name': 'timezone', 'value': 'UTC'},
+                         {'name': 'statement_timeout', 'value': '10s'}]}))
+        target, baseline = record(client, route, 'database', name,
+                                  'database')
+        assert (baseline['owner'], baseline['comment'],
+                baseline['encoding'],
+                sorted((row['name'], row['value'])
+                       for row in baseline['settings'])) == (
+            owner, 'rt', 'UTF8',
+            [('statement_timeout', '10s'), ('timezone', 'UTC')])
+        assert backend_draft(form, baseline, mode='alter',
+                             baseline=baseline) == {}
+        alter = backend_draft(form, {
+            **baseline, 'name': f'{name}_2', 'owner': 'root', 'comment': '',
+            'settings': [{'name': 'timezone', 'value': 'America/Toronto'}]},
+            mode='alter', baseline=baseline)
+        run(client, route, 'database', 'alter', alter, target=target)
+        target, after = record(client, route, 'database', f'{name}_2',
+                               'database')
+        assert (after['owner'], after['comment'],
+                [(row['name'], row['value']) for row in after['settings']]) \
+            == ('root', None, [('timezone', 'America/Toronto')])
+        run(client, route, 'database', 'drop',
+            {'cascade': True, 'confirmation': f'{name}_2'}, target=target)
+        assert not query(f"SELECT 1 FROM pg_database WHERE datname LIKE "
+                         f"'{name}%'")
+    finally:
+        with connect() as connection:
+            for database in (name, f'{name}_2'):
+                connection.execute(
+                    f'DROP DATABASE IF EXISTS {database} CASCADE')
+            connection.execute(f'DROP ROLE IF EXISTS {owner}')

@@ -5,14 +5,24 @@
   "resource_kinds": [
     "database"
   ],
-  "status": "draft",
-  "engine_tab_title": "cockroachdb",
+  "status": "complete",
+  "engine_tab_title": "CockroachDB",
   "omitted_tabs": [],
   "gaps": [
     {
-      "concept": "database.alter.properties",
-      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
-      "tracking": "ui-unification"
+      "concept": "CONNECTION LIMIT, TEMPLATE, LC_COLLATE, LC_CTYPE",
+      "reason": "Refused by CockroachDB 26.1.3 (live)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Regions, survival goal, placement",
+      "reason": "Operations of their own; need a multi-region cluster (untested, see the parity page)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Per-role defaults in a database (ALTER ROLE ... IN DATABASE SET)",
+      "reason": "Run on 26.1.3 but have no editor yet",
+      "tracking": "postgresql-wire-parity"
     }
   ],
   "fields": [
@@ -21,18 +31,78 @@
       "label": "Name",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "help": "Renaming runs ALTER DATABASE ... RENAME TO."
     },
     {
-      "field_id": "properties",
-      "label": "Changed properties",
+      "field_id": "owner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "role",
+      "reference_value": "display_name"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON DATABASE"
+    },
+    {
+      "field_id": "encoding",
+      "label": "Encoding",
+      "tab": "Options",
+      "control": "select",
+      "default": "UTF8",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "UTF8",
+          "label": "UTF8"
+        }
+      ],
+      "help": "CockroachDB databases are UTF8."
+    },
+    {
+      "field_id": "settings",
+      "label": "Session defaults",
       "tab": "Engine",
-      "control": "keyvalue",
-      "required": true,
-      "modes": [
-        "alter"
+      "control": "grid",
+      "help": "ALTER DATABASE ... SET: defaults for every session in this database. Removing a row runs RESET.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Variable",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
       ]
+    },
+    {
+      "field_id": "primary_region",
+      "label": "Primary region",
+      "tab": "Engine",
+      "group": "Regions",
+      "control": "text",
+      "readonly": true,
+      "help": "Set with the Set primary region operation (needs a multi-region cluster)."
+    },
+    {
+      "field_id": "survival_goal",
+      "label": "Survival goal",
+      "tab": "Engine",
+      "group": "Regions",
+      "control": "text",
+      "readonly": true,
+      "help": "Set with the Set survival goal operation."
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
+  "notes": "Hand-finished from providers/cockroachdb/databases.py. The record reads pg_database (owner, encoding, comment), SHOW DATABASES (regions) and SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL (session defaults). Round trip verified live on CockroachDB 26.1.3 by tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py (2026-10-30)."
 }

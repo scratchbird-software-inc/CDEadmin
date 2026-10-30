@@ -23,8 +23,8 @@ from ..distributed_sql import (
     sql_administration,
 )
 from . import (
-    indexes as index_sql, objects, routines, sequences, tables, types,
-    views,
+    databases, indexes as index_sql, objects, routines, sequences, tables,
+    types, views,
 )
 from .driver import CockroachDBClient
 from ..distributed_control_plane import DistributedSQLControlPlane
@@ -1291,7 +1291,7 @@ def _post_validate_control_plane(client, request):
 # Kinds whose create and alter are CockroachDB's own modules.
 _EDITED_KINDS = frozenset({'table', 'index', 'type', 'view',
                            'materialized-view', 'sequence', 'function',
-                           'procedure'})
+                           'procedure', 'database'})
 
 
 class CockroachDBAdministration(DistributedSQLControlPlane):
@@ -1309,6 +1309,11 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if kind == 'database':
+            if operation == 'create':
+                return {'statements': databases.create(self, draft)}
+            return {'statements': databases.alter(
+                self, draft, request.get('target_resource'))}
         if kind in {'function', 'procedure'}:
             target = request.get('target_resource')
             if operation == 'drop':
@@ -1375,6 +1380,8 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
         return super()._compile(request)
 
     def _form(self, kind, operation):
+        if kind == 'database' and operation in {'create', 'alter'}:
+            return databases.form(self._field, operation)
         if kind in {'function', 'procedure'} and operation in {
                 'create', 'alter'}:
             return routines.form(self._field, kind, operation)
@@ -1766,6 +1773,28 @@ def _annotate_catalog(connection, values):
             for row in optional_rows(
                 cursor, 'SELECT schemaname, matviewname, definition '
                 'FROM pg_catalog.pg_matviews')})
+        database_facts = {
+            str(row[0]): {
+                'owner': str(row[1]), 'encoding': str(row[2]),
+                'comment': None if row[3] is None else str(row[3])}
+            for row in optional_rows(
+                cursor, 'SELECT datname, pg_get_userbyid(datdba), '
+                'pg_encoding_to_char(encoding), '
+                "shobj_description(oid, 'pg_database') "
+                'FROM pg_catalog.pg_database')}
+        for name, primary, regions, survival in optional_rows(
+                cursor, 'SELECT database_name, primary_region, regions, '
+                'survival_goal FROM [SHOW DATABASES]'):
+            database_facts.setdefault(str(name), {}).update(
+                primary_region=primary, regions=list(regions or []),
+                survival_goal=survival)
+        for variable, value, database in optional_rows(
+                cursor, 'SELECT session_variables, default_values, database '
+                'FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL]'):
+            if database:
+                database_facts.setdefault(str(database), {}).setdefault(
+                    'settings', []).append(
+                        {'name': str(variable), 'value': str(value)})
         view_columns = {}
         for schema, table, column in optional_rows(
                 cursor, 'SELECT c.table_schema, c.table_name, c.column_name '
@@ -1912,6 +1941,14 @@ def _annotate_catalog(connection, values):
             held.setdefault(tuple(item['display_path'][:2]), []).append(
                 {'name': item['display_name'], **row})
     for item in kept:
+        if item['resource_kind'] == 'database':
+            native = item.get('native') or {}
+            native.update({'settings': [], **database_facts.get(
+                str(item['display_name']), {})})
+            if item['display_name'] == 'system':
+                # CockroachDB's own cluster metadata.
+                native['system_object'] = True
+            item['native'] = native
         if item['resource_kind'] == 'sequence':
             facts = sequence_facts.get(tuple(map(str, item['display_path'])))
             item.setdefault('native', {}).update(

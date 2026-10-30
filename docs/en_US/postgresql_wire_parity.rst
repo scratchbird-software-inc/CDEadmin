@@ -401,6 +401,15 @@ Checked live on 26.1.3 for those forms (not yet in the probe):
       built-in function descriptions: an uncommented table read back a
       function's help text as its comment. Fixed 2026-10-30 (table and
       index comments now name ``'pg_class'``); a live check covers it.
+-  Databases: ``CREATE DATABASE`` with ``ENCODING 'UTF8'`` and
+   ``OWNER``, ``COMMENT ON DATABASE``, ``ALTER DATABASE ... OWNER TO``,
+   ``RENAME TO``, ``SET``/``RESET`` run (session defaults read back from
+   ``SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL``). Refused:
+   ``CONNECTION LIMIT``, ``TEMPLATE``, ``LC_COLLATE``, ``LC_CTYPE``;
+   ``ALTER DATABASE ... PLACEMENT`` needs the session setting
+   ``enable_multiregion_placement_policy``. The catalog had listed
+   CockroachDB's ``system`` database as a user database; it is now flagged
+   as a system object.
 -  Routines: SQL and PL/pgSQL; ``IN``/``OUT``/``INOUT`` parameters with
    defaults; ``RETURNS [SETOF]`` (``RETURNS TABLE`` renders as ``OUT``
    parameters and ``SETOF RECORD``); volatility, ``STRICT``,
@@ -498,6 +507,8 @@ comment) and diffs each changed constraint grid against the table record.
 Key membership and family stay fixed on existing columns.
 The sequence and routine forms are ``complete`` too (``sequences.py``,
 ``routines.py``; the provider admits function and procedure alter).
+The database form is ``complete`` the same day (``databases.py``), which
+leaves no CockroachDB family form in draft.
 The view (with materialized views; alter is admitted for them, which
 ``portfolio_catalog.json`` had excluded), index and type forms are
 ``complete`` the same day
