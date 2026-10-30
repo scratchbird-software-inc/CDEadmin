@@ -434,6 +434,18 @@ Plan
    legacy dialog. The shared ``OperationDialog`` now sends values in the
    provider's own shapes (string grids as plain lists); it is not yet
    mounted by any host.
+   Also 2026-10-30, live: tablet backup and restore ran (a ``lookup_keyspace``
+   replica backed up, restored from that named backup, back to serving as a
+   replica; the replica's log shows the restore used the requested
+   timestamp), and the backup deleted. Online DDL submission is exposed on
+   table alter (``ddl_strategy`` direct, vitess or mysql, with postponed
+   launch and cut-over); a migration was submitted with both postponed,
+   launched, completed, and the column checked on every shard. Both
+   ``vitess`` and ``mysql`` strategies were probed and return a migration
+   id. Remaining: ApplyVSchema is not exposed; the catalog keeps one record
+   per migration although ``SHOW VITESS_MIGRATIONS`` has a row per shard, so
+   a migration's status is one shard's; the backup timestamp on restore is
+   text, not a backup picker.
 #. For each engine, run the forms through the draft and review tools in
    ``ui_descriptors/README.md`` to make a descriptor folder. Reuse MySQL's
    field ids where the backend field is the same, and filter by this matrix.

@@ -354,6 +354,73 @@
         "field": "auto_increment_column",
         "truthy": true
       }
+    },
+    {
+      "field_id": "ddl_strategy",
+      "label": "DDL strategy",
+      "tab": "Engine",
+      "control": "select",
+      "required": false,
+      "default": "direct",
+      "modes": [
+        "alter"
+      ],
+      "group": "Online DDL",
+      "options": [
+        {
+          "value": "direct",
+          "label": "Direct (ALTER now)"
+        },
+        {
+          "value": "vitess",
+          "label": "Vitess online migration"
+        },
+        {
+          "value": "mysql",
+          "label": "MySQL, scheduled by Vitess"
+        }
+      ],
+      "help": "An online strategy submits the change as a migration per shard; follow it under Online DDL, where it can be launched, completed or cancelled."
+    },
+    {
+      "field_id": "postpone_launch",
+      "label": "Postpone launch",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ],
+      "group": "Online DDL",
+      "visible_when": {
+        "field": "ddl_strategy",
+        "in": [
+          "vitess",
+          "mysql"
+        ]
+      },
+      "help": "Queue the migration until Launch."
+    },
+    {
+      "field_id": "postpone_completion",
+      "label": "Postpone cut-over",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ],
+      "group": "Online DDL",
+      "visible_when": {
+        "field": "ddl_strategy",
+        "in": [
+          "vitess",
+          "mysql"
+        ]
+      },
+      "help": "Copy and keep in sync, then wait for Complete."
     }
   ],
   "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: column grid record keys; constraints grid split into Primary key / Unique / Foreign keys / Check; parent picker (database).",

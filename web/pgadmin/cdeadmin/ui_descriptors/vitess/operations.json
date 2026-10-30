@@ -140,7 +140,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": []
     },
@@ -152,7 +152,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": []
     },
@@ -164,7 +164,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": []
     },
@@ -228,11 +228,12 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Live round trip: the backup appears in the catalog under its keyspace and shard, and the provider post-state check confirms it."
     },
     {
       "operation_id": "restore",
@@ -242,18 +243,20 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
           "field_id": "backup_timestamp",
           "label": "Backup timestamp",
           "control": "text",
-          "required": false
+          "required": false,
+          "help": "The leading date and time of a backup name, e.g. 2026-10-30.125734; empty restores the latest."
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_vitess.py, 23.0.3): a replica restored from a named backup and returned to serving."
     },
     {
       "operation_id": "rebuild",

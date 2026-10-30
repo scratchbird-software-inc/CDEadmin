@@ -3456,6 +3456,33 @@ class DistributedProviderTests(unittest.TestCase):
             )],
         )
 
+    def test_vitess_table_alter_can_submit_an_online_migration(self):
+        def plan(**options):
+            return VITESS_ADMIN.plan({
+                'resource_kind': 'table', 'operation_id': 'alter',
+                '_provider_route': {'database': 'inventory'},
+                'target_resource': {
+                    'resource_kind': 'table', 'display_name': 'widgets',
+                    'display_path': ['inventory', 'widgets']},
+                'draft': {'add_columns': [{'name': 'w', 'type': 'INT'}],
+                          **options},
+            })['provider_payload']['compiled']['statements']
+
+        direct = plan(ddl_strategy='direct')
+        self.assertEqual(plan(), direct)
+        self.assertNotIn('ddl_strategy', direct[0]['source'])
+        # A session setting: set, used and reset on the same connection.
+        online = plan(ddl_strategy='vitess', postpone_completion=True)
+        self.assertEqual(('SET @@ddl_strategy = %s',
+                          ('vitess --postpone-completion',)),
+                         (online[0]['source'], tuple(online[0]['parameters'])))
+        self.assertEqual(direct, online[1:-1])
+        self.assertEqual("SET @@ddl_strategy = 'direct'", online[-1]['source'])
+        with self.assertRaisesRegex(RelationalClientError, 'online DDL'):
+            plan(postpone_launch=True)
+        with self.assertRaisesRegex(RelationalClientError, 'one of'):
+            plan(ddl_strategy='gh-ost')
+
     def test_vitess_table_attaches_a_sequence_after_its_vindex(self):
         draft = {
             'name': 'widgets', 'parent': 'inventory',

@@ -92,6 +92,10 @@ def _version(row):
     return match.group(1)
 
 
+# Online migrations through vtgate (live, 23.0.3): 'vitess' copies and
+# keeps the table in sync per shard; direct is a plain ALTER.
+_DDL_STRATEGIES = frozenset({'direct', 'vitess', 'mysql'})
+
 # Live, 23.0.3. A sequence's CREATE TABLE succeeds before ADD SEQUENCE fails,
 # so without the refusal it leaves a backing table on every shard.
 _UNSHARDED_ONLY = {
@@ -232,6 +236,23 @@ class VitessAdministration(RelationalAdministration):
                     'keyspace.',
                 ),
             ))
+        elif kind == 'table' and operation == 'alter':
+            value['fields'].extend((
+                self._field(
+                    'ddl_strategy', 'DDL strategy', 'text', False,
+                    'direct runs the ALTER now; vitess submits an online '
+                    'migration that vtgate tracks per shard.', 'direct',
+                ),
+                self._field(
+                    'postpone_completion', 'Postpone cut-over', 'boolean',
+                    False, 'Copy and keep in sync, then wait for Complete.',
+                    False,
+                ),
+                self._field(
+                    'postpone_launch', 'Postpone launch', 'boolean', False,
+                    'Queue the migration until Launch.', False,
+                ),
+            ))
         elif kind == 'table' and operation == 'drop':
             value['fields'].insert(0, self._field(
                 'drop_vschema_registration', 'Remove VSchema registration',
@@ -261,6 +282,9 @@ class VitessAdministration(RelationalAdministration):
         return value
 
     def _compile(self, request):
+        if (request['resource_kind'] == 'table' and
+                request['operation_id'] == 'alter'):
+            return self._compile_table_alter(request)
         if (
             request['resource_kind'] == 'sequence' and
             request['operation_id'] == 'drop'
@@ -349,6 +373,40 @@ class VitessAdministration(RelationalAdministration):
             statements.append({'source': source, 'parameters': ()})
         statements.extend(self._auto_increment(name, options))
         return statements
+
+    def _compile_table_alter(self, request):
+        """A table ALTER, optionally submitted as an online migration.
+
+        @@ddl_strategy is a session setting, so it is set, used and reset on
+        the one connection that runs these statements.
+        """
+        draft = dict(request['draft'])
+        strategy = draft.pop('ddl_strategy', None) or 'direct'
+        flags = [flag for key, flag in (
+            ('postpone_completion', '--postpone-completion'),
+            ('postpone_launch', '--postpone-launch'),
+        ) if draft.pop(key, False)]
+        compiled = super()._compile({**request, 'draft': draft})
+        if strategy not in _DDL_STRATEGIES:
+            raise RelationalClientError(
+                'Vitess DDL strategy must be one of ' +
+                ', '.join(sorted(_DDL_STRATEGIES)))
+        if strategy == 'direct':
+            if flags:
+                raise RelationalClientError(
+                    'postponing needs an online DDL strategy')
+            return compiled
+        statements = compiled.get('statements') if isinstance(
+            compiled, Mapping) else compiled
+        statements = list(statements if isinstance(statements, list)
+                          else [statements])
+        setting = ' '.join([strategy, *flags])
+        statements = [
+            {'source': 'SET @@ddl_strategy = %s', 'parameters': (setting,)},
+            *statements,
+            {'source': "SET @@ddl_strategy = 'direct'", 'parameters': ()},
+        ]
+        return {'statements': statements}
 
     def _auto_increment(self, table, options):
         column = options.get('auto_increment_column')

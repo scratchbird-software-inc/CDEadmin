@@ -36,7 +36,8 @@ from pgadmin.cdeadmin.providers.vitess.provider import (  # noqa: E402
     ADMINISTRATION, PROFILE, create_provider,
 )
 from ui_descriptor_roundtrip import (  # noqa: E402
-    backend_draft, record_draft, record_from_resource, resolved_form,
+    backend_draft, engine_operations, operation_backend_draft,
+    operation_draft, record_draft, record_from_resource, resolved_form,
 )
 
 SETTINGS = json.loads(SETTINGS)
@@ -497,3 +498,104 @@ def test_routing_rules_editor_keeps_existing_rules(live):
              '--rules', json.dumps({'rules': original})],
             check=True, capture_output=True)
     assert routing_rules() == original
+
+
+def test_tablet_backup_restore_and_backup_delete(live):
+    # The demo's tablets share one file backup root. Works on the
+    # lookup_keyspace replica, which catches up from its primary afterwards.
+    route, client = live
+    replica = next(row for row in resources(client, route)
+                   if row['resource_kind'] == 'tablet' and
+                   row['native'].get('keyspace') == 'lookup_keyspace' and
+                   row['native'].get('tablet_type') == 'REPLICA')
+    alias = replica['display_name']
+    operations = engine_operations('vitess')
+    before = {row['resource_id'] for row in resources(client, route)
+              if row['resource_kind'] == 'backup'}
+    run(client, route, 'tablet', 'backup', operation_backend_draft(
+        operations['backup@tablet'], operation_draft(
+            operations['backup@tablet'])), target=replica, post_state=True)
+    backups = [row for row in resources(client, route)
+               if row['resource_kind'] == 'backup' and
+               row['resource_id'] not in before]
+    assert len(backups) == 1, backups
+    backup = backups[0]
+    assert backup['display_path'][:2] == ['lookup_keyspace', '-']
+    assert backup['display_name'].endswith(alias)
+    try:
+        # Backup names start with the timestamp RestoreFromBackup takes.
+        timestamp = backup['display_name'].rsplit('.', 1)[0]
+        restore = operations['restore@tablet']
+        run(client, route, 'tablet', 'restore', operation_backend_draft(
+            restore, operation_draft(restore, {
+                'backup_timestamp': timestamp}, alias)), target=replica)
+        for _attempt in range(60):
+            tablet = next(row for row in resources(client, route)
+                          if row['display_name'] == alias and
+                          row['resource_kind'] == 'tablet')
+            if tablet['native']['serving_state'] == 'SERVING':
+                break
+            time.sleep(1)
+        assert tablet['native']['serving_state'] == 'SERVING'
+        assert tablet['native']['tablet_type'] == 'REPLICA'
+    finally:
+        run(client, route, 'backup', 'drop',
+            {'confirmation': backup['display_name']}, target=backup,
+            post_state=True)
+    assert backup['resource_id'] not in {
+        row['resource_id'] for row in resources(client, route)}
+
+
+def test_online_ddl_submit_launch_complete(live):
+    route, client = live
+    table = f'rt_od_{UNIQUE}'
+    query(f'CREATE TABLE `{table}` (id BIGINT NOT NULL PRIMARY KEY, v INT)')
+    try:
+        query(f'ALTER VSCHEMA ON `{table}` ADD VINDEX xxhash (id)')
+        form = resolved_form('vitess', 'table')
+        target, baseline = record(client, route, 'table', table, 'table')
+        alter = backend_draft(form, {
+            **baseline, 'columns': baseline['columns'] + [
+                {'name': 'w', 'type': 'INT'}],
+            'ddl_strategy': 'vitess', 'postpone_launch': True,
+            'postpone_completion': True}, mode='alter', baseline=baseline)
+        run(client, route, 'table', 'alter', alter, target=target)
+
+        def migration(status=None, wait=60):
+            for _attempt in range(wait):
+                rows = [row for row in resources(client, route)
+                        if row['resource_kind'] == 'online-ddl' and
+                        row['native']['table'] == table]
+                if rows and (status is None or
+                             rows[0]['native']['status'] in status):
+                    return rows[0]
+                time.sleep(1)
+            return rows[0] if rows else None
+
+        queued = migration({'queued'})
+        assert queued is not None
+        assert (queued['native']['strategy'], queued['native']['status'],
+                queued['native']['postpone_launch']) == (
+            'vitess', 'queued', True)
+        operations = engine_operations('vitess')
+        for operation in ('launch', 'complete'):
+            if operation == 'complete':
+                # Cut-over waits until the copy is in sync.
+                for _attempt in range(60):
+                    current = migration()
+                    if current['native']['ready_to_complete']:
+                        break
+                    time.sleep(1)
+            declared = operations[f'{operation}@online-ddl']
+            run(client, route, 'online-ddl', operation,
+                operation_backend_draft(declared, operation_draft(declared)),
+                target=migration())
+        assert migration({'complete'})['native']['status'] == 'complete'
+        for shard in shards_of(KEYSPACE):
+            columns = [row[0] for row in query(
+                f'SHOW COLUMNS FROM `{table}`',
+                keyspace=f'{KEYSPACE}:{shard}')]
+            assert 'w' in columns, shard
+    finally:
+        query(f'ALTER VSCHEMA DROP TABLE `{KEYSPACE}`.`{table}`')
+        query(f'DROP TABLE IF EXISTS `{table}`')
