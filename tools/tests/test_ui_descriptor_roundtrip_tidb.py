@@ -84,6 +84,7 @@ def live():
         for statement in (
                 f'DROP DATABASE IF EXISTS `{DATABASE}`',
                 f'DROP DATABASE IF EXISTS `{DATABASE}_child`',
+                f'DROP DATABASE IF EXISTS `{DATABASE}_br`',
                 f"DROP USER IF EXISTS 'rt_user_{UNIQUE}'@'localhost'",
                 f"DROP ROLE IF EXISTS 'rt_role_{UNIQUE}'",
                 f"DROP USER IF EXISTS 'rt_nopw_{UNIQUE}'@'%'",
@@ -98,15 +99,24 @@ def resources(client, route):
     return client.list_resources({'route': dict(route)})
 
 
+def executor_request(request, planned):
+    """The request shape the visual-admin executor passes to apply."""
+    plan = {key: value for key, value in request.items()
+            if key != '_provider_route'}
+    plan['command_preview'] = planned.get('command_preview')
+    return {'plan': plan, 'provider_payload': planned['provider_payload']}
+
+
 def run(client, route, kind, operation, draft, target=None):
     request = {'resource_kind': kind, 'operation_id': operation,
                'target_resource': target, '_provider_route': route,
                'draft': draft}
     assert ADMINISTRATION.validate(request)['errors'] == []
     planned = ADMINISTRATION.plan(request)
-    sql = '\n'.join(statement['source'] for statement in
+    sql = '\n'.join(str(statement.get('source', '')) for statement in
                     planned['command_preview']['statements'])
-    assert ADMINISTRATION.apply(client, planned)['accepted'], sql
+    assert ADMINISTRATION.apply(
+        client, executor_request(request, planned))['accepted'], sql
     return sql
 
 
@@ -189,7 +199,7 @@ def test_check_constraint_follows_the_server_setting(live):
                'draft': draft}
     planned = ADMINISTRATION.plan(request)
     with pytest.raises(Exception, match='tidb_enable_check_constraint'):
-        ADMINISTRATION.apply(client, planned)
+        ADMINISTRATION.apply(client, executor_request(request, planned))
     assert not query(
         "SELECT 1 FROM information_schema.tables "
         f"WHERE table_schema='{DATABASE}' AND table_name='rt_checked'")
@@ -294,7 +304,8 @@ def native_run(client, route, kind, operation, draft, target=None):
                'target_resource': target, '_provider_route': route,
                'draft': draft}
     assert ADMINISTRATION.validate(request)['errors'] == []
-    return ADMINISTRATION.apply(client, ADMINISTRATION.plan(request))
+    planned = ADMINISTRATION.plan(request)
+    return ADMINISTRATION.apply(client, executor_request(request, planned))
 
 
 def native(client, route, kind, name):
@@ -394,9 +405,11 @@ def test_partition_maintenance(live):
 def test_refusals_say_why(live):
     route, client = live
     table = native(client, route, 'table', 'owner')
+    servers = query("SELECT COUNT(*) FROM information_schema.CLUSTER_INFO "
+                    "WHERE TYPE = 'tiflash'")[0][0]
     with pytest.raises(Exception, match='TiFlash server'):
         native_run(client, route, 'table', 'set_tiflash_replica',
-                   {'replica_count': 1}, table)
+                   {'replica_count': servers + 1}, table)
     native_run(client, route, 'table', 'set_tiflash_replica',
                {'replica_count': 0}, table)
     finished = next(row for row in resources(client, route)
@@ -455,3 +468,89 @@ def test_engine_object_editors_round_trip(live):
     finally:
         query(f'DROP PLACEMENT POLICY IF EXISTS {policy}')
         query(f'DROP RESOURCE GROUP IF EXISTS {group}')
+
+
+# Opt-in demo components (owner direction 2026-10-29): add "ticdc", "br"
+# and/or "tiflash": true to CDEADMIN_ROUNDTRIP_TIDB once the matching
+# `dev.sh start tidb_ticdc|tidb_br|tidb_tiflash` component is running.
+TOOLS = ROOT / 'tools/reference_engine_demos/runtime/tidb_tools'
+
+
+def component(name):
+    if not SETTINGS.get(name):
+        pytest.skip(f'TiDB component {name} is not enabled in the settings')
+
+
+def test_changefeed_editor_lifecycle(live):
+    component('ticdc')
+    route, client = live
+    route = {**route, 'ticdc_path': str(TOOLS / 'cdc'),
+             'ticdc_server': 'http://127.0.0.1:8300',
+             'ticdc_sink_allowlist': 'blackhole://'}
+    feed = f'rt-feed-{UNIQUE}'
+    form = resolved_form('tidb', 'engine_object:changefeed')
+    run(client, route, 'changefeed', 'create', backend_draft(
+        form, {'changefeed_id': feed, 'sink_uri': 'blackhole://'}))
+
+    def state():
+        return native(client, route, 'changefeed', feed)['native'][
+            'changefeed_state']
+
+    try:
+        assert state() == 'normal'
+        native_run(client, route, 'changefeed', 'pause', {},
+                   native(client, route, 'changefeed', feed))
+        assert state() == 'stopped'
+        native_run(client, route, 'changefeed', 'resume', {},
+                   native(client, route, 'changefeed', feed))
+        assert state() == 'normal'
+    finally:
+        native_run(client, route, 'changefeed', 'remove', {},
+                   native(client, route, 'changefeed', feed))
+    assert not [row for row in resources(client, route)
+                if row['resource_kind'] == 'changefeed' and
+                row['display_name'] == feed]
+
+
+def test_br_database_backup_and_restore(live):
+    component('br')
+    sys.path.insert(0, str(ROOT / 'tools/reference_engine_demos'))
+    from demo_estate import tidb_backup_storage
+    route, client = live
+    route = {**route, 'br_path': str(TOOLS / 'br'),
+             'br_pd_addresses': 'cdeadmin-demo-tidb-pd:2379',
+             'br_storage_allowlist': 's3://tidb-backups/'}
+    # BR restores a whole database, so this one holds only the test table
+    # and is dropped completely before the restore.
+    backed = f'{DATABASE}_br'
+    query(f'CREATE DATABASE `{backed}`')
+    query(f'CREATE TABLE `{backed}`.rt_backed (id INT PRIMARY KEY)')
+    query(f'INSERT INTO `{backed}`.rt_backed VALUES (1), (2), (3)')
+    storage = tidb_backup_storage(f'rt-{UNIQUE}')
+    database = native(client, route, 'database', backed)
+    native_run(client, route, 'database', 'backup_br',
+               {'storage_uri': storage}, database)
+    query(f'DROP DATABASE `{backed}`')
+    native_run(client, route, 'database', 'restore_br',
+               {'storage_uri': storage}, database)
+    assert query(f'SELECT COUNT(*) FROM `{backed}`.rt_backed') == [(3,)]
+
+
+def test_tiflash_replica_becomes_available(live):
+    component('tiflash')
+    route, client = live
+    query('CREATE TABLE rt_columnar (id INT PRIMARY KEY)')
+    table = native(client, route, 'table', 'rt_columnar')
+    native_run(client, route, 'table', 'set_tiflash_replica',
+               {'replica_count': 1}, table)
+    import time
+    for _attempt in range(60):
+        replicas = [row for row in resources(client, route)
+                    if row['resource_kind'] == 'tiflash-replica' and
+                    row['display_path'][-2:-1] == ['rt_columnar']]
+        if replicas and replicas[0]['native']['available']:
+            break
+        time.sleep(2)
+    assert replicas and replicas[0]['native']['available']
+    native_run(client, route, 'table', 'set_tiflash_replica',
+               {'replica_count': 0}, table)

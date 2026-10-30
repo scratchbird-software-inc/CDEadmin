@@ -200,6 +200,27 @@ TiDB 8.5.6
    -  Not run: TiCDC changefeeds and BR backup/restore (no TiCDC or BR in the
       demo); a successful DDL job cancel (needs a long-running job). Marked
       experimental, with the required component, in ``capabilities.json``.
+      Update 2026-10-30, with the opt-in demo components (owner direction):
+      changefeed create, pause, resume and remove, database BR backup and
+      restore, and TiFlash replicas (replica available, query read through
+      TiFlash) were verified live. Still not run: cluster BR restore (needs an
+      empty cluster), point-in-time restore (needs a log backup), table-level
+      BR, and a successful job cancel.
+   -  **Defect, fixed 2026-10-30:** changefeed state was lost the same way as
+      DDL job state; it is now ``changefeed_state``.
+   -  **Defect, fixed 2026-10-30:** the TiDB guards (``CHECK`` refusal,
+      TiFlash server count, job-cancel result) read the plan preview from the
+      top of the request, but the visual-admin executor passes it under
+      ``plan``, so in the real UI path they would not have run. The tests had
+      used the raw plan; they now use the executor's request shape. A
+      provider action reaching the SQL path without its plan, which would run
+      nothing and report acceptance, is now refused.
+   -  **Defect, fixed 2026-10-30:** resource-group alter filled in create-time
+      defaults for untouched fields; it now sends only the supplied ones.
+   -  TiFlash and the demo: Docker Desktop's VM has 8 GB here. Starting
+      TiFlash beside three TiKV stores got stores OOM-killed, and a BR restore
+      then failed because a store was down. ``dev.sh start tidb_tiflash`` now
+      refuses below 12 GiB of Docker memory.
 -  Distinctive features present (live) but not yet exposed: ``AUTO_RANDOM``,
    ``SHARD_ROW_ID_BITS``/``PRE_SPLIT_REGIONS``, TTL tables, cached tables,
    SQL plan bindings, ``FLASHBACK TABLE``, ``SPLIT TABLE`` regions, global

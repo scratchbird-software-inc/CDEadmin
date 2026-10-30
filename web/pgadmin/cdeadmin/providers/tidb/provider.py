@@ -1118,7 +1118,9 @@ def _cdc_resources(request, generation):
         values.append(resource(
             'changefeed', [], changefeed_id, generation, {
                 'keyspace': str(row.get('keyspace') or ''),
-                'state': str(summary.get('state') or ''),
+                # Not 'state': the shared record builder reserves that key
+                # for changefeed records and overwrote this value.
+                'changefeed_state': str(summary.get('state') or ''),
                 'checkpoint_tso': summary.get('tso'),
                 'checkpoint_time': str(summary.get('checkpoint') or ''),
                 'error': summary.get('error'),
@@ -1403,7 +1405,11 @@ class TiDBAdministration(DistributedSQLControlPlane):
                 client._forget_and_close(native)
 
     def apply(self, client, request, connection=None):
-        preview = request.get('command_preview') or {}
+        # The visual-admin executor passes {'plan': presentation,
+        # 'provider_payload': ...}; the presentation holds the preview.
+        plan = request.get('plan') if isinstance(
+            request.get('plan'), Mapping) else request
+        preview = plan.get('command_preview') or {}
         statements = preview.get('statements') or []
         operation = str(preview.get('operation') or '')
         if operation.endswith(('_table', '_constraint')) and any(

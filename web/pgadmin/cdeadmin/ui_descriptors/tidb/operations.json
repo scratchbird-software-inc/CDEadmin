@@ -22,7 +22,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30."
     },
     {
       "operation_id": "restore_full",
@@ -50,7 +50,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30."
     },
     {
       "operation_id": "restore_point",
@@ -90,7 +90,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30."
     },
     {
       "operation_id": "backup_br",
@@ -112,7 +112,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
+      "notes": "Verified live with the opt-in demo component (dev.sh start tidb_br), 2026-10-30."
     },
     {
       "operation_id": "restore_br",
@@ -134,7 +134,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
+      "notes": "Verified live with the opt-in demo component (dev.sh start tidb_br), 2026-10-30."
     },
     {
       "operation_id": "configure_placement",
@@ -192,7 +192,7 @@
           "required": false
         }
       ],
-      "notes": "A count above 0 needs that many TiFlash servers; the provider refuses with the server count first (verified on a cluster with none, 2026-10-29)."
+      "notes": "Verified live with one TiFlash server (dev.sh start tidb_tiflash, which needs 12 GiB of Docker memory); a count above the server count is refused first."
     },
     {
       "operation_id": "backup_br",
@@ -214,7 +214,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30."
     },
     {
       "operation_id": "restore_br",
@@ -236,7 +236,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30."
     },
     {
       "operation_id": "configure_placement",
@@ -294,7 +294,7 @@
           "required": false
         }
       ],
-      "notes": "A count above 0 needs that many TiFlash servers; the provider refuses with the server count first (verified on a cluster with none, 2026-10-29)."
+      "notes": "Verified live with one TiFlash server (dev.sh start tidb_tiflash, which needs 12 GiB of Docker memory); a count above the server count is refused first."
     },
     {
       "operation_id": "configure_placement",
@@ -351,7 +351,7 @@
       "status": "draft",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Needs TiCDC; not run against the demo cluster (2026-10-29)."
+      "notes": "Verified live with the opt-in demo component (dev.sh start tidb_ticdc), 2026-10-30."
     },
     {
       "operation_id": "resume",
@@ -364,7 +364,7 @@
       "status": "draft",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Needs TiCDC; not run against the demo cluster (2026-10-29)."
+      "notes": "Verified live with the opt-in demo component (dev.sh start tidb_ticdc), 2026-10-30."
     },
     {
       "operation_id": "analyze",

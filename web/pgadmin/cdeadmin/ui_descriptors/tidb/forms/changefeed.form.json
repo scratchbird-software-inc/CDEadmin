@@ -5,9 +5,9 @@
   "resource_kinds": [
     "changefeed"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "TiDB",
-  "notes": "TiCDC changefeed. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15); field ids are the provider dialog's own. Not run: the demo has no TiCDC.",
+  "notes": "TiCDC changefeed. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15); field ids are the provider dialog's own. Round trip verified live with the opt-in TiCDC component (test_changefeed_editor_lifecycle, 2026-10-30).",
   "fields": [
     {
       "field_id": "changefeed_id",

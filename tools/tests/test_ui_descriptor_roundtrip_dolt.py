@@ -95,6 +95,14 @@ def resources(client, route):
     return client.list_resources({'route': dict(route)})
 
 
+def executor_request(request, planned):
+    """The request shape the visual-admin executor passes to apply."""
+    plan = {key: value for key, value in request.items()
+            if key != '_provider_route'}
+    plan['command_preview'] = planned.get('command_preview')
+    return {'plan': plan, 'provider_payload': planned['provider_payload']}
+
+
 def run(client, route, kind, operation, draft, target=None):
     request = {'resource_kind': kind, 'operation_id': operation,
                'target_resource': target, '_provider_route': route,
@@ -103,7 +111,8 @@ def run(client, route, kind, operation, draft, target=None):
     planned = ADMINISTRATION.plan(request)
     sql = '\n'.join(statement['source'] for statement in
                     planned['command_preview']['statements'])
-    assert ADMINISTRATION.apply(client, planned)['accepted'], sql
+    assert ADMINISTRATION.apply(
+        client, executor_request(request, planned))['accepted'], sql
     return sql
 
 

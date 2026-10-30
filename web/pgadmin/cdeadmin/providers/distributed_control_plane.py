@@ -180,6 +180,14 @@ class DistributedSQLControlPlane(RelationalAdministration):
                     raise RelationalClientError(
                         'provider action result is invalid')
                 return copy.deepcopy(dict(value))
+        payload = request.get('provider_payload')
+        compiled = payload.get('compiled') if isinstance(
+            payload, Mapping) else None
+        if isinstance(compiled, Mapping) and 'provider_action' in compiled:
+            # A provider action reaching the SQL path would execute nothing
+            # and still report acceptance.
+            raise RelationalClientError(
+                'provider action request is missing its operation plan')
         return super().apply(client, request, connection=connection)
 
     def inspect_operation(self, client, request):

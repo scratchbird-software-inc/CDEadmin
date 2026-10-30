@@ -67,15 +67,32 @@ class Connection:
 
 
 def test_check_constraints_are_refused_while_tidb_would_drop_them():
-    planned = plan('table', 'create', {
-        'name': 't', 'parent': 'd1',
-        'columns': [{'name': 'v', 'type': 'INT'}],
-        'constraints': [{'kind': 'CHECK', 'name': 'ck',
-                         'expression': 'v > 0'}]})
+    draft = {'name': 't', 'parent': 'd1',
+             'columns': [{'name': 'v', 'type': 'INT'}],
+             'constraints': [{'kind': 'CHECK', 'name': 'ck',
+                              'expression': 'v > 0'}]}
+    planned = plan('table', 'create', draft)
     client = SimpleNamespace(_forget_and_close=lambda _connection: None)
+    # The shape the visual-admin executor passes (the guard must read the
+    # preview from the plan, not the top level).
+    executed = {'plan': {'resource_kind': 'table', 'operation_id': 'create',
+                         'draft': draft,
+                         'command_preview': planned['command_preview']},
+                'provider_payload': planned['provider_payload']}
     with pytest.raises(RelationalClientError,
                        match='tidb_enable_check_constraint'):
-        ADMINISTRATION.apply(client, planned, connection=Connection(False))
+        ADMINISTRATION.apply(client, executed, connection=Connection(False))
+
+
+def test_provider_action_without_its_plan_is_refused():
+    planned = ADMINISTRATION.plan({
+        'resource_kind': 'changefeed', 'operation_id': 'create',
+        'target_resource': None,
+        '_provider_route': {'database': 'd1',
+                            'ticdc_sink_allowlist': 'blackhole://'},
+        'draft': {'changefeed_id': 'c1', 'sink_uri': 'blackhole://'}})
+    with pytest.raises(RelationalClientError, match='operation plan'):
+        ADMINISTRATION.apply(SimpleNamespace(), planned)
 
 
 TARGET_POLICY = {
