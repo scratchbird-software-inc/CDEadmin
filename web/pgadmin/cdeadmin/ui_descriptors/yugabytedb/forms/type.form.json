@@ -6,59 +6,72 @@
     "type",
     "domain"
   ],
-  "status": "draft",
-  "engine_tab_title": "yugabytedb",
+  "status": "complete",
+  "engine_tab_title": "YugabyteDB",
   "omitted_tabs": [],
   "gaps": [
     {
-      "concept": "type.create.enum_values",
-      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
-      "tracking": "ui-unification"
+      "concept": "Composite attribute changes",
+      "reason": "ADD / DROP / ALTER / RENAME ATTRIBUTE are not supported in YugabyteDB 2025.2.2.2 (live)",
+      "tracking": "postgresql-wire-parity"
     },
     {
-      "concept": "type.create.fields",
-      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
-      "tracking": "ui-unification"
+      "concept": "Domain NOT NULL and constraint changes",
+      "reason": "ALTER DOMAIN SET / DROP NOT NULL and ADD / DROP / VALIDATE / RENAME CONSTRAINT are not supported yet (live)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Dropping enum values",
+      "reason": "No DROP VALUE in PostgreSQL or YugabyteDB",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Range type options beyond subtype_diff (collation, canonical, multirange name), base types",
+      "reason": "No editor yet",
+      "tracking": "postgresql-wire-parity"
     }
   ],
   "fields": [
     {
       "field_id": "variant",
-      "label": "Variant",
+      "label": "Kind",
       "tab": "General",
       "control": "select",
+      "ui_only": true,
+      "editable_after_create": false,
       "options": [
-        {
-          "value": "default",
-          "label": "Default"
-        },
         {
           "value": "domain",
           "label": "Domain"
         }
-      ]
+      ],
+      "help": "Set for a domain; a type leaves it empty."
     },
     {
       "field_id": "name",
       "label": "Name",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "help": "Renaming runs ALTER TYPE ... RENAME TO."
     },
     {
       "field_id": "parent",
-      "label": "Database",
+      "label": "Schema",
       "tab": "General",
       "control": "reference",
-      "required": false,
-      "reference_kind": "database"
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "editable_after_create": false
     },
     {
       "field_id": "type_kind",
-      "label": "Type kind",
+      "label": "Kind",
       "tab": "General",
       "control": "select",
       "required": true,
+      "default": "ENUM",
+      "editable_after_create": false,
       "options": [
         {
           "value": "ENUM",
@@ -67,72 +80,199 @@
         {
           "value": "COMPOSITE",
           "label": "Composite"
+        },
+        {
+          "value": "RANGE",
+          "label": "Range"
+        }
+      ],
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
+    },
+    {
+      "field_id": "enum_values",
+      "label": "Enum values",
+      "tab": "General",
+      "control": "grid",
+      "item_kind": "string",
+      "reorderable": true,
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "ENUM"
+      },
+      "help": "In order. New values can be added anywhere; an existing value can be renamed but not dropped or moved.",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true,
+          "editable_after_create": false
         }
       ]
     },
     {
-      "field_id": "data_type",
-      "label": "Base data type",
+      "field_id": "rename_values",
+      "label": "Rename values",
+      "tab": "General",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "ENUM"
+      },
+      "help": "ALTER TYPE ... RENAME VALUE; applied before additions.",
+      "columns": [
+        {
+          "field_id": "from",
+          "label": "Current value",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "to",
+          "label": "New value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "fields",
+      "label": "Fields",
+      "tab": "General",
+      "control": "grid",
+      "required": true,
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "COMPOSITE"
+      },
+      "editable_after_create": false,
+      "help": "A composite type's fields are fixed once created (YugabyteDB does not alter attributes).",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Field",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Type",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "subtype",
+      "label": "Subtype",
       "tab": "General",
       "control": "text",
       "required": true,
-      "group": "Domain",
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "RANGE"
+      },
+      "editable_after_create": false,
+      "help": "e.g. timestamptz"
+    },
+    {
+      "field_id": "subtype_diff",
+      "label": "Subtype difference function",
+      "tab": "General",
+      "control": "text",
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "RANGE"
+      },
+      "editable_after_create": false
+    },
+    {
+      "field_id": "base_type",
+      "label": "Base type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
       "visible_when": {
         "field": "variant",
         "equals": "domain"
-      }
+      },
+      "editable_after_create": false,
+      "help": "e.g. varchar(20)"
+    },
+    {
+      "field_id": "collation",
+      "label": "Collation",
+      "tab": "General",
+      "control": "text",
+      "visible_when": {
+        "field": "variant",
+        "equals": "domain"
+      },
+      "editable_after_create": false
     },
     {
       "field_id": "default",
-      "label": "Default expression",
+      "label": "Default",
       "tab": "General",
       "control": "text",
-      "required": false,
-      "group": "Domain",
       "visible_when": {
         "field": "variant",
         "equals": "domain"
-      }
+      },
+      "help": "ALTER DOMAIN SET / DROP DEFAULT"
     },
     {
       "field_id": "not_null",
       "label": "Not null",
       "tab": "General",
       "control": "boolean",
-      "required": false,
       "default": false,
-      "group": "Domain",
       "visible_when": {
         "field": "variant",
         "equals": "domain"
-      }
+      },
+      "editable_after_create": false,
+      "help": "Fixed once created: YugabyteDB does not support ALTER DOMAIN SET / DROP NOT NULL."
     },
     {
-      "field_id": "enum_values",
-      "label": "Enum values",
-      "tab": "Constraints",
-      "control": "keyvalue",
-      "required": false
-    },
-    {
-      "field_id": "fields",
-      "label": "Composite fields",
-      "tab": "Constraints",
-      "control": "keyvalue",
-      "required": false
-    },
-    {
-      "field_id": "check",
-      "label": "Check expression",
-      "tab": "Constraints",
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
       "control": "text",
-      "required": false,
-      "group": "Domain",
+      "help": "COMMENT ON TYPE / DOMAIN"
+    },
+    {
+      "field_id": "checks",
+      "label": "Checks",
+      "tab": "Constraints",
+      "control": "grid",
       "visible_when": {
         "field": "variant",
         "equals": "domain"
-      }
+      },
+      "editable_after_create": false,
+      "help": "CHECK constraints on VALUE; fixed once created (no ALTER DOMAIN constraint changes in YugabyteDB).",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "expression",
+          "label": "Expression",
+          "control": "code",
+          "language": "sql",
+          "required": true
+        }
+      ]
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database)."
+  "notes": "Started from the CockroachDB type form; enum_values and fields as YugabyteDB's and DuckDB's type forms name them (the CockroachDB form says values; to be aligned when its demo next runs). providers/yugabytedb/types.py; records from pg_enum, pg_attribute, pg_range, pg_type and pg_constraint. Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
 }

@@ -20,7 +20,7 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
-from . import indexes as index_sql, objects, tables as tables_sql
+from . import indexes as index_sql, objects, tables as tables_sql, types
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
 from .control_plane import (
@@ -88,8 +88,9 @@ _YSQL_SUPPORTED.update({
     'materialized-view': frozenset({
         'inspect', 'create', 'rename', 'drop',
     }),
-    'domain': frozenset({'inspect', 'create', 'rename', 'drop'}),
-    'type': frozenset({'inspect', 'create', 'rename', 'drop'}),
+    # alter: values, default, comment, rename (providers/yugabytedb/types).
+    'domain': frozenset({'inspect', 'create', 'alter', 'rename', 'drop'}),
+    'type': frozenset({'inspect', 'create', 'alter', 'rename', 'drop'}),
     'function': frozenset({'inspect', 'create', 'drop'}),
     'procedure': frozenset({'inspect', 'create', 'drop'}),
     # alter: CREATE OR REPLACE, rename, enable, comment (objects.py).
@@ -129,12 +130,24 @@ class YugabyteDBAdministration(RelationalAdministration):
     @staticmethod
     def _native_object(kind, operation):
         return operation in objects.OPERATIONS.get(kind, ()) or (
-            kind in {'table', 'index'} and operation in {'create', 'alter'})
+            kind in {'table', 'index', 'type', 'domain'} and
+            operation in {'create', 'alter'})
 
     def _native_compile(self, request):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if request['resource_kind'] in {'type', 'domain'}:
+            builder = {
+                ('type', 'create'): lambda: types.create_type(self, draft),
+                ('type', 'alter'): lambda: types.alter_type(
+                    self, draft, request.get('target_resource')),
+                ('domain', 'create'): lambda: types.create_domain(
+                    self, draft),
+                ('domain', 'alter'): lambda: types.alter_domain(
+                    self, draft, request.get('target_resource')),
+            }[(request['resource_kind'], request['operation_id'])]
+            return {'statements': builder()}
         if request['resource_kind'] == 'index':
             if request['operation_id'] == 'create':
                 return {'statements': index_sql.create(self, draft)}
@@ -165,7 +178,7 @@ class YugabyteDBAdministration(RelationalAdministration):
         if kind == 'table' and operation in {'create', 'alter'}:
             return tables_sql.extend_form(
                 super()._form(kind, operation), self._field, operation)
-        if self._native_object(kind, operation):
+        if operation in objects.OPERATIONS.get(kind, ()):
             return objects.form(kind, operation, self._field)
         if operation == 'create' and kind == 'materialized-view':
             return {
@@ -189,12 +202,41 @@ class YugabyteDBAdministration(RelationalAdministration):
                     self._field('name', 'Name', 'text', True),
                     self._field('parent', 'Parent schema', 'text', False),
                     self._field('type_kind', 'Type kind', 'select', True,
-                                options=('ENUM', 'COMPOSITE')),
+                                options=types.TYPE_KINDS),
                     self._field('enum_values', 'Enum values', 'json', False,
                                 default=[]),
                     self._field('fields', 'Composite fields', 'json', False,
                                 default=[]),
+                    self._field('subtype', 'Range subtype', 'text'),
+                    self._field('subtype_diff',
+                                'Range subtype difference function', 'text'),
+                    self._field('comment', 'Comment', 'text'),
                 ],
+            }
+        if operation == 'alter' and kind in {'type', 'domain'}:
+            fields = [self._field('name', 'Name', 'text', True)]
+            if kind == 'domain':
+                fields.append(self._field('default', 'Default', 'text'))
+            fields.append(self._field('comment', 'Comment', 'text'))
+            for item in fields:
+                item['initial_value_path'] = [item['field_id']]
+            return {'form_id': f'{kind}.alter',
+                    'title': f'Alter YSQL {kind}', 'fields': fields,
+                    'notes': 'Enum value changes are descriptor grids.'}
+        if operation == 'create' and kind == 'domain':
+            return {
+                'form_id': 'domain.create', 'title': 'Create YSQL domain',
+                'fields': [
+                    self._field('name', 'Name', 'text', True),
+                    self._field('parent', 'Parent schema', 'text', False),
+                    self._field('base_type', 'Base type', 'text', True),
+                    self._field('collation', 'Collation', 'text'),
+                    self._field('default', 'Default', 'text'),
+                    self._field('not_null', 'Not null', 'boolean', False,
+                                default=False),
+                    self._field('comment', 'Comment', 'text'),
+                ],
+                'notes': 'Checks are a descriptor grid (type.form.json).',
             }
         if operation == 'create' and kind == 'extension':
             return {
@@ -250,34 +292,6 @@ class YugabyteDBAdministration(RelationalAdministration):
             return [{
                 'source': f'CREATE MATERIALIZED VIEW {qualified} AS '
                           f'{query}{suffix}',
-                'parameters': (),
-            }]
-        if kind == 'type':
-            type_kind = str(options.get('type_kind', '')).upper()
-            if type_kind == 'ENUM':
-                values = options.get('enum_values')
-                if not isinstance(values, list) or not values:
-                    raise RelationalClientError(
-                        'YSQL enum type requires values'
-                    )
-                definition = 'ENUM (' + ', '.join(
-                    self._literal(str(item)) for item in values
-                ) + ')'
-            elif type_kind == 'COMPOSITE':
-                fields = options.get('fields')
-                if not isinstance(fields, list) or not fields:
-                    raise RelationalClientError(
-                        'YSQL composite type requires fields'
-                    )
-                definition = '(' + ', '.join(
-                    f'{self._quote(self._identifier(item["name"]))} '
-                    f'{self._safe_fragment(item["type"], "field type")}'
-                    for item in fields
-                ) + ')'
-            else:
-                raise RelationalClientError('YSQL type kind is invalid')
-            return [{
-                'source': f'CREATE TYPE {qualified} AS {definition}',
                 'parameters': (),
             }]
         if kind == 'extension':
@@ -511,21 +525,80 @@ def _extras(cursor, _request, generation):
         values.append(resource(
             'materialized-view', [schema], name, generation
         ))
-    for schema, name, type_kind in optional_rows(
+    enum_values, fields, checks = {}, {}, {}
+    for schema, name, label in optional_rows(
         cursor,
-        'SELECT n.nspname, t.typname, t.typtype '
+        'SELECT n.nspname, t.typname, e.enumlabel FROM pg_catalog.pg_enum e '
+        'JOIN pg_catalog.pg_type t ON t.oid = e.enumtypid '
+        'JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace '
+        'ORDER BY 1, 2, e.enumsortorder',
+    ):
+        enum_values.setdefault((str(schema), str(name)), []).append(
+            str(label))
+    for schema, name, field, field_type in optional_rows(
+        cursor,
+        'SELECT n.nspname, t.typname, a.attname, '
+        'format_type(a.atttypid, a.atttypmod) FROM pg_catalog.pg_type t '
+        'JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace '
+        'JOIN pg_catalog.pg_attribute a ON a.attrelid = t.typrelid '
+        "WHERE t.typtype = 'c' AND a.attnum > 0 AND NOT a.attisdropped "
+        'ORDER BY 1, 2, a.attnum',
+    ):
+        fields.setdefault((str(schema), str(name)), []).append(
+            {'name': str(field), 'type': str(field_type)})
+    for schema, name, check, definition in optional_rows(
+        cursor,
+        'SELECT n.nspname, t.typname, co.conname, '
+        'pg_get_constraintdef(co.oid) FROM pg_catalog.pg_constraint co '
+        'JOIN pg_catalog.pg_type t ON t.oid = co.contypid '
+        'JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace '
+        'ORDER BY 1, 2, 3',
+    ):
+        found = re.match(r'CHECK \((.*)\)$', str(definition))
+        checks.setdefault((str(schema), str(name)), []).append({
+            'name': str(check),
+            'expression': found.group(1) if found else str(definition)})
+    for (schema, name, type_kind, base_type, not_null, default, collation,
+         subtype, subtype_diff, comment) in optional_rows(
+        cursor,
+        'SELECT n.nspname, t.typname, t.typtype, '
+        'format_type(t.typbasetype, t.typtypmod), t.typnotnull, '
+        't.typdefault, co.collname, r.rngsubtype::regtype::text, '
+        'NULLIF(r.rngsubdiff::text, \'-\'), '
+        "obj_description(t.oid, 'pg_type') "
         'FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n '
         'ON n.oid = t.typnamespace LEFT JOIN pg_catalog.pg_class c '
-        'ON c.oid = t.typrelid WHERE t.typisdefined '
+        'ON c.oid = t.typrelid '
+        'LEFT JOIN pg_catalog.pg_range r ON r.rngtypid = t.oid '
+        'LEFT JOIN pg_catalog.pg_collation co ON co.oid = t.typcollation '
+        "AND co.collname <> 'default' WHERE t.typisdefined "
         f'AND n.nspname NOT IN {excluded} AND ('
-        "t.typtype IN ('d', 'e') OR (t.typtype = 'c' AND "
+        "t.typtype IN ('d', 'e', 'r') OR (t.typtype = 'c' AND "
         "c.relkind = 'c')) ORDER BY 1, 2",
     ):
-        kind = 'domain' if str(type_kind) == 'd' else 'type'
-        values.append(resource(
-            kind, [schema], name, generation,
-            {'type_kind': str(type_kind)},
-        ))
+        key = (str(schema), str(name))
+        comment = None if comment is None else str(comment)
+        if str(type_kind) == 'd':
+            values.append(resource('domain', [schema], name, generation, {
+                'type_kind': 'd', 'parent': key[0],
+                'base_type': str(base_type),
+                'collation': None if collation is None else str(collation),
+                'default': None if default is None else str(default),
+                'not_null': bool(not_null), 'checks': checks.get(key, []),
+                'comment': comment,
+            }))
+            continue
+        kind = {'e': 'ENUM', 'c': 'COMPOSITE', 'r': 'RANGE'}[str(type_kind)]
+        values.append(resource('type', [schema], name, generation, {
+            'type_kind': kind, 'parent': key[0],
+            'enum_values': enum_values.get(key, []) if kind == 'ENUM'
+            else None,
+            'fields': fields.get(key, []) if kind == 'COMPOSITE' else None,
+            'subtype': None if subtype is None else str(subtype),
+            'subtype_diff': None if subtype_diff is None
+            else str(subtype_diff),
+            'comment': comment,
+        }))
     for schema, name, routine_kind, arguments in optional_rows(
         cursor,
         'SELECT n.nspname, p.proname, p.prokind, '
@@ -678,7 +751,12 @@ def _annotate_catalog(connection, values):
                        'ON d.adrelid = c.oid AND d.adnum = a.attnum '
                        'LEFT JOIN pg_catalog.pg_collation co '
                        'ON co.oid = a.attcollation '
-                       'WHERE a.attnum > 0 AND NOT a.attisdropped')}
+                       'WHERE a.attnum > 0 AND NOT a.attisdropped '
+                       # User relations only: YSQL fetches catalog rows
+                       # over RPC, and the system catalogs dominate.
+                       "AND n.nspname NOT IN ('pg_catalog', "
+                       "'information_schema') "
+                       "AND c.relkind IN ('r', 'p', 'v', 'm', 'f')")}
         tables = {(str(row[0]), str(row[1])): row[2:]
                   for row in optional_rows(
                       cursor,

@@ -382,6 +382,25 @@ and a comment; in place, rename, ``SET TABLESPACE`` and comment. Found
 live: an index's ``SPLIT`` clause must come before ``WHERE`` (after
 ``TABLESPACE``); ``fillfactor`` is refused; gin reads back as ``ybgin``.
 
+The type form (types and domains) is ``complete``
+(``providers/yugabytedb/types.py``): enums (add and rename values;
+dropping or reordering is refused, as PostgreSQL has no ``DROP VALUE``),
+composites (fixed once created: YugabyteDB refuses every attribute
+change), range types with a subtype and difference function, and domains
+with base type, collation, default, ``NOT NULL`` and checks, of which only
+the default, name and comment change afterwards (``ALTER DOMAIN`` ``NOT
+NULL`` and constraint changes are "not supported yet"). Enum values use
+the field id ``enum_values`` as YugabyteDB's and DuckDB's forms did; the
+CockroachDB form's ``values`` is to be aligned when its demo next runs, so
+the change is re-checked live.
+
+Catalog speed, measured the same day: YSQL fetches catalog rows over RPC
+and a new connection starts with a cold catalog cache. The column query
+added for the table editor read every system relation (35 seconds cold);
+it now reads user relations only, and a whole catalog read takes about
+6 to 10 seconds on the demo, pooled or not. Earlier readings of 65 to 130
+seconds were taken while a killed test's queries were still running.
+
 Provider finding, 2026-10-30: the shared relational apply runs a plan in
 one transaction, and YugabyteDB refuses ``CREATE DATABASE`` and ``CREATE
 TABLESPACE`` there ("cannot run inside a transaction block"), so the

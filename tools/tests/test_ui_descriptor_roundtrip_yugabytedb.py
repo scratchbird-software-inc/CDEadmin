@@ -426,3 +426,74 @@ def test_index_create_reopen_alter_drop(live):
         query('DROP TABLE IF EXISTS public.ix')
         with connect() as connection:
             connection.execute(f'DROP TABLESPACE IF EXISTS {space}')
+
+
+def test_types_and_domains(live):
+    route, client = live
+    form = resolved_form('yugabytedb', 'type')
+    run(client, route, 'type', 'create', backend_draft(form, {
+        'name': 'rt_status', 'parent': 'public', 'type_kind': 'ENUM',
+        'enum_values': [{'value': 'new'}, {'value': "it's"},
+                        {'value': 'done'}], 'comment': 'status'}))
+    run(client, route, 'type', 'create', backend_draft(form, {
+        'name': 'rt_point', 'parent': 'public', 'type_kind': 'COMPOSITE',
+        'fields': [{'name': 'x', 'type': 'int'},
+                   {'name': 'label', 'type': 'text'}]}))
+    run(client, route, 'type', 'create', backend_draft(form, {
+        'name': 'rt_span', 'parent': 'public', 'type_kind': 'RANGE',
+        'subtype': 'timestamptz', 'subtype_diff': 'tstzrange_subdiff'}))
+    run(client, route, 'domain', 'create', backend_draft(form, {
+        'variant': 'domain', 'name': 'rt_code', 'parent': 'public',
+        'base_type': 'varchar(20)', 'collation': 'C', 'default': "'x'",
+        'not_null': True, 'comment': 'a code',
+        'checks': [{'name': 'rt_code_len',
+                    'expression': 'length(VALUE) > 0'}]}))
+    target, baseline = record(client, route, 'type', 'rt_status', 'type')
+    assert ([row['value'] for row in baseline['enum_values']],
+            baseline['comment'], baseline['type_kind']) == (
+        ['new', "it's", 'done'], 'status', 'ENUM')
+    _, point = record(client, route, 'type', 'rt_point', 'type')
+    assert [(row['name'], row['type']) for row in point['fields']] == [
+        ('x', 'integer'), ('label', 'text')]
+    _, span = record(client, route, 'type', 'rt_span', 'type')
+    assert (span['type_kind'], span['subtype'], span['subtype_diff']) == (
+        'RANGE', 'timestamp with time zone', 'tstzrange_subdiff')
+    dtarget, domain = record(client, route, 'domain', 'rt_code', 'type',
+                             'domain')
+    assert (domain['base_type'], domain['collation'], domain['default'],
+            domain['not_null'], domain['comment'],
+            [(row['name'], row['expression']) for row in domain['checks']]
+            ) == ('character varying(20)', 'C',
+                  "'x'::character varying", True, 'a code',
+                  [('rt_code_len', '(length((VALUE)::text) > 0)')])
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    run(client, route, 'type', 'alter', backend_draft(form, {
+        **baseline, 'name': 'rt_state',
+        'rename_values': [{'from': 'done', 'to': 'closed'}],
+        'enum_values': [{'value': 'draft'}, {'value': 'new'},
+                        {'value': "it's"}, {'value': 'closed'},
+                        {'value': 'archived'}], 'comment': ''},
+        mode='alter', baseline=baseline), target=target)
+    target, after = record(client, route, 'type', 'rt_state', 'type')
+    assert ([row['value'] for row in after['enum_values']],
+            after['comment']) == (
+        ['draft', 'new', "it's", 'closed', 'archived'], None)
+    assert 'cannot be dropped' in refused('type', 'alter', {
+        'enum_values': ['draft', 'new']}, target)
+    assert 'fixed once created' in refused('type', 'alter', {
+        'fields': [{'name': 'z', 'type': 'int'}]},
+        find(client, route, 'type', 'rt_point')[0])
+    run(client, route, 'domain', 'alter', backend_draft(form, {
+        **domain, 'default': '', 'comment': 'code', 'name': 'rt_code2'},
+        mode='alter', baseline=domain), target=dtarget)
+    _, domain2 = record(client, route, 'domain', 'rt_code2', 'type',
+                        'domain')
+    assert (domain2['default'], domain2['comment']) == (None, 'code')
+    assert 'cannot change' in refused('domain', 'alter', {
+        'not_null': False}, find(client, route, 'domain', 'rt_code2')[0])
+    for kind, name in (('type', 'rt_state'), ('type', 'rt_point'),
+                       ('type', 'rt_span'), ('domain', 'rt_code2')):
+        run(client, route, kind, 'drop', {'confirmation': name},
+            target=find(client, route, kind, name)[0])
+    assert not query("SELECT 1 FROM pg_type WHERE typname LIKE 'rt\\_%'")
