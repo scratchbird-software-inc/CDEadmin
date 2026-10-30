@@ -9,7 +9,9 @@ services:
     volumes:
     - vitess_backups:/vt/vtdataroot/backups
   consul1:
-    command: agent -server -bootstrap-expect 3 -ui -disable-host-node-id -client 0.0.0.0
+    # A demo cluster can stay stopped for weeks; Consul's default 168h rejoin
+    # limit refused to restart it after more than 7 days stopped (2026-10-30).
+    command: agent -server -bootstrap-expect 3 -ui -disable-host-node-id -client 0.0.0.0 -hcl 'server_rejoin_age_max = "87600h"'
     hostname: consul1
     image: hashicorp/consul:2.0.3
     ports:
@@ -17,7 +19,7 @@ services:
     - 8500:8500
     - 8600:8600
   consul2:
-    command: agent -server -retry-join consul1 -disable-host-node-id
+    command: agent -server -retry-join consul1 -disable-host-node-id -hcl 'server_rejoin_age_max = "87600h"'
     depends_on:
     - consul1
     expose:
@@ -27,7 +29,7 @@ services:
     hostname: consul2
     image: hashicorp/consul:2.0.3
   consul3:
-    command: agent -server -retry-join consul1 -disable-host-node-id
+    command: agent -server -retry-join consul1 -disable-host-node-id -hcl 'server_rejoin_age_max = "87600h"'
     depends_on:
     - consul1
     expose:
