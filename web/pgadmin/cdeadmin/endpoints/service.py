@@ -1948,7 +1948,20 @@ class EndpointService:
             if registration_secret:
                 models['database_password'] = registration_secret
             present = None if registration_secret else route.get('credential_kinds')
-            if present is not None:
+            if present is None:
+                # No record of which credentials were supplied (a legacy-
+                # created endpoint, or verification during registration):
+                # reference rows exist for every declared field, but only a
+                # primary or required credential can have been supplied.
+                # Optional factors stay unrequested until the user supplies
+                # them, which records credential_kinds.
+                models = {
+                    kind: model for kind, model in models.items()
+                    if any(field['secret_kind'] == kind and (
+                        field['primary'] or field['required'])
+                        for field in fields)
+                }
+            else:
                 if not isinstance(present, list) or not all(
                     isinstance(item, str) for item in present
                 ):

@@ -1260,6 +1260,60 @@ class EndpointVerificationTests(unittest.TestCase):
         self.assertEqual('api_token', bound.secret_kind)
         self.assertEqual([bound], observed)
 
+    def _mysql_wire_endpoint(self, configuration):
+        # A legacy-created endpoint has one reference row per declared secret
+        # field, whether or not the user ever supplied that credential.
+        route = SimpleNamespace(
+            id=str(uuid.uuid4()), priority=0,
+            configuration=json.dumps(configuration),
+        )
+        references = [
+            SimpleNamespace(
+                id=str(uuid.uuid4()), secret_kind=kind,
+                storage_kind='legacy_protected_column',
+                secret_reference=f'server:14:password:{kind}',
+            )
+            for kind in ('database_password', 'database_password_2',
+                         'database_password_3')
+        ]
+        endpoint = SimpleNamespace(
+            id=str(uuid.uuid4()), endpoint_mode='legacy_native',
+            secret_references=references, routes=[route],
+        )
+        security = SimpleNamespace(secrets=SimpleNamespace(
+            register_resolver=lambda *_args: None,
+            register_reference=lambda *_args: None,
+        ))
+        return endpoint, EndpointService(SimpleNamespace(), security)
+
+    def test_unsupplied_optional_factors_are_not_required(self):
+        # 2026-10-29 smoke test: MySQL/Dolt/TiDB/Vitess verify returned 401
+        # because unsupplied second/third factors became required references.
+        for profile_id in ('mysql-native', 'dolt-native', 'tidb-native',
+                           'vitess-native'):
+            with self.subTest(profile_id=profile_id):
+                endpoint, service = self._mysql_wire_endpoint(
+                    {'host': '127.0.0.1', 'port': 3306, 'username': 'root'})
+                result, primary = service._route_and_reference(
+                    SimpleNamespace(user_id=7), endpoint,
+                    registration_profile(profile_id),
+                )
+                self.assertEqual(['database_password'],
+                                 list(result['credential_references']))
+                self.assertEqual('database_password', primary.secret_kind)
+
+    def test_supplied_optional_factor_stays_required(self):
+        endpoint, service = self._mysql_wire_endpoint({
+            'host': '127.0.0.1', 'port': 3306, 'username': 'root',
+            'credential_kinds': ['database_password', 'database_password_2'],
+        })
+        result, _primary = service._route_and_reference(
+            SimpleNamespace(user_id=7), endpoint,
+            registration_profile('mysql-native'),
+        )
+        self.assertEqual(['database_password', 'database_password_2'],
+                         sorted(result['credential_references']))
+
     def test_embedded_route_does_not_require_or_invent_a_secret(self):
         route = SimpleNamespace(
             id=str(uuid.uuid4()), priority=0,
