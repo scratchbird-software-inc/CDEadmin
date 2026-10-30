@@ -22,6 +22,7 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
+from . import objects
 from .driver import CockroachDBClient
 from ..distributed_control_plane import DistributedSQLControlPlane
 from pgadmin.cdeadmin.visual_admin import (
@@ -1273,7 +1274,45 @@ def _post_validate_control_plane(client, request):
 class CockroachDBAdministration(DistributedSQLControlPlane):
     """CockroachDB-specific relational forms plus native controls."""
 
+    @staticmethod
+    def _native_object(kind, operation):
+        return operation in objects.OPERATIONS.get(kind, ())
+
+    def validate(self, request):
+        kind = request.get('resource_kind')
+        operation = request.get('operation_id')
+        if not self._native_object(kind, operation) or not self.supports(
+                kind, operation):
+            return super().validate(request)
+        try:
+            objects.compile_operation(
+                self, kind, operation, request.get('draft'),
+                request.get('target_resource'))
+        except RelationalClientError as error:
+            return {'errors': [{'field_id': None,
+                                'code': f'invalid_cockroachdb_{kind}',
+                                'message': str(error)}]}
+        return {'errors': []}
+
+    def _normalize_draft(self, kind, operation, draft):
+        if self._native_object(kind, operation):
+            if not isinstance(draft, dict):
+                raise RelationalClientError(
+                    'administration draft is invalid')
+            return dict(draft)
+        return super()._normalize_draft(kind, operation, draft)
+
+    def _compile(self, request):
+        kind, operation = request['resource_kind'], request['operation_id']
+        if self._native_object(kind, operation):
+            return {'statements': objects.compile_operation(
+                self, kind, operation, request['draft'],
+                request.get('target_resource'))}
+        return super()._compile(request)
+
     def _form(self, kind, operation):
+        if self._native_object(kind, operation):
+            return objects.form(kind, operation, self._field)
         if kind == 'materialized-view' and operation == 'create':
             return {
                 'form_id': 'materialized-view.create',
@@ -1388,15 +1427,26 @@ def _extras(cursor, request, generation):
     ):
         kind = 'procedure' if str(routine_kind) == 'p' else 'function'
         values.append(resource(kind, [schema], name, generation))
-    for schema, table, name in optional_rows(
+    # pg_trigger, not information_schema.triggers: that lists a trigger
+    # once per event, so a trigger on two events came back twice.
+    for (schema, table, name, tgtype, enabled, function_schema, function,
+         arguments, when) in optional_rows(
         cursor,
-        'SELECT event_object_schema, event_object_table, trigger_name '
-        'FROM information_schema.triggers WHERE event_object_schema NOT IN '
-        "('pg_catalog', 'information_schema', 'crdb_internal') "
-        'ORDER BY 1, 2, 3',
+        'SELECT n.nspname, cl.relname, tg.tgname, tg.tgtype, tg.tgenabled, '
+        'pn.nspname, p.proname, tg.tgargs, tg.tgqual '
+        'FROM pg_catalog.pg_trigger tg '
+        'JOIN pg_catalog.pg_class cl ON cl.oid = tg.tgrelid '
+        'JOIN pg_catalog.pg_namespace n ON n.oid = cl.relnamespace '
+        'JOIN pg_catalog.pg_proc p ON p.oid = tg.tgfoid '
+        'JOIN pg_catalog.pg_namespace pn ON pn.oid = p.pronamespace '
+        "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', "
+        "'crdb_internal') ORDER BY 1, 2, 3",
     ):
         values.append(resource(
-            'trigger', [schema, table], name, generation
+            'trigger', [schema, table], name, generation,
+            objects.trigger_native(
+                (str(schema), str(table)), tgtype, enabled,
+                (str(function_schema), str(function)), arguments, when),
         ))
     route = request.get('route') or {}
     database = route.get('database')
@@ -1416,17 +1466,22 @@ def _extras(cursor, request, generation):
                 'partition_value': None if value is None else str(value),
             },
         ))
-    for name, can_login in optional_rows(
+    shown = {str(name): (options, member_of) for name, options, member_of,
+             *_ in optional_rows(cursor, 'SHOW ROLES')}
+    for name, can_login, valid_until in optional_rows(
         cursor,
-        'SELECT rolname, rolcanlogin FROM pg_catalog.pg_roles '
-        'ORDER BY rolname',
+        'SELECT rolname, rolcanlogin, rolvaliduntil::STRING '
+        'FROM pg_catalog.pg_roles ORDER BY rolname',
     ):
+        options, member_of = shown.get(str(name), ((), ()))
+        native = objects.principal_native(
+            options, member_of, can_login, valid_until)
         values.append(resource('role', [], name, generation, {
-            'can_login': bool(can_login),
+            'can_login': bool(can_login), **native,
         }))
         if can_login:
             values.append(resource('user', [], name, generation, {
-                'can_login': True,
+                'can_login': True, **native,
             }))
     for grantee, schema, table, privilege in optional_rows(
         cursor,

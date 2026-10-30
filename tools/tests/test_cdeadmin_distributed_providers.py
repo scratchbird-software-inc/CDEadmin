@@ -4028,7 +4028,7 @@ class DistributedProviderTests(unittest.TestCase):
         })
         source = cockroach['provider_payload']['compiled']['statements'][0]
         self.assertEqual(
-            'CREATE USER "analyst" PASSWORD \'secret-canary\'',
+            'CREATE USER "analyst" WITH LOGIN PASSWORD \'secret-canary\'',
             source['source'],
         )
         self.assertNotIn('secret-canary', source['preview_source'])
@@ -4090,16 +4090,16 @@ class DistributedProviderTests(unittest.TestCase):
                 'name': 'widgets_trigger', 'parent': 'public',
                 'table': 'public.widgets', 'timing': 'AFTER',
                 'events': ['INSERT'],
-                'body': (
-                    'FOR EACH ROW EXECUTE FUNCTION public.on_widget()'
-                ),
+                # Structured since 2026-10-30: a free-text body could carry
+                # statement-level syntax CockroachDB refuses.
+                'function': 'public.on_widget',
             },
             '_provider_route': route,
         })
         self.assertEqual(
             'CREATE TRIGGER "widgets_trigger" AFTER INSERT ON '
             '"public"."widgets" FOR EACH ROW EXECUTE FUNCTION '
-            'public.on_widget()',
+            '"public"."on_widget"()',
             trigger['provider_payload']['compiled']['statements'][0][
                 'source'],
         )

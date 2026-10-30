@@ -1,0 +1,245 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "cockroachdb",
+  "family": "role",
+  "resource_kinds": [
+    "user",
+    "role",
+    "privilege"
+  ],
+  "status": "complete",
+  "engine_tab_title": "CockroachDB",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Role rename and comments",
+      "reason": "CockroachDB 26.1.3 refuses ALTER ROLE/USER ... RENAME and COMMENT ON ROLE (live)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "SUPERUSER, INHERIT, CONNECTION LIMIT",
+      "reason": "Refused by CockroachDB 26.1.3 (live); admin rights come from membership in admin",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Per-role session defaults",
+      "reason": "ALTER ROLE ... [IN DATABASE] SET runs on 26.1.3 (live) but has no editor yet",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "System privileges",
+      "reason": "GRANT SYSTEM <privilege> runs on 26.1.3 (live) but has no editor yet",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Grant dialog privilege list",
+      "reason": "Grant/revoke use the provider dialog; its privilege list is a JSON field",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "tab": "General",
+      "control": "select",
+      "ui_only": true,
+      "options": [
+        {
+          "value": "user",
+          "label": "User"
+        },
+        {
+          "value": "role",
+          "label": "Role"
+        },
+        {
+          "value": "grant",
+          "label": "Grant"
+        }
+      ]
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "login",
+      "label": "Can log in",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "help": "LOGIN / NOLOGIN. A user is a role that can log in.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    },
+    {
+      "field_id": "sql_login",
+      "label": "SQL login",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": true,
+      "help": "Off (NOSQLLOGIN) refuses SQL sessions but still allows the DB Console.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "General",
+      "control": "password",
+      "required": false,
+      "help": "Optional; a cluster in insecure mode refuses passwords. The value is redacted from validation and plans.",
+      "group": "Authentication",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    },
+    {
+      "field_id": "clear_password",
+      "label": "Remove password",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ],
+      "group": "Authentication",
+      "help": "PASSWORD NULL",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    },
+    {
+      "field_id": "valid_until",
+      "label": "Valid until",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "VALID UNTIL; a timestamp such as 2030-01-01. Empty means no expiry.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    },
+    {
+      "field_id": "member_of",
+      "label": "Member of",
+      "tab": "Membership",
+      "control": "grid",
+      "item_kind": "string",
+      "required": false,
+      "help": "Roles granted to this principal (GRANT role TO name).",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      },
+      "columns": [
+        {
+          "field_id": "role",
+          "label": "Role",
+          "control": "reference",
+          "reference_kind": "role",
+          "reference_value": "display_name",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "privileges",
+      "label": "Role options",
+      "tab": "Privileges",
+      "control": "multiselect",
+      "required": false,
+      "options": [
+        {
+          "value": "CREATEDB",
+          "label": "Create databases"
+        },
+        {
+          "value": "CREATEROLE",
+          "label": "Create roles"
+        },
+        {
+          "value": "CREATELOGIN",
+          "label": "Manage login options"
+        },
+        {
+          "value": "CONTROLJOB",
+          "label": "Control jobs"
+        },
+        {
+          "value": "CONTROLCHANGEFEED",
+          "label": "Control changefeeds (deprecated by CockroachDB)"
+        },
+        {
+          "value": "CANCELQUERY",
+          "label": "Cancel queries"
+        },
+        {
+          "value": "VIEWACTIVITY",
+          "label": "View activity"
+        },
+        {
+          "value": "VIEWACTIVITYREDACTED",
+          "label": "View activity (redacted)"
+        },
+        {
+          "value": "VIEWCLUSTERSETTING",
+          "label": "View cluster settings"
+        },
+        {
+          "value": "MODIFYCLUSTERSETTING",
+          "label": "Modify cluster settings"
+        },
+        {
+          "value": "REPLICATION",
+          "label": "Replication"
+        },
+        {
+          "value": "BYPASSRLS",
+          "label": "Bypass row-level security"
+        }
+      ],
+      "help": "CockroachDB role options; clearing one sends its NO form.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    }
+  ],
+  "notes": "Hand-finished from the provider forms (providers/cockroachdb/objects.py). Users and roles are one principal in CockroachDB; the user variant defaults Can log in on, the role variant off. Password is optional: a cluster in insecure mode refuses it (the demo). privilege: provider exposes no create form (grant, inspect, revoke). Round trip verified live on CockroachDB 26.1.3 by tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py (2026-10-30)."
+}

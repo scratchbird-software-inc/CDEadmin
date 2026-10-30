@@ -1,0 +1,565 @@
+{
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "cockroachdb",
+  "profiles": [
+    "cockroachdb-native"
+  ],
+  "beta_tier": "full",
+  "version_range": {
+    "minimum": "26.1.3",
+    "tested": [
+      "26.1.3"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "cluster",
+      "family": "engine_object",
+      "title": "CockroachDB cluster",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "node",
+      "family": "engine_object",
+      "title": "Node",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "locality",
+      "family": "engine_object",
+      "title": "Locality",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "database",
+      "family": "database",
+      "title": "Database",
+      "form": "forms/database.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "schema",
+      "family": "engine_object",
+      "title": "Schema",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "table",
+      "family": "table",
+      "title": "Table",
+      "form": "forms/table.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "insert",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "update",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "delete",
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "column",
+      "family": "engine_object",
+      "title": "Column",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "index",
+      "family": "index",
+      "title": "Index",
+      "form": "forms/index.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "constraint",
+      "family": "engine_object",
+      "title": "Constraint",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "sequence",
+      "family": "sequence",
+      "title": "Sequence",
+      "form": "forms/sequence.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "view",
+      "family": "view",
+      "title": "View",
+      "form": "forms/view.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "materialized-view",
+      "family": "view",
+      "title": "Materialized view",
+      "variant": "materialized",
+      "form": "forms/view.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "type",
+      "family": "type",
+      "title": "Type",
+      "form": "forms/type.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "function",
+      "family": "routine",
+      "title": "Function",
+      "variant": "function",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "procedure",
+      "family": "routine",
+      "title": "Procedure",
+      "variant": "procedure",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "trigger",
+      "family": "trigger",
+      "title": "Trigger",
+      "form": "forms/trigger.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "partition",
+      "family": "engine_object",
+      "title": "Partition",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "user",
+      "family": "role",
+      "title": "User",
+      "variant": "user",
+      "form": "forms/role.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "role",
+      "family": "role",
+      "title": "Role",
+      "variant": "role",
+      "form": "forms/role.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "privilege",
+      "family": "role",
+      "title": "Privilege",
+      "variant": "grant",
+      "form": "forms/role.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1,
+          "mutation_class": "admin"
+        }
+      ]
+    },
+    {
+      "resource_kind": "range",
+      "family": "engine_object",
+      "title": "Range",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "zone-config",
+      "family": "engine_object",
+      "title": "Zone configuration",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "job",
+      "family": "engine_object",
+      "title": "Job",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "schedule",
+      "family": "engine_object",
+      "title": "Schedule",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "changefeed",
+      "family": "engine_object",
+      "title": "Changefeed",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    }
+  ]
+}

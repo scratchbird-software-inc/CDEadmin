@@ -1,0 +1,123 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "cockroachdb",
+  "family": "trigger",
+  "resource_kinds": [
+    "trigger"
+  ],
+  "status": "complete",
+  "engine_tab_title": "CockroachDB",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Statement-level, INSTEAD OF, TRUNCATE, column-list and REFERENCING triggers",
+      "reason": "Refused by CockroachDB 26.1.3 (live)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Trigger alter, rename, enable/disable, comment, CREATE OR REPLACE",
+      "reason": "Refused by CockroachDB 26.1.3 (live); a trigger is changed by drop and create",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "reference",
+      "required": true,
+      "help": "Row-level triggers on a table; CockroachDB refuses triggers on views.",
+      "reference_kind": "table",
+      "reference_value": "display_path"
+    },
+    {
+      "field_id": "timing",
+      "label": "Timing",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "BEFORE",
+      "options": [
+        {
+          "value": "BEFORE",
+          "label": "Before"
+        },
+        {
+          "value": "AFTER",
+          "label": "After"
+        }
+      ]
+    },
+    {
+      "field_id": "events",
+      "label": "Events",
+      "tab": "General",
+      "control": "multiselect",
+      "required": true,
+      "default": [
+        "INSERT"
+      ],
+      "options": [
+        {
+          "value": "INSERT",
+          "label": "Insert"
+        },
+        {
+          "value": "UPDATE",
+          "label": "Update"
+        },
+        {
+          "value": "DELETE",
+          "label": "Delete"
+        }
+      ]
+    },
+    {
+      "field_id": "function",
+      "label": "Trigger function",
+      "tab": "Definition",
+      "control": "reference",
+      "required": true,
+      "help": "A function that returns TRIGGER.",
+      "reference_kind": "function",
+      "reference_value": "display_path"
+    },
+    {
+      "field_id": "arguments",
+      "label": "Function arguments",
+      "tab": "Definition",
+      "control": "grid",
+      "item_kind": "string",
+      "required": false,
+      "help": "String constants passed to the function (TG_ARGV).",
+      "reorderable": true,
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Argument",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "when",
+      "label": "WHEN condition",
+      "tab": "General",
+      "control": "code",
+      "language": "sql",
+      "required": false,
+      "help": "Write row fields as (NEW).column or (OLD).column; NEW.column is refused."
+    }
+  ],
+  "notes": "Hand-finished from the provider form (providers/cockroachdb/objects.py): FOR EACH ROW is implied; the record decodes pg_trigger (timing, events, function, arguments, WHEN). Round trip verified live on CockroachDB 26.1.3 by tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py (2026-10-30)."
+}

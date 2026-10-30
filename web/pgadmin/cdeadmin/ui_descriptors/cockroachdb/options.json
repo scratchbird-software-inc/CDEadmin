@@ -1,0 +1,26 @@
+{
+  "schema": "cdeadmin.ui-options.v1",
+  "engine": "cockroachdb",
+  "dialect": {},
+  "catalog": {
+    "databases": {
+      "resource_kind": "database"
+    },
+    "schemas": {
+      "resource_kind": "schema"
+    },
+    "tables": {
+      "resource_kind": "table"
+    },
+    "functions": {
+      "resource_kind": "function"
+    },
+    "users": {
+      "resource_kind": "user"
+    },
+    "roles": {
+      "resource_kind": "role"
+    }
+  },
+  "notes": "Catalog entries resolve at runtime from the endpoint resources of the named kind (tested version 26.1.3)."
+}

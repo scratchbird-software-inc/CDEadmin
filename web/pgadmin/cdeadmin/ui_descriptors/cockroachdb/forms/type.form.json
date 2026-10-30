@@ -1,0 +1,14 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "cockroachdb",
+  "family": "type",
+  "resource_kinds": [
+    "type"
+  ],
+  "status": "pending",
+  "engine_tab_title": "cockroachdb",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. type: provider exposes no create form (inspect)"
+}

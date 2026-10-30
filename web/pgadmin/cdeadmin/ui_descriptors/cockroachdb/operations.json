@@ -1,0 +1,859 @@
+{
+  "schema": "cdeadmin.ui-operations.v1",
+  "engine": "cockroachdb",
+  "operations": [
+    {
+      "operation_id": "restore_database",
+      "resource_kind": "cluster",
+      "title": "Restore database",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "source_uri",
+          "label": "Approved backup URI",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "database_name",
+          "label": "Database name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "new_database_name",
+          "label": "Restore as database",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "decommission",
+      "resource_kind": "node",
+      "title": "Decommission node",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "checks",
+          "label": "Readiness checks",
+          "control": "select",
+          "required": false,
+          "default": "enabled",
+          "options": [
+            {
+              "value": "enabled",
+              "label": "Enabled"
+            },
+            {
+              "value": "strict",
+              "label": "Strict"
+            },
+            {
+              "value": "skip",
+              "label": "Skip"
+            }
+          ]
+        },
+        {
+          "field_id": "wait",
+          "label": "Wait for",
+          "control": "select",
+          "required": false,
+          "default": "all",
+          "options": [
+            {
+              "value": "all",
+              "label": "All replicas relocated"
+            },
+            {
+              "value": "none",
+              "label": "Request acceptance only"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "recommission",
+      "resource_kind": "node",
+      "title": "Recommission node",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "configure_zone",
+      "resource_kind": "database",
+      "title": "Configure database placement",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "num_replicas",
+          "label": "Replica count",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "num_voters",
+          "label": "Voting replica count",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "range_min_bytes",
+          "label": "Minimum range bytes",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "range_max_bytes",
+          "label": "Maximum range bytes",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "gc_ttl_seconds",
+          "label": "GC TTL seconds",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "constraints",
+          "label": "Replica constraints",
+          "control": "keyvalue",
+          "required": false
+        },
+        {
+          "field_id": "voter_constraints",
+          "label": "Voter constraints",
+          "control": "keyvalue",
+          "required": false
+        },
+        {
+          "field_id": "lease_preferences",
+          "label": "Lease preferences",
+          "control": "keyvalue",
+          "required": false
+        }
+      ],
+      "notes": "typed_from_json: database.configure_zone.constraints, database.configure_zone.voter_constraints, database.configure_zone.lease_preferences"
+    },
+    {
+      "operation_id": "reset_zone",
+      "resource_kind": "database",
+      "title": "Reset database placement",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "set_primary_region",
+      "resource_kind": "database",
+      "title": "Set primary region",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "region",
+          "label": "Cluster region",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "add_region",
+      "resource_kind": "database",
+      "title": "Add database region",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "region",
+          "label": "Cluster region",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "drop_region",
+      "resource_kind": "database",
+      "title": "Drop database region",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "region",
+          "label": "Database region",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "set_secondary_region",
+      "resource_kind": "database",
+      "title": "Set secondary region",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "region",
+          "label": "Database region",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "drop_secondary_region",
+      "resource_kind": "database",
+      "title": "Drop secondary region",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "set_survival_goal",
+      "resource_kind": "database",
+      "title": "Set survival goal",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "goal",
+          "label": "Failure survival goal",
+          "control": "select",
+          "required": true,
+          "default": "zone",
+          "options": [
+            {
+              "value": "zone",
+              "label": "Zone failure"
+            },
+            {
+              "value": "region",
+              "label": "Region failure"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "set_placement",
+      "resource_kind": "database",
+      "title": "Set replica placement policy",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "policy",
+          "label": "Placement policy",
+          "control": "select",
+          "required": true,
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Default"
+            },
+            {
+              "value": "restricted",
+              "label": "Restricted"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "backup",
+      "resource_kind": "database",
+      "title": "Back up database",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "destination_uri",
+          "label": "Approved destination URI",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "revision_history",
+          "label": "Revision history",
+          "control": "select",
+          "required": false,
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Default"
+            },
+            {
+              "value": "with_revision_history",
+              "label": "Include revision history"
+            }
+          ]
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "configure_zone",
+      "resource_kind": "table",
+      "title": "Configure table placement",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "num_replicas",
+          "label": "Replica count",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "num_voters",
+          "label": "Voting replica count",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "range_min_bytes",
+          "label": "Minimum range bytes",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "range_max_bytes",
+          "label": "Maximum range bytes",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "gc_ttl_seconds",
+          "label": "GC TTL seconds",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "constraints",
+          "label": "Replica constraints",
+          "control": "keyvalue",
+          "required": false
+        },
+        {
+          "field_id": "voter_constraints",
+          "label": "Voter constraints",
+          "control": "keyvalue",
+          "required": false
+        },
+        {
+          "field_id": "lease_preferences",
+          "label": "Lease preferences",
+          "control": "keyvalue",
+          "required": false
+        }
+      ],
+      "notes": "typed_from_json: table.configure_zone.constraints, table.configure_zone.voter_constraints, table.configure_zone.lease_preferences"
+    },
+    {
+      "operation_id": "reset_zone",
+      "resource_kind": "table",
+      "title": "Reset table placement",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "set_locality",
+      "resource_kind": "table",
+      "title": "Set table locality",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "locality",
+          "label": "Table locality",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "global",
+              "label": "Global"
+            },
+            {
+              "value": "regional_by_table",
+              "label": "Regional by table"
+            },
+            {
+              "value": "regional_by_row",
+              "label": "Regional by row"
+            }
+          ]
+        },
+        {
+          "field_id": "region",
+          "label": "Table home region",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "locality",
+            "equals": "regional_by_table"
+          }
+        },
+        {
+          "field_id": "region_column",
+          "label": "Region column",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "locality",
+            "equals": "regional_by_row"
+          }
+        }
+      ]
+    },
+    {
+      "operation_id": "scatter",
+      "resource_kind": "table",
+      "title": "Scatter table ranges",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "create_changefeed",
+      "resource_kind": "table",
+      "title": "Create table changefeed",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "sink_uri",
+          "label": "Approved sink URI",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "initial_scan",
+          "label": "Initial scan",
+          "control": "select",
+          "required": false,
+          "default": "yes",
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes"
+            },
+            {
+              "value": "no",
+              "label": "No"
+            },
+            {
+              "value": "only",
+              "label": "Only"
+            }
+          ]
+        },
+        {
+          "field_id": "format",
+          "label": "Message format",
+          "control": "select",
+          "required": false,
+          "default": "json",
+          "options": [
+            {
+              "value": "json",
+              "label": "JSON"
+            },
+            {
+              "value": "csv",
+              "label": "CSV"
+            }
+          ]
+        },
+        {
+          "field_id": "envelope",
+          "label": "Envelope",
+          "control": "select",
+          "required": false,
+          "default": "wrapped",
+          "options": [
+            {
+              "value": "wrapped",
+              "label": "Wrapped"
+            },
+            {
+              "value": "row",
+              "label": "Row"
+            },
+            {
+              "value": "key_only",
+              "label": "Key only"
+            }
+          ]
+        },
+        {
+          "field_id": "resolved_interval",
+          "label": "Resolved timestamp interval",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "operation_id": "scatter",
+      "resource_kind": "index",
+      "title": "Scatter index ranges",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "refresh",
+      "resource_kind": "materialized-view",
+      "title": "Refresh materialized view",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "relocate_lease",
+      "resource_kind": "range",
+      "title": "Relocate range lease",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "destination_store_id",
+          "label": "Destination store ID",
+          "control": "number",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "relocate_voter",
+      "resource_kind": "range",
+      "title": "Relocate voting replica",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "source_store_id",
+          "label": "Source store ID",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "destination_store_id",
+          "label": "Destination store ID",
+          "control": "number",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "relocate_nonvoter",
+      "resource_kind": "range",
+      "title": "Relocate non-voting replica",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "source_store_id",
+          "label": "Source store ID",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "destination_store_id",
+          "label": "Destination store ID",
+          "control": "number",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "pause",
+      "resource_kind": "job",
+      "title": "Pause job",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "reason",
+          "label": "Reason",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "operation_id": "resume",
+      "resource_kind": "job",
+      "title": "Resume job",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "cancel",
+      "resource_kind": "job",
+      "title": "Cancel job",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "pause",
+      "resource_kind": "schedule",
+      "title": "Pause schedule",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "resume",
+      "resource_kind": "schedule",
+      "title": "Resume schedule",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "pause",
+      "resource_kind": "changefeed",
+      "title": "Pause changefeed",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "resume",
+      "resource_kind": "changefeed",
+      "title": "Resume changefeed",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "cancel",
+      "resource_kind": "changefeed",
+      "title": "Cancel changefeed",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "add_table",
+      "resource_kind": "changefeed",
+      "title": "Add table to changefeed",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "table_name",
+          "label": "Qualified table name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "initial_scan",
+          "label": "Initial scan",
+          "control": "select",
+          "required": false,
+          "default": "yes",
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes"
+            },
+            {
+              "value": "no",
+              "label": "No"
+            },
+            {
+              "value": "only",
+              "label": "Only"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "drop_table",
+      "resource_kind": "changefeed",
+      "title": "Remove table from changefeed",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "table_name",
+          "label": "Qualified table name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "set_sink",
+      "resource_kind": "changefeed",
+      "title": "Change changefeed sink",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "sink_uri",
+          "label": "Approved sink URI",
+          "control": "text",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

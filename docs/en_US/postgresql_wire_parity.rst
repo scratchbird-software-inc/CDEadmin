@@ -322,6 +322,47 @@ Provider findings (2026-10-30)
    index marked hidden; indexes carry columns, directions, ``STORING``,
    uniqueness, method (``inverted`` for gin), hash sharding with its bucket
    count, partial predicate and visibility.
+-  Triggers and principals, 2026-10-30. ``information_schema.triggers``
+   lists a trigger once per event, so a trigger on two events appeared
+   twice; trigger records now come from ``pg_trigger`` and carry timing,
+   events, function, arguments and the ``WHEN`` clause. User and role
+   records carry login, SQL login, role options, expiry and memberships from
+   ``SHOW ROLES``. The trigger, user and role forms are CockroachDB's own
+   (``providers/cockroachdb/objects.py``) and their descriptors are
+   ``complete`` after live round trips
+   (``tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py``).
+
+Checked live on 26.1.3 for those forms (not yet in the probe):
+
+-  Triggers: only ``FOR EACH ROW``, ``BEFORE`` or ``AFTER``, on ``INSERT``,
+   ``UPDATE`` or ``DELETE``, with string arguments and a ``WHEN`` clause.
+   Refused: ``INSTEAD OF`` (on views too), ``TRUNCATE``, column lists
+   (``UPDATE OF``), ``REFERENCING``, statement-level triggers,
+   ``CREATE OR REPLACE TRIGGER``, and every ``ALTER TRIGGER``,
+   ``ENABLE``/``DISABLE TRIGGER`` and ``COMMENT ON TRIGGER``.
+-  A ``WHEN`` clause must write row fields as ``(NEW).col``; ``NEW.col`` is
+   refused ("no data source matches prefix").
+-  A trigger argument containing a single quote cannot be stored: however
+   the literal is written (``''``, ``E'\''``, dollar quoting), CockroachDB
+   re-renders the statement with the quote unescaped and fails to parse it.
+   The provider refuses such an argument with that reason.
+-  Role options that run: ``LOGIN``, ``SQLLOGIN``, ``CREATEDB``,
+   ``CREATEROLE``, ``CREATELOGIN``, ``CONTROLJOB``, ``CONTROLCHANGEFEED``,
+   ``CANCELQUERY``, ``VIEWACTIVITY``, ``VIEWACTIVITYREDACTED``,
+   ``VIEWCLUSTERSETTING``, ``MODIFYCLUSTERSETTING``, ``REPLICATION``,
+   ``BYPASSRLS`` (each with its ``NO`` form), ``PASSWORD NULL`` and
+   ``VALID UNTIL``. Refused: ``SUPERUSER``, ``INHERIT``, ``CONNECTION
+   LIMIT``, ``RENAME`` and ``COMMENT ON ROLE``. ``ALTER ROLE ... [IN
+   DATABASE] SET`` and ``GRANT SYSTEM`` run but have no editor yet.
+-  Enum types: ``ADD VALUE`` (with ``BEFORE``/``AFTER``), ``RENAME VALUE``,
+   ``DROP VALUE`` and ``RENAME TO`` run; composite ``ADD ATTRIBUTE`` is
+   refused.
+-  Policies: ``CREATE``/``ALTER``/``DROP POLICY`` run and ``pg_policy`` and
+   ``SHOW POLICIES`` read them back; ``COMMENT ON POLICY`` is refused.
+-  ``ALTER COLUMN ... TYPE`` is refused while a policy expression references
+   the column.
+-  Tables are created with ``schema_locked = true`` by default (seen in
+   ``SHOW CREATE TABLE``).
 
 Plan
 ----
@@ -340,7 +381,11 @@ Plan
    Owner decision, 2026-10-30: rangefeeds are on in the demo; there is no
    multi-node demo, and what it would have proved is listed under
    "Untested on CockroachDB" below. The CLI wrapper is in the demo.
-#. Provider forms per family, reusing the PostgreSQL provider's field ids:
+#. Provider forms per family, reusing the PostgreSQL provider's field ids
+   (corrected 2026-10-30: the PostgreSQL provider has no effective forms of
+   this kind to reuse, and its descriptors use pgAdmin's own ids.
+   CockroachDB compiles through the shared relational administration, so
+   its forms keep that layer's ids, as Vitess, TiDB and Dolt do):
    table (columns, constraints, families, TTL, locality), index (method,
    storing, hash-sharded, partial, visibility), trigger (row-level only),
    user and role (passwordless where the cluster requires it), type (enum,
@@ -351,4 +396,11 @@ Plan
    ``complete`` only after a live round trip checks what the engine holds.
 #. The shared PostgreSQL descriptors are still ``draft`` and are another
    stream's work; CockroachDB takes field ids from the PostgreSQL provider's
-   effective forms, not from those drafts.
+   effective forms, not from those drafts (see the correction above: the
+   ids are the shared relational administration's).
+
+Progress, 2026-10-30: the descriptor folder exists; trigger and role
+(user, role) forms are ``complete``; database, table, index, sequence, view
+and routine are drafts and type is pending. The table form's existing
+columns take add, drop and rename only (the shared column diff), so a type,
+default or nullability change on an existing column is not yet sent.

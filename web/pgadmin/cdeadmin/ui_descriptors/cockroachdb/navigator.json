@@ -1,0 +1,120 @@
+{
+  "schema": "cdeadmin.ui-navigator.v1",
+  "engine": "cockroachdb",
+  "sort": "alphabetical",
+  "groups": [
+    {
+      "group_id": "topology",
+      "title": "Topology",
+      "kinds": [
+        "cluster",
+        "node",
+        "locality",
+        "range",
+        "zone-config"
+      ],
+      "order": 1
+    },
+    {
+      "group_id": "namespaces",
+      "title": "Databases and schemas",
+      "kinds": [
+        "database",
+        "schema"
+      ],
+      "order": 2
+    },
+    {
+      "group_id": "relations",
+      "title": "Tables and views",
+      "kinds": [
+        "table",
+        "column",
+        "index",
+        "constraint",
+        "view",
+        "materialized-view",
+        "sequence",
+        "partition"
+      ],
+      "order": 3
+    },
+    {
+      "group_id": "programmability",
+      "title": "Types, routines and triggers",
+      "kinds": [
+        "type",
+        "function",
+        "procedure",
+        "trigger"
+      ],
+      "order": 4
+    },
+    {
+      "group_id": "replication",
+      "title": "Changefeeds",
+      "kinds": [
+        "changefeed"
+      ],
+      "order": 5
+    },
+    {
+      "group_id": "security",
+      "title": "Security",
+      "kinds": [
+        "user",
+        "role",
+        "privilege"
+      ],
+      "order": 6
+    },
+    {
+      "group_id": "operations",
+      "title": "Administration",
+      "kinds": [
+        "job",
+        "schedule"
+      ],
+      "order": 7
+    }
+  ],
+  "resource_children": {
+    "table": [
+      "column",
+      "index",
+      "constraint",
+      "partition",
+      "trigger"
+    ],
+    "view": [
+      "column"
+    ]
+  },
+  "kind_icons": {
+    "cluster": "object.cluster",
+    "node": "object.node",
+    "locality": "object.node",
+    "range": "object.partition",
+    "zone-config": "object.filespace",
+    "database": "object.database",
+    "schema": "object.schema",
+    "table": "object.table",
+    "column": "object.column",
+    "index": "object.index",
+    "constraint": "object.constraint",
+    "view": "object.view",
+    "materialized-view": "object.materialized_view",
+    "sequence": "object.sequence",
+    "partition": "object.partition",
+    "type": "object.type",
+    "function": "object.function",
+    "procedure": "object.procedure",
+    "trigger": "object.trigger",
+    "changefeed": "object.replication",
+    "user": "object.user",
+    "role": "object.role",
+    "privilege": "object.privilege",
+    "job": "object.job",
+    "schedule": "object.job"
+  }
+}
