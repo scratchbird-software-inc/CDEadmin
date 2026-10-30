@@ -22,7 +22,7 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
-from . import objects, tables
+from . import indexes as index_sql, objects, tables
 from .driver import CockroachDBClient
 from ..distributed_control_plane import DistributedSQLControlPlane
 from pgadmin.cdeadmin.visual_admin import (
@@ -79,6 +79,10 @@ for _kind in ('function', 'procedure', 'trigger'):
     _COCKROACH_SUPPORTED[_kind] = frozenset({
         'inspect', 'create', 'drop',
     })
+# In place: rename, visibility and comment (providers/cockroachdb/indexes).
+_COCKROACH_SUPPORTED['index'] = frozenset({
+    'inspect', 'create', 'alter', 'drop', 'scatter',
+})
 _COCKROACH_SUPPORTED['materialized-view'] = frozenset({
     'inspect', 'create', 'rename', 'drop',
 })
@@ -1277,13 +1281,18 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
     @staticmethod
     def _native_object(kind, operation):
         return operation in objects.OPERATIONS.get(kind, ()) or (
-            kind == 'table' and operation in {'create', 'alter'})
+            kind in {'table', 'index'} and operation in {'create', 'alter'})
 
     def _native_compile(self, request):
         kind, operation = request['resource_kind'], request['operation_id']
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if kind == 'index':
+            if operation == 'create':
+                return {'statements': index_sql.create(self, draft)}
+            return {'statements': index_sql.alter(
+                self, draft, request.get('target_resource'))}
         if kind != 'table':
             return {'statements': objects.compile_operation(
                 self, kind, operation, draft,
@@ -1323,6 +1332,9 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
         return super()._compile(request)
 
     def _form(self, kind, operation):
+        if kind == 'index' and operation in {'create', 'alter'}:
+            return index_sql.form(super()._form(kind, 'create'),
+                                  self._field, operation)
         if kind == 'table' and operation in {'create', 'alter'}:
             return tables.extend_form(
                 super()._form(kind, operation), self._field, operation)
@@ -1640,6 +1652,16 @@ def _annotate_catalog(connection, values):
                          'FROM pg_catalog.pg_class c '
                          'JOIN pg_catalog.pg_namespace n '
                          "ON n.oid = c.relnamespace WHERE c.relkind = 'r'")}
+        index_comments = {
+            (str(row[0]), str(row[1]), str(row[2])): str(row[3])
+            for row in optional_rows(
+                cursor,
+                'SELECT n.nspname, t.relname, i.relname, '
+                'obj_description(i.oid) FROM pg_catalog.pg_index x '
+                'JOIN pg_catalog.pg_class i ON i.oid = x.indexrelid '
+                'JOIN pg_catalog.pg_class t ON t.oid = x.indrelid '
+                'JOIN pg_catalog.pg_namespace n ON n.oid = t.relnamespace')
+            if row[3] is not None}
         created = {}
         for row in optional_rows(cursor, 'SHOW CREATE ALL TABLES'):
             parsed = tables.parse_create(str(row[0]))
@@ -1726,8 +1748,13 @@ def _annotate_catalog(connection, values):
         method = re.search(r'\bUSING (\w+) \(', definition)
         bucket = re.search(r'USING HASH WITH \(bucket_count=(\d+)\)',
                            definition)
-        predicate = re.search(r'\) WHERE \((.*)\)$', definition)
+        # VISIBILITY, when below 1, is rendered after the predicate.
+        predicate = re.search(
+            r'\) WHERE \((.*)\)(?: VISIBILITY [0-9.]+)?$', definition)
         native.update(
+            keys=index_sql.key_list(definition),
+            table=[schema, table],
+            comment=index_comments.get((schema, table, name)),
             columns=entry['columns'], directions=entry['directions'],
             # The primary index stores every column; that is not a choice.
             storing=[] if (schema, table, name) in primaries else

@@ -389,6 +389,17 @@ Checked live on 26.1.3 for those forms (not yet in the probe):
       columns), which the catalog tells apart by name and default.
    -  A collation tag is stored normalized (``"en-US"`` reads back as
       ``en_US``).
+-  Indexes: keys with directions and expressions, ``UNIQUE``, inverted
+   (``USING GIN`` or ``CREATE INVERTED INDEX``), hash-sharded with a bucket
+   count, ``STORING`` (``INCLUDE`` is accepted and read back as
+   ``STORING``), a partial predicate and visibility run; in place an index
+   takes ``RENAME TO``, ``VISIBLE``/``NOT VISIBLE``/``VISIBILITY`` and
+   ``COMMENT ON INDEX``. Expression keys read back as
+   ``crdb_internal_idx_expr`` in ``information_schema.statistics``, so the
+   record takes keys from the ``pg_indexes`` definition; NOT VISIBLE reads
+   back as visibility 0. The provider admits index ``alter`` from
+   2026-10-30. Fixed the same day: the catalog lost a partial predicate
+   when visibility was below 1 (rendered after the predicate).
 
 Plan
 ----
@@ -438,3 +449,5 @@ TTL and a table comment; in alter mode it changes existing columns (type,
 default, nullability, visibility, ON UPDATE, identity, stored to regular,
 comment) and diffs each changed constraint grid against the table record.
 Key membership and family stay fixed on existing columns.
+The index form is ``complete`` the same day
+(``providers/cockroachdb/indexes.py``).

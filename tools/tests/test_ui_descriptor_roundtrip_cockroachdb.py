@@ -295,3 +295,53 @@ def test_table_create_reopen_alter_drop(live):
     run(client, route, 'table', 'drop', {'confirmation': 'rt_orders'},
         target=target)
     assert not query("SELECT 1 FROM pg_class WHERE relname = 'rt_orders'")
+
+
+def test_index_create_reopen_alter_drop(live):
+    route, client = live
+    query('CREATE TABLE public.ix (id INT8 PRIMARY KEY, a INT8, b STRING, '
+          'j JSONB, ts TIMESTAMPTZ)')
+    form = resolved_form('cockroachdb', 'index')
+    run(client, route, 'index', 'create', backend_draft(form, {
+        'name': 'ix_ab', 'table': ['public', 'ix'],
+        'keys': [{'expression': 'a', 'direction': 'DESC'},
+                 {'expression': 'lower(b)'}],
+        'storing': [{'value': 'ts'}], 'predicate': 'a > 0',
+        'visibility': 0.25, 'comment': 'partial'}))
+    run(client, route, 'index', 'create', backend_draft(form, {
+        'name': 'ix_hash', 'table': ['public', 'ix'], 'unique': True,
+        'keys': [{'expression': 'b'}], 'hash_sharded': True,
+        'bucket_count': 8}))
+    run(client, route, 'index', 'create', backend_draft(form, {
+        'name': 'ix_inv', 'table': ['public', 'ix'], 'method': 'inverted',
+        'keys': [{'expression': 'j'}]}))
+    target, baseline = record(client, route, 'index', 'ix_ab', 'index')
+    assert (baseline['table'], baseline['keys'],
+            [row['value'] for row in baseline['storing']],
+            baseline['predicate'], baseline['visibility'],
+            baseline['comment']) == (
+        ['public', 'ix'],
+        [{'expression': 'a', 'direction': 'DESC', '_id': '0'},
+         {'expression': 'lower(b)', 'direction': 'ASC', '_id': '1'}],
+        ['ts'], 'a > 0', 0.25, 'partial')
+    _, hashed = record(client, route, 'index', 'ix_hash', 'index')
+    assert (hashed['unique'], hashed['hash_sharded'],
+            hashed['bucket_count'], hashed['keys'][0]['expression']) == (
+        True, True, 8, 'b')
+    _, inverted = record(client, route, 'index', 'ix_inv', 'index')
+    assert inverted['method'] == 'inverted'
+    # Reopened unchanged: nothing to send.
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    alter = backend_draft(form, {**baseline, 'name': 'ix_ab2',
+                                 'visibility': 0, 'comment': ''},
+                          mode='alter', baseline=baseline)
+    assert alter == {'name': 'ix_ab2', 'visibility': 0, 'comment': ''}
+    run(client, route, 'index', 'alter', alter, target=target)
+    target, after = record(client, route, 'index', 'ix_ab2', 'index')
+    assert (after['visibility'], after['comment']) == (0.0, None)
+    for name in ('ix_ab2', 'ix_hash', 'ix_inv'):
+        run(client, route, 'index', 'drop', {'confirmation': name},
+            target=find(client, route, 'index', name)[0])
+    assert query("SELECT indexname FROM pg_indexes WHERE tablename='ix'") \
+        == [('ix_pkey',)]
