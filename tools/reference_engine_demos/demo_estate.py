@@ -388,6 +388,11 @@ def start_standard(engine):
     if not docker_running(name):
         run(["docker", "start", name])
     wait_tcp(READY_PORTS[actual], timeout=300)
+    if actual in {"mysql", "mariadb", "dolt"}:
+        # Docker's port proxy accepts TCP before the server listens; wait
+        # for the protocol greeting so callers can log in on return.
+        wait_until(lambda: _mysql_greeting_ready(READY_PORTS[actual]),
+                   timeout=300, interval=1)
     if actual == "apache_ignite":
         wait_until(lambda: _activate_ignite(name), timeout=180, interval=3)
     elif actual == "xtdb":
@@ -396,6 +401,24 @@ def start_standard(engine):
         wait_until(lambda: _http_engine_ready(actual), timeout=300, interval=2)
     elif actual == 'yugabytedb':
         _check_yugabyte_master_addresses(name)
+
+
+def _mysql_greeting_ready(port):
+    """Require a MySQL-protocol server greeting (protocol version 10).
+
+    Needs no credentials: the server sends the greeting before any login.
+    """
+    with contextlib.closing(socket.create_connection(
+            ("127.0.0.1", port), timeout=5)) as probe:
+        header = b""
+        while len(header) < 5:
+            chunk = probe.recv(5 - len(header))
+            if not chunk:
+                raise ConnectionError("server closed before its greeting")
+            header += chunk
+    if header[4] != 10:
+        raise ConnectionError("unexpected MySQL greeting")
+    return True
 
 
 def _check_yugabyte_master_addresses(name):
