@@ -103,30 +103,48 @@ def _choice(field_id, label, values, **options):
     )
 
 
+# TiDB refuses mixing region placement (PRIMARY_REGION/REGIONS, SCHEDULE)
+# with constraint placement (CONSTRAINTS, LEADER/FOLLOWER/LEARNER
+# constraints, LEARNERS); followers, voters, voter constraints and survival
+# preferences combine with either (every pair probed live, 8.5.6).
+_REGION_PLACEMENT = ('primary_region', 'regions', 'schedule')
+_CONSTRAINT_PLACEMENT = (
+    'constraints', 'leader_constraints', 'follower_constraints', 'learners',
+    'learner_constraints',
+)
+_REGION_STYLE = {'field_id': 'placement_style', 'equals': 'regions'}
+_CONSTRAINT_STYLE = {'field_id': 'placement_style', 'equals': 'constraints'}
+
 _PLACEMENT_FIELDS = (
+    _choice('placement_style', 'Placement style', (
+        ('regions', 'Regions and schedule'),
+        ('constraints', 'Label constraints'),
+    ), required=False, default='regions'),
     cp_field('primary_region', 'Primary region', 'text', False,
-             max_length=256),
+             max_length=256, visible_when=_REGION_STYLE),
     cp_field('regions', 'Regions (comma separated)', 'text', False,
-             max_length=2048),
+             max_length=2048, visible_when=_REGION_STYLE),
+    _choice('schedule', 'Placement schedule', (
+        ('even', 'Even'), ('majority_in_primary', 'Majority in primary'),
+    ), required=False, visible_when=_REGION_STYLE),
     cp_field('followers', 'Follower replicas', 'number', False,
              minimum=0, maximum=15),
     cp_field('voters', 'Voting replicas', 'number', False,
              minimum=0, maximum=15),
-    cp_field('learners', 'Learner replicas', 'number', False,
-             minimum=0, maximum=15),
-    cp_field('constraints', 'Replica constraints', 'text', False,
-             max_length=4096),
-    cp_field('leader_constraints', 'Leader constraints', 'text', False,
-             max_length=4096),
-    cp_field('follower_constraints', 'Follower constraints', 'text', False,
-             max_length=4096),
     cp_field('voter_constraints', 'Voter constraints', 'text', False,
              max_length=4096),
+    cp_field('learners', 'Learner replicas', 'number', False,
+             minimum=0, maximum=15, visible_when=_CONSTRAINT_STYLE),
+    cp_field('constraints', 'Replica constraints', 'text', False,
+             max_length=4096, visible_when=_CONSTRAINT_STYLE),
+    cp_field('leader_constraints', 'Leader constraints', 'text', False,
+             max_length=4096, visible_when=_CONSTRAINT_STYLE),
+    cp_field('follower_constraints', 'Follower constraints', 'text', False,
+             max_length=4096, visible_when=_CONSTRAINT_STYLE),
     cp_field('learner_constraints', 'Learner constraints', 'text', False,
-             max_length=4096),
-    _choice('schedule', 'Placement schedule', (
-        ('even', 'Even'), ('majority_in_primary', 'Majority in primary'),
-    ), required=False),
+             max_length=4096, visible_when=_CONSTRAINT_STYLE),
+    cp_field('survival_preferences', 'Survival preferences', 'text', False,
+             max_length=1024),
 )
 
 _RESOURCE_GROUP_FIELDS = (
@@ -141,6 +159,13 @@ _RESOURCE_GROUP_FIELDS = (
         ('LOW', 'Low'), ('MEDIUM', 'Medium'), ('HIGH', 'High'),
     ), required=True, default='MEDIUM'),
     cp_field('burstable', 'Burstable', 'boolean', False, default=False),
+    # Runaway-query handling (QUERY_LIMIT), verified live on 8.5.6.
+    _choice('query_limit_action', 'Runaway query action', (
+        ('DRYRUN', 'Record only'), ('COOLDOWN', 'Lower priority'),
+        ('KILL', 'Kill the query'), ('REMOVE', 'Remove the limit'),
+    ), required=False),
+    cp_field('query_limit_exec_elapsed', 'Runaway after (e.g. 60s, 1m30s)',
+             'text', False, max_length=32, pattern=r'([0-9]+(ms|s|m|h))+'),
 )
 
 _BR_STORAGE_FIELD = (
@@ -252,6 +277,48 @@ CONTROL_OPERATIONS = (
         'partition', 'reset_placement', 'Use default partition placement',
         'admin', 'topology_admin', impact_scope='cluster'
     ),
+    # Partition maintenance TiDB runs (live, 8.5.6); CHECK, OPTIMIZE,
+    # REBUILD and REPAIR PARTITION are refused with 8200 and not offered.
+    ControlPlaneOperation(
+        'partition', 'truncate', 'Truncate partition', 'destructive',
+        'maintenance_admin', impact_scope='database'
+    ),
+    ControlPlaneOperation(
+        'partition', 'drop', 'Drop partition', 'destructive',
+        'maintenance_admin', impact_scope='database'
+    ),
+    ControlPlaneOperation(
+        'partition', 'analyze', 'Analyze partition', 'admin',
+        'maintenance_admin', impact_scope='database'
+    ),
+    ControlPlaneOperation(
+        'partition', 'exchange', 'Exchange partition with table',
+        'destructive', 'maintenance_admin', (
+            cp_field('exchange_database', 'Table database', 'text', False,
+                     max_length=256),
+            cp_field('exchange_table', 'Table', 'text', True,
+                     max_length=256),
+            _choice('validation', 'Validation', (
+                ('WITH', 'Validate rows'), ('WITHOUT', 'Skip validation'),
+            ), required=False, default='WITH'),
+        ), impact_scope='database'
+    ),
+    ControlPlaneOperation(
+        'partition', 'reorganize', 'Reorganize partitions', 'destructive',
+        'maintenance_admin', (
+            cp_field('partitions', 'Partitions to reorganize (comma '
+                     'separated)', 'text', False, max_length=4096),
+            cp_field('definitions', 'New partition definitions',
+                     'multiline', True, max_length=65536),
+        ), impact_scope='database'
+    ),
+    ControlPlaneOperation(
+        'table', 'add_partitions', 'Add partitions', 'admin',
+        'maintenance_admin', (
+            cp_field('definitions', 'Partition definitions', 'multiline',
+                     True, max_length=65536),
+        ), impact_scope='database'
+    ),
     ControlPlaneOperation(
         'resource-group', 'create', 'Create resource group', 'admin',
         'topology_admin', (
@@ -274,8 +341,9 @@ CONTROL_OPERATIONS = (
         'admin', 'replication_admin', (
             cp_field('replica_count', 'Replica count', 'number', True,
                      minimum=0, maximum=15),
-            cp_field('location_labels', 'Location labels', 'json', False,
-                     default=[], json_type='array'),
+            cp_field('location_labels',
+                     'Location labels (comma separated)', 'text', False,
+                     max_length=4096),
         ), impact_scope='cluster', long_running=True
     ),
     ControlPlaneOperation(
@@ -283,8 +351,9 @@ CONTROL_OPERATIONS = (
         'admin', 'replication_admin', (
             cp_field('replica_count', 'Replica count', 'number', True,
                      minimum=0, maximum=15),
-            cp_field('location_labels', 'Location labels', 'json', False,
-                     default=[], json_type='array'),
+            cp_field('location_labels',
+                     'Location labels (comma separated)', 'text', False,
+                     max_length=4096),
         ), impact_scope='cluster', long_running=True
     ),
     ControlPlaneOperation(
@@ -337,6 +406,47 @@ def _path(request):
     return [str(value) for value in values]
 
 
+_PLACEMENT_OPTION_NAMES = (
+    'primary_region', 'regions', 'followers', 'voters', 'learners',
+    'constraints', 'leader_constraints', 'follower_constraints',
+    'voter_constraints', 'learner_constraints', 'schedule',
+    'survival_preferences',
+)
+
+
+_PARTITION_DEFINITION = re.compile(
+    r'\s*PARTITION\s+\S+\s+VALUES\s+(LESS\s+THAN|IN)\s*\(.*\)\s*',
+    re.IGNORECASE | re.DOTALL)
+
+
+def _partition_definitions(draft):
+    """Comma-separated PARTITION ... VALUES ... clauses, one statement only."""
+    text = str(draft.get('definitions') or '').strip()
+    if not text or ';' in text or not text.upper().startswith('PARTITION'):
+        raise RelationalClientError(
+            'partition definitions must be PARTITION name VALUES ... clauses')
+    depth = 0
+    for character in text:
+        depth += {'(': 1, ')': -1}.get(character, 0)
+        if depth < 0:
+            raise RelationalClientError('partition definitions are unbalanced')
+    if depth:
+        raise RelationalClientError('partition definitions are unbalanced')
+    return text
+
+
+def _current_placement(request):
+    """Options of the target policy as last read from the inventory."""
+    native = (request.get('target_resource') or {}).get('native') or {}
+    current = {
+        key: native[key] for key in _PLACEMENT_OPTION_NAMES
+        if native.get(key) not in (None, '')
+    }
+    if not current.get('learners'):
+        current.pop('learners', None)
+    return current
+
+
 def _target_id(request):
     try:
         return int(_path(request)[-1])
@@ -351,7 +461,18 @@ def _placement_assignments(draft):
         'primary_region', 'regions', 'followers', 'voters', 'learners',
         'constraints', 'leader_constraints', 'follower_constraints',
         'voter_constraints', 'learner_constraints', 'schedule',
+        'survival_preferences',
     )
+    supplied = {name for name in names if draft.get(name) not in (None, '')}
+    if supplied & set(_REGION_PLACEMENT) and (
+            supplied & set(_CONSTRAINT_PLACEMENT)):
+        raise RelationalClientError(
+            'TiDB placement cannot combine regions or schedule with label '
+            'constraints or learners; choose one placement style')
+    if draft.get('learner_constraints') not in (None, '') and not (
+            draft.get('learners')):
+        raise RelationalClientError(
+            'learner constraints need at least one learner replica')
     parts = []
     parameters = []
     for name in names:
@@ -387,6 +508,22 @@ def _resource_group_assignments(draft):
     parts.append('BURSTABLE = ' + (
         'TRUE' if draft.get('burstable') else 'FALSE'
     ))
+    action = draft.get('query_limit_action')
+    if action == 'REMOVE':
+        parts.append('QUERY_LIMIT = NULL')
+    elif action:
+        if action not in {'DRYRUN', 'COOLDOWN', 'KILL'}:
+            raise RelationalClientError('TiDB runaway action is invalid')
+        elapsed = draft.get('query_limit_exec_elapsed')
+        if not isinstance(elapsed, str) or not re.fullmatch(
+                r'([0-9]+(ms|s|m|h))+', elapsed):
+            raise RelationalClientError(
+                'a runaway query limit needs an execution time such as 60s')
+        parts.append(f'QUERY_LIMIT = (EXEC_ELAPSED = %s, ACTION = {action})')
+        parameters.append(elapsed)
+    elif draft.get('query_limit_exec_elapsed'):
+        raise RelationalClientError(
+            'choose a runaway query action for the execution time')
     return ', '.join(parts), tuple(parameters)
 
 
@@ -576,6 +713,15 @@ def _compile_control_plane(request):
         return _compile_cdc_action(request)
     if kind == 'placement-policy':
         name = draft['name'] if operation == 'create' else _path(request)[-1]
+        if operation == 'alter':
+            # ALTER PLACEMENT POLICY replaces every option (verified live:
+            # altering FOLLOWERS alone dropped CONSTRAINTS, VOTERS and
+            # SURVIVAL_PREFERENCES). Start from the policy's current options
+            # so only the edited ones change; the plan preview shows the
+            # complete set being written.
+            draft = {**_current_placement(request), **{
+                key: value for key, value in draft.items()
+                if value not in (None, '')}}
         if operation in {'create', 'alter'}:
             assignments, parameters = _placement_assignments(draft)
             source = (
@@ -619,6 +765,10 @@ def _compile_control_plane(request):
         source = f'ALTER {kind.upper()} {target} SET TIFLASH REPLICA %s'
         parameters = (draft['replica_count'],)
         labels = draft.get('location_labels') or []
+        if isinstance(labels, str):
+            # Typed as text in the provider dialog, as a list in descriptors.
+            labels = [value.strip() for value in labels.split(',')
+                      if value.strip()]
         if labels:
             if len(labels) > 64 or not all(
                     isinstance(value, str) and value and len(value) <= 256
@@ -630,6 +780,40 @@ def _compile_control_plane(request):
                 '%s' for _value in labels
             )
             parameters += tuple(labels)
+    elif kind == 'partition' and operation in {
+            'truncate', 'drop', 'analyze', 'exchange', 'reorganize'}:
+        path = _path(request)
+        if len(path) < 3:
+            raise RelationalClientError('TiDB partition path is invalid')
+        table = '.'.join(_quote(value) for value in path[-3:-1])
+        name = _quote(path[-1])
+        if operation == 'analyze':
+            source = f'ANALYZE TABLE {table} PARTITION {name}'
+        elif operation == 'exchange':
+            other = '.'.join(_quote(value) for value in (
+                draft.get('exchange_database') or path[-3],
+                draft['exchange_table']))
+            validation = draft.get('validation') or 'WITH'
+            if validation not in {'WITH', 'WITHOUT'}:
+                raise RelationalClientError('validation must be WITH/WITHOUT')
+            source = (f'ALTER TABLE {table} EXCHANGE PARTITION {name} '
+                      f'WITH TABLE {other} {validation} VALIDATION')
+        elif operation == 'reorganize':
+            names = [value.strip() for value in str(
+                draft.get('partitions') or path[-1]).split(',')
+                if value.strip()]
+            merged = ', '.join(_quote(value) for value in names)
+            definitions = _partition_definitions(draft)
+            source = (f'ALTER TABLE {table} REORGANIZE PARTITION {merged} '
+                      f'INTO ({definitions})')
+        else:
+            verb = operation.upper()
+            source = f'ALTER TABLE {table} {verb} PARTITION {name}'
+    elif kind == 'table' and operation == 'add_partitions':
+        path = _path(request)
+        table = '.'.join(_quote(value) for value in path[-2:])
+        definitions = _partition_definitions(draft)
+        source = f'ALTER TABLE {table} ADD PARTITION ({definitions})'
     elif kind == 'job' and operation == 'cancel':
         source = 'ADMIN CANCEL DDL JOBS %s'
         parameters = (_target_id(request),)
@@ -1138,13 +1322,31 @@ _CHECK_CLAUSE = re.compile(r'\bCHECK\s*\(', re.IGNORECASE)
 
 
 class TiDBAdministration(DistributedSQLControlPlane):
-    """Refuse CHECK constraints TiDB would silently discard.
+    """Refuse changes TiDB would silently discard or cannot place.
 
-    With the global tidb_enable_check_constraint OFF (the default) TiDB
-    accepts a CHECK clause and drops it; with it ON the constraint is kept
-    and enforced (verified live on 8.5.6, 2026-10-29). The setting belongs
-    to the server, so it is read when the change is applied, not assumed.
+    - CHECK constraints: with the global tidb_enable_check_constraint OFF
+      (the default) TiDB accepts a CHECK clause and drops it; with it ON the
+      constraint is kept and enforced (verified live on 8.5.6, 2026-10-29).
+    - TiFlash replicas: a count above the cluster's TiFlash servers is
+      refused by TiDB with a message the shared error policy hides; the
+      count is checked first so the refusal says why.
+    Both read the server state when the change is applied, not assumed.
     """
+
+    @staticmethod
+    def _scalar(client, request, connection, source):
+        route = (request.get('provider_payload') or {}).get('route')
+        native = connection or client._connect({'route': dict(route)})
+        try:
+            cursor = native.cursor()
+            try:
+                cursor.execute(source)
+                return cursor.fetchone()[0]
+            finally:
+                cursor.close()
+        finally:
+            if connection is None:
+                client._forget_and_close(native)
 
     def apply(self, client, request, connection=None):
         preview = request.get('command_preview') or {}
@@ -1153,26 +1355,44 @@ class TiDBAdministration(DistributedSQLControlPlane):
         if operation.endswith(('_table', '_constraint')) and any(
                 _CHECK_CLAUSE.search(str(item.get('source', '')))
                 for item in statements):
-            route = (request.get('provider_payload') or {}).get('route')
-            native = connection or client._connect({'route': dict(route)})
-            try:
-                cursor = native.cursor()
-                try:
-                    cursor.execute(
-                        'SELECT @@GLOBAL.tidb_enable_check_constraint')
-                    enabled = str(cursor.fetchone()[0]).upper() in {
-                        '1', 'ON'}
-                finally:
-                    cursor.close()
-            finally:
-                if connection is None:
-                    client._forget_and_close(native)
+            enabled = str(self._scalar(
+                client, request, connection,
+                'SELECT @@GLOBAL.tidb_enable_check_constraint',
+            )).upper() in {'1', 'ON'}
             if not enabled:
                 raise RelationalClientError(
                     'TiDB discards CHECK constraints while the global '
                     'tidb_enable_check_constraint is OFF; enable it on the '
                     'server or remove the CHECK constraint')
-        return super().apply(client, request, connection=connection)
+        if operation == 'set_tiflash_replica':
+            compiled = (request.get('provider_payload') or {}).get(
+                'compiled') or {}
+            parameters = (compiled.get('statements') or [{}])[0].get(
+                'parameters') or (0,)
+            wanted = int(parameters[0])
+            if wanted > 0:
+                servers = int(self._scalar(
+                    client, request, connection,
+                    "SELECT COUNT(*) FROM information_schema.CLUSTER_INFO "
+                    "WHERE TYPE = 'tiflash'"))
+                if wanted > servers:
+                    raise RelationalClientError(
+                        f'TiDB has {servers} TiFlash server(s); a replica '
+                        f'count of {wanted} cannot be placed')
+        result = super().apply(client, request, connection=connection)
+        if operation == 'cancel' or 'ADMIN CANCEL DDL JOBS' in ' '.join(
+                str(item.get('source', '')) for item in statements):
+            # ADMIN CANCEL DDL JOBS reports a per-job RESULT row instead of
+            # failing ("error: [ddl:8224]DDL Job:711 not found" for a finished
+            # job, verified live); a success response would be false.
+            for statement in result.get('statement_results') or []:
+                for row in statement.get('rows') or []:
+                    if len(row) >= 2 and str(row[1]).lower().startswith(
+                            'error'):
+                        raise RelationalClientError(
+                            f'TiDB did not cancel DDL job {row[0]}: '
+                            f'{str(row[1])[:200]}')
+        return result
 
 
 ADMINISTRATION = TiDBAdministration(
@@ -1194,17 +1414,57 @@ def _version(row):
     return match.group(1)
 
 
+_PLACEMENT_OPTION = re.compile(r'([A-Z_]+)=("[^"]*"|[^ ]+)')
+
+
+def _placement_definition(text):
+    """Options of SHOW CREATE PLACEMENT POLICY that the catalog omits."""
+    found = {}
+    for key, value in _PLACEMENT_OPTION.findall(str(text)):
+        if key in {'VOTERS', 'VOTER_CONSTRAINTS', 'SURVIVAL_PREFERENCES'}:
+            value = value.strip('"')
+            found[key.lower()] = int(value) if key == 'VOTERS' else value
+    return found
+
+
+def _placement_states(cursor):
+    """SHOW PLACEMENT scheduling state keyed by its target text."""
+    return {
+        str(target): str(state)
+        for target, _placement, state in optional_rows(
+            cursor, 'SHOW PLACEMENT')
+    }
+
+
 def _extras(cursor, _request, generation):
     values = []
-    for name, character_set, collation in optional_rows(
+    placement = _placement_states(cursor)
+    for name, character_set, collation, policy in optional_rows(
         cursor,
         'SELECT SCHEMA_NAME, DEFAULT_CHARACTER_SET_NAME, '
-        'DEFAULT_COLLATION_NAME FROM information_schema.SCHEMATA '
-        'ORDER BY SCHEMA_NAME',
+        'DEFAULT_COLLATION_NAME, TIDB_PLACEMENT_POLICY_NAME '
+        'FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME',
     ):
         values.append(resource('database', [], name, generation, {
             'default_character_set': str(character_set),
             'default_collation': str(collation),
+            'placement_policy': policy,
+            'placement_state': placement.get(f'DATABASE {name}'),
+        }))
+    # TiDB table facts: clustered primary key, row-ID sharding, placement.
+    for database, name, table_type, pk_type, sharding, policy in \
+            optional_rows(
+                cursor,
+                'SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE, TIDB_PK_TYPE, '
+                'TIDB_ROW_ID_SHARDING_INFO, TIDB_PLACEMENT_POLICY_NAME '
+                "FROM information_schema.TABLES WHERE TABLE_TYPE <> 'VIEW' "
+                'ORDER BY 1, 2'):
+        values.append(resource('table', [database], name, generation, {
+            'table_type': str(table_type),
+            'primary_key_type': pk_type,
+            'row_id_sharding': sharding,
+            'placement_policy': policy,
+            'placement_state': placement.get(f'TABLE {database}.{name}'),
         }))
     constraint_details = mysql_constraint_details(cursor)
     for database, table, name, constraint_type in optional_rows(
@@ -1252,15 +1512,20 @@ def _extras(cursor, _request, generation):
             'cycle': bool(cycle), 'increment': increment,
             'maximum': maximum, 'minimum': minimum, 'start': start,
         }))
-    for database, table, name, method, expression in optional_rows(
-        cursor,
-        'SELECT TABLE_SCHEMA, TABLE_NAME, PARTITION_NAME, PARTITION_METHOD, '
-        'PARTITION_EXPRESSION FROM information_schema.PARTITIONS '
-        'WHERE PARTITION_NAME IS NOT NULL ORDER BY 1, 2, 3',
-    ):
+    for database, table, name, method, expression, description, policy in \
+            optional_rows(
+                cursor,
+                'SELECT TABLE_SCHEMA, TABLE_NAME, PARTITION_NAME, '
+                'PARTITION_METHOD, PARTITION_EXPRESSION, '
+                'PARTITION_DESCRIPTION, TIDB_PLACEMENT_POLICY_NAME '
+                'FROM information_schema.PARTITIONS '
+                'WHERE PARTITION_NAME IS NOT NULL ORDER BY 1, 2, 3'):
         values.append(resource('partition', [database, table], name,
                                generation, {
             'method': str(method), 'expression': str(expression),
+            'description': description, 'placement_policy': policy,
+            'placement_state': placement.get(
+                f'TABLE {database}.{table} PARTITION {name}'),
         }))
     tiflash_rows = optional_rows(
         cursor,
@@ -1282,7 +1547,9 @@ def _extras(cursor, _request, generation):
         values.append(resource('job', [], row[0], generation, {
             'database': str(row[1]), 'table': str(row[2]),
             'job_type': str(row[3]), 'schema_state': str(row[4]),
-            'state': str(row[11]) if len(row) > 11 else '',
+            # Not 'state': the shared record builder reserves that key for
+            # job records and overwrote the job's own state.
+            'job_state': str(row[11]) if len(row) > 11 else '',
         }))
     values.extend(mysql_account_resources(cursor, generation))
     for component, instance, status_address, version in optional_rows(
@@ -1293,22 +1560,45 @@ def _extras(cursor, _request, generation):
         values.append(resource('node', [component], instance, generation, {
             'status_address': str(status_address), 'version': str(version),
         }))
-    for name, followers, learners, constraints in optional_rows(
+    policies = optional_rows(
         cursor,
-        'SELECT POLICY_NAME, FOLLOWERS, LEARNERS, CONSTRAINTS '
+        'SELECT POLICY_NAME, PRIMARY_REGION, REGIONS, CONSTRAINTS, '
+        'LEADER_CONSTRAINTS, FOLLOWER_CONSTRAINTS, LEARNER_CONSTRAINTS, '
+        'SCHEDULE, FOLLOWERS, LEARNERS '
         'FROM information_schema.PLACEMENT_POLICIES ORDER BY POLICY_NAME',
-    ):
-        values.append(resource('placement-policy', [], name, generation, {
+    )
+    for name, primary_region, regions, constraints, leader, follower, \
+            learner, schedule, followers, learners in policies:
+        native = {
+            'primary_region': primary_region or None,
+            'regions': regions or None,
+            'constraints': constraints or None,
+            'leader_constraints': leader or None,
+            'follower_constraints': follower or None,
+            'learner_constraints': learner or None,
+            'schedule': str(schedule).lower() if schedule else None,
             'followers': followers, 'learners': learners,
-            'constraints': None if constraints is None else str(constraints),
-        }))
-    for name, ru_per_sec, priority in optional_rows(
-        cursor,
-        'SELECT NAME, RU_PER_SEC, PRIORITY '
-        'FROM information_schema.RESOURCE_GROUPS ORDER BY NAME',
-    ):
+        }
+        # VOTERS, VOTER_CONSTRAINTS and SURVIVAL_PREFERENCES are kept by
+        # TiDB but not exposed in PLACEMENT_POLICIES.
+        for row in optional_rows(
+                cursor, f'SHOW CREATE PLACEMENT POLICY {_quote(name)}'):
+            native.update(_placement_definition(row[1]))
+        values.append(resource('placement-policy', [], name, generation,
+                               native))
+    for name, ru_per_sec, priority, burstable, query_limit, background in \
+            optional_rows(
+                cursor,
+                'SELECT NAME, RU_PER_SEC, PRIORITY, BURSTABLE, QUERY_LIMIT, '
+                'BACKGROUND FROM information_schema.RESOURCE_GROUPS '
+                'ORDER BY NAME'):
+        unlimited = str(ru_per_sec).upper() == 'UNLIMITED'
         values.append(resource('resource-group', [], name, generation, {
-            'ru_per_sec': ru_per_sec, 'priority': str(priority),
+            'ru_mode': 'unlimited' if unlimited else 'limited',
+            'ru_per_sec': None if unlimited else int(ru_per_sec),
+            'priority': str(priority),
+            'burstable': str(burstable).upper() == 'YES',
+            'query_limit': query_limit, 'background': background,
         }))
     values.extend(_cdc_resources(_request, generation))
     return values

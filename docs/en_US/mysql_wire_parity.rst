@@ -163,6 +163,49 @@ TiDB 8.5.6
    a changed global setting (verified live).
 -  Grants work on databases, tables, views and sequences; routine grants
    are refused (live). Passwordless users can be created and log in.
+-  Native objects, verified live 2026-10-29 on PD + 3 TiKV + TiDB:
+
+   -  **Defect, fixed:** ``ALTER PLACEMENT POLICY`` replaces every option.
+      The provider sent only the edited ones, so changing followers dropped
+      constraints, voters and survival preferences. Alter now starts from
+      the policy's current options (the plan preview shows the full set). A
+      change made by someone else after the policy was read can still be
+      overwritten.
+   -  Placement styles: region options (``PRIMARY_REGION``/``REGIONS``,
+      ``SCHEDULE``) cannot be combined with label constraints or learners;
+      followers, voters, voter constraints and survival preferences combine
+      with either (every pair probed). The form shows one style at a time and
+      the compiler refuses a mix. ``VOTERS``, ``VOTER_CONSTRAINTS`` and
+      ``SURVIVAL_PREFERENCES`` are kept but absent from
+      ``PLACEMENT_POLICIES``; the inventory reads them from ``SHOW CREATE``.
+      The demo stores have no location labels, so region policies are
+      accepted but cannot be scheduled there.
+   -  **Defect, fixed:** ``ADMIN CANCEL DDL JOBS`` reports failure in a
+      result row ("DDL Job:711 not found") instead of an error; the provider
+      reported success. It now raises with TiDB's reason.
+   -  **Defect, fixed:** DDL job state was lost (the shared record builder
+      overwrote the ``state`` key); it is now ``job_state``.
+   -  TiFlash replicas above the number of TiFlash servers are refused with
+      the server count, before TiDB's own error (which the shared error
+      policy hides). Setting 0 works.
+   -  Added: resource-group runaway-query limits (``QUERY_LIMIT`` with
+      DRYRUN/COOLDOWN/KILL, and removal); survival preferences; partition
+      truncate, drop, analyze, exchange, reorganize and add. TiDB refuses
+      CHECK/OPTIMIZE/REBUILD/REPAIR PARTITION (8200), so they are not
+      offered. ``BACKGROUND`` settings apply only to the ``default``
+      resource group.
+   -  Records now carry placement policy and scheduling state on databases,
+      tables and partitions; clustered or non-clustered primary key and
+      row-ID sharding on tables; every policy and resource-group setting.
+   -  Not run: TiCDC changefeeds and BR backup/restore (no TiCDC or BR in the
+      demo); a successful DDL job cancel (needs a long-running job). Marked
+      experimental, with the required component, in ``capabilities.json``.
+-  Distinctive features present (live) but not yet exposed: ``AUTO_RANDOM``,
+   ``SHARD_ROW_ID_BITS``/``PRE_SPLIT_REGIONS``, TTL tables, cached tables,
+   SQL plan bindings, ``FLASHBACK TABLE``, ``SPLIT TABLE`` regions, global
+   indexes on partitioned tables, ``ADMIN CHECK TABLE``. Stale reads and
+   table attributes need a re-probe (the probe table had been cached); SQL
+   ``BACKUP`` needs storage every TiKV store can reach.
 
 Vitess 23.0.3 (through vtgate, sharded keyspace)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -256,7 +299,7 @@ Plan
    ``complete``. Remaining Dolt gap: the grant dialog's privilege list is a
    JSON field. One unexplained Dolt server exit was seen once during
    trigger probes and did not recur on the same statements.
--  Correction, 2026-10-29: MariaDB 12.2.2 accepts several events per
+   Correction, 2026-10-29: MariaDB 12.2.2 accepts several events per
    trigger (``BEFORE INSERT OR UPDATE``; MDEV-10164, fix version 12.0.1).
    Dolt does not (live). Both refuse ``INSTEAD OF``, which MariaDB's trigger
    form offered and no longer does.

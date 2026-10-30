@@ -87,7 +87,9 @@ def live():
                 f"DROP USER IF EXISTS 'rt_user_{UNIQUE}'@'localhost'",
                 f"DROP ROLE IF EXISTS 'rt_role_{UNIQUE}'",
                 f"DROP USER IF EXISTS 'rt_nopw_{UNIQUE}'@'%'",
-                "SET GLOBAL tidb_enable_check_constraint = OFF"):
+                "SET GLOBAL tidb_enable_check_constraint = OFF",
+                f'DROP PLACEMENT POLICY IF EXISTS rt_pol_{UNIQUE}x',
+                f'DROP RESOURCE GROUP IF EXISTS rt_rg_{UNIQUE}'):
             cleanup.cursor().execute(statement)
         cleanup.close()
 
@@ -284,3 +286,120 @@ def test_passwordless_user_form(live):
     assert 'IDENTIFIED' not in run(client, route, 'user', 'create', draft)
     mysql_connector.connect(host=SETTINGS['host'], port=int(SETTINGS['port']),
                             user=f'rt_nopw_{UNIQUE}').close()
+
+
+def native_run(client, route, kind, operation, draft, target=None):
+    request = {'resource_kind': kind, 'operation_id': operation,
+               'target_resource': target, '_provider_route': route,
+               'draft': draft}
+    assert ADMINISTRATION.validate(request)['errors'] == []
+    return ADMINISTRATION.apply(client, ADMINISTRATION.plan(request))
+
+
+def native(client, route, kind, name):
+    return next(row for row in resources(client, route)
+                if row['resource_kind'] == kind and
+                row['display_name'] == name)
+
+
+def test_placement_policy_lifecycle_keeps_unedited_options(live):
+    route, client = live
+    policy = f'rt_pol_{UNIQUE}'
+    native_run(client, route, 'placement-policy', 'create', {
+        'name': policy, 'placement_style': 'constraints', 'followers': 2,
+        'voters': 3, 'constraints': '[+disk=ssd]',
+        'survival_preferences': '[region, zone]'})
+    try:
+        before = native(client, route, 'placement-policy', policy)
+        assert (before['native']['voters'],
+                before['native']['survival_preferences']) == (
+            3, '[region, zone]')
+        # ALTER PLACEMENT POLICY replaces every option on the server; the
+        # provider must carry the unedited ones forward.
+        native_run(client, route, 'placement-policy', 'alter',
+                   {'placement_style': 'constraints', 'followers': 1},
+                   before)
+        text = query(f'SHOW CREATE PLACEMENT POLICY {policy}')[0][1]
+        assert 'FOLLOWERS=1' in text and 'VOTERS=3' in text
+        assert 'CONSTRAINTS="[+disk=ssd]"' in text
+        assert 'SURVIVAL_PREFERENCES' in text
+        database = native(client, route, 'database', DATABASE)
+        native_run(client, route, 'database', 'configure_placement',
+                   {'policy_name': policy}, database)
+        assert native(client, route, 'database', DATABASE)['native'][
+            'placement_policy'] == policy
+        native_run(client, route, 'database', 'reset_placement', {},
+                   database)
+        with pytest.raises(Exception, match='placement style'):
+            native_run(client, route, 'placement-policy', 'create', {
+                'name': policy + 'x', 'schedule': 'even',
+                'constraints': '[+disk=ssd]'})
+    finally:
+        native_run(client, route, 'placement-policy', 'drop', {},
+                   native(client, route, 'placement-policy', policy))
+
+
+def test_resource_group_with_runaway_query_limit(live):
+    route, client = live
+    group = f'rt_rg_{UNIQUE}'
+    native_run(client, route, 'resource-group', 'create', {
+        'name': group, 'ru_mode': 'limited', 'ru_per_sec': 500,
+        'priority': 'HIGH', 'burstable': True,
+        'query_limit_action': 'KILL', 'query_limit_exec_elapsed': '60s'})
+    try:
+        record = native(client, route, 'resource-group', group)['native']
+        assert (record['ru_per_sec'], record['priority'],
+                record['burstable']) == (500, 'HIGH', True)
+        assert 'ACTION=KILL' in record['query_limit']
+        native_run(client, route, 'resource-group', 'alter', {
+            'ru_mode': 'unlimited', 'priority': 'LOW',
+            'query_limit_action': 'REMOVE'},
+            native(client, route, 'resource-group', group))
+        record = native(client, route, 'resource-group', group)['native']
+        assert (record['ru_mode'], record['query_limit']) == (
+            'unlimited', None)
+    finally:
+        native_run(client, route, 'resource-group', 'drop', {},
+                   native(client, route, 'resource-group', group))
+
+
+def test_partition_maintenance(live):
+    route, client = live
+    query('CREATE TABLE rt_parts (id INT PRIMARY KEY) PARTITION BY RANGE '
+          '(id) (PARTITION a VALUES LESS THAN (10), '
+          'PARTITION b VALUES LESS THAN (20))')
+    query('INSERT INTO rt_parts VALUES (1), (15)')
+    table = native(client, route, 'table', 'rt_parts')
+    native_run(client, route, 'table', 'add_partitions', {
+        'definitions': 'PARTITION c VALUES LESS THAN (30), '
+                       'PARTITION d VALUES LESS THAN (40)'}, table)
+
+    def partition(name):
+        return next(row for row in resources(client, route)
+                    if row['resource_kind'] == 'partition' and
+                    row['display_path'][-2:] == ['rt_parts', name])
+
+    native_run(client, route, 'partition', 'reorganize', {
+        'partitions': 'c, d',
+        'definitions': 'PARTITION cd VALUES LESS THAN (40)'}, partition('c'))
+    native_run(client, route, 'partition', 'truncate', {}, partition('a'))
+    native_run(client, route, 'partition', 'drop', {}, partition('b'))
+    assert query("SELECT PARTITION_NAME FROM information_schema.PARTITIONS "
+                 f"WHERE TABLE_SCHEMA='{DATABASE}' AND TABLE_NAME='rt_parts' "
+                 'ORDER BY PARTITION_ORDINAL_POSITION') == [('a',), ('cd',)]
+    assert query('SELECT COUNT(*) FROM rt_parts') == [(0,)]
+
+
+def test_refusals_say_why(live):
+    route, client = live
+    table = native(client, route, 'table', 'owner')
+    with pytest.raises(Exception, match='TiFlash server'):
+        native_run(client, route, 'table', 'set_tiflash_replica',
+                   {'replica_count': 1}, table)
+    native_run(client, route, 'table', 'set_tiflash_replica',
+               {'replica_count': 0}, table)
+    finished = next(row for row in resources(client, route)
+                    if row['resource_kind'] == 'job' and
+                    row['native'].get('job_state') == 'synced')
+    with pytest.raises(Exception, match='did not cancel DDL job'):
+        native_run(client, route, 'job', 'cancel', {}, finished)

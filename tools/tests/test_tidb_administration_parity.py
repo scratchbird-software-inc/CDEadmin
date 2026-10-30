@@ -76,3 +76,79 @@ def test_check_constraints_are_refused_while_tidb_would_drop_them():
     with pytest.raises(RelationalClientError,
                        match='tidb_enable_check_constraint'):
         ADMINISTRATION.apply(client, planned, connection=Connection(False))
+
+
+TARGET_POLICY = {
+    'resource_id': 'placement-policy:p', 'resource_kind': 'placement-policy',
+    'display_name': 'p', 'display_path': ['p'],
+    'authority_path': ['placement-policy', 'p'],
+    'native': {'followers': 2, 'voters': 3, 'constraints': '[+disk=ssd]',
+               'learners': 0, 'survival_preferences': '[region]'}}
+
+
+def compiled(planned):
+    return planned['provider_payload']['compiled']['statements'][0]
+
+
+def test_placement_alter_carries_unedited_options_forward():
+    statement = compiled(ADMINISTRATION.plan({
+        'resource_kind': 'placement-policy', 'operation_id': 'alter',
+        'target_resource': TARGET_POLICY,
+        '_provider_route': {'database': 'd1'},
+        'draft': {'placement_style': 'constraints', 'followers': 1}}))
+    assert statement['source'] == (
+        'ALTER PLACEMENT POLICY `p` FOLLOWERS = %s VOTERS = %s '
+        'CONSTRAINTS = %s SURVIVAL_PREFERENCES = %s')
+    assert tuple(statement['parameters']) == (
+        1, 3, '[+disk=ssd]', '[region]')
+
+
+def test_placement_styles_do_not_mix():
+    with pytest.raises(RelationalClientError, match='placement style'):
+        plan('placement-policy', 'create', {
+            'name': 'p', 'schedule': 'even', 'constraints': '[+disk=ssd]'})
+    with pytest.raises(RelationalClientError, match='learner replica'):
+        plan('placement-policy', 'create', {
+            'name': 'p', 'placement_style': 'constraints',
+            'learner_constraints': '[+disk=ssd]'})
+
+
+def test_runaway_query_limit():
+    statement = compiled(plan('resource-group', 'create', {
+        'name': 'g', 'ru_mode': 'limited', 'ru_per_sec': 10,
+        'priority': 'LOW', 'query_limit_action': 'KILL',
+        'query_limit_exec_elapsed': '1m30s'}))
+    assert statement['source'].endswith(
+        'QUERY_LIMIT = (EXEC_ELAPSED = %s, ACTION = KILL)')
+    with pytest.raises(RelationalClientError, match='execution time'):
+        plan('resource-group', 'create', {
+            'name': 'g', 'ru_mode': 'unlimited', 'priority': 'LOW',
+            'query_limit_action': 'KILL'})
+
+
+@pytest.mark.parametrize('definitions', [
+    'PARTITION p9 VALUES LESS THAN (9); DROP TABLE x',
+    'p9 VALUES LESS THAN (9)',
+    'PARTITION p9 VALUES LESS THAN (9',
+])
+def test_partition_definitions_stay_one_clause(definitions):
+    target = {'resource_id': 'table:d1:t', 'resource_kind': 'table',
+              'display_name': 't', 'display_path': ['d1', 't'],
+              'authority_path': ['d1', 'table', 't']}
+    with pytest.raises(RelationalClientError):
+        ADMINISTRATION.plan({
+            'resource_kind': 'table', 'operation_id': 'add_partitions',
+            'target_resource': target,
+            '_provider_route': {'database': 'd1'},
+            'draft': {'definitions': definitions}})
+
+
+def test_location_labels_accept_text_or_list():
+    target = {'resource_id': 'table:d1:t', 'resource_kind': 'table',
+              'display_name': 't', 'display_path': ['d1', 't'],
+              'authority_path': ['d1', 'table', 't']}
+    statement = compiled(ADMINISTRATION.plan({
+        'resource_kind': 'table', 'operation_id': 'set_tiflash_replica',
+        'target_resource': target, '_provider_route': {'database': 'd1'},
+        'draft': {'replica_count': 2, 'location_labels': 'zone, rack'}}))
+    assert tuple(statement['parameters']) == (2, 'zone', 'rack')

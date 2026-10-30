@@ -21,7 +21,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
     },
     {
       "operation_id": "restore_full",
@@ -48,7 +49,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
     },
     {
       "operation_id": "restore_point",
@@ -87,7 +89,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
     },
     {
       "operation_id": "backup_br",
@@ -108,7 +111,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
     },
     {
       "operation_id": "restore_br",
@@ -129,7 +133,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
     },
     {
       "operation_id": "configure_placement",
@@ -182,21 +187,12 @@
         },
         {
           "field_id": "location_labels",
-          "label": "Location labels",
-          "control": "grid",
-          "required": false,
-          "item_kind": "string",
-          "columns": [
-            {
-              "field_id": "value",
-              "label": "Location label",
-              "control": "text",
-              "required": true
-            }
-          ]
+          "label": "Location labels (comma separated)",
+          "control": "text",
+          "required": false
         }
       ],
-      "notes": "typed_from_json: database.set_tiflash_replica.location_labels"
+      "notes": "A count above 0 needs that many TiFlash servers; the provider refuses with the server count first (verified on a cluster with none, 2026-10-29)."
     },
     {
       "operation_id": "backup_br",
@@ -217,7 +213,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
     },
     {
       "operation_id": "restore_br",
@@ -238,7 +235,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo cluster (2026-10-29)."
     },
     {
       "operation_id": "configure_placement",
@@ -291,21 +289,12 @@
         },
         {
           "field_id": "location_labels",
-          "label": "Location labels",
-          "control": "grid",
-          "required": false,
-          "item_kind": "string",
-          "columns": [
-            {
-              "field_id": "value",
-              "label": "Location label",
-              "control": "text",
-              "required": true
-            }
-          ]
+          "label": "Location labels (comma separated)",
+          "control": "text",
+          "required": false
         }
       ],
-      "notes": "typed_from_json: table.set_tiflash_replica.location_labels"
+      "notes": "A count above 0 needs that many TiFlash servers; the provider refuses with the server count first (verified on a cluster with none, 2026-10-29)."
     },
     {
       "operation_id": "configure_placement",
@@ -361,7 +350,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Needs TiCDC; not run against the demo cluster (2026-10-29)."
     },
     {
       "operation_id": "resume",
@@ -373,7 +363,112 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Needs TiCDC; not run against the demo cluster (2026-10-29)."
+    },
+    {
+      "operation_id": "analyze",
+      "resource_kind": "partition",
+      "tier": 2,
+      "title": "Analyze partition",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "confirmation": "none",
+      "fields": [],
+      "status": "draft"
+    },
+    {
+      "operation_id": "exchange",
+      "resource_kind": "partition",
+      "tier": 2,
+      "title": "Exchange partition with table",
+      "menu": {
+        "category": "maintenance"
+      },
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "exchange_database",
+          "label": "Table database",
+          "control": "reference",
+          "reference_kind": "database",
+          "required": false
+        },
+        {
+          "field_id": "exchange_table",
+          "label": "Table",
+          "control": "reference",
+          "reference_kind": "table",
+          "required": true
+        },
+        {
+          "field_id": "validation",
+          "label": "Validation",
+          "control": "select",
+          "required": false,
+          "default": "WITH",
+          "options": [
+            {
+              "value": "WITH",
+              "label": "Validate rows"
+            },
+            {
+              "value": "WITHOUT",
+              "label": "Skip validation"
+            }
+          ]
+        }
+      ],
+      "status": "draft"
+    },
+    {
+      "operation_id": "reorganize",
+      "resource_kind": "partition",
+      "tier": 2,
+      "title": "Reorganize partitions",
+      "menu": {
+        "category": "maintenance"
+      },
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "partitions",
+          "label": "Partitions to reorganize (comma separated)",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "definitions",
+          "label": "New partition definitions",
+          "control": "code",
+          "language": "sql",
+          "required": true,
+          "help": "PARTITION name VALUES LESS THAN (...) or VALUES IN (...) clauses, comma separated."
+        }
+      ],
+      "status": "draft"
+    },
+    {
+      "operation_id": "add_partitions",
+      "resource_kind": "table",
+      "tier": 2,
+      "title": "Add partitions",
+      "menu": {
+        "category": "maintenance"
+      },
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "definitions",
+          "label": "Partition definitions",
+          "control": "code",
+          "language": "sql",
+          "required": true,
+          "help": "PARTITION name VALUES LESS THAN (...) or VALUES IN (...) clauses, comma separated."
+        }
+      ],
+      "status": "draft"
     }
   ]
 }

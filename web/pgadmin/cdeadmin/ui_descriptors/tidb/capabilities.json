@@ -21,6 +21,24 @@
           "operation_id": "inspect",
           "tier": 1,
           "mutation_class": "read"
+        },
+        {
+          "operation_id": "backup_full",
+          "tier": 3,
+          "requires_utility": "br",
+          "support_state": "experimental"
+        },
+        {
+          "operation_id": "restore_full",
+          "tier": 3,
+          "requires_utility": "br",
+          "support_state": "experimental"
+        },
+        {
+          "operation_id": "restore_point",
+          "tier": 3,
+          "requires_utility": "br",
+          "support_state": "experimental"
         }
       ]
     },
@@ -60,6 +78,18 @@
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "backup_br",
+          "tier": 3,
+          "requires_utility": "br",
+          "support_state": "experimental"
+        },
+        {
+          "operation_id": "restore_br",
+          "tier": 3,
+          "requires_utility": "br",
+          "support_state": "experimental"
         }
       ]
     },
@@ -107,6 +137,18 @@
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "backup_br",
+          "tier": 3,
+          "requires_utility": "br",
+          "support_state": "experimental"
+        },
+        {
+          "operation_id": "restore_br",
+          "tier": 3,
+          "requires_utility": "br",
+          "support_state": "experimental"
         }
       ]
     },
@@ -249,6 +291,16 @@
           "operation_id": "inspect",
           "tier": 1,
           "mutation_class": "read"
+        },
+        {
+          "operation_id": "truncate",
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
         }
       ]
     },
@@ -343,12 +395,28 @@
         {
           "operation_id": "create",
           "tier": 1,
-          "mutation_class": "admin"
+          "mutation_class": "admin",
+          "support_state": "experimental",
+          "requires_utility": "ticdc"
         },
         {
           "operation_id": "remove",
           "tier": 1,
-          "mutation_class": "destructive"
+          "mutation_class": "destructive",
+          "support_state": "experimental",
+          "requires_utility": "ticdc"
+        },
+        {
+          "operation_id": "pause",
+          "tier": 2,
+          "requires_utility": "ticdc",
+          "support_state": "experimental"
+        },
+        {
+          "operation_id": "resume",
+          "tier": 2,
+          "requires_utility": "ticdc",
+          "support_state": "experimental"
         }
       ]
     },
