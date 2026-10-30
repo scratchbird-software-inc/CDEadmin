@@ -374,6 +374,14 @@ foreign key. The constraint records now come from ``pg_constraint``
 (``information_schema`` listed each NOT NULL column as a check). Table
 DDL is slow on the one-node demo (the round trip takes about 11 minutes).
 
+The index form is ``complete`` too (``providers/yugabytedb/indexes.py``):
+keys with HASH / ASC / DESC (leading HASH keys hashed together),
+``UNIQUE`` with ``NULLS NOT DISTINCT``, ``INCLUDE``, a partial predicate,
+lsm or gin, tablespace, ``SPLIT INTO``/``SPLIT AT``, ``NONCONCURRENTLY``
+and a comment; in place, rename, ``SET TABLESPACE`` and comment. Found
+live: an index's ``SPLIT`` clause must come before ``WHERE`` (after
+``TABLESPACE``); ``fillfactor`` is refused; gin reads back as ``ybgin``.
+
 Provider finding, 2026-10-30: the shared relational apply runs a plan in
 one transaction, and YugabyteDB refuses ``CREATE DATABASE`` and ``CREATE
 TABLESPACE`` there ("cannot run inside a transaction block"), so the

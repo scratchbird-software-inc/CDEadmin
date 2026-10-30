@@ -5,26 +5,34 @@
   "resource_kinds": [
     "index"
   ],
-  "status": "draft",
-  "engine_tab_title": "yugabytedb",
+  "status": "complete",
+  "engine_tab_title": "YugabyteDB",
   "omitted_tabs": [],
-  "gaps": [],
+  "gaps": [
+    {
+      "concept": "Storage parameters (fillfactor)",
+      "reason": "Refused by YugabyteDB 2025.2.2.2 (live)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "brin, gist, hash index methods",
+      "reason": "brin and gist are refused; hash becomes lsm HASH (probe)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Changing keys, method, predicate or INCLUDE",
+      "reason": "No in-place statement; drop and create",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
   "fields": [
     {
       "field_id": "name",
       "label": "Name",
       "tab": "General",
       "control": "text",
-      "required": true
-    },
-    {
-      "field_id": "parent",
-      "label": "Database",
-      "tab": "General",
-      "control": "reference",
-      "required": false,
-      "help": "Use a qualified database or schema name where needed.",
-      "reference_kind": "database"
+      "required": true,
+      "help": "Renaming runs ALTER INDEX ... RENAME TO."
     },
     {
       "field_id": "table",
@@ -32,13 +40,116 @@
       "tab": "General",
       "control": "reference",
       "required": true,
-      "reference_kind": "table"
+      "reference_kind": "table",
+      "reference_value": "display_path",
+      "editable_after_create": false
     },
     {
-      "field_id": "columns",
-      "label": "Indexed columns",
+      "field_id": "unique",
+      "label": "Unique",
+      "tab": "General",
+      "control": "boolean",
+      "default": false,
+      "editable_after_create": false,
+      "help": "UNIQUE"
+    },
+    {
+      "field_id": "nulls_not_distinct",
+      "label": "NULLS NOT DISTINCT",
+      "tab": "General",
+      "control": "boolean",
+      "default": false,
+      "editable_after_create": false,
+      "visible_when": {
+        "field": "unique",
+        "truthy": true
+      },
+      "help": "NULL values count as equal for uniqueness."
+    },
+    {
+      "field_id": "keys",
+      "label": "Keys",
       "tab": "General",
       "control": "grid",
+      "required": true,
+      "reorderable": true,
+      "editable_after_create": false,
+      "help": "A column or an expression such as lower(name). Leading HASH keys are hashed together; the first key is HASH when left at the default.",
+      "columns": [
+        {
+          "field_id": "expression",
+          "label": "Column or expression",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "direction",
+          "label": "Direction",
+          "control": "select",
+          "options": [
+            {
+              "value": "",
+              "label": "Default"
+            },
+            {
+              "value": "HASH",
+              "label": "Hash"
+            },
+            {
+              "value": "ASC",
+              "label": "Ascending"
+            },
+            {
+              "value": "DESC",
+              "label": "Descending"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "field_id": "predicate",
+      "label": "Partial index predicate",
+      "tab": "General",
+      "control": "code",
+      "language": "sql",
+      "editable_after_create": false,
+      "help": "WHERE expression"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON INDEX"
+    },
+    {
+      "field_id": "method",
+      "label": "Method",
+      "tab": "Options",
+      "control": "select",
+      "default": "lsm",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "lsm",
+          "label": "LSM (default)"
+        },
+        {
+          "value": "gin",
+          "label": "GIN"
+        }
+      ],
+      "help": "GIN serves JSONB, arrays and trigram text (with pg_trgm, key such as name gin_trgm_ops). USING hash becomes lsm HASH in YSQL."
+    },
+    {
+      "field_id": "storing",
+      "label": "Included columns",
+      "tab": "Options",
+      "control": "grid",
+      "item_kind": "string",
+      "editable_after_create": false,
+      "help": "INCLUDE: extra columns kept in the index.",
       "columns": [
         {
           "field_id": "value",
@@ -47,18 +158,55 @@
           "required": true,
           "reference_kind": "column"
         }
-      ],
-      "required": true,
-      "item_kind": "string"
+      ]
     },
     {
-      "field_id": "unique",
-      "label": "Unique index",
-      "tab": "General",
+      "field_id": "tablespace",
+      "label": "Tablespace",
+      "tab": "Options",
+      "control": "reference",
+      "reference_kind": "tablespace",
+      "reference_value": "display_name",
+      "help": "Replica placement comes from the tablespace; changing it runs ALTER INDEX ... SET TABLESPACE."
+    },
+    {
+      "field_id": "split_into",
+      "label": "Split into tablets",
+      "tab": "Engine",
+      "group": "Sharding",
+      "control": "number",
+      "min": 1,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "split_at",
+      "label": "Split points",
+      "tab": "Engine",
+      "group": "Sharding",
+      "control": "grid",
+      "item_kind": "string",
+      "editable_after_create": false,
+      "help": "SPLIT AT VALUES, one point per row (range keys).",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Split point",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "nonconcurrently",
+      "label": "Build without the online process",
+      "tab": "Engine",
       "control": "boolean",
-      "required": false,
-      "default": false
+      "default": false,
+      "modes": [
+        "create"
+      ],
+      "help": "NONCONCURRENTLY: faster, but blocks writes while it builds."
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: index columns as an ordered column list; parent picker (database); table picker."
+  "notes": "Started from the CockroachDB index form (same field ids; storing is INCLUDE); providers/yugabytedb/indexes.py. The record parses the pg_indexes definition (grouped HASH keys, INCLUDE, NULLS NOT DISTINCT, WHERE; ybgin reads as gin). Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
 }

@@ -20,7 +20,7 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
-from . import objects, tables as tables_sql
+from . import indexes as index_sql, objects, tables as tables_sql
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
 from .control_plane import (
@@ -83,6 +83,8 @@ _BASE_ADMINISTRATION = sql_administration('yugabytedb', 'postgresql', (
 ))
 _YSQL_SUPPORTED = dict(_BASE_ADMINISTRATION.dialect.supported)
 _YSQL_SUPPORTED.update({
+    # In place: rename, tablespace, comment (providers/yugabytedb/indexes).
+    'index': frozenset({'inspect', 'create', 'alter', 'drop'}),
     'materialized-view': frozenset({
         'inspect', 'create', 'rename', 'drop',
     }),
@@ -127,12 +129,17 @@ class YugabyteDBAdministration(RelationalAdministration):
     @staticmethod
     def _native_object(kind, operation):
         return operation in objects.OPERATIONS.get(kind, ()) or (
-            kind == 'table' and operation in {'create', 'alter'})
+            kind in {'table', 'index'} and operation in {'create', 'alter'})
 
     def _native_compile(self, request):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if request['resource_kind'] == 'index':
+            if request['operation_id'] == 'create':
+                return {'statements': index_sql.create(self, draft)}
+            return {'statements': index_sql.alter(
+                self, draft, request.get('target_resource'))}
         if request['resource_kind'] == 'table':
             if request['operation_id'] == 'create':
                 return {'statements': tables_sql.create(self, draft)}
@@ -152,6 +159,9 @@ class YugabyteDBAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def _form(self, kind, operation):
+        if kind == 'index' and operation in {'create', 'alter'}:
+            return index_sql.form(super()._form(kind, 'create'),
+                                  self._field, operation)
         if kind == 'table' and operation in {'create', 'alter'}:
             return tables_sql.extend_form(
                 super()._form(kind, operation), self._field, operation)
@@ -682,6 +692,20 @@ def _annotate_catalog(connection, values):
                       'LEFT JOIN pg_catalog.pg_tablespace ts '
                       'ON ts.oid = c.reltablespace '
                       "WHERE c.relkind IN ('r', 'p')")}
+        index_facts = {(str(row[0]), str(row[1]), str(row[2])): row[3:]
+                       for row in optional_rows(
+                           cursor,
+                           'SELECT n.nspname, t.relname, i.relname, '
+                           'x.indisunique, ts.spcname, '
+                           "obj_description(i.oid, 'pg_class') "
+                           'FROM pg_catalog.pg_index x '
+                           'JOIN pg_catalog.pg_class i '
+                           'ON i.oid = x.indexrelid '
+                           'JOIN pg_catalog.pg_class t ON t.oid = x.indrelid '
+                           'JOIN pg_catalog.pg_namespace n '
+                           'ON n.oid = t.relnamespace '
+                           'LEFT JOIN pg_catalog.pg_tablespace ts '
+                           'ON ts.oid = i.reltablespace')}
         keys = {(str(row[0]), str(row[1])): str(row[2])
                 for row in optional_rows(
                     cursor,
@@ -753,6 +777,15 @@ def _annotate_catalog(connection, values):
                 collation=None if collation is None else str(collation),
                 comment=None if comment is None else str(comment),
                 column_key=membership.get(path, ''))
+        elif item['resource_kind'] == 'index':
+            unique, tablespace, comment = index_facts.get(
+                path, (False, None, None))
+            native.update(index_sql.parse_definition(
+                str(native.get('definition') or '')))
+            native.update(
+                table='.'.join(path[:2]), unique=bool(unique),
+                tablespace=None if tablespace is None else str(tablespace),
+                comment=None if comment is None else str(comment))
         elif item['resource_kind'] == 'table':
             facts = tables.get(path)
             if not facts:

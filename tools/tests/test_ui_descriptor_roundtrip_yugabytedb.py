@@ -362,3 +362,67 @@ def test_table_create_reopen_alter_drop(live):
         query('DROP TABLE IF EXISTS public.rt_orders')
         with connect() as connection:
             connection.execute(f'DROP TABLESPACE IF EXISTS {space}')
+
+
+def test_index_create_reopen_alter_drop(live):
+    route, client = live
+    space = f'rt_its_{UNIQUE}'
+    with connect() as connection:
+        connection.execute(f"CREATE TABLESPACE {space} WITH "
+                           f"(replica_placement='{PLACEMENT}')")
+    try:
+        query('CREATE TABLE public.ix (id INT PRIMARY KEY, a INT, b TEXT, '
+              'j JSONB)')
+        form = resolved_form('yugabytedb', 'index')
+        run(client, route, 'index', 'create', backend_draft(form, {
+            'name': 'ix_hash', 'table': 'public.ix',
+            'keys': [{'expression': 'a', 'direction': 'HASH'},
+                     {'expression': 'b', 'direction': 'HASH'},
+                     {'expression': 'id', 'direction': 'ASC'}],
+            'storing': [{'value': 'j'}], 'predicate': 'a > 0',
+            'split_into': 3, 'tablespace': space, 'comment': 'hashed'}))
+        run(client, route, 'index', 'create', backend_draft(form, {
+            'name': 'ix_uniq', 'table': 'public.ix', 'unique': True,
+            'nulls_not_distinct': True,
+            'keys': [{'expression': 'lower(b)', 'direction': 'DESC'}],
+            'nonconcurrently': True}))
+        run(client, route, 'index', 'create', backend_draft(form, {
+            'name': 'ix_gin', 'table': 'public.ix', 'method': 'gin',
+            'keys': [{'expression': 'j'}]}))
+        assert query("SELECT num_tablets FROM yb_table_properties("
+                     "'public.ix_hash'::regclass)") == [(3,)]
+        target, baseline = record(client, route, 'index', 'ix_hash',
+                                  'index')
+        assert ([(row['expression'], row['direction'])
+                 for row in baseline['keys']],
+                [row['value'] for row in baseline['storing']],
+                baseline['predicate'], baseline['tablespace'],
+                baseline['comment'], baseline['table']) == (
+            [('a', 'HASH'), ('b', 'HASH'), ('id', 'ASC')], ['j'],
+            'a > 0', space, 'hashed', 'public.ix')
+        _, unique = record(client, route, 'index', 'ix_uniq', 'index')
+        assert (unique['unique'], unique['nulls_not_distinct'],
+                unique['keys'][0]['expression'],
+                unique['keys'][0]['direction']) == (
+            True, True, 'lower(b)', 'DESC')
+        _, gin = record(client, route, 'index', 'ix_gin', 'index')
+        assert gin['method'] == 'gin'
+        assert backend_draft(form, baseline, mode='alter',
+                             baseline=baseline) == {}
+        run(client, route, 'index', 'alter', backend_draft(form, {
+            **baseline, 'name': 'ix_hash2', 'tablespace': '',
+            'comment': ''}, mode='alter', baseline=baseline),
+            target=target)
+        _, after = record(client, route, 'index', 'ix_hash2', 'index')
+        assert (after['tablespace'], after['comment']) == (None, None)
+        assert 'needs a new index' in refused('index', 'alter', {
+            'keys': [{'expression': 'a'}]}, target)
+        for name in ('ix_hash2', 'ix_uniq', 'ix_gin'):
+            run(client, route, 'index', 'drop', {'confirmation': name},
+                target=find(client, route, 'index', name)[0])
+        assert query("SELECT indexname FROM pg_indexes WHERE "
+                     "tablename = 'ix'") == [('ix_pkey',)]
+    finally:
+        query('DROP TABLE IF EXISTS public.ix')
+        with connect() as connection:
+            connection.execute(f'DROP TABLESPACE IF EXISTS {space}')
