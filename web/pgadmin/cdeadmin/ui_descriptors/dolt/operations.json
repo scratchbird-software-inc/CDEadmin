@@ -1,0 +1,522 @@
+{
+  "schema": "cdeadmin.ui-operations.v1",
+  "engine": "dolt",
+  "operations": [
+    {
+      "operation_id": "restore_backup",
+      "resource_kind": "database",
+      "title": "Restore backup as database",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "url",
+          "label": "Approved backup URL",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "new_database_name",
+          "label": "New database name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "force",
+          "label": "Replace existing database",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "set_default",
+      "resource_kind": "branch",
+      "title": "Make default branch",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "persist",
+          "label": "Persist across server restarts",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        }
+      ]
+    },
+    {
+      "operation_id": "copy",
+      "resource_kind": "branch",
+      "title": "Copy branch",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "new_name",
+          "label": "New branch name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "force",
+          "label": "Replace destination branch",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "cherry_pick",
+      "resource_kind": "commit",
+      "title": "Cherry-pick commit",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "revert",
+      "resource_kind": "commit",
+      "title": "Revert commit",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "fetch",
+      "resource_kind": "remote",
+      "title": "Fetch remote",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "pull",
+      "resource_kind": "remote",
+      "title": "Pull remote",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "branch",
+          "label": "Remote branch",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "operation_id": "push",
+      "resource_kind": "remote",
+      "title": "Push to remote",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "refspec",
+          "label": "Refspec",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "set_upstream",
+          "label": "Set upstream",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "commit",
+      "resource_kind": "working-set",
+      "title": "Commit working set",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "message",
+          "label": "Commit message",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "stage_all",
+          "label": "Stage all changes",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "allow_empty",
+          "label": "Allow empty commit",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "author",
+          "label": "Author (Name <email>)",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "operation_id": "stage_tables",
+      "resource_kind": "working-set",
+      "title": "Stage table changes",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "table_names",
+          "label": "Table names",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "catalog",
+            "tables"
+          ]
+        },
+        {
+          "field_id": "force_ignored",
+          "label": "Include ignored tables",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "notes": "typed_from_json: working-set.stage_tables.table_names"
+    },
+    {
+      "operation_id": "stage_all",
+      "resource_kind": "working-set",
+      "title": "Stage all changes",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "unstage_tables",
+      "resource_kind": "working-set",
+      "title": "Unstage table changes",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "table_names",
+          "label": "Table names",
+          "control": "multiselect",
+          "required": true,
+          "option_values_path": [
+            "catalog",
+            "tables"
+          ]
+        }
+      ],
+      "notes": "typed_from_json: working-set.unstage_tables.table_names"
+    },
+    {
+      "operation_id": "reset_hard",
+      "resource_kind": "working-set",
+      "title": "Reset working set and staging",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "revision",
+          "label": "Target revision",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "operation_id": "reset_soft",
+      "resource_kind": "working-set",
+      "title": "Move HEAD without changing tables",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "revision",
+          "label": "Target revision",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "operation_id": "clean",
+      "resource_kind": "working-set",
+      "title": "Remove untracked tables",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "table_names",
+          "label": "Table names (empty means all)",
+          "control": "multiselect",
+          "required": false,
+          "option_values_path": [
+            "catalog",
+            "tables"
+          ]
+        },
+        {
+          "field_id": "include_ignored",
+          "label": "Include ignored tables",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "notes": "typed_from_json: working-set.clean.table_names"
+    },
+    {
+      "operation_id": "start",
+      "resource_kind": "merge",
+      "title": "Merge revision",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "revision",
+          "label": "Revision",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "message",
+          "label": "Merge message",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "strategy",
+          "label": "Merge mode",
+          "control": "select",
+          "required": true,
+          "default": "normal",
+          "options": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "squash",
+              "label": "Squash"
+            },
+            {
+              "value": "no_ff",
+              "label": "No fast-forward"
+            }
+          ]
+        },
+        {
+          "field_id": "no_commit",
+          "label": "Do not commit",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "abort",
+      "resource_kind": "merge",
+      "title": "Abort merge",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "start",
+      "resource_kind": "rebase",
+      "title": "Start rebase",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "upstream",
+          "label": "Upstream revision",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "interactive",
+          "label": "Pause for plan editing",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "empty_commits",
+          "label": "Commits that become empty",
+          "control": "select",
+          "required": true,
+          "default": "drop",
+          "options": [
+            {
+              "value": "drop",
+              "label": "Drop"
+            },
+            {
+              "value": "keep",
+              "label": "Keep"
+            }
+          ]
+        },
+        {
+          "field_id": "skip_verification",
+          "label": "Skip commit verification",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "continue",
+      "resource_kind": "rebase",
+      "title": "Continue rebase",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "abort",
+      "resource_kind": "rebase",
+      "title": "Abort rebase",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "resolve",
+      "resource_kind": "conflict",
+      "title": "Resolve table conflicts",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "resolution",
+          "label": "Resolution",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "ours",
+              "label": "Use ours"
+            },
+            {
+              "value": "theirs",
+              "label": "Use theirs"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "sync",
+      "resource_kind": "backup",
+      "title": "Synchronize backup",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    }
+  ]
+}

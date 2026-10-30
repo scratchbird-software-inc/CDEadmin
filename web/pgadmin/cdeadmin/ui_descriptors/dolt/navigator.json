@@ -1,0 +1,120 @@
+{
+  "schema": "cdeadmin.ui-navigator.v1",
+  "engine": "dolt",
+  "sort": "alphabetical",
+  "groups": [
+    {
+      "group_id": "topology",
+      "title": "Topology",
+      "kinds": [
+        "cluster"
+      ],
+      "order": 1
+    },
+    {
+      "group_id": "namespaces",
+      "title": "Databases and schemas",
+      "kinds": [
+        "database"
+      ],
+      "order": 2
+    },
+    {
+      "group_id": "relations",
+      "title": "Tables and views",
+      "kinds": [
+        "table",
+        "column",
+        "index",
+        "constraint",
+        "view"
+      ],
+      "order": 3
+    },
+    {
+      "group_id": "programmable",
+      "title": "Routines and triggers",
+      "kinds": [
+        "trigger",
+        "procedure"
+      ],
+      "order": 4
+    },
+    {
+      "group_id": "scheduling",
+      "title": "Scheduled events",
+      "kinds": [
+        "event"
+      ],
+      "order": 5
+    },
+    {
+      "group_id": "version_control",
+      "title": "Version control",
+      "kinds": [
+        "branch",
+        "tag",
+        "commit",
+        "working-set",
+        "merge",
+        "rebase",
+        "conflict",
+        "remote"
+      ],
+      "order": 6
+    },
+    {
+      "group_id": "security",
+      "title": "Security",
+      "kinds": [
+        "user",
+        "role",
+        "privilege"
+      ],
+      "order": 7
+    },
+    {
+      "group_id": "operations",
+      "title": "Administration",
+      "kinds": [
+        "backup"
+      ],
+      "order": 8
+    }
+  ],
+  "resource_children": {
+    "table": [
+      "column",
+      "index",
+      "trigger",
+      "constraint"
+    ],
+    "view": [
+      "column"
+    ]
+  },
+  "kind_icons": {
+    "cluster": "object.cluster",
+    "database": "object.database",
+    "table": "object.table",
+    "column": "object.column",
+    "index": "object.index",
+    "constraint": "object.constraint",
+    "view": "object.view",
+    "trigger": "object.trigger",
+    "event": "object.event",
+    "procedure": "object.procedure",
+    "user": "object.user",
+    "role": "object.role",
+    "privilege": "object.privilege",
+    "branch": "object.stream",
+    "tag": "object.tag",
+    "commit": "object.snapshot",
+    "remote": "object.cluster",
+    "working-set": "object.shadow",
+    "merge": "object.relationship",
+    "rebase": "object.relationship",
+    "conflict": "object.constraint",
+    "backup": "object.snapshot"
+  }
+}

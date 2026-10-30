@@ -1,0 +1,66 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "dolt",
+  "family": "index",
+  "resource_kinds": [
+    "index"
+  ],
+  "status": "complete",
+  "engine_tab_title": "Dolt",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Database",
+      "tab": "General",
+      "control": "reference",
+      "required": false,
+      "help": "Use a qualified database or schema name where needed.",
+      "reference_kind": "database"
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "reference",
+      "required": true,
+      "reference_kind": "table",
+      "record_key": "navigator_parent_resource_id",
+      "record_pattern": "^[a-z-]+:(?:[^:]+:)?(.*)$"
+    },
+    {
+      "field_id": "columns",
+      "label": "Indexed columns",
+      "tab": "General",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Column",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "column"
+        }
+      ],
+      "required": true,
+      "item_kind": "string"
+    },
+    {
+      "field_id": "unique",
+      "label": "Unique index",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: index columns as an ordered column list; parent picker (database); table picker. Round trip verified live on Dolt 1.86.6 by tools/tests/test_ui_descriptor_roundtrip_dolt.py (2026-10-29)."
+}

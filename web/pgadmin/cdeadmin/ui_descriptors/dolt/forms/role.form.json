@@ -1,0 +1,95 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "dolt",
+  "family": "role",
+  "resource_kinds": [
+    "user",
+    "role",
+    "privilege"
+  ],
+  "status": "draft",
+  "engine_tab_title": "Dolt",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Schema- and table-level grants in the inventory",
+      "reason": "Dolt reads only global privileges (USER_PRIVILEGES); SCHEMA_PRIVILEGES and TABLE_PRIVILEGES are not read yet",
+      "tracking": "mysql-wire-parity"
+    },
+    {
+      "concept": "Passwordless user creation",
+      "reason": "The MySQL-dialect compiler requires a password for CREATE USER; owner decision pending",
+      "tracking": "mysql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "user",
+          "label": "User"
+        },
+        {
+          "value": "role",
+          "label": "Role"
+        },
+        {
+          "value": "grant",
+          "label": "Grant"
+        }
+      ],
+      "ui_only": true
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "record_key": "user"
+    },
+    {
+      "field_id": "host",
+      "label": "Host",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "default": "%"
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "General",
+      "control": "password",
+      "required": true,
+      "help": "The value is redacted from validation and plans.",
+      "group": "Authentication",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "members",
+      "label": "Initial members",
+      "tab": "Membership",
+      "control": "multiselect",
+      "required": false,
+      "help": "Accounts granted the role when it is created.",
+      "group": "Role",
+      "visible_when": {
+        "field": "variant",
+        "equals": "role"
+      },
+      "option_values_path": [
+        "catalog",
+        "users"
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. privilege: provider exposes no create form (grant, inspect, revoke)"
+}

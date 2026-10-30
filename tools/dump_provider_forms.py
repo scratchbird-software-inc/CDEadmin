@@ -47,6 +47,13 @@ def administrations():
     found["sqlite"] = sqlite.ADMINISTRATION
     from pgadmin.cdeadmin.providers.duckdb import provider as duckdb
     found["duckdb"] = duckdb.ADMINISTRATION
+    # MySQL-wire engines brought to full parity (owner direction 2026-10-29).
+    from pgadmin.cdeadmin.providers.dolt import provider as dolt
+    found["dolt"] = dolt.ADMINISTRATION
+    from pgadmin.cdeadmin.providers.tidb import provider as tidb
+    found["tidb"] = tidb.ADMINISTRATION
+    from pgadmin.cdeadmin.providers.vitess import provider as vitess
+    found["vitess"] = vitess.ADMINISTRATION
     return found
 
 

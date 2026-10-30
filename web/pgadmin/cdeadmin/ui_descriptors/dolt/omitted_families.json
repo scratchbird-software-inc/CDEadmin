@@ -1,0 +1,13 @@
+{
+  "engine": "dolt",
+  "omitted": [
+    {
+      "family": "sequence",
+      "reason": "Dolt refuses CREATE SEQUENCE (syntax error near SEQUENCE, live probe on 1.86.6; docs/en_US/mysql_wire_parity.rst); AUTO_INCREMENT is a column property"
+    },
+    {
+      "family": "type",
+      "reason": "No user-defined types or domains (MySQL dialect)"
+    }
+  ]
+}

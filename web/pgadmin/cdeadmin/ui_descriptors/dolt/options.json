@@ -1,0 +1,31 @@
+{
+  "schema": "cdeadmin.ui-options.v1",
+  "engine": "dolt",
+  "dialect": {
+    "trigger_events": {
+      "table": [
+        "INSERT",
+        "UPDATE",
+        "DELETE"
+      ]
+    }
+  },
+  "catalog": {
+    "databases": {
+      "resource_kind": "database"
+    },
+    "tables": {
+      "resource_kind": "table"
+    },
+    "users": {
+      "resource_kind": "user"
+    },
+    "roles": {
+      "resource_kind": "role"
+    },
+    "branches": {
+      "resource_kind": "branch"
+    }
+  },
+  "notes": "Static dialect lists are for the tested version 1.86.6; catalog entries resolve at runtime from the endpoint resources of the named kind."
+}

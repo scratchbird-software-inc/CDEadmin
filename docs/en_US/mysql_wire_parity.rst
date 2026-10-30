@@ -130,6 +130,15 @@ Dolt 1.86.6
 -  ``explain`` failed in the client ("Unread result found"), not in Dolt;
    ``EXPLAIN ANALYZE`` passed. Treat it as a probe defect, not evidence.
 -  Supports triggers, events, procedures, users, roles and grants.
+-  **Defect (Dolt 1.86.6, fixed in the provider 2026-10-29):** with system
+   tables shown, ``information_schema.TABLES`` fails while the database has an
+   uncommitted stored procedure ("dolt_procedures can not have conflicts
+   because it is not updateable"). The provider's rebase check used that
+   query, so the whole inventory failed for such a database. It now uses
+   ``SHOW TABLES LIKE 'dolt_rebase'``, verified to find the table during an
+   interactive rebase and not after it.
+-  Generated-column expressions are not reported in
+   ``information_schema.COLUMNS`` (``GENERATION_EXPRESSION`` is empty).
 
 TiDB 8.5.6
 ~~~~~~~~~~
@@ -167,6 +176,18 @@ Vitess 23.0.3 (through vtgate, sharded keyspace)
 -  DDL on a sharded keyspace reaches vtgate's schema tracking
    asynchronously. Read-after-write of the schema needs to wait.
 
+Shared MySQL-wire catalog reader
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+-  **Defect, fixed 2026-10-29:** index uniqueness was read with
+   ``bool(NON_UNIQUE)``. TiDB returns ``'0'``/``'1'`` strings, so every TiDB
+   index, ``PRIMARY`` included, was reported non-unique.
+-  Columns were listed alphabetically, without defaults or key membership,
+   and indexes without their columns, so an editor could not re-open an
+   existing table. The reader now keeps definition order and reports
+   defaults, key membership and index columns. Live on Dolt, TiDB and
+   Vitess (2026-10-29).
+
 Demo environment
 ~~~~~~~~~~~~~~~~
 
@@ -176,6 +197,9 @@ Demo environment
    old data.
 -  ``dev.sh start`` returns before MariaDB and Dolt accept logins. The probe
    waits for them. Other callers may need the same wait.
+   Fixed 2026-10-29: ``dev.sh start`` now waits for the MySQL protocol
+   greeting for MySQL, MariaDB and Dolt (Docker's port proxy accepts TCP
+   before the server listens).
 
 Distinctive native features (already modelled by the providers)
 ---------------------------------------------------------------
@@ -200,6 +224,13 @@ Plan
 ----
 
 #. Dolt first (single container, closest to MySQL), then TiDB, then Vitess.
+   Dolt progress 2026-10-29: ``ui_descriptors/dolt`` exists. Table, view,
+   index, trigger and routine forms are ``complete`` (live round trip in
+   ``tools/tests/test_ui_descriptor_roundtrip_dolt.py``); role and database
+   are ``draft``. Open Dolt gaps: database character set and collation
+   (Dolt accepts them; the provider does not expose them), schema- and
+   table-level grants in the inventory, trigger ordering, and creating
+   passwordless users (owner decision).
 #. For each engine, run the forms through the draft and review tools in
    ``ui_descriptors/README.md`` to make a descriptor folder. Reuse MySQL's
    field ids where the backend field is the same, and filter by this matrix.
