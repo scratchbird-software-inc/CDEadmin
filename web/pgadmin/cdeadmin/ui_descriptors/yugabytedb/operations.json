@@ -3,6 +3,36 @@
   "engine": "yugabytedb",
   "operations": [
     {
+      "operation_id": "refresh",
+      "resource_kind": "materialized-view",
+      "title": "Refresh materialized view",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "concurrently",
+          "label": "Concurrently",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "help": "Readers keep the old rows meanwhile; needs a unique index on the materialized view."
+        },
+        {
+          "field_id": "with_data",
+          "label": "Fill with data",
+          "control": "boolean",
+          "required": false,
+          "default": true,
+          "help": "Off: WITH NO DATA empties it until the next refresh."
+        }
+      ],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2): plain and concurrent refresh."
+    },
+    {
       "operation_id": "set_load_balancer",
       "resource_kind": "cluster",
       "title": "Set load balancer state",

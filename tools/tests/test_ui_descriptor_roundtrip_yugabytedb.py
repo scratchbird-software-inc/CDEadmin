@@ -497,3 +497,52 @@ def test_types_and_domains(live):
         run(client, route, kind, 'drop', {'confirmation': name},
             target=find(client, route, kind, name)[0])
     assert not query("SELECT 1 FROM pg_type WHERE typname LIKE 'rt\\_%'")
+
+
+def test_views_and_materialized_views(live):
+    route, client = live
+    query('CREATE TABLE public.vt (id INT PRIMARY KEY, v INT)')
+    query('INSERT INTO public.vt VALUES (1, 10)')
+    form = resolved_form('yugabytedb', 'view')
+    run(client, route, 'view', 'create', backend_draft(form, {
+        'name': 'rt_v', 'parent': 'public',
+        'query': 'SELECT id, v FROM public.vt',
+        'column_names': [{'value': 'a'}, {'value': 'b'}],
+        'security_barrier': True, 'comment': 'a view'}))
+    run(client, route, 'materialized-view', 'create', backend_draft(form, {
+        'variant': 'materialized', 'name': 'rt_m', 'parent': 'public',
+        'query': 'SELECT id, v FROM public.vt', 'with_data': False,
+        'comment': 'a matview'}))
+    target, baseline = record(client, route, 'view', 'rt_v', 'view')
+    assert ([row['value'] for row in baseline['column_names']],
+            baseline['security_barrier'], baseline['security_invoker'],
+            baseline['comment']) == (['a', 'b'], True, False, 'a view')
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    run(client, route, 'view', 'alter', backend_draft(form, {
+        **baseline, 'name': 'rt_v2',
+        'column_names': [{'value': 'a2'}, {'value': 'b'}, {'value': 'c'}],
+        'query': 'SELECT id, v, v * 2 FROM public.vt',
+        'security_invoker': True, 'comment': ''},
+        mode='alter', baseline=baseline), target=target)
+    assert query('SELECT a2, b, c FROM public.rt_v2') == [(1, 10, 20)]
+    _, after = record(client, route, 'view', 'rt_v2', 'view')
+    assert (after['security_invoker'], after['comment']) == (True, None)
+    mtarget, mat = record(client, route, 'materialized-view', 'rt_m',
+                          'view', 'materialized')
+    assert (mat['comment'], [row['value'] for row in mat['column_names']]
+            ) == ('a matview', ['id', 'v'])
+    assert 'cannot change in place' in refused(
+        'materialized-view', 'alter', {'query': 'SELECT 1'}, mtarget)
+    query('CREATE UNIQUE INDEX rt_m_id ON public.rt_m (id)')
+    run(client, route, 'materialized-view', 'refresh', {}, target=mtarget)
+    run(client, route, 'materialized-view', 'refresh',
+        {'concurrently': True}, target=mtarget)
+    assert query('SELECT id, v FROM public.rt_m') == [(1, 10)]
+    run(client, route, 'materialized-view', 'alter', {
+        'name': 'rt_m2', 'comment': ''}, target=mtarget)
+    for kind, name in (('view', 'rt_v2'), ('materialized-view', 'rt_m2')):
+        run(client, route, kind, 'drop', {'confirmation': name},
+            target=find(client, route, kind, name)[0])
+    assert not query("SELECT 1 FROM pg_class WHERE relname LIKE "
+                     "'rt\\_%'")

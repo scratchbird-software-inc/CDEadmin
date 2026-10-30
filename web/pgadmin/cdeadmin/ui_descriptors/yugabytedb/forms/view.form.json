@@ -6,65 +6,147 @@
     "view",
     "materialized-view"
   ],
-  "status": "draft",
-  "engine_tab_title": "yugabytedb",
+  "status": "complete",
+  "engine_tab_title": "YugabyteDB",
   "omitted_tabs": [],
-  "gaps": [],
+  "gaps": [
+    {
+      "concept": "WITH CHECK OPTION",
+      "reason": "Refused by YugabyteDB 2025.2.2.2 (probe)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "View column defaults (ALTER VIEW ALTER COLUMN SET DEFAULT), owner, SET SCHEMA",
+      "reason": "Run on 2025.2.2.2 but have no editor yet",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
   "fields": [
     {
       "field_id": "variant",
       "label": "Variant",
       "tab": "General",
       "control": "select",
+      "ui_only": true,
+      "editable_after_create": false,
       "options": [
         {
-          "value": "default",
-          "label": "Default"
-        },
-        {
           "value": "materialized",
-          "label": "Materialized"
+          "label": "Materialized view"
         }
-      ]
+      ],
+      "help": "Set for a materialized view; a view leaves it empty."
     },
     {
       "field_id": "name",
       "label": "Name",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "help": "Renaming runs ALTER ... RENAME TO."
     },
     {
       "field_id": "parent",
-      "label": "Database",
+      "label": "Schema",
       "tab": "General",
       "control": "reference",
-      "required": false,
-      "help": "Use a qualified database or schema name where needed.",
-      "reference_kind": "database"
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON VIEW / MATERIALIZED VIEW"
     },
     {
       "field_id": "query",
-      "label": "View query",
+      "label": "Query",
       "tab": "Definition",
       "control": "code",
       "language": "sql",
       "required": true,
-      "help": "One SELECT or WITH query; do not include the CREATE command."
+      "help": "One SELECT or WITH query. A view is replaced with the Column names list; a materialized view's query cannot change in place."
+    },
+    {
+      "field_id": "column_names",
+      "label": "Column names",
+      "tab": "Columns",
+      "control": "grid",
+      "item_kind": "string",
+      "help": "Names for the query columns, in order. On a view, renaming a row runs ALTER VIEW ... RENAME COLUMN; new columns go last.",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Column",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "recursive",
+      "label": "Recursive",
+      "tab": "Options",
+      "control": "boolean",
+      "default": false,
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      },
+      "editable_after_create": false,
+      "help": "CREATE RECURSIVE VIEW; needs column names."
+    },
+    {
+      "field_id": "security_barrier",
+      "label": "Security barrier",
+      "tab": "Options",
+      "control": "boolean",
+      "default": false,
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
+    },
+    {
+      "field_id": "security_invoker",
+      "label": "Security invoker",
+      "tab": "Options",
+      "control": "boolean",
+      "default": false,
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      },
+      "help": "Check the caller's privileges on the underlying tables."
     },
     {
       "field_id": "with_data",
       "label": "Populate now",
       "tab": "Options",
       "control": "boolean",
-      "required": false,
       "default": true,
-      "group": "Materialized",
+      "visible_when": {
+        "field": "variant",
+        "equals": "materialized"
+      },
+      "editable_after_create": false,
+      "help": "Off: WITH NO DATA; use Refresh to fill it."
+    },
+    {
+      "field_id": "tablespace",
+      "label": "Tablespace",
+      "tab": "Options",
+      "control": "reference",
+      "reference_kind": "tablespace",
+      "reference_value": "display_name",
       "visible_when": {
         "field": "variant",
         "equals": "materialized"
       }
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database)."
+  "notes": "Started from the CockroachDB view form (same field ids); providers/yugabytedb/views.py. The record reads pg_get_viewdef, the view's columns in order, reloptions, the comment and a materialized view's tablespace. Refresh is its own operation. Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
 }

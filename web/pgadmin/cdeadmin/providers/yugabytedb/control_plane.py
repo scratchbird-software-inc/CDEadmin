@@ -34,6 +34,19 @@ def _choice(field_id, label, values, **options):
 
 OPERATIONS = (
     ControlPlaneOperation(
+        'materialized-view', 'refresh', 'Refresh materialized view',
+        'admin', 'maintenance_admin', (
+            cp_field('concurrently', 'Concurrently', 'boolean', False,
+                     help='Readers keep the old rows meanwhile; needs a '
+                     'unique index on the materialized view.',
+                     default=False),
+            cp_field('with_data', 'Fill with data', 'boolean', False,
+                     help='Off: WITH NO DATA empties it until the next '
+                     'refresh.', default=True),
+        ), impact_scope='resource', long_running=True,
+        post_state_required=False
+    ),
+    ControlPlaneOperation(
         'placement-policy', 'configure', 'Configure live placement', 'admin',
         'topology_admin', (
             cp_field('placements', 'Cloud/region/zone placements', 'json',
@@ -378,6 +391,33 @@ def compile_action(request):
                 ).get('resource_id'),
                 'availability_risk': 'medium',
                 'data_movement_possible': True,
+            },
+        }
+    if kind == 'materialized-view' and operation == 'refresh':
+        concurrently = draft.get('concurrently') is True
+        with_data = draft.get('with_data', True) is not False
+        if concurrently and not with_data:
+            # PostgreSQL refuses CONCURRENTLY with WITH NO DATA.
+            raise RelationalClientError(
+                'a concurrent refresh fills the view; it cannot be WITH NO '
+                'DATA')
+        return {
+            'statements': [{
+                'source': (
+                    'REFRESH MATERIALIZED VIEW '
+                    f'{"CONCURRENTLY " if concurrently else ""}'
+                    f'{_qualified_table(request)}'
+                    f'{"" if with_data else " WITH NO DATA"}'
+                ),
+                'parameters': (),
+            }],
+            'impact': {
+                'scope': 'resource',
+                'target_resource_id': (
+                    request.get('target_resource') or {}
+                ).get('resource_id'),
+                'availability_risk': 'low' if concurrently else 'medium',
+                'data_movement_possible': False,
             },
         }
     if kind == 'table' and operation == 'compact':

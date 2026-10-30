@@ -20,7 +20,9 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
-from . import indexes as index_sql, objects, tables as tables_sql, types
+from . import (
+    indexes as index_sql, objects, tables as tables_sql, types, views,
+)
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
 from .control_plane import (
@@ -85,8 +87,9 @@ _YSQL_SUPPORTED = dict(_BASE_ADMINISTRATION.dialect.supported)
 _YSQL_SUPPORTED.update({
     # In place: rename, tablespace, comment (providers/yugabytedb/indexes).
     'index': frozenset({'inspect', 'create', 'alter', 'drop'}),
+    # alter: rename, tablespace, comment (providers/yugabytedb/views).
     'materialized-view': frozenset({
-        'inspect', 'create', 'rename', 'drop',
+        'inspect', 'create', 'alter', 'rename', 'drop',
     }),
     # alter: values, default, comment, rename (providers/yugabytedb/types).
     'domain': frozenset({'inspect', 'create', 'alter', 'rename', 'drop'}),
@@ -130,13 +133,20 @@ class YugabyteDBAdministration(RelationalAdministration):
     @staticmethod
     def _native_object(kind, operation):
         return operation in objects.OPERATIONS.get(kind, ()) or (
-            kind in {'table', 'index', 'type', 'domain'} and
+            kind in {'table', 'index', 'type', 'domain', 'view',
+                     'materialized-view'} and
             operation in {'create', 'alter'})
 
     def _native_compile(self, request):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if request['resource_kind'] in {'view', 'materialized-view'}:
+            kind = request['resource_kind']
+            if request['operation_id'] == 'create':
+                return {'statements': views.create(self, kind, draft)}
+            return {'statements': views.alter(
+                self, kind, draft, request.get('target_resource'))}
         if request['resource_kind'] in {'type', 'domain'}:
             builder = {
                 ('type', 'create'): lambda: types.create_type(self, draft),
@@ -172,6 +182,11 @@ class YugabyteDBAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def _form(self, kind, operation):
+        if kind in {'view', 'materialized-view'} and operation in {
+                'create', 'alter'}:
+            return views.form(super()._form(kind, 'create')
+                              if operation == 'create' else None,
+                              self._field, kind, operation)
         if kind == 'index' and operation in {'create', 'alter'}:
             return index_sql.form(super()._form(kind, 'create'),
                                   self._field, operation)
@@ -180,21 +195,6 @@ class YugabyteDBAdministration(RelationalAdministration):
                 super()._form(kind, operation), self._field, operation)
         if operation in objects.OPERATIONS.get(kind, ()):
             return objects.form(kind, operation, self._field)
-        if operation == 'create' and kind == 'materialized-view':
-            return {
-                'form_id': 'materialized-view.create',
-                'title': 'Create materialized view',
-                'fields': [
-                    self._field('name', 'Name', 'text', True),
-                    self._field('parent', 'Parent schema', 'text', False),
-                    self._field(
-                        'query', 'Materialized query', 'code', True,
-                        'Enter one SELECT or WITH query.',
-                    ),
-                    self._field('with_data', 'Populate now', 'boolean',
-                                default=True),
-                ],
-            }
         if operation == 'create' and kind == 'type':
             return {
                 'form_id': 'type.create', 'title': 'Create YSQL type',
@@ -286,14 +286,6 @@ class YugabyteDBAdministration(RelationalAdministration):
         options = draft.get('options') or {}
         name = self._identifier(draft['name'])
         qualified = self._new_object_name(name, options)
-        if kind == 'materialized-view':
-            query = self._query_body(draft.get('definition'))
-            suffix = '' if options.get('with_data', True) else ' WITH NO DATA'
-            return [{
-                'source': f'CREATE MATERIALIZED VIEW {qualified} AS '
-                          f'{query}{suffix}',
-                'parameters': (),
-            }]
         if kind == 'extension':
             source = f'CREATE EXTENSION {self._quote(name)}'
             schema = options.get('schema')
@@ -756,7 +748,9 @@ def _annotate_catalog(connection, values):
                        # over RPC, and the system catalogs dominate.
                        "AND n.nspname NOT IN ('pg_catalog', "
                        "'information_schema') "
-                       "AND c.relkind IN ('r', 'p', 'v', 'm', 'f')")}
+                       "AND c.relkind IN ('r', 'p', 'v', 'm', 'f') "
+                       # Definition order: view records list names by it.
+                       'ORDER BY n.nspname, c.relname, a.attnum')}
         tables = {(str(row[0]), str(row[1])): row[2:]
                   for row in optional_rows(
                       cursor,
@@ -784,6 +778,19 @@ def _annotate_catalog(connection, values):
                            'ON n.oid = t.relnamespace '
                            'LEFT JOIN pg_catalog.pg_tablespace ts '
                            'ON ts.oid = i.reltablespace')}
+        view_facts = {(str(row[0]), str(row[1])): row[2:]
+                      for row in optional_rows(
+                          cursor,
+                          'SELECT n.nspname, c.relname, '
+                          'pg_get_viewdef(c.oid, true), c.reloptions, '
+                          "obj_description(c.oid, 'pg_class'), ts.spcname "
+                          'FROM pg_catalog.pg_class c '
+                          'JOIN pg_catalog.pg_namespace n '
+                          'ON n.oid = c.relnamespace '
+                          'LEFT JOIN pg_catalog.pg_tablespace ts '
+                          'ON ts.oid = c.reltablespace '
+                          "WHERE c.relkind IN ('v', 'm') AND n.nspname "
+                          "NOT IN ('pg_catalog', 'information_schema')")}
         keys = {(str(row[0]), str(row[1])): str(row[2])
                 for row in optional_rows(
                     cursor,
@@ -855,6 +862,22 @@ def _annotate_catalog(connection, values):
                 collation=None if collation is None else str(collation),
                 comment=None if comment is None else str(comment),
                 column_key=membership.get(path, ''))
+        elif item['resource_kind'] in {'view', 'materialized-view'}:
+            facts = view_facts.get(path)
+            if not facts:
+                continue
+            definition, options, comment, tablespace = facts
+            settings = dict(str(entry).partition('=')[::2]
+                            for entry in options or ())
+            native.update(
+                parent=path[0],
+                query=str(definition or '').strip().rstrip(';'),
+                column_names=[name for (schema, table, name)
+                              in columns if (schema, table) == path],
+                comment=None if comment is None else str(comment),
+                tablespace=None if tablespace is None else str(tablespace),
+                **{key: settings.get(key) == 'true'
+                   for key in views.OPTIONS})
         elif item['resource_kind'] == 'index':
             unique, tablespace, comment = index_facts.get(
                 path, (False, None, None))

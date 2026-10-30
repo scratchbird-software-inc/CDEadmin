@@ -322,7 +322,10 @@ offered):
    WITH CHECK OPTION``; virtual generated columns (PostgreSQL 15 syntax has
    only ``STORED``).
 -  ``CLUSTER``, ``REINDEX``, ``DROP INDEX CONCURRENTLY``, ``REFRESH
-   MATERIALIZED VIEW CONCURRENTLY``, large objects.
+   MATERIALIZED VIEW CONCURRENTLY``, large objects. (Correction, same
+   day: the probe row ``materialized-view-concurrently`` passes; the
+   concurrent refresh I first tried by hand failed only because that view
+   had no unique index, which PostgreSQL requires too.)
 
 Accepted but not carried out (the notice says so):
 
@@ -400,6 +403,16 @@ added for the table editor read every system relation (35 seconds cold);
 it now reads user relations only, and a whole catalog read takes about
 6 to 10 seconds on the demo, pooled or not. Earlier readings of 65 to 130
 seconds were taken while a killed test's queries were still running.
+
+The view form (views and materialized views) is ``complete``
+(``providers/yugabytedb/views.py``): column names, recursive views,
+``security_barrier`` and ``security_invoker``, comments, a materialized
+view's tablespace and ``WITH NO DATA``. A view is altered by renaming
+changed columns in place (``ALTER VIEW ... RENAME COLUMN``) and then
+``CREATE OR REPLACE VIEW`` with the full column list; a materialized
+view's query is fixed, its name, tablespace and comment change. YugabyteDB
+had no refresh operation; it now has one (``CONCURRENTLY``, ``WITH NO
+DATA``) in its control plane.
 
 Provider finding, 2026-10-30: the shared relational apply runs a plan in
 one transaction, and YugabyteDB refuses ``CREATE DATABASE`` and ``CREATE
