@@ -59,6 +59,9 @@
   "column-identity": "supported",
   "column-rename-drop": "supported",
   "comment": "supported",
+  "comment-function": "supported",
+  "comment-policy": "supported",
+  "comment-view": "supported",
   "constraint-check": "supported",
   "constraint-deferrable": "supported",
   "constraint-exclusion": {
@@ -87,7 +90,7 @@
   "crdb-backup-schedule": {
    "msg": "syntax error at or near \"SCHEDULE\"",
    "sqlstate": "42601",
-   "statement": "CREATE SCHEDULE cs2d79d8a9 FOR",
+   "statement": "CREATE SCHEDULE cs937fb387 FOR",
    "step": 1
   },
   "crdb-changefeed": {
@@ -117,19 +120,19 @@
   "crdb-database-placement": {
    "msg": "syntax error at or near \"PRIMARY\"",
    "sqlstate": "42601",
-   "statement": "ALTER DATABASE cde_probe_2d79d8a9 SET",
+   "statement": "ALTER DATABASE cde_probe_937fb387 SET",
    "step": 0
   },
   "crdb-export": {
    "msg": "syntax error at or near \"EXPORT\"",
    "sqlstate": "42601",
-   "statement": "EXPORT INTO CSV 'nodelocal://1/cde_probe/e2d79d8a9'",
+   "statement": "EXPORT INTO CSV 'nodelocal://1/cde_probe/e937fb387'",
    "step": 1
   },
   "crdb-external-connection": {
    "msg": "syntax error at or near \"EXTERNAL\"",
    "sqlstate": "42601",
-   "statement": "CREATE EXTERNAL CONNECTION ec2d79d8a9",
+   "statement": "CREATE EXTERNAL CONNECTION ec937fb387",
    "step": 0
   },
   "crdb-index-hash-sharded": {
@@ -245,14 +248,18 @@
    "step": 1
   },
   "database": "supported",
+  "database-connection-limit": "supported",
+  "database-template": "supported",
   "default-privileges": "supported",
   "domain": "supported",
   "event-trigger": "supported",
   "extension": "supported",
   "foreign-data": "supported",
+  "function-options": "supported",
   "function-plpgsql": "supported",
   "function-set-returning": "supported",
   "function-sql": "supported",
+  "function-variadic": "supported",
   "grant-column": "supported",
   "grant-table": "supported",
   "index": "supported",
@@ -320,6 +327,12 @@
   "materialized-view-concurrently": "supported",
   "operator": "supported",
   "owner-change": "supported",
+  "policy-alter-command": {
+   "msg": "syntax error at or near \"FOR\"",
+   "sqlstate": "42601",
+   "statement": "ALTER POLICY pc ON",
+   "step": 2
+  },
   "procedure": "supported",
   "publication": "supported",
   "retained-check": "supported",
@@ -356,12 +369,19 @@
    "step": "setup 1"
   },
   "role": "supported",
+  "role-comment": "supported",
+  "role-connection-limit": "supported",
+  "role-inherit": "supported",
   "role-membership": "supported",
   "role-password": "supported",
+  "role-rename": "supported",
+  "role-superuser": "supported",
   "row-level-security": "supported",
   "rule": "supported",
   "schema": "supported",
   "sequence": "supported",
+  "sequence-comment": "supported",
+  "sequence-cycle": "supported",
   "sequence-owned-by": "supported",
   "statistics-extended": "supported",
   "table": "supported",
@@ -378,10 +398,28 @@
   },
   "text-search": "supported",
   "trigger": "supported",
+  "trigger-alter": "supported",
+  "trigger-instead-of": "supported",
+  "trigger-or-replace": "supported",
+  "trigger-referencing": {
+   "msg": "REFERENCING clause (transition tables) not supported yet",
+   "sqlstate": "0A000",
+   "statement": "CREATE TRIGGER trf AFTER",
+   "step": 2
+  },
   "trigger-statement": "supported",
+  "trigger-truncate": "supported",
+  "trigger-update-of": "supported",
   "truncate": "supported",
   "type-composite": "supported",
+  "type-composite-alter": {
+   "msg": "ALTER TYPE ADD ATTRIBUTE not supported yet",
+   "sqlstate": "0A000",
+   "statement": "ALTER TYPE ca ADD",
+   "step": 1
+  },
   "type-enum": "supported",
+  "type-enum-alter": "supported",
   "type-range": "supported",
   "view": "supported",
   "view-check-option": {

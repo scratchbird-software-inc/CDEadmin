@@ -10,8 +10,8 @@
   "omitted_tabs": [],
   "gaps": [
     {
-      "concept": "CONNECTION LIMIT, TEMPLATE, LC_COLLATE, LC_CTYPE",
-      "reason": "Refused by CockroachDB 26.1.3 (live)",
+      "concept": "CONNECTION LIMIT, LC_COLLATE, LC_CTYPE, TEMPLATE",
+      "reason": "CONNECTION LIMIT (other than -1), LC_COLLATE and LC_CTYPE are refused by 26.1.3; TEMPLATE template0 is accepted without a notice but its effect was not checked, so it is not offered (probe, 2026-10-30)",
       "tracking": "postgresql-wire-parity"
     },
     {

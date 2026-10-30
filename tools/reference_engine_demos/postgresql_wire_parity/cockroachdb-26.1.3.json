@@ -1,6 +1,6 @@
 {
  "engine": "cockroachdb",
- "external_storage_prefix": "nodelocal://1/cde_probe/a3fd25d8",
+ "external_storage_prefix": "nodelocal://1/cde_probe/29b4931c",
  "leftover_roles": [],
  "notices_on_supported": {
   "column-identity": [
@@ -53,6 +53,24 @@
   "column-identity": "supported",
   "column-rename-drop": "supported",
   "comment": "supported",
+  "comment-function": {
+   "msg": "at or near \"cf\": syntax error: unimplemented: this syntax",
+   "sqlstate": "0A000",
+   "statement": "COMMENT ON FUNCTION cf()",
+   "step": 1
+  },
+  "comment-policy": {
+   "msg": "at or near \"policy\": syntax error",
+   "sqlstate": "42601",
+   "statement": "COMMENT ON POLICY cp",
+   "step": 2
+  },
+  "comment-view": {
+   "msg": "at or near \"view\": syntax error",
+   "sqlstate": "42601",
+   "statement": "COMMENT ON VIEW cv",
+   "step": 1
+  },
   "constraint-check": "supported",
   "constraint-deferrable": {
    "msg": "at or near \"deferrable\": syntax error",
@@ -86,7 +104,7 @@
   "crdb-database-placement": {
    "msg": "region \"local\" does not exist",
    "sqlstate": "42602",
-   "statement": "ALTER DATABASE cde_probe_a3fd25d8 SET",
+   "statement": "ALTER DATABASE cde_probe_29b4931c SET",
    "step": 0
   },
   "crdb-export": "supported",
@@ -112,6 +130,13 @@
   "crdb-table-temporary-opt-in": "supported",
   "crdb-zone-config": "supported",
   "database": "supported",
+  "database-connection-limit": {
+   "msg": "unimplemented: only connection limit -1 is supported, got: 5",
+   "sqlstate": "0A000",
+   "statement": "CREATE DATABASE cde_probe_29b4931c_cl CONNECTION",
+   "step": 0
+  },
+  "database-template": "supported",
   "default-privileges": "supported",
   "domain": {
    "msg": "at or near \"as\": syntax error: unimplemented: this syntax",
@@ -132,9 +157,21 @@
    "statement": "CREATE EXTENSION IF NOT",
    "step": 0
   },
+  "function-options": {
+   "msg": "at or near \"parallel\": syntax error: unimplemented: this syntax",
+   "sqlstate": "0A000",
+   "statement": "CREATE FUNCTION fo() RETURNS",
+   "step": 0
+  },
   "function-plpgsql": "supported",
   "function-set-returning": "supported",
   "function-sql": "supported",
+  "function-variadic": {
+   "msg": "at or near \"variadic\": syntax error: unimplemented: this syntax",
+   "sqlstate": "0A000",
+   "statement": "CREATE FUNCTION fv(VARIADIC a",
+   "step": 0
+  },
   "grant-column": {
    "msg": "at or near \"(\": syntax error",
    "sqlstate": "42601",
@@ -215,6 +252,12 @@
    "step": 0
   },
   "owner-change": "supported",
+  "policy-alter-command": {
+   "msg": "at or near \"for\": syntax error",
+   "sqlstate": "42601",
+   "statement": "ALTER POLICY pc ON",
+   "step": 2
+  },
   "procedure": "supported",
   "publication": {
    "msg": "at or near \"pb\": syntax error: unimplemented: this syntax",
@@ -264,11 +307,41 @@
    "step": "setup 1"
   },
   "role": "supported",
+  "role-comment": {
+   "msg": "at or near \"role\": syntax error",
+   "sqlstate": "42601",
+   "statement": "COMMENT ON ROLE rm29b4931c",
+   "step": 1
+  },
+  "role-connection-limit": {
+   "msg": "at or near \"connection\": syntax error",
+   "sqlstate": "42601",
+   "statement": "CREATE ROLE rc29b4931c CONNECTION",
+   "step": 0
+  },
+  "role-inherit": {
+   "msg": "at or near \"noinherit\": syntax error",
+   "sqlstate": "42601",
+   "statement": "CREATE ROLE ri29b4931c WITH",
+   "step": 0
+  },
   "role-membership": "supported",
   "role-password": {
    "msg": "setting or updating a password is not supported in insecure mode",
    "sqlstate": "28P01",
-   "statement": "CREATE USER ua3fd25d8 WITH",
+   "statement": "CREATE USER u29b4931c WITH",
+   "step": 0
+  },
+  "role-rename": {
+   "msg": "at or near \"rename\": syntax error",
+   "sqlstate": "42601",
+   "statement": "ALTER ROLE rr29b4931c RENAME",
+   "step": 1
+  },
+  "role-superuser": {
+   "msg": "at or near \"superuser\": syntax error",
+   "sqlstate": "42601",
+   "statement": "CREATE ROLE rs29b4931c WITH",
    "step": 0
   },
   "row-level-security": "supported",
@@ -280,6 +353,18 @@
   },
   "schema": "supported",
   "sequence": "supported",
+  "sequence-comment": {
+   "msg": "at or near \"sequence\": syntax error",
+   "sqlstate": "42601",
+   "statement": "COMMENT ON SEQUENCE sm",
+   "step": 1
+  },
+  "sequence-cycle": {
+   "msg": "unimplemented: CYCLE option is not supported",
+   "sqlstate": "0A000",
+   "statement": "CREATE SEQUENCE sc MAXVALUE",
+   "step": 0
+  },
   "sequence-owned-by": "supported",
   "statistics-extended": {
    "msg": "at or near \"(\": syntax error",
@@ -321,15 +406,58 @@
    "step": 0
   },
   "trigger": "supported",
+  "trigger-alter": {
+   "msg": "at or near \"trigger\": syntax error",
+   "sqlstate": "42601",
+   "statement": "ALTER TRIGGER ta ON",
+   "step": 3
+  },
+  "trigger-instead-of": {
+   "msg": "unimplemented: INSTEAD OF triggers are not yet supported",
+   "sqlstate": "0A000",
+   "statement": "CREATE TRIGGER ti INSTEAD",
+   "step": 3
+  },
+  "trigger-or-replace": {
+   "msg": "unimplemented: CREATE OR REPLACE TRIGGER is not supported",
+   "sqlstate": "0A000",
+   "statement": "CREATE OR REPLACE TRIGGER",
+   "step": 3
+  },
+  "trigger-referencing": {
+   "msg": "unimplemented: statement-level triggers are not yet supported",
+   "sqlstate": "0A000",
+   "statement": "CREATE TRIGGER trf AFTER",
+   "step": 2
+  },
   "trigger-statement": {
    "msg": "unimplemented: statement-level triggers are not yet supported",
    "sqlstate": "0A000",
    "statement": "CREATE TRIGGER tgs AFTER",
    "step": 2
   },
+  "trigger-truncate": {
+   "msg": "unimplemented: statement-level triggers are not yet supported",
+   "sqlstate": "0A000",
+   "statement": "CREATE TRIGGER tt AFTER",
+   "step": 2
+  },
+  "trigger-update-of": {
+   "msg": "unimplemented: column lists are not yet supported for triggers",
+   "sqlstate": "0A000",
+   "statement": "CREATE TRIGGER tu BEFORE",
+   "step": 2
+  },
   "truncate": "supported",
   "type-composite": "supported",
+  "type-composite-alter": {
+   "msg": "at or near \"EOF\": syntax error: unimplemented: this syntax",
+   "sqlstate": "0A000",
+   "statement": "ALTER TYPE ca ADD",
+   "step": 1
+  },
   "type-enum": "supported",
+  "type-enum-alter": "supported",
   "type-range": {
    "msg": "at or near \"(\": syntax error: unimplemented: this syntax",
    "sqlstate": "0A000",
@@ -358,7 +486,7 @@
   "ysql-colocated-database": {
    "msg": "at or near \"colocation\": syntax error",
    "sqlstate": "42601",
-   "statement": "CREATE DATABASE cde_probe_a3fd25d8_colo WITH",
+   "statement": "CREATE DATABASE cde_probe_29b4931c_colo WITH",
    "step": 0
   },
   "ysql-hash-code": {
@@ -407,7 +535,7 @@
    "step": "setup 0"
   },
   "ysql-retained-tablespace-placement": {
-   "msg": "at or near \"ytra3fd25d8\": syntax error: unimplemented: this syntax",
+   "msg": "at or near \"ytr29b4931c\": syntax error: unimplemented: this syntax",
    "sqlstate": "0A000",
    "step": "setup 0"
   },
@@ -436,9 +564,9 @@
    "step": 0
   },
   "ysql-tablespace-placement": {
-   "msg": "at or near \"ytsa3fd25d8\": syntax error: unimplemented: this syntax",
+   "msg": "at or near \"yts29b4931c\": syntax error: unimplemented: this syntax",
    "sqlstate": "0A000",
-   "statement": "CREATE TABLESPACE ytsa3fd25d8 WITH",
+   "statement": "CREATE TABLESPACE yts29b4931c WITH",
    "step": 0
   }
  },

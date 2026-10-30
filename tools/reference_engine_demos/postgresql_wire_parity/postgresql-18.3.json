@@ -32,6 +32,9 @@
   "column-identity": "supported",
   "column-rename-drop": "supported",
   "comment": "supported",
+  "comment-function": "supported",
+  "comment-policy": "supported",
+  "comment-view": "supported",
   "constraint-check": "supported",
   "constraint-deferrable": "supported",
   "constraint-exclusion": "supported",
@@ -55,7 +58,7 @@
   "crdb-backup-schedule": {
    "msg": "syntax error at or near \"SCHEDULE\"",
    "sqlstate": "42601",
-   "statement": "CREATE SCHEDULE csb8d6e05d FOR",
+   "statement": "CREATE SCHEDULE csb1eca21b FOR",
    "step": 1
   },
   "crdb-changefeed": {
@@ -85,19 +88,19 @@
   "crdb-database-placement": {
    "msg": "syntax error at or near \"PRIMARY\"",
    "sqlstate": "42601",
-   "statement": "ALTER DATABASE cde_probe_b8d6e05d SET",
+   "statement": "ALTER DATABASE cde_probe_b1eca21b SET",
    "step": 0
   },
   "crdb-export": {
    "msg": "syntax error at or near \"EXPORT\"",
    "sqlstate": "42601",
-   "statement": "EXPORT INTO CSV 'nodelocal://1/cde_probe/eb8d6e05d'",
+   "statement": "EXPORT INTO CSV 'nodelocal://1/cde_probe/eb1eca21b'",
    "step": 1
   },
   "crdb-external-connection": {
    "msg": "syntax error at or near \"EXTERNAL\"",
    "sqlstate": "42601",
-   "statement": "CREATE EXTERNAL CONNECTION ecb8d6e05d",
+   "statement": "CREATE EXTERNAL CONNECTION ecb1eca21b",
    "step": 0
   },
   "crdb-index-hash-sharded": {
@@ -213,14 +216,18 @@
    "step": 1
   },
   "database": "supported",
+  "database-connection-limit": "supported",
+  "database-template": "supported",
   "default-privileges": "supported",
   "domain": "supported",
   "event-trigger": "supported",
   "extension": "supported",
   "foreign-data": "supported",
+  "function-options": "supported",
   "function-plpgsql": "supported",
   "function-set-returning": "supported",
   "function-sql": "supported",
+  "function-variadic": "supported",
   "grant-column": "supported",
   "grant-table": "supported",
   "index": "supported",
@@ -246,6 +253,12 @@
   "materialized-view-concurrently": "supported",
   "operator": "supported",
   "owner-change": "supported",
+  "policy-alter-command": {
+   "msg": "syntax error at or near \"FOR\"",
+   "sqlstate": "42601",
+   "statement": "ALTER POLICY pc ON",
+   "step": 2
+  },
   "procedure": "supported",
   "publication": "supported",
   "retained-check": "supported",
@@ -264,12 +277,19 @@
   "retained-unlogged": "supported",
   "retained-view-check-option": "supported",
   "role": "supported",
+  "role-comment": "supported",
+  "role-connection-limit": "supported",
+  "role-inherit": "supported",
   "role-membership": "supported",
   "role-password": "supported",
+  "role-rename": "supported",
+  "role-superuser": "supported",
   "row-level-security": "supported",
   "rule": "supported",
   "schema": "supported",
   "sequence": "supported",
+  "sequence-comment": "supported",
+  "sequence-cycle": "supported",
   "sequence-owned-by": "supported",
   "statistics-extended": "supported",
   "table": "supported",
@@ -281,10 +301,18 @@
   "table-unlogged": "supported",
   "text-search": "supported",
   "trigger": "supported",
+  "trigger-alter": "supported",
+  "trigger-instead-of": "supported",
+  "trigger-or-replace": "supported",
+  "trigger-referencing": "supported",
   "trigger-statement": "supported",
+  "trigger-truncate": "supported",
+  "trigger-update-of": "supported",
   "truncate": "supported",
   "type-composite": "supported",
+  "type-composite-alter": "supported",
   "type-enum": "supported",
+  "type-enum-alter": "supported",
   "type-range": "supported",
   "view": "supported",
   "view-check-option": "supported",
@@ -293,7 +321,7 @@
   "ysql-colocated-database": {
    "msg": "option \"colocation\" not recognized",
    "sqlstate": "42601",
-   "statement": "CREATE DATABASE cde_probe_b8d6e05d_colo WITH",
+   "statement": "CREATE DATABASE cde_probe_b1eca21b_colo WITH",
    "step": 0
   },
   "ysql-hash-code": {
@@ -373,7 +401,7 @@
   "ysql-tablespace-placement": {
    "msg": "syntax error at or near \"WITH\"",
    "sqlstate": "42601",
-   "statement": "CREATE TABLESPACE ytsb8d6e05d WITH",
+   "statement": "CREATE TABLESPACE ytsb1eca21b WITH",
    "step": 0
   }
  },

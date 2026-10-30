@@ -2,7 +2,9 @@
 
 Checked live on 26.1.3: CREATE DATABASE [ENCODING 'UTF8'] [OWNER], COMMENT
 ON DATABASE, ALTER DATABASE ... OWNER TO / RENAME TO / SET var = value /
-RESET var. Refused: CONNECTION LIMIT, TEMPLATE, LC_COLLATE, LC_CTYPE.
+RESET var. Refused: CONNECTION LIMIT (other than -1), LC_COLLATE, LC_CTYPE.
+TEMPLATE template0 is accepted without a notice (probe); its effect was not
+checked, so the editor does not offer it.
 Regions, survival goals and placement are their own operations (and need
 a multi-region cluster; see "Untested on CockroachDB").
 """

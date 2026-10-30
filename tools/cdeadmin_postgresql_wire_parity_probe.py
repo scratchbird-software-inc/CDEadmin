@@ -234,6 +234,103 @@ PROBES = {
         'DROP TABLE t'],
     'comment': [TABLE, "COMMENT ON TABLE t IS 'probe'",
                 "COMMENT ON COLUMN t.v IS 'probe'", 'DROP TABLE t'],
+    # Clauses the CockroachDB forms were first checked on by hand
+    # (2026-10-30); each is a row here so every column records it.
+    'trigger-instead-of': [
+        TABLE, 'CREATE VIEW tv AS SELECT id, v FROM t',
+        'CREATE FUNCTION tr() RETURNS TRIGGER LANGUAGE plpgsql AS '
+        "'BEGIN RETURN NEW; END'",
+        'CREATE TRIGGER ti INSTEAD OF INSERT ON tv FOR EACH ROW '
+        'EXECUTE FUNCTION tr()', 'DROP VIEW tv', 'DROP FUNCTION tr',
+        'DROP TABLE t'],
+    'trigger-truncate': [
+        TABLE, 'CREATE FUNCTION tr() RETURNS TRIGGER LANGUAGE plpgsql AS '
+        "'BEGIN RETURN NEW; END'",
+        'CREATE TRIGGER tt AFTER TRUNCATE ON t FOR EACH STATEMENT '
+        'EXECUTE FUNCTION tr()', 'DROP TRIGGER tt ON t',
+        'DROP FUNCTION tr', 'DROP TABLE t'],
+    'trigger-update-of': [
+        TABLE, 'CREATE FUNCTION tr() RETURNS TRIGGER LANGUAGE plpgsql AS '
+        "'BEGIN RETURN NEW; END'",
+        'CREATE TRIGGER tu BEFORE UPDATE OF v ON t FOR EACH ROW '
+        'EXECUTE FUNCTION tr()', 'DROP TRIGGER tu ON t',
+        'DROP FUNCTION tr', 'DROP TABLE t'],
+    'trigger-referencing': [
+        TABLE, 'CREATE FUNCTION tr() RETURNS TRIGGER LANGUAGE plpgsql AS '
+        "'BEGIN RETURN NEW; END'",
+        'CREATE TRIGGER trf AFTER INSERT ON t REFERENCING NEW TABLE AS nt '
+        'FOR EACH STATEMENT EXECUTE FUNCTION tr()',
+        'DROP TRIGGER trf ON t', 'DROP FUNCTION tr', 'DROP TABLE t'],
+    'trigger-or-replace': [
+        TABLE, 'CREATE FUNCTION tr() RETURNS TRIGGER LANGUAGE plpgsql AS '
+        "'BEGIN RETURN NEW; END'",
+        'CREATE TRIGGER tor BEFORE INSERT ON t FOR EACH ROW '
+        'EXECUTE FUNCTION tr()',
+        'CREATE OR REPLACE TRIGGER tor BEFORE UPDATE ON t FOR EACH ROW '
+        'EXECUTE FUNCTION tr()', 'DROP TRIGGER tor ON t',
+        'DROP FUNCTION tr', 'DROP TABLE t'],
+    'trigger-alter': [
+        TABLE, 'CREATE FUNCTION tr() RETURNS TRIGGER LANGUAGE plpgsql AS '
+        "'BEGIN RETURN NEW; END'",
+        'CREATE TRIGGER ta BEFORE INSERT ON t FOR EACH ROW '
+        'EXECUTE FUNCTION tr()', 'ALTER TRIGGER ta ON t RENAME TO ta2',
+        'ALTER TABLE t DISABLE TRIGGER ta2',
+        'ALTER TABLE t ENABLE TRIGGER ta2',
+        "COMMENT ON TRIGGER ta2 ON t IS 'probe'", 'DROP TRIGGER ta2 ON t',
+        'DROP FUNCTION tr', 'DROP TABLE t'],
+    'role-superuser': ['CREATE ROLE rs{suffix} WITH SUPERUSER',
+                       'DROP ROLE rs{suffix}'],
+    'role-inherit': ['CREATE ROLE ri{suffix} WITH NOINHERIT',
+                     'DROP ROLE ri{suffix}'],
+    'role-connection-limit': ['CREATE ROLE rc{suffix} CONNECTION LIMIT 5',
+                              'DROP ROLE rc{suffix}'],
+    # Separate rows: each one's cleanup drops the role it created.
+    'role-rename': ['CREATE ROLE rr{suffix}',
+                    'ALTER ROLE rr{suffix} RENAME TO rn{suffix}',
+                    # Renamed back so the cleanup's DROP always matches.
+                    'ALTER ROLE rn{suffix} RENAME TO rr{suffix}',
+                    'DROP ROLE rr{suffix}'],
+    'role-comment': ['CREATE ROLE rm{suffix}',
+                     "COMMENT ON ROLE rm{suffix} IS 'probe'",
+                     'DROP ROLE rm{suffix}'],
+    'sequence-cycle': ['CREATE SEQUENCE sc MAXVALUE 3 CYCLE',
+                       'DROP SEQUENCE sc'],
+    'sequence-comment': ['CREATE SEQUENCE sm',
+                         "COMMENT ON SEQUENCE sm IS 'probe'",
+                         'DROP SEQUENCE sm'],
+    'comment-view': ['CREATE VIEW cv AS SELECT 1 AS x',
+                     "COMMENT ON VIEW cv IS 'probe'", 'DROP VIEW cv'],
+    'comment-function': [
+        "CREATE FUNCTION cf() RETURNS INT LANGUAGE SQL AS 'SELECT 1'",
+        "COMMENT ON FUNCTION cf() IS 'probe'", 'DROP FUNCTION cf'],
+    'comment-policy': [
+        TABLE, 'CREATE POLICY cp ON t USING (true)',
+        "COMMENT ON POLICY cp ON t IS 'probe'", 'DROP POLICY cp ON t',
+        'DROP TABLE t'],
+    'type-composite-alter': [
+        'CREATE TYPE ca AS (a INT)', 'ALTER TYPE ca ADD ATTRIBUTE b TEXT',
+        'DROP TYPE ca'],
+    'type-enum-alter': [
+        "CREATE TYPE ea AS ENUM ('a', 'b')",
+        "ALTER TYPE ea ADD VALUE 'c' AFTER 'a'",
+        "ALTER TYPE ea RENAME VALUE 'b' TO 'bb'", 'DROP TYPE ea'],
+    'policy-alter-command': [
+        TABLE, 'CREATE POLICY pc ON t USING (true)',
+        'ALTER POLICY pc ON t FOR SELECT', 'DROP POLICY pc ON t',
+        'DROP TABLE t'],
+    'database-connection-limit': [
+        'CREATE DATABASE {db}_cl CONNECTION LIMIT 5',
+        'DROP DATABASE {db}_cl'],
+    'database-template': [
+        'CREATE DATABASE {db}_tp TEMPLATE template0',
+        'DROP DATABASE {db}_tp'],
+    'function-variadic': [
+        'CREATE FUNCTION fv(VARIADIC a INT[]) RETURNS INT LANGUAGE SQL '
+        "AS 'SELECT 1'", 'DROP FUNCTION fv'],
+    'function-options': [
+        'CREATE FUNCTION fo() RETURNS INT LANGUAGE SQL PARALLEL SAFE '
+        "COST 10 SET search_path = public AS 'SELECT 1'",
+        'DROP FUNCTION fo'],
     'publication': [TABLE, 'CREATE PUBLICATION pb FOR TABLE t',
                     'DROP PUBLICATION pb', 'DROP TABLE t'],
     'foreign-data': [

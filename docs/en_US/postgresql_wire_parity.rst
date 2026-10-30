@@ -79,6 +79,9 @@ column-generated-virtual                yes              yes                 no 
 column-identity                         yes              yes                 yes
 column-rename-drop                      yes              yes                 yes
 comment                                 yes              yes                 yes
+comment-function                        yes              no (0A000)          yes
+comment-policy                          yes              no (42601)          yes
+comment-view                            yes              no (42601)          yes
 constraint-check                        yes              yes                 yes
 constraint-deferrable                   yes              no (42601)          yes
 constraint-exclusion                    yes              no (0A000)          no (0A000)
@@ -118,14 +121,18 @@ crdb-table-partition-list               no (42601)       yes                 no 
 crdb-table-temporary-opt-in             no (42704)       yes                 no (42704)
 crdb-zone-config                        no (42601)       yes                 no (42601)
 database                                yes              yes                 yes
+database-connection-limit               yes              no (0A000)          yes
+database-template                       yes              yes                 yes
 default-privileges                      yes              yes                 yes
 domain                                  yes              no (0A000)          yes
 event-trigger                           yes              no (42704)          yes
 extension                               yes              yes                 yes
 foreign-data                            yes              no (0A000)          yes
+function-options                        yes              no (0A000)          yes
 function-plpgsql                        yes              yes                 yes
 function-set-returning                  yes              yes                 yes
 function-sql                            yes              yes                 yes
+function-variadic                       yes              no (0A000)          yes
 grant-column                            yes              no (42601)          yes
 grant-table                             yes              yes                 yes
 index                                   yes              yes                 yes
@@ -151,6 +158,7 @@ materialized-view                       yes              yes                 yes
 materialized-view-concurrently          yes              yes                 yes
 operator                                yes              no (0A000)          yes
 owner-change                            yes              yes                 yes
+policy-alter-command                    no (42601)       no (42601)          no (42601)
 procedure                               yes              yes                 yes
 publication                             yes              no (0A000)          yes
 retained-check                          yes              yes                 yes
@@ -169,12 +177,19 @@ retained-table-comment                  yes              yes                 yes
 retained-unlogged                       yes              not kept            not kept
 retained-view-check-option              yes              no (42601)          no (0A000)
 role                                    yes              yes                 yes
+role-comment                            yes              no (42601)          yes
+role-connection-limit                   yes              no (42601)          yes
+role-inherit                            yes              no (42601)          yes
 role-membership                         yes              yes                 yes
 role-password                           yes              no (28P01)          yes
+role-rename                             yes              no (42601)          yes
+role-superuser                          yes              no (42601)          yes
 row-level-security                      yes              yes                 yes
 rule                                    yes              no (0A000)          yes
 schema                                  yes              yes                 yes
 sequence                                yes              yes                 yes
+sequence-comment                        yes              no (42601)          yes
+sequence-cycle                          yes              no (0A000)          yes
 sequence-owned-by                       yes              yes                 yes
 statistics-extended                     yes              no (42601)          yes
 table                                   yes              yes                 yes
@@ -186,10 +201,18 @@ table-temporary                         yes              no (XCEXF)          yes
 table-unlogged                          yes              notice              notice
 text-search                             yes              no (0A000)          yes
 trigger                                 yes              yes                 yes
+trigger-alter                           yes              no (42601)          yes
+trigger-instead-of                      yes              no (0A000)          yes
+trigger-or-replace                      yes              no (0A000)          yes
+trigger-referencing                     yes              no (0A000)          no (0A000)
 trigger-statement                       yes              no (0A000)          yes
+trigger-truncate                        yes              no (0A000)          yes
+trigger-update-of                       yes              no (0A000)          yes
 truncate                                yes              yes                 yes
 type-composite                          yes              yes                 yes
+type-composite-alter                    yes              no (0A000)          no (0A000)
 type-enum                               yes              yes                 yes
+type-enum-alter                         yes              yes                 yes
 type-range                              yes              no (0A000)          yes
 view                                    yes              yes                 yes
 view-check-option                       yes              no (42601)          no (0A000)
@@ -284,7 +307,15 @@ YugabyteDB YSQL 2025.2.2.2
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 92 of the 141 probes run (the shared PostgreSQL surface is close to
-PostgreSQL 15's). Shared surface it does not have (refused, so not
+PostgreSQL 15's). With the rows added later the same day for clauses first
+checked by hand on CockroachDB, 112 of 164: YugabyteDB runs INSTEAD OF,
+TRUNCATE, column-list, OR REPLACE and altered/commented triggers, SUPERUSER,
+NOINHERIT, CONNECTION LIMIT, role rename and comment, sequence CYCLE and
+comments, comments on views, functions and policies, VARIADIC and function
+options, database CONNECTION LIMIT and TEMPLATE. It refuses transition
+tables (``REFERENCING``) and composite ``ADD ATTRIBUTE``; ``ALTER POLICY ...
+FOR`` is a syntax error there as on PostgreSQL 18.3 (so not a CockroachDB
+restriction). Shared surface it does not have (refused, so not
 offered):
 
 -  Index methods ``brin`` and ``gist``; ``EXCLUDE`` constraints; ``VIEW
@@ -487,7 +518,11 @@ Checked live on 26.1.3 for those forms (not yet in the probe):
    ``OWNER``, ``COMMENT ON DATABASE``, ``ALTER DATABASE ... OWNER TO``,
    ``RENAME TO``, ``SET``/``RESET`` run (session defaults read back from
    ``SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL``). Refused:
-   ``CONNECTION LIMIT``, ``TEMPLATE``, ``LC_COLLATE``, ``LC_CTYPE``;
+   ``CONNECTION LIMIT``, ``TEMPLATE``, ``LC_COLLATE``, ``LC_CTYPE``
+   (correction, same day: the probe row ``database-template`` shows
+   ``TEMPLATE template0`` accepted without a notice; the refusal came from
+   ``LC_COLLATE`` in the same statement. Its effect was not checked and the
+   editor does not offer it. ``CONNECTION LIMIT`` is refused unless -1);
    ``ALTER DATABASE ... PLACEMENT`` needs the session setting
    ``enable_multiregion_placement_policy``. The catalog had listed
    CockroachDB's ``system`` database as a user database; it is now flagged
