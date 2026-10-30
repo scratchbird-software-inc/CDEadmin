@@ -347,6 +347,16 @@ others) run as on PostgreSQL. Multi-node behaviour (tablet placement
 across zones, leader preferences, xCluster) is untested on the one-node
 demo.
 
+Provider finding, 2026-10-30: the shared relational apply runs a plan in
+one transaction, and YugabyteDB refuses ``CREATE DATABASE`` and ``CREATE
+TABLESPACE`` there ("cannot run inside a transaction block"), so the
+provider's database and tablespace creation had always failed. Plans may
+now set ``statements_outside_transaction``; YugabyteDB sets it for database
+and tablespace create and drop, and such a plan runs on an owned
+autocommit connection (each statement commits on its own, with a warning
+when there are several). Index creation on a populated table and a failed
+statement's rollback behaved correctly in the same check.
+
 Untested on CockroachDB
 ~~~~~~~~~~~~~~~~~~~~~~~
 

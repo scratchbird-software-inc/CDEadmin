@@ -3290,7 +3290,16 @@ class RelationalAdministration:
             route = {**route, 'database': None}
         borrowed_firebird = (not owns_connection and
                              self.dialect.engine_id == 'firebird')
+        outside = bool(compiled.get('statements_outside_transaction'))
+        if outside and not owns_connection:
+            raise RelationalClientError(
+                'this operation runs outside a transaction and needs an '
+                'independently owned connection')
         connection = connection or client._connect({'route': route})
+        if outside:
+            # Statements such as PostgreSQL's CREATE DATABASE refuse to run
+            # in a transaction block; each one commits on its own.
+            connection.autocommit = True
         cursor = None
         task_savepoint = None
         commit_requested = False

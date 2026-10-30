@@ -177,6 +177,19 @@ class YugabyteDBAdministration(RelationalAdministration):
             }
         return super()._form(kind, operation)
 
+    def _compile(self, request):
+        compiled = super()._compile(request)
+        if request['resource_kind'] in {'database', 'tablespace'} and \
+                request['operation_id'] in {'create', 'drop'}:
+            # Live, 2025.2.2.2: "CREATE DATABASE / CREATE TABLESPACE cannot
+            # run inside a transaction block" (DROP likewise).
+            compiled['statements_outside_transaction'] = True
+            if len(compiled.get('statements', [])) > 1:
+                compiled.setdefault('warnings', []).append(
+                    'These statements run outside a transaction and commit '
+                    'one at a time.')
+        return compiled
+
     def _compile_create(self, request):
         kind = request['resource_kind']
         draft = request['draft']
