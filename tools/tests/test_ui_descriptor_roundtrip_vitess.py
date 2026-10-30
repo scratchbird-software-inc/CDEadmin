@@ -687,3 +687,135 @@ def test_lookup_vindex_parameters_route_queries(live):
                 query(statement, keyspace=keyspace)
             except mysql_connector.Error:
                 pass
+
+
+def vschema(keyspace):
+    import subprocess
+    return json.loads(subprocess.run(
+        [str(VTCTLD), '--server', 'localhost:15999', 'GetVSchema', keyspace],
+        check=True, capture_output=True, text=True).stdout)
+
+
+def restore_vschema(keyspace, document):
+    import subprocess
+    subprocess.run(
+        [str(VTCTLD), '--server', 'localhost:15999', 'ApplyVSchema',
+         '--vschema', json.dumps(document), keyspace],
+        check=True, capture_output=True)
+
+
+def test_keyspace_vschema_editor(live):
+    route, client = live
+    form = resolved_form('vitess', 'engine_object:vschema')
+    table, lookup = f'rt_vs_{UNIQUE}', f'rt_vs_lk_{UNIQUE}'
+    sequence, source = f'rt_vs_seq_{UNIQUE}', f'rt_vs_src_{UNIQUE}'
+    vindex = f'rt_vs_vx_{UNIQUE}'
+    originals = {name: vschema(name)
+                 for name in (KEYSPACE, 'lookup_keyspace')}
+    query(f'CREATE TABLE `{table}` (id BIGINT NOT NULL PRIMARY KEY, '
+          'email VARCHAR(64))')
+    query(f'CREATE TABLE `{source}` (id INT PRIMARY KEY)')
+    query(f'CREATE TABLE `{lookup}` (email VARCHAR(64) NOT NULL PRIMARY '
+          'KEY, keyspace_id VARBINARY(16))', keyspace='lookup_keyspace')
+    query(f'CREATE TABLE `{source}` (id INT PRIMARY KEY)',
+          keyspace='lookup_keyspace')
+    run(client, route, 'sequence', 'create', backend_draft(
+        resolved_form('vitess', 'sequence'),
+        {'name': sequence, 'parent': 'lookup_keyspace', 'start': 9000,
+         'cache': 10}))
+
+    def edit(keyspace, change, post_state=True):
+        target, baseline = record(client, route, 'vschema', keyspace,
+                                  'engine_object:vschema')
+        draft = backend_draft(form, change(baseline), mode='alter',
+                              baseline=baseline)
+        return run(client, route, 'vschema', 'alter', draft, target=target,
+                   post_state=post_state)
+
+    def refused(keyspace, change, reason):
+        target, baseline = record(client, route, 'vschema', keyspace,
+                                  'engine_object:vschema')
+        before = vschema(keyspace)
+        request = {'resource_kind': 'vschema', 'operation_id': 'alter',
+                   '_provider_route': route, 'target_resource': target,
+                   'draft': backend_draft(form, change(baseline),
+                                          mode='alter', baseline=baseline)}
+        planned = ADMINISTRATION.plan(request)
+        with pytest.raises(Exception, match=reason):
+            ADMINISTRATION.apply(client, executor_request(request, planned))
+        assert vschema(keyspace) == before
+
+    try:
+        # 1. A lookup vindex, the table with primary and lookup vindexes,
+        #    and a sequence column, in one edit.
+        edit(KEYSPACE, lambda base: {
+            **base,
+            'vindexes': base['vindexes'] + [{
+                'name': vindex, 'type': 'lookup_unique', 'owner': table,
+                'params': {'table': f'lookup_keyspace.{lookup}',
+                           'from': 'email', 'to': 'keyspace_id',
+                           'autocommit': 'true'}}],
+            'tables': base['tables'] + [{
+                'name': table, 'auto_increment_column': 'id',
+                'auto_increment_sequence': f'lookup_keyspace.{sequence}'}],
+            'table_vindexes': base['table_vindexes'] + [
+                {'table': table, 'vindex': 'xxhash', 'columns': 'id'},
+                {'table': table, 'vindex': vindex, 'columns': 'email'}]})
+        time.sleep(2)
+        query(f"INSERT INTO `{table}` (email) VALUES ('a@x'), ('b@x')")
+        assert query(f'SELECT id FROM `{table}` ORDER BY id') == [
+            (9000,), (9001,)]
+        assert len(query(f'SELECT email FROM `{lookup}`',
+                         keyspace='lookup_keyspace')) == 2
+        [[plan]] = query(f"VEXPLAIN PLAN SELECT id FROM `{table}` "
+                         "WHERE email = 'b@x'")
+        assert f'"Vindex": "{vindex}"' in plan, plan
+
+        # 2. A reference table whose source is registered in its keyspace.
+        edit('lookup_keyspace', lambda base: {
+            **base, 'tables': base['tables'] + [{'name': source}]})
+        edit(KEYSPACE, lambda base: {
+            **base, 'tables': base['tables'] + [{
+                'name': source, 'type': 'reference',
+                'source': f'lookup_keyspace.{source}'}]})
+        time.sleep(2)
+        assert query(f'SELECT COUNT(*) FROM `{source}`') == [(0,)]
+
+        # 3. What vtctld accepts but vtgate cannot serve, and staleness.
+        refused(KEYSPACE, lambda base: {
+            **base, 'tables': base['tables'] + [{
+                'name': f'{source}_x', 'type': 'reference',
+                'source': f'lookup_keyspace.{source}_missing'}]},
+            'not a table in that keyspace')
+        refused(KEYSPACE, lambda base: {**base, 'sharded': False},
+                'would route every query to one')
+        target, baseline = record(client, route, 'vschema', KEYSPACE,
+                                  'engine_object:vschema')
+        query(f'ALTER VSCHEMA CREATE VINDEX `{KEYSPACE}`.`{vindex}_oob` '
+              'USING xxhash')
+        request = {'resource_kind': 'vschema', 'operation_id': 'alter',
+                   '_provider_route': route, 'target_resource': target,
+                   'draft': backend_draft(form, {
+                       **baseline, 'vindexes': baseline['vindexes'][:-1]},
+                       mode='alter', baseline=baseline)}
+        planned = ADMINISTRATION.plan(request)
+        with pytest.raises(Exception, match='changed since it was opened'):
+            ADMINISTRATION.apply(client, executor_request(request, planned))
+        assert f'{vindex}_oob' in vschema(KEYSPACE)['vindexes']
+    finally:
+        for name, document in originals.items():
+            restore_vschema(name, document)
+        for statement, keyspace in (
+                (f'DROP TABLE IF EXISTS `{table}`', KEYSPACE),
+                (f'DROP TABLE IF EXISTS `{source}`', KEYSPACE),
+                (f'DROP TABLE IF EXISTS `{lookup}`', 'lookup_keyspace'),
+                (f'DROP TABLE IF EXISTS `{source}`', 'lookup_keyspace'),
+                (f'ALTER VSCHEMA DROP SEQUENCE `{sequence}`',
+                 'lookup_keyspace'),
+                (f'DROP TABLE IF EXISTS `{sequence}`', 'lookup_keyspace')):
+            try:
+                query(statement, keyspace=keyspace)
+            except mysql_connector.Error:
+                pass
+    for name, document in originals.items():
+        assert vschema(name) == document

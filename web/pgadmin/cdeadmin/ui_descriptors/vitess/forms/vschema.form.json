@@ -1,0 +1,251 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "vitess",
+  "family": "engine_object",
+  "resource_kinds": [
+    "vschema"
+  ],
+  "status": "complete",
+  "engine_tab_title": "Vitess",
+  "notes": "Keyspace VSchema. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15). Vitess replaces a keyspace's VSchema whole (vtctld ApplyVSchema), so the editor reopens with the current VSchema and alter sends only the sections changed; the provider reads the VSchema at execute time, refuses if a sent section changed since it was opened, merges, checks what vtctld accepts but vtgate cannot serve, applies, and confirms vtgate serves the keyspace without error. Row order in Table vindexes sets each table's primary vindex (its first row). Round trip (tools/tests/test_ui_descriptor_roundtrip_vitess.py, live 23.0.3): one edit adds a lookup vindex, a table with primary and lookup vindexes and a sequence column (inserts draw ids, fill the lookup, and route by it); a reference table to a registered source is served; a missing source, unsharding a two-shard keyspace, and an edit after an out-of-band change are refused with the VSchema unchanged; the original VSchemas are restored exactly.",
+  "fields": [
+    {
+      "field_id": "sharded",
+      "label": "Sharded",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "sharded",
+      "help": "A keyspace with several shards cannot be made unsharded; making one sharded needs a primary vindex on every table."
+    },
+    {
+      "field_id": "foreign_key_mode",
+      "label": "Foreign key mode",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "foreign_key_mode",
+      "options": [
+        {
+          "value": "unspecified",
+          "label": "Unspecified (vtgate default)"
+        },
+        {
+          "value": "unmanaged",
+          "label": "Unmanaged (each shard enforces)"
+        },
+        {
+          "value": "managed",
+          "label": "Managed (vtgate cascades)"
+        },
+        {
+          "value": "disallow",
+          "label": "Disallow"
+        }
+      ]
+    },
+    {
+      "field_id": "require_explicit_routing",
+      "label": "Require explicit routing",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "require_explicit_routing",
+      "help": "Unqualified table names stop resolving to this keyspace."
+    },
+    {
+      "field_id": "tables",
+      "label": "Tables",
+      "tab": "Definition",
+      "control": "grid",
+      "required": false,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "tables",
+      "help": "Removing a row removes the table from the VSchema (not from the database).",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Table",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Type",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "",
+              "label": "Normal"
+            },
+            {
+              "value": "reference",
+              "label": "Reference"
+            },
+            {
+              "value": "sequence",
+              "label": "Sequence"
+            }
+          ]
+        },
+        {
+          "field_id": "source",
+          "label": "Reference source",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "type",
+            "equals": "reference"
+          },
+          "help": "keyspace.table; it must be in that keyspace's VSchema."
+        },
+        {
+          "field_id": "pinned",
+          "label": "Pinned keyspace id",
+          "control": "text",
+          "required": false,
+          "help": "Hex bytes, e.g. 80; the table lives in the shard owning that id."
+        },
+        {
+          "field_id": "auto_increment_column",
+          "label": "Sequence column",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "auto_increment_sequence",
+          "label": "Sequence",
+          "control": "text",
+          "required": false,
+          "help": "keyspace.sequence; it must be a sequence table in that keyspace's VSchema."
+        }
+      ]
+    },
+    {
+      "field_id": "table_vindexes",
+      "label": "Table vindexes",
+      "tab": "Definition",
+      "control": "grid",
+      "required": false,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "table_vindexes",
+      "help": "Each table's first row is its primary vindex, which places its rows.",
+      "columns": [
+        {
+          "field_id": "table",
+          "label": "Table",
+          "control": "select",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "tables"
+          ]
+        },
+        {
+          "field_id": "vindex",
+          "label": "Vindex",
+          "control": "select",
+          "required": true,
+          "option_values_path": [
+            "draft",
+            "vindexes"
+          ]
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "control": "text",
+          "required": true,
+          "help": "Comma-separated, in vindex order."
+        }
+      ]
+    },
+    {
+      "field_id": "vindexes",
+      "label": "Vindexes",
+      "tab": "Definition",
+      "control": "grid",
+      "required": false,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "vindexes",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Vindex",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Type",
+          "control": "select",
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "vindex_types"
+          ]
+        },
+        {
+          "field_id": "params",
+          "label": "Parameters",
+          "control": "keyvalue",
+          "required": false
+        },
+        {
+          "field_id": "owner",
+          "label": "Owner table",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "field_id": "cells",
+      "label": "Rebuild cells",
+      "tab": "Engine",
+      "control": "grid",
+      "required": false,
+      "modes": [
+        "alter"
+      ],
+      "item_kind": "string",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Cell",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "help": "Cells whose serving VSchema is rebuilt; empty means all."
+    },
+    {
+      "field_id": "skip_rebuild",
+      "label": "Skip serving VSchema rebuild",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ],
+      "help": "vtgate keeps serving the old VSchema until the graph is rebuilt."
+    }
+  ]
+}

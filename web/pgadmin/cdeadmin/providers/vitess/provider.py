@@ -36,6 +36,8 @@ from .control_plane import (
     execute_action,
     inspect_action,
     post_validate_action,
+    vschema_documents as control_vschema_documents,
+    vschema_records as control_vschema_records,
 )
 
 
@@ -788,6 +790,44 @@ class VitessDBAPIClient(VitessNativeClient):
         context.check_hostname = tls_mode == 'verify-full'
         return context
 
+    def _vtgate_document(self, request, path):
+        route, host, port, timeout, tls_mode = self._http_route(request)
+        address = (
+            f'[{host}]' if ':' in host and not host.startswith('[') else host
+        )
+        scheme = 'http' if tls_mode == 'disable' else 'https'
+        with self._opener(
+            urllib.request.Request(f'{scheme}://{address}:{port}{path}',
+                                   method='GET'),
+            timeout=timeout,
+            context=self._ssl_context(route, tls_mode),
+        ) as response:
+            payload = response.read(self.MAX_IDENTITY_BYTES * 8 + 1)
+        if len(payload) > self.MAX_IDENTITY_BYTES * 8:
+            raise RelationalClientError('Vitess vtgate response is too large')
+        return json.loads(payload)
+
+    def served_vschema_error(self, request, keyspace):
+        """The error vtgate serves a keyspace's VSchema with, if any.
+
+        vtctld stores a VSchema vtgate cannot build (a reference table with
+        a missing source, live 23.0.3); vtgate then reports the keyspace in
+        error while still answering queries. None when there is no error;
+        a reason string when vtgate cannot be asked.
+        """
+        route = (request.get('provider_payload') or {}).get('route')
+        try:
+            document = self._vtgate_document({'route': route},
+                                             '/debug/vschema')
+        except Exception as exc:
+            return f'vtgate VSchema could not be read ({type(exc).__name__})'
+        keyspaces = document.get('keyspaces') if isinstance(
+            document, Mapping) else None
+        entry = (keyspaces or {}).get(keyspace)
+        if not isinstance(entry, Mapping):
+            return f'vtgate does not serve keyspace {keyspace}'
+        return str(entry['error']) if entry.get('error') else None
+
     def _native_identity(self, request):
         route, host, port, timeout, tls_mode = self._http_route(request)
         address = (
@@ -1115,7 +1155,11 @@ def _catalog(connection, request):
                   if item['resource_kind'] != 'keyspace' or
                   item['display_name'] in topology}
     _annotate_table_vindexes(connection, values)
-    attached = control_auto_increments(route, keyspaces)
+    documents = control_vschema_documents(route, keyspaces)
+    attached = control_auto_increments(route, keyspaces, documents)
+    # The topology VSchema, one editable record per keyspace.
+    for item in control_vschema_records(documents, generation):
+        values[item['resource_id']] = item
     for item in values.values():
         found = attached.get(tuple(item['display_path']))
         if item['resource_kind'] == 'table' and found:

@@ -15,6 +15,8 @@ from pgadmin.cdeadmin.visual_admin import (
     control_plane_field as cp_field,
 )
 
+from . import vschema_editor
+
 
 def _choice(field_id, label, values, **options):
     return cp_field(
@@ -362,6 +364,27 @@ OPERATIONS = (
                      json_type='array'),
         ), impact_scope='cluster', long_running=True
     ),
+    # The keyspace VSchema editor: sections it sends replace those sections,
+    # read and merged at execute time (vschema_editor).
+    ControlPlaneOperation(
+        'vschema', 'alter', 'Edit keyspace VSchema', 'destructive',
+        'topology_admin', (
+            cp_field('sharded', 'Sharded', 'boolean', False),
+            cp_field('foreign_key_mode', 'Foreign key mode', 'text', False,
+                     max_length=32),
+            cp_field('require_explicit_routing', 'Require explicit routing',
+                     'boolean', False),
+            cp_field('tables', 'Tables', 'json', False, json_type='array'),
+            cp_field('table_vindexes', 'Table vindexes', 'json', False,
+                     json_type='array'),
+            cp_field('vindexes', 'Vindexes', 'json', False,
+                     json_type='array'),
+            cp_field('cells', 'Rebuild cells', 'json', False, default=[],
+                     json_type='array'),
+            cp_field('skip_rebuild', 'Skip serving VSchema rebuild',
+                     'boolean', False, default=False),
+        ), impact_scope='cluster', long_running=True
+    ),
     ControlPlaneOperation(
         'tablet', 'ping', 'Ping tablet', 'admin', 'maintenance_admin',
         impact_scope='shard', post_state_required=False
@@ -610,6 +633,7 @@ def compile_action(request):
     draft = request.get('draft') or {}
     arguments = []
     cancel_arguments = None
+    vschema_edit = None
     if kind == 'keyspace':
         name = draft.get('name') if operation == 'create' else _target(
             request)[-1]
@@ -863,6 +887,20 @@ def compile_action(request):
             arguments.extend(['--cells', ','.join(_string_list(
                 cells, 'cell'
             ))])
+    elif kind == 'vschema' and operation == 'alter':
+        keyspace = _safe_name(_target(request)[0], 'keyspace')
+        sections = vschema_editor.normalize(draft)
+        cells = draft.get('cells') or []
+        target = request.get('target_resource') or {}
+        vschema_edit = {
+            'keyspace': keyspace, 'sections': sections,
+            # What the editor opened, for the staleness check.
+            'baseline': (target.get('native') or {}) if isinstance(
+                target, dict) else {},
+            'cells': _string_list(cells, 'cell') if cells else [],
+            'skip_rebuild': bool(draft.get('skip_rebuild')),
+        }
+        arguments = ['ApplyVSchema', keyspace]
     elif kind == 'tablet':
         tablet = _safe_name(_target(request)[-1], 'tablet alias')
         if operation == 'ping':
@@ -936,6 +974,7 @@ def compile_action(request):
             'arguments': arguments,
             'cancel_arguments': cancel_arguments,
             **({'follow_up_arguments': follow_up} if follow_up else {}),
+            **({'vschema_edit': vschema_edit} if vschema_edit else {}),
         },
         'action_preview': {
             'tool': 'vtctldclient',
@@ -1088,11 +1127,12 @@ def _connection_arguments(route):
     return arguments, action_timeout
 
 
-def _run(route, arguments, timeout=None):
+def _run(route, arguments, timeout=None, max_argument=8192):
     if not isinstance(arguments, list) or not arguments or len(
             arguments) > 128 or any(
-                not isinstance(value, str) or not value or len(value) > 8192
-                or '\x00' in value for value in arguments):
+                not isinstance(value, str) or not value or
+                len(value.encode('utf-8')) > max_argument or
+                '\x00' in value for value in arguments):
         raise RelationalClientError('Vitess tool arguments are invalid')
     connection_arguments, action_timeout = _connection_arguments(route)
     command = [
@@ -1130,11 +1170,55 @@ def _run(route, arguments, timeout=None):
     }
 
 
+def _apply_vschema(route, edit):
+    """Read, check, merge and apply one keyspace VSchema edit."""
+    keyspace = edit['keyspace']
+    sections = edit['sections']
+    current = vschema_documents(route, [keyspace]).get(keyspace)
+    if current is None:
+        raise RelationalClientError(
+            f'Vitess VSchema of {keyspace} could not be read')
+    stale = vschema_editor.stale_sections(current, edit.get('baseline'),
+                                          sections)
+    if stale:
+        raise RelationalClientError(
+            f'Vitess VSchema of {keyspace} changed since it was opened '
+            f'({", ".join(stale)}); reopen the editor')
+    merged = vschema_editor.merge(current, sections)
+    documents = vschema_documents(
+        route, vschema_editor.referenced_keyspaces(keyspace, merged))
+    try:
+        response = _run(route, ['FindAllShardsInKeyspace', keyspace],
+                        timeout=30)
+        shards = (json.loads(response.get('stdout') or 'null') or {}).get(
+            'shards')
+        shard_count = len(shards) if isinstance(shards, dict) else None
+    except (RelationalClientError, TypeError, ValueError, AttributeError):
+        shard_count = None
+    text = vschema_editor.validate(keyspace, merged, shard_count, documents)
+    arguments = ['ApplyVSchema', '--vschema', text]
+    if edit.get('cells'):
+        arguments.extend(['--cells', ','.join(edit['cells'])])
+    if edit.get('skip_rebuild'):
+        arguments.append('--skip-rebuild')
+    arguments.append(keyspace)
+    return _run(route, arguments,
+                max_argument=vschema_editor.MAX_DOCUMENT_BYTES)
+
+
 def execute_action(_client, request):
     payload = request.get('provider_payload') or {}
     compiled = payload.get('compiled') or {}
     action = compiled.get('provider_action') or {}
     route = _route(request)
+    if action.get('vschema_edit'):
+        return {
+            'accepted': True,
+            'provider_response': _apply_vschema(
+                route, action['vschema_edit']),
+            'provider_finality_authority': True,
+            'automatic_mutation_retry': False,
+        }
     result = {
         'accepted': True,
         'provider_response': _run(route, action.get('arguments')),
@@ -1231,6 +1315,9 @@ def inspect_action(_client, request):
             ]
         else:
             inspect_arguments = ['GetTablet', tablet]
+    elif kind == 'vschema' and plan['operation_id'] == 'alter':
+        inspect_arguments = ['GetVSchema', _safe_name(_target({
+            'target_resource': plan.get('target_resource')})[0], 'keyspace')]
     elif kind == 'vschema':
         inspect_arguments = ['GetSrvVSchemas']
     elif kind == 'backup':
@@ -1334,6 +1421,22 @@ def post_validate_action(client, request):
     elif kind == 'vschema' and operation == 'rebuild':
         expected = path[-1]
         present = _document_contains_named_resource(document, expected)
+    elif kind == 'vschema' and operation == 'alter':
+        expected = path[0]
+        sections = vschema_editor.normalize(draft)
+        present = vschema_editor.applied(sections, document)
+        # vtctld stores what vtgate may refuse to serve; vtgate then serves
+        # the whole keyspace in error.
+        served = getattr(client, 'served_vschema_error', None)
+        error = served(request, expected) if callable(served) else None
+        if error:
+            return {
+                'confirmed': False,
+                'reason': 'vitess_vtgate_serves_keyspace_vschema_in_error',
+                'vtgate_error': error, 'provider_document': document,
+                'observation': observation,
+                'provider_finality_authority': True,
+            }
     elif kind == 'backup' and operation == 'drop':
         expected = path[-1]
         backups = document.get('backups') if isinstance(
@@ -1429,12 +1532,8 @@ def _topology_records(keyspace, settings, shards, generation):
     return records
 
 
-def auto_increments(route, keyspaces):
-    """{(keyspace, table): (column, keyspace.sequence)} from vtctld.
-
-    vtgate's /debug/vschema names the sequence without its keyspace, so the
-    topology VSchema is the source.
-    """
+def vschema_documents(route, keyspaces):
+    """{keyspace: GetVSchema document} from vtctld, the topology VSchema."""
     if not isinstance(route, dict) or not route.get(
             'vtctldclient_path') or not route.get('vtctld_server'):
         return {}
@@ -1445,6 +1544,32 @@ def auto_increments(route, keyspaces):
             document = json.loads(response.get('stdout') or 'null')
         except (RelationalClientError, TypeError, ValueError):
             continue
+        if isinstance(document, dict):
+            found[keyspace] = document
+    return found
+
+
+def vschema_records(documents, generation):
+    """One editable VSchema record per keyspace, as editor rows."""
+    return [{
+        'resource_id': f'vschema:{keyspace}', 'resource_kind': 'vschema',
+        'display_name': keyspace, 'display_path': [keyspace, 'VSchema'],
+        'authority_path': ['vschema', keyspace], 'generation': generation,
+        'native': {**vschema_editor.flatten(document), 'topology': 'vtctld',
+                   'navigator_parent_resource_id': f'keyspace:{keyspace}'},
+    } for keyspace, document in sorted(documents.items())]
+
+
+def auto_increments(route, keyspaces, documents=None):
+    """{(keyspace, table): (column, keyspace.sequence)} from vtctld.
+
+    vtgate's /debug/vschema names the sequence without its keyspace, so the
+    topology VSchema is the source.
+    """
+    if documents is None:
+        documents = vschema_documents(route, keyspaces)
+    found = {}
+    for keyspace, document in documents.items():
         tables = document.get('tables') if isinstance(
             document, dict) else None
         for table, spec in (tables if isinstance(tables, dict) else {}

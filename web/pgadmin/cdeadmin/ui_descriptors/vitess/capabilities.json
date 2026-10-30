@@ -132,8 +132,14 @@
           "operation_id": "inspect",
           "tier": 1,
           "mutation_class": "read"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/vschema.form.json"
     },
     {
       "resource_kind": "table",
