@@ -401,6 +401,18 @@ Checked live on 26.1.3 for those forms (not yet in the probe):
       built-in function descriptions: an uncommented table read back a
       function's help text as its comment. Fixed 2026-10-30 (table and
       index comments now name ``'pg_class'``); a live check covers it.
+-  Sequences: ``AS INT2/INT4/INT8``, ``START``, ``INCREMENT``,
+   ``MINVALUE``/``MAXVALUE`` (or ``NO``), ``CACHE`` with ``PER NODE`` or
+   ``PER SESSION``, ``OWNED BY`` (or ``NONE``), ``RESTART [WITH]`` and
+   ``RENAME TO`` run; ``CYCLE`` is unimplemented and ``COMMENT ON
+   SEQUENCE`` is a syntax error. ``pg_sequences.data_type`` reports bigint
+   for an ``INT4`` sequence; ``SHOW CREATE ALL TABLES`` renders sequences
+   exactly and the record reads it. The cache scope has state: a cache
+   above 1 is ``PER NODE`` by default; a scope-less ``CACHE n`` on a
+   ``PER SESSION`` sequence is silently ignored, as is ``PER NODE CACHE
+   n``; node becomes session directly, but session becomes node only after
+   ``PER SESSION CACHE 1``. The editor names the scope on every step and
+   resets first when leaving ``PER SESSION``.
 -  Views: ``CREATE OR REPLACE VIEW`` refuses to rename an existing column
    ("cannot change name of view column") or drop one, so the editor always
    sends the column list with a replacement. ``COMMENT ON VIEW`` and
@@ -470,6 +482,7 @@ TTL and a table comment; in alter mode it changes existing columns (type,
 default, nullability, visibility, ON UPDATE, identity, stored to regular,
 comment) and diffs each changed constraint grid against the table record.
 Key membership and family stay fixed on existing columns.
+The sequence form is ``complete`` too (``sequences.py``).
 The view (with materialized views; alter is admitted for them, which
 ``portfolio_catalog.json`` had excluded), index and type forms are
 ``complete`` the same day

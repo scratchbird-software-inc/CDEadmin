@@ -22,7 +22,9 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
-from . import indexes as index_sql, objects, tables, types, views
+from . import (
+    indexes as index_sql, objects, sequences, tables, types, views,
+)
 from .driver import CockroachDBClient
 from ..distributed_control_plane import DistributedSQLControlPlane
 from pgadmin.cdeadmin.visual_admin import (
@@ -1282,7 +1284,7 @@ def _post_validate_control_plane(client, request):
 
 # Kinds whose create and alter are CockroachDB's own modules.
 _EDITED_KINDS = frozenset({'table', 'index', 'type', 'view',
-                           'materialized-view'})
+                           'materialized-view', 'sequence'})
 
 
 class CockroachDBAdministration(DistributedSQLControlPlane):
@@ -1298,6 +1300,11 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if kind == 'sequence':
+            if operation == 'create':
+                return {'statements': sequences.create(self, draft)}
+            return {'statements': sequences.alter(
+                self, draft, request.get('target_resource'))}
         if kind in {'view', 'materialized-view'}:
             if operation == 'create':
                 return {'statements': views.create(self, kind, draft)}
@@ -1352,6 +1359,8 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
         return super()._compile(request)
 
     def _form(self, kind, operation):
+        if kind == 'sequence' and operation in {'create', 'alter'}:
+            return sequences.form(self._field, operation)
         if kind == 'type' and operation in {'create', 'alter'}:
             return types.form(self._field, operation)
         if kind == 'index' and operation in {'create', 'alter'}:
@@ -1711,11 +1720,27 @@ def _annotate_catalog(connection, values):
                 'ORDER BY 1, 2, c.ordinal_position'):
             view_columns.setdefault((str(schema), str(table)), []).append(
                 str(column))
-        created = {}
+        created, sequence_facts = {}, {}
         for row in optional_rows(cursor, 'SHOW CREATE ALL TABLES'):
             parsed = tables.parse_create(str(row[0]))
             if parsed:
                 created[parsed[0]] = parsed[1:]
+            parsed = sequences.parse_create(str(row[0]))
+            if parsed:
+                sequence_facts[parsed[0]] = parsed[1]
+        for schema, name, table_schema, table, column in optional_rows(
+                cursor,
+                'SELECT n.nspname, s.relname, tn.nspname, t.relname, '
+                'a.attname FROM pg_catalog.pg_depend d '
+                'JOIN pg_catalog.pg_class s ON s.oid = d.objid '
+                'JOIN pg_catalog.pg_namespace n ON n.oid = s.relnamespace '
+                'JOIN pg_catalog.pg_class t ON t.oid = d.refobjid '
+                'JOIN pg_catalog.pg_namespace tn ON tn.oid = t.relnamespace '
+                'JOIN pg_catalog.pg_attribute a ON a.attrelid = t.oid '
+                'AND a.attnum = d.refobjsubid '
+                "WHERE s.relkind = 'S' AND d.deptype = 'a'"):
+            sequence_facts.setdefault((str(schema), str(name)), {})[
+                'owned_by'] = f'{table_schema}.{table}.{column}'
         statistics = optional_rows(
             cursor,
             'SELECT table_schema, table_name, index_name, column_name, '
@@ -1829,6 +1854,11 @@ def _annotate_catalog(connection, values):
             held.setdefault(tuple(item['display_path'][:2]), []).append(
                 {'name': item['display_name'], **row})
     for item in kept:
+        if item['resource_kind'] == 'sequence':
+            facts = sequence_facts.get(tuple(map(str, item['display_path'])))
+            item.setdefault('native', {}).update(
+                {'owned_by': None, **(facts or {}),
+                 'parent': str(item['display_path'][0])})
         found = queries.get((item['resource_kind'],
                              *map(str, item['display_path'])))
         if found:

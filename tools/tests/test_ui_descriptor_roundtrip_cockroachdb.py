@@ -444,3 +444,38 @@ def test_view_and_materialized_view(live):
         run(client, route, kind, 'drop', {'confirmation': name},
             target=find(client, route, kind, name)[0])
     assert not query("SELECT 1 FROM pg_class WHERE relname LIKE 'rt_%'")
+
+
+def test_sequence_create_reopen_alter_drop(live):
+    route, client = live
+    query('CREATE TABLE public.st (id INT8 PRIMARY KEY, n INT8)')
+    form = resolved_form('cockroachdb', 'sequence')
+    run(client, route, 'sequence', 'create', backend_draft(form, {
+        'name': 'rt_seq', 'parent': 'public', 'data_type': 'INT4',
+        'start': 5, 'increment': 2, 'minimum': 1, 'maximum': 1000,
+        'cache': 10, 'cache_scope': 'PER SESSION',
+        'owned_by': 'public.st.n'}))
+    target, baseline = record(client, route, 'sequence', 'rt_seq',
+                              'sequence')
+    assert {key: baseline[key] for key in (
+        'data_type', 'start', 'increment', 'minimum', 'maximum', 'cache',
+        'cache_scope', 'owned_by')} == {
+        'data_type': 'INT4', 'start': 5, 'increment': 2, 'minimum': 1,
+        'maximum': 1000, 'cache': 10, 'cache_scope': 'PER SESSION',
+        'owned_by': 'public.st.n'}
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    run(client, route, 'sequence', 'alter', backend_draft(form, {
+        **baseline, 'name': 'rt_seq2', 'data_type': 'INT8',
+        'increment': 4, 'maximum': None, 'cache_scope': '', 'owned_by': '',
+        'restart': 100}, mode='alter', baseline=baseline), target=target)
+    target, after = record(client, route, 'sequence', 'rt_seq2', 'sequence')
+    # Leaving PER SESSION took a reset first; a cache above 1 is per node.
+    assert (after['data_type'], after['increment'], after['maximum'],
+            after['cache'], after['cache_scope'], after['owned_by']) == (
+        'INT8', 4, 9223372036854775807, 10, 'PER NODE', None)
+    assert query("SELECT nextval('public.rt_seq2')") == [(100,)]
+    assert 'CYCLE' in refused('sequence', 'alter', {'cycle': True}, target)
+    run(client, route, 'sequence', 'drop', {'confirmation': 'rt_seq2'},
+        target=target)
+    assert not query("SELECT 1 FROM pg_class WHERE relname = 'rt_seq2'")
