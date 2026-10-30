@@ -122,6 +122,12 @@ def route_for(item, host, registration, provider_route_options):
             Path(__file__).resolve().parent /
             'runtime/cockroach_tools/cockroach'))
         item.setdefault('cockroach_insecure', True)
+        # Recovery and changefeeds write only inside the demo node's own
+        # external-I/O directory (nodelocal) or discard (null://).
+        item.setdefault('backup_destination_allowlist',
+                        'nodelocal://1/cdeadmin-backups/')
+        item.setdefault('changefeed_sink_allowlist',
+                        'null://,nodelocal://1/cdeadmin-changefeeds/')
     if item['engine'] == 'vitess':
         # Control plane through the demo wrapper (demo_estate.py); the
         # wrapper runs vtctldclient inside the vtctld container.

@@ -2631,7 +2631,10 @@ class DistributedProviderTests(unittest.TestCase):
         plan = COCKROACH_ADMIN.plan(request)
         statement = plan['provider_payload']['compiled']['statements'][0]
         self.assertEqual(
-            'BACKUP DATABASE "inventory" INTO %s', statement['source']
+            # DETACHED since 2026-10-30: inside the provider's transaction
+            # a plain BACKUP is refused on 26.1.3 (live round trip).
+            'BACKUP DATABASE "inventory" INTO %s WITH detached',
+            statement['source'],
         )
         blocked = dict(request)
         blocked['_provider_route'] = {

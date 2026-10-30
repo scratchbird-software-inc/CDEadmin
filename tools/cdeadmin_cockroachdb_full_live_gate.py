@@ -89,6 +89,23 @@ def _target(kind, *path):
     }
 
 
+def _wait_for_job(fixture, job_type, timeout=300):
+    deadline = time.monotonic() + timeout
+    status = None
+    while time.monotonic() < deadline:
+        rows = _execute(
+            fixture,
+            'SELECT status FROM [SHOW JOBS] WHERE job_type = %s '
+            'ORDER BY created DESC LIMIT 1', (job_type,))
+        status = rows[0][0] if rows else None
+        if status == 'succeeded':
+            return
+        if status in {'failed', 'canceled'}:
+            raise RuntimeError(f'CockroachDB {job_type} job {status}')
+        time.sleep(1)
+    raise RuntimeError(f'CockroachDB {job_type} job stayed {status}')
+
+
 def _apply(
         provider, route, kind, operation, draft=None, target=None,
         task_evidence=None):
@@ -535,11 +552,15 @@ def verify(host, port, cockroach_path):
             'destination_uri': backup_uri,
             'revision_history': 'with_revision_history',
         }, database_target)
+        # BACKUP and RESTORE run DETACHED (the provider's transaction
+        # refuses them otherwise), so wait for each job to finish.
+        _wait_for_job(fixture, 'BACKUP')
         apply('cluster', 'restore_database', {
             'source_uri': backup_uri,
             'database_name': standard,
             'new_database_name': restored,
         }, _target('cluster', 'CockroachDB'))
+        _wait_for_job(fixture, 'RESTORE')
         restored_rows = _execute(
             fixture,
             'SELECT count(*) FROM [SHOW DATABASES] WHERE database_name = %s',

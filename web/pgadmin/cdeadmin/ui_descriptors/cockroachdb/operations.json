@@ -10,7 +10,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -33,7 +33,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Runs DETACHED: the job is followed in Jobs."
     },
     {
       "operation_id": "decommission",
@@ -84,7 +85,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "recommission",
@@ -96,7 +98,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "configure_zone",
@@ -106,7 +109,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -142,23 +145,53 @@
         {
           "field_id": "constraints",
           "label": "Replica constraints",
-          "control": "keyvalue",
-          "required": false
+          "control": "grid",
+          "item_kind": "string",
+          "required": false,
+          "help": "One per row, such as +region=us-east1 or -zone=a (required / prohibited locality).",
+          "columns": [
+            {
+              "field_id": "constraint",
+              "label": "Replica constraint",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "voter_constraints",
           "label": "Voter constraints",
-          "control": "keyvalue",
-          "required": false
+          "control": "grid",
+          "item_kind": "string",
+          "required": false,
+          "help": "As replica constraints, for voting replicas.",
+          "columns": [
+            {
+              "field_id": "constraint",
+              "label": "Voter constraint",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "lease_preferences",
           "label": "Lease preferences",
-          "control": "keyvalue",
-          "required": false
+          "control": "grid",
+          "item_kind": "string",
+          "required": false,
+          "help": "One preference per row, in order; comma-separate its constraints (+region=a,+zone=b).",
+          "columns": [
+            {
+              "field_id": "preference",
+              "label": "Lease preference",
+              "control": "text",
+              "required": true
+            }
+          ]
         }
       ],
-      "notes": "typed_from_json: database.configure_zone.constraints, database.configure_zone.voter_constraints, database.configure_zone.lease_preferences"
+      "notes": "Constraints and lease preferences are rows (list form); the per-replica-count map form has no editor yet. Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "reset_zone",
@@ -168,9 +201,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "set_primary_region",
@@ -189,7 +223,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "add_region",
@@ -208,7 +243,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "drop_region",
@@ -227,7 +263,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "set_secondary_region",
@@ -246,7 +283,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "drop_secondary_region",
@@ -258,7 +296,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "set_survival_goal",
@@ -288,7 +327,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "set_placement",
@@ -318,7 +358,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "backup",
@@ -328,7 +369,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -356,7 +397,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Runs DETACHED: the job is followed in Jobs."
     },
     {
       "operation_id": "configure_zone",
@@ -366,7 +408,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -402,23 +444,53 @@
         {
           "field_id": "constraints",
           "label": "Replica constraints",
-          "control": "keyvalue",
-          "required": false
+          "control": "grid",
+          "item_kind": "string",
+          "required": false,
+          "help": "One per row, such as +region=us-east1 or -zone=a (required / prohibited locality).",
+          "columns": [
+            {
+              "field_id": "constraint",
+              "label": "Replica constraint",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "voter_constraints",
           "label": "Voter constraints",
-          "control": "keyvalue",
-          "required": false
+          "control": "grid",
+          "item_kind": "string",
+          "required": false,
+          "help": "As replica constraints, for voting replicas.",
+          "columns": [
+            {
+              "field_id": "constraint",
+              "label": "Voter constraint",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "lease_preferences",
           "label": "Lease preferences",
-          "control": "keyvalue",
-          "required": false
+          "control": "grid",
+          "item_kind": "string",
+          "required": false,
+          "help": "One preference per row, in order; comma-separate its constraints (+region=a,+zone=b).",
+          "columns": [
+            {
+              "field_id": "preference",
+              "label": "Lease preference",
+              "control": "text",
+              "required": true
+            }
+          ]
         }
       ],
-      "notes": "typed_from_json: table.configure_zone.constraints, table.configure_zone.voter_constraints, table.configure_zone.lease_preferences"
+      "notes": "Constraints and lease preferences are rows (list form); the per-replica-count map form has no editor yet. Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "reset_zone",
@@ -428,9 +500,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "set_locality",
@@ -483,7 +556,8 @@
             "equals": "regional_by_row"
           }
         }
-      ]
+      ],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "scatter",
@@ -493,9 +567,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "create_changefeed",
@@ -505,7 +580,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -579,7 +654,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "scatter",
@@ -589,9 +665,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "refresh",
@@ -601,9 +678,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "relocate_lease",
@@ -622,7 +700,8 @@
           "control": "number",
           "required": true
         }
-      ]
+      ],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "relocate_voter",
@@ -647,7 +726,8 @@
           "control": "number",
           "required": true
         }
-      ]
+      ],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "relocate_nonvoter",
@@ -672,7 +752,8 @@
           "control": "number",
           "required": true
         }
-      ]
+      ],
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
     },
     {
       "operation_id": "pause",
@@ -682,7 +763,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -691,7 +772,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "resume",
@@ -701,9 +783,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "cancel",
@@ -713,9 +796,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "pause",
@@ -725,9 +809,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "resume",
@@ -737,9 +822,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "pause",
@@ -749,9 +835,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "resume",
@@ -761,9 +848,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "cancel",
@@ -773,9 +861,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
     },
     {
       "operation_id": "add_table",
@@ -785,14 +874,16 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
           "field_id": "table_name",
           "label": "Qualified table name",
-          "control": "text",
-          "required": true
+          "control": "reference",
+          "required": true,
+          "reference_kind": "table",
+          "reference_value": "display_path"
         },
         {
           "field_id": "initial_scan",
@@ -815,7 +906,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Pause the changefeed first."
     },
     {
       "operation_id": "drop_table",
@@ -825,16 +917,19 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
           "field_id": "table_name",
           "label": "Qualified table name",
-          "control": "text",
-          "required": true
+          "control": "reference",
+          "required": true,
+          "reference_kind": "table",
+          "reference_value": "display_path"
         }
-      ]
+      ],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Pause the changefeed first."
     },
     {
       "operation_id": "set_sink",
@@ -844,7 +939,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -853,7 +948,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Pause the changefeed first; the sink keeps its type."
     }
   ]
 }

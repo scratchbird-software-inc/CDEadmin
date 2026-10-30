@@ -313,13 +313,15 @@ def trigger_native(table_path, tgtype, enabled, function_path, arguments,
     raw = bytes(arguments or b'')
     values = raw.split(b'\x00')[:-1] if raw else []
     return {
-        'table': list(table_path),
+        # Dotted, as the front end's table picker sends it.
+        'table': '.'.join(table_path),
         'timing': next((label for bit, label in _TIMING_BITS.items()
                         if tgtype & bit), 'AFTER'),
         'events': [label for bit, label in _EVENT_BITS if tgtype & bit],
         'row_level': bool(tgtype & 1),
-        # As the function's resource is named: name(), no arguments.
-        'function': [*function_path[:-1], f'{function_path[-1]}()'],
+        # As the function picker sends it: schema.name(), no arguments.
+        'function': '.'.join([*function_path[:-1],
+                              f'{function_path[-1]}()']),
         'arguments': [item.decode('utf-8') for item in values],
         'when': None if when is None else _unwrap(str(when)),
         'enabled': str(enabled) != 'D',

@@ -158,6 +158,8 @@ class ReferenceEngineDemoTestCase(unittest.TestCase):
                     self.assertTrue(route['cockroach_path'].endswith(
                         'runtime/cockroach_tools/cockroach'))
                     self.assertTrue(route['cockroach_insecure'])
+                    self.assertEqual('nodelocal://1/cdeadmin-backups/',
+                                     route['backup_destination_allowlist'])
                 if item['engine'] == 'tikv':
                     self.assertNotIn('enable_ttl', route)
                 if item['engine'] == 'tidb':

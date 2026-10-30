@@ -486,6 +486,10 @@ def _allowlisted_uri(request, field_id, allowlist_key=None):
 
 
 def _qualified_identifier(value, label='qualified identifier'):
+    # A picker sends the object's path; a typed name is dotted text.
+    if isinstance(value, list) and all(isinstance(part, str)
+                                       for part in value):
+        value = '.'.join(value)
     if not isinstance(value, str):
         raise RelationalClientError(f'CockroachDB {label} is invalid')
     parts = value.split('.')
@@ -579,6 +583,12 @@ def _compile_control_plane(request):
         else:
             assignments = []
             values = []
+            if (draft.get('range_min_bytes') in (None, '')) != (
+                    draft.get('range_max_bytes') in (None, '')):
+                # Live, 26.1.3: "range_min_bytes and range_max_bytes must
+                # be set together".
+                raise RelationalClientError(
+                    'set the minimum and maximum range bytes together')
             names = (
                 ('num_replicas', 'num_replicas'),
                 ('num_voters', 'num_voters'),
@@ -593,6 +603,13 @@ def _compile_control_plane(request):
                 value = draft.get(field_id)
                 if value in (None, [], ''):
                     continue
+                if field_id == 'lease_preferences' and isinstance(
+                        value, list):
+                    # One preference per row: comma-separated constraints.
+                    value = [[part.strip() for part in item.split(',')
+                              if part.strip()]
+                             if isinstance(item, str) else item
+                             for item in value]
                 if isinstance(value, (dict, list)):
                     value = json.dumps(value, separators=(',', ':'))
                 assignments.append(f'{sql_name} = %s')
@@ -727,15 +744,21 @@ def _compile_control_plane(request):
         database = _quote(_path(request)[-1])
         source = f'BACKUP DATABASE {database} INTO %s'
         parameters = (_allowlisted_uri(request, 'destination_uri'),)
+        # Live, 26.1.3: the provider runs statements in a transaction, and
+        # BACKUP there needs DETACHED (it then returns the job at once).
+        options = ['detached']
         if draft.get('revision_history') == 'with_revision_history':
-            source += ' WITH revision_history'
+            options.append('revision_history')
+        source += ' WITH ' + ', '.join(options)
         impact = _impact(request, availability_risk='low')
     elif kind == 'cluster' and operation == 'restore_database':
         database = _quote(draft['database_name'])
         source = f'RESTORE DATABASE {database} FROM LATEST IN %s'
         parameters = (_allowlisted_uri(request, 'source_uri'),)
+        # As BACKUP: DETACHED inside the provider's transaction.
+        source += ' WITH detached'
         if draft.get('new_database_name'):
-            source += ' WITH new_db_name = %s'
+            source += ', new_db_name = %s'
             parameters += (draft['new_database_name'],)
         impact = _impact(
             request, availability_risk='high',
@@ -773,6 +796,16 @@ def _compile_control_plane(request):
             # provider allowlist above, so emitting the literal is safe.
             source += f" WITH initial_scan = '{initial_scan}'"
     elif kind == 'changefeed' and operation == 'set_sink':
+        current = ((request.get('target_resource') or {}).get('native') or
+                   {}).get('sink_uri')
+        wanted = draft.get('sink_uri')
+        if isinstance(current, str) and isinstance(wanted, str) and \
+                urlsplit(current).scheme != urlsplit(wanted).scheme:
+            # Live, 26.1.3: "Altering the sink type of a changefeed is
+            # disallowed".
+            raise RelationalClientError(
+                'a changefeed keeps its sink type; create a new changefeed '
+                'for another kind of sink')
         source = 'ALTER CHANGEFEED %s SET sink = %s'
         parameters = (
             _target_id(request),
@@ -1612,7 +1645,7 @@ def _extras(cursor, request, generation):
     ):
         values.append(resource('row-policy', [schema, table], name,
                                generation, {
-            'table': [str(schema), str(table)],
+            'table': f'{schema}.{table}',
             'policy_type': str(kind).upper(), 'command': str(command),
             'roles': sorted(str(role) for role in roles or []),
             # CockroachDB annotates constants (:::INT8) in the rendering.
@@ -1727,11 +1760,13 @@ def _extras(cursor, request, generation):
         }))
     for row in optional_rows(
         cursor,
-        'SELECT job_id, status, description '
+        'SELECT job_id, status, description, sink_uri, full_table_names '
         'FROM [SHOW CHANGEFEED JOBS] ORDER BY job_id',
     ):
         values.append(resource('changefeed', [], row[0], generation, {
             'status': str(row[1]), 'description': str(row[2]),
+            'sink_uri': None if row[3] is None else str(row[3]),
+            'tables': [str(name) for name in row[4] or []],
         }))
     for row in optional_rows(
         cursor,
@@ -1945,7 +1980,8 @@ def _annotate_catalog(connection, values):
             r'\) WHERE \((.*)\)(?: VISIBILITY [0-9.]+)?$', definition)
         native.update(
             keys=index_sql.key_list(definition),
-            table=[schema, table],
+            # Dotted, as the front end's table picker sends it.
+            table=f'{schema}.{table}',
             comment=index_comments.get((schema, table, name)),
             columns=entry['columns'], directions=entry['directions'],
             # The primary index stores every column; that is not a choice.
@@ -1968,7 +2004,12 @@ def _annotate_catalog(connection, values):
         if item['resource_kind'] == 'constraint':
             native = item['native']
             row = _constraint_editor_fields(native)
+            # The grid row shows the referenced table as the picker sends
+            # it (dotted); the alter baseline keeps the path.
             native.update(row)
+            if 'references_table' in row:
+                native['references_table'] = '.'.join(
+                    str(part) for part in row['references_table'])
             held.setdefault(tuple(item['display_path'][:2]), []).append(
                 {'name': item['display_name'], **row})
     for item in kept:

@@ -10,6 +10,7 @@ and removes them. Skipped otherwise.
 import json
 import os
 import sys
+import time
 import uuid
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -33,8 +34,10 @@ psycopg = pytest.importorskip('psycopg')
 from pgadmin.cdeadmin.providers.cockroachdb.provider import (  # noqa: E402
     ADMINISTRATION, PROFILE, create_provider,
 )
+from pgadmin.cdeadmin.sdk import RelationalClientError  # noqa: E402
 from ui_descriptor_roundtrip import (  # noqa: E402
-    backend_draft, record_draft, record_from_resource, resolved_form,
+    backend_draft, engine_operations, operation_backend_draft,
+    operation_draft, record_draft, record_from_resource, resolved_form,
 )
 
 SETTINGS = json.loads(SETTINGS)
@@ -59,7 +62,12 @@ def query(sql, database=DATABASE):
 def live():
     route = {'host': SETTINGS['host'], 'port': int(SETTINGS['port']),
              'user': SETTINGS['user'], 'database': DATABASE,
-             'sslmode': 'disable'}
+             'sslmode': 'disable',
+             # As the demo profile registers them.
+             'backup_destination_allowlist':
+                 'nodelocal://1/cdeadmin-backups/',
+             'changefeed_sink_allowlist':
+                 'null://,nodelocal://1/cdeadmin-changefeeds/'}
     context = SimpleNamespace(
         endpoint_id=str(uuid.uuid4()), session_namespace=f'rt{UNIQUE}',
         pool_namespace=f'rt{UNIQUE}', cache_namespace=f'rt{UNIQUE}',
@@ -138,15 +146,15 @@ def test_trigger_create_reopen_drop(live):
     route, client = live
     form = resolved_form('cockroachdb', 'trigger')
     run(client, route, 'trigger', 'create', backend_draft(form, {
-        'name': 'tr_rt', 'table': ['public', 't'], 'timing': 'AFTER',
-        'events': ['INSERT', 'UPDATE'], 'function': ['public', 'on_t()'],
+        'name': 'tr_rt', 'table': 'public.t', 'timing': 'AFTER',
+        'events': ['INSERT', 'UPDATE'], 'function': 'public.on_t()',
         'arguments': [{'value': 'a'}, {'value': 'say "hi", a\\b'}],
         'when': '(NEW).v > 0'}))
     target, baseline = record(client, route, 'trigger', 'tr_rt', 'trigger')
     # One record for a two-event trigger (information_schema lists two).
     assert (baseline['table'], baseline['timing'], baseline['events'],
             baseline['function'], baseline['when']) == (
-        ['public', 't'], 'AFTER', ['INSERT', 'UPDATE'], ['public', 'on_t()'],
+        'public.t', 'AFTER', ['INSERT', 'UPDATE'], 'public.on_t()',
         '(new).v > 0')
     assert [row['value'] for row in baseline['arguments']] == [
         'a', 'say "hi", a\\b']
@@ -234,7 +242,7 @@ def test_table_create_reopen_alter_drop(live):
         'primary_key': [{'name': 'rt_orders_pkey', 'columns': ['id']}],
         'unique_constraints': [{'name': 'uq_note', 'columns': ['note']}],
         'foreign_keys': [{'name': 'fk_ref', 'columns': ['ref'],
-                          'references_table': ['public', 'parent'],
+                          'references_table': 'public.parent',
                           'references_columns': ['k'],
                           'on_delete': 'SET NULL'}],
         'check_constraints': [{'name': 'ck_id', 'expression': 'id > 0'}],
@@ -256,7 +264,7 @@ def test_table_create_reopen_alter_drop(live):
     fk = baseline['foreign_keys'][0]
     assert (fk['references_table'], fk['references_columns'],
             fk['on_delete'], fk['on_update']) == (
-        ['public', 'parent'], ['k'], 'SET NULL', 'NO ACTION')
+        'public.parent', ['k'], 'SET NULL', 'NO ACTION')
     assert baseline['check_constraints'][0]['expression'] == 'id > 0'
     assert (baseline['ttl_expire_after'], baseline['comment']) == (
         '30 days', 'orders')
@@ -315,24 +323,24 @@ def test_index_create_reopen_alter_drop(live):
           'j JSONB, ts TIMESTAMPTZ)')
     form = resolved_form('cockroachdb', 'index')
     run(client, route, 'index', 'create', backend_draft(form, {
-        'name': 'ix_ab', 'table': ['public', 'ix'],
+        'name': 'ix_ab', 'table': 'public.ix',
         'keys': [{'expression': 'a', 'direction': 'DESC'},
                  {'expression': 'lower(b)'}],
         'storing': [{'value': 'ts'}], 'predicate': 'a > 0',
         'visibility': 0.25, 'comment': 'partial'}))
     run(client, route, 'index', 'create', backend_draft(form, {
-        'name': 'ix_hash', 'table': ['public', 'ix'], 'unique': True,
+        'name': 'ix_hash', 'table': 'public.ix', 'unique': True,
         'keys': [{'expression': 'b'}], 'hash_sharded': True,
         'bucket_count': 8}))
     run(client, route, 'index', 'create', backend_draft(form, {
-        'name': 'ix_inv', 'table': ['public', 'ix'], 'method': 'inverted',
+        'name': 'ix_inv', 'table': 'public.ix', 'method': 'inverted',
         'keys': [{'expression': 'j'}]}))
     target, baseline = record(client, route, 'index', 'ix_ab', 'index')
     assert (baseline['table'], baseline['keys'],
             [row['value'] for row in baseline['storing']],
             baseline['predicate'], baseline['visibility'],
             baseline['comment']) == (
-        ['public', 'ix'],
+        'public.ix',
         [{'expression': 'a', 'direction': 'DESC', '_id': '0'},
          {'expression': 'lower(b)', 'direction': 'ASC', '_id': '1'}],
         ['ts'], 'a > 0', 0.25, 'partial')
@@ -625,12 +633,12 @@ def test_row_security_policies(live):
             table['force_row_level_security']
         form = resolved_form('cockroachdb', 'engine_object:row-policy')
         run(client, route, 'row-policy', 'create', backend_draft(form, {
-            'name': 'rt_own', 'table': ['public', 'secured'],
+            'name': 'rt_own', 'table': 'public.secured',
             'policy_type': 'PERMISSIVE', 'command': 'ALL',
             'roles': [{'role': reader}],
             'using': 'owner = current_user', 'with_check': 'v > 0'}))
         run(client, route, 'row-policy', 'create', backend_draft(form, {
-            'name': 'rt_cap', 'table': ['public', 'secured'],
+            'name': 'rt_cap', 'table': 'public.secured',
             'policy_type': 'RESTRICTIVE', 'command': 'SELECT',
             'using': 'v < 100'}))
         target, baseline = record(client, route, 'row-policy', 'rt_own',
@@ -639,7 +647,7 @@ def test_row_security_policies(live):
                 baseline['command'],
                 [row['role'] for row in baseline['roles']],
                 baseline['using'], baseline['with_check']) == (
-            ['public', 'secured'], 'PERMISSIVE', 'ALL', [reader],
+            'public.secured', 'PERMISSIVE', 'ALL', [reader],
             'owner = current_user()', 'v > 0')
         _, cap = record(client, route, 'row-policy', 'rt_cap',
                         'engine_object:row-policy')
@@ -670,3 +678,163 @@ def test_row_security_policies(live):
             connection.execute(
                 f'DROP TABLE IF EXISTS {DATABASE}.public.secured')
             connection.execute(f'DROP ROLE IF EXISTS {reader}')
+
+
+def operate(client, route, kind, operation, values, target,
+            confirmation=None):
+    """Run an operation from its descriptor, as the OperationDialog does."""
+    declared = engine_operations('cockroachdb')[f'{operation}@{kind}']
+    return run(client, route, kind, operation, operation_backend_draft(
+        declared, operation_draft(declared, values, confirmation)),
+        target=target)
+
+
+def zone(kind, path):
+    noun = 'TABLE' if kind == 'table' else 'DATABASE'
+    return query(f'SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATION '
+                 f'FROM {noun} {path}]')[0][0]
+
+
+def wait_for_job(kind, done, timeout=120):
+    """The newest job of a type, once it reaches one of ``done``."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        rows = query(f"SELECT job_id, status FROM [SHOW JOBS] WHERE "
+                     f"job_type = '{kind}' ORDER BY created DESC LIMIT 1")
+        if rows and rows[0][1] in done:
+            return rows[0]
+        time.sleep(1)
+    raise AssertionError(f'{kind} job did not reach {done}: {rows}')
+
+
+def wait_status(job, done, timeout=60):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        status = query(f'SELECT status FROM [SHOW JOB {job}]')[0][0]
+        if status in done:
+            return status
+        time.sleep(0.5)
+    raise AssertionError(f'job {job} stayed {status}')
+
+
+def newest(client, route, kind, **match):
+    rows = [row for row in resources(client, route)
+            if row['resource_kind'] == kind and all(
+                str((row.get('native') or {}).get(key)) == str(value)
+                for key, value in match.items())]
+    return max(rows, key=lambda row: int(row['display_name']))
+
+
+def test_zone_scatter_and_changefeed_operations(live):
+    route, client = live
+    query('CREATE TABLE public.ops (id INT8 PRIMARY KEY, v INT8)')
+    query('CREATE TABLE public.ops2 (id INT8 PRIMARY KEY)')
+    query('CREATE INDEX ops_v ON public.ops (v)')
+    table, _ = find(client, route, 'table', 'ops')
+    operate(client, route, 'table', 'configure_zone', {
+        'num_replicas': 1, 'gc_ttl_seconds': 600,
+        'range_min_bytes': 1048576, 'range_max_bytes': 268435456,
+        'constraints': [],
+        'lease_preferences': []}, table)
+    # Control-plane operations are compiled, and refused, at plan time.
+    with pytest.raises(RelationalClientError, match='together'):
+        ADMINISTRATION.plan({
+            'resource_kind': 'table', 'operation_id': 'configure_zone',
+            'target_resource': table, '_provider_route': route,
+            'draft': {'range_max_bytes': 268435456}})
+    config = zone('table', 'public.ops')
+    assert 'num_replicas = 1' in config and 'gc.ttlseconds = 600' in config
+    operate(client, route, 'table', 'reset_zone', {}, table)
+    assert 'gc.ttlseconds = 600' not in zone('table', 'public.ops')
+    database, _ = find(client, route, 'database', DATABASE)
+    operate(client, route, 'database', 'configure_zone',
+            {'gc_ttl_seconds': 1200}, database)
+    assert 'gc.ttlseconds = 1200' in zone('database', DATABASE)
+    operate(client, route, 'database', 'reset_zone', {}, database)
+    operate(client, route, 'table', 'scatter', {}, table)
+    operate(client, route, 'index', 'scatter', {},
+            find(client, route, 'index', 'ops_v')[0])
+
+    operate(client, route, 'table', 'create_changefeed', {
+        'sink_uri': 'null://', 'initial_scan': 'no'}, table)
+    feed = newest(client, route, 'changefeed')
+    operate(client, route, 'changefeed', 'pause', {}, feed)
+    # ALTER CHANGEFEED needs a paused changefeed, not one pausing.
+    wait_status(int(feed['display_name']), {'paused'})
+    operate(client, route, 'changefeed', 'add_table', {
+        'table_name': 'public.ops2', 'initial_scan': 'no'}, feed)
+    operate(client, route, 'changefeed', 'drop_table', {
+        'table_name': 'public.ops'}, feed)
+    # The sink type is fixed (null stays null); refused at plan time.
+    with pytest.raises(RelationalClientError, match='sink type'):
+        ADMINISTRATION.plan({
+            'resource_kind': 'changefeed', 'operation_id': 'set_sink',
+            'target_resource': find(client, route, 'changefeed',
+                                    feed['display_name'])[0],
+            '_provider_route': route,
+            'draft': {'sink_uri': 'nodelocal://1/cdeadmin-changefeeds/x'}})
+    operate(client, route, 'changefeed', 'set_sink', {
+        'sink_uri': 'null://rt'}, feed)
+    job = int(feed['display_name'])
+    sink, tables = query(f"SELECT sink_uri, full_table_names FROM "
+                         f"[SHOW CHANGEFEED JOB {job}]")[0]
+    assert sink == 'null://rt'
+    assert [name.split('.')[-1] for name in tables] == ['ops2']
+    operate(client, route, 'changefeed', 'resume', {}, feed)
+    operate(client, route, 'changefeed', 'cancel', {}, feed,
+            confirmation=feed['display_name'])
+    assert query(f'SELECT status FROM [SHOW JOB {job}]')[0][0] in {
+        'canceled', 'cancel-requested', 'reverting'}
+    # A job is also operated as a job.
+    operate(client, route, 'table', 'create_changefeed', {
+        'sink_uri': 'null://', 'initial_scan': 'no'}, table)
+    other = find(client, route, 'job',
+                 newest(client, route, 'changefeed')['display_name'])[0]
+    operate(client, route, 'job', 'pause', {'reason': 'round trip'}, other)
+    wait_status(int(other['display_name']), {'paused'})
+    operate(client, route, 'job', 'resume', {}, other)
+    wait_status(int(other['display_name']), {'running'})
+    operate(client, route, 'job', 'cancel', {}, other,
+            confirmation=other['display_name'])
+
+
+def test_backup_restore_and_schedule_operations(live):
+    route, client = live
+    query('CREATE TABLE public.kept (id INT8 PRIMARY KEY)')
+    query('INSERT INTO public.kept VALUES (7)')
+    restored = f'rt_restored_{UNIQUE}'
+    uri = f'nodelocal://1/cdeadmin-backups/rt-{UNIQUE}'
+    try:
+        database, _ = find(client, route, 'database', DATABASE)
+        operate(client, route, 'database', 'backup', {
+            'destination_uri': uri}, database)
+        assert wait_for_job('BACKUP', {'succeeded', 'failed'})[1] == \
+            'succeeded'
+        cluster = next(row for row in resources(client, route)
+                       if row['resource_kind'] == 'cluster')
+        operate(client, route, 'cluster', 'restore_database', {
+            'source_uri': uri, 'database_name': DATABASE,
+            'new_database_name': restored}, cluster,
+            confirmation=DATABASE)
+        assert wait_for_job('RESTORE', {'succeeded', 'failed'})[1] == \
+            'succeeded'
+        assert query('SELECT id FROM public.kept', database=restored) == [
+            (7,)]
+        query(f"CREATE SCHEDULE rt_sched_{UNIQUE} FOR BACKUP DATABASE "
+              f"{DATABASE} INTO '{uri}-sched' RECURRING '@daily' "
+              "FULL BACKUP ALWAYS WITH SCHEDULE OPTIONS "
+              "first_run = '2099-01-01'")
+        schedule = newest(client, route, 'schedule',
+                          name=f'rt_sched_{UNIQUE}')
+        operate(client, route, 'schedule', 'pause', {}, schedule)
+        assert query("SELECT schedule_status FROM [SHOW SCHEDULES] WHERE "
+                     f"id = {schedule['display_name']}")[0][0] == 'PAUSED'
+        operate(client, route, 'schedule', 'resume', {}, schedule)
+        assert query("SELECT schedule_status FROM [SHOW SCHEDULES] WHERE "
+                     f"id = {schedule['display_name']}")[0][0] == 'ACTIVE'
+    finally:
+        with connect() as connection:
+            connection.execute(f'DROP DATABASE IF EXISTS {restored} CASCADE')
+            connection.execute(
+                f"DROP SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM "
+                f"x WHERE label = 'rt_sched_{UNIQUE}'")

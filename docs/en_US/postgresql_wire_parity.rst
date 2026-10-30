@@ -411,6 +411,21 @@ Checked live on 26.1.3 for those forms (not yet in the probe):
       built-in function descriptions: an uncommented table read back a
       function's help text as its comment. Fixed 2026-10-30 (table and
       index comments now name ``'pg_class'``); a live check covers it.
+-  Operations, checked through their descriptors: zone configuration and
+   reset (database, table), scatter (table, index), refresh, changefeed
+   create / pause / resume / add and drop table / set sink / cancel, job
+   pause / resume / cancel, schedule pause / resume, backup and restore.
+   Findings: ``BACKUP`` and ``RESTORE`` inside the provider's transaction
+   are refused ("cannot be used inside a multi-statement transaction
+   without DETACHED"), so the operation failed every time; they now run
+   ``DETACHED`` and the job is followed. ``range_min_bytes`` and
+   ``range_max_bytes`` must be set together. ``ALTER CHANGEFEED`` needs a
+   paused changefeed, and a changefeed keeps its sink type ("Altering the
+   sink type of a changefeed is disallowed"); the provider refuses a type
+   change. A job that is still pausing cannot be resumed. The demo
+   profile registers backup and sink allowlists inside the node's
+   ``nodelocal`` directory (and ``null://``). Node, region, locality and
+   range-relocation operations stay untested on one node.
 -  Databases: ``CREATE DATABASE`` with ``ENCODING 'UTF8'`` and
    ``OWNER``, ``COMMENT ON DATABASE``, ``ALTER DATABASE ... OWNER TO``,
    ``RENAME TO``, ``SET``/``RESET`` run (session defaults read back from
