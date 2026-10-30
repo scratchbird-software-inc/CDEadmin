@@ -982,21 +982,33 @@ def _extras(cursor, _request, generation, keyspaces=None):
                 'throttler_status': str(throttler),
             }
         ))
+    # One row per shard; one record per migration, with every shard's state.
+    migrations = {}
     for row in optional_rows(cursor, 'SHOW VITESS_MIGRATIONS'):
         if len(row) < 53:
             continue
-        migration = str(row[1])
+        migrations.setdefault((str(row[2]), str(row[1])), []).append(row)
+    for (keyspace, migration), rows in migrations.items():
+        rows.sort(key=lambda row: str(row[3]))
+        shards = [{
+            'shard': str(row[3]), 'status': str(row[16]),
+            'retries': row[19], 'tablet': str(row[20]),
+            'progress': row[22], 'message': str(row[25]),
+            'ready_to_complete': bool(row[44]), 'stage': str(row[52]),
+        } for row in rows]
+        statuses = sorted({item['status'] for item in shards})
+        first = rows[0]
         values.append(resource(
-            'online-ddl', [row[2]], migration, generation, {
-                'shard': str(row[3]), 'table': str(row[5]),
-                'statement': str(row[6]), 'strategy': str(row[7]),
-                'options': str(row[8]), 'status': str(row[16]),
-                'retries': row[19], 'tablet': str(row[20]),
-                'progress': row[22], 'message': str(row[25]),
-                'postpone_completion': bool(row[35]),
-                'ready_to_complete': bool(row[44]),
-                'postpone_launch': bool(row[51]),
-                'stage': str(row[52]),
+            'online-ddl', [keyspace], migration, generation, {
+                'table': str(first[5]), 'statement': str(first[6]),
+                'strategy': str(first[7]), 'options': str(first[8]),
+                # A single status only when every shard agrees.
+                'status': statuses[0] if len(statuses) == 1 else 'mixed',
+                'ready_to_complete': all(
+                    item['ready_to_complete'] for item in shards),
+                'postpone_completion': bool(first[35]),
+                'postpone_launch': bool(first[51]),
+                'shards': shards,
             }
         ))
     return values

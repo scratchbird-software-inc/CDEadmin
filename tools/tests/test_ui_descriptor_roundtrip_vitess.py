@@ -590,7 +590,12 @@ def test_online_ddl_submit_launch_complete(live):
             run(client, route, 'online-ddl', operation,
                 operation_backend_draft(declared, operation_draft(declared)),
                 target=migration())
-        assert migration({'complete'})['native']['status'] == 'complete'
+        done = migration({'complete'})
+        # One record per migration with each shard's own state.
+        assert sorted(item['shard'] for item in done['native']['shards']) \
+            == sorted(shards_of(KEYSPACE))
+        assert {item['status'] for item in done['native']['shards']} == {
+            'complete'}
         for shard in shards_of(KEYSPACE):
             columns = [row[0] for row in query(
                 f'SHOW COLUMNS FROM `{table}`',

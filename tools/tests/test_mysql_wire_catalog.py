@@ -15,7 +15,7 @@ from pgadmin.cdeadmin.providers.distributed_sql import (  # noqa: E402
     mysql_procedures,
 )
 from pgadmin.cdeadmin.providers.vitess.provider import (  # noqa: E402
-    _catalog as vitess_catalog,
+    _catalog as vitess_catalog, _extras as vitess_extras,
 )
 
 
@@ -222,3 +222,23 @@ def test_vitess_catalog_reads_every_keyspace_once():
     sequence = native(rows, 'sequence:lookup:ids')
     assert (sequence['next_id'], sequence['cache']) == (500, 50)
     assert not any(' IN (' in source for source, _ in cursor.seen)
+
+
+def test_vitess_migration_keeps_every_shard_state():
+    def row(shard, status, ready):
+        value = [None] * 53
+        value[1:9] = ['m1', 'ks', shard, 'vt_ks', 't', 'alter table t',
+                      'vitess', '']
+        value[16], value[44] = status, ready
+        return tuple(value)
+
+    cursor = Cursor({'SHOW VITESS_MIGRATIONS': [
+        row('80-', 'running', 0), row('-80', 'complete', 1)]})
+    record = next(item for item in vitess_extras(cursor, {}, 'g', {'ks'})
+                  if item['resource_kind'] == 'online-ddl')
+    assert record['resource_id'] == 'online-ddl:ks:m1'
+    assert record['native']['status'] == 'mixed'
+    assert record['native']['ready_to_complete'] is False
+    assert [(item['shard'], item['status'])
+            for item in record['native']['shards']] == [
+        ('-80', 'complete'), ('80-', 'running')]

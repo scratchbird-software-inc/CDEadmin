@@ -444,8 +444,10 @@ Plan
    ``vitess`` and ``mysql`` strategies were probed and return a migration
    id. Remaining: ApplyVSchema is not exposed; the catalog keeps one record
    per migration although ``SHOW VITESS_MIGRATIONS`` has a row per shard, so
-   a migration's status is one shard's; the backup timestamp on restore is
-   text, not a backup picker.
+   a migration's status is one shard's (fixed the same day: the record now
+   carries each shard's status, progress and readiness, and reports one
+   status only when every shard agrees, otherwise ``mixed``); the backup
+   timestamp on restore is text, not a backup picker.
 #. For each engine, run the forms through the draft and review tools in
    ``ui_descriptors/README.md`` to make a descriptor folder. Reuse MySQL's
    field ids where the backend field is the same, and filter by this matrix.
