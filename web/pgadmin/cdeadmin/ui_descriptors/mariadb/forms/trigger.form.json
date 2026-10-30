@@ -16,6 +16,11 @@
     {
       "concept": "active / position",
       "reason": "the shared provider create form lists them, but the MariaDB compiler emits neither (no ENABLE/DISABLE or POSITION clause); hidden so the form never shows a control that does nothing"
+    },
+    {
+      "concept": "Multiple trigger events before 12.0.1",
+      "reason": "MariaDB accepts several events per trigger from 12.0.1 (MDEV-10164, fix version 12.0.1; verified live on 12.2.2). The form does not yet limit 10.6-11.x servers to one event.",
+      "tracking": "mysql-wire-parity"
     }
   ],
   "fields": [
@@ -59,10 +64,6 @@
         {
           "value": "AFTER",
           "label": "After"
-        },
-        {
-          "value": "INSTEAD OF",
-          "label": "Instead Of"
         }
       ]
     },
@@ -91,5 +92,5 @@
       "help": "Enter only the trigger body, not CREATE TRIGGER."
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database); table picker; trigger events typed as a multiselect from dialect.trigger_events. Create path round-tripped against MariaDB 10.11 (tools/tests/test_ui_descriptor_roundtrip_mariadb.py); The MariaDB inventory now reports timing/events/position/body (mariadb_catalog.program_object_natives); create + re-open round-tripped against MariaDB 10.11."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database); table picker; trigger events typed as a multiselect from dialect.trigger_events. Create path round-tripped against MariaDB 10.11 (tools/tests/test_ui_descriptor_roundtrip_mariadb.py); The MariaDB inventory now reports timing/events/position/body (mariadb_catalog.program_object_natives); create + re-open round-tripped against MariaDB 10.11. 2026-10-29: INSTEAD OF removed from Timing; MariaDB 12.2.2 refuses it on tables and views (live)."
 }
