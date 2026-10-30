@@ -627,7 +627,28 @@ class VitessControlAdministration(VitessAdministration):
         if plan.get('resource_kind') in _UNSHARDED_ONLY and plan.get(
                 'operation_id') == 'create':
             self._refuse_sharded(client, request)
+        if plan.get('resource_kind') == 'table' and plan.get(
+                'operation_id') == 'create':
+            self._refuse_missing_sequence(client, request)
         return super().apply(client, request, connection=connection)
+
+    @staticmethod
+    def _refuse_missing_sequence(client, request):
+        # vtgate accepts ADD AUTO_INCREMENT ... USING a sequence that does
+        # not exist (live, 23.0.3); inserts then fail far from the cause.
+        route = (request.get('provider_payload') or {}).get('route')
+        draft = (request.get('plan') or {}).get('draft') or {}
+        sequence = draft.get('auto_increment_sequence') or (
+            draft.get('options') or {}).get('auto_increment_sequence')
+        if not sequence or not isinstance(route, Mapping):
+            return
+        known = {'.'.join(item.get('display_path') or [])
+                 for item in client.list_resources({'route': route})
+                 if item.get('resource_kind') == 'sequence'}
+        if str(sequence) not in known:
+            raise RelationalClientError(
+                f'Vitess sequence {sequence} does not exist; create it in an '
+                'unsharded keyspace first')
 
     @staticmethod
     def _refuse_sharded(client, request):

@@ -407,6 +407,23 @@ def test_table_draws_ids_from_an_attached_sequence(live):
             'vindex_columns': ['id'], 'auto_increment_column': 'id',
             'auto_increment_sequence': f'lookup_keyspace.{sequence}'}))
         target, baseline = record(client, route, 'table', table, 'table')
+        missing = f'rt_nosuch_{UNIQUE}'
+        request = {'resource_kind': 'table', 'operation_id': 'create',
+                   '_provider_route': route, 'target_resource': None,
+                   'draft': backend_draft(form, {
+                       'name': missing, 'parent': KEYSPACE,
+                       'columns': [{'name': 'id', 'type': 'BIGINT',
+                                    'nullable': False}],
+                       'primary_key': [{'name': 'pk', 'columns': ['id']}],
+                       'register_in_vschema': True, 'vindex_name': 'xxhash',
+                       'vindex_columns': ['id'],
+                       'auto_increment_column': 'id',
+                       'auto_increment_sequence':
+                           f'lookup_keyspace.{missing}'})}
+        planned = ADMINISTRATION.plan(request)
+        with pytest.raises(Exception, match='does not exist'):
+            ADMINISTRATION.apply(client, executor_request(request, planned))
+        assert not query(f"SHOW TABLES LIKE '{missing}'")
         assert (baseline['auto_increment_column'],
                 baseline['auto_increment_sequence']) == (
             'id', f'lookup_keyspace.{sequence}')
@@ -625,7 +642,8 @@ def test_lookup_vindex_parameters_route_queries(live):
     query(f'CREATE TABLE `{table}` (id BIGINT NOT NULL PRIMARY KEY, '
           'email VARCHAR(64))')
     try:
-        query(f'ALTER VSCHEMA ON `{KEYSPACE}`.`{table}` ADD VINDEX xxhash (id)')
+        query(f'ALTER VSCHEMA ON `{KEYSPACE}`.`{table}` '
+              'ADD VINDEX xxhash (id)')
         run(client, route, 'vindex', 'create', backend_draft(
             resolved_form('vitess', 'engine_object:vindex'),
             {'name': vindex, 'vindex_type': 'lookup_unique', 'parameters': {
