@@ -1689,7 +1689,9 @@ def _annotate_catalog(connection, values):
                      for row in optional_rows(
                          cursor,
                          'SELECT n.nspname, c.relname, c.reloptions, '
-                         'obj_description(c.oid) '
+                         # One argument also matches built-in function
+                         # descriptions (live, 26.1.3); name the catalog.
+                         "obj_description(c.oid, 'pg_class') "
                          'FROM pg_catalog.pg_class c '
                          'JOIN pg_catalog.pg_namespace n '
                          "ON n.oid = c.relnamespace WHERE c.relkind = 'r'")}
@@ -1698,7 +1700,8 @@ def _annotate_catalog(connection, values):
             for row in optional_rows(
                 cursor,
                 'SELECT n.nspname, t.relname, i.relname, '
-                'obj_description(i.oid) FROM pg_catalog.pg_index x '
+                "obj_description(i.oid, 'pg_class') "
+                'FROM pg_catalog.pg_index x '
                 'JOIN pg_catalog.pg_class i ON i.oid = x.indexrelid '
                 'JOIN pg_catalog.pg_class t ON t.oid = x.indrelid '
                 'JOIN pg_catalog.pg_namespace n ON n.oid = t.relnamespace')

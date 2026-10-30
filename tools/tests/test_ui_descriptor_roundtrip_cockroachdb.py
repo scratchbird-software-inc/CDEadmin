@@ -252,6 +252,10 @@ def test_table_create_reopen_alter_drop(live):
     assert baseline['check_constraints'][0]['expression'] == 'id > 0'
     assert (baseline['ttl_expire_after'], baseline['comment']) == (
         '30 days', 'orders')
+    # An uncommented table has no comment (a one-argument obj_description
+    # returned a built-in function's description here).
+    assert record(client, route, 'table', 'parent', 'table')[1][
+        'comment'] is None
 
     # Reopened unchanged: nothing to send.
     assert backend_draft(form, baseline, mode='alter',

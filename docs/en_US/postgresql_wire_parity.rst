@@ -397,6 +397,10 @@ Checked live on 26.1.3 for those forms (not yet in the probe):
       columns), which the catalog tells apart by name and default.
    -  A collation tag is stored normalized (``"en-US"`` reads back as
       ``en_US``).
+   -  ``obj_description(oid)`` without a catalog argument matches
+      built-in function descriptions: an uncommented table read back a
+      function's help text as its comment. Fixed 2026-10-30 (table and
+      index comments now name ``'pg_class'``); a live check covers it.
 -  Indexes: keys with directions and expressions, ``UNIQUE``, inverted
    (``USING GIN`` or ``CREATE INVERTED INDEX``), hash-sharded with a bucket
    count, ``STORING`` (``INCLUDE`` is accepted and read back as
