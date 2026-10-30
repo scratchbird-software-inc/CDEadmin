@@ -825,6 +825,7 @@
         {"resource_kind": "user", "title": "User", "operation_profile": "security"},
         {"resource_kind": "role", "title": "Role", "operation_profile": "security"},
         {"resource_kind": "privilege", "title": "Privilege", "operation_profile": "security"},
+        {"resource_kind": "row-policy", "title": "Row security policy", "operation_profile": "security", "exclude_operations": ["rename", "grant", "revoke", "set_default"]},
         {"resource_kind": "range", "title": "Range", "operation_profile": "topology"},
         {"resource_kind": "zone-config", "title": "Zone configuration", "operation_profile": "topology"},
         {"resource_kind": "job", "title": "Job", "operation_profile": "operational"},

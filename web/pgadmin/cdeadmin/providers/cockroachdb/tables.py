@@ -27,11 +27,12 @@ CONSTRAINT_KEYS = {
     'name', 'kind', 'columns', 'references_table', 'references_columns',
     'on_delete', 'on_update', 'expression',
 }
+RLS_KEYS = ('row_level_security', 'force_row_level_security')
 CREATE_KEYS = {'name', 'parent', 'columns', 'constraints', 'comment',
-               *CONSTRAINT_LISTS, *TTL_KEYS}
+               *CONSTRAINT_LISTS, *TTL_KEYS, *RLS_KEYS}
 ALTER_KEYS = {'add_columns', 'drop_columns', 'rename_columns',
               'alter_columns', 'comment', 'confirmation',
-              *CONSTRAINT_LISTS, *TTL_KEYS}
+              *CONSTRAINT_LISTS, *TTL_KEYS, *RLS_KEYS}
 # Column cells an existing column cannot take here: key membership is the
 # Constraints tab's, and a column cannot move between families.
 _LOCKED = {'unique': 'use the Unique grid', 'primary_key':
@@ -226,6 +227,7 @@ def create(admin, draft):
     if ttl:
         source += ' WITH (' + ', '.join(ttl) + ')'
     statements = [{'source': source, 'parameters': ()}]
+    statements += _rls_changes(admin, table, draft, {})
     if not _blank(draft.get('comment')):
         statements.append(_comment(admin, table, draft['comment']))
     for item in columns:
@@ -383,6 +385,7 @@ def alter(admin, draft, target):
                 item['comment'], column=True))
     statements += [{'source': source, 'parameters': ()} for source in adds]
     statements += _ttl_changes(admin, table, draft, native)
+    statements += _rls_changes(admin, table, draft, native)
     if 'comment' in draft and (draft['comment'] or None) != (
             native.get('comment') or None):
         statements.append(_comment(admin, table, draft['comment']))
@@ -396,6 +399,22 @@ def alter(admin, draft, target):
                                   '(schema_locked = true)',
                         'parameters': ()}])
     return statements, warnings
+
+
+def _rls_changes(admin, table, draft, native):
+    """ENABLE/DISABLE and FORCE/NO FORCE ROW LEVEL SECURITY."""
+    statements = []
+    for key, on, off in (
+            ('row_level_security', 'ENABLE', 'DISABLE'),
+            ('force_row_level_security', 'FORCE', 'NO FORCE')):
+        if key not in draft or draft[key] is None:
+            continue
+        value = _boolean(draft, key, False)
+        if value != bool(native.get(key, False)):
+            statements.append({'source': (
+                f'ALTER TABLE {table} {on if value else off} ROW LEVEL '
+                'SECURITY'), 'parameters': ()})
+    return statements
 
 
 def _ttl_changes(admin, table, draft, native):

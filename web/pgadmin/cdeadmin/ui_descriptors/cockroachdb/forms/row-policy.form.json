@@ -1,0 +1,127 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "cockroachdb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "row-policy"
+  ],
+  "status": "complete",
+  "engine_tab_title": "CockroachDB",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Changing AS or FOR",
+      "reason": "ALTER POLICY ... AS / FOR are syntax errors on 26.1.3 (live); drop and create",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Policy comments",
+      "reason": "COMMENT ON POLICY is refused on 26.1.3 (live)",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "Renaming runs ALTER POLICY ... RENAME TO."
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "reference",
+      "required": true,
+      "reference_kind": "table",
+      "reference_value": "display_path",
+      "editable_after_create": false,
+      "help": "The table also needs Row-level security enabled (table editor, Engine tab)."
+    },
+    {
+      "field_id": "policy_type",
+      "label": "Type",
+      "tab": "General",
+      "control": "select",
+      "default": "PERMISSIVE",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "PERMISSIVE",
+          "label": "Permissive (any may allow)"
+        },
+        {
+          "value": "RESTRICTIVE",
+          "label": "Restrictive (all must allow)"
+        }
+      ]
+    },
+    {
+      "field_id": "command",
+      "label": "Command",
+      "tab": "General",
+      "control": "select",
+      "default": "ALL",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "ALL",
+          "label": "All"
+        },
+        {
+          "value": "SELECT",
+          "label": "Select"
+        },
+        {
+          "value": "INSERT",
+          "label": "Insert"
+        },
+        {
+          "value": "UPDATE",
+          "label": "Update"
+        },
+        {
+          "value": "DELETE",
+          "label": "Delete"
+        }
+      ]
+    },
+    {
+      "field_id": "roles",
+      "label": "Roles",
+      "tab": "General",
+      "control": "grid",
+      "item_kind": "string",
+      "help": "Empty: PUBLIC.",
+      "columns": [
+        {
+          "field_id": "role",
+          "label": "Role",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "role",
+          "reference_value": "display_name"
+        }
+      ]
+    },
+    {
+      "field_id": "using",
+      "label": "USING",
+      "tab": "General",
+      "control": "code",
+      "language": "sql",
+      "help": "Rows a statement may see or change (not for INSERT)."
+    },
+    {
+      "field_id": "with_check",
+      "label": "WITH CHECK",
+      "tab": "General",
+      "control": "code",
+      "language": "sql",
+      "help": "Rows an INSERT or UPDATE may write (not for SELECT or DELETE)."
+    }
+  ],
+  "notes": "Hand-finished from providers/cockroachdb/policies.py. The record reads pg_policies; CockroachDB annotates constants (:::INT8), which the record strips. Round trip verified live on CockroachDB 26.1.3 by tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py (2026-10-30)."
+}

@@ -23,8 +23,8 @@ from ..distributed_sql import (
     sql_administration,
 )
 from . import (
-    databases, indexes as index_sql, objects, routines, sequences, tables,
-    types, views,
+    databases, indexes as index_sql, objects, policies, routines, sequences,
+    tables, types, views,
 )
 from .driver import CockroachDBClient
 from ..distributed_control_plane import DistributedSQLControlPlane
@@ -43,7 +43,7 @@ PROFILE = PilotProfile(
         'cluster', 'node', 'locality', 'database', 'schema', 'table',
         'column', 'index', 'constraint', 'sequence', 'view',
         'materialized-view', 'type', 'function', 'procedure', 'trigger',
-        'partition', 'user', 'role', 'privilege', 'range',
+        'partition', 'user', 'role', 'privilege', 'row-policy', 'range',
         'zone-config', 'job', 'schedule', 'changefeed',
     ),
     ('cockroach-sql', 'node-status', 'debug-zip', 'backup-restore'),
@@ -75,7 +75,7 @@ PROFILE = PilotProfile(
 
 _BASE_ADMINISTRATION = sql_administration('cockroachdb', 'postgresql', (
     'node', 'locality', 'range', 'zone-config', 'job', 'schedule',
-    'changefeed', 'materialized-view', 'type', 'partition',
+    'changefeed', 'materialized-view', 'type', 'partition', 'row-policy',
 ))
 _COCKROACH_SUPPORTED = dict(_BASE_ADMINISTRATION.dialect.supported)
 for _kind in ('function', 'procedure', 'trigger'):
@@ -90,6 +90,10 @@ for _kind in ('function', 'procedure'):
 # In place: rename, visibility and comment (providers/cockroachdb/indexes).
 _COCKROACH_SUPPORTED['index'] = frozenset({
     'inspect', 'create', 'alter', 'drop', 'scatter',
+})
+# Row-level security policies (providers/cockroachdb/policies).
+_COCKROACH_SUPPORTED['row-policy'] = frozenset({
+    'inspect', 'create', 'alter', 'drop',
 })
 # Enums and composites (providers/cockroachdb/types).
 _COCKROACH_SUPPORTED['type'] = frozenset({
@@ -1291,7 +1295,7 @@ def _post_validate_control_plane(client, request):
 # Kinds whose create and alter are CockroachDB's own modules.
 _EDITED_KINDS = frozenset({'table', 'index', 'type', 'view',
                            'materialized-view', 'sequence', 'function',
-                           'procedure', 'database'})
+                           'procedure', 'database', 'row-policy'})
 
 
 class CockroachDBAdministration(DistributedSQLControlPlane):
@@ -1302,13 +1306,21 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
         return operation in objects.OPERATIONS.get(kind, ()) or (
             operation in {'create', 'alter'} and kind in _EDITED_KINDS) or (
             # Dropped by signature: overloads share a name.
-            operation == 'drop' and kind in {'function', 'procedure'})
+            operation == 'drop' and kind in {
+                'function', 'procedure', 'row-policy'})
 
     def _native_compile(self, request):
         kind, operation = request['resource_kind'], request['operation_id']
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if kind == 'row-policy':
+            target = request.get('target_resource')
+            if operation == 'drop':
+                return {'statements': policies.drop(self, target)}
+            if operation == 'create':
+                return {'statements': policies.create(self, draft)}
+            return {'statements': policies.alter(self, draft, target)}
         if kind == 'database':
             if operation == 'create':
                 return {'statements': databases.create(self, draft)}
@@ -1380,6 +1392,8 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
         return super()._compile(request)
 
     def _form(self, kind, operation):
+        if kind == 'row-policy' and operation in {'create', 'alter'}:
+            return policies.form(self._field, operation)
         if kind == 'database' and operation in {'create', 'alter'}:
             return databases.form(self._field, operation)
         if kind in {'function', 'procedure'} and operation in {
@@ -1590,6 +1604,22 @@ def _extras(cursor, request, generation):
                 'partition_value': None if value is None else str(value),
             },
         ))
+    for (schema, table, name, kind, roles, command, using,
+         with_check) in optional_rows(
+        cursor,
+        'SELECT schemaname, tablename, policyname, permissive, roles, cmd, '
+        'qual, with_check FROM pg_catalog.pg_policies ORDER BY 1, 2, 3',
+    ):
+        values.append(resource('row-policy', [schema, table], name,
+                               generation, {
+            'table': [str(schema), str(table)],
+            'policy_type': str(kind).upper(), 'command': str(command),
+            'roles': sorted(str(role) for role in roles or []),
+            # CockroachDB annotates constants (:::INT8) in the rendering.
+            'using': tables._strip_casts(str(using)) if using else None,
+            'with_check': (tables._strip_casts(str(with_check))
+                           if with_check else None),
+        }))
     shown = {str(name): (options, member_of) for name, options, member_of,
              *_ in optional_rows(cursor, 'SHOW ROLES')}
     for name, can_login, valid_until in optional_rows(
@@ -1747,7 +1777,8 @@ def _annotate_catalog(connection, values):
                          'SELECT n.nspname, c.relname, c.reloptions, '
                          # One argument also matches built-in function
                          # descriptions (live, 26.1.3); name the catalog.
-                         "obj_description(c.oid, 'pg_class') "
+                         "obj_description(c.oid, 'pg_class'), "
+                         'c.relrowsecurity, c.relforcerowsecurity '
                          'FROM pg_catalog.pg_class c '
                          'JOIN pg_catalog.pg_namespace n '
                          "ON n.oid = c.relnamespace WHERE c.relkind = 'r'")}
@@ -1965,9 +1996,12 @@ def _annotate_catalog(connection, values):
         if item['resource_kind'] != 'table':
             continue
         key = tuple(item['display_path'])
-        options, comment = relations.get(key, ((), None))
+        facts = tuple(relations.get(key, ()))
+        options, comment, secured, forced = (facts + (None,) * 4)[:4]
         settings = tables.parse_reloptions(options)
         item.setdefault('native', {}).update({
+            'row_level_security': bool(secured),
+            'force_row_level_security': bool(forced),
             'constraints': held.get(key, []),
             'schema_locked': settings.get('schema_locked') == 'true',
             'comment': None if comment is None else str(comment),

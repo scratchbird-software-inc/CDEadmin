@@ -602,3 +602,71 @@ def test_database_create_reopen_alter_drop(live):
                 connection.execute(
                     f'DROP DATABASE IF EXISTS {database} CASCADE')
             connection.execute(f'DROP ROLE IF EXISTS {owner}')
+
+
+def test_row_security_policies(live):
+    route, client = live
+    reader = f'rt_reader_{UNIQUE}'
+    with connect() as connection:
+        connection.execute(f'CREATE ROLE {reader}')
+    try:
+        query('CREATE TABLE public.secured (id INT8 PRIMARY KEY, '
+              'owner STRING, v INT8)')
+        tform = resolved_form('cockroachdb', 'table')
+        target, table = record(client, route, 'table', 'secured', 'table')
+        assert (table['row_level_security'],
+                table['force_row_level_security']) == (False, False)
+        run(client, route, 'table', 'alter', backend_draft(tform, {
+            **table, 'row_level_security': True,
+            'force_row_level_security': True}, mode='alter', baseline=table),
+            target=target)
+        _, table = record(client, route, 'table', 'secured', 'table')
+        assert table['row_level_security'] and \
+            table['force_row_level_security']
+        form = resolved_form('cockroachdb', 'engine_object:row-policy')
+        run(client, route, 'row-policy', 'create', backend_draft(form, {
+            'name': 'rt_own', 'table': ['public', 'secured'],
+            'policy_type': 'PERMISSIVE', 'command': 'ALL',
+            'roles': [{'role': reader}],
+            'using': 'owner = current_user', 'with_check': 'v > 0'}))
+        run(client, route, 'row-policy', 'create', backend_draft(form, {
+            'name': 'rt_cap', 'table': ['public', 'secured'],
+            'policy_type': 'RESTRICTIVE', 'command': 'SELECT',
+            'using': 'v < 100'}))
+        target, baseline = record(client, route, 'row-policy', 'rt_own',
+                                  'engine_object:row-policy')
+        assert (baseline['table'], baseline['policy_type'],
+                baseline['command'],
+                [row['role'] for row in baseline['roles']],
+                baseline['using'], baseline['with_check']) == (
+            ['public', 'secured'], 'PERMISSIVE', 'ALL', [reader],
+            'owner = current_user()', 'v > 0')
+        _, cap = record(client, route, 'row-policy', 'rt_cap',
+                        'engine_object:row-policy')
+        assert ([row['role'] for row in cap['roles']], cap['with_check']) \
+            == (['public'], None)
+        assert backend_draft(form, baseline, mode='alter',
+                             baseline=baseline) == {}
+        # Clearing an expression would store NULL, refusing every row.
+        assert 'cannot remove' in refused('row-policy', 'alter',
+                                          {'with_check': ''}, target)
+        run(client, route, 'row-policy', 'alter', backend_draft(form, {
+            **baseline, 'name': 'rt_own2', 'roles': [],
+            'using': 'v = 1', 'with_check': 'v > 1'},
+            mode='alter', baseline=baseline), target=target)
+        target, after = record(client, route, 'row-policy', 'rt_own2',
+                               'engine_object:row-policy')
+        assert ([row['role'] for row in after['roles']], after['using'],
+                after['with_check']) == (['public'], 'v = 1', 'v > 1')
+        assert 'cannot change in place' in refused(
+            'row-policy', 'alter', {'command': 'SELECT'}, target)
+        for name in ('rt_own2', 'rt_cap'):
+            run(client, route, 'row-policy', 'drop', {'confirmation': name},
+                target=find(client, route, 'row-policy', name)[0])
+        assert not query("SELECT 1 FROM pg_policies WHERE "
+                         "tablename = 'secured'")
+    finally:
+        with connect() as connection:
+            connection.execute(
+                f'DROP TABLE IF EXISTS {DATABASE}.public.secured')
+            connection.execute(f'DROP ROLE IF EXISTS {reader}')

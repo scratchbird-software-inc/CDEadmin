@@ -367,6 +367,16 @@ Checked live on 26.1.3 for those forms (not yet in the probe):
    offset, restricted to ``pg_type`` descriptions.
 -  Policies: ``CREATE``/``ALTER``/``DROP POLICY`` run and ``pg_policy`` and
    ``SHOW POLICIES`` read them back; ``COMMENT ON POLICY`` is refused.
+   Later the same day: ``ALTER POLICY`` takes ``TO``, ``USING``, ``WITH
+   CHECK`` and ``RENAME TO``; ``AS`` and ``FOR`` are syntax errors there.
+   ``USING (NULL)`` and ``WITH CHECK (NULL)`` are stored as the
+   expression ``NULL`` (refusing every row), and nothing removes a clause,
+   so the editor refuses clearing one rather than drop and recreate the
+   policy (which would leave the table unguarded in between).
+   ``pg_policies`` gives role names; ``pg_class.relrowsecurity`` and
+   ``relforcerowsecurity`` reflect ``ENABLE``/``FORCE ROW LEVEL
+   SECURITY``. Policies are the ``row-policy`` kind (as for PostgreSQL),
+   children of their table; the table editor has the two switches.
 -  ``ALTER COLUMN ... TYPE`` is refused while a policy expression references
    the column.
 -  Tables are created with ``schema_locked = true`` by default (seen in
@@ -508,7 +518,9 @@ Key membership and family stay fixed on existing columns.
 The sequence and routine forms are ``complete`` too (``sequences.py``,
 ``routines.py``; the provider admits function and procedure alter).
 The database form is ``complete`` the same day (``databases.py``), which
-leaves no CockroachDB family form in draft.
+leaves no CockroachDB family form in draft. Row security policies followed as a new
+``row-policy`` kind (``policies.py``; ``portfolio_catalog.json`` lists
+it for CockroachDB), with a ``complete`` engine-object form.
 The view (with materialized views; alter is admitted for them, which
 ``portfolio_catalog.json`` had excluded), index and type forms are
 ``complete`` the same day
