@@ -285,6 +285,21 @@ Vitess 23.0.3 (through vtgate, sharded keyspace)
    change shows there after a delay; vtctld ``GetVSchema`` is the source
    for what the VSchema holds. vtgate's ``/debug/vschema`` names an attached
    sequence without its keyspace, so attachments are read from vtctld.
+-  **Defect (provider, fixed 2026-10-30):** vtgate stores a single-quoted
+   ``ALTER VSCHEMA ... WITH`` value with its quotes (``table`` became
+   ``'lookup_keyspace.t'``), so a lookup vindex created through the vindex
+   editor or the table form could not find its lookup table. Unquoted and
+   backtick-quoted values are stored bare; the provider now backtick-quotes.
+   Live test: a lookup vindex made in the editor, owned by a sharded table,
+   is filled on insert and routes a query by its column to one shard.
+-  ``ALTER VSCHEMA ON t ADD AUTO_INCREMENT col USING ks.seq`` succeeds for a
+   sequence that does not exist. Dropping a table's last vindex removes the
+   table from the VSchema (with anything else on its entry, such as an
+   attached sequence).
+-  ``ApplyVSchema`` accepted a reference table whose source is not in the
+   source keyspace's VSchema; vtgate then reports the whole keyspace's
+   VSchema in error (``/debug/vschema``) while still answering queries.
+   ``--dry-run`` accepts it too.
 -  Routing rules (probed 2026-10-30): ``ApplyRoutingRules`` accepts a rule
    with two target tables, but vtgate then refuses to route that table
    ("has more than one target"; visible in ``/debug/vschema``). The

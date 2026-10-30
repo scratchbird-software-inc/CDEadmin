@@ -537,7 +537,10 @@ class VitessAdministration(RelationalAdministration):
             elif isinstance(value, int) and not isinstance(value, bool):
                 literal = str(value)
             elif isinstance(value, str) and '\x00' not in value:
-                literal = "'" + value.replace("'", "''") + "'"
+                # vtgate stores a single-quoted value with its quotes
+                # ('lookup.t' stays quoted and the lookup breaks); a
+                # backtick-quoted one is stored bare (live, 23.0.3).
+                literal = '`' + value.replace('`', '``') + '`'
             else:
                 raise RelationalClientError(
                     'vindex parameter values must be text, integer, or boolean'

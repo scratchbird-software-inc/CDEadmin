@@ -3609,7 +3609,7 @@ class DistributedProviderTests(unittest.TestCase):
             'ALTER VSCHEMA CREATE VINDEX `lookup_by_name` '
             'USING `lookup_hash`', source['source']
         )
-        self.assertIn("`table`='lookup.names'", source['source'])
+        self.assertIn('`table`=`lookup.names`', source['source'])
         self.assertIn('`autocommit`=true', source['source'])
 
         sequence = VITESS_ADMIN.plan({

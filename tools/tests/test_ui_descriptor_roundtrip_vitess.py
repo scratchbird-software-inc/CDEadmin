@@ -611,3 +611,61 @@ def test_online_ddl_submit_launch_complete(live):
     finally:
         query(f'ALTER VSCHEMA DROP TABLE `{KEYSPACE}`.`{table}`')
         query(f'DROP TABLE IF EXISTS `{table}`')
+
+
+def test_lookup_vindex_parameters_route_queries(live):
+    # vtgate stored single-quoted WITH values with their quotes, so a lookup
+    # vindex made through the editor could not find its table. Proves the
+    # stored parameters work, not just how they read back.
+    route, client = live
+    table, lookup = f'rt_lu_{UNIQUE}', f'rt_lu_idx_{UNIQUE}'
+    vindex = f'rt_lu_vx_{UNIQUE}'
+    query(f'CREATE TABLE `{lookup}` (email VARCHAR(64) NOT NULL PRIMARY KEY, '
+          'keyspace_id VARBINARY(16))', keyspace='lookup_keyspace')
+    query(f'CREATE TABLE `{table}` (id BIGINT NOT NULL PRIMARY KEY, '
+          'email VARCHAR(64))')
+    try:
+        query(f'ALTER VSCHEMA ON `{KEYSPACE}`.`{table}` ADD VINDEX xxhash (id)')
+        run(client, route, 'vindex', 'create', backend_draft(
+            resolved_form('vitess', 'engine_object:vindex'),
+            {'name': vindex, 'vindex_type': 'lookup_unique', 'parameters': {
+                'table': f'lookup_keyspace.{lookup}', 'from': 'email',
+                'to': 'keyspace_id', 'autocommit': True, 'owner': table}}))
+        target, baseline = record(client, route, 'vindex', vindex,
+                                  'engine_object:vindex')
+        assert "'" not in target['native']['parameters']
+        query(f'ALTER VSCHEMA ON `{KEYSPACE}`.`{table}` '
+              f'ADD VINDEX `{vindex}` (email)')
+        time.sleep(2)
+        query(f"INSERT INTO `{table}` (id, email) VALUES (1, 'a@x'), "
+              "(2, 'b@x'), (3, 'c@x')")
+        # The table owns the vindex, so vtgate filled the lookup table.
+        assert len(query(f'SELECT email FROM `{lookup}`',
+                         keyspace='lookup_keyspace')) == 3
+        assert query(f"SELECT id FROM `{table}` WHERE email = 'b@x'") == [
+            (2,)]
+        # Routed through the lookup vindex to one shard, not scattered.
+        [[plan]] = query(f"VEXPLAIN PLAN SELECT id FROM `{table}` "
+                         "WHERE email = 'b@x'")
+        plan = json.loads(plan)
+
+        def operators(node):
+            yield node
+            for child in node.get('Inputs', []):
+                yield from operators(child)
+
+        steps = list(operators(plan))
+        assert any(step.get('Vindex') == vindex for step in steps), plan
+        assert not any(step.get('Variant') == 'Scatter' for step in steps), \
+            plan
+    finally:
+        for statement, keyspace in (
+                (f'ALTER VSCHEMA DROP TABLE `{KEYSPACE}`.`{table}`', KEYSPACE),
+                (f'DROP TABLE IF EXISTS `{table}`', KEYSPACE),
+                (f'ALTER VSCHEMA DROP VINDEX `{KEYSPACE}`.`{vindex}`',
+                 KEYSPACE),
+                (f'DROP TABLE IF EXISTS `{lookup}`', 'lookup_keyspace')):
+            try:
+                query(statement, keyspace=keyspace)
+            except mysql_connector.Error:
+                pass
