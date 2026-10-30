@@ -45,6 +45,21 @@ describe('provider endpoint verification', () => {
       expect(onSuccess).toHaveBeenCalledTimes(1);
     });
 
+  it('does not prompt for an explicit passwordless account', async () => {
+    // Owner direction 2026-10-29: passwordless accounts are supported even on
+    // providers whose accounts normally need a password.
+    const onSuccess = jest.fn();
+    showEndpointVerification(
+      'Verify Endpoint', node,
+      {cde_profile_id: 'qualified-native', label: 'Secured engine',
+        cde_passwordless: true},
+      {}, {}, onSuccess, jest.fn()
+    );
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect(pgAdmin.Browser.notifier.showModal).not.toHaveBeenCalled();
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
   it('prompts before verification when the provider requires a secret',
     () => {
       showEndpointVerification(

@@ -257,7 +257,24 @@ def _runtime_node_fields(server):
         'verified_runtime_version': getattr(
             runtime, 'verified_runtime_version', None),
         'version_support': _version_support(server),
+        'cde_passwordless': _passwordless(server),
     }
+
+
+def _passwordless(server):
+    """Whether the endpoint's primary route is an explicit passwordless
+    account, so the connect flow verifies without prompting for one."""
+    routes = getattr(getattr(server, 'endpoint_profile', None), 'routes',
+                     None) or []
+    route = min(routes, key=lambda item: (item.priority, item.id),
+                default=None)
+    if route is None:
+        return False
+    try:
+        return json.loads(route.configuration or '{}').get(
+            'passwordless') is True
+    except (TypeError, ValueError):
+        return False
 
 
 def _unsupported_operations(visual_admin, resource_kind):

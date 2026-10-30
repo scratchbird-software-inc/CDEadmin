@@ -163,6 +163,15 @@ MYSQL_AUTH = 'MySQL-wire authentication'
 MYSQL_SESSION = 'MySQL-wire session'
 MYSQL_POOL = 'MySQL-wire pool'
 
+# Owner direction 2026-10-29: support passwordless accounts. Explicit, so an
+# unsupplied password is never silently treated as an empty one: with the
+# switch on, no password field is active and none is requested or bound.
+PASSWORDLESS_HELP = (
+    'The account has no password. The connection authenticates without one '
+    'and no password is requested or stored.'
+)
+_WITH_PASSWORD = {'field_id': 'passwordless', 'equals': False}
+
 MYSQL_WIRE_FIELDS = (
     _field('unix_socket', 'Unix socket', 'file', MYSQL),
     _field('connection_timeout', 'Connect timeout (seconds)', 'number',
@@ -175,6 +184,8 @@ MYSQL_WIRE_FIELDS = (
     _field('dns_srv', 'Use DNS SRV discovery', 'boolean', MYSQL,
            default=False, conflicts_with=['failover']),
     _field('force_ipv6', 'Force IPv6', 'boolean', MYSQL, default=False),
+    _field('passwordless', 'Passwordless account', 'boolean', MYSQL_AUTH,
+           default=False, help=PASSWORDLESS_HELP),
     _select('auth_plugin', 'Authentication plugin', (
         ('auto', 'Server-selected'),
         ('mysql_native_password', 'mysql_native_password'),
@@ -238,6 +249,8 @@ MARIADB_TLS = 'MariaDB TLS'
 MARIADB_POOL = 'MariaDB pool'
 MARIADB_FIELDS = (
     _field('unix_socket', 'Unix socket', 'file', MARIADB),
+    _field('passwordless', 'Passwordless account', 'boolean', MARIADB,
+           default=False, help=PASSWORDLESS_HELP),
     _field('connection_timeout', 'Connect timeout (seconds)', 'number',
            MARIADB, default=10, minimum=1, maximum=600),
     _field('read_timeout', 'Read timeout (seconds)', 'number', MARIADB,
@@ -294,16 +307,19 @@ POSTGRESQL_WIRE_SECRETS = (
 MYSQL_WIRE_SECRETS = (
     {'field_id': 'password', 'secret_kind': 'database_password',
      'label': 'Password / first factor', 'group': MYSQL_AUTH,
-     'primary': True},
+     'primary': True, 'visible_when': _WITH_PASSWORD},
     {'field_id': 'password_2', 'secret_kind': 'database_password_2',
-     'label': 'Second authentication factor', 'group': MYSQL_AUTH},
+     'label': 'Second authentication factor', 'group': MYSQL_AUTH,
+     'visible_when': _WITH_PASSWORD},
     {'field_id': 'password_3', 'secret_kind': 'database_password_3',
-     'label': 'Third authentication factor', 'group': MYSQL_AUTH},
+     'label': 'Third authentication factor', 'group': MYSQL_AUTH,
+     'visible_when': _WITH_PASSWORD},
 )
 
 MARIADB_SECRETS = (
     {'field_id': 'password', 'secret_kind': 'database_password',
-     'label': 'Password', 'group': MARIADB, 'primary': True},
+     'label': 'Password', 'group': MARIADB, 'primary': True,
+     'visible_when': _WITH_PASSWORD},
 )
 
 CQL = 'CQL native protocol'

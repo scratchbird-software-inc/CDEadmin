@@ -1302,6 +1302,35 @@ class EndpointVerificationTests(unittest.TestCase):
                                  list(result['credential_references']))
                 self.assertEqual('database_password', primary.secret_kind)
 
+    def test_passwordless_account_binds_no_credential(self):
+        # Owner direction 2026-10-29: passwordless accounts are supported.
+        for profile_id in ('mysql-native', 'mariadb-native', 'dolt-native',
+                           'tidb-native', 'vitess-native'):
+            with self.subTest(profile_id=profile_id):
+                endpoint, service = self._mysql_wire_endpoint({
+                    'host': '127.0.0.1', 'port': 3306, 'username': 'root',
+                    'passwordless': True,
+                })
+                result, primary = service._route_and_reference(
+                    SimpleNamespace(user_id=7), endpoint,
+                    registration_profile(profile_id),
+                )
+                self.assertIsNone(primary)
+                # TiDB's separate TiCDC credential field stays active, so
+                # its route may carry an empty map; nothing may be bound.
+                self.assertFalse(result.get('credential_references'))
+                self.assertNotIn('credential_reference_id', result)
+
+    def test_passwordless_account_has_no_active_password_field(self):
+        profile = registration_profile('dolt-native')
+        route = {'passwordless': True}
+        self.assertEqual([], active_secret_fields(profile, route))
+        self.assertEqual(
+            ['database_password', 'database_password_2',
+             'database_password_3'],
+            [field['secret_kind'] for field in active_secret_fields(
+                profile, {'passwordless': False})])
+
     def test_supplied_optional_factor_stays_required(self):
         endpoint, service = self._mysql_wire_endpoint({
             'host': '127.0.0.1', 'port': 3306, 'username': 'root',

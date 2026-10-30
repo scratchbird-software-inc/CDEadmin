@@ -30,7 +30,7 @@ Read the results with these limits:
    MySQL.
 -  Results are for the pinned demo versions and their demo configuration
    (Dolt 1.86.6, TiDB 8.5.6, Vitess 23.0.3, MySQL 9.7.0, MariaDB 12.2.2),
-   probed 2026-10-30. Server settings can change a result (see TiDB below).
+   probed 2026-10-29. Server settings can change a result (see TiDB below).
 -  The Vitess probe ran in the sharded ``test_keyspace``. Unsharded
    keyspaces allow more (see Vitess below).
 
@@ -212,5 +212,9 @@ Plan
 #. Fix the MySQL-wire registration defect from the 2026-10-29 smoke test:
    registration stores ``database_password_2`` / ``_3`` secret slots for these
    engines, and endpoint verify then fails.
+   Fixed 2026-10-29: unsupplied optional credentials are no longer required.
+   The same day, by owner direction, MySQL-wire and MariaDB connections gained
+   an explicit **Passwordless account** switch. The Dolt, TiDB and Vitess demo
+   accounts, which have no password, are registered with it.
 #. Later and separately: replace the exact-profile pins with coarse version
    ranges, per the owner's rule of tracking only compatibility breaks.

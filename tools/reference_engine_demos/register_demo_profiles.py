@@ -101,6 +101,11 @@ def route_for(item, host, registration, provider_route_options):
         item.setdefault('ssl_disabled', False)
         item.setdefault('ssl_verify_cert', False)
         item.setdefault('ssl_verify_identity', False)
+    if engine in {'mysql', 'mariadb', 'dolt', 'tidb', 'vitess'} and (
+            not item.get('password')):
+        # The demo account has no password: register it as passwordless
+        # rather than leaving a password the user cannot supply.
+        item.setdefault('passwordless', True)
     if engine in {'dolt', 'tidb', 'vitess'}:
         item.setdefault('ssl_disabled', True)
         item.setdefault('ssl_verify_cert', False)

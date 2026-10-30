@@ -138,7 +138,9 @@ export function showEndpointVerification(
     ), {id: 'id-verify-endpoint'}
   );
   const verify = () => {
-    if (profile?.requires_secret === false) {
+    // An explicit passwordless account (owner direction 2026-10-29) is
+    // verified the same way: without a password, prompting only on 401.
+    if (profile?.requires_secret === false || nodeData.cde_passwordless) {
     // Passwordless and conditionally-authenticated providers must first be
     // verified without fabricating a database password. If the retained
     // route activates an optional secret, the server responds with 401 and
