@@ -280,6 +280,18 @@ Provider findings (2026-10-30)
    constraints as JSON. ``type`` is inspect-only although enum and
    composite types run, and there is no policy kind although row-level
    security runs.
+-  Fixed the same day: ``pg_extension`` is flagged as a system schema;
+   hidden columns are marked (``hidden``) with CockroachDB's own type
+   expression (``native_type``) and key membership (``column_key``);
+   columns carry position, default, generation and identity (in the shared
+   reader, with the narrow query as fallback); constraints come from
+   ``pg_constraint`` with ordered columns, references, rules and check
+   clauses, which leaves out the ``<ids>_not_null`` pseudo-checks
+   ``information_schema`` lists; the constraints on hidden columns
+   (``rowid``'s primary key, a shard column's check) are dropped and their
+   index marked hidden; indexes carry columns, directions, ``STORING``,
+   uniqueness, method (``inverted`` for gin), hash sharding with its bucket
+   count, partial predicate and visibility.
 
 Plan
 ----

@@ -475,6 +475,71 @@ def mysql_route(route):
     return result
 
 
+# pg_extension is CockroachDB's schema for spatial_ref_sys and the geometry
+# catalogs, which the engine maintains.
+POSTGRESQL_SYSTEM_SCHEMAS = frozenset({
+    'pg_catalog', 'information_schema', 'crdb_internal', 'pg_extension'})
+
+
+_FOREIGN_KEY_RULES = {'a': 'NO ACTION', 'r': 'RESTRICT', 'c': 'CASCADE',
+                      'n': 'SET NULL', 'd': 'SET DEFAULT'}
+
+
+def postgresql_constraint_details(cursor):
+    """{(schema, table, name): details} from pg_constraint.
+
+    Key columns in order, a foreign key's referenced table, columns and
+    rules, and a check clause, so an editor can re-open a table's
+    constraints. pg_constraint ties each constraint to its table, where
+    information_schema names a check or foreign key by schema only and
+    PostgreSQL constraint names are unique per table. Optional: a missing
+    catalog leaves only the constraint type.
+    """
+    names = {}
+    for relation, number, name in optional_rows(
+            cursor,
+            'SELECT attrelid, attnum, attname FROM pg_catalog.pg_attribute '
+            'WHERE attnum > 0'):
+        names[(int(relation), int(number))] = str(name)
+    found = {}
+    for schema, table, name, kind, keys, relation, ref_schema, ref_table, \
+            ref_keys, ref_relation, update_rule, delete_rule, definition in \
+            optional_rows(
+                cursor,
+                'SELECT n.nspname, cl.relname, co.conname, co.contype, '
+                'co.conkey, co.conrelid, fn.nspname, fcl.relname, '
+                'co.confkey, co.confrelid, co.confupdtype, co.confdeltype, '
+                'pg_catalog.pg_get_constraintdef(co.oid) '
+                'FROM pg_catalog.pg_constraint co '
+                'JOIN pg_catalog.pg_class cl ON cl.oid = co.conrelid '
+                'JOIN pg_catalog.pg_namespace n ON n.oid = cl.relnamespace '
+                'LEFT JOIN pg_catalog.pg_class fcl ON fcl.oid = co.confrelid '
+                'LEFT JOIN pg_catalog.pg_namespace fn '
+                'ON fn.oid = fcl.relnamespace '
+                "WHERE co.contype IN ('p', 'u', 'f', 'c')"):
+        entry = {'columns': [names.get((int(relation), int(key)), str(key))
+                             for key in (keys or [])]}
+        if str(kind) == 'f' and ref_table is not None:
+            entry.update(
+                referenced_schema=str(ref_schema),
+                referenced_table=str(ref_table),
+                referenced_columns=[
+                    names.get((int(ref_relation), int(key)), str(key))
+                    for key in (ref_keys or [])],
+                update_rule=_FOREIGN_KEY_RULES.get(str(update_rule),
+                                                   str(update_rule)),
+                delete_rule=_FOREIGN_KEY_RULES.get(str(delete_rule),
+                                                   str(delete_rule)))
+        if str(kind) == 'c':
+            # information_schema's form: the expression in parentheses.
+            match = re.match(r'^CHECK\s*(\(.*\))\s*(NOT VALID)?$',
+                             str(definition or ''), re.S)
+            entry['check_clause'] = match.group(1) if match else str(
+                definition)
+        found[(str(schema), str(table), str(name))] = entry
+    return found
+
+
 def postgresql_catalog(connection, request, engine_name, extras=None):
     """Read portable SQL catalogs plus provider-selected topology extras."""
     generation = str(request.get('capability_generation') or 'current')
@@ -536,18 +601,42 @@ def postgresql_catalog(connection, request, engine_name, extras=None):
                 {'table_type': str(table_type)},
             )
             values[item['resource_id']] = item
+        # Definition order, defaults, generation and identity let an editor
+        # re-open an existing table; the narrower query remains the fallback.
         columns = optional_rows(
+            cursor,
+            'SELECT table_schema, table_name, column_name, data_type, '
+            'is_nullable, ordinal_position, column_default, is_generated, '
+            'generation_expression, is_identity '
+            'FROM information_schema.columns WHERE table_schema NOT IN '
+            "('pg_catalog', 'information_schema', 'crdb_internal') "
+            'ORDER BY 1, 2, ordinal_position',
+        ) or [(*row, None, None, None, None, None) for row in optional_rows(
             cursor,
             'SELECT table_schema, table_name, column_name, data_type, '
             'is_nullable FROM information_schema.columns '
             'WHERE table_schema NOT IN '
             "('pg_catalog', 'information_schema', 'crdb_internal') "
             'ORDER BY 1, 2, 3',
-        )
-        for schema, table, name, data_type, nullable in columns:
-            item = resource('column', [schema, table], name, generation, {
-                'data_type': str(data_type), 'is_nullable': str(nullable),
-            })
+        )]
+        for schema, table, name, data_type, nullable, position, default, \
+                generated, expression, identity in columns:
+            native = {'data_type': str(data_type),
+                      'is_nullable': str(nullable)}
+            if position is not None:
+                native.update({
+                    'ordinal_position': int(position),
+                    'column_default': (
+                        None if default is None else str(default)),
+                    'default_expression': (
+                        None if default is None else str(default)),
+                    'is_generated': str(generated or 'NEVER'),
+                    'generation_expression': (
+                        None if not expression else str(expression)),
+                    'is_identity': str(identity or 'NO') == 'YES',
+                })
+            item = resource('column', [schema, table], name, generation,
+                            native)
             values[item['resource_id']] = item
         indexes = optional_rows(
             cursor,
@@ -566,8 +655,7 @@ def postgresql_catalog(connection, request, engine_name, extras=None):
                 values[item['resource_id']] = item
         for item in values.values():
             path = item.get('display_path', [])
-            if path and path[0] in {
-                    'pg_catalog', 'information_schema', 'crdb_internal'}:
+            if path and path[0] in POSTGRESQL_SYSTEM_SCHEMAS:
                 item.setdefault('native', {})['system_object'] = True
         return annotate_relation_ownership(list(values.values()))
     finally:

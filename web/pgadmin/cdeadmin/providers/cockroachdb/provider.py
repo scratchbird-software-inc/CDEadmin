@@ -18,6 +18,7 @@ from ..distributed_sql import (
     create_sql_client,
     optional_rows,
     postgresql_catalog,
+    postgresql_constraint_details,
     resource,
     sql_administration,
 )
@@ -1326,20 +1327,31 @@ def _version(row):
     return match.group(1)
 
 
+_CONSTRAINT_TYPES = {'p': 'PRIMARY KEY', 'u': 'UNIQUE', 'f': 'FOREIGN KEY',
+                     'c': 'CHECK'}
+
+
 def _extras(cursor, request, generation):
     values = []
-    for schema, table, name, constraint_type in optional_rows(
-        cursor,
-        'SELECT constraint_schema, table_name, constraint_name, '
-        'constraint_type FROM information_schema.table_constraints '
-        'WHERE constraint_schema NOT IN '
-        "('pg_catalog', 'information_schema', 'crdb_internal') "
-        'ORDER BY 1, 2, 3',
-    ):
+    # From pg_constraint: information_schema.table_constraints also lists
+    # each NOT NULL column as a CHECK named <ids>_not_null, which is the
+    # column's nullability, not a constraint an editor should re-create.
+    details = postgresql_constraint_details(cursor)
+    types = {(str(schema), str(table), str(name)): str(kind)
+             for schema, table, name, kind in optional_rows(
+                 cursor,
+                 'SELECT n.nspname, cl.relname, co.conname, co.contype '
+                 'FROM pg_catalog.pg_constraint co '
+                 'JOIN pg_catalog.pg_class cl ON cl.oid = co.conrelid '
+                 'JOIN pg_catalog.pg_namespace n '
+                 "ON n.oid = cl.relnamespace WHERE co.contype IN "
+                 "('p', 'u', 'f', 'c') ORDER BY 1, 2, 3")}
+    for (schema, table, name), kind in types.items():
         values.append(resource(
-            'constraint', [schema, table], name, generation,
-            {'constraint_type': str(constraint_type)},
-        ))
+            'constraint', [schema, table], name, generation, {
+                'constraint_type': _CONSTRAINT_TYPES[kind],
+                **details.get((schema, table, name), {}),
+            }))
     for schema, name in optional_rows(
         cursor,
         'SELECT sequence_schema, sequence_name '
@@ -1523,6 +1535,116 @@ def _extras(cursor, request, generation):
     return values
 
 
+def _annotate_catalog(connection, values):
+    """CockroachDB facts the portable catalog cannot carry.
+
+    Hidden columns (``rowid`` of a table without a primary key, a
+    hash-sharded index's ``crdb_internal_..._shard_N``) are marked and the
+    constraints on them dropped, so an editor neither re-creates nor drops
+    what the engine maintains. Columns carry CockroachDB's own type
+    expression and their key membership; indexes their structure.
+    """
+    cursor = connection.cursor()
+    try:
+        columns = {(str(row[0]), str(row[1]), str(row[2])): row[3:]
+                   for row in optional_rows(
+                       cursor,
+                       'SELECT table_schema, table_name, column_name, '
+                       'is_hidden, crdb_sql_type '
+                       'FROM information_schema.columns')}
+        statistics = optional_rows(
+            cursor,
+            'SELECT table_schema, table_name, index_name, column_name, '
+            'direction, storing, implicit, non_unique, visibility '
+            'FROM information_schema.statistics '
+            'ORDER BY 1, 2, 3, seq_in_index')
+    finally:
+        cursor.close()
+    by_id = {item['resource_id']: item for item in values}
+    hidden = set()
+    for item in values:
+        if item['resource_kind'] != 'column':
+            continue
+        key = tuple(item['display_path'])
+        facts = columns.get(key)
+        native = item.setdefault('native', {})
+        native['hidden'] = bool(facts) and str(facts[0]) == 'YES'
+        if facts and facts[1]:
+            native['native_type'] = str(facts[1])
+        if native['hidden']:
+            hidden.add(key)
+    keys, primaries = {}, set()
+    for item in values:
+        native = item.get('native') or {}
+        if item['resource_kind'] != 'constraint':
+            continue
+        schema, table = item['display_path'][:2]
+        own = native.get('columns') or []
+        kind = native.get('constraint_type')
+        if kind == 'PRIMARY KEY':
+            primaries.add((schema, table, item['display_name']))
+        if own and all((schema, table, column) in hidden for column in own):
+            # The engine's own: rowid's primary key, a shard column's check.
+            item['_drop'] = True
+            continue
+        if kind == 'PRIMARY KEY':
+            for column in own:
+                keys[(schema, table, column)] = 'PRI'
+        elif kind == 'UNIQUE' and len(own) == 1:
+            keys.setdefault((schema, table, own[0]), 'UNI')
+    for item in values:
+        if item['resource_kind'] == 'column':
+            item['native']['column_key'] = keys.get(
+                tuple(item['display_path']), '')
+    indexes = {}
+    for schema, table, name, column, direction, storing, implicit, \
+            non_unique, visibility in statistics:
+        entry = indexes.setdefault((str(schema), str(table), str(name)), {
+            'columns': [], 'directions': [], 'storing': [],
+            'unique': str(non_unique) == 'NO',
+            'visibility': float(visibility if visibility is not None
+                                else 1.0)})
+        if str(implicit) == 'YES':
+            continue
+        if str(storing) == 'YES':
+            entry['storing'].append(str(column))
+        else:
+            entry['columns'].append(str(column))
+            entry['directions'].append(str(direction))
+    for (schema, table, name), entry in indexes.items():
+        item = by_id.get(f'index:{schema}:{table}:{name}')
+        if item is None:
+            continue
+        native = item.setdefault('native', {})
+        definition = str(native.get('definition') or '')
+        method = re.search(r'\bUSING (\w+) \(', definition)
+        bucket = re.search(r'USING HASH WITH \(bucket_count=(\d+)\)',
+                           definition)
+        predicate = re.search(r'\) WHERE \((.*)\)$', definition)
+        native.update(
+            columns=entry['columns'], directions=entry['directions'],
+            # The primary index stores every column; that is not a choice.
+            storing=[] if (schema, table, name) in primaries else
+            entry['storing'],
+            unique=entry['unique'],
+            method='inverted' if method and method.group(1) == 'gin' else (
+                method.group(1) if method else 'btree'),
+            hash_sharded=bucket is not None,
+            bucket_count=int(bucket.group(1)) if bucket else None,
+            predicate=predicate.group(1) if predicate else None,
+            visibility=entry['visibility'],
+            # rowid's primary index: the engine's, on a hidden column.
+            hidden=bool(entry['columns']) and all(
+                (schema, table, column) in hidden
+                for column in entry['columns']))
+    return [item for item in values if not item.pop('_drop', False)]
+
+
+def _catalog(connection, request):
+    return _annotate_catalog(connection, postgresql_catalog(
+        connection, request, 'CockroachDB', _extras))
+
+
 class CockroachDBProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
@@ -1541,9 +1663,7 @@ def create_provider(context, permissions, client=None):
             wire='postgresql',
             version_query='SELECT version()',
             version_parser=_version,
-            metadata_reader=lambda connection, request: postgresql_catalog(
-                connection, request, 'CockroachDB', _extras
-            ),
+            metadata_reader=_catalog,
             administration=ADMINISTRATION,
             client_class=CockroachDBClient,
             client_options={'pool_namespace': context.pool_namespace},
