@@ -127,6 +127,25 @@ describe('bundles and menus', () => {
     expect(editorAvailable(bundle, 'gizmo')).toBe(false);
     expect(bundle.kinds.widget.tier1).toEqual(['create', 'alter', 'drop', 'grant']);
   });
+  it('gives each engine-object kind its own form (decision 15, 2026-10-29)', () => {
+    const engineObject = {schema: 'cdeadmin.ui-family.v1', family: 'engine_object', title: 'Engine object',
+      tabs: [{tab: 'General', primitive: 'group', required: true}, {tab: 'SQL', primitive: 'sql_preview', required: true}]};
+    const objectForm = (kind) => ({schema: 'cdeadmin.ui-form.v1', engine: 'acme', family: 'engine_object',
+      resource_kinds: [kind], status: 'draft', fields: [{field_id: `${kind}_name`, label: 'Name', tab: 'General', control: 'text'}]});
+    const objects = resolveBundle({
+      engine: 'acme', families: {widget: family, engine_object: engineObject},
+      capabilities: {engine: 'acme', kinds: [
+        {resource_kind: 'gizmo', family: 'engine_object', operations: [{operation_id: 'create', tier: 1}]},
+        {resource_kind: 'gadget', family: 'engine_object', operations: [{operation_id: 'create', tier: 1}]},
+        {resource_kind: 'doohickey', family: 'engine_object', operations: []},
+      ]},
+      forms: {a: objectForm('gizmo'), b: objectForm('gadget')},
+    });
+    expect(formForKind(objects, 'gizmo').fields[0].field_id).toBe('gizmo_name');
+    expect(formForKind(objects, 'gadget').fields[0].field_id).toBe('gadget_name');
+    expect(formForKind(objects, 'doohickey')).toBeNull();
+    expect(editorAvailable(objects, 'gizmo')).toBe(true);
+  });
   it('builds the categorised menu in the fixed order with children, lifecycle and tiers', () => {
     const menu = menuForKind(bundle, 'widget', {childKinds: ['gizmo']});
     expect(menu.map((group) => group.category)).toEqual(['create', 'open', 'lifecycle', 'backup_restore', 'security', 'diagnostics', 'refresh']);
@@ -152,9 +171,11 @@ describe('real engine descriptors', () => {
       expect(menu.at(-1).category).toBe('refresh');
     }
   });
-  it('the family skeleton list matches the ten families', () => {
+  it('the family skeleton list matches the ten families plus the engine object', () => {
+    // engine_object added by owner direction 2026-10-29 (ui_unified_design.rst decision 15).
     expect(Object.keys(loadFamilies()).sort()).toEqual(
-      ['database', 'index', 'role', 'routine', 'sequence', 'server', 'table', 'trigger', 'type', 'view']);
+      ['database', 'engine_object', 'index', 'role', 'routine', 'sequence', 'server', 'table', 'trigger',
+        'type', 'view']);
   });
 });
 

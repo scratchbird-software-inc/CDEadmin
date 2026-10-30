@@ -57,6 +57,27 @@ def version_gate_state(gate, observed_version):
     return True, None
 
 
+def engine_object_key(resource_kind: str) -> str:
+    """Bundle key of the Engine-object form that edits one resource kind.
+
+    Owner direction 2026-10-29 (ui_unified_design.rst decision 15): kinds
+    that fit no family get their own form, so several can coexist.
+    """
+    return f'engine_object:{resource_kind}'
+
+
+def form_key(form: dict) -> str:
+    """Bundle key for a form: its family, or engine_object:<kind>."""
+    if form.get('family') == 'engine_object':
+        kinds = form.get('resource_kinds') or []
+        if len(kinds) != 1:
+            raise UIDescriptorError(
+                f"{form.get('engine')}: an engine-object form edits "
+                'exactly one resource kind')
+        return engine_object_key(kinds[0])
+    return form['family']
+
+
 class UIDescriptorService:
     """Loads and resolves the descriptor folder; safe to share per app."""
 
@@ -106,7 +127,7 @@ class UIDescriptorService:
             }
             for path in sorted((folder / 'forms').glob('*.form.json')):
                 form = _load_json(path)
-                bundle['forms'][form['family']] = self._resolve_form(form)
+                bundle['forms'][form_key(form)] = self._resolve_form(form)
             bundle['kinds'] = self._kind_index(bundle)
             self._engines[engine_id] = bundle
             return bundle
@@ -166,7 +187,9 @@ class UIDescriptorService:
             ops_by_kind.setdefault(op['resource_kind'], []).append(op)
         for kind in bundle['capabilities'].get('kinds', []):
             family = kind['family']
-            form = bundle['forms'].get(family) if family != 'engine_object' else None
+            form = bundle['forms'].get(
+                engine_object_key(kind['resource_kind'])
+                if family == 'engine_object' else family)
             kinds[kind['resource_kind']] = {
                 'resource_kind': kind['resource_kind'],
                 'family': family,

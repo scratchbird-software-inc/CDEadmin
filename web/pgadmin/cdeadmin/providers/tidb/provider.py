@@ -168,6 +168,14 @@ _RESOURCE_GROUP_FIELDS = (
              'text', False, max_length=32, pattern=r'([0-9]+(ms|s|m|h))+'),
 )
 
+# ALTER RESOURCE GROUP merges, so nothing is required or defaulted on alter;
+# a default would silently reset a setting the user did not touch.
+_RESOURCE_GROUP_ALTER_FIELDS = tuple(
+    {**{key: value for key, value in field.items() if key != 'default'},
+     'required': False}
+    for field in _RESOURCE_GROUP_FIELDS
+)
+
 _BR_STORAGE_FIELD = (
     cp_field('storage_uri', 'Approved BR storage URI', 'text', True,
              max_length=8192, sensitive=True),
@@ -330,7 +338,8 @@ CONTROL_OPERATIONS = (
     ),
     ControlPlaneOperation(
         'resource-group', 'alter', 'Alter resource group', 'admin',
-        'topology_admin', _RESOURCE_GROUP_FIELDS, impact_scope='cluster'
+        'topology_admin', _RESOURCE_GROUP_ALTER_FIELDS,
+        impact_scope='cluster'
     ),
     ControlPlaneOperation(
         'resource-group', 'drop', 'Drop resource group', 'destructive',
@@ -487,7 +496,9 @@ def _placement_assignments(draft):
     return ' '.join(parts), tuple(parameters)
 
 
-def _resource_group_assignments(draft):
+def _resource_group_assignments(draft, operation='create'):
+    if operation == 'alter':
+        return _resource_group_changes(draft)
     ru_mode = draft.get('ru_mode', 'limited')
     if ru_mode not in {'limited', 'unlimited'}:
         raise RelationalClientError('TiDB request-unit mode is invalid')
@@ -508,10 +519,52 @@ def _resource_group_assignments(draft):
     parts.append('BURSTABLE = ' + (
         'TRUE' if draft.get('burstable') else 'FALSE'
     ))
+    limit, limit_parameters = _resource_group_assignments_query_limit(draft)
+    parts.extend(limit)
+    parameters.extend(limit_parameters)
+    return ', '.join(parts), tuple(parameters)
+
+
+def _resource_group_changes(draft):
+    """ALTER RESOURCE GROUP clauses for the supplied fields only.
+
+    TiDB merges an ALTER RESOURCE GROUP (verified live: an unrelated
+    QUERY_LIMIT survived), so unsupplied settings are left as they are
+    instead of being reset to create-time defaults.
+    """
+    present = {key for key, value in draft.items() if value not in (None, '')}
+    parts, parameters = [], []
+    if 'ru_mode' in present or 'ru_per_sec' in present:
+        mode = draft.get('ru_mode') or 'limited'
+        if mode == 'unlimited':
+            parts.append('RU_PER_SEC = UNLIMITED')
+        elif mode == 'limited' and 'ru_per_sec' in present:
+            parts.append('RU_PER_SEC = %s')
+            parameters.append(draft['ru_per_sec'])
+        elif mode == 'limited':
+            raise RelationalClientError('TiDB request-unit limit is required')
+        else:
+            raise RelationalClientError('TiDB request-unit mode is invalid')
+    if 'priority' in present:
+        if draft['priority'] not in {'LOW', 'MEDIUM', 'HIGH'}:
+            raise RelationalClientError('TiDB resource priority is invalid')
+        parts.append('PRIORITY = ' + draft['priority'])
+    if 'burstable' in draft and draft['burstable'] is not None:
+        parts.append('BURSTABLE = ' + (
+            'TRUE' if draft['burstable'] else 'FALSE'))
+    limit, limit_parameters = _resource_group_assignments_query_limit(draft)
+    parts.extend(limit)
+    parameters.extend(limit_parameters)
+    if not parts:
+        raise RelationalClientError('resource group alteration has no changes')
+    return ', '.join(parts), tuple(parameters)
+
+
+def _resource_group_assignments_query_limit(draft):
     action = draft.get('query_limit_action')
     if action == 'REMOVE':
-        parts.append('QUERY_LIMIT = NULL')
-    elif action:
+        return ['QUERY_LIMIT = NULL'], []
+    if action:
         if action not in {'DRYRUN', 'COOLDOWN', 'KILL'}:
             raise RelationalClientError('TiDB runaway action is invalid')
         elapsed = draft.get('query_limit_exec_elapsed')
@@ -519,12 +572,12 @@ def _resource_group_assignments(draft):
                 r'([0-9]+(ms|s|m|h))+', elapsed):
             raise RelationalClientError(
                 'a runaway query limit needs an execution time such as 60s')
-        parts.append(f'QUERY_LIMIT = (EXEC_ELAPSED = %s, ACTION = {action})')
-        parameters.append(elapsed)
-    elif draft.get('query_limit_exec_elapsed'):
+        return [f'QUERY_LIMIT = (EXEC_ELAPSED = %s, ACTION = {action})'], [
+            elapsed]
+    if draft.get('query_limit_exec_elapsed'):
         raise RelationalClientError(
             'choose a runaway query action for the execution time')
-    return ', '.join(parts), tuple(parameters)
+    return [], []
 
 
 def _impact(request, **extra):
@@ -749,7 +802,8 @@ def _compile_control_plane(request):
     elif kind == 'resource-group':
         name = draft['name'] if operation == 'create' else _path(request)[-1]
         if operation in {'create', 'alter'}:
-            assignments, parameters = _resource_group_assignments(draft)
+            assignments, parameters = _resource_group_assignments(
+                draft, operation)
             source = (
                 f'{operation.upper()} RESOURCE GROUP {_quote(name)} '
                 f'{assignments}'

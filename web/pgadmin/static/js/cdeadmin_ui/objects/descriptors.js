@@ -75,17 +75,26 @@ export function resolveForm(family, form) {
   };
 }
 
+/**
+ * Bundle key of the form that edits a kind: its family, or engine_object:<kind>.
+ * Owner direction 2026-10-29 (ui_unified_design.rst decision 15): kinds that
+ * fit no family get one Engine-object form each, so several can coexist.
+ */
+export function formKey(family, resourceKind) {
+  return family === 'engine_object' ? `engine_object:${resourceKind}` : family;
+}
+
 /** Build the same bundle shape the server serves, from raw descriptor files. */
 export function resolveBundle({engine, families, capabilities, operations=[], navigator={}, forms={}, options={dialect: {}, catalog: {}}}) {
   const resolvedForms = {};
-  for(const [familyId, form] of Object.entries(forms)) {
-    resolvedForms[familyId] = resolveForm(families[familyId], form);
+  for(const form of Object.values(forms)) {
+    resolvedForms[formKey(form.family, (form.resource_kinds || [])[0])] = resolveForm(families[form.family], form);
   }
   const opsByKind = {};
   for(const op of operations) (opsByKind[op.resource_kind] = opsByKind[op.resource_kind] || []).push(op);
   const kinds = {};
   for(const kind of capabilities.kinds || []) {
-    const form = kind.family === 'engine_object' ? null : resolvedForms[kind.family];
+    const form = resolvedForms[formKey(kind.family, kind.resource_kind)] || null;
     kinds[kind.resource_kind] = {
       resource_kind: kind.resource_kind,
       family: kind.family,
@@ -103,8 +112,8 @@ export function resolveBundle({engine, families, capabilities, operations=[], na
 /** The resolved form that edits a resource kind, or null when none is declared. */
 export function formForKind(bundle, resourceKind) {
   const kind = bundle?.kinds?.[resourceKind];
-  if(!kind || kind.family === 'engine_object') return null;
-  return bundle.forms?.[kind.family] || null;
+  if(!kind) return null;
+  return bundle.forms?.[formKey(kind.family, resourceKind)] || null;
 }
 
 /** Whether the shell should open the family editor for this kind. */

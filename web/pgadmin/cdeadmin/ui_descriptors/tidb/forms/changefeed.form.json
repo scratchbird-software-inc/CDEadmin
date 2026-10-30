@@ -1,0 +1,52 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "tidb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "changefeed"
+  ],
+  "status": "draft",
+  "engine_tab_title": "TiDB",
+  "notes": "TiCDC changefeed. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15); field ids are the provider dialog's own. Not run: the demo has no TiCDC.",
+  "fields": [
+    {
+      "field_id": "changefeed_id",
+      "label": "Changefeed ID",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "sink_uri",
+      "label": "Approved sink URI",
+      "tab": "Definition",
+      "control": "password",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "help": "Sensitive: kept out of plans and logs."
+    },
+    {
+      "field_id": "start_ts",
+      "label": "Start TSO",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "target_ts",
+      "label": "Target TSO",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    }
+  ]
+}

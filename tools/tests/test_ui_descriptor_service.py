@@ -150,3 +150,25 @@ def test_http_bundle_endpoint(service):
         assert client.get('/cdeadmin/api/ui/descriptors/zzz').status_code == 404
     finally:
         sys.modules.pop('pgadmin.user_login_check', None)
+
+
+def test_engine_object_forms_are_keyed_per_kind(service):
+    # Owner direction 2026-10-29 (ui_unified_design.rst decision 15): each
+    # Engine-object kind gets its own form, resolved over the skeleton.
+    assert 'engine_object' in service.families()
+    bundle = service.engine('tidb')
+    for kind in ('placement-policy', 'resource-group', 'changefeed'):
+        form = bundle['forms'][f'engine_object:{kind}']
+        assert form['resource_kinds'] == [kind]
+        assert bundle['kinds'][kind]['form_status'] == form['status']
+        assert [tab['tab'] for tab in form['tabs']][0] == 'General'
+    assert bundle['kinds']['job']['form_status'] is None
+
+
+def test_engine_object_form_must_name_one_kind():
+    from pgadmin.cdeadmin.ui_descriptors import form_key
+    assert form_key({'family': 'table'}) == 'table'
+    assert form_key({'family': 'engine_object',
+                     'resource_kinds': ['x']}) == 'engine_object:x'
+    with pytest.raises(UIDescriptorError):
+        form_key({'family': 'engine_object', 'resource_kinds': ['x', 'y']})

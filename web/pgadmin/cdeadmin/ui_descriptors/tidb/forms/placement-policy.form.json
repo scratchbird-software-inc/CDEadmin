@@ -1,0 +1,212 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "tidb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "placement-policy"
+  ],
+  "status": "complete",
+  "engine_tab_title": "TiDB",
+  "notes": "Placement policy. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15); field ids are the provider dialog's own. Round trip verified live on TiDB 8.5.6 (test_engine_object_editors_round_trip, 2026-10-29).",
+  "gaps": [
+    {
+      "concept": "Clearing an option on alter",
+      "reason": "ALTER PLACEMENT POLICY replaces every option; the provider carries current options forward, so an emptied field keeps its value instead of being cleared",
+      "tracking": "mysql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "placement_style",
+      "label": "Placement style",
+      "tab": "General",
+      "control": "select",
+      "default": "regions",
+      "options": [
+        {
+          "value": "regions",
+          "label": "Regions and schedule"
+        },
+        {
+          "value": "constraints",
+          "label": "Label constraints"
+        }
+      ],
+      "help": "TiDB cannot combine region placement with label constraints or learners.",
+      "record_derive": {
+        "cases": [
+          {
+            "key": "constraints",
+            "truthy": true,
+            "value": "constraints"
+          },
+          {
+            "key": "leader_constraints",
+            "truthy": true,
+            "value": "constraints"
+          },
+          {
+            "key": "follower_constraints",
+            "truthy": true,
+            "value": "constraints"
+          },
+          {
+            "key": "learner_constraints",
+            "truthy": true,
+            "value": "constraints"
+          },
+          {
+            "key": "learners",
+            "truthy": true,
+            "value": "constraints"
+          }
+        ],
+        "default": "regions"
+      }
+    },
+    {
+      "field_id": "primary_region",
+      "label": "Primary region",
+      "tab": "Definition",
+      "control": "text",
+      "visible_when": {
+        "field": "placement_style",
+        "equals": "regions"
+      },
+      "group": "Regions"
+    },
+    {
+      "field_id": "regions",
+      "label": "Regions (comma separated)",
+      "tab": "Definition",
+      "control": "text",
+      "visible_when": {
+        "field": "placement_style",
+        "equals": "regions"
+      },
+      "group": "Regions"
+    },
+    {
+      "field_id": "schedule",
+      "label": "Schedule",
+      "tab": "Definition",
+      "control": "select",
+      "visible_when": {
+        "field": "placement_style",
+        "equals": "regions"
+      },
+      "group": "Regions",
+      "options": [
+        {
+          "value": "even",
+          "label": "Even"
+        },
+        {
+          "value": "majority_in_primary",
+          "label": "Majority in primary"
+        }
+      ]
+    },
+    {
+      "field_id": "followers",
+      "label": "Follower replicas",
+      "tab": "Definition",
+      "control": "number",
+      "min": 0,
+      "max": 15,
+      "group": "Replicas"
+    },
+    {
+      "field_id": "voters",
+      "label": "Voting replicas",
+      "tab": "Definition",
+      "control": "number",
+      "min": 0,
+      "max": 15,
+      "group": "Replicas"
+    },
+    {
+      "field_id": "learners",
+      "label": "Learner replicas",
+      "tab": "Definition",
+      "control": "number",
+      "min": 0,
+      "max": 15,
+      "group": "Replicas",
+      "visible_when": {
+        "field": "placement_style",
+        "equals": "constraints"
+      }
+    },
+    {
+      "field_id": "constraints",
+      "label": "Replica constraints",
+      "tab": "Definition",
+      "control": "text",
+      "visible_when": {
+        "field": "placement_style",
+        "equals": "constraints"
+      },
+      "group": "Constraints",
+      "help": "For example [+disk=ssd]"
+    },
+    {
+      "field_id": "leader_constraints",
+      "label": "Leader constraints",
+      "tab": "Definition",
+      "control": "text",
+      "visible_when": {
+        "field": "placement_style",
+        "equals": "constraints"
+      },
+      "group": "Constraints"
+    },
+    {
+      "field_id": "follower_constraints",
+      "label": "Follower constraints",
+      "tab": "Definition",
+      "control": "text",
+      "visible_when": {
+        "field": "placement_style",
+        "equals": "constraints"
+      },
+      "group": "Constraints"
+    },
+    {
+      "field_id": "voter_constraints",
+      "label": "Voter constraints",
+      "tab": "Definition",
+      "control": "text",
+      "group": "Constraints"
+    },
+    {
+      "field_id": "learner_constraints",
+      "label": "Learner constraints",
+      "tab": "Definition",
+      "control": "text",
+      "visible_when": {
+        "field": "placement_style",
+        "equals": "constraints"
+      },
+      "group": "Constraints",
+      "help": "Needs at least one learner replica."
+    },
+    {
+      "field_id": "survival_preferences",
+      "label": "Survival preferences",
+      "tab": "Engine",
+      "control": "text",
+      "help": "For example [region, zone]"
+    }
+  ]
+}

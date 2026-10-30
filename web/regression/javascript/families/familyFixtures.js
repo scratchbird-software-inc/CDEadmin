@@ -31,7 +31,7 @@ export function loadEngineBundle(engine) {
   for(const file of fs.readdirSync(formsDir)) {
     if(!file.endsWith('.form.json')) continue;
     const doc = readJson(path.join(formsDir, file));
-    forms[doc.family] = doc;
+    forms[doc.family === 'engine_object' ? `engine_object:${doc.resource_kinds[0]}` : doc.family] = doc;
   }
   const readOptional = (name) => fs.existsSync(path.join(folder, name)) ? readJson(path.join(folder, name)) : null;
   return resolveBundle({

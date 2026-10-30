@@ -756,6 +756,18 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     Existing channel start/stop/reset/filter descriptors and tool openers can
     migrate independently. This decision does not change the native engine's
     supported replication options or defer their backend implementation.
+    Owner direction, 2026-10-29: the engine stream creates the Engine-object
+    dialog now and the front-end team adjusts it afterwards. Implemented as
+    ``families/engine_object.family.json`` (General, Definition, Engine,
+    Security, SQL) with one form per kind, ``forms/<kind>.form.json``
+    (``family: engine_object``, exactly one ``resource_kinds`` entry), held
+    in the bundle as ``engine_object:<kind>`` and found by the existing
+    ``formForKind``/kind index, so the family editor renders it with no new
+    renderer branch and tier-1 create/alter stay tier 1. First users: TiDB
+    placement policy and resource group (complete, live round trip) and
+    TiCDC changefeed (draft). The MySQL replication channel above can use
+    the same dialog; its typed source options and separate secret field are
+    still open.
 
 16. Protected generated-password delivery (MySQL audit, 2026-10-26):
     User authentication and factor mode ``RANDOM_PASSWORD`` now have a native

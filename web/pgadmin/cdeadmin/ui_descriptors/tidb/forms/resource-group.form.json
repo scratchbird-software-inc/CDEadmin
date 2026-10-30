@@ -1,0 +1,118 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "tidb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "resource-group"
+  ],
+  "status": "complete",
+  "engine_tab_title": "TiDB",
+  "notes": "Resource group. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15); field ids are the provider dialog's own. Round trip verified live on TiDB 8.5.6 (test_engine_object_editors_round_trip, 2026-10-29).",
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "ru_mode",
+      "label": "Request-unit limit",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "limited",
+      "options": [
+        {
+          "value": "limited",
+          "label": "Fixed limit"
+        },
+        {
+          "value": "unlimited",
+          "label": "Unlimited"
+        }
+      ]
+    },
+    {
+      "field_id": "ru_per_sec",
+      "label": "Request units per second",
+      "tab": "Definition",
+      "control": "number",
+      "min": 1,
+      "visible_when": {
+        "field": "ru_mode",
+        "equals": "limited"
+      }
+    },
+    {
+      "field_id": "priority",
+      "label": "Priority",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "MEDIUM",
+      "options": [
+        {
+          "value": "LOW",
+          "label": "Low"
+        },
+        {
+          "value": "MEDIUM",
+          "label": "Medium"
+        },
+        {
+          "value": "HIGH",
+          "label": "High"
+        }
+      ]
+    },
+    {
+      "field_id": "burstable",
+      "label": "Burstable",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": false
+    },
+    {
+      "field_id": "query_limit_action",
+      "label": "Runaway query action",
+      "tab": "Engine",
+      "control": "select",
+      "group": "Runaway queries",
+      "options": [
+        {
+          "value": "DRYRUN",
+          "label": "Record only"
+        },
+        {
+          "value": "COOLDOWN",
+          "label": "Lower priority"
+        },
+        {
+          "value": "KILL",
+          "label": "Kill the query"
+        },
+        {
+          "value": "REMOVE",
+          "label": "Remove the limit"
+        }
+      ],
+      "record_key": "query_limit",
+      "record_pattern": "ACTION=([A-Z_]+)"
+    },
+    {
+      "field_id": "query_limit_exec_elapsed",
+      "label": "Runaway after",
+      "tab": "Engine",
+      "control": "text",
+      "group": "Runaway queries",
+      "help": "Execution time such as 60s or 1m30s.",
+      "record_key": "query_limit",
+      "record_pattern": "EXEC_ELAPSED='([^']+)'"
+    }
+  ]
+}

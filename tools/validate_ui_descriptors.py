@@ -151,7 +151,7 @@ def validate_descriptors(strict_pending: bool) -> tuple[list[str], dict]:
                       str(path.relative_to(REPO)), errors)
         families[doc.get("family")] = doc
         summary["families"].append(doc.get("family"))
-    for family in FAMILIES:
+    for family in FAMILIES + ("engine_object",):
         if family not in families:
             errors.append(f"families/{family}.family.json is missing")
 
@@ -228,7 +228,17 @@ def validate_descriptors(strict_pending: bool) -> tuple[list[str], dict]:
             doc = load(form_path)
             schemas.check(doc, schemas.schemas["form.schema.json"], schemas.schemas["form.schema.json"], rel, errors)
             family = doc.get("family")
-            report["forms"][family] = doc.get("status")
+            if family == "engine_object":
+                # Owner direction 2026-10-29 (decision 15): one form per kind.
+                kinds = doc.get("resource_kinds") or []
+                if len(kinds) != 1:
+                    errors.append(
+                        f"{rel}: an engine-object form edits exactly one "
+                        "resource kind")
+                key = f"engine_object:{kinds[0]}" if kinds else family
+            else:
+                key = family
+            report["forms"][key] = doc.get("status")
             skeleton = families.get(family)
             if not skeleton:
                 errors.append(f"{rel}: unknown family {family!r}")

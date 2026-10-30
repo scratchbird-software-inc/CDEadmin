@@ -114,7 +114,8 @@ def record(client, route, kind, name, family):
     rows = resources(client, route)
     row = next(item for item in rows if item['resource_kind'] == kind and
                item['display_name'] == name and
-               (kind in {'user', 'role', 'database'} or
+               (kind in {'user', 'role', 'database', 'placement-policy',
+                         'resource-group'} or
                 DATABASE in item['display_path']))
     form = resolved_form('tidb', family)
     return row, record_draft(form, record_from_resource(form, row, rows))
@@ -403,3 +404,54 @@ def test_refusals_say_why(live):
                     row['native'].get('job_state') == 'synced')
     with pytest.raises(Exception, match='did not cancel DDL job'):
         native_run(client, route, 'job', 'cancel', {}, finished)
+
+
+def test_engine_object_editors_round_trip(live):
+    # Engine-object editor (owner direction 2026-10-29, decision 15): the
+    # placement-policy and resource-group dialogs drive the same provider
+    # operations, re-open from the inventory, and alter one setting only.
+    route, client = live
+    policy, group = f'rt_pol2_{UNIQUE}', f'rt_rg2_{UNIQUE}'
+    policy_form = resolved_form('tidb', 'engine_object:placement-policy')
+    group_form = resolved_form('tidb', 'engine_object:resource-group')
+    run(client, route, 'placement-policy', 'create', backend_draft(
+        policy_form, {'name': policy, 'placement_style': 'constraints',
+                      'followers': 2, 'voters': 3,
+                      'constraints': '[+disk=ssd]'}))
+    run(client, route, 'resource-group', 'create', backend_draft(
+        group_form, {'name': group, 'ru_mode': 'limited',
+                     'ru_per_sec': 400, 'priority': 'HIGH',
+                     'burstable': True, 'query_limit_action': 'KILL',
+                     'query_limit_exec_elapsed': '60s'}))
+    try:
+        target, baseline = record(client, route, 'placement-policy', policy,
+                                  'engine_object:placement-policy')
+        assert (baseline['placement_style'], baseline['followers'],
+                baseline['voters'], baseline['constraints']) == (
+            'constraints', 2, 3, '[+disk=ssd]')
+        alter = backend_draft(policy_form, {**baseline, 'followers': 1},
+                              mode='alter', baseline=baseline)
+        assert alter == {'followers': 1}, alter
+        run(client, route, 'placement-policy', 'alter', alter, target=target)
+        text = query(f'SHOW CREATE PLACEMENT POLICY {policy}')[0][1]
+        assert 'FOLLOWERS=1' in text and 'VOTERS=3' in text
+        assert 'CONSTRAINTS="[+disk=ssd]"' in text
+
+        target, baseline = record(client, route, 'resource-group', group,
+                                  'engine_object:resource-group')
+        assert (baseline['ru_mode'], baseline['ru_per_sec'],
+                baseline['priority'], baseline['burstable'],
+                baseline['query_limit_action'],
+                baseline['query_limit_exec_elapsed']) == (
+            'limited', 400, 'HIGH', True, 'KILL', '1m0s')
+        alter = backend_draft(group_form, {**baseline, 'priority': 'LOW'},
+                              mode='alter', baseline=baseline)
+        assert alter == {'priority': 'LOW'}, alter
+        run(client, route, 'resource-group', 'alter', alter, target=target)
+        assert query(
+            'SELECT RU_PER_SEC, PRIORITY, BURSTABLE, QUERY_LIMIT FROM '
+            f"information_schema.RESOURCE_GROUPS WHERE NAME='{group}'") == [
+            ('400', 'LOW', 'YES', "EXEC_ELAPSED='1m0s', ACTION=KILL")]
+    finally:
+        query(f'DROP PLACEMENT POLICY IF EXISTS {policy}')
+        query(f'DROP RESOURCE GROUP IF EXISTS {group}')

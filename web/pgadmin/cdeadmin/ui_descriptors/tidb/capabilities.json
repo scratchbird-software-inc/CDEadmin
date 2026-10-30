@@ -329,7 +329,8 @@
           "tier": 1,
           "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/placement-policy.form.json"
     },
     {
       "resource_kind": "resource-group",
@@ -356,7 +357,8 @@
           "tier": 1,
           "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/resource-group.form.json"
     },
     {
       "resource_kind": "tiflash-replica",
@@ -418,7 +420,8 @@
           "requires_utility": "ticdc",
           "support_state": "experimental"
         }
-      ]
+      ],
+      "form": "forms/changefeed.form.json"
     },
     {
       "resource_kind": "backup",

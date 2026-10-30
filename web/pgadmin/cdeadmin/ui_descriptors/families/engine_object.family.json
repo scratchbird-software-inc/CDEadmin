@@ -1,0 +1,42 @@
+{
+  "schema": "cdeadmin.ui-family.v1",
+  "family": "engine_object",
+  "title": "Engine object",
+  "tabs": [
+    {
+      "tab": "General",
+      "primitive": "group",
+      "required": true,
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "notes": "Owner direction 2026-10-29 (ui_unified_design.rst decision 15): an editor for kinds that fit no other family (TiDB placement policies, resource groups, changefeeds, Firebird shadows, DuckDB secrets...). Created by the engine stream so lifecycle create/alter can be surfaced; the front-end team will adjust it. An engine-object form edits exactly one resource kind: forms/<kind>.form.json."
+    },
+    {
+      "tab": "Definition",
+      "primitive": "group",
+      "required": false
+    },
+    {
+      "tab": "Engine",
+      "primitive": "group",
+      "required": false
+    },
+    {
+      "tab": "Security",
+      "primitive": "group",
+      "required": false
+    },
+    {
+      "tab": "SQL",
+      "primitive": "sql_preview",
+      "required": true,
+      "notes": "Read-only native plan from the provider."
+    }
+  ]
+}
