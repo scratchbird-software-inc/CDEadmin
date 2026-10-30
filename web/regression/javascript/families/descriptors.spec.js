@@ -185,7 +185,18 @@ describe('alter-mode column diff', () => {
     const before = [{_id: '0', name: 'id', type: 'INTEGER'}, {_id: '1', name: 'note', type: 'TEXT'}, {_id: '2', name: 'old', type: 'TEXT'}];
     const after = [{_id: '0', name: 'id', type: 'INTEGER'}, {_id: '1', name: 'remark', type: 'TEXT'}, {name: 'added', type: 'REAL'}];
     expect(diffColumns(before, after)).toEqual({
-      add_columns: [{name: 'added', type: 'REAL'}], drop_columns: ['old'], rename_columns: [{from: 'note', to: 'remark'}]});
+      add_columns: [{name: 'added', type: 'REAL'}], drop_columns: ['old'], rename_columns: [{from: 'note', to: 'remark'}],
+      alter_columns: []});
+  });
+  it('reports changed cells on existing rows as alter_columns, grid columns only', () => {
+    const before = [{_id: '0', name: 'id', type: 'INT', default: '1', position: 1},
+      {_id: '1', name: 'note', type: 'TEXT', nullable: true}];
+    const after = [{_id: '0', name: 'id', type: 'BIGINT', default: '', position: 9},
+      {_id: '1', name: 'remark', type: 'TEXT', nullable: false}];
+    expect(diffColumns(before, after, ['name', 'type', 'default', 'nullable'])).toEqual({
+      add_columns: [], drop_columns: [], rename_columns: [{from: 'note', to: 'remark'}],
+      alter_columns: [{name: 'id', changes: {type: 'BIGINT', default: null}},
+        {name: 'remark', changes: {nullable: false}}]});
   });
   it('sends only the ALTER set through toBackendDraft', () => {
     const resolved = resolveForm(family, form);

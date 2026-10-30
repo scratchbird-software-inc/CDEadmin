@@ -5300,7 +5300,10 @@ class RelationalAdministration:
             value['options'] = options
         elif operation == 'alter':
             if kind == 'table':
-                keys = ('add_columns', 'drop_columns', 'rename_columns')
+                # alter_columns and constraints are carried so _compile_alter
+                # refuses them by name rather than dropping them unread.
+                keys = ('add_columns', 'drop_columns', 'rename_columns',
+                        'alter_columns', 'constraints')
                 if self.dialect.engine_id == 'firebird':
                     keys += firebird_tables.ALTER_KEYS
                 value['changes'] = {
@@ -7560,6 +7563,18 @@ class RelationalAdministration:
                 'parameters': (),
             }]
         if kind == 'table':
+            unapplied = [key for key in ('alter_columns', 'constraints')
+                         if changes.get(key)]
+            if unapplied:
+                # The editor's column diff and constraint grids can send
+                # these; an engine that compiles neither must say so.
+                raise RelationalClientError(
+                    'this editor cannot yet change existing '
+                    + ' or '.join({'alter_columns': 'columns',
+                                   'constraints': 'constraints'}[key]
+                                  for key in unapplied)
+                    + ' on this engine; only adding, dropping and renaming '
+                    'columns is applied')
             statements = []
             if self.dialect.engine_id == 'firebird':
                 path = self._target_path(request['target_resource'])

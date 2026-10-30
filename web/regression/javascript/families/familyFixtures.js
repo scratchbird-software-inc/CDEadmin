@@ -7,7 +7,9 @@ import path from 'path';
 import {resolveBundle} from '../../../pgadmin/static/js/cdeadmin_ui/objects/descriptors';
 
 export const DESCRIPTOR_ROOT = path.resolve(__dirname, '../../../pgadmin/cdeadmin/ui_descriptors');
-export const BETA_ENGINES = ['postgresql', 'mysql', 'mariadb', 'firebird', 'duckdb', 'sqlite'];
+// Owner direction 2026-10-30: the parity engines join beta as their descriptor folders land.
+export const BETA_ENGINES = ['postgresql', 'mysql', 'mariadb', 'firebird', 'duckdb', 'sqlite',
+  'dolt', 'tidb', 'vitess', 'cockroachdb'];
 export const FAMILIES = ['table', 'view', 'index', 'routine', 'trigger', 'sequence', 'type', 'role', 'database', 'server'];
 
 function readJson(file) {

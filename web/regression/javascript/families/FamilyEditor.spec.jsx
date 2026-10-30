@@ -43,7 +43,9 @@ describe('engine bundles', () => {
         }
       }
       if(form.status === 'complete') expect(form.missing_required_tabs).toEqual([]);
-      expect(family).toBe(form.family);
+      // Engine-object editors are one form per kind (design decision 15).
+      expect(family).toBe(form.family === 'engine_object' ?
+        `engine_object:${form.resource_kinds[0]}` : form.family);
     }
   });
 });

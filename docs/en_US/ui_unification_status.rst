@@ -174,6 +174,35 @@ count sets its maximum to zero in the enforcement file.
 Change log
 ----------
 
+Parity engines join beta; create-only fields; existing-column edits (2026-10-30)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Owner direction: the parity engines are added to the list of beta engines.
+Dolt, TiDB, Vitess and CockroachDB, which have descriptor folders, joined the
+gate lists (``tools/validate_ui_descriptors.py``,
+``tools/tests/test_ui_descriptor_service.py``, the family render fixtures);
+YugabyteDB YSQL, immudb and XTDB join when their folders land. The render
+gate's engine-bundle check now expects engine-object forms keyed
+``engine_object:<kind>`` (TiDB and Vitess are the first beta engines with
+them).
+
+The editor now honours ``editable_after_create: false``: the field is locked
+in alter mode, and a grid column is locked on rows loaded from the record
+(new rows stay editable). It had been declared in the SQLite and Vitess table
+forms but no renderer read it.
+
+The alter-mode column diff (``diffColumns`` and its Python twin) now reports
+changed cells on existing rows as ``alter_columns``. The shared table alter
+refuses ``alter_columns`` and constraint-grid edits it cannot compile,
+instead of ignoring them; see the correction in
+:ref:`mysql_wire_parity`.
+
+Front-end family suite: 158 passed (one earlier run failed the SQLite
+registration test under load; it passed alone and on the rerun). ESLint could
+not be run here: loading ``.eslintrc.js`` fails inside ``@eslint/eslintrc``
+("Converting circular structure to JSON") before any file is checked. Lint
+counts from ``make ui-descriptors-check`` are unchanged.
+
 Firebird diagram physical edits to reviewed plan (2026-10-29)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

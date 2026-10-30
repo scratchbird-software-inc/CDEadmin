@@ -633,6 +633,9 @@ The following block goes into ``AGENTS.md`` verbatim as a new owner direction. I
        then immudb and XTDB, get full family editors and their distinctive native
        features at the six engines' level. Same family skeletons and shared field
        ids, filtered per engine; never lowest common denominator.
+       Owner direction 2026-10-30: these engines are added to the list of beta
+       engines and join the gate lists as their descriptor folders land (Dolt,
+       TiDB, Vitess and CockroachDB first).
 
 Two existing ``AGENTS.md`` statements change meaning under this direction and should be amended in the same commit:
 

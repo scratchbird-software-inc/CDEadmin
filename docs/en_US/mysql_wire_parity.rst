@@ -511,6 +511,18 @@ Plan
       the keyspace VSchema editor. The vindex editor still creates in the
       connected keyspace; vindexes of other keyspaces are edited in their
       keyspace's VSchema editor.
+#. Correction 2026-10-30 to the ``complete`` table forms of Dolt, TiDB and
+   Vitess: in alter mode an edit to an existing column's type, default,
+   nullability or key flags was not sent (the column diff carried only add,
+   drop and rename), and an edit to a constraint grid was sent but ignored
+   by the shared table alter. Beside an added column both were lost without
+   an error. Now the diff sends them as ``alter_columns`` and the shared
+   alter refuses ``alter_columns`` and constraint edits with the reason, so
+   nothing is dropped silently; applying them on these engines is open
+   work. The forms stay ``complete`` for what their round trips check.
+   The same day the parity engines joined the beta-engine gate lists (owner
+   direction), and ``editable_after_create: false`` is enforced by the
+   editor (it was declared in these forms but not honoured).
 #. For each engine, run the forms through the draft and review tools in
    ``ui_descriptors/README.md`` to make a descriptor folder. Reuse MySQL's
    field ids where the backend field is the same, and filter by this matrix.

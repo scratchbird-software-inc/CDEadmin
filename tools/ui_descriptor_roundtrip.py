@@ -66,20 +66,33 @@ def _strip(row):
     return row
 
 
-def diff_columns(before, after):
+def diff_columns(before, after, fields=None):
+    """Twin of diffColumns in descriptors.js, alter_columns included."""
     def key(row, index):
         return row.get("_id") if isinstance(row, dict) and row.get("_id") else f"{(row or {}).get('name', '')}#{index}"
+
+    def blank(value):
+        return value is None or value == ""
+
+    def same(left, right):
+        return (blank(left) and blank(right)) or json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
     before_by_key = {key(row, i): row for i, row in enumerate(before or [])}
     after_keys = {key(row, i) for i, row in enumerate(after or [])}
-    add, rename = [], []
+    add, rename, alter = [], [], []
     for i, row in enumerate(after or []):
         previous = before_by_key.get(key(row, i))
         if previous is None:
             add.append(_strip(row))
-        elif previous.get("name") != row.get("name") and row.get("name"):
+            continue
+        if previous.get("name") != row.get("name") and row.get("name"):
             rename.append({"from": previous["name"], "to": row["name"]})
+        compared = [fid for fid in (fields or dict.fromkeys([*previous, *row])) if fid not in ("name", "_id")]
+        changes = {fid: (None if blank(row.get(fid)) else row.get(fid))
+                   for fid in compared if not same(previous.get(fid), row.get(fid))}
+        if changes:
+            alter.append({"name": row.get("name") or previous.get("name"), "changes": changes})
     drop = [row.get("name") for i, row in enumerate(before or []) if key(row, i) not in after_keys]
-    return {"add_columns": add, "drop_columns": drop, "rename_columns": rename}
+    return {"add_columns": add, "drop_columns": drop, "rename_columns": rename, "alter_columns": alter}
 
 
 def backend_draft(form: dict, draft: dict, mode: str = "create", baseline: dict | None = None) -> dict:
@@ -91,7 +104,8 @@ def backend_draft(form: dict, draft: dict, mode: str = "create", baseline: dict 
                 continue
             value = draft[fid]
             if mode == "alter" and field.get("control") == "grid" and fid == "columns" and baseline is not None:
-                diff = diff_columns(baseline.get("columns") or [], value or [])
+                diff = diff_columns(baseline.get("columns") or [], value or [],
+                                    [column["field_id"] for column in field.get("columns", [])])
                 out.update({k: v for k, v in diff.items() if v})
                 continue
             if mode == "alter" and baseline is not None and \

@@ -4035,6 +4035,28 @@ class DistributedProviderTests(unittest.TestCase):
         self.assertFalse(VITESS_ADMIN.supports('user', 'create'))
         self.assertFalse(VITESS_ADMIN.supports('user', 'inspect'))
 
+    def test_table_alter_refuses_changes_it_cannot_apply(self):
+        # The editor's column diff and constraint grids send these; before
+        # 2026-10-30 the shared alter ignored them beside an added column.
+        target = {'resource_id': 'table:app:widgets',
+                  'display_name': 'widgets',
+                  'display_path': ['app', 'widgets']}
+        for draft, reason in (
+            ({'add_columns': [{'name': 'x', 'type': 'INT'}],
+              'alter_columns': [{'name': 'id', 'changes': {
+                  'type': 'BIGINT'}}]}, 'existing columns'),
+            ({'add_columns': [{'name': 'x', 'type': 'INT'}],
+              'constraints': [{'kind': 'UNIQUE', 'columns': ['x']}]},
+             'existing constraints'),
+        ):
+            with self.subTest(reason=reason), self.assertRaisesRegex(
+                    RelationalClientError, reason):
+                TIDB_ADMIN.plan({
+                    'resource_kind': 'table', 'operation_id': 'alter',
+                    'target_resource': target, 'draft': draft,
+                    '_provider_route': {'host': '127.0.0.1'},
+                })
+
     def test_tidb_relational_admin_compiles_native_object_syntax(self):
         route = {'host': '127.0.0.1', 'port': 4000}
         index = TIDB_ADMIN.plan({

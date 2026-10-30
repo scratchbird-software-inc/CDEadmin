@@ -398,22 +398,37 @@ export function validateDraft(form, draft, {mode='create', baseline=null}={}) {
  * Diff two column grids into the add/drop/rename lists an ALTER path takes.
  * Rows are matched by a stable `_id` the editor assigns when it loads a
  * record (falling back to name); a changed name on a matched row is a rename.
+ * A matched row whose other grid cells changed becomes an alter_columns entry
+ * ({name, changes}, name after any rename; an emptied cell is null), so an
+ * edit the provider cannot apply is refused there rather than lost here.
+ * Only the grid's own columns are compared (`fields`; all keys when absent).
  */
-export function diffColumns(before=[], after=[]) {
+export function diffColumns(before=[], after=[], fields=null) {
   const key = (row, index) => row?._id ?? `${row?.name ?? ''}#${index}`;
   const beforeByKey = new Map(before.map((row, index) => [key(row, index), row]));
   const afterKeys = new Set(after.map((row, index) => key(row, index)));
-  const add_columns = [], rename_columns = [];
+  const add_columns = [], rename_columns = [], alter_columns = [];
+  const blank = (value) => value === undefined || value === null || value === '';
+  const same = (left, right) => (blank(left) && blank(right)) || JSON.stringify(left) === JSON.stringify(right);
   for(const [index, row] of after.entries()) {
     const previous = beforeByKey.get(key(row, index));
     if(!previous) {
       add_columns.push(stripMeta(row));
-    } else if(previous.name !== row.name && row.name) {
+      continue;
+    }
+    if(previous.name !== row.name && row.name) {
       rename_columns.push({from: previous.name, to: row.name});
     }
+    const compared = (fields || [...new Set([...Object.keys(previous), ...Object.keys(row)])])
+      .filter((id) => id !== 'name' && id !== '_id');
+    const changes = {};
+    for(const id of compared) {
+      if(!same(previous[id], row[id])) changes[id] = blank(row[id]) ? null : row[id];
+    }
+    if(Object.keys(changes).length) alter_columns.push({name: row.name || previous.name, changes});
   }
   const drop_columns = before.filter((row, index) => !afterKeys.has(key(row, index))).map((row) => row.name);
-  return {add_columns, drop_columns, rename_columns};
+  return {add_columns, drop_columns, rename_columns, alter_columns};
 }
 
 function stripMeta(row) {
@@ -435,10 +450,11 @@ export function toBackendDraft(form, draft, {mode='create', baseline=null}={}) {
       if(field.wrap_list && !Array.isArray(value)) value = (value === undefined || value === null || value === '') ? [] : [value];
       if(mode === 'alter' && field.control === 'grid' && field.field_id === 'columns' && baseline) {
         // The Columns grid diff is what ALTER paths consume (design 6.1).
-        const diff = diffColumns(baseline.columns || [], value || []);
-        if(diff.add_columns.length) out.add_columns = diff.add_columns;
-        if(diff.drop_columns.length) out.drop_columns = diff.drop_columns;
-        if(diff.rename_columns.length) out.rename_columns = diff.rename_columns;
+        const diff = diffColumns(baseline.columns || [], value || [],
+          (field.columns || []).map((column) => column.field_id));
+        for(const list of ['add_columns', 'drop_columns', 'rename_columns', 'alter_columns']) {
+          if(diff[list].length) out[list] = diff[list];
+        }
         continue;
       }
       if(mode === 'alter' && baseline && JSON.stringify(value ?? null) === JSON.stringify(baseline[field.field_id] ?? null)) {

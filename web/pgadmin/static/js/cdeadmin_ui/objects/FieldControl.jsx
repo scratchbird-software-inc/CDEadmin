@@ -42,7 +42,7 @@ export function fieldHelpText(field) {
 }
 
 export default function FieldControl({field, value, onChange, draft={}, context={}, resourceKind,
-  error, disabled=false, dense=false}) {
+  error, disabled=false, dense=false, mode='create'}) {
   const helpId = useId();
   const unavailable = field.available === false;
   const isDisabled = disabled || unavailable || Boolean(field.readonly);
@@ -121,7 +121,7 @@ export default function FieldControl({field, value, onChange, draft={}, context=
   if(control === 'grid' || control === 'privileges') {
     return <RecordGrid field={field} rows={Array.isArray(value) ? value : []} onChange={onChange}
       draft={draft} context={context} resourceKind={resourceKind} disabled={isDisabled} error={error}
-      help={help} />;
+      help={help} mode={mode} />;
   }
   if(control === 'keyvalue') {
     return <KeyValueEditor field={field} value={value} onChange={onChange} disabled={isDisabled}
@@ -138,6 +138,7 @@ FieldControl.propTypes = {
   onChange: PropTypes.func.isRequired,
   draft: PropTypes.object,
   context: PropTypes.object,
+  mode: PropTypes.string,
   resourceKind: PropTypes.string,
   error: PropTypes.string,
   disabled: PropTypes.bool,

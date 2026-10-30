@@ -35,8 +35,16 @@ function emptyRow(columns) {
   return row;
 }
 
+/**
+ * A cell the engine cannot change once its row exists: in alter mode, rows
+ * loaded from the record carry an _id; rows added in this edit do not.
+ */
+export function lockedCell(column, row, mode) {
+  return mode === 'alter' && column.editable_after_create === false && row?._id !== undefined;
+}
+
 export default function RecordGrid({field, rows, onChange, draft={}, context={}, resourceKind,
-  disabled=false, error, help}) {
+  disabled=false, error, help, mode='create'}) {
   const [selected, setSelected] = useState(null);
   const columns = field.columns || [];
   const label = field.label;
@@ -101,7 +109,8 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
               {columns.map((column) => <Box key={column.field_id} component="td" sx={cellSx}>
                 {visible.includes(column) ?
                   <FieldControl field={{...column, label: `${column.label} (row ${index + 1})`}}
-                    value={row[column.field_id]} dense disabled={disabled}
+                    value={row[column.field_id]} dense mode={mode}
+                    disabled={disabled || lockedCell(column, row, mode)}
                     draft={{...draft, ...row}} context={context} resourceKind={resourceKind}
                     onChange={(value) => update(index, column.field_id, value)} /> :
                   <Box aria-hidden="true" />}
@@ -145,4 +154,5 @@ RecordGrid.propTypes = {
   disabled: PropTypes.bool,
   error: PropTypes.string,
   help: PropTypes.string,
+  mode: PropTypes.string,
 };

@@ -240,6 +240,11 @@ still governs presentation. All UI work on every engine follows it.
 14. Scope. The six beta engines get full family editors. The other connector roots
     get the generic family skeleton; do not hand-build forms for them before beta.
     Closed-source features remain post-beta as already recorded.
+    Owner direction 2026-10-30: the parity engines (Dolt, TiDB, Vitess,
+    CockroachDB, YugabyteDB YSQL, immudb, XTDB) are added to the list of beta
+    engines. Each joins the gate lists (`tools/validate_ui_descriptors.py`,
+    `tools/tests/test_ui_descriptor_service.py`, the family render fixtures)
+    when its descriptor folder lands.
 
 Backend engine streams populate `web/pgadmin/cdeadmin/ui_descriptors/<engine>/`
 (see its README.md); the front-end stream owns `families/`, `schema/` and the

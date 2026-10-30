@@ -72,7 +72,8 @@ function FieldsTab({tab, form, draft, errors, mode, context, resourceKind, disab
         1 : 'repeat(auto-fit, minmax(260px, 1fr))'} gap="standard">
         {group.fields.map((field) => <FieldControl key={field.field_id} field={field}
           value={draft[field.field_id]} draft={draft} context={context} resourceKind={resourceKind}
-          error={errors[field.field_id]} disabled={disabled}
+          error={errors[field.field_id]} mode={mode}
+          disabled={disabled || (mode === 'alter' && field.editable_after_create === false)}
           onChange={(value) => onFieldChange(field.field_id, value)} />)}
       </Grid>
     </Box>)}
