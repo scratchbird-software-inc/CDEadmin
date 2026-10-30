@@ -1,0 +1,6 @@
+# TiFlash proxy (TiKV learner) settings for the opt-in demo component.
+[server]
+engine-addr = "cdeadmin-demo-tidb-tiflash:3930"
+
+[storage]
+reserve-space = "0MB"

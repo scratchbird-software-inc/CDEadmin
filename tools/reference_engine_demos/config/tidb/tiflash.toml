@@ -1,0 +1,28 @@
+# TiFlash for the opt-in TiDB demo component (owner direction 2026-10-29).
+# Demo only: one TiFlash node joined to the demo PD.
+tmp_path = "/data/tmp"
+path = "/data/db"
+
+[flash]
+service_addr = "0.0.0.0:3930"
+
+[flash.proxy]
+addr = "0.0.0.0:20170"
+advertise-addr = "cdeadmin-demo-tidb-tiflash:20170"
+status-addr = "0.0.0.0:20292"
+advertise-status-addr = "cdeadmin-demo-tidb-tiflash:20292"
+engine-addr = "cdeadmin-demo-tidb-tiflash:3930"
+data-dir = "/data/proxy"
+config = "/etc/tiflash-learner.toml"
+log-file = "/data/logs/proxy.log"
+
+[logger]
+level = "info"
+log = "/data/logs/server.log"
+errorlog = "/data/logs/error.log"
+
+[raft]
+pd_addr = "cdeadmin-demo-tidb-pd:2379"
+
+[status]
+metrics_port = 8234

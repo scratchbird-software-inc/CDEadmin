@@ -186,6 +186,28 @@ and rendered profiles are stored under ignored `runtime/`. Named Docker volumes
 retain server data across ordinary `stop`/`start` operations. These scripts do
 not delete volumes.
 
+## Opt-in TiDB components
+
+Owner direction, 2026-10-29: TiCDC, BR and TiFlash are opt-in. They are not
+part of `start all` and each needs the TiDB stack (`dev.sh start tidb`).
+
+| Component | Start | Provides |
+| --- | --- | --- |
+| `tidb_ticdc` | `dev.sh start tidb_ticdc` | TiCDC server; `runtime/tidb_tools/cdc` runs the CLI inside it (route `ticdc_server` = `http://127.0.0.1:8300`, `ticdc_path` = that wrapper; `blackhole://` sinks for testing) |
+| `tidb_br` | `dev.sh start tidb_br` | MinIO bucket `tidb-backups` on the demo network; `runtime/tidb_tools/br` runs BR v8.5.6 on that network (route `br_path` = the wrapper, `br_pd_addresses` = `cdeadmin-demo-tidb-pd:2379`, `br_storage_allowlist` = `s3://tidb-backups/`) |
+| `tidb_tiflash` | `dev.sh start tidb_tiflash` | One TiFlash node (`config/tidb/tiflash*.toml`) |
+
+The CLIs run on the demo network because the cluster advertises Docker
+network names the host cannot resolve, and BR's storage must be reachable by
+every TiKV store under the same address. The wrappers are demo plumbing, not
+a deployment pattern.
+
+TiFlash refuses to start below 12 GiB of Docker memory. In Docker Desktop's
+8 GB VM, starting it beside the three TiKV stores (about 1.7 GiB each) got
+stores OOM-killed (observed 2026-10-30); raise the Docker memory limit first.
+`dev.sh stop tidb` stops the components too; `dev.sh status <component>`
+reports each one.
+
 ## Profiles and ports
 
 All network listeners bind only to `127.0.0.1`, except the TiKV peer address
