@@ -1,0 +1,21 @@
+{
+  "engine": "vitess",
+  "omitted": [
+    {
+      "family": "database",
+      "reason": "vtgate refuses CREATE DATABASE (VT12001, live probe on 23.0.3); keyspaces are control-plane objects with their own editor"
+    },
+    {
+      "family": "trigger",
+      "reason": "vtgate refuses CREATE TRIGGER (live probe on 23.0.3)"
+    },
+    {
+      "family": "role",
+      "reason": "vtgate has no SQL users, roles or grants (live probe on 23.0.3); authentication is its configured auth server"
+    },
+    {
+      "family": "type",
+      "reason": "No user-defined types or domains (MySQL dialect)"
+    }
+  ]
+}

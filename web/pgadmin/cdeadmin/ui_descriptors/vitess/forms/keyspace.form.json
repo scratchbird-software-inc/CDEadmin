@@ -1,0 +1,53 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "vitess",
+  "family": "engine_object",
+  "resource_kinds": [
+    "keyspace"
+  ],
+  "status": "complete",
+  "engine_tab_title": "Vitess",
+  "notes": "Keyspace. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15); field ids are the provider dialog's own.",
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "durability_policy",
+      "label": "Durability policy",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "semi_sync",
+          "label": "Semi-synchronous"
+        },
+        {
+          "value": "cross_cell",
+          "label": "Cross-cell"
+        }
+      ],
+      "record_key": "durability_policy",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "allow_empty_vschema",
+      "label": "Allow an empty VSchema",
+      "tab": "Definition",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ],
+      "default": false
+    }
+  ]
+}

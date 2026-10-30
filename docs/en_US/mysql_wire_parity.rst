@@ -237,17 +237,46 @@ Vitess 23.0.3 (through vtgate, sharded keyspace)
    the qualified form, so it reports success without dropping anything.
    ``vtctldclient ApplySchema --sql "DROP VIEW ..."`` does drop it, and the
    provider already has a typed vtctld control plane. Reproduced twice.
+   Fixed 2026-10-30: the view drop runs ``ApplySchema`` through vtctld;
+   verified live that the view is gone from both shards.
 -  Refuses ``CREATE DATABASE`` through vtgate. Keyspaces are a control-plane
    concept.
 -  Refuses users, roles and grants through vtgate. Authentication is
    vtgate's configured auth server; tablet MySQL accounts are separate.
 -  Refuses stored procedures and temporary tables on sharded keyspaces
    (Vitess names the restriction). Unsharded keyspaces were not probed.
+   Probed 2026-10-30 on the unsharded ``lookup_keyspace``: ``CREATE`` and
+   ``DROP PROCEDURE`` (qualified with the keyspace) and ``CREATE TEMPORARY
+   TABLE`` work. ``CALL`` works for a procedure without a result set; one
+   that returns rows fails (vttablet: "Multi-Resultset not supported").
+   vtgate re-renders the procedure text before storing it (keywords come
+   back lowercased). ``information_schema.ROUTINES`` answers only with a
+   ``ROUTINE_SCHEMA`` predicate naming the keyspace; otherwise vtgate reads
+   the session keyspace.
 -  Refuses triggers, events, stored functions, sequences (Vitess sequences
    are VSchema-backed tables, not ``CREATE SEQUENCE``), tablespaces,
    ``CREATE SERVER``, XA and ``CHECK TABLE``.
 -  DDL on a sharded keyspace reaches vtgate's schema tracking
    asynchronously. Read-after-write of the schema needs to wait.
+-  ``ALTER VIEW`` through vtgate does reach every shard (live, 2026-10-30),
+   unlike ``DROP VIEW``.
+-  A ``UNIQUE`` key that is not on the primary vindex is enforced within
+   each shard only: two rows with the same value were accepted, one per
+   shard (live, 2026-10-30). The table form offers unique constraints
+   because vtgate accepts them; the guarantee is per shard.
+-  The demo keyspaces run ``foreignKeyMode: unmanaged`` (vtgate leaves
+   foreign keys to each shard). Foreign keys were not round-tripped.
+-  vtgate's ``SHOW VITESS_KEYSPACES`` kept listing a keyspace after vtctld
+   deleted it, and omits keyspaces and shards without serving tablets. The
+   provider now takes keyspaces and shards from vtctld when it is
+   configured (2026-10-30). Cause of the stale listing: ``DeleteKeyspace``
+   leaves the keyspace in each cell's ``SrvVSchema``, which vtgate serves
+   from. The provider's keyspace drop now runs ``RebuildVSchemaGraph``
+   afterwards, and the round trip checks that vtgate forgets the keyspace.
+-  Driver errors reach the user redacted ("relational administration
+   execution failed (ProgrammingError)"), so vtgate's VT12001 text is never
+   shown. The provider refuses a procedure on a sharded keyspace before
+   executing, with the reason.
 
 Shared MySQL-wire catalog reader
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -292,6 +321,8 @@ Vitess      cluster, cell, keyspace, shard, tablet, vtgate, vttablet, vschema,
 None of the three has a UI descriptor folder yet. They render through the
 generic operation forms that ``ui_unified_design.rst`` decision 14 assigned to
 non-beta engines before this direction.
+Update 2026-10-30: all three now have descriptor folders (see Plan).
+Vitess also gained ``procedure`` (unsharded keyspaces).
 
 Plan
 ----
@@ -324,6 +355,26 @@ Plan
    trigger (``BEFORE INSERT OR UPDATE``; MDEV-10164, fix version 12.0.1).
    Dolt does not (live). Both refuse ``INSTEAD OF``, which MariaDB's trigger
    form offered and no longer does.
+   Vitess progress 2026-10-30: ``ui_descriptors/vitess`` exists. Table
+   (with its primary vindex), view, routine (procedures, unsharded
+   keyspaces only), and the keyspace, shard and vindex engine-object editors
+   are ``complete`` (live round trip in
+   ``tools/tests/test_ui_descriptor_roundtrip_vitess.py``); index and
+   sequence are ``draft``. Database, trigger and role families are omitted
+   with live evidence; type is omitted because the MySQL dialect has no
+   user-defined types (not a live probe). Records now carry keyspace sharding and
+   durability, shard key range and primary, tablet serving state (renamed
+   from ``state``, which the shared record builder overwrote), table
+   vindexes, constraint columns and references, and view queries rewritten
+   from the physical ``vt_`` schema to the keyspace. Workflow, reshard and
+   traffic operations take cell, table and shard lists as rows instead of
+   JSON, and keyspace and tablet pickers. Open Vitess gaps: the routing
+   rules dialog is still the provider's JSON field (removed from the
+   descriptor operations until a rules grid exists); the routine form's
+   keyspace picker cannot yet filter out sharded keyspaces (descriptor
+   reference fields have no record filter, front-end follow-up);
+   ApplyVSchema and online DDL submission (``ddl_strategy``) are not
+   exposed; tablet backup and restore were not run live.
 #. For each engine, run the forms through the draft and review tools in
    ``ui_descriptors/README.md`` to make a descriptor folder. Reuse MySQL's
    field ids where the backend field is the same, and filter by this matrix.
@@ -333,6 +384,7 @@ Plan
    ``_VITESS``). A form becomes ``complete`` only after one passes.
 #. Fix the Vitess view drop, and gate TiDB ``CHECK`` on
    ``tidb_enable_check_constraint``.
+   Vitess view drop fixed 2026-10-30 (see Vitess above).
 #. Fix the MySQL-wire registration defect from the 2026-10-29 smoke test:
    registration stores ``database_password_2`` / ``_3`` secret slots for these
    engines, and endpoint verify then fails.

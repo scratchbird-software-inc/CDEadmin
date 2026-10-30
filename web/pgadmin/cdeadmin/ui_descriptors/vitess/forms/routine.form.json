@@ -1,0 +1,73 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "vitess",
+  "family": "routine",
+  "resource_kinds": [
+    "procedure"
+  ],
+  "status": "complete",
+  "engine_tab_title": "Vitess",
+  "omitted_tabs": [],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "procedure",
+          "label": "Procedure"
+        }
+      ],
+      "ui_only": true
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Keyspace",
+      "tab": "General",
+      "control": "reference",
+      "required": false,
+      "help": "Unsharded keyspaces only: Vitess refuses stored procedures on a sharded keyspace (VT12001).",
+      "reference_kind": "keyspace"
+    },
+    {
+      "field_id": "parameters",
+      "label": "Input parameters",
+      "tab": "Parameters",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Parameter name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Native data type",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "field_id": "body",
+      "label": "Procedure body",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "required": true,
+      "help": "Enter only the procedure body, not a CREATE command."
+    }
+  ],
+  "notes": "Stored procedures on unsharded keyspaces (live, Vitess 23.0.3). Stored functions, triggers and events are syntax errors through vtgate. CALL of a procedure that returns a result set fails (vttablet: Multi-Resultset not supported)."
+}

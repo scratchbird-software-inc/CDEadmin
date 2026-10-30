@@ -1,0 +1,112 @@
+{
+  "schema": "cdeadmin.ui-navigator.v1",
+  "engine": "vitess",
+  "sort": "alphabetical",
+  "groups": [
+    {
+      "group_id": "topology",
+      "title": "Topology",
+      "kinds": [
+        "cluster",
+        "cell",
+        "keyspace",
+        "shard",
+        "tablet",
+        "vtgate",
+        "vttablet",
+        "replica"
+      ],
+      "order": 1
+    },
+    {
+      "group_id": "routing",
+      "title": "VSchema and routing",
+      "kinds": [
+        "vschema",
+        "vindex",
+        "routing-rule",
+        "sequence"
+      ],
+      "order": 2
+    },
+    {
+      "group_id": "relations",
+      "title": "Tables and views",
+      "kinds": [
+        "table",
+        "column",
+        "index",
+        "constraint",
+        "view",
+        "partition",
+        "procedure"
+      ],
+      "order": 3
+    },
+    {
+      "group_id": "replication",
+      "title": "Workflows",
+      "kinds": [
+        "workflow",
+        "vreplication-stream",
+        "materialize"
+      ],
+      "order": 4
+    },
+    {
+      "group_id": "operations",
+      "title": "Administration",
+      "kinds": [
+        "online-ddl",
+        "backup"
+      ],
+      "order": 5
+    },
+    {
+      "group_id": "security",
+      "title": "Security",
+      "kinds": [
+        "user"
+      ],
+      "order": 6
+    }
+  ],
+  "resource_children": {
+    "table": [
+      "column",
+      "index",
+      "constraint",
+      "partition"
+    ],
+    "view": [
+      "column"
+    ]
+  },
+  "kind_icons": {
+    "cluster": "object.cluster",
+    "cell": "object.node",
+    "keyspace": "object.keyspace",
+    "shard": "object.partition",
+    "tablet": "object.node",
+    "vtgate": "object.node",
+    "vttablet": "object.node",
+    "replica": "object.replication",
+    "vschema": "object.schema",
+    "vindex": "object.index",
+    "routing-rule": "object.pipeline",
+    "sequence": "object.sequence",
+    "table": "object.table",
+    "column": "object.column",
+    "index": "object.index",
+    "constraint": "object.constraint",
+    "view": "object.view",
+    "partition": "object.partition",
+    "workflow": "object.job",
+    "vreplication-stream": "object.stream",
+    "materialize": "object.materialized_view",
+    "online-ddl": "object.job",
+    "backup": "object.snapshot",
+    "user": "object.user",
+    "procedure": "object.procedure"
+  }
+}

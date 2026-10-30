@@ -1,0 +1,876 @@
+{
+  "schema": "cdeadmin.ui-operations.v1",
+  "engine": "vitess",
+  "operations": [
+    {
+      "operation_id": "rebuild_graph",
+      "resource_kind": "keyspace",
+      "title": "Rebuild keyspace serving graph",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "cells",
+          "label": "Cells",
+          "control": "grid",
+          "required": false,
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Cell",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "allow_partial",
+          "label": "Allow partial snapshot keyspace",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "notes": "typed_from_json: keyspace.rebuild_graph.cells"
+    },
+    {
+      "operation_id": "planned_reparent",
+      "resource_kind": "shard",
+      "title": "Planned reparent shard",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "new_primary",
+          "label": "New primary tablet alias",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "tablet"
+        },
+        {
+          "field_id": "expected_primary",
+          "label": "Expected current primary",
+          "control": "reference",
+          "required": false,
+          "reference_kind": "tablet"
+        },
+        {
+          "field_id": "allow_cross_cell",
+          "label": "Allow cross-cell promotion",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "emergency_reparent",
+      "resource_kind": "shard",
+      "title": "Emergency reparent shard",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "new_primary",
+          "label": "New primary tablet alias",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "tablet"
+        },
+        {
+          "field_id": "expected_primary",
+          "label": "Expected prior primary",
+          "control": "reference",
+          "required": false,
+          "reference_kind": "tablet"
+        },
+        {
+          "field_id": "prevent_cross_cell",
+          "label": "Prevent cross-cell promotion",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "wait_for_all_tablets",
+          "label": "Wait for all tablets",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "set_primary_serving",
+      "resource_kind": "shard",
+      "title": "Set primary serving state",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "is_serving",
+          "label": "Primary is serving",
+          "control": "boolean",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "ping",
+      "resource_kind": "tablet",
+      "title": "Ping tablet",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "refresh_state",
+      "resource_kind": "tablet",
+      "title": "Refresh tablet state",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "run_health_check",
+      "resource_kind": "tablet",
+      "title": "Run health check",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "change_type",
+      "resource_kind": "tablet",
+      "title": "Change tablet type",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "tablet_type",
+          "label": "Tablet type",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "replica",
+              "label": "Replica"
+            },
+            {
+              "value": "rdonly",
+              "label": "Read-only"
+            },
+            {
+              "value": "spare",
+              "label": "Spare"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "set_writable",
+      "resource_kind": "tablet",
+      "title": "Set tablet writability",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "writable",
+          "label": "Writable",
+          "control": "boolean",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "backup",
+      "resource_kind": "tablet",
+      "title": "Back up tablet",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "restore",
+      "resource_kind": "tablet",
+      "title": "Restore tablet from backup",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "backup_timestamp",
+          "label": "Backup timestamp",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "rebuild",
+      "resource_kind": "vschema",
+      "title": "Rebuild serving VSchema",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "cells",
+          "label": "Cells",
+          "control": "grid",
+          "required": false,
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Cell",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "notes": "typed_from_json: vschema.rebuild.cells"
+    },
+    {
+      "operation_id": "create_move_tables",
+      "resource_kind": "workflow",
+      "title": "Create MoveTables workflow",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "workflow_name",
+          "label": "Workflow name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "target_keyspace",
+          "label": "Target keyspace",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "keyspace"
+        },
+        {
+          "field_id": "source_keyspace",
+          "label": "Source keyspace",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "keyspace"
+        },
+        {
+          "field_id": "tables",
+          "label": "Tables",
+          "control": "grid",
+          "required": true,
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Table",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "tablet_types",
+          "label": "Source tablet types",
+          "control": "select",
+          "required": true,
+          "default": "primary",
+          "options": [
+            {
+              "value": "primary",
+              "label": "Primary"
+            },
+            {
+              "value": "replica",
+              "label": "Replica"
+            },
+            {
+              "value": "rdonly",
+              "label": "Read-only"
+            },
+            {
+              "value": "replica,rdonly",
+              "label": "Replica and read-only"
+            }
+          ]
+        }
+      ],
+      "notes": "typed_from_json: workflow.create_move_tables.tables"
+    },
+    {
+      "operation_id": "create_reshard",
+      "resource_kind": "workflow",
+      "title": "Create Reshard workflow",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "workflow_name",
+          "label": "Workflow name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "target_keyspace",
+          "label": "Keyspace",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "keyspace"
+        },
+        {
+          "field_id": "source_shards",
+          "label": "Source shards",
+          "control": "grid",
+          "required": true,
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Shard",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "target_shards",
+          "label": "Target shards",
+          "control": "grid",
+          "required": true,
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Shard",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "tablet_types",
+          "label": "Source tablet types",
+          "control": "select",
+          "required": true,
+          "default": "primary",
+          "options": [
+            {
+              "value": "primary",
+              "label": "Primary"
+            },
+            {
+              "value": "replica",
+              "label": "Replica"
+            },
+            {
+              "value": "rdonly",
+              "label": "Read-only"
+            },
+            {
+              "value": "replica,rdonly",
+              "label": "Replica and read-only"
+            }
+          ]
+        }
+      ],
+      "notes": "typed_from_json: workflow.create_reshard.source_shards, workflow.create_reshard.target_shards"
+    },
+    {
+      "operation_id": "start",
+      "resource_kind": "workflow",
+      "title": "Start workflow",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "stop",
+      "resource_kind": "workflow",
+      "title": "Stop workflow",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "switch_traffic",
+      "resource_kind": "workflow",
+      "title": "Switch workflow traffic",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "workflow_family",
+          "label": "Workflow family",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "movetables",
+              "label": "MoveTables"
+            },
+            {
+              "value": "reshard",
+              "label": "Reshard"
+            }
+          ]
+        },
+        {
+          "field_id": "tablet_types",
+          "label": "Tablet traffic",
+          "control": "select",
+          "required": true,
+          "default": "all",
+          "options": [
+            {
+              "value": "all",
+              "label": "Primary, replica, and read-only"
+            },
+            {
+              "value": "primary",
+              "label": "Primary only"
+            },
+            {
+              "value": "replica",
+              "label": "Replica only"
+            },
+            {
+              "value": "rdonly",
+              "label": "Read-only only"
+            },
+            {
+              "value": "replica,rdonly",
+              "label": "Replica and read-only"
+            }
+          ]
+        },
+        {
+          "field_id": "cells",
+          "label": "Cells",
+          "control": "grid",
+          "required": false,
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Cell",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Catch-up timeout (seconds)",
+          "control": "number",
+          "required": false,
+          "default": 30
+        },
+        {
+          "field_id": "max_replication_lag_seconds",
+          "label": "Maximum replication lag (seconds)",
+          "control": "number",
+          "required": false,
+          "default": 30
+        },
+        {
+          "field_id": "enable_reverse_replication",
+          "label": "Enable reverse replication",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "initialize_target_sequences",
+          "label": "Initialize target sequences",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "workflow_family",
+            "equals": "movetables"
+          }
+        },
+        {
+          "field_id": "force",
+          "label": "Force past non-critical failures",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "notes": "typed_from_json: workflow.switch_traffic.cells"
+    },
+    {
+      "operation_id": "reverse_traffic",
+      "resource_kind": "workflow",
+      "title": "Reverse workflow traffic",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "workflow_family",
+          "label": "Workflow family",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "movetables",
+              "label": "MoveTables"
+            },
+            {
+              "value": "reshard",
+              "label": "Reshard"
+            }
+          ]
+        },
+        {
+          "field_id": "tablet_types",
+          "label": "Tablet traffic",
+          "control": "select",
+          "required": true,
+          "default": "all",
+          "options": [
+            {
+              "value": "all",
+              "label": "Primary, replica, and read-only"
+            },
+            {
+              "value": "primary",
+              "label": "Primary only"
+            },
+            {
+              "value": "replica",
+              "label": "Replica only"
+            },
+            {
+              "value": "rdonly",
+              "label": "Read-only only"
+            },
+            {
+              "value": "replica,rdonly",
+              "label": "Replica and read-only"
+            }
+          ]
+        },
+        {
+          "field_id": "cells",
+          "label": "Cells",
+          "control": "grid",
+          "required": false,
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Cell",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Catch-up timeout (seconds)",
+          "control": "number",
+          "required": false,
+          "default": 30
+        },
+        {
+          "field_id": "max_replication_lag_seconds",
+          "label": "Maximum replication lag (seconds)",
+          "control": "number",
+          "required": false,
+          "default": 30
+        },
+        {
+          "field_id": "enable_reverse_replication",
+          "label": "Enable reverse replication",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "force",
+          "label": "Force past non-critical failures",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "notes": "typed_from_json: workflow.reverse_traffic.cells"
+    },
+    {
+      "operation_id": "complete",
+      "resource_kind": "workflow",
+      "title": "Complete workflow migration",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "workflow_family",
+          "label": "Workflow family",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "movetables",
+              "label": "MoveTables"
+            },
+            {
+              "value": "reshard",
+              "label": "Reshard"
+            }
+          ]
+        },
+        {
+          "field_id": "keep_data",
+          "label": "Keep source data",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "workflow_family",
+            "equals": "movetables"
+          }
+        },
+        {
+          "field_id": "keep_routing_rules",
+          "label": "Keep routing rules",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "workflow_family",
+            "equals": "movetables"
+          }
+        },
+        {
+          "field_id": "rename_tables",
+          "label": "Rename retained source tables",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "workflow_family",
+            "equals": "movetables"
+          }
+        },
+        {
+          "field_id": "ignore_source_keyspace",
+          "label": "Ignore source keyspace",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "workflow_family",
+            "equals": "movetables"
+          }
+        }
+      ]
+    },
+    {
+      "operation_id": "start",
+      "resource_kind": "materialize",
+      "title": "Start materialization",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "stop",
+      "resource_kind": "materialize",
+      "title": "Stop materialization",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "launch",
+      "resource_kind": "online-ddl",
+      "title": "Launch postponed migration",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "retry",
+      "resource_kind": "online-ddl",
+      "title": "Retry failed migration",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "complete",
+      "resource_kind": "online-ddl",
+      "title": "Complete postponed migration",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "cancel",
+      "resource_kind": "online-ddl",
+      "title": "Cancel migration",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "cleanup",
+      "resource_kind": "online-ddl",
+      "title": "Clean up migration artifacts",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "throttle",
+      "resource_kind": "online-ddl",
+      "title": "Throttle migration",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "unthrottle",
+      "resource_kind": "online-ddl",
+      "title": "Unthrottle migration",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "force_cutover",
+      "resource_kind": "online-ddl",
+      "title": "Force migration cutover",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    }
+  ]
+}

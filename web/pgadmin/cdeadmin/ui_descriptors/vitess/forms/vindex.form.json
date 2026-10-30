@@ -1,0 +1,43 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "vitess",
+  "family": "engine_object",
+  "resource_kinds": [
+    "vindex"
+  ],
+  "status": "complete",
+  "engine_tab_title": "Vitess",
+  "notes": "Vindex. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15); field ids are the provider dialog's own.",
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "vindex_type",
+      "label": "Vindex type",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "option_values_path": [
+        "dialect",
+        "vindex_types"
+      ],
+      "record_key": "vindex_type",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "parameters",
+      "label": "Parameters",
+      "tab": "Definition",
+      "control": "keyvalue",
+      "modes": [
+        "create"
+      ]
+    }
+  ]
+}

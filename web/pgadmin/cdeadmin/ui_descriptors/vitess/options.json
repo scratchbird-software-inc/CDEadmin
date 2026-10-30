@@ -1,0 +1,43 @@
+{
+  "schema": "cdeadmin.ui-options.v1",
+  "engine": "vitess",
+  "dialect": {
+    "vindex_types": [
+      "hash",
+      "xxhash",
+      "unicode_loose_xxhash",
+      "unicode_loose_md5",
+      "binary",
+      "binary_md5",
+      "numeric",
+      "numeric_static_map",
+      "reverse_bits",
+      "null",
+      "lookup",
+      "lookup_hash",
+      "lookup_unique",
+      "lookup_hash_unique",
+      "consistent_lookup",
+      "consistent_lookup_unique",
+      "region_experimental",
+      "region_json",
+      "cfc",
+      "multicol"
+    ]
+  },
+  "catalog": {
+    "keyspaces": {
+      "resource_kind": "keyspace"
+    },
+    "tables": {
+      "resource_kind": "table"
+    },
+    "tablets": {
+      "resource_kind": "tablet"
+    },
+    "cells": {
+      "resource_kind": "cell"
+    }
+  },
+  "notes": "Vindex types are the Vitess 23 built-in vindexes; catalog entries resolve from the endpoint resources of the named kind."
+}

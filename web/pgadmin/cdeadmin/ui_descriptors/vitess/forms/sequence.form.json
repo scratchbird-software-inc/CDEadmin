@@ -1,0 +1,57 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "vitess",
+  "family": "sequence",
+  "resource_kinds": [
+    "sequence"
+  ],
+  "status": "draft",
+  "engine_tab_title": "Vitess",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Keyspace",
+      "tab": "General",
+      "control": "reference",
+      "required": true,
+      "help": "Vitess sequence backing tables must be in an unsharded keyspace.",
+      "reference_kind": "keyspace"
+    },
+    {
+      "field_id": "start",
+      "label": "Next value",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "default": 1
+    },
+    {
+      "field_id": "cache",
+      "label": "Cache size",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "default": 1000
+    },
+    {
+      "field_id": "restart",
+      "label": "Next value",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "modes": [
+        "alter"
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database)."
+}

@@ -1,0 +1,33 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "vitess",
+  "family": "engine_object",
+  "resource_kinds": [
+    "shard"
+  ],
+  "status": "complete",
+  "engine_tab_title": "Vitess",
+  "notes": "Shard. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15); field ids are the provider dialog's own.",
+  "fields": [
+    {
+      "field_id": "keyspace",
+      "label": "Keyspace",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "keyspace",
+      "required": true,
+      "record_key": "keyspace",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "shard",
+      "label": "Key range",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "record_key": "key_range",
+      "help": "For example -80, 80- or - for an unsharded keyspace.",
+      "editable_after_create": false
+    }
+  ]
+}

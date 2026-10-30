@@ -1,0 +1,462 @@
+{
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "vitess",
+  "profiles": [
+    "vitess-native"
+  ],
+  "beta_tier": "full",
+  "version_range": {
+    "minimum": "23.0.3",
+    "tested": [
+      "23.0.3"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "cluster",
+      "family": "engine_object",
+      "title": "Vitess cluster",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "cell",
+      "family": "engine_object",
+      "title": "Cell",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "keyspace",
+      "family": "engine_object",
+      "title": "Keyspace",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ],
+      "form": "forms/keyspace.form.json"
+    },
+    {
+      "resource_kind": "shard",
+      "family": "engine_object",
+      "title": "Shard",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ],
+      "form": "forms/shard.form.json"
+    },
+    {
+      "resource_kind": "tablet",
+      "family": "engine_object",
+      "title": "Tablet",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "vtgate",
+      "family": "engine_object",
+      "title": "VTGate",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "vttablet",
+      "family": "engine_object",
+      "title": "VTTablet",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "vschema",
+      "family": "engine_object",
+      "title": "VSchema",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "table",
+      "family": "table",
+      "form": "forms/table.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "insert",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "update",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "delete",
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "column",
+      "family": "engine_object",
+      "title": "Column",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "view",
+      "family": "view",
+      "form": "forms/view.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "index",
+      "family": "index",
+      "form": "forms/index.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "constraint",
+      "family": "engine_object",
+      "title": "Constraint",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "partition",
+      "family": "engine_object",
+      "title": "Physical partition",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "sequence",
+      "family": "sequence",
+      "form": "forms/sequence.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "vindex",
+      "family": "engine_object",
+      "title": "Vindex",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ],
+      "form": "forms/vindex.form.json"
+    },
+    {
+      "resource_kind": "routing-rule",
+      "family": "engine_object",
+      "title": "Routing rule",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "workflow",
+      "family": "engine_object",
+      "title": "Workflow",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "vreplication-stream",
+      "family": "engine_object",
+      "title": "VReplication stream",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "replica",
+      "family": "engine_object",
+      "title": "Tablet replica",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "materialize",
+      "family": "engine_object",
+      "title": "Materialization",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "online-ddl",
+      "family": "engine_object",
+      "title": "Online DDL",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "backup",
+      "family": "engine_object",
+      "title": "Backup",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "user",
+      "family": "engine_object",
+      "title": "User/ACL",
+      "operations": []
+    },
+    {
+      "resource_kind": "procedure",
+      "family": "routine",
+      "form": "forms/routine.form.json",
+      "operations": []
+    }
+  ]
+}
