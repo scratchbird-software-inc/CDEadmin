@@ -1,0 +1,87 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "routine",
+  "resource_kinds": [
+    "function",
+    "procedure"
+  ],
+  "status": "draft",
+  "engine_tab_title": "yugabytedb",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "function.create.return_parameters",
+      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
+      "tracking": "ui-unification"
+    },
+    {
+      "concept": "procedure.create.return_parameters",
+      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
+      "tracking": "ui-unification"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Database",
+      "tab": "General",
+      "control": "reference",
+      "required": false,
+      "help": "Use a qualified database or schema name where needed.",
+      "reference_kind": "database"
+    },
+    {
+      "field_id": "returns",
+      "label": "Return type",
+      "tab": "General",
+      "control": "text",
+      "required": false
+    },
+    {
+      "field_id": "parameters",
+      "label": "Input parameters",
+      "tab": "Parameters",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Parameter name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Native data type",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "field_id": "return_parameters",
+      "label": "Output parameters",
+      "tab": "Parameters",
+      "control": "keyvalue",
+      "required": false
+    },
+    {
+      "field_id": "body",
+      "label": "Function body",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "required": true,
+      "help": "Enter only the function body, not a CREATE command."
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database)."
+}

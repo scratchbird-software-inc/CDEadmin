@@ -347,6 +347,17 @@ others) run as on PostgreSQL. Multi-node behaviour (tablet placement
 across zones, leader preferences, xCluster) is untested on the one-node
 demo.
 
+YugabyteDB progress, 2026-10-30: ``ui_descriptors/yugabytedb`` exists and
+YugabyteDB joined the beta-engine gate lists. Trigger and role (user, role)
+forms are ``complete`` (``providers/yugabytedb/objects.py``, live round
+trips in ``tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py``): every
+trigger timing, level and event, ``UPDATE OF`` columns, ``WHEN``, enable
+modes, comments, ``CREATE OR REPLACE`` and rename; PostgreSQL role options,
+connection limit, expiry, memberships, comments, rename and password
+removal. Field ids match the CockroachDB forms where the concept is the
+same. Trigger records come from ``pg_trigger`` (WHEN and ``UPDATE OF`` from
+``pg_get_triggerdef``), one per trigger. The other families are drafts.
+
 Provider finding, 2026-10-30: the shared relational apply runs a plan in
 one transaction, and YugabyteDB refuses ``CREATE DATABASE`` and ``CREATE
 TABLESPACE`` there ("cannot run inside a transaction block"), so the

@@ -1,0 +1,224 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "role",
+  "resource_kinds": [
+    "user",
+    "role",
+    "privilege"
+  ],
+  "status": "complete",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Per-role session defaults (ALTER ROLE ... SET)",
+      "reason": "Run on 2025.2.2.2 but have no editor yet",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Membership WITH ADMIN OPTION",
+      "reason": "No editor yet; memberships are granted without it",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Grant dialog privilege list",
+      "reason": "Grant/revoke use the provider dialog; its privilege list is a JSON field",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "tab": "General",
+      "control": "select",
+      "ui_only": true,
+      "options": [
+        {
+          "value": "user",
+          "label": "User"
+        },
+        {
+          "value": "role",
+          "label": "Role"
+        },
+        {
+          "value": "grant",
+          "label": "Grant"
+        }
+      ]
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "Renaming runs ALTER ROLE ... RENAME TO."
+    },
+    {
+      "field_id": "login",
+      "label": "Can log in",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "help": "LOGIN / NOLOGIN. A user is a role that can log in.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "General",
+      "control": "password",
+      "required": false,
+      "help": "The value is redacted from validation and plans.",
+      "group": "Authentication",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    },
+    {
+      "field_id": "clear_password",
+      "label": "Remove password",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ],
+      "group": "Authentication",
+      "help": "PASSWORD NULL",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    },
+    {
+      "field_id": "valid_until",
+      "label": "Valid until",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "VALID UNTIL; empty means no expiry.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    },
+    {
+      "field_id": "connection_limit",
+      "label": "Connection limit",
+      "tab": "General",
+      "control": "number",
+      "min": -1,
+      "help": "CONNECTION LIMIT; -1 for none.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON ROLE",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    },
+    {
+      "field_id": "member_of",
+      "label": "Member of",
+      "tab": "Membership",
+      "control": "grid",
+      "item_kind": "string",
+      "required": false,
+      "help": "Roles granted to this principal (GRANT role TO name).",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      },
+      "columns": [
+        {
+          "field_id": "role",
+          "label": "Role",
+          "control": "reference",
+          "reference_kind": "role",
+          "reference_value": "display_name",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "privileges",
+      "label": "Role options",
+      "tab": "Privileges",
+      "control": "multiselect",
+      "required": false,
+      "options": [
+        {
+          "value": "SUPERUSER",
+          "label": "Superuser"
+        },
+        {
+          "value": "CREATEDB",
+          "label": "Create databases"
+        },
+        {
+          "value": "CREATEROLE",
+          "label": "Create roles"
+        },
+        {
+          "value": "INHERIT",
+          "label": "Inherit privileges of granted roles"
+        },
+        {
+          "value": "REPLICATION",
+          "label": "Replication"
+        },
+        {
+          "value": "BYPASSRLS",
+          "label": "Bypass row-level security"
+        }
+      ],
+      "help": "PostgreSQL role options; clearing one sends its NO form.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "user",
+          "role"
+        ]
+      }
+    }
+  ],
+  "notes": "Started from the CockroachDB role form (same field ids); YugabyteDB takes PostgreSQL role options, connection limit, rename and comments (providers/yugabytedb/objects.py). privilege: provider exposes no create form (grant, inspect, revoke). Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
+}

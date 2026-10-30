@@ -19,6 +19,7 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
+from . import objects
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
 from .control_plane import (
@@ -88,7 +89,8 @@ _YSQL_SUPPORTED.update({
     'type': frozenset({'inspect', 'create', 'rename', 'drop'}),
     'function': frozenset({'inspect', 'create', 'drop'}),
     'procedure': frozenset({'inspect', 'create', 'drop'}),
-    'trigger': frozenset({'inspect', 'create', 'drop'}),
+    # alter: CREATE OR REPLACE, rename, enable, comment (objects.py).
+    'trigger': frozenset({'inspect', 'create', 'alter', 'drop'}),
     'extension': frozenset({'inspect', 'create', 'drop'}),
     # Partition bounds are part of CREATE TABLE in YSQL. Until the table form
     # has a complete structured bound editor, partitions remain inspect-only.
@@ -121,7 +123,29 @@ _CONTROL_ADMINISTRATION = DistributedSQLControlPlane(
 class YugabyteDBAdministration(RelationalAdministration):
     """Combine YSQL object administration with native cluster controls."""
 
+    @staticmethod
+    def _native_object(kind, operation):
+        return operation in objects.OPERATIONS.get(kind, ())
+
+    def _native_compile(self, request):
+        draft = request.get('draft')
+        if not isinstance(draft, dict):
+            raise RelationalClientError('administration draft is invalid')
+        return {'statements': objects.compile_operation(
+            self, request['resource_kind'], request['operation_id'], draft,
+            request.get('target_resource'))}
+
+    def _normalize_draft(self, kind, operation, draft):
+        if self._native_object(kind, operation):
+            if not isinstance(draft, Mapping):
+                raise RelationalClientError(
+                    'administration draft is invalid')
+            return dict(draft)
+        return super()._normalize_draft(kind, operation, draft)
+
     def _form(self, kind, operation):
+        if self._native_object(kind, operation):
+            return objects.form(kind, operation, self._field)
         if operation == 'create' and kind == 'materialized-view':
             return {
                 'form_id': 'materialized-view.create',
@@ -178,6 +202,9 @@ class YugabyteDBAdministration(RelationalAdministration):
         return super()._form(kind, operation)
 
     def _compile(self, request):
+        if self._native_object(request['resource_kind'],
+                               request['operation_id']):
+            return self._native_compile(request)
         compiled = super()._compile(request)
         if request['resource_kind'] in {'database', 'tablespace'} and \
                 request['operation_id'] in {'create', 'drop'}:
@@ -305,6 +332,17 @@ class YugabyteDBAdministration(RelationalAdministration):
         if _CONTROL_ADMINISTRATION.control_plane.supports(
                 request.get('resource_kind'), request.get('operation_id')):
             return _CONTROL_ADMINISTRATION.validate(request)
+        kind = request.get('resource_kind')
+        operation = request.get('operation_id')
+        if self._native_object(kind, operation) and self.supports(
+                kind, operation):
+            try:
+                self._native_compile(request)
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None,
+                                    'code': f'invalid_ysql_{kind}',
+                                    'message': str(error)}]}
+            return {'errors': []}
         return super().validate(request)
 
     def plan(self, request):
@@ -464,14 +502,34 @@ def _extras(cursor, _request, generation):
         values.append(resource(kind, [schema], name, generation, {
             'identity_arguments': str(arguments),
         }))
-    for schema, table, name in optional_rows(
+    # pg_trigger, one record per trigger (information_schema.triggers has
+    # one row per event); WHEN and UPDATE OF from pg_get_triggerdef.
+    for (schema, table, name, tgtype, enabled, function_schema, function,
+         arguments, definition, comment) in optional_rows(
         cursor,
-        'SELECT event_object_schema, event_object_table, trigger_name '
-        'FROM information_schema.triggers '
-        f'WHERE event_object_schema NOT IN {excluded} ORDER BY 1, 2, 3',
+        'SELECT n.nspname, cl.relname, tg.tgname, tg.tgtype, tg.tgenabled, '
+        'pn.nspname, p.proname, tg.tgargs, pg_get_triggerdef(tg.oid), '
+        "obj_description(tg.oid, 'pg_trigger') "
+        'FROM pg_catalog.pg_trigger tg '
+        'JOIN pg_catalog.pg_class cl ON cl.oid = tg.tgrelid '
+        'JOIN pg_catalog.pg_namespace n ON n.oid = cl.relnamespace '
+        'JOIN pg_catalog.pg_proc p ON p.oid = tg.tgfoid '
+        'JOIN pg_catalog.pg_namespace pn ON pn.oid = p.pronamespace '
+        f'WHERE NOT tg.tgisinternal AND n.nspname NOT IN {excluded} '
+        'ORDER BY 1, 2, 3',
     ):
+        definition = str(definition or '')
+        when = re.search(r' WHEN \((.*)\) EXECUTE ', definition)
+        columns = re.search(r' UPDATE OF (.+?) (?:OR |ON )', definition)
         values.append(resource(
-            'trigger', [schema, table], name, generation
+            'trigger', [schema, table], name, generation,
+            objects.trigger_native(
+                (str(schema), str(table)), tgtype, enabled,
+                (str(function_schema), str(function)), arguments,
+                when.group(1) if when else None,
+                [part.strip().strip('"') for part in
+                 columns.group(1).split(',')] if columns else [],
+                None if comment is None else str(comment)),
         ))
     for name, version, schema in optional_rows(
         cursor,
@@ -506,17 +564,30 @@ def _extras(cursor, _request, generation):
         values.append(resource('tablespace', [], name, generation, {
             'owner': str(owner), 'options': list(options or ()),
         }))
-    for name, can_login in optional_rows(
+    memberships = {}
+    for member, role in optional_rows(
         cursor,
-        'SELECT rolname, rolcanlogin FROM pg_catalog.pg_roles ORDER BY 1',
+        'SELECT m.rolname, r.rolname FROM pg_catalog.pg_auth_members a '
+        'JOIN pg_catalog.pg_roles m ON m.oid = a.member '
+        'JOIN pg_catalog.pg_roles r ON r.oid = a.roleid',
     ):
-        values.append(resource('role', [], name, generation, {
-            'can_login': bool(can_login),
-        }))
-        if can_login:
-            values.append(resource('user', [], name, generation, {
-                'can_login': True,
-            }))
+        memberships.setdefault(str(member), []).append(str(role))
+    for row in optional_rows(
+        cursor,
+        'SELECT rolname, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, '
+        'rolinherit, rolreplication, rolbypassrls, rolconnlimit, '
+        'rolvaliduntil::text, '
+        "shobj_description(oid, 'pg_authid') "
+        'FROM pg_catalog.pg_roles ORDER BY 1',
+    ):
+        name, comment = str(row[0]), row[-1]
+        native = {'can_login': bool(row[1]), **objects.principal_native(
+            row[1:-1], memberships.get(name),
+            None if comment is None else str(comment))}
+        values.append(resource('role', [], name, generation, native))
+        if row[1]:
+            values.append(resource('user', [], name, generation,
+                                   dict(native)))
     for grantee, schema, table, privilege in optional_rows(
         cursor,
         'SELECT grantee, table_schema, table_name, privilege_type '

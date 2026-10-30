@@ -57,6 +57,8 @@ def administrations():
     # PostgreSQL-wire engines brought to full parity (same direction).
     from pgadmin.cdeadmin.providers.cockroachdb import provider as cockroachdb
     found["cockroachdb"] = cockroachdb.ADMINISTRATION
+    from pgadmin.cdeadmin.providers.yugabytedb import provider as yugabytedb
+    found["yugabytedb"] = yugabytedb.ADMINISTRATION
     return found
 
 

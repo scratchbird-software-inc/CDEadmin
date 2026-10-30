@@ -19,7 +19,7 @@ from pgadmin.cdeadmin.ui_descriptors import (  # noqa: E402
 BETA_ENGINES = ('postgresql', 'mysql', 'mariadb', 'firebird', 'duckdb', 'sqlite',
                 # Owner direction 2026-10-30: the parity engines join beta as
                 # their descriptor folders land.
-                'dolt', 'tidb', 'vitess', 'cockroachdb')
+                'dolt', 'tidb', 'vitess', 'cockroachdb', 'yugabytedb')
 FAMILIES = ('table', 'view', 'index', 'routine', 'trigger', 'sequence', 'type',
             'role', 'database', 'server')
 

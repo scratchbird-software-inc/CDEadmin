@@ -1,0 +1,29 @@
+{
+  "schema": "cdeadmin.ui-options.v1",
+  "engine": "yugabytedb",
+  "dialect": {},
+  "catalog": {
+    "databases": {
+      "resource_kind": "database"
+    },
+    "schemas": {
+      "resource_kind": "schema"
+    },
+    "tables": {
+      "resource_kind": "table"
+    },
+    "functions": {
+      "resource_kind": "function"
+    },
+    "users": {
+      "resource_kind": "user"
+    },
+    "roles": {
+      "resource_kind": "role"
+    },
+    "tablespaces": {
+      "resource_kind": "tablespace"
+    }
+  },
+  "notes": "Catalog entries resolve at runtime from the endpoint resources of the named kind (tested version 2025.2.2.2)."
+}

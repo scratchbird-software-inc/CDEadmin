@@ -1,0 +1,138 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "type",
+  "resource_kinds": [
+    "type",
+    "domain"
+  ],
+  "status": "draft",
+  "engine_tab_title": "yugabytedb",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "type.create.enum_values",
+      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
+      "tracking": "ui-unification"
+    },
+    {
+      "concept": "type.create.fields",
+      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
+      "tracking": "ui-unification"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "default",
+          "label": "Default"
+        },
+        {
+          "value": "domain",
+          "label": "Domain"
+        }
+      ]
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Database",
+      "tab": "General",
+      "control": "reference",
+      "required": false,
+      "reference_kind": "database"
+    },
+    {
+      "field_id": "type_kind",
+      "label": "Type kind",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "options": [
+        {
+          "value": "ENUM",
+          "label": "Enum"
+        },
+        {
+          "value": "COMPOSITE",
+          "label": "Composite"
+        }
+      ]
+    },
+    {
+      "field_id": "data_type",
+      "label": "Base data type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "group": "Domain",
+      "visible_when": {
+        "field": "variant",
+        "equals": "domain"
+      }
+    },
+    {
+      "field_id": "default",
+      "label": "Default expression",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "group": "Domain",
+      "visible_when": {
+        "field": "variant",
+        "equals": "domain"
+      }
+    },
+    {
+      "field_id": "not_null",
+      "label": "Not null",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "group": "Domain",
+      "visible_when": {
+        "field": "variant",
+        "equals": "domain"
+      }
+    },
+    {
+      "field_id": "enum_values",
+      "label": "Enum values",
+      "tab": "Constraints",
+      "control": "keyvalue",
+      "required": false
+    },
+    {
+      "field_id": "fields",
+      "label": "Composite fields",
+      "tab": "Constraints",
+      "control": "keyvalue",
+      "required": false
+    },
+    {
+      "field_id": "check",
+      "label": "Check expression",
+      "tab": "Constraints",
+      "control": "text",
+      "required": false,
+      "group": "Domain",
+      "visible_when": {
+        "field": "variant",
+        "equals": "domain"
+      }
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database)."
+}

@@ -1,0 +1,204 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "trigger",
+  "resource_kinds": [
+    "trigger"
+  ],
+  "status": "complete",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Transition tables (REFERENCING)",
+      "reason": "Refused by YugabyteDB 2025.2.2.2 (probe)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Constraint triggers (CREATE CONSTRAINT TRIGGER)",
+      "reason": "Not probed yet; no editor",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Event triggers",
+      "reason": "Run on 2025.2.2.2 (probe) but have no editor yet",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "Renaming runs ALTER TRIGGER ... RENAME TO."
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "reference",
+      "required": true,
+      "help": "A table, or a view for INSTEAD OF triggers.",
+      "reference_kind": "table",
+      "reference_value": "display_path"
+    },
+    {
+      "field_id": "timing",
+      "label": "Timing",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "BEFORE",
+      "options": [
+        {
+          "value": "BEFORE",
+          "label": "Before"
+        },
+        {
+          "value": "AFTER",
+          "label": "After"
+        },
+        {
+          "value": "INSTEAD OF",
+          "label": "Instead Of"
+        }
+      ]
+    },
+    {
+      "field_id": "level",
+      "label": "Level",
+      "tab": "General",
+      "control": "select",
+      "default": "ROW",
+      "options": [
+        {
+          "value": "ROW",
+          "label": "For each row"
+        },
+        {
+          "value": "STATEMENT",
+          "label": "For each statement"
+        }
+      ],
+      "help": "INSTEAD OF is row-level; TRUNCATE is statement-level."
+    },
+    {
+      "field_id": "events",
+      "label": "Events",
+      "tab": "General",
+      "control": "multiselect",
+      "required": true,
+      "default": [
+        "INSERT"
+      ],
+      "options": [
+        {
+          "value": "INSERT",
+          "label": "Insert"
+        },
+        {
+          "value": "UPDATE",
+          "label": "Update"
+        },
+        {
+          "value": "DELETE",
+          "label": "Delete"
+        },
+        {
+          "value": "TRUNCATE",
+          "label": "Truncate"
+        }
+      ]
+    },
+    {
+      "field_id": "update_columns",
+      "label": "UPDATE OF columns",
+      "tab": "General",
+      "control": "grid",
+      "item_kind": "string",
+      "help": "Fire on UPDATE only when one of these columns is set.",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Column",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "column"
+        }
+      ]
+    },
+    {
+      "field_id": "when",
+      "label": "WHEN condition",
+      "tab": "General",
+      "control": "code",
+      "language": "sql",
+      "required": false,
+      "help": "Row fields as NEW.column / OLD.column."
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON TRIGGER"
+    },
+    {
+      "field_id": "function",
+      "label": "Trigger function",
+      "tab": "Definition",
+      "control": "reference",
+      "required": true,
+      "help": "A function that returns TRIGGER.",
+      "reference_kind": "function",
+      "reference_value": "display_path"
+    },
+    {
+      "field_id": "arguments",
+      "label": "Function arguments",
+      "tab": "Definition",
+      "control": "grid",
+      "item_kind": "string",
+      "required": false,
+      "help": "String constants passed to the function (TG_ARGV).",
+      "reorderable": true,
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Argument",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "enabled",
+      "label": "Fires",
+      "tab": "Definition",
+      "control": "select",
+      "default": "ORIGIN",
+      "options": [
+        {
+          "value": "ORIGIN",
+          "label": "Enabled"
+        },
+        {
+          "value": "DISABLED",
+          "label": "Disabled"
+        },
+        {
+          "value": "REPLICA",
+          "label": "Replica sessions only"
+        },
+        {
+          "value": "ALWAYS",
+          "label": "Always"
+        }
+      ],
+      "help": "ALTER TABLE ... ENABLE / DISABLE / ENABLE REPLICA / ENABLE ALWAYS TRIGGER"
+    }
+  ],
+  "notes": "Started from the CockroachDB trigger form (same field ids); YugabyteDB adds INSTEAD OF, TRUNCATE, statement level, UPDATE OF columns, enable modes, comments and rename. A definition change runs CREATE OR REPLACE TRIGGER (providers/yugabytedb/objects.py). Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
+}

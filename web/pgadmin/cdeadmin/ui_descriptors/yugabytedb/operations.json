@@ -1,0 +1,361 @@
+{
+  "schema": "cdeadmin.ui-operations.v1",
+  "engine": "yugabytedb",
+  "operations": [
+    {
+      "operation_id": "set_load_balancer",
+      "resource_kind": "cluster",
+      "title": "Set load balancer state",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "enabled",
+          "label": "Enabled",
+          "control": "boolean",
+          "required": true,
+          "default": true
+        }
+      ]
+    },
+    {
+      "operation_id": "add_blacklist",
+      "resource_kind": "node",
+      "title": "Drain node replicas",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "remove_blacklist",
+      "resource_kind": "node",
+      "title": "Return node replicas",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "add_leader_blacklist",
+      "resource_kind": "node",
+      "title": "Drain node leaders",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "remove_leader_blacklist",
+      "resource_kind": "node",
+      "title": "Return node leaders",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "configure_placement",
+      "resource_kind": "table",
+      "title": "Configure table placement",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "tablespace",
+          "label": "Placement tablespace",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "compact",
+      "resource_kind": "table",
+      "title": "Compact table tablets",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "timeout_seconds",
+          "label": "Completion timeout (seconds)",
+          "control": "number",
+          "required": false,
+          "default": 20
+        },
+        {
+          "field_id": "include_indexes",
+          "label": "Also compact YCQL indexes",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "include_vector_indexes",
+          "label": "Also compact vector indexes",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "leader_stepdown",
+      "resource_kind": "tablet",
+      "title": "Step down tablet leader",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "destination_uuid",
+          "label": "Destination TServer UUID",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "operation_id": "split",
+      "resource_kind": "tablet",
+      "title": "Split tablet",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "leader_stepdown",
+      "resource_kind": "master",
+      "title": "Step down master leader",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "destination_uuid",
+          "label": "Destination master UUID",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "operation_id": "configure",
+      "resource_kind": "placement-policy",
+      "title": "Configure live placement",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "placements",
+          "label": "Cloud/region/zone placements",
+          "control": "keyvalue",
+          "required": true
+        },
+        {
+          "field_id": "replication_factor",
+          "label": "Replication factor",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "placement_uuid",
+          "label": "Placement UUID",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "notes": "typed_from_json: placement-policy.configure.placements"
+    },
+    {
+      "operation_id": "clear",
+      "resource_kind": "placement-policy",
+      "title": "Clear live placement",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "create_database",
+      "resource_kind": "snapshot",
+      "title": "Create database snapshot",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "YSQL database",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "retention_hours",
+          "label": "Retention hours",
+          "control": "number",
+          "required": false
+        }
+      ]
+    },
+    {
+      "operation_id": "restore",
+      "resource_kind": "snapshot",
+      "title": "Restore snapshot",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "restore_timestamp",
+          "label": "Restore timestamp",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "restore",
+      "resource_kind": "schedule",
+      "title": "Restore snapshot schedule",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "restore_timestamp",
+          "label": "Restore timestamp",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "set_enabled",
+      "resource_kind": "xcluster-replication",
+      "title": "Set xCluster replication state",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "enabled",
+          "label": "Enabled",
+          "control": "boolean",
+          "required": true,
+          "default": true
+        }
+      ]
+    },
+    {
+      "operation_id": "add_tables",
+      "resource_kind": "xcluster-replication",
+      "title": "Add xCluster replicated tables",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "table_ids",
+          "label": "Producer table IDs",
+          "control": "keyvalue",
+          "required": true
+        },
+        {
+          "field_id": "bootstrap_ids",
+          "label": "Producer bootstrap IDs",
+          "control": "keyvalue",
+          "required": false
+        }
+      ],
+      "notes": "typed_from_json: xcluster-replication.add_tables.table_ids, xcluster-replication.add_tables.bootstrap_ids"
+    },
+    {
+      "operation_id": "remove_tables",
+      "resource_kind": "xcluster-replication",
+      "title": "Remove xCluster replicated tables",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "table_ids",
+          "label": "Producer table IDs",
+          "control": "keyvalue",
+          "required": true
+        },
+        {
+          "field_id": "ignore_errors",
+          "label": "Ignore missing tables",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "notes": "typed_from_json: xcluster-replication.remove_tables.table_ids"
+    }
+  ]
+}
