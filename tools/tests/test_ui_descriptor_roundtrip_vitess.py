@@ -285,3 +285,139 @@ def test_procedure_in_unsharded_keyspace_and_refused_when_sharded(live):
         result = ADMINISTRATION.apply(
             client, executor_request(request, planned))
         assert result['accepted'], result
+
+
+def shards_of(keyspace):
+    return [row[0].split('/', 1)[1] for row in query('SHOW VITESS_SHARDS')
+            if row[0].startswith(keyspace + '/')]
+
+
+def test_index_create_and_drop_reach_every_shard(live):
+    route, client = live
+    table = f'rt_ix_t_{UNIQUE}'
+    index = f'rt_ix_{UNIQUE}'
+    query(f'CREATE TABLE `{table}` (id BIGINT NOT NULL PRIMARY KEY, '
+          'a INT, b INT)')
+    try:
+        query(f'ALTER VSCHEMA ON `{table}` ADD VINDEX xxhash (id)')
+        form = resolved_form('vitess', 'index')
+        run(client, route, 'index', 'create', backend_draft(form, {
+            'name': index, 'parent': KEYSPACE, 'table': table,
+            'columns': ['b', 'a'], 'unique': False}))
+        target, baseline = record(client, route, 'index', index, 'index')
+        assert (baseline['table'],
+                [row['value'] for row in baseline['columns']],
+                baseline['unique']) == (table, ['b', 'a'], False)
+        for shard in shards_of(KEYSPACE):
+            assert query(
+                f"SHOW INDEX FROM `{table}` WHERE Key_name = '{index}'",
+                keyspace=f'{KEYSPACE}:{shard}'), shard
+        run(client, route, 'index', 'drop', {'confirmation': index},
+            target=target)
+        for shard in shards_of(KEYSPACE):
+            assert not query(
+                f"SHOW INDEX FROM `{table}` WHERE Key_name = '{index}'",
+                keyspace=f'{KEYSPACE}:{shard}'), shard
+    finally:
+        query(f'ALTER VSCHEMA DROP TABLE `{table}`')
+        query(f'DROP TABLE IF EXISTS `{table}`')
+
+
+def test_unsharded_keyspace_objects_are_listed(live):
+    # vtgate reads information_schema for the session keyspace unless an
+    # equality predicate names another; the catalog reads each keyspace.
+    route, client = live
+    rows = resources(client, route)
+    assert any(row['resource_kind'] == 'table' and
+               row['display_path'][0] == 'lookup_keyspace' for row in rows)
+    assert any(row['resource_kind'] == 'index' and
+               row['display_path'][0] == 'lookup_keyspace' for row in rows)
+
+
+def test_sequence_create_reopen_alter_drop(live):
+    route, client = live
+    name = f'rt_seq_{UNIQUE}'
+    form = resolved_form('vitess', 'sequence')
+    run(client, route, 'sequence', 'create', backend_draft(form, {
+        'name': name, 'parent': 'lookup_keyspace', 'start': 500,
+        'cache': 50}))
+    try:
+        target, baseline = record(client, route, 'sequence', name,
+                                  'sequence')
+        assert target['display_path'] == ['lookup_keyspace', name]
+        assert (baseline['restart'], baseline['cache']) == (500, 50)
+        alter = backend_draft(form, {**baseline, 'restart': 900,
+                                     'cache': 20},
+                              mode='alter', baseline=baseline)
+        run(client, route, 'sequence', 'alter', alter, target=target)
+        assert query(f'SELECT next_id, cache FROM `{name}` WHERE id = 0',
+                     keyspace='lookup_keyspace') == [(900, 20)]
+        run(client, route, 'sequence', 'drop', {'confirmation': name},
+            target=target)
+        assert find(client, route, 'sequence', name, wait=5) is None
+        assert (name,) not in query('SHOW TABLES',
+                                    keyspace='lookup_keyspace')
+    finally:
+        try:
+            query(f'ALTER VSCHEMA DROP SEQUENCE `{name}`',
+                  keyspace='lookup_keyspace')
+        except mysql_connector.Error:
+            pass
+        query(f'DROP TABLE IF EXISTS `{name}`', keyspace='lookup_keyspace')
+
+
+def test_sequence_refused_on_sharded_keyspace_leaves_nothing(live):
+    route, client = live
+    name = f'rt_sseq_{UNIQUE}'
+    request = {'resource_kind': 'sequence', 'operation_id': 'create',
+               '_provider_route': route, 'target_resource': None,
+               'draft': backend_draft(resolved_form('vitess', 'sequence'),
+                                      {'name': name, 'parent': KEYSPACE})}
+    planned = ADMINISTRATION.plan(request)
+    with pytest.raises(Exception, match='sequences .* sharded keyspace'):
+        ADMINISTRATION.apply(client, executor_request(request, planned))
+    for shard in shards_of(KEYSPACE):
+        assert (name,) not in query('SHOW TABLES',
+                                    keyspace=f'{KEYSPACE}:{shard}'), shard
+
+
+def test_table_draws_ids_from_an_attached_sequence(live):
+    route, client = live
+    sequence = f'rt_aseq_{UNIQUE}'
+    table = f'rt_at_{UNIQUE}'
+    run(client, route, 'sequence', 'create', backend_draft(
+        resolved_form('vitess', 'sequence'),
+        {'name': sequence, 'parent': 'lookup_keyspace', 'start': 7000,
+         'cache': 10}))
+    try:
+        form = resolved_form('vitess', 'table')
+        run(client, route, 'table', 'create', backend_draft(form, {
+            'name': table, 'parent': KEYSPACE,
+            'columns': [{'name': 'id', 'type': 'BIGINT', 'nullable': False},
+                        {'name': 'v', 'type': 'INT'}],
+            'primary_key': [{'name': 'pk', 'columns': ['id']}],
+            'register_in_vschema': True, 'vindex_name': 'xxhash',
+            'vindex_columns': ['id'], 'auto_increment_column': 'id',
+            'auto_increment_sequence': f'lookup_keyspace.{sequence}'}))
+        target, baseline = record(client, route, 'table', table, 'table')
+        assert (baseline['auto_increment_column'],
+                baseline['auto_increment_sequence']) == (
+            'id', f'lookup_keyspace.{sequence}')
+        query(f'INSERT INTO `{table}` (v) VALUES (1), (2), (3)')
+        assert query(f'SELECT id FROM `{table}` ORDER BY id') == [
+            (7000,), (7001,), (7002,)]
+        run(client, route, 'table', 'drop',
+            {'drop_vschema_registration': True, 'confirmation': table},
+            target=target)
+    finally:
+        for statement, keyspace in (
+                (f'ALTER VSCHEMA DROP TABLE `{KEYSPACE}`.`{table}`',
+                 KEYSPACE),
+                (f'DROP TABLE IF EXISTS `{table}`', KEYSPACE),
+                (f'ALTER VSCHEMA DROP SEQUENCE `{sequence}`',
+                 'lookup_keyspace'),
+                (f'DROP TABLE IF EXISTS `{sequence}`', 'lookup_keyspace')):
+            try:
+                query(statement, keyspace=keyspace)
+            except mysql_connector.Error:
+                pass

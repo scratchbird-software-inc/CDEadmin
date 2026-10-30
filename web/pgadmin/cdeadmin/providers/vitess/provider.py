@@ -29,6 +29,7 @@ from ..relational_admin import RelationalAdministration
 from ..distributed_control_plane import DistributedSQLControlPlane
 from .control_plane import (
     OPERATIONS as CONTROL_OPERATIONS,
+    auto_increments as control_auto_increments,
     catalog_resources as control_catalog_resources,
     cancel_action,
     compile_action,
@@ -89,6 +90,14 @@ def _version(row):
     if match is None:
         raise RelationalClientError('Vitess version is unavailable')
     return match.group(1)
+
+
+# Live, 23.0.3. A sequence's CREATE TABLE succeeds before ADD SEQUENCE fails,
+# so without the refusal it leaves a backing table on every shard.
+_UNSHARDED_ONLY = {
+    'procedure': ('stored procedures', 'VT12001'),
+    'sequence': ('sequences', 'ADD SEQUENCE is unsupported there'),
+}
 
 
 class VitessAdministration(RelationalAdministration):
@@ -211,6 +220,17 @@ class VitessAdministration(RelationalAdministration):
                     'vindex_parameters', 'New vindex parameters', 'json',
                     False, 'Structured key/value parameters.', {},
                 ),
+                self._field(
+                    'auto_increment_column', 'Sequence-filled column',
+                    'text', False,
+                    'vtgate fills this column from the sequence when an '
+                    'insert leaves it out.',
+                ),
+                self._field(
+                    'auto_increment_sequence', 'Sequence', 'text', False,
+                    'keyspace.sequence; the sequence lives in an unsharded '
+                    'keyspace.',
+                ),
             ))
         elif kind == 'table' and operation == 'drop':
             value['fields'].insert(0, self._field(
@@ -230,6 +250,7 @@ class VitessAdministration(RelationalAdministration):
             for key in (
                 'register_in_vschema', 'vindex_name', 'vindex_columns',
                 'vindex_type', 'vindex_parameters', 'parameters', 'cache',
+                'auto_increment_column', 'auto_increment_sequence',
             ):
                 if key in value:
                     options[key] = value.pop(key)
@@ -250,9 +271,9 @@ class VitessAdministration(RelationalAdministration):
             request['operation_id'] == 'drop' and
             request['draft'].get('drop_vschema_registration', True)
         ):
-            path = self._target_path(request['target_resource'])
-            self._require_target_keyspace(request, path)
-            table = self._quote(path[-1])
+            # Qualified VSchema DDL reaches any keyspace (live, 23.0.3).
+            table = self._qualified(
+                self._target_path(request['target_resource']))
             return {'statements': [
                 {
                     'source': f'ALTER VSCHEMA DROP TABLE {table}',
@@ -308,22 +329,43 @@ class VitessAdministration(RelationalAdministration):
                 },
             ]
         statements = super()._compile_create(request)
-        if kind != 'table' or not options.get(
-            'register_in_vschema', True
-        ):
+        if kind != 'table':
             return statements
-        name = self._quote(self._identifier(draft['name']))
-        vindex = self._quote(self._identifier(options.get('vindex_name')))
-        columns = self._identifier_list(options.get('vindex_columns'))
-        source = (
-            f'ALTER VSCHEMA ON {name} ADD VINDEX {vindex} ({columns})'
-        )
-        vindex_type = options.get('vindex_type')
-        if vindex_type:
-            source += ' USING ' + self._quote(self._identifier(vindex_type))
-        source += self._vindex_parameters(options.get('vindex_parameters'))
-        statements.append({'source': source, 'parameters': ()})
+        # Unqualified VSchema DDL acts on the session keyspace, not the
+        # table's; the qualified form reaches any keyspace (live, 23.0.3).
+        name = self._new_object_name(self._identifier(draft['name']), options)
+        if options.get('register_in_vschema', True):
+            vindex = self._quote(self._identifier(options.get('vindex_name')))
+            columns = self._identifier_list(options.get('vindex_columns'))
+            source = (
+                f'ALTER VSCHEMA ON {name} ADD VINDEX {vindex} ({columns})'
+            )
+            vindex_type = options.get('vindex_type')
+            if vindex_type:
+                source += ' USING ' + self._quote(
+                    self._identifier(vindex_type))
+            source += self._vindex_parameters(
+                options.get('vindex_parameters'))
+            statements.append({'source': source, 'parameters': ()})
+        statements.extend(self._auto_increment(name, options))
         return statements
+
+    def _auto_increment(self, table, options):
+        column = options.get('auto_increment_column')
+        sequence = options.get('auto_increment_sequence')
+        if not column and not sequence:
+            return []
+        if not (column and sequence):
+            raise RelationalClientError(
+                'a Vitess sequence-filled column needs both the column and '
+                'the keyspace.sequence')
+        return [{
+            'source': (
+                f'ALTER VSCHEMA ON {table} ADD AUTO_INCREMENT '
+                f'{self._quote(self._identifier(column))} USING '
+                f'{self._qualified(self._path_value(sequence))}'),
+            'parameters': (),
+        }]
 
     def _compile_alter(self, request):
         if request['resource_kind'] != 'sequence':
@@ -360,9 +402,8 @@ class VitessAdministration(RelationalAdministration):
 
     def _compile_drop(self, request):
         if request['resource_kind'] == 'sequence':
-            path = self._target_path(request['target_resource'])
-            self._require_target_keyspace(request, path)
-            target = self._qualified(path)
+            target = self._qualified(
+                self._target_path(request['target_resource']))
             return [
                 {
                     'source': f'ALTER VSCHEMA DROP SEQUENCE {target}',
@@ -374,9 +415,8 @@ class VitessAdministration(RelationalAdministration):
                 },
             ]
         if request['resource_kind'] == 'vindex':
-            path = self._target_path(request['target_resource'])
-            self._require_target_keyspace(request, path)
-            name = self._quote(path[-1])
+            name = self._qualified(
+                self._target_path(request['target_resource'])[-2:])
             return {
                 'source': f'ALTER VSCHEMA DROP VINDEX {name}',
                 'parameters': (),
@@ -423,13 +463,6 @@ class VitessAdministration(RelationalAdministration):
         route = request.get('_provider_route')
         database = route.get('database') if isinstance(route, Mapping) else ''
         return str(database or '').split(':', 1)[0].split('@', 1)[0]
-
-    def _require_target_keyspace(self, request, path):
-        route_keyspace = self._route_keyspace(request)
-        if len(path) > 1 and route_keyspace and path[-2] != route_keyspace:
-            raise RelationalClientError(
-                'Vitess target belongs to another routed keyspace'
-            )
 
     def _vindex_parameters(self, parameters):
         if parameters in (None, {}):
@@ -530,15 +563,16 @@ class VitessControlAdministration(VitessAdministration):
             return _CONTROL_ADMINISTRATION.apply(
                 client, request, connection=connection
             )
-        if plan.get('resource_kind') == 'procedure' and plan.get(
+        if plan.get('resource_kind') in _UNSHARDED_ONLY and plan.get(
                 'operation_id') == 'create':
-            self._refuse_sharded_procedure(client, request)
+            self._refuse_sharded(client, request)
         return super().apply(client, request, connection=connection)
 
     @staticmethod
-    def _refuse_sharded_procedure(client, request):
-        # vtgate refuses with VT12001, but driver text is redacted on the way
-        # to the user; refuse first with the reason instead.
+    def _refuse_sharded(client, request):
+        # vtgate refuses these on a sharded keyspace, but driver text is
+        # redacted on the way to the user; refuse first with the reason.
+        kind = (request.get('plan') or {}).get('resource_kind')
         route = (request.get('provider_payload') or {}).get('route')
         if not isinstance(route, Mapping):
             return
@@ -551,8 +585,9 @@ class VitessControlAdministration(VitessAdministration):
             item.get('display_name') == keyspace), None)
         if record and (record.get('native') or {}).get('sharded'):
             raise RelationalClientError(
-                f'Vitess refuses stored procedures on sharded keyspace '
-                f'{keyspace} (VT12001); choose an unsharded keyspace')
+                f'Vitess refuses {_UNSHARDED_ONLY[kind][0]} on sharded '
+                f'keyspace {keyspace} ({_UNSHARDED_ONLY[kind][1]}); choose '
+                'an unsharded keyspace')
 
     @staticmethod
     def _control_request(request):
@@ -745,6 +780,85 @@ def _keyspace_name(schema, keyspaces):
     return None
 
 
+def _keyspace_extras(cursor, keyspace, keyspaces, generation):
+    """Constraints, views, partitions, procedures and sequences of one
+    keyspace; every read names it in an equality predicate."""
+    values = []
+    constraints = optional_rows(
+        cursor,
+        'SELECT CONSTRAINT_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, '
+        'CONSTRAINT_TYPE FROM information_schema.TABLE_CONSTRAINTS '
+        'WHERE CONSTRAINT_SCHEMA = %s ORDER BY 1, 2, 3', (keyspace,),
+    )
+    details = mysql_constraint_details(cursor, keyspace)
+    for schema, table, name, constraint_type in constraints:
+        if _keyspace_name(schema, keyspaces) != keyspace:
+            continue
+        native = {'constraint_type': str(constraint_type),
+                  **details.get((schema, table, name), {})}
+        if native.get('referenced_database'):
+            native['referenced_database'] = _keyspace_name(
+                native['referenced_database'], keyspaces) or native[
+                    'referenced_database']
+        values.append(resource(
+            'constraint', [keyspace, table], name, generation, native))
+    for schema, name, definition, check_option, security in optional_rows(
+            cursor,
+            'SELECT TABLE_SCHEMA, TABLE_NAME, VIEW_DEFINITION, CHECK_OPTION, '
+            'SECURITY_TYPE FROM information_schema.VIEWS '
+            'WHERE TABLE_SCHEMA = %s ORDER BY 1, 2', (keyspace,)):
+        if _keyspace_name(schema, keyspaces) != keyspace:
+            continue
+        # Shards store the physical vt_<keyspace> schema; vtgate needs the
+        # keyspace name to run the definition again.
+        query = str(definition).replace(f'`{schema}`.', f'`{keyspace}`.')
+        values.append(resource('view', [keyspace], name, generation, {
+            'table_type': 'VIEW', 'query': query,
+            'check_option': str(check_option),
+            'sql_security': str(security),
+        }))
+    partitions = optional_rows(
+        cursor,
+        'SELECT TABLE_SCHEMA, TABLE_NAME, PARTITION_NAME, '
+        'PARTITION_METHOD, PARTITION_EXPRESSION, PARTITION_DESCRIPTION '
+        'FROM information_schema.PARTITIONS '
+        'WHERE PARTITION_NAME IS NOT NULL AND TABLE_SCHEMA = %s '
+        'ORDER BY 1, 2, 3', (keyspace,),
+    )
+    for schema, table, name, method, expression, description in partitions:
+        if _keyspace_name(schema, keyspaces) != keyspace:
+            continue
+        values.append(resource(
+            'partition', [keyspace, table], name, generation, {
+                'method': str(method), 'expression': str(expression),
+                'description': str(description),
+            }
+        ))
+    for _schema, name, native in mysql_procedures(cursor, keyspace):
+        values.append(resource('procedure', [keyspace], name, generation,
+                               native))
+    sequences = optional_rows(
+        cursor,
+        'SELECT TABLE_SCHEMA, TABLE_NAME FROM information_schema.TABLES '
+        "WHERE TABLE_COMMENT = 'vitess_sequence' AND TABLE_SCHEMA = %s "
+        'ORDER BY 1, 2', (keyspace,),
+    )
+    for schema, name in sequences:
+        if _keyspace_name(schema, keyspaces) != keyspace:
+            continue
+        native = {'backing_table': True}
+        quoted = '.'.join('`' + str(part).replace('`', '``') + '`'
+                          for part in (keyspace, name))
+        # Row 0 holds the next unreserved value; vttablet hands values out
+        # of cached blocks, so issued ids can trail it by up to one block.
+        for next_id, cache in optional_rows(
+                cursor, f'SELECT next_id, cache FROM {quoted} WHERE id = 0'):
+            native.update(next_id=int(next_id), cache=int(cache))
+        values.append(resource('sequence', [keyspace], name, generation,
+                               native))
+    return values
+
+
 def _extras(cursor, _request, generation, keyspaces=None):
     keyspaces = set(keyspaces or ())
     values = [resource('vtgate', [], 'connected-vtgate', generation)]
@@ -785,89 +899,19 @@ def _extras(cursor, _request, generation, keyspaces=None):
         values.append(resource(
             'vttablet', [keyspace, shard], alias, generation, native
         ))
-    route = _request.get('route') or _request.get('_provider_route') or {}
-    current_keyspace = str(route.get('database') or '').split(
-        ':', 1
-    )[0].split('@', 1)[0]
     for row in optional_rows(cursor, 'SHOW VSCHEMA VINDEXES'):
         keyspace, name, vindex_type, parameters, owner = row
-        if current_keyspace and str(keyspace) != current_keyspace:
-            continue
         values.append(resource('vschema', [], keyspace, generation))
         values.append(resource('vindex', [keyspace], name, generation, {
             'vindex_type': str(vindex_type),
             'parameters': str(parameters),
             'owner': str(owner),
         }))
-    constraints = optional_rows(
-        cursor,
-        'SELECT CONSTRAINT_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, '
-        'CONSTRAINT_TYPE FROM information_schema.TABLE_CONSTRAINTS '
-        'ORDER BY 1, 2, 3',
-    )
-    details = mysql_constraint_details(cursor)
-    for schema, table, name, constraint_type in constraints:
-        keyspace = _keyspace_name(schema, keyspaces)
-        if keyspace is None:
-            continue
-        native = {'constraint_type': str(constraint_type),
-                  **details.get((schema, table, name), {})}
-        if native.get('referenced_database'):
-            native['referenced_database'] = _keyspace_name(
-                native['referenced_database'], keyspaces) or native[
-                    'referenced_database']
-        values.append(resource(
-            'constraint', [keyspace, table], name, generation, native))
-    for schema, name, definition, check_option, security in optional_rows(
-            cursor,
-            'SELECT TABLE_SCHEMA, TABLE_NAME, VIEW_DEFINITION, CHECK_OPTION, '
-            'SECURITY_TYPE FROM information_schema.VIEWS ORDER BY 1, 2'):
-        keyspace = _keyspace_name(schema, keyspaces)
-        if keyspace is None:
-            continue
-        # Shards store the physical vt_<keyspace> schema; vtgate needs the
-        # keyspace name to run the definition again.
-        query = str(definition).replace(f'`{schema}`.', f'`{keyspace}`.')
-        values.append(resource('view', [keyspace], name, generation, {
-            'table_type': 'VIEW', 'query': query,
-            'check_option': str(check_option),
-            'sql_security': str(security),
-        }))
-    partitions = optional_rows(
-        cursor,
-        'SELECT TABLE_SCHEMA, TABLE_NAME, PARTITION_NAME, '
-        'PARTITION_METHOD, PARTITION_EXPRESSION, PARTITION_DESCRIPTION '
-        'FROM information_schema.PARTITIONS '
-        'WHERE PARTITION_NAME IS NOT NULL ORDER BY 1, 2, 3',
-    )
-    for schema, table, name, method, expression, description in partitions:
-        keyspace = _keyspace_name(schema, keyspaces)
-        if keyspace is None:
-            continue
-        values.append(resource(
-            'partition', [keyspace, table], name, generation, {
-                'method': str(method), 'expression': str(expression),
-                'description': str(description),
-            }
-        ))
+    # vtgate answers information_schema for the keyspace an equality
+    # predicate names, else the session keyspace only: read each keyspace.
     for keyspace in sorted(keyspaces):
-        # Without the schema predicate vtgate reads the session keyspace only.
-        for _schema, name, native in mysql_procedures(cursor, keyspace):
-            values.append(resource('procedure', [keyspace], name, generation,
-                                   native))
-    sequences = optional_rows(
-        cursor,
-        'SELECT TABLE_SCHEMA, TABLE_NAME FROM information_schema.TABLES '
-        "WHERE TABLE_COMMENT = 'vitess_sequence' ORDER BY 1, 2",
-    )
-    for schema, name in sequences:
-        keyspace = _keyspace_name(schema, keyspaces)
-        if keyspace is not None:
-            values.append(resource(
-                'sequence', [keyspace], name, generation, {
-                    'backing_table': True,
-                }
-            ))
+        values.extend(_keyspace_extras(cursor, keyspace, keyspaces,
+                                       generation))
     for row in optional_rows(cursor, 'SHOW VITESS_REPLICATION_STATUS'):
         keyspace, shard, tablet_type, alias, hostname, source, health, (
             lag), throttler = row
@@ -939,7 +983,12 @@ def _catalog(connection, request):
     finally:
         cursor.close()
     values = {}
-    for item in mysql_catalog(connection, request, 'Vitess'):
+    # vtgate reads information_schema for the keyspace an equality predicate
+    # names, else only the session keyspace; one read per keyspace.
+    catalog = [item for keyspace in sorted(keyspaces) for item in
+               mysql_catalog(connection, request, 'Vitess', schema=keyspace)
+               ] if keyspaces else mysql_catalog(connection, request, 'Vitess')
+    for item in catalog:
         if item['resource_kind'] == 'cluster':
             values[item['resource_id']] = item
             continue
@@ -972,6 +1021,13 @@ def _catalog(connection, request):
                   if item['resource_kind'] != 'keyspace' or
                   item['display_name'] in topology}
     _annotate_table_vindexes(connection, values)
+    attached = control_auto_increments(route, keyspaces)
+    for item in values.values():
+        found = attached.get(tuple(item['display_path']))
+        if item['resource_kind'] == 'table' and found:
+            item.setdefault('native', {}).update(
+                auto_increment_column=found[0],
+                auto_increment_sequence=found[1])
     for item in values.values():
         path = item['display_path']
         if item['resource_kind'] == 'vschema':

@@ -326,6 +326,34 @@
         "equals": true
       },
       "editable_after_create": false
+    },
+    {
+      "field_id": "auto_increment_column",
+      "label": "Sequence-filled column",
+      "tab": "Engine",
+      "control": "select",
+      "required": false,
+      "help": "vtgate fills this column from the sequence when an insert leaves it out.",
+      "option_values_path": [
+        "draft",
+        "columns"
+      ],
+      "group": "VSchema",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "auto_increment_sequence",
+      "label": "Sequence",
+      "tab": "Engine",
+      "control": "text",
+      "required": false,
+      "help": "keyspace.sequence; sequences live in an unsharded keyspace.",
+      "group": "VSchema",
+      "editable_after_create": false,
+      "visible_when": {
+        "field": "auto_increment_column",
+        "truthy": true
+      }
     }
   ],
   "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: column grid record keys; constraints grid split into Primary key / Unique / Foreign keys / Check; parent picker (database).",

@@ -11,7 +11,11 @@ if 'pgadmin' not in sys.modules:
     sys.modules['pgadmin'] = package
 
 from pgadmin.cdeadmin.providers.distributed_sql import (  # noqa: E402
-    mysql_catalog, mysql_default_expression, mysql_procedures,
+    mysql_catalog, mysql_constraint_details, mysql_default_expression,
+    mysql_procedures,
+)
+from pgadmin.cdeadmin.providers.vitess.provider import (  # noqa: E402
+    _catalog as vitess_catalog,
 )
 
 
@@ -141,3 +145,80 @@ def test_procedures_for_one_schema_name_it_in_both_queries():
     assert [parameters for _source, parameters in cursor.seen] == [
         ('lookup_keyspace',), ('lookup_keyspace',)]
     assert all('SCHEMA = %s' in source for source, _ in cursor.seen)
+
+
+def test_without_a_schema_the_catalog_sql_is_unchanged():
+    cursor = Cursor({})
+    mysql_catalog(Connection(cursor), {}, 'Engine')
+    mysql_constraint_details(cursor)
+    assert all(parameters == () for _source, parameters in cursor.seen)
+    assert not any('= %s' in source for source, _ in cursor.seen)
+
+
+def test_one_schema_is_one_equality_predicate_on_every_read():
+    cursor = Cursor({})
+    mysql_catalog(Connection(cursor), {}, 'Engine', schema='ks')
+    mysql_constraint_details(cursor, 'ks')
+    assert len(cursor.seen) == 9
+    assert all(parameters == ('ks',) for _source, parameters in cursor.seen)
+    assert all('SCHEMA = %s' in source for source, _ in cursor.seen)
+
+
+class Vtgate(Cursor):
+    """vtgate's information_schema routing (live, 23.0.3): an equality
+    predicate naming a keyspace reads that keyspace, no predicate reads the
+    session keyspace, and an IN list of keyspaces reads nothing."""
+
+    session = 'sharded'
+
+    def __init__(self, answers, keyspaces):
+        super().__init__(answers)
+        self.keyspaces = keyspaces
+
+    def execute(self, source, parameters=()):
+        self.seen.append((source, tuple(parameters)))
+        if 'information_schema' not in source:
+            return super().execute(source, parameters)
+        if ' IN (' in source:
+            self.rows = []
+            return
+        keyspace = parameters[0] if parameters else self.session
+        self.rows = []
+        for needle, rows in self.keyspaces.get(keyspace, {}).items():
+            if needle in source:
+                self.rows = rows
+                return
+
+
+def test_vitess_catalog_reads_every_keyspace_once():
+    cursor = Vtgate({
+        'SHOW VITESS_KEYSPACES': [('sharded',), ('lookup',)],
+        'SHOW VITESS_SHARDS': [('sharded/-80',), ('sharded/80-',),
+                               ('lookup/-',)],
+        'FROM `lookup`.`ids` WHERE id = 0': [(500, 50)],
+    }, {
+        'sharded': {
+            "TABLE_COMMENT = 'vitess_sequence'": [],
+            'information_schema.TABLES': [
+                ('vt_sharded', 'orders', 'BASE TABLE')],
+            'SEQ_IN_INDEX': [
+                ('vt_sharded', 'orders', 'PRIMARY', 0, 'BTREE', 1, 'a'),
+                ('vt_sharded', 'orders', 'PRIMARY', 0, 'BTREE', 2, 'b')],
+        },
+        'lookup': {
+            "TABLE_COMMENT = 'vitess_sequence'": [('vt_lookup', 'ids')],
+            'information_schema.TABLES': [
+                ('vt_lookup', 'ids', 'BASE TABLE')],
+        },
+    })
+    rows = vitess_catalog(Connection(cursor), {
+        'route': {'database': 'sharded'}})
+    found = {row['resource_id'] for row in rows}
+    assert {'table:sharded:orders', 'table:lookup:ids',
+            'sequence:lookup:ids'} <= found
+    # One read per keyspace: a two-column key keeps two columns.
+    assert native(rows, 'index:sharded:orders:PRIMARY')['columns'] == [
+        'a', 'b']
+    sequence = native(rows, 'sequence:lookup:ids')
+    assert (sequence['next_id'], sequence['cache']) == (500, 50)
+    assert not any(' IN (' in source for source, _ in cursor.seen)

@@ -120,6 +120,7 @@ from pgadmin.cdeadmin.providers.vitess.provider import (  # noqa: E402
 from pgadmin.cdeadmin.providers.vitess.control_plane import (  # noqa: E402
     _connection_arguments as vitess_connection_arguments,
     _document_contains_named_resource as vitess_contains_resource,
+    auto_increments as vitess_auto_increments,
     catalog_resources as vitess_control_resources,
     compile_action as compile_vitess_action,
 )
@@ -3415,6 +3416,49 @@ class DistributedProviderTests(unittest.TestCase):
             )],
         )
 
+    def test_vitess_table_attaches_a_sequence_after_its_vindex(self):
+        draft = {
+            'name': 'widgets', 'parent': 'inventory',
+            'columns': [{'name': 'id', 'type': 'BIGINT', 'nullable': False,
+                         'primary_key': True}],
+            'constraints': [], 'register_in_vschema': True,
+            'vindex_name': 'xxhash', 'vindex_columns': ['id'],
+            'auto_increment_column': 'id',
+            'auto_increment_sequence': 'lookup.widget_seq',
+        }
+        statements = VITESS_ADMIN.plan({
+            'resource_kind': 'table', 'operation_id': 'create',
+            'draft': draft, '_provider_route': {'database': 'inventory'},
+        })['provider_payload']['compiled']['statements']
+        self.assertEqual([
+            'ALTER VSCHEMA ON `inventory`.`widgets` ADD VINDEX `xxhash` '
+            '(`id`)',
+            'ALTER VSCHEMA ON `inventory`.`widgets` ADD AUTO_INCREMENT '
+            '`id` USING `lookup`.`widget_seq`',
+        ], [item['source'] for item in statements[1:]])
+        with self.assertRaisesRegex(RelationalClientError, 'needs both'):
+            VITESS_ADMIN.plan({
+                'resource_kind': 'table', 'operation_id': 'create',
+                'draft': {**draft, 'auto_increment_sequence': ''},
+                '_provider_route': {'database': 'inventory'},
+            })
+
+    @patch('pgadmin.cdeadmin.providers.vitess.control_plane._run')
+    def test_vitess_sequence_attachments_come_from_vtctld(self, run):
+        run.return_value = {'stdout': json.dumps({'tables': {
+            'widgets': {'auto_increment': {
+                'column': 'id', 'sequence': 'lookup.widget_seq'}},
+            'plain': {'auto_increment': None},
+        }})}
+        self.assertEqual(
+            {('inventory', 'widgets'): ('id', 'lookup.widget_seq')},
+            vitess_auto_increments(
+                {'vtctldclient_path': '/trusted/client',
+                 'vtctld_server': '127.0.0.1:15999'}, {'inventory'}))
+        self.assertEqual(['GetVSchema', 'inventory'],
+                         run.call_args.args[1])
+        self.assertEqual({}, vitess_auto_increments({}, {'inventory'}))
+
     def test_vitess_table_and_vindex_commands_are_provider_constructed(self):
         route = {'host': '127.0.0.1', 'database': 'inventory'}
         create = VITESS_ADMIN.plan({
@@ -3433,7 +3477,10 @@ class DistributedProviderTests(unittest.TestCase):
         statements = create['provider_payload']['compiled']['statements']
         self.assertEqual(2, len(statements))
         self.assertEqual(
-            'ALTER VSCHEMA ON `widgets` ADD VINDEX `xxhash` (`id`)',
+            # Qualified: unqualified VSchema DDL acts on the session
+            # keyspace, not the table's (live, 23.0.3).
+            'ALTER VSCHEMA ON `inventory`.`widgets` ADD VINDEX `xxhash` '
+            '(`id`)',
             statements[1]['source'],
         )
         drop = VITESS_ADMIN.plan({
@@ -3450,7 +3497,7 @@ class DistributedProviderTests(unittest.TestCase):
         })
         statements = drop['provider_payload']['compiled']['statements']
         self.assertEqual(
-            'ALTER VSCHEMA DROP TABLE `widgets`',
+            'ALTER VSCHEMA DROP TABLE `inventory`.`widgets`',
             statements[0]['source'],
         )
         self.assertEqual(

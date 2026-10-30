@@ -256,6 +256,35 @@ Vitess 23.0.3 (through vtgate, sharded keyspace)
 -  Refuses triggers, events, stored functions, sequences (Vitess sequences
    are VSchema-backed tables, not ``CREATE SEQUENCE``), tablespaces,
    ``CREATE SERVER``, XA and ``CHECK TABLE``.
+   Sequences probed 2026-10-30: a ``vitess_sequence`` backing table plus
+   ``ALTER VSCHEMA ADD SEQUENCE`` works in the unsharded keyspace, and
+   ``ALTER VSCHEMA ON ks.t ADD AUTO_INCREMENT col USING ks.seq`` makes
+   inserts draw ids from it (three inserts drew 700-702 and the backing row
+   moved to 710, one cache block). On a sharded keyspace ``ADD SEQUENCE``
+   fails ("unsupported on sharded keyspace") after ``CREATE TABLE`` has
+   already succeeded, so the provider refuses before running anything.
+-  **Defect (provider, fixed 2026-10-30):** vtgate reads
+   ``information_schema`` for the keyspace an equality predicate on the
+   schema names, and otherwise for the session keyspace only; an ``IN``
+   list of keyspaces returns no rows and no error. The catalog read without
+   a predicate, so tables, columns, indexes, constraints, views, partitions
+   and sequences outside the connection's keyspace were never listed
+   (sequences, which must live in an unsharded keyspace, never appeared at
+   all). The shared reader now takes one schema, and the Vitess catalog
+   reads each keyspace with an equality predicate.
+-  Qualified VSchema DDL (``ALTER VSCHEMA ON ks.t``, ``DROP TABLE ks.t``,
+   ``DROP SEQUENCE ks.s``, ``DROP VINDEX ks.v``) reaches any keyspace from
+   any session (verified through vtctld ``GetVSchema``). The unqualified
+   form acts on the session keyspace. The provider used the unqualified form
+   for table VSchema registration and refused drops outside the
+   connection's keyspace; both now use the qualified form.
+-  ``ALTER VSCHEMA CREATE VINDEX`` in an unsharded keyspace that already
+   has tables fails ("missing primary col vindex"); the vindex editor
+   creates in the connection's keyspace only.
+-  ``SHOW VSCHEMA TABLES`` also reflects schema tracking, and the VSchema
+   change shows there after a delay; vtctld ``GetVSchema`` is the source
+   for what the VSchema holds. vtgate's ``/debug/vschema`` names an attached
+   sequence without its keyspace, so attachments are read from vtctld.
 -  DDL on a sharded keyspace reaches vtgate's schema tracking
    asynchronously. Read-after-write of the schema needs to wait.
 -  ``ALTER VIEW`` through vtgate does reach every shard (live, 2026-10-30),
@@ -360,7 +389,10 @@ Plan
    keyspaces only), and the keyspace, shard and vindex engine-object editors
    are ``complete`` (live round trip in
    ``tools/tests/test_ui_descriptor_roundtrip_vitess.py``); index and
-   sequence are ``draft``. Database, trigger and role families are omitted
+   sequence are ``draft``. Index and sequence became ``complete`` later on
+   2026-10-30: index create and drop checked on every shard; sequence
+   create, reopen (next value and cache), alter and drop, plus the table
+   form's sequence-filled column, which a live insert draws ids from. Database, trigger and role families are omitted
    with live evidence; type is omitted because the MySQL dialect has no
    user-defined types (not a live probe). Records now carry keyspace sharding and
    durability, shard key range and primary, tablet serving state (renamed
@@ -374,7 +406,13 @@ Plan
    keyspace picker cannot yet filter out sharded keyspaces (descriptor
    reference fields have no record filter, front-end follow-up);
    ApplyVSchema and online DDL submission (``ddl_strategy``) are not
-   exposed; tablet backup and restore were not run live.
+   exposed; tablet backup and restore were not run live. Also open: the
+   sequence picker has the same sharded-keyspace filter gap, and the
+   table's sequence is a ``keyspace.sequence`` text field because a
+   reference picker cannot yet carry the keyspace; attaching or detaching a
+   sequence (like changing the primary vindex) is create-time only; the
+   three-statement sequence create is not atomic (a failure after the
+   backing table leaves the table behind).
 #. For each engine, run the forms through the draft and review tools in
    ``ui_descriptors/README.md`` to make a descriptor folder. Reuse MySQL's
    field ids where the backend field is the same, and filter by this matrix.

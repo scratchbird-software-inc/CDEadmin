@@ -74,21 +74,35 @@ def mysql_grant(grantee, object_type, object_name, privilege, grantable):
     }
 
 
-def mysql_constraint_details(cursor):
+def _schema_where(column, schema, keyword='WHERE'):
+    """``(clause, parameters)`` limiting a catalog read to one schema.
+
+    Vitess routes an ``information_schema`` read to the keyspace an equality
+    predicate names; with none it reads the session keyspace, and an ``IN``
+    list returns no rows (live, 23.0.3). So a schema is always one equality.
+    """
+    if schema is None:
+        return '', ()
+    return f'{keyword} {column} = %s ', (schema,)
+
+
+def mysql_constraint_details(cursor, schema=None):
     """Key columns, references, rules and check clauses per constraint.
 
     Lets an editor re-open an existing table's constraints. Each catalog is
-    optional: a missing one leaves only the constraint type.
+    optional: a missing one leaves only the constraint type. ``schema`` reads
+    one schema only (see ``_schema_where``).
     """
     found = {}
+    where, parameters = _schema_where('TABLE_SCHEMA', schema)
     for database, table, name, column, ref_database, ref_table, \
             ref_column in optional_rows(
                 cursor,
                 'SELECT TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, '
                 'COLUMN_NAME, REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME, '
                 'REFERENCED_COLUMN_NAME '
-                'FROM information_schema.KEY_COLUMN_USAGE '
-                'ORDER BY 1, 2, 3, ORDINAL_POSITION'):
+                f'FROM information_schema.KEY_COLUMN_USAGE {where}'
+                'ORDER BY 1, 2, 3, ORDINAL_POSITION', parameters):
         entry = found.setdefault((database, table, name), {'columns': []})
         entry['columns'].append(str(column))
         if ref_table is not None:
@@ -100,7 +114,8 @@ def mysql_constraint_details(cursor):
             cursor,
             'SELECT CONSTRAINT_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, '
             'UPDATE_RULE, DELETE_RULE '
-            'FROM information_schema.REFERENTIAL_CONSTRAINTS'):
+            'FROM information_schema.REFERENTIAL_CONSTRAINTS ' +
+            _schema_where('CONSTRAINT_SCHEMA', schema)[0], parameters):
         entry = found.setdefault((database, table, name), {})
         entry.update(update_rule=str(update_rule),
                      delete_rule=str(delete_rule))
@@ -109,13 +124,15 @@ def mysql_constraint_details(cursor):
         optional_rows(
             cursor,
             'SELECT CONSTRAINT_SCHEMA, CONSTRAINT_NAME, CHECK_CLAUSE '
-            'FROM information_schema.CHECK_CONSTRAINTS')
+            'FROM information_schema.CHECK_CONSTRAINTS ' +
+            _schema_where('CONSTRAINT_SCHEMA', schema)[0], parameters)
     }
     for database, table, name in optional_rows(
             cursor,
             "SELECT TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME "
             "FROM information_schema.TABLE_CONSTRAINTS "
-            "WHERE CONSTRAINT_TYPE = 'CHECK'"):
+            "WHERE CONSTRAINT_TYPE = 'CHECK' " +
+            _schema_where('TABLE_SCHEMA', schema, 'AND')[0], parameters):
         clause = checks.get((database, name))
         if clause is not None:
             found.setdefault((database, table, name), {})[
@@ -557,9 +574,14 @@ def postgresql_catalog(connection, request, engine_name, extras=None):
         cursor.close()
 
 
-def mysql_catalog(connection, request, engine_name, extras=None):
-    """Read MySQL-wire catalogs plus provider-selected topology extras."""
+def mysql_catalog(connection, request, engine_name, extras=None,
+                  schema=None):
+    """Read MySQL-wire catalogs plus provider-selected topology extras.
+
+    ``schema`` reads one schema only (see ``_schema_where``).
+    """
     generation = str(request.get('capability_generation') or 'current')
+    where, parameters = _schema_where('TABLE_SCHEMA', schema)
     cluster = resource('cluster', [], engine_name, generation)
     values = {cluster['resource_id']: cluster}
     cursor = connection.cursor()
@@ -567,7 +589,8 @@ def mysql_catalog(connection, request, engine_name, extras=None):
         rows = optional_rows(
             cursor,
             'SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE '
-            'FROM information_schema.TABLES ORDER BY 1, 2',
+            f'FROM information_schema.TABLES {where}ORDER BY 1, 2',
+            parameters,
         )
         for database, name, table_type in rows:
             database_item = resource('database', [], database, generation)
@@ -583,14 +606,14 @@ def mysql_catalog(connection, request, engine_name, extras=None):
             cursor,
             'SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, '
             'IS_NULLABLE, ORDINAL_POSITION, COLUMN_DEFAULT, COLUMN_KEY, '
-            'EXTRA FROM information_schema.COLUMNS '
-            'ORDER BY 1, 2, ORDINAL_POSITION',
+            f'EXTRA FROM information_schema.COLUMNS {where}'
+            'ORDER BY 1, 2, ORDINAL_POSITION', parameters,
         ) or [
             (*row, None, None, None, None) for row in optional_rows(
                 cursor,
                 'SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, '
-                'IS_NULLABLE FROM information_schema.COLUMNS '
-                'ORDER BY 1, 2, 3',
+                f'IS_NULLABLE FROM information_schema.COLUMNS {where}'
+                'ORDER BY 1, 2, 3', parameters,
             )
         ]
         for database, table, name, data_type, nullable, position, \
@@ -615,13 +638,14 @@ def mysql_catalog(connection, request, engine_name, extras=None):
             cursor,
             'SELECT TABLE_SCHEMA, TABLE_NAME, INDEX_NAME, NON_UNIQUE, '
             'INDEX_TYPE, SEQ_IN_INDEX, COLUMN_NAME '
-            'FROM information_schema.STATISTICS ORDER BY 1, 2, 3, 6',
+            f'FROM information_schema.STATISTICS {where}'
+            'ORDER BY 1, 2, 3, 6', parameters,
         ) or [
             (*row, None, None) for row in optional_rows(
                 cursor,
                 'SELECT DISTINCT TABLE_SCHEMA, TABLE_NAME, INDEX_NAME, '
                 'NON_UNIQUE, INDEX_TYPE FROM information_schema.STATISTICS '
-                'ORDER BY 1, 2, 3',
+                f'{where}ORDER BY 1, 2, 3', parameters,
             )
         ]
         for database, table, name, non_unique, index_type, _sequence, \

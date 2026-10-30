@@ -5,7 +5,7 @@
   "resource_kinds": [
     "sequence"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "Vitess",
   "omitted_tabs": [],
   "gaps": [],
@@ -23,7 +23,7 @@
       "tab": "General",
       "control": "reference",
       "required": true,
-      "help": "Vitess sequence backing tables must be in an unsharded keyspace.",
+      "help": "Vitess sequence backing tables must be in an unsharded keyspace; a sharded one is refused before anything runs.",
       "reference_kind": "keyspace"
     },
     {
@@ -32,7 +32,11 @@
       "tab": "General",
       "control": "number",
       "required": false,
-      "default": 1
+      "default": 1,
+      "modes": [
+        "create"
+      ],
+      "help": "The first value the sequence issues."
     },
     {
       "field_id": "cache",
@@ -40,7 +44,8 @@
       "tab": "General",
       "control": "number",
       "required": false,
-      "default": 1000
+      "default": 1000,
+      "help": "Values vttablet reserves per block; each block costs one backing-table write."
     },
     {
       "field_id": "restart",
@@ -50,8 +55,10 @@
       "required": false,
       "modes": [
         "alter"
-      ]
+      ],
+      "record_key": "next_id",
+      "help": "The next unreserved value (the backing table's next_id). vttablet issues values from cached blocks, so values already issued can trail it by up to one cache block; set it above any value in use."
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database)."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database). Round trip (tools/tests/test_ui_descriptor_roundtrip_vitess.py, live 23.0.3): create in an unsharded keyspace, reopen (next_id and cache from the backing row), alter, drop; a table attached to it draws ids from it; a sharded keyspace is refused before anything runs. start is create-only; restart reads next_id."
 }

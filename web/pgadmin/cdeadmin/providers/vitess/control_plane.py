@@ -1364,6 +1364,34 @@ def _topology_records(keyspace, settings, shards, generation):
     return records
 
 
+def auto_increments(route, keyspaces):
+    """{(keyspace, table): (column, keyspace.sequence)} from vtctld.
+
+    vtgate's /debug/vschema names the sequence without its keyspace, so the
+    topology VSchema is the source.
+    """
+    if not isinstance(route, dict) or not route.get(
+            'vtctldclient_path') or not route.get('vtctld_server'):
+        return {}
+    found = {}
+    for keyspace in sorted(set(keyspaces or ())):
+        try:
+            response = _run(route, ['GetVSchema', keyspace], timeout=30)
+            document = json.loads(response.get('stdout') or 'null')
+        except (RelationalClientError, TypeError, ValueError):
+            continue
+        tables = document.get('tables') if isinstance(
+            document, dict) else None
+        for table, spec in (tables if isinstance(tables, dict) else {}
+                            ).items():
+            value = spec.get('auto_increment') if isinstance(
+                spec, dict) else None
+            if isinstance(value, dict) and value.get('column'):
+                found[(keyspace, table)] = (
+                    str(value['column']), str(value.get('sequence') or ''))
+    return found
+
+
 def catalog_resources(route, generation, keyspaces):
     """Read exact native workflow and VReplication objects for navigation."""
     if not isinstance(route, dict) or not route.get(
