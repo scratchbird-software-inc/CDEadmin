@@ -100,14 +100,20 @@ def executor_request(request, planned):
     return {'plan': plan, 'provider_payload': planned['provider_payload']}
 
 
-def run(client, route, kind, operation, draft, target=None):
+def run(client, route, kind, operation, draft, target=None,
+        post_state=False):
     request = {'resource_kind': kind, 'operation_id': operation,
                'target_resource': target, '_provider_route': route,
                'draft': draft}
     assert ADMINISTRATION.validate(request)['errors'] == []
     planned = ADMINISTRATION.plan(request)
-    result = ADMINISTRATION.apply(client, executor_request(request, planned))
+    executed = executor_request(request, planned)
+    result = ADMINISTRATION.apply(client, executed)
     assert result['accepted'], result
+    if post_state:
+        # The provider's own after-check, as the executor runs it.
+        state = ADMINISTRATION.validate_operation_post_state(client, executed)
+        assert state['confirmed'], state.get('reason')
     return result
 
 
@@ -421,3 +427,73 @@ def test_table_draws_ids_from_an_attached_sequence(live):
                 query(statement, keyspace=keyspace)
             except mysql_connector.Error:
                 pass
+
+
+def routing_rules():
+    import subprocess
+    output = subprocess.run(
+        [str(VTCTLD), '--server', 'localhost:15999', 'GetRoutingRules'],
+        check=True, capture_output=True, text=True).stdout
+    # vtctldclient prints from_table/to_tables and takes either form.
+    return [{'fromTable': rule['from_table'], 'toTables': rule['to_tables']}
+            for rule in json.loads(output).get('rules') or []]
+
+
+def test_routing_rules_editor_keeps_existing_rules(live):
+    # Vitess replaces the global rule set whole; the editor reopens with the
+    # current rules, so an edit adds to them instead of wiping them.
+    import subprocess
+    route, client = live
+    original = routing_rules()
+    alias, second = f'rt_alias_{UNIQUE}', f'rt_alias2_{UNIQUE}'
+    form = resolved_form('vitess', 'engine_object:routing-rule')
+    try:
+        target, baseline = record(client, route, 'routing-rule',
+                                  'global-routing-rules',
+                                  'engine_object:routing-rule')
+        rows = baseline['rules'] + [{'from_table': f'{KEYSPACE}.{alias}',
+                                     'to_table': f'{KEYSPACE}.customers'}]
+        run(client, route, 'routing-rule', 'alter', backend_draft(
+            form, {**baseline, 'rules': rows}, mode='alter',
+            baseline=baseline), target=target, post_state=True)
+        assert {'fromTable': f'{KEYSPACE}.{alias}',
+                'toTables': [f'{KEYSPACE}.customers']} in routing_rules()
+        for _attempt in range(20):
+            try:
+                count = query(f'SELECT COUNT(*) FROM `{alias}`')
+                break
+            except mysql_connector.Error:
+                time.sleep(1)
+        assert count == query('SELECT COUNT(*) FROM customers')
+
+        target, baseline = record(client, route, 'routing-rule',
+                                  'global-routing-rules',
+                                  'engine_object:routing-rule')
+        assert [(row['from_table'], row['to_table'])
+                for row in baseline['rules']] == [
+            (rule['fromTable'], rule['toTables'][0]) for rule in original
+        ] + [(f'{KEYSPACE}.{alias}', f'{KEYSPACE}.customers')]
+        rows = baseline['rules'] + [{'from_table': f'{KEYSPACE}.{second}',
+                                     'to_table': f'{KEYSPACE}.assets'}]
+        run(client, route, 'routing-rule', 'alter', backend_draft(
+            form, {**baseline, 'rules': rows}, mode='alter',
+            baseline=baseline), target=target, post_state=True)
+        sources = [rule['fromTable'] for rule in routing_rules()]
+        assert f'{KEYSPACE}.{alias}' in sources
+        assert f'{KEYSPACE}.{second}' in sources
+
+        # vtgate refuses to route a rule with two targets; refused at plan.
+        with pytest.raises(Exception, match='one target table'):
+            ADMINISTRATION.plan({
+                'resource_kind': 'routing-rule', 'operation_id': 'alter',
+                'target_resource': target, '_provider_route': route,
+                'draft': {'rules': {'rules': [{
+                    'fromTable': f'{KEYSPACE}.{alias}',
+                    'toTables': [f'{KEYSPACE}.customers',
+                                 f'{KEYSPACE}.assets']}]}}})
+    finally:
+        subprocess.run(
+            [str(VTCTLD), '--server', 'localhost:15999', 'ApplyRoutingRules',
+             '--rules', json.dumps({'rules': original})],
+            check=True, capture_output=True)
+    assert routing_rules() == original

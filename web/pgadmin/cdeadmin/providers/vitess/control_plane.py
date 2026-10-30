@@ -301,6 +301,18 @@ OPERATIONS = (
                      'boolean', False, default=False),
         ), target_required=False, impact_scope='cluster', long_running=True
     ),
+    # The editor's alter: the same whole-set replace, from the current rules.
+    ControlPlaneOperation(
+        'routing-rule', 'alter', 'Edit routing rules', 'destructive',
+        'topology_admin', (
+            cp_field('rules', 'Routing rules', 'json', True,
+                     json_type='object'),
+            cp_field('cells', 'Rebuild cells', 'json', False, default=[],
+                     json_type='array'),
+            cp_field('skip_rebuild', 'Skip serving VSchema rebuild',
+                     'boolean', False, default=False),
+        ), impact_scope='cluster', long_running=True
+    ),
     ControlPlaneOperation(
         'online-ddl', 'launch', 'Launch postponed migration', 'admin',
         'maintenance_admin', impact_scope='cluster', long_running=True,
@@ -483,6 +495,11 @@ def _workflow_family(value):
     return value
 
 
+_RULE_KEYS = frozenset({
+    'fromTable', 'toTables', 'from_table', 'to_tables', 'toTable', 'to_table',
+})
+
+
 def _routing_rules(value):
     if not isinstance(value, dict) or set(value) != {'rules'}:
         raise RelationalClientError('Vitess routing rules are invalid')
@@ -492,17 +509,50 @@ def _routing_rules(value):
     normalized = []
     origins = set()
     for item in rules:
-        if not isinstance(item, dict) or set(item) != {
-                'fromTable', 'toTables'}:
+        if not isinstance(item, dict) or not set(item) <= _RULE_KEYS:
             raise RelationalClientError('Vitess routing rule is invalid')
-        origin = _safe_name(item.get('fromTable'), 'routing source')
+        # The editor grid's rows use vtctld's printed names (from_table) and
+        # one target (to_table); a reopened row also carries the record's
+        # to_tables, which the grid's to_table replaces.
+        source = [item[key] for key in ('fromTable', 'from_table')
+                  if key in item]
+        single = [item[key] for key in ('toTable', 'to_table') if key in item]
+        lists = [item[key] for key in ('toTables', 'to_tables') if key in item]
+        if len(source) != 1 or len(single) > 1 or (
+                not single and len(lists) != 1):
+            raise RelationalClientError('Vitess routing rule is invalid')
+        origin = _safe_name(source[0], 'routing source')
         if origin in origins:
             raise RelationalClientError(
                 'Vitess routing rule sources must be unique')
         origins.add(origin)
-        targets = _string_list(item.get('toTables'), 'routing target')
+        targets = _string_list(single or lists[0], 'routing target')
+        # ApplyRoutingRules accepts more, but vtgate then refuses to route
+        # the table ("has more than one target"; live, 23.0.3).
+        if len(targets) != 1:
+            raise RelationalClientError(
+                f'Vitess routes {origin} to one target table; vtgate refuses '
+                'a rule with more than one')
         normalized.append({'fromTable': origin, 'toTables': targets})
     return {'rules': normalized}
+
+
+def _rules_document(document):
+    """GetRoutingRules in ApplyRoutingRules' own key names.
+
+    vtctldclient prints from_table/to_tables (live, 23.0.3) but takes
+    fromTable/toTables; reading either keeps the editor and the post-state
+    check on one shape.
+    """
+    if not isinstance(document, dict):
+        return document
+    rules = document.get('rules')
+    if not isinstance(rules, list):
+        return document
+    return {'rules': [{
+        'fromTable': item.get('fromTable', item.get('from_table')),
+        'toTables': item.get('toTables', item.get('to_tables')),
+    } if isinstance(item, dict) else item for item in rules]}
 
 
 def _materialize_settings(value):
@@ -780,7 +830,7 @@ def compile_action(request):
             'workflow', '--keyspace', keyspace, command,
             '--workflow', workflow,
         ]
-    elif kind == 'routing-rule' and operation == 'apply':
+    elif kind == 'routing-rule' and operation in {'apply', 'alter'}:
         rules = _routing_rules(draft.get('rules'))
         arguments = [
             'ApplyRoutingRules', '--rules', json.dumps(
@@ -1242,9 +1292,9 @@ def post_validate_action(client, request):
         else:
             expected = path[-1]
         present = _document_contains_named_resource(document, expected)
-    elif kind == 'routing-rule' and operation == 'apply':
+    elif kind == 'routing-rule' and operation in {'apply', 'alter'}:
         expected = _routing_rules(draft.get('rules'))
-        present = document == expected
+        present = _rules_document(document) == expected
     elif kind == 'tablet' and operation == 'change_type':
         tablet_type = str(draft.get('tablet_type') or '').lower()
         expected = {
@@ -1283,7 +1333,8 @@ def post_validate_action(client, request):
         expected and present is not None and (
             (operation in {'drop', 'complete'} and not present) or
             (operation in {'create', 'create_move_tables',
-                           'create_reshard', 'apply', 'change_type',
+                           'create_reshard', 'apply', 'alter',
+                           'change_type',
                            'set_primary_serving', 'planned_reparent',
                            'emergency_reparent', 'backup', 'rebuild'} and
              present)

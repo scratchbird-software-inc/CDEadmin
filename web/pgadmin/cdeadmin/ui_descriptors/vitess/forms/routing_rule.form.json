@@ -1,0 +1,66 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "vitess",
+  "family": "engine_object",
+  "resource_kinds": [
+    "routing-rule"
+  ],
+  "status": "complete",
+  "engine_tab_title": "Vitess",
+  "notes": "Routing rules. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15). Vitess keeps one global rule set and replaces it whole (ApplyRoutingRules), so the editor reopens with the current rules and alter sends the edited set. One target per rule: ApplyRoutingRules accepts several, but vtgate then refuses to route the table (live, 23.0.3). The provider's JSON 'apply' operation stays for the legacy dialog. Round trip (tools/tests/test_ui_descriptor_roundtrip_vitess.py, live 23.0.3): reopen, add a rule and query through it, reopen and add a second with the first kept, the provider post-state check confirms each, a two-target rule is refused at plan.",
+  "fields": [
+    {
+      "field_id": "rules",
+      "label": "Routing rules",
+      "tab": "General",
+      "control": "grid",
+      "required": false,
+      "record_key": "rules",
+      "backend_field_id": "rules.rules",
+      "help": "Each row sends queries for a source table to one target table. Removing every row clears the rules.",
+      "columns": [
+        {
+          "field_id": "from_table",
+          "label": "Source",
+          "control": "text",
+          "required": true,
+          "help": "keyspace.table, optionally with @replica or @rdonly. An unqualified table applies only to sessions with no keyspace selected."
+        },
+        {
+          "field_id": "to_table",
+          "label": "Target",
+          "control": "text",
+          "required": true,
+          "record_key": "to_tables.0",
+          "help": "keyspace.table"
+        }
+      ]
+    },
+    {
+      "field_id": "cells",
+      "label": "Rebuild cells",
+      "tab": "Engine",
+      "control": "grid",
+      "required": false,
+      "item_kind": "string",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Cell",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "help": "Cells whose serving VSchema is rebuilt; empty means all."
+    },
+    {
+      "field_id": "skip_rebuild",
+      "label": "Skip serving VSchema rebuild",
+      "tab": "Engine",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "help": "vtgate keeps routing by the old rules until the serving VSchema is rebuilt."
+    }
+  ]
+}

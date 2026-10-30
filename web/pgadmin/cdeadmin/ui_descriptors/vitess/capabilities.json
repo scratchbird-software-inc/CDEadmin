@@ -351,8 +351,14 @@
           "operation_id": "inspect",
           "tier": 1,
           "mutation_class": "read"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/routing_rule.form.json"
     },
     {
       "resource_kind": "workflow",

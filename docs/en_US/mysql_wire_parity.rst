@@ -285,6 +285,20 @@ Vitess 23.0.3 (through vtgate, sharded keyspace)
    change shows there after a delay; vtctld ``GetVSchema`` is the source
    for what the VSchema holds. vtgate's ``/debug/vschema`` names an attached
    sequence without its keyspace, so attachments are read from vtctld.
+-  Routing rules (probed 2026-10-30): ``ApplyRoutingRules`` accepts a rule
+   with two target tables, but vtgate then refuses to route that table
+   ("has more than one target"; visible in ``/debug/vschema``). The
+   provider now refuses such a rule before running. An unqualified rule
+   source applies only to sessions with no keyspace selected; from a
+   keyspace session the source must be ``keyspace.table``. A rule whose
+   source is in the unsharded ``lookup_keyspace``, queried unqualified from
+   a ``lookup_keyspace`` session, had its table name rewritten but was sent
+   to the session keyspace and failed; the qualified query worked.
+-  **Defect (provider, fixed 2026-10-30):** ``vtctldclient GetRoutingRules``
+   prints ``from_table``/``to_tables`` while ``ApplyRoutingRules`` takes
+   ``fromTable``/``toTables``. The provider's post-state check compared the
+   two shapes, so it could never confirm a routing-rule change; it now
+   reads both.
 -  DDL on a sharded keyspace reaches vtgate's schema tracking
    asynchronously. Read-after-write of the schema needs to wait.
 -  ``ALTER VIEW`` through vtgate does reach every shard (live, 2026-10-30),
@@ -413,6 +427,13 @@ Plan
    sequence (like changing the primary vindex) is create-time only; the
    three-statement sequence create is not atomic (a failure after the
    backing table leaves the table behind).
+   Routing rules have an engine-object editor since 2026-10-30 (``complete``,
+   live round trip): Vitess replaces the global rule set whole, so the
+   editor reopens with the current rules and its alter sends the edited
+   set; one target per row. The JSON ``apply`` operation remains for the
+   legacy dialog. The shared ``OperationDialog`` now sends values in the
+   provider's own shapes (string grids as plain lists); it is not yet
+   mounted by any host.
 #. For each engine, run the forms through the draft and review tools in
    ``ui_descriptors/README.md`` to make a descriptor folder. Reuse MySQL's
    field ids where the backend field is the same, and filter by this matrix.

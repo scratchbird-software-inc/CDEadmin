@@ -123,6 +123,7 @@ from pgadmin.cdeadmin.providers.vitess.control_plane import (  # noqa: E402
     auto_increments as vitess_auto_increments,
     catalog_resources as vitess_control_resources,
     compile_action as compile_vitess_action,
+    post_validate_action as vitess_post_validate,
 )
 from pgadmin.cdeadmin.providers.yugabytedb.provider import (  # noqa: E402
     ADMINISTRATION as YUGABYTEDB_ADMIN,
@@ -1367,6 +1368,45 @@ class DistributedProviderTests(unittest.TestCase):
                     'unexpected': 'silently ignored by protobuf JSON',
                 }]}},
             })
+
+    def test_vitess_routing_rule_editor_rows_take_one_target(self):
+        def compile_rules(rows):
+            action = compile_vitess_action({
+                'resource_kind': 'routing-rule', 'operation_id': 'alter',
+                'target_resource': {
+                    'resource_kind': 'routing-rule',
+                    'display_name': 'global-routing-rules',
+                    'display_path': ['global-routing-rules']},
+                'draft': {'rules': {'rules': rows}},
+            })
+            return json.loads(action['provider_action']['arguments'][2])
+
+        # A reopened grid row keeps the record's to_tables; the grid's
+        # to_table is the edit.
+        self.assertEqual({'rules': [{
+            'fromTable': 'commerce.orders', 'toTables': ['archive.orders'],
+        }]}, compile_rules([{
+            'from_table': 'commerce.orders', 'to_table': 'archive.orders',
+            'to_tables': ['customer.orders']}]))
+        with self.assertRaisesRegex(RelationalClientError,
+                                    'one target table'):
+            compile_rules([{'fromTable': 'commerce.orders', 'toTables': [
+                'customer.orders', 'archive.orders']}])
+
+    @patch('pgadmin.cdeadmin.providers.vitess.control_plane.inspect_action')
+    def test_vitess_routing_rules_post_state_reads_vtctld_names(
+            self, inspect):
+        # vtctldclient prints from_table/to_tables (live, 23.0.3).
+        inspect.return_value = {'provider_observation': {'stdout': json.dumps(
+            {'rules': [{'from_table': 'commerce.orders',
+                        'to_tables': ['archive.orders']}]})}}
+        state = vitess_post_validate(None, {'plan': {
+            'resource_kind': 'routing-rule', 'operation_id': 'alter',
+            'target_resource': {'display_path': ['global-routing-rules']},
+            'draft': {'rules': {'rules': [{
+                'from_table': 'commerce.orders',
+                'to_table': 'archive.orders'}]}}}})
+        self.assertTrue(state['confirmed'], state['reason'])
 
     def test_vitess_online_ddl_lifecycle_uses_exact_native_identifiers(self):
         target = {
