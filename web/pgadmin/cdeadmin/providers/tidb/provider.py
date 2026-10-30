@@ -1,6 +1,7 @@
 """TiDB 8.5.6 distributed relational provider."""
 
 import copy
+from collections.abc import Mapping
 import json
 import os
 import re
@@ -17,7 +18,9 @@ from pgadmin.cdeadmin.sdk import (
 from .driver import TiDBNativeClient
 from ..distributed_sql import (
     create_sql_client,
+    mysql_account_resources,
     mysql_catalog,
+    mysql_constraint_details,
     optional_rows,
     resource,
     sql_administration,
@@ -1131,7 +1134,48 @@ def _post_validate_control_plane(client, request):
     }
 
 
-ADMINISTRATION = DistributedSQLControlPlane(
+_CHECK_CLAUSE = re.compile(r'\bCHECK\s*\(', re.IGNORECASE)
+
+
+class TiDBAdministration(DistributedSQLControlPlane):
+    """Refuse CHECK constraints TiDB would silently discard.
+
+    With the global tidb_enable_check_constraint OFF (the default) TiDB
+    accepts a CHECK clause and drops it; with it ON the constraint is kept
+    and enforced (verified live on 8.5.6, 2026-10-29). The setting belongs
+    to the server, so it is read when the change is applied, not assumed.
+    """
+
+    def apply(self, client, request, connection=None):
+        preview = request.get('command_preview') or {}
+        statements = preview.get('statements') or []
+        operation = str(preview.get('operation') or '')
+        if operation.endswith(('_table', '_constraint')) and any(
+                _CHECK_CLAUSE.search(str(item.get('source', '')))
+                for item in statements):
+            route = (request.get('provider_payload') or {}).get('route')
+            native = connection or client._connect({'route': dict(route)})
+            try:
+                cursor = native.cursor()
+                try:
+                    cursor.execute(
+                        'SELECT @@GLOBAL.tidb_enable_check_constraint')
+                    enabled = str(cursor.fetchone()[0]).upper() in {
+                        '1', 'ON'}
+                finally:
+                    cursor.close()
+            finally:
+                if connection is None:
+                    client._forget_and_close(native)
+            if not enabled:
+                raise RelationalClientError(
+                    'TiDB discards CHECK constraints while the global '
+                    'tidb_enable_check_constraint is OFF; enable it on the '
+                    'server or remove the CHECK constraint')
+        return super().apply(client, request, connection=connection)
+
+
+ADMINISTRATION = TiDBAdministration(
     _TIDB_DIALECT, CONTROL_OPERATIONS,
     _compile_control_plane, inspector=_inspect_control_plane,
     canceller=_cancel_control_plane,
@@ -1162,6 +1206,7 @@ def _extras(cursor, _request, generation):
             'default_character_set': str(character_set),
             'default_collation': str(collation),
         }))
+    constraint_details = mysql_constraint_details(cursor)
     for database, table, name, constraint_type in optional_rows(
         cursor,
         'SELECT TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, CONSTRAINT_TYPE '
@@ -1169,8 +1214,31 @@ def _extras(cursor, _request, generation):
     ):
         values.append(resource(
             'constraint', [database, table], name, generation,
-            {'constraint_type': str(constraint_type)},
+            {'constraint_type': str(constraint_type),
+             **constraint_details.get((database, table, name), {})},
         ))
+    # TiDB lists CHECK constraints only in its own catalog (TABLE_CONSTRAINTS
+    # omits them; the standard CHECK_CONSTRAINTS has no table name).
+    for database, table, name, clause in optional_rows(
+        cursor,
+        'SELECT CONSTRAINT_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, CHECK_CLAUSE '
+        'FROM information_schema.TIDB_CHECK_CONSTRAINTS ORDER BY 1, 2, 3',
+    ):
+        values.append(resource(
+            'constraint', [database, table], name, generation,
+            {'constraint_type': 'CHECK', 'check_clause': str(clause)},
+        ))
+    for database, name, definition, check_option, security_type, \
+            definer in optional_rows(
+                cursor,
+                'SELECT TABLE_SCHEMA, TABLE_NAME, VIEW_DEFINITION, '
+                'CHECK_OPTION, SECURITY_TYPE, DEFINER '
+                'FROM information_schema.VIEWS ORDER BY 1, 2'):
+        values.append(resource('view', [database], name, generation, {
+            'table_type': 'VIEW', 'query': str(definition),
+            'check_option': str(check_option),
+            'sql_security': str(security_type), 'definer': str(definer),
+        }))
     sequence_rows = optional_rows(
         cursor,
         'SELECT SEQUENCE_SCHEMA, SEQUENCE_NAME, CACHE, CACHE_VALUE, CYCLE, '
@@ -1216,45 +1284,7 @@ def _extras(cursor, _request, generation):
             'job_type': str(row[3]), 'schema_state': str(row[4]),
             'state': str(row[11]) if len(row) > 11 else '',
         }))
-    roles = set()
-    for user, host in optional_rows(
-        cursor,
-        'SELECT DISTINCT FROM_USER, FROM_HOST FROM mysql.role_edges '
-        'ORDER BY 1, 2',
-    ):
-        account = (str(user), str(host))
-        roles.add(account)
-        values.append(resource(
-            'role', [], f'{account[0]}@{account[1]}', generation,
-        ))
-    accounts = optional_rows(
-        cursor,
-        'SELECT User, Host, account_locked, authentication_string '
-        'FROM mysql.user ORDER BY 1, 2',
-    )
-    for user, host, locked, authentication in accounts:
-        account = (str(user), str(host))
-        is_role = (
-            str(locked).upper() == 'Y' and not str(authentication or '')
-        )
-        if is_role and account not in roles:
-            roles.add(account)
-            values.append(resource(
-                'role', [], f'{account[0]}@{account[1]}', generation,
-            ))
-        elif account not in roles:
-            values.append(resource(
-                'user', [], f'{account[0]}@{account[1]}', generation,
-                {'account_locked': str(locked)},
-            ))
-    for grantee, privilege in optional_rows(
-        cursor,
-        'SELECT GRANTEE, PRIVILEGE_TYPE '
-        'FROM information_schema.USER_PRIVILEGES ORDER BY 1, 2',
-    ):
-        values.append(resource(
-            'privilege', [grantee], privilege, generation,
-        ))
+    values.extend(mysql_account_resources(cursor, generation))
     for component, instance, status_address, version in optional_rows(
         cursor,
         'SELECT TYPE, INSTANCE, STATUS_ADDRESS, VERSION '

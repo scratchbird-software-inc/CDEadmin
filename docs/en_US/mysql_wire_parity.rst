@@ -154,6 +154,15 @@ TiDB 8.5.6
    status statements.
 -  Has sequences and its own resource groups (``RU_PER_SEC``), which MySQL
    lacks.
+-  **Defect, fixed 2026-10-29:** TiDB lists ``CHECK`` constraints only in
+   ``information_schema.TIDB_CHECK_CONSTRAINTS``; ``TABLE_CONSTRAINTS``
+   omits them and the standard ``CHECK_CONSTRAINTS`` has no table name, so
+   the inventory never showed them. It now reads TiDB's catalog.
+-  ``CHECK`` with the setting OFF is now refused when applied, naming the
+   setting, instead of being reported as created. An existing session sees
+   a changed global setting (verified live).
+-  Grants work on databases, tables, views and sequences; routine grants
+   are refused (live). Passwordless users can be created and log in.
 
 Vitess 23.0.3 (through vtgate, sharded keyspace)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -224,6 +233,14 @@ Plan
 ----
 
 #. Dolt first (single container, closest to MySQL), then TiDB, then Vitess.
+   TiDB progress 2026-10-29: ``ui_descriptors/tidb`` exists; table, view,
+   index, sequence, database and role forms are ``complete`` (live round
+   trip in ``tools/tests/test_ui_descriptor_roundtrip_tidb.py``). Routine
+   and trigger families are omitted (refused live). Open TiDB gaps: the
+   grant dialog's privilege list is JSON; ``IDENTIFIED WITH`` an
+   authentication plugin is not emitted; placement policies, resource
+   groups, TiFlash replicas, DDL jobs and changefeeds use the provider's
+   own dialogs (not yet descriptor forms).
    Dolt progress 2026-10-29: ``ui_descriptors/dolt`` exists. Table, view,
    index, trigger and routine forms are ``complete`` (live round trip in
    ``tools/tests/test_ui_descriptor_roundtrip_dolt.py``); role and database

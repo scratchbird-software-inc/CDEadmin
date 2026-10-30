@@ -1,0 +1,379 @@
+{
+  "schema": "cdeadmin.ui-operations.v1",
+  "engine": "tidb",
+  "operations": [
+    {
+      "operation_id": "backup_full",
+      "resource_kind": "cluster",
+      "title": "Back up cluster with BR",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "storage_uri",
+          "label": "Approved BR storage URI",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "restore_full",
+      "resource_kind": "cluster",
+      "title": "Restore cluster with BR",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "storage_uri",
+          "label": "Approved BR storage URI",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "verification_database",
+          "label": "Database expected after restore",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "restore_point",
+      "resource_kind": "cluster",
+      "title": "Point-in-time restore with BR",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "storage_uri",
+          "label": "Approved BR storage URI",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "restore_timestamp",
+          "label": "Restore timestamp or TSO",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "full_backup_storage_uri",
+          "label": "Approved full-backup storage URI",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "verification_database",
+          "label": "Database expected after restore",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "backup_br",
+      "resource_kind": "database",
+      "title": "Back up database with BR",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "storage_uri",
+          "label": "Approved BR storage URI",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "restore_br",
+      "resource_kind": "database",
+      "title": "Restore database with BR",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "storage_uri",
+          "label": "Approved BR storage URI",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "configure_placement",
+      "resource_kind": "database",
+      "title": "Set database placement policy",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "policy_name",
+          "label": "Placement policy",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "placement-policy"
+        }
+      ]
+    },
+    {
+      "operation_id": "reset_placement",
+      "resource_kind": "database",
+      "title": "Use default database placement",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "set_tiflash_replica",
+      "resource_kind": "database",
+      "title": "Set tiflash replica",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "replica_count",
+          "label": "Replica count",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "location_labels",
+          "label": "Location labels",
+          "control": "grid",
+          "required": false,
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Location label",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "notes": "typed_from_json: database.set_tiflash_replica.location_labels"
+    },
+    {
+      "operation_id": "backup_br",
+      "resource_kind": "table",
+      "title": "Back up table with BR",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "storage_uri",
+          "label": "Approved BR storage URI",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "restore_br",
+      "resource_kind": "table",
+      "title": "Restore table with BR",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "storage_uri",
+          "label": "Approved BR storage URI",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "execution_host": true,
+      "produces_log": true
+    },
+    {
+      "operation_id": "configure_placement",
+      "resource_kind": "table",
+      "title": "Set table placement policy",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "policy_name",
+          "label": "Placement policy",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "placement-policy"
+        }
+      ]
+    },
+    {
+      "operation_id": "reset_placement",
+      "resource_kind": "table",
+      "title": "Use default table placement",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "set_tiflash_replica",
+      "resource_kind": "table",
+      "title": "Set tiflash replica",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "replica_count",
+          "label": "Replica count",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "location_labels",
+          "label": "Location labels",
+          "control": "grid",
+          "required": false,
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Location label",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "notes": "typed_from_json: table.set_tiflash_replica.location_labels"
+    },
+    {
+      "operation_id": "configure_placement",
+      "resource_kind": "partition",
+      "title": "Set partition placement policy",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "policy_name",
+          "label": "Placement policy",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "placement-policy"
+        }
+      ]
+    },
+    {
+      "operation_id": "reset_placement",
+      "resource_kind": "partition",
+      "title": "Use default partition placement",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "cancel",
+      "resource_kind": "job",
+      "title": "Cancel DDL job",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "pause",
+      "resource_kind": "changefeed",
+      "title": "Pause TiCDC changefeed",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "resume",
+      "resource_kind": "changefeed",
+      "title": "Resume TiCDC changefeed",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    }
+  ]
+}

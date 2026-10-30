@@ -12,7 +12,9 @@ from pgadmin.cdeadmin.sdk import (
 from .driver import DoltNativeClient
 from ..distributed_sql import (
     create_sql_client,
+    mysql_account_resources,
     mysql_catalog,
+    mysql_constraint_details,
     optional_rows,
     resource,
     sql_administration,
@@ -898,18 +900,6 @@ def _rebase_plan(cursor):
     return True, cursor.fetchall()
 
 
-def _grant(grantee, object_type, object_name, privilege, grantable):
-    """Native facts for one grant; GRANTEE arrives as 'user'@'host'."""
-    principal = '@'.join(
-        part.strip("'") for part in str(grantee).split("'@'", 1))
-    return {
-        'principal': principal, 'object_type': object_type,
-        'object_name': object_name, 'privilege': str(privilege),
-        'grantable': None if grantable is None else
-        str(grantable).upper() == 'YES',
-    }
-
-
 def _event_schedule(event_type, execute_at, interval_value, interval_field,
                     starts, ends):
     """The ON SCHEDULE clause as the server keeps it (STARTS included)."""
@@ -921,55 +911,6 @@ def _event_schedule(event_type, execute_at, interval_value, interval_field,
     if ends is not None:
         clause += f" ENDS '{ends}'"
     return clause
-
-
-def _constraint_details(cursor):
-    """Key columns, references, rules and check clauses per constraint.
-
-    Lets an editor re-open an existing table's constraints. Each catalog is
-    optional: a missing one leaves only the constraint type.
-    """
-    found = {}
-    for database, table, name, column, ref_database, ref_table, \
-            ref_column in optional_rows(
-                cursor,
-                'SELECT TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, '
-                'COLUMN_NAME, REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME, '
-                'REFERENCED_COLUMN_NAME '
-                'FROM information_schema.KEY_COLUMN_USAGE '
-                'ORDER BY 1, 2, 3, ORDINAL_POSITION'):
-        entry = found.setdefault((database, table, name), {'columns': []})
-        entry['columns'].append(str(column))
-        if ref_table is not None:
-            entry['referenced_database'] = str(ref_database)
-            entry['referenced_table'] = str(ref_table)
-            entry.setdefault('referenced_columns', []).append(
-                str(ref_column))
-    for database, table, name, update_rule, delete_rule in optional_rows(
-            cursor,
-            'SELECT CONSTRAINT_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, '
-            'UPDATE_RULE, DELETE_RULE '
-            'FROM information_schema.REFERENTIAL_CONSTRAINTS'):
-        entry = found.setdefault((database, table, name), {})
-        entry.update(update_rule=str(update_rule),
-                     delete_rule=str(delete_rule))
-    checks = {
-        (database, name): str(clause) for database, name, clause in
-        optional_rows(
-            cursor,
-            'SELECT CONSTRAINT_SCHEMA, CONSTRAINT_NAME, CHECK_CLAUSE '
-            'FROM information_schema.CHECK_CONSTRAINTS')
-    }
-    for database, table, name in optional_rows(
-            cursor,
-            "SELECT TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME "
-            "FROM information_schema.TABLE_CONSTRAINTS "
-            "WHERE CONSTRAINT_TYPE = 'CHECK'"):
-        clause = checks.get((database, name))
-        if clause is not None:
-            found.setdefault((database, table, name), {})[
-                'check_clause'] = clause
-    return found
 
 
 def _extras(cursor, _request, generation):
@@ -998,7 +939,7 @@ def _extras(cursor, _request, generation):
             'FROM information_schema.TRIGGERS ORDER BY 1, 2, 3',
         ),
     )
-    constraint_details = _constraint_details(cursor)
+    constraint_details = mysql_constraint_details(cursor)
     trigger_details = {
         (database, name): {
             'table': str(table), 'timing': str(timing),
@@ -1088,73 +1029,7 @@ def _extras(cursor, _request, generation):
             'enabled': str(status).upper() == 'ENABLED',
             'body': None if body is None else str(body),
         }))
-    roles = set()
-    for user, host in optional_rows(
-        cursor,
-        'SELECT DISTINCT FROM_USER, FROM_HOST FROM mysql.role_edges '
-        'ORDER BY 1, 2',
-    ):
-        account = (str(user), str(host))
-        roles.add(account)
-        values.append(resource(
-            'role', [], f'{account[0]}@{account[1]}', generation,
-            {'user': account[0], 'host': account[1]},
-        ))
-    accounts = optional_rows(
-        cursor,
-        'SELECT User, Host, account_locked, authentication_string '
-        'FROM mysql.user ORDER BY 1, 2',
-    )
-    for user, host, locked, authentication in accounts:
-        account = (str(user), str(host))
-        # Dolt implements MySQL roles as locked, passwordless accounts. This
-        # also preserves unassigned roles, which have no mysql.role_edges row.
-        is_role = (
-            str(locked).upper() == 'Y' and not str(authentication or '')
-        )
-        if is_role and account not in roles:
-            roles.add(account)
-            values.append(resource(
-                'role', [], f'{account[0]}@{account[1]}', generation,
-                {'user': account[0], 'host': account[1]},
-            ))
-        elif account not in roles:
-            values.append(resource(
-                'user', [], f'{account[0]}@{account[1]}', generation,
-                {'account_locked': str(locked), 'user': account[0],
-                 'host': account[1]},
-            ))
-    for grantee, privilege in optional_rows(
-        cursor,
-        'SELECT GRANTEE, PRIVILEGE_TYPE '
-        'FROM information_schema.USER_PRIVILEGES ORDER BY 1, 2',
-    ):
-        values.append(resource(
-            'privilege', [grantee], privilege, generation,
-            _grant(grantee, 'GLOBAL', '*.*', privilege, None),
-        ))
-    # Database- and table-level grants, so the tree shows every grant a
-    # REVOKE can name, not only global ones.
-    for grantee, schema, privilege, grantable in optional_rows(
-        cursor,
-        'SELECT GRANTEE, TABLE_SCHEMA, PRIVILEGE_TYPE, IS_GRANTABLE '
-        'FROM information_schema.SCHEMA_PRIVILEGES ORDER BY 1, 2, 3',
-    ):
-        values.append(resource(
-            'privilege', [grantee, schema], privilege, generation,
-            _grant(grantee, 'DATABASE', schema, privilege, grantable),
-        ))
-    for grantee, schema, table, privilege, grantable in optional_rows(
-        cursor,
-        'SELECT GRANTEE, TABLE_SCHEMA, TABLE_NAME, PRIVILEGE_TYPE, '
-        'IS_GRANTABLE FROM information_schema.TABLE_PRIVILEGES '
-        'ORDER BY 1, 2, 3, 4',
-    ):
-        values.append(resource(
-            'privilege', [grantee, schema, table], privilege, generation,
-            _grant(grantee, 'TABLE', f'{schema}.{table}', privilege,
-                   grantable),
-        ))
+    values.extend(mysql_account_resources(cursor, generation))
     tables = (
         ('branch', 'SELECT name, hash, latest_committer, latest_commit_date '
          'FROM dolt_branches ORDER BY name'),

@@ -1,0 +1,23 @@
+{
+  "schema": "cdeadmin.ui-options.v1",
+  "engine": "tidb",
+  "dialect": {},
+  "catalog": {
+    "databases": {
+      "resource_kind": "database"
+    },
+    "tables": {
+      "resource_kind": "table"
+    },
+    "users": {
+      "resource_kind": "user"
+    },
+    "roles": {
+      "resource_kind": "role"
+    },
+    "placement_policies": {
+      "resource_kind": "placement-policy"
+    }
+  },
+  "notes": "Catalog entries resolve at runtime from the endpoint resources of the named kind (tested version 8.5.6)."
+}

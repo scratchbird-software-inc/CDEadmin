@@ -62,6 +62,67 @@ def mysql_default_expression(data_type, default, extra):
     return "'" + text.replace('\\', '\\\\').replace("'", "''") + "'"
 
 
+def mysql_grant(grantee, object_type, object_name, privilege, grantable):
+    """Native facts for one grant; GRANTEE arrives as 'user'@'host'."""
+    principal = '@'.join(
+        part.strip("'") for part in str(grantee).split("'@'", 1))
+    return {
+        'principal': principal, 'object_type': object_type,
+        'object_name': object_name, 'privilege': str(privilege),
+        'grantable': None if grantable is None else
+        str(grantable).upper() == 'YES',
+    }
+
+
+def mysql_constraint_details(cursor):
+    """Key columns, references, rules and check clauses per constraint.
+
+    Lets an editor re-open an existing table's constraints. Each catalog is
+    optional: a missing one leaves only the constraint type.
+    """
+    found = {}
+    for database, table, name, column, ref_database, ref_table, \
+            ref_column in optional_rows(
+                cursor,
+                'SELECT TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, '
+                'COLUMN_NAME, REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME, '
+                'REFERENCED_COLUMN_NAME '
+                'FROM information_schema.KEY_COLUMN_USAGE '
+                'ORDER BY 1, 2, 3, ORDINAL_POSITION'):
+        entry = found.setdefault((database, table, name), {'columns': []})
+        entry['columns'].append(str(column))
+        if ref_table is not None:
+            entry['referenced_database'] = str(ref_database)
+            entry['referenced_table'] = str(ref_table)
+            entry.setdefault('referenced_columns', []).append(
+                str(ref_column))
+    for database, table, name, update_rule, delete_rule in optional_rows(
+            cursor,
+            'SELECT CONSTRAINT_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, '
+            'UPDATE_RULE, DELETE_RULE '
+            'FROM information_schema.REFERENTIAL_CONSTRAINTS'):
+        entry = found.setdefault((database, table, name), {})
+        entry.update(update_rule=str(update_rule),
+                     delete_rule=str(delete_rule))
+    checks = {
+        (database, name): str(clause) for database, name, clause in
+        optional_rows(
+            cursor,
+            'SELECT CONSTRAINT_SCHEMA, CONSTRAINT_NAME, CHECK_CLAUSE '
+            'FROM information_schema.CHECK_CONSTRAINTS')
+    }
+    for database, table, name in optional_rows(
+            cursor,
+            "SELECT TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME "
+            "FROM information_schema.TABLE_CONSTRAINTS "
+            "WHERE CONSTRAINT_TYPE = 'CHECK'"):
+        clause = checks.get((database, name))
+        if clause is not None:
+            found.setdefault((database, table, name), {})[
+                'check_clause'] = clause
+    return found
+
+
 def resource(kind, path, name, generation, native=None):
     """Build one provider-native resource before common normalization."""
     parts = [str(item) for item in path]
@@ -676,3 +737,81 @@ def sql_administration(
         supported=supported,
         syntax_family=wire,
     ))
+
+
+def mysql_account_resources(cursor, generation):
+    """Users, roles and global, database and table grants (MySQL dialect).
+
+    Roles are locked passwordless accounts or role_edges sources (Dolt and
+    TiDB implement MySQL roles that way). Records carry the user and host
+    parts so an editor can re-open an account.
+    """
+    values = []
+    roles = set()
+    for user, host in optional_rows(
+        cursor,
+        'SELECT DISTINCT FROM_USER, FROM_HOST FROM mysql.role_edges '
+        'ORDER BY 1, 2',
+    ):
+        account = (str(user), str(host))
+        roles.add(account)
+        values.append(resource(
+            'role', [], f'{account[0]}@{account[1]}', generation,
+            {'user': account[0], 'host': account[1]},
+        ))
+    accounts = optional_rows(
+        cursor,
+        'SELECT User, Host, account_locked, authentication_string '
+        'FROM mysql.user ORDER BY 1, 2',
+    )
+    for user, host, locked, authentication in accounts:
+        account = (str(user), str(host))
+        # Dolt implements MySQL roles as locked, passwordless accounts. This
+        # also preserves unassigned roles, which have no mysql.role_edges row.
+        is_role = (
+            str(locked).upper() == 'Y' and not str(authentication or '')
+        )
+        if is_role and account not in roles:
+            roles.add(account)
+            values.append(resource(
+                'role', [], f'{account[0]}@{account[1]}', generation,
+                {'user': account[0], 'host': account[1]},
+            ))
+        elif account not in roles:
+            values.append(resource(
+                'user', [], f'{account[0]}@{account[1]}', generation,
+                {'account_locked': str(locked), 'user': account[0],
+                 'host': account[1]},
+            ))
+    for grantee, privilege in optional_rows(
+        cursor,
+        'SELECT GRANTEE, PRIVILEGE_TYPE '
+        'FROM information_schema.USER_PRIVILEGES ORDER BY 1, 2',
+    ):
+        values.append(resource(
+            'privilege', [grantee], privilege, generation,
+            mysql_grant(grantee, 'GLOBAL', '*.*', privilege, None),
+        ))
+    # Database- and table-level grants, so the tree shows every grant a
+    # REVOKE can name, not only global ones.
+    for grantee, schema, privilege, grantable in optional_rows(
+        cursor,
+        'SELECT GRANTEE, TABLE_SCHEMA, PRIVILEGE_TYPE, IS_GRANTABLE '
+        'FROM information_schema.SCHEMA_PRIVILEGES ORDER BY 1, 2, 3',
+    ):
+        values.append(resource(
+            'privilege', [grantee, schema], privilege, generation,
+            mysql_grant(grantee, 'DATABASE', schema, privilege, grantable),
+        ))
+    for grantee, schema, table, privilege, grantable in optional_rows(
+        cursor,
+        'SELECT GRANTEE, TABLE_SCHEMA, TABLE_NAME, PRIVILEGE_TYPE, '
+        'IS_GRANTABLE FROM information_schema.TABLE_PRIVILEGES '
+        'ORDER BY 1, 2, 3, 4',
+    ):
+        values.append(resource(
+            'privilege', [grantee, schema, table], privilege, generation,
+            mysql_grant(grantee, 'TABLE', f'{schema}.{table}', privilege,
+                        grantable),
+        ))
+    return values

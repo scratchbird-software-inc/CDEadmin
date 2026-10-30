@@ -1,0 +1,17 @@
+{
+  "engine": "tidb",
+  "omitted": [
+    {
+      "family": "routine",
+      "reason": "TiDB refuses stored procedures, functions and events (live probe on 8.5.6; docs/en_US/mysql_wire_parity.rst)"
+    },
+    {
+      "family": "trigger",
+      "reason": "TiDB refuses CREATE TRIGGER (live probe on 8.5.6)"
+    },
+    {
+      "family": "type",
+      "reason": "No user-defined types or domains (MySQL dialect)"
+    }
+  ]
+}

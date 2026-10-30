@@ -1,0 +1,132 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "tidb",
+  "family": "role",
+  "resource_kinds": [
+    "user",
+    "role",
+    "privilege"
+  ],
+  "status": "complete",
+  "engine_tab_title": "TiDB",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Grant dialog privilege list",
+      "reason": "Grant/revoke use the provider dialog (as MariaDB and Dolt do); its privilege list is a JSON field",
+      "tracking": "mysql-wire-parity"
+    },
+    {
+      "concept": "Authentication plugin",
+      "reason": "TiDB supports IDENTIFIED WITH <plugin>; the generic compiler does not emit it yet",
+      "tracking": "mysql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "tab": "General",
+      "control": "select",
+      "ui_only": true,
+      "options": [
+        {
+          "value": "user",
+          "label": "User"
+        },
+        {
+          "value": "role",
+          "label": "Role"
+        },
+        {
+          "value": "grant",
+          "label": "Grant"
+        }
+      ]
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "record_key": "user"
+    },
+    {
+      "field_id": "host",
+      "label": "Host",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "default": "%",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "authentication_mode",
+      "label": "Primary authentication",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "PASSWORD",
+      "options": [
+        {
+          "value": "PASSWORD",
+          "label": "Password"
+        },
+        {
+          "value": "NONE",
+          "label": "None"
+        }
+      ],
+      "help": "None creates an account with no password (owner direction 2026-10-29).",
+      "group": "Authentication",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "General",
+      "control": "password",
+      "required": false,
+      "help": "The value is redacted from validation and plans.",
+      "group": "Authentication",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "active",
+      "label": "Account active",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      },
+      "record_derive": {
+        "cases": [
+          {
+            "key": "account_locked",
+            "equals": "Y",
+            "value": false
+          }
+        ],
+        "default": true
+      },
+      "help": "ACCOUNT LOCK / UNLOCK"
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. privilege: provider exposes no create form (grant, inspect, revoke) Round trip verified live on TiDB 8.5.6 by tools/tests/test_ui_descriptor_roundtrip_tidb.py (2026-10-29)."
+}

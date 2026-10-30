@@ -119,7 +119,18 @@ _PASSWORDLESS_USER_ENGINES = frozenset({'dolt', 'tidb'})
 # Dolt refuses stored functions and sequences (live probe, 1.86.6).
 _PRIVILEGE_OBJECT_TYPES = {
     'dolt': ('TABLE', 'VIEW', 'PROCEDURE', 'DATABASE'),
+    # TiDB grants on tables, views and sequences by name, and refuses
+    # routine grants (it has no stored routines); live, 8.5.6.
+    'tidb': ('TABLE', 'VIEW', 'SEQUENCE', 'DATABASE'),
 }
+
+# CHARACTER SET / COLLATE on CREATE and ALTER DATABASE, verified live
+# (Dolt 1.86.6, TiDB 8.5.6). MySQL and MariaDB have their own option sets.
+_DATABASE_OPTION_ENGINES = frozenset({'dolt', 'tidb'})
+
+# Engines whose accounts go through the generic MySQL-dialect compiler,
+# which emits only IDENTIFIED BY and ACCOUNT LOCK (Dolt has no lock either).
+_ACCOUNT_LOCK_ONLY_ENGINES = frozenset({'tidb'})
 
 # FOLLOWS / PRECEDES trigger ordering, verified live (Dolt 1.86.6).
 _TRIGGER_ORDER_ENGINES = frozenset({'dolt'})
@@ -1310,7 +1321,7 @@ class RelationalAdministration:
         ):
             errors.extend(self._validate_mysql_database(operation_id, draft))
         if (
-            self.dialect.engine_id == 'dolt' and
+            self.dialect.engine_id in _DATABASE_OPTION_ENGINES and
             resource_kind == 'database' and operation_id in {'create', 'alter'}
         ):
             errors.extend(self._validate_mysql_database(
@@ -5222,13 +5233,14 @@ class RelationalAdministration:
                     if key in value:
                         options[key] = value.pop(key)
             if kind == 'database' and self.dialect.engine_id in {
-                    'mysql', 'mariadb', 'dolt'}:
+                    'mysql', 'mariadb', *_DATABASE_OPTION_ENGINES}:
                 database_keys = (
                     ('if_not_exists', 'character_set', 'collation',
                      'encryption')
                     if self.dialect.engine_id == 'mysql' else
                     ('if_not_exists', 'character_set', 'collation')
-                    if self.dialect.engine_id == 'dolt' else
+                    if self.dialect.engine_id in _DATABASE_OPTION_ENGINES
+                    else
                     ('or_replace', 'if_not_exists', 'character_set',
                      'collation', 'comment')
                 )
@@ -6033,9 +6045,8 @@ class RelationalAdministration:
                                 options=('fts5', 'rtree')),
                     self._field('columns', 'Module columns', 'json', True),
                 ))
-            elif kind == 'database' and self.dialect.engine_id == 'dolt':
-                # CHARACTER SET / COLLATE on create and alter verified live
-                # (Dolt 1.86.6).
+            elif kind == 'database' and (
+                    self.dialect.engine_id in _DATABASE_OPTION_ENGINES):
                 fields.extend((
                     self._field('if_not_exists', 'If not exists', 'boolean',
                                 default=False),
@@ -6065,7 +6076,14 @@ class RelationalAdministration:
                     'The value is redacted from validation and plans.',
                     sensitive=True,
                 ))
-                if self.dialect.engine_id != 'dolt':
+                if self.dialect.engine_id in _ACCOUNT_LOCK_ONLY_ENGINES:
+                    # The generic MySQL-dialect compiler honours only
+                    # ACCOUNT LOCK; plugin and administrator would be
+                    # silently ignored.
+                    user_fields.append(
+                        self._field('active', 'Account active', 'boolean',
+                                    default=True))
+                elif self.dialect.engine_id != 'dolt':
                     user_fields.extend((
                         self._field(
                             'plugin', 'Authentication plugin', 'text'
@@ -6131,7 +6149,11 @@ class RelationalAdministration:
                     sensitive=True,
                 ),
             ]
-            if self.dialect.engine_id != 'dolt':
+            if self.dialect.engine_id in _ACCOUNT_LOCK_ONLY_ENGINES:
+                # Only IDENTIFIED BY and ACCOUNT LOCK are compiled here.
+                fields.append(self._field('active', 'Account active',
+                                          'boolean', default=True))
+            elif self.dialect.engine_id != 'dolt':
                 fields.extend((
                     self._field('plugin', 'Authentication plugin', 'text'),
                     self._field('active', 'Account active', 'boolean',
@@ -6876,7 +6898,7 @@ class RelationalAdministration:
                     },
                 ]
         elif kind == 'database' and self.dialect.engine_id in {
-                'mysql', 'mariadb', 'dolt'}:
+                'mysql', 'mariadb', *_DATABASE_OPTION_ENGINES}:
             prefix = 'CREATE DATABASE'
             if (
                 self.dialect.engine_id == 'mariadb' and
