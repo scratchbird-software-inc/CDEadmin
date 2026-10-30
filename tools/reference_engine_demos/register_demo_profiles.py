@@ -116,6 +116,12 @@ def route_for(item, host, registration, provider_route_options):
     if engine in {'postgresql', 'cockroachdb', 'yugabytedb', 'immudb'}:
         item.setdefault('sslmode', 'disable')
     if item['engine'] == 'vitess':
+        # Control plane through the demo wrapper (demo_estate.py); the
+        # wrapper runs vtctldclient inside the vtctld container.
+        item.setdefault('vtctldclient_path', str(
+            Path(__file__).resolve().parent /
+            'runtime/vitess_tools/vtctldclient'))
+        item.setdefault('vtctld_server', 'localhost:15999')
         item.setdefault('vtgate_http_port', item['http_port'])
         item.setdefault('vtgate_http_host', host)
         item.setdefault('vtgate_http_tls_mode', 'disable')
