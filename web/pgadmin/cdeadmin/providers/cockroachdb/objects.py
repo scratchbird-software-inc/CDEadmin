@@ -133,7 +133,12 @@ def _trigger(admin, draft):
                 set(events)) != len(events):
         raise RelationalClientError(
             'select one or more of INSERT, UPDATE, DELETE')
-    function = admin._qualified(admin._option_path(draft, 'function'))
+    function = list(admin._option_path(draft, 'function'))
+    # Routine resources are named name(arguments); a trigger function's
+    # argument list is empty.
+    if function[-1].endswith('()'):
+        function[-1] = function[-1][:-2]
+    function = admin._qualified(function)
     arguments = draft.get('arguments') or []
     if not isinstance(arguments, list) or any(
             not isinstance(item, str) for item in arguments):
@@ -313,7 +318,8 @@ def trigger_native(table_path, tgtype, enabled, function_path, arguments,
                         if tgtype & bit), 'AFTER'),
         'events': [label for bit, label in _EVENT_BITS if tgtype & bit],
         'row_level': bool(tgtype & 1),
-        'function': list(function_path),
+        # As the function's resource is named: name(), no arguments.
+        'function': [*function_path[:-1], f'{function_path[-1]}()'],
         'arguments': [item.decode('utf-8') for item in values],
         'when': None if when is None else _unwrap(str(when)),
         'enabled': str(enabled) != 'D',

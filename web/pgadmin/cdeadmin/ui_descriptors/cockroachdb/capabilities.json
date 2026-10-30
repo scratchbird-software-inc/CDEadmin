@@ -374,6 +374,11 @@
           "mutation_class": "write"
         },
         {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
@@ -394,6 +399,11 @@
         },
         {
           "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
           "tier": 1,
           "mutation_class": "write"
         },

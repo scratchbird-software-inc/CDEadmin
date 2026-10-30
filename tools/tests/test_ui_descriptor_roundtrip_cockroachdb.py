@@ -139,14 +139,14 @@ def test_trigger_create_reopen_drop(live):
     form = resolved_form('cockroachdb', 'trigger')
     run(client, route, 'trigger', 'create', backend_draft(form, {
         'name': 'tr_rt', 'table': ['public', 't'], 'timing': 'AFTER',
-        'events': ['INSERT', 'UPDATE'], 'function': ['public', 'on_t'],
+        'events': ['INSERT', 'UPDATE'], 'function': ['public', 'on_t()'],
         'arguments': [{'value': 'a'}, {'value': 'say "hi", a\\b'}],
         'when': '(NEW).v > 0'}))
     target, baseline = record(client, route, 'trigger', 'tr_rt', 'trigger')
     # One record for a two-event trigger (information_schema lists two).
     assert (baseline['table'], baseline['timing'], baseline['events'],
             baseline['function'], baseline['when']) == (
-        ['public', 't'], 'AFTER', ['INSERT', 'UPDATE'], ['public', 'on_t'],
+        ['public', 't'], 'AFTER', ['INSERT', 'UPDATE'], ['public', 'on_t()'],
         '(new).v > 0')
     assert [row['value'] for row in baseline['arguments']] == [
         'a', 'say "hi", a\\b']
@@ -443,7 +443,7 @@ def test_view_and_materialized_view(live):
     for kind, name in (('view', 'rt_v2'), ('materialized-view', 'rt_m2')):
         run(client, route, kind, 'drop', {'confirmation': name},
             target=find(client, route, kind, name)[0])
-    assert not query("SELECT 1 FROM pg_class WHERE relname LIKE 'rt_%'")
+    assert not query("SELECT 1 FROM pg_class WHERE relname LIKE 'rt\\_%'")
 
 
 def test_sequence_create_reopen_alter_drop(live):
@@ -479,3 +479,82 @@ def test_sequence_create_reopen_alter_drop(live):
     run(client, route, 'sequence', 'drop', {'confirmation': 'rt_seq2'},
         target=target)
     assert not query("SELECT 1 FROM pg_class WHERE relname = 'rt_seq2'")
+
+
+def test_functions_and_procedures(live):
+    route, client = live
+    form = resolved_form('cockroachdb', 'routine')
+    run(client, route, 'function', 'create', backend_draft(form, {
+        'variant': 'function', 'name': 'rt_add', 'parent': 'public',
+        'parameters': [{'name': 'a', 'type': 'INT8'},
+                       {'name': 'b', 'type': 'INT8', 'default': '2'}],
+        'returns': 'INT8', 'language': 'SQL', 'volatility': 'IMMUTABLE',
+        'strict': True, 'leakproof': True, 'body': 'SELECT a + b'}))
+    # An overload of the same name stays a separate routine.
+    run(client, route, 'function', 'create', backend_draft(form, {
+        'variant': 'function', 'name': 'rt_add', 'parent': 'public',
+        'parameters': [{'name': 'a', 'type': 'STRING'}],
+        'returns': 'STRING', 'body': "SELECT a || '!'"}))
+    run(client, route, 'function', 'create', backend_draft(form, {
+        'variant': 'function', 'name': 'rt_split', 'parent': 'public',
+        'parameters': [{'name': 'a', 'type': 'INT8'},
+                       {'mode': 'OUT', 'name': 'x', 'type': 'INT8'},
+                       {'mode': 'INOUT', 'name': 'y', 'type': 'INT8'}],
+        'language': 'PLPGSQL',
+        'body': 'BEGIN x := a; y := y + 1; END'}))
+    run(client, route, 'procedure', 'create', backend_draft(form, {
+        'variant': 'procedure', 'name': 'rt_proc', 'parent': 'public',
+        'parameters': [{'name': 'n', 'type': 'INT8'}],
+        'language': 'PLPGSQL', 'security': 'DEFINER',
+        'body': "BEGIN RAISE NOTICE 'n=%', n; END"}))
+    names = sorted(row['display_name'] for row in resources(client, route)
+                   if row['resource_kind'] in {'function', 'procedure'} and
+                   row['display_name'].startswith('rt_'))
+    assert names == ['rt_add(int8, int8)', 'rt_add(text)',
+                     'rt_proc(int8)', 'rt_split(int8, int8)']
+    target, baseline = record(client, route, 'function',
+                              'rt_add(int8, int8)', 'routine')
+    assert ([(row['name'], row['type'], row['default'], row['mode'])
+             for row in baseline['parameters']], baseline['returns'],
+            baseline['volatility'], baseline['strict'],
+            baseline['leakproof'], baseline['name']) == (
+        [('a', 'INT8', None, 'IN'), ('b', 'INT8', '2', 'IN')], 'INT8',
+        'IMMUTABLE', True, True, 'rt_add')
+    assert query('SELECT public.rt_add(1)') == [(3,)]
+    _, split = record(client, route, 'function', 'rt_split(int8, int8)',
+                      'routine')
+    assert [row['mode'] for row in split['parameters']] == [
+        'IN', 'OUT', 'INOUT']
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    # The editor host adds the kind's variant to the record.
+    baseline['variant'] = 'function'
+    alter = backend_draft(form, {
+        **baseline, 'body': 'SELECT a * b', 'volatility': 'STABLE',
+        'leakproof': False, 'name': 'rt_mul'},
+        mode='alter', baseline=baseline)
+    run(client, route, 'function', 'alter', alter, target=target)
+    assert query('SELECT public.rt_mul(3)') == [(6,)]
+    assert query('SELECT public.rt_add(\'x\')') == [('x!',)]
+    _, after = record(client, route, 'function', 'rt_mul(int8, int8)',
+                      'routine')
+    assert (after['volatility'], after['leakproof']) == ('STABLE', False)
+    # ALTER ... SECURITY DEFINER leaves pg_proc.prosecdef false; the record
+    # reads the rendering.
+    query('ALTER FUNCTION public.rt_mul(INT8, INT8) SECURITY DEFINER')
+    assert record(client, route, 'function', 'rt_mul(int8, int8)',
+                  'routine')[1]['security'] == 'DEFINER'
+    assert 'identity' in refused('function', 'alter', {'parameters': []},
+                                 find(client, route, 'function',
+                                      'rt_mul(int8, int8)')[0])
+    ptarget, proc = record(client, route, 'procedure', 'rt_proc(int8)',
+                           'routine')
+    assert (proc['security'], proc['language']) == ('DEFINER', 'PLPGSQL')
+    query('CALL public.rt_proc(1)')
+    for kind, name in (('function', 'rt_mul(int8, int8)'),
+                       ('function', 'rt_add(text)'),
+                       ('function', 'rt_split(int8, int8)'),
+                       ('procedure', 'rt_proc(int8)')):
+        run(client, route, kind, 'drop', {'confirmation': name},
+            target=find(client, route, kind, name)[0])
+    assert not query("SELECT 1 FROM pg_proc WHERE proname LIKE 'rt\\_%'")

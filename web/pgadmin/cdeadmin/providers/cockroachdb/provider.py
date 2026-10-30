@@ -23,7 +23,8 @@ from ..distributed_sql import (
     sql_administration,
 )
 from . import (
-    indexes as index_sql, objects, sequences, tables, types, views,
+    indexes as index_sql, objects, routines, sequences, tables, types,
+    views,
 )
 from .driver import CockroachDBClient
 from ..distributed_control_plane import DistributedSQLControlPlane
@@ -80,6 +81,11 @@ _COCKROACH_SUPPORTED = dict(_BASE_ADMINISTRATION.dialect.supported)
 for _kind in ('function', 'procedure', 'trigger'):
     _COCKROACH_SUPPORTED[_kind] = frozenset({
         'inspect', 'create', 'drop',
+    })
+# Body and options change in place (providers/cockroachdb/routines).
+for _kind in ('function', 'procedure'):
+    _COCKROACH_SUPPORTED[_kind] = frozenset({
+        'inspect', 'create', 'alter', 'drop',
     })
 # In place: rename, visibility and comment (providers/cockroachdb/indexes).
 _COCKROACH_SUPPORTED['index'] = frozenset({
@@ -1284,7 +1290,8 @@ def _post_validate_control_plane(client, request):
 
 # Kinds whose create and alter are CockroachDB's own modules.
 _EDITED_KINDS = frozenset({'table', 'index', 'type', 'view',
-                           'materialized-view', 'sequence'})
+                           'materialized-view', 'sequence', 'function',
+                           'procedure'})
 
 
 class CockroachDBAdministration(DistributedSQLControlPlane):
@@ -1293,13 +1300,22 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
     @staticmethod
     def _native_object(kind, operation):
         return operation in objects.OPERATIONS.get(kind, ()) or (
-            operation in {'create', 'alter'} and kind in _EDITED_KINDS)
+            operation in {'create', 'alter'} and kind in _EDITED_KINDS) or (
+            # Dropped by signature: overloads share a name.
+            operation == 'drop' and kind in {'function', 'procedure'})
 
     def _native_compile(self, request):
         kind, operation = request['resource_kind'], request['operation_id']
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if kind in {'function', 'procedure'}:
+            target = request.get('target_resource')
+            if operation == 'drop':
+                return {'statements': routines.drop(self, kind, target)}
+            if operation == 'create':
+                return {'statements': routines.create(self, kind, draft)}
+            return {'statements': routines.alter(self, kind, draft, target)}
         if kind == 'sequence':
             if operation == 'create':
                 return {'statements': sequences.create(self, draft)}
@@ -1359,6 +1375,9 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
         return super()._compile(request)
 
     def _form(self, kind, operation):
+        if kind in {'function', 'procedure'} and operation in {
+                'create', 'alter'}:
+            return routines.form(self._field, kind, operation)
         if kind == 'sequence' and operation in {'create', 'alter'}:
             return sequences.form(self._field, operation)
         if kind == 'type' and operation in {'create', 'alter'}:
@@ -1476,16 +1495,55 @@ def _extras(cursor, request, generation):
             'fields': None if enum else fields.get(key, []),
             'comment': None if comment is None else str(comment),
         }))
-    for schema, name, routine_kind in optional_rows(
+    # Overloads share a name, so a routine's resource is name(arguments);
+    # its record keeps the bare name and the signature apart.
+    rendered = [str(row[0]) for row in optional_rows(
+        cursor, 'SHOW CREATE ALL ROUTINES')]
+    for (schema, name, routine_kind, signature, names, modes, language,
+         volatility, strict, security, leakproof, body) in optional_rows(
         cursor,
-        'SELECT n.nspname, p.proname, p.prokind '
+        'SELECT n.nspname, p.proname, p.prokind, '
+        'pg_get_function_arguments(p.oid), p.proargnames, p.proargmodes, '
+        'l.lanname, p.provolatile, p.proisstrict, p.prosecdef, '
+        'p.proleakproof, p.prosrc '
         'FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n '
         'ON n.oid = p.pronamespace '
-        "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') "
-        "AND p.prokind IN ('f', 'p') ORDER BY 1, 2",
+        'JOIN pg_catalog.pg_language l ON l.oid = p.prolang '
+        "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', "
+        "'crdb_internal') AND p.prokind IN ('f', 'p') ORDER BY 1, 2, 4",
     ):
         kind = 'procedure' if str(routine_kind) == 'p' else 'function'
-        values.append(resource(kind, [schema], name, generation))
+        native = {
+            'name': str(name), 'signature': str(signature or ''),
+            'parent': str(schema),
+            'language': 'PLPGSQL' if str(language) == 'plpgsql' else 'SQL',
+            'security': 'DEFINER' if security else 'INVOKER',
+            'body': None if body is None else str(body).strip(),
+        }
+        if kind == 'function':
+            native.update(
+                volatility={'i': 'IMMUTABLE', 's': 'STABLE'}.get(
+                    str(volatility), 'VOLATILE'),
+                strict=bool(strict), leakproof=bool(leakproof))
+        # The rendering has CockroachDB's own types and the defaults; match
+        # it by name and parameter names (pg_get_function_arguments gives
+        # PostgreSQL type names). Ambiguous overloads keep pg_proc's facts.
+        matches = []
+        for statement in rendered:
+            parsed = routines.parse_create(statement, names, modes)
+            if parsed and parsed[0] == (str(schema), str(name)) and [
+                    item['name'] for item in parsed[1]['parameters']] == [
+                    str(item) for item in names or []]:
+                matches.append(parsed[1])
+        if len(matches) == 1:
+            facts = matches[0]
+            if kind == 'procedure':
+                facts = {key: facts[key] for key in (
+                    'parameters', 'security', 'language') if key in facts}
+            native.update(facts)
+        values.append(resource(
+            kind, [schema], f'{name}({signature or ""})', generation,
+            native))
     # pg_trigger, not information_schema.triggers: that lists a trigger
     # once per event, so a trigger on two events came back twice.
     for (schema, table, name, tgtype, enabled, function_schema, function,

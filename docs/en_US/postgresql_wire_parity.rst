@@ -401,6 +401,20 @@ Checked live on 26.1.3 for those forms (not yet in the probe):
       built-in function descriptions: an uncommented table read back a
       function's help text as its comment. Fixed 2026-10-30 (table and
       index comments now name ``'pg_class'``); a live check covers it.
+-  Routines: SQL and PL/pgSQL; ``IN``/``OUT``/``INOUT`` parameters with
+   defaults; ``RETURNS [SETOF]`` (``RETURNS TABLE`` renders as ``OUT``
+   parameters and ``SETOF RECORD``); volatility, ``STRICT``,
+   ``LEAKPROOF`` (immutable only), ``SECURITY DEFINER``; ``CREATE OR
+   REPLACE`` (which resets every option it does not name) and ``RENAME
+   TO``. Refused: ``VARIADIC``, ``PARALLEL``, ``COST``, ``SET`` options
+   and ``COMMENT ON FUNCTION``/``PROCEDURE``. ``pg_proc.prosecdef`` stays
+   false after ``ALTER FUNCTION ... SECURITY DEFINER`` while ``SHOW
+   CREATE`` shows ``DEFINER``; ``pg_get_function_arguments`` gives
+   PostgreSQL type names without defaults. The record reads ``SHOW CREATE
+   ALL ROUTINES``, matched to ``pg_proc`` by name and parameter names.
+   Overloads share a name, so routine resources are now named
+   ``name(arguments)`` (they collided before) and are dropped by
+   signature; a trigger names its function ``name()``.
 -  Sequences: ``AS INT2/INT4/INT8``, ``START``, ``INCREMENT``,
    ``MINVALUE``/``MAXVALUE`` (or ``NO``), ``CACHE`` with ``PER NODE`` or
    ``PER SESSION``, ``OWNED BY`` (or ``NONE``), ``RESTART [WITH]`` and
@@ -482,7 +496,8 @@ TTL and a table comment; in alter mode it changes existing columns (type,
 default, nullability, visibility, ON UPDATE, identity, stored to regular,
 comment) and diffs each changed constraint grid against the table record.
 Key membership and family stay fixed on existing columns.
-The sequence form is ``complete`` too (``sequences.py``).
+The sequence and routine forms are ``complete`` too (``sequences.py``,
+``routines.py``; the provider admits function and procedure alter).
 The view (with materialized views; alter is admitted for them, which
 ``portfolio_catalog.json`` had excluded), index and type forms are
 ``complete`` the same day

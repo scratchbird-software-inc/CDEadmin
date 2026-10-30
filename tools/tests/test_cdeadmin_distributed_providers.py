@@ -429,8 +429,10 @@ class DistributedProviderTests(unittest.TestCase):
             concepts['tablespaces_and_filespaces'][
                 'catalog_resource_kinds'],
         )
+        # alter since 2026-10-30: body and options by CREATE OR REPLACE,
+        # rename (providers/cockroachdb/routines.py, live round trip).
         self.assertEqual(
-            ['create', 'drop', 'inspect'],
+            ['alter', 'create', 'drop', 'inspect'],
             concepts['procedures']['operation_obligations']['procedure'],
         )
         self.assertIn(
