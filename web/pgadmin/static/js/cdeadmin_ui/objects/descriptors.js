@@ -219,14 +219,42 @@ export function fieldOptions(field, {context={}, draft={}, resourceKind}={}) {
     }
   }
   if(field.control === 'reference' && field.reference_kind) {
-    const rows = context.resources?.[field.reference_kind] || [];
-    // Providers take object references as dotted display paths (schema.name).
-    return rows.map((row) => ({
-      value: Array.isArray(row.display_path) && row.display_path.length ? row.display_path.join('.') :
-        row.display_name ?? row.resource_id ?? row.value ?? row,
-      label: row.display_name ?? row.label ?? String(row)}));
+    const rows = (context.resources?.[field.reference_kind] || []).filter((row) => referenceOffered(field, row, context));
+    return rows.map((row) => ({value: referenceValue(field, row), label: row.display_name ?? row.label ?? String(row)}));
   }
   return [];
+}
+
+/**
+ * Whether a reference picker offers a resource row. `reference_filter`
+ * ({key, equals}) keeps rows whose dotted key equals the value; a row without
+ * the key is not offered (nothing unconfirmed is offered). `reference_scope`
+ * ({target_path_prefix: n}) keeps rows sharing the first n display_path
+ * segments with the target resource (context.target_resource), such as the
+ * backups of the target tablet's keyspace and shard.
+ */
+export function referenceOffered(field, row, context={}) {
+  const filter = field.reference_filter;
+  if(filter && readPath(row, String(filter.key).split('.')) !== filter.equals) return false;
+  const size = field.reference_scope?.target_path_prefix;
+  if(size) {
+    const own = context.target_resource?.display_path;
+    if(!Array.isArray(own) || !Array.isArray(row.display_path) || own.length < size) return false;
+    if(own.slice(0, size).some((part, index) => row.display_path[index] !== part)) return false;
+  }
+  return true;
+}
+
+/**
+ * The value a reference picker sends. Providers take object references as
+ * dotted display paths (schema.name) unless the field names another part
+ * (`reference_value`: display_name for engine names such as a tablet alias).
+ */
+export function referenceValue(field, row) {
+  if(field.reference_value === 'display_name') return row.display_name ?? row.resource_id;
+  if(field.reference_value === 'resource_id') return row.resource_id;
+  return Array.isArray(row.display_path) && row.display_path.length ? row.display_path.join('.') :
+    row.display_name ?? row.resource_id ?? row.value ?? row;
 }
 
 /** Initial draft for a form in a mode, from field defaults and an existing record. */
@@ -508,4 +536,13 @@ export function buildOptionContext(bundle, resources=[]) {
     }));
   }
   return {dialect: bundle?.options?.dialect || {}, catalog, resources: byKind, bundle};
+}
+
+/**
+ * The OperationDialog's option context: the editor's (dialect, catalog and
+ * reference resources) plus the resource the operation targets, which
+ * reference_scope compares against.
+ */
+export function operationContext(bundle, resources=[], target=null) {
+  return {...buildOptionContext(bundle, resources), target_resource: target};
 }

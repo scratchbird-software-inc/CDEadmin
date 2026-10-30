@@ -257,6 +257,43 @@
           "type": "string",
           "description": "for control=reference: resource_kind to pick"
         },
+        "reference_value": {
+          "enum": [
+            "display_path",
+            "display_name",
+            "resource_id"
+          ],
+          "description": "for control=reference: what the picker sends (default: the dotted display_path)"
+        },
+        "reference_filter": {
+          "type": "object",
+          "description": "for control=reference: offer only resources whose dotted key equals the value; a resource without the key is not offered",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "equals": {}
+          },
+          "required": [
+            "key",
+            "equals"
+          ]
+        },
+        "reference_scope": {
+          "type": "object",
+          "description": "for control=reference: offer only resources sharing the first target_path_prefix display_path segments with the target resource",
+          "additionalProperties": false,
+          "properties": {
+            "target_path_prefix": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "target_path_prefix"
+          ]
+        },
         "options": {
           "type": "array",
           "items": {

@@ -16,7 +16,7 @@
 export {default as ObjectEditor, planSqlText} from './ObjectEditor';
 export {default as OperationDialog} from './OperationDialog';
 export {
-  default as ProviderObjectEditorHost, makePost, recordFromResource, resourceNative,
+  default as ProviderObjectEditorHost, loadEndpointResources, makePost, recordFromResource, resourceNative,
 } from './ProviderObjectEditorHost';
 export {default as ServerRegistrationHost} from './ServerRegistrationHost';
 export {default as FieldControl, fieldHelpText} from './FieldControl';
@@ -37,7 +37,10 @@ export {
   formForKind,
   initialDraft,
   menuForKind,
+  operationContext,
   recordFromBackend,
+  referenceOffered,
+  referenceValue,
   resolveBundle,
   resolveForm,
   toBackendDraft,

@@ -523,12 +523,19 @@ def test_tablet_backup_restore_and_backup_delete(live):
     assert backup['display_path'][:2] == ['lookup_keyspace', '-']
     assert backup['display_name'].endswith(alias)
     try:
-        # Backup names start with the timestamp RestoreFromBackup takes.
-        timestamp = backup['display_name'].rsplit('.', 1)[0]
+        # Choose as the dialog's picker does (reference_scope 2,
+        # reference_value display_name): this shard's backups, by name.
         restore = operations['restore@tablet']
+        [field] = restore['fields']
+        size = field['reference_scope']['target_path_prefix']
+        offered = [row['display_name'] for row in resources(client, route)
+                   if row['resource_kind'] == field['reference_kind'] and
+                   row['display_path'][:size] ==
+                   replica['display_path'][:size]]
+        assert offered == [backup['display_name']]
         run(client, route, 'tablet', 'restore', operation_backend_draft(
-            restore, operation_draft(restore, {
-                'backup_timestamp': timestamp}, alias)), target=replica)
+            restore, operation_draft(restore, {'backup': offered[0]},
+                                     alias)), target=replica)
         for _attempt in range(60):
             tablet = next(row for row in resources(client, route)
                           if row['display_name'] == alias and

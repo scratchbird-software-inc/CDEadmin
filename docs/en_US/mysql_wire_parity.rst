@@ -433,7 +433,19 @@ Plan
    set; one target per row. The JSON ``apply`` operation remains for the
    legacy dialog. The shared ``OperationDialog`` now sends values in the
    provider's own shapes (string grids as plain lists); it is not yet
-   mounted by any host.
+   mounted by any host. **Correction (2026-10-30, later the same day):**
+   that was wrong. ``web/pgadmin/browser/static/js/ProviderObjectEditor.jsx``
+   already opened it for tier 2/3 operations from the object tree, so the
+   list-field bug was reachable in the app. The same review found the
+   dialog received no option context, so every reference picker and
+   dialect list in it was empty; it now gets the editor's context plus the
+   target resource. Reference fields gained ``reference_value`` (what the
+   picker sends; tablet aliases, backup names and TiDB's exchange table send
+   the bare name instead of the dotted path), ``reference_filter``
+   (procedure and sequence keyspaces offer unsharded keyspaces only; a
+   keyspace whose sharding is unknown is not offered) and
+   ``reference_scope`` (restore offers the target tablet's own keyspace and
+   shard backups; reparent offers the shard's own tablets).
    Also 2026-10-30, live: tablet backup and restore ran (a ``lookup_keyspace``
    replica backed up, restored from that named backup, back to serving as a
    replica; the replica's log shows the restore used the requested

@@ -20,8 +20,8 @@ import gettext from 'sources/gettext';
 import getApiInstance from 'sources/api_instance';
 import ErrorBoundary from 'sources/helpers/ErrorBoundary';
 import {
-  OperationDialog, ProviderObjectEditorHost, ServerRegistrationHost, descriptorClient, editorAvailable, makePost, menuForKind,
-  visualAdminCalls,
+  OperationDialog, ProviderObjectEditorHost, ServerRegistrationHost, descriptorClient, editorAvailable, loadEndpointResources,
+  makePost, menuForKind, operationContext, visualAdminCalls,
 } from 'sources/cdeadmin_ui/objects';
 import {createRoot} from 'react-dom/client';
 import Theme from 'sources/Theme';
@@ -153,14 +153,20 @@ export function openDescriptorOperation(itemData, item, operation) {
     mount.remove();
   };
   const run = async () => {
-    const target = await operationTarget(post, itemData);
+    // Reference pickers and dialect lists need the same option context the
+    // object editor builds; without it every picker in the dialog was empty.
+    const [target, bundle, resources] = await Promise.all([
+      operationTarget(post, itemData),
+      descriptorClient(context.api).bundle(context.engine, {version: context.version}).catch(() => null),
+      loadEndpointResources(post),
+    ]);
     const calls = visualAdminCalls(post, {resourceKind: itemData.cde_resource_kind, operationId: operation.operation_id, target});
     // Typed confirmations compare against the route database for database
     // nodes and the object name otherwise (what the providers validate).
     const targetName = itemData._type === 'cde_database_target' ?
       (itemData.cde_database || itemData.label || itemData._label) : (itemData.label || itemData._label);
     root.render(<Theme><OperationDialog open operation={operation} targetName={targetName}
-      plan={({draft}) => calls.plan({draft})} apply={({plan}) => calls.apply({plan})}
+      context={operationContext(bundle, resources, target)} plan={({draft}) => calls.plan({draft})} apply={({plan}) => calls.apply({plan})}
       onClose={close} onApplied={() => refreshNode(item)} /></Theme>);
   };
   run();

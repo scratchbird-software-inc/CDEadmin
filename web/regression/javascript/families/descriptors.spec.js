@@ -1,6 +1,6 @@
 import {
   activeFields, editorAvailable, fieldOptions, fieldVisible, formForKind, initialDraft, menuForKind,
-  resolveBundle, resolveForm, toBackendDraft, toOperationDraft, validateDraft,
+  operationContext, resolveBundle, resolveForm, toBackendDraft, toOperationDraft, validateDraft,
 } from '../../../pgadmin/static/js/cdeadmin_ui/objects/descriptors';
 import {loadEngineBundle, loadFamilies} from './familyFixtures';
 
@@ -272,5 +272,58 @@ describe('operation dialog drafts (kept in step with operation_backend_draft)', 
 
   it('keeps a typed-name confirmation', () => {
     expect(toOperationDraft(operation, {cells: [], confirmation: 'ks'})).toEqual({cells: [], confirmation: 'ks'});
+  });
+});
+
+describe('reference pickers fed by the catalog (operation dialog and editor)', () => {
+  const row = (kind, path, native={}) => ({resource_kind: kind, resource_id: `${kind}:${path.join(':')}`,
+    display_name: path.at(-1), display_path: path, native});
+  const catalog = [
+    row('keyspace', ['test_keyspace'], {sharded: true}),
+    row('keyspace', ['lookup_keyspace'], {sharded: false}),
+    row('keyspace', ['unknown_keyspace']),
+    row('tablet', ['test_keyspace', '-80', 'test-0000000101']),
+    row('tablet', ['test_keyspace', '80-', 'test-0000000201']),
+    row('tablet', ['lookup_keyspace', '-', 'test-0000000301']),
+    row('backup', ['lookup_keyspace', '-', '2026-10-30.125734.test-0000000301']),
+    row('backup', ['test_keyspace', '-80', '2026-10-30.120000.test-0000000101']),
+  ];
+  const vitess = loadEngineBundle('vitess');
+  const operation = (kind, id) => vitess.kinds[kind].operations.find((op) => op.operation_id === id);
+  const values = (field, context) => fieldOptions(field, {context}).map((option) => option.value);
+
+  it('restore offers only the target tablet\'s shard backups, by name', () => {
+    const [field] = operation('tablet', 'restore').fields;
+    const context = operationContext(vitess, catalog, catalog[5]);
+    expect(values(field, context)).toEqual(['2026-10-30.125734.test-0000000301']);
+    // No target, no scope match: nothing is offered.
+    expect(values(field, operationContext(vitess, catalog, null))).toEqual([]);
+  });
+
+  it('reparent offers the shard\'s own tablets as aliases', () => {
+    const field = operation('shard', 'planned_reparent').fields.find((item) => item.field_id === 'new_primary');
+    const shard = row('shard', ['test_keyspace', '-80']);
+    expect(values(field, operationContext(vitess, catalog, shard))).toEqual(['test-0000000101']);
+  });
+
+  it('procedure and sequence keyspaces are unsharded only; an unknown sharding is not offered', () => {
+    const context = operationContext(vitess, catalog, null);
+    for(const family of ['routine', 'sequence']) {
+      const parent = vitess.forms[family].tabs.flatMap((tab) => tab.fields).find((item) => item.field_id === 'parent');
+      expect(values(parent, context)).toEqual(['lookup_keyspace']);
+    }
+  });
+
+  it('TiDB\'s exchange table sends the bare table name its provider joins to the database', () => {
+    const tidb = loadEngineBundle('tidb');
+    const field = tidb.kinds.partition.operations.find((op) => op.operation_id === 'exchange').fields
+      .find((item) => item.field_id === 'exchange_table');
+    const context = operationContext(tidb, [row('table', ['shop', 'orders_2025'])], null);
+    expect(values(field, context)).toEqual(['orders_2025']);
+  });
+
+  it('keeps the dotted display path where no reference_value is set', () => {
+    const field = {field_id: 'policy', control: 'reference', reference_kind: 'table'};
+    expect(values(field, operationContext(vitess, [row('table', ['shop', 'orders'])], null))).toEqual(['shop.orders']);
   });
 });

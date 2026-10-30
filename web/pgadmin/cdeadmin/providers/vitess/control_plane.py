@@ -25,6 +25,8 @@ def _choice(field_id, label, values, **options):
 
 
 _NAME_PATTERN = r'[A-Za-z0-9_.:@+-]+'
+# <date>.<time>.<cell>-<uid>, e.g. 2026-10-30.125734.test-0000000301.
+_BACKUP_NAME = r'[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]{6}\.[A-Za-z0-9_]+-[0-9]+'
 OPERATIONS = (
     ControlPlaneOperation(
         'keyspace', 'create', 'Create keyspace', 'admin',
@@ -405,6 +407,8 @@ OPERATIONS = (
         'restore_admin', (
             cp_field('backup_timestamp', 'Backup timestamp', 'text', False,
                      max_length=128, pattern=r'[0-9TZ:.-]+'),
+            cp_field('backup', 'Backup', 'text', False, max_length=256,
+                     pattern=_BACKUP_NAME),
         ), impact_scope='shard', long_running=True,
         post_state_required=False
     ),
@@ -887,7 +891,17 @@ def compile_action(request):
             arguments = ['Backup' if operation == 'backup' else (
                 'RestoreFromBackup'
             )]
-        if operation == 'restore' and draft.get('backup_timestamp'):
+        if operation == 'restore' and draft.get('backup'):
+            if draft.get('backup_timestamp'):
+                raise RelationalClientError(
+                    'Vitess restore takes a backup or a timestamp, not both')
+            # A backup name is <date>.<time>.<tablet alias>; RestoreFromBackup
+            # takes the leading date and time. It restores from the target
+            # tablet's own keyspace and shard, so the picker offers those.
+            timestamp = _safe_name(
+                draft['backup'], 'backup', _BACKUP_NAME).rsplit('.', 1)[0]
+            arguments.extend(['--backup-timestamp', timestamp])
+        elif operation == 'restore' and draft.get('backup_timestamp'):
             timestamp = _safe_name(
                 draft['backup_timestamp'], 'backup timestamp', r'[0-9TZ:.-]+'
             )

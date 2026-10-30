@@ -1369,6 +1369,30 @@ class DistributedProviderTests(unittest.TestCase):
                 }]}},
             })
 
+    def test_vitess_restore_takes_a_backup_name(self):
+        def arguments(draft):
+            return compile_vitess_action({
+                'resource_kind': 'tablet', 'operation_id': 'restore',
+                'target_resource': {
+                    'resource_kind': 'tablet',
+                    'display_name': 'test-0000000301',
+                    'display_path': ['lookup_keyspace', '-',
+                                     'test-0000000301']},
+                'draft': draft,
+            })['provider_action']['arguments']
+
+        self.assertEqual([
+            'RestoreFromBackup', '--backup-timestamp', '2026-10-30.125734',
+            'test-0000000301',
+        ], arguments({'backup': '2026-10-30.125734.test-0000000301'}))
+        self.assertEqual(['RestoreFromBackup', 'test-0000000301'],
+                         arguments({}))
+        with self.assertRaisesRegex(RelationalClientError, 'not both'):
+            arguments({'backup': '2026-10-30.125734.test-0000000301',
+                       'backup_timestamp': '2026-10-30.125734'})
+        with self.assertRaisesRegex(RelationalClientError, 'is invalid'):
+            arguments({'backup': '2026-10-30.125734.x; rm'})
+
     def test_vitess_routing_rule_editor_rows_take_one_target(self):
         def compile_rules(rows):
             action = compile_vitess_action({

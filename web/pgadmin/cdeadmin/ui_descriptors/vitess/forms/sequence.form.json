@@ -23,8 +23,12 @@
       "tab": "General",
       "control": "reference",
       "required": true,
-      "help": "Vitess sequence backing tables must be in an unsharded keyspace; a sharded one is refused before anything runs.",
-      "reference_kind": "keyspace"
+      "help": "Unsharded keyspaces only: Vitess refuses this object on a sharded keyspace.",
+      "reference_kind": "keyspace",
+      "reference_filter": {
+        "key": "native.sharded",
+        "equals": false
+      }
     },
     {
       "field_id": "start",

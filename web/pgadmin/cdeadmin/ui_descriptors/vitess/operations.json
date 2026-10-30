@@ -54,14 +54,22 @@
           "label": "New primary tablet alias",
           "control": "reference",
           "required": true,
-          "reference_kind": "tablet"
+          "reference_kind": "tablet",
+          "reference_value": "display_name",
+          "reference_scope": {
+            "target_path_prefix": 2
+          }
         },
         {
           "field_id": "expected_primary",
           "label": "Expected current primary",
           "control": "reference",
           "required": false,
-          "reference_kind": "tablet"
+          "reference_kind": "tablet",
+          "reference_value": "display_name",
+          "reference_scope": {
+            "target_path_prefix": 2
+          }
         },
         {
           "field_id": "allow_cross_cell",
@@ -88,14 +96,22 @@
           "label": "New primary tablet alias",
           "control": "reference",
           "required": true,
-          "reference_kind": "tablet"
+          "reference_kind": "tablet",
+          "reference_value": "display_name",
+          "reference_scope": {
+            "target_path_prefix": 2
+          }
         },
         {
           "field_id": "expected_primary",
           "label": "Expected prior primary",
           "control": "reference",
           "required": false,
-          "reference_kind": "tablet"
+          "reference_kind": "tablet",
+          "reference_value": "display_name",
+          "reference_scope": {
+            "target_path_prefix": 2
+          }
         },
         {
           "field_id": "prevent_cross_cell",
@@ -247,11 +263,16 @@
       "confirmation": "typed_name",
       "fields": [
         {
-          "field_id": "backup_timestamp",
-          "label": "Backup timestamp",
-          "control": "text",
+          "field_id": "backup",
+          "label": "Backup",
+          "control": "reference",
           "required": false,
-          "help": "The leading date and time of a backup name, e.g. 2026-10-30.125734; empty restores the latest."
+          "reference_kind": "backup",
+          "reference_value": "display_name",
+          "reference_scope": {
+            "target_path_prefix": 2
+          },
+          "help": "Backups of this tablet's keyspace and shard; empty restores the latest."
         }
       ],
       "execution_host": true,

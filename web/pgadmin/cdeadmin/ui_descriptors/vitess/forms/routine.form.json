@@ -35,8 +35,12 @@
       "tab": "General",
       "control": "reference",
       "required": false,
-      "help": "Unsharded keyspaces only: Vitess refuses stored procedures on a sharded keyspace (VT12001).",
-      "reference_kind": "keyspace"
+      "help": "Unsharded keyspaces only: Vitess refuses this object on a sharded keyspace.",
+      "reference_kind": "keyspace",
+      "reference_filter": {
+        "key": "native.sharded",
+        "equals": false
+      }
     },
     {
       "field_id": "parameters",

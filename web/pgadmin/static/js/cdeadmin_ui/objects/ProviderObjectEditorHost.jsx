@@ -212,7 +212,7 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
   const record = {...recordFromResource(resource, {form, resources}), ...(variant ? {variant} : {})};
   const notice = versionSupportNotice(versionSupport);
   const editor = <ObjectEditor form={form} mode={mode} resourceKind={resourceKind}
-    record={record} context={{...context, ...optionContext, target}}
+    record={record} context={{...context, ...optionContext, target, target_resource: resource}}
     tabRenderers={tabRenderers}
     title={displayName ? `${mode === 'create' ? 'Create' : 'Edit'} ${form.family_title.toLowerCase()} — ${displayName}` : undefined}
     plan={({draft}) => calls.plan({draft})}

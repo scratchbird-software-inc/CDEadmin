@@ -400,7 +400,8 @@
           "label": "Table",
           "control": "reference",
           "reference_kind": "table",
-          "required": true
+          "required": true,
+          "reference_value": "display_name"
         },
         {
           "field_id": "validation",
