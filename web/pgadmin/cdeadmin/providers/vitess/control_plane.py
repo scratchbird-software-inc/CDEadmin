@@ -305,11 +305,16 @@ OPERATIONS = (
                      'boolean', False, default=False),
         ), target_required=False, impact_scope='cluster', long_running=True
     ),
-    # The editor's alter: the same whole-set replace, from the current rules.
+    # The editor's alter: the same whole-set replace, from the current rules,
+    # for each rule set it sends (table, keyspace and shard rules).
     ControlPlaneOperation(
         'routing-rule', 'alter', 'Edit routing rules', 'destructive',
         'topology_admin', (
-            cp_field('rules', 'Routing rules', 'json', True,
+            cp_field('rules', 'Routing rules', 'json', False,
+                     json_type='object'),
+            cp_field('keyspace_rules', 'Keyspace routing rules', 'json',
+                     False, json_type='object'),
+            cp_field('shard_rules', 'Shard routing rules', 'json', False,
                      json_type='object'),
             cp_field('cells', 'Rebuild cells', 'json', False, default=[],
                      json_type='array'),
@@ -582,6 +587,111 @@ def _rules_document(document):
     } if isinstance(item, dict) else item for item in rules]}
 
 
+def _rule_rows(value, label):
+    if not isinstance(value, dict) or set(value) != {'rules'} or not \
+            isinstance(value['rules'], list) or len(value['rules']) > 4096:
+        raise RelationalClientError(f'Vitess {label} are invalid')
+    return value['rules']
+
+
+def _one(item, keys, label):
+    found = [item[key] for key in keys if key in item]
+    if len(found) != 1:
+        raise RelationalClientError(f'Vitess {label} is invalid')
+    return _safe_name(found[0], label)
+
+
+def _keyspace_routing_rules(value):
+    """Rows (from_keyspace, to_keyspace) as ApplyKeyspaceRoutingRules takes
+    them; vtctldclient prints the snake_case names (live, 23.0.3)."""
+    normalized, origins = [], set()
+    for item in _rule_rows(value, 'keyspace routing rules'):
+        if not isinstance(item, dict) or not set(item) <= {
+                'fromKeyspace', 'toKeyspace', 'from_keyspace', 'to_keyspace'}:
+            raise RelationalClientError('Vitess keyspace routing rule is '
+                                        'invalid')
+        origin = _one(item, ('fromKeyspace', 'from_keyspace'), 'keyspace')
+        target = _one(item, ('toKeyspace', 'to_keyspace'), 'keyspace')
+        if origin in origins or origin == target:
+            raise RelationalClientError(
+                'Vitess keyspace routing rules need distinct sources that '
+                'differ from their targets')
+        origins.add(origin)
+        normalized.append({'fromKeyspace': origin, 'toKeyspace': target})
+    return {'rules': normalized}
+
+
+def _shard_routing_rules(value):
+    normalized, origins = [], set()
+    for item in _rule_rows(value, 'shard routing rules'):
+        if not isinstance(item, dict) or not set(item) <= {
+                'fromKeyspace', 'toKeyspace', 'from_keyspace', 'to_keyspace',
+                'shard'}:
+            raise RelationalClientError('Vitess shard routing rule is '
+                                        'invalid')
+        origin = _one(item, ('fromKeyspace', 'from_keyspace'), 'keyspace')
+        target = _one(item, ('toKeyspace', 'to_keyspace'), 'keyspace')
+        shard = _safe_name(item.get('shard'), 'shard', r'[0-9A-Fa-f]*-'
+                           r'[0-9A-Fa-f]*')
+        if (origin, shard) in origins:
+            raise RelationalClientError(
+                f'Vitess shard routing rule {origin}/{shard} appears twice')
+        origins.add((origin, shard))
+        normalized.append({'fromKeyspace': origin, 'toKeyspace': target,
+                           'shard': shard})
+    return {'rules': normalized}
+
+
+def _camel_rules(document, keys):
+    if not isinstance(document, dict) or not isinstance(
+            document.get('rules'), list):
+        return document
+    return {'rules': [{camel: item.get(camel, item.get(snake))
+                       for camel, snake in keys}
+                      for item in document['rules'] if isinstance(item, dict)]}
+
+
+def _check_shard_rules(route, rules):
+    """vtctld accepted a shard rule for a shard its target keyspace lacks
+    (live, 23.0.3); queries for that shard then have nowhere to go."""
+    shards = {}
+    for rule in rules.get('rules') or []:
+        target = rule['toKeyspace']
+        if target not in shards:
+            response = _run(route, ['FindAllShardsInKeyspace', target],
+                            timeout=30)
+            found = (json.loads(response.get('stdout') or 'null') or {}).get(
+                'shards')
+            shards[target] = set(found) if isinstance(found, dict) else set()
+        if rule['shard'] not in shards[target]:
+            raise RelationalClientError(
+                f"Vitess shard routing rule sends {rule['fromKeyspace']}/"
+                f"{rule['shard']} to {target}, which has no shard "
+                f"{rule['shard']}")
+
+
+_RULE_SETS = (
+    ('rules', 'ApplyRoutingRules'),
+    ('keyspace_rules', 'ApplyKeyspaceRoutingRules'),
+    ('shard_rules', 'ApplyShardRoutingRules'),
+)
+_RULE_READERS = {'keyspace_rules': 'GetKeyspaceRoutingRules',
+                 'shard_rules': 'GetShardRoutingRules'}
+_RULE_NORMALIZERS = {
+    'rules': _routing_rules,
+    'keyspace_rules': _keyspace_routing_rules,
+    'shard_rules': _shard_routing_rules,
+}
+_RULE_DOCUMENTS = {
+    'rules': _rules_document,
+    'keyspace_rules': lambda document: _camel_rules(document, (
+        ('fromKeyspace', 'from_keyspace'), ('toKeyspace', 'to_keyspace'))),
+    'shard_rules': lambda document: _camel_rules(document, (
+        ('fromKeyspace', 'from_keyspace'), ('toKeyspace', 'to_keyspace'),
+        ('shard', 'shard'))),
+}
+
+
 def _materialize_settings(value):
     if not isinstance(value, list) or not value or len(value) > 256:
         raise RelationalClientError(
@@ -632,6 +742,7 @@ def compile_action(request):
     operation = request['operation_id']
     draft = request.get('draft') or {}
     arguments = []
+    more_arguments = []
     cancel_arguments = None
     vschema_edit = None
     if kind == 'keyspace':
@@ -859,19 +970,25 @@ def compile_action(request):
             '--workflow', workflow,
         ]
     elif kind == 'routing-rule' and operation in {'apply', 'alter'}:
-        rules = _routing_rules(draft.get('rules'))
-        arguments = [
-            'ApplyRoutingRules', '--rules', json.dumps(
-                rules, sort_keys=True, separators=(',', ':')
-            ),
-        ]
+        commands = []
+        for key, verb in _RULE_SETS:
+            if key == 'rules' and operation == 'apply' or key in draft:
+                rules = _RULE_NORMALIZERS[key](draft.get(key))
+                commands.append([verb, '--rules', json.dumps(
+                    rules, sort_keys=True, separators=(',', ':'))])
+        if not commands:
+            raise RelationalClientError('Vitess routing rules: nothing to '
+                                        'change')
         cells = draft.get('cells') or []
-        if cells:
-            arguments.extend(['--cells', ','.join(_string_list(
-                cells, 'cell'
-            ))])
-        if draft.get('skip_rebuild'):
-            arguments.append('--skip-rebuild')
+        for command in commands:
+            if cells:
+                command.extend(['--cells', ','.join(_string_list(
+                    cells, 'cell'
+                ))])
+            if draft.get('skip_rebuild'):
+                command.append('--skip-rebuild')
+        arguments = commands[0]
+        more_arguments = commands[1:]
     elif kind == 'online-ddl' and operation in {
             'launch', 'retry', 'complete', 'cancel', 'cleanup', 'throttle',
             'unthrottle', 'force_cutover'}:
@@ -975,6 +1092,7 @@ def compile_action(request):
             'cancel_arguments': cancel_arguments,
             **({'follow_up_arguments': follow_up} if follow_up else {}),
             **({'vschema_edit': vschema_edit} if vschema_edit else {}),
+            **({'more_arguments': more_arguments} if more_arguments else {}),
         },
         'action_preview': {
             'tool': 'vtctldclient',
@@ -1219,12 +1337,19 @@ def execute_action(_client, request):
             'provider_finality_authority': True,
             'automatic_mutation_retry': False,
         }
+    commands = [action.get('arguments'), *(action.get('more_arguments') or [])]
+    for command in commands:
+        if command and command[0] == 'ApplyShardRoutingRules':
+            _check_shard_rules(route, json.loads(command[2]))
     result = {
         'accepted': True,
-        'provider_response': _run(route, action.get('arguments')),
+        'provider_response': _run(route, commands[0]),
         'provider_finality_authority': True,
         'automatic_mutation_retry': False,
     }
+    if len(commands) > 1:
+        result['more_responses'] = [_run(route, command)
+                                    for command in commands[1:]]
     follow_up = action.get('follow_up_arguments')
     if follow_up == ['RebuildVSchemaGraph']:
         result['follow_up_response'] = _run(route, follow_up)
@@ -1394,8 +1519,16 @@ def post_validate_action(client, request):
             expected = path[-1]
         present = _document_contains_named_resource(document, expected)
     elif kind == 'routing-rule' and operation in {'apply', 'alter'}:
-        expected = _routing_rules(draft.get('rules'))
-        present = _rules_document(document) == expected
+        expected, present = {}, True
+        for key, verb in _RULE_SETS:
+            if not (key == 'rules' and operation == 'apply' or key in draft):
+                continue
+            expected[key] = _RULE_NORMALIZERS[key](draft.get(key))
+            current = document if key == 'rules' else json.loads(
+                _run(_route(request), [_RULE_READERS[key]],
+                     timeout=30).get('stdout') or 'null')
+            present = present and _RULE_DOCUMENTS[key](current) == expected[
+                key]
     elif kind == 'tablet' and operation == 'change_type':
         tablet_type = str(draft.get('tablet_type') or '').lower()
         expected = {
@@ -1591,6 +1724,17 @@ def catalog_resources(route, generation, keyspaces):
     try:
         response = _run(route, ['GetRoutingRules'], timeout=30)
         document = json.loads(response.get('stdout') or 'null')
+        if isinstance(document, dict):
+            for key, reader in (('keyspace_rules', 'GetKeyspaceRoutingRules'),
+                                ('shard_rules', 'GetShardRoutingRules'),
+                                ('mirror_rules', 'GetMirrorRules')):
+                try:
+                    found = json.loads(_run(route, [reader], timeout=30).get(
+                        'stdout') or 'null')
+                except (RelationalClientError, TypeError, ValueError):
+                    continue
+                if isinstance(found, dict):
+                    document[key] = found.get('rules') or []
         resources.append({
             'resource_id': 'routing-rule:global-routing-rules',
             'resource_kind': 'routing-rule',

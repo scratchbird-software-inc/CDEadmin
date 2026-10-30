@@ -819,3 +819,70 @@ def test_keyspace_vschema_editor(live):
                 pass
     for name, document in originals.items():
         assert vschema(name) == document
+
+
+def test_keyspace_and_shard_routing_rules(live):
+    import subprocess
+
+    def rules(reader):
+        return json.loads(subprocess.run(
+            [str(VTCTLD), '--server', 'localhost:15999', reader],
+            check=True, capture_output=True, text=True).stdout)['rules']
+
+    route, client = live
+    form = resolved_form('vitess', 'engine_object:routing-rule')
+    originals = {'ApplyKeyspaceRoutingRules': rules('GetKeyspaceRoutingRules'),
+                 'ApplyShardRoutingRules': rules('GetShardRoutingRules')}
+    ghost = f'rt_ghost_{UNIQUE}'
+    try:
+        target, baseline = record(client, route, 'routing-rule',
+                                  'global-routing-rules',
+                                  'engine_object:routing-rule')
+        run(client, route, 'routing-rule', 'alter', backend_draft(form, {
+            **baseline,
+            'keyspace_rules': baseline['keyspace_rules'] + [
+                {'from_keyspace': ghost, 'to_keyspace': 'lookup_keyspace'}],
+            'shard_rules': baseline['shard_rules'] + [
+                {'from_keyspace': 'lookup_keyspace', 'shard': '-80',
+                 'to_keyspace': KEYSPACE}]}, mode='alter', baseline=baseline),
+            target=target, post_state=True)
+        assert {'from_keyspace': ghost, 'to_keyspace': 'lookup_keyspace'} \
+            in rules('GetKeyspaceRoutingRules')
+        # The made-up keyspace name now answers from lookup_keyspace.
+        for _attempt in range(20):
+            try:
+                count = query(
+                    f'SELECT COUNT(*) FROM `{ghost}`.tokens_token_lookup',
+                    keyspace='lookup_keyspace')
+                break
+            except mysql_connector.Error:
+                time.sleep(1)
+        assert count == query('SELECT COUNT(*) FROM tokens_token_lookup',
+                              keyspace='lookup_keyspace')
+
+        # vtctld accepts a shard the target keyspace lacks; refused here.
+        target, baseline = record(client, route, 'routing-rule',
+                                  'global-routing-rules',
+                                  'engine_object:routing-rule')
+        before = rules('GetShardRoutingRules')
+        request = {'resource_kind': 'routing-rule', 'operation_id': 'alter',
+                   '_provider_route': route, 'target_resource': target,
+                   'draft': backend_draft(form, {
+                       **baseline, 'shard_rules': baseline['shard_rules'] + [
+                           {'from_keyspace': KEYSPACE, 'shard': '-80',
+                            'to_keyspace': 'lookup_keyspace'}]},
+                       mode='alter', baseline=baseline)}
+        planned = ADMINISTRATION.plan(request)
+        with pytest.raises(Exception, match='which has no shard -80'):
+            ADMINISTRATION.apply(client, executor_request(request, planned))
+        assert rules('GetShardRoutingRules') == before
+    finally:
+        for verb, original in originals.items():
+            subprocess.run(
+                [str(VTCTLD), '--server', 'localhost:15999', verb, '--rules',
+                 json.dumps({'rules': original})],
+                check=True, capture_output=True)
+    assert rules('GetKeyspaceRoutingRules') == originals[
+        'ApplyKeyspaceRoutingRules']
+    assert rules('GetShardRoutingRules') == originals[
+        'ApplyShardRoutingRules']

@@ -474,7 +474,43 @@ Plan
    a migration's status is one shard's (fixed the same day: the record now
    carries each shard's status, progress and readiness, and reports one
    status only when every shard agrees, otherwise ``mixed``); the backup
-   timestamp on restore is text, not a backup picker.
+   timestamp on restore is text, not a backup picker (restore now picks
+   from the target tablet's own shard backups, later the same day).
+   Structured VSchema editing (2026-10-30, live round trips):
+
+   -  A keyspace VSchema editor (``engine_object:vschema``) edits the
+      sharded flag, foreign key mode, explicit routing, tables (normal,
+      reference with its source, sequence, pinned, sequence column), each
+      table's vindexes in order (the first is the primary) and the
+      keyspace's vindexes with parameters and owner. Vitess replaces a
+      keyspace's VSchema whole, so the provider reads it at execute time,
+      replaces only the sections sent, keeps what the editor does not show
+      (column lists), refuses a sent section changed since the editor
+      opened (vtctld has no compare-and-set), refuses what vtctld accepts
+      but vtgate cannot serve (missing reference source or sequence,
+      undefined vindex, sharded table without placement, unsharding a
+      multi-shard keyspace), applies in one ``ApplyVSchema``, and confirms
+      vtgate serves the keyspace without error.
+   -  The VSchema travels as one command-line argument because the tool may
+      run where host files are not visible; above 128 KiB (Linux
+      ``MAX_ARG_STRLEN``) the edit is refused with that reason.
+   -  The routing rules editor also edits keyspace and shard routing rules
+      (``ApplyKeyspaceRoutingRules``, ``ApplyShardRoutingRules``; input in
+      camelCase, printed in snake_case, like table rules). vtctld accepted a
+      shard rule for a shard the target keyspace lacks; the provider refuses
+      it. A keyspace rule may name a keyspace that does not exist; its
+      queries then go to the target (verified).
+   -  Mirror rules are shown read only: vtctld has no command to apply them
+      (MoveTables mirrortraffic sets them). Their row fields follow the
+      Vitess MirrorRule message and have not been seen with live data.
+   -  Setting ``sharded`` on a keyspace whose tables lack a primary vindex
+      is refused by vtctld itself; unsharding a two-shard keyspace passed
+      vtctld's dry run, so the provider refuses it.
+   -  The table editor's VSchema fields (primary vindex, sequence column)
+      remain create-time; alter-time table vindex and sequence edits live in
+      the keyspace VSchema editor. The vindex editor still creates in the
+      connected keyspace; vindexes of other keyspaces are edited in their
+      keyspace's VSchema editor.
 #. For each engine, run the forms through the draft and review tools in
    ``ui_descriptors/README.md`` to make a descriptor folder. Reuse MySQL's
    field ids where the backend field is the same, and filter by this matrix.

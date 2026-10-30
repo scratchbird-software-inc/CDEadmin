@@ -1257,6 +1257,10 @@ class DistributedProviderTests(unittest.TestCase):
         def response(_route, arguments, timeout=30):
             documents = {
                 'GetRoutingRules': {'rules': []},
+                'GetKeyspaceRoutingRules': {'rules': [
+                    {'from_keyspace': 'old', 'to_keyspace': 'analytics'}]},
+                'GetShardRoutingRules': {'rules': []},
+                'GetMirrorRules': {'rules': []},
                 'GetKeyspaces': [{
                     'name': 'analytics',
                     'keyspace': {'durability_policy': 'semi_sync'},
@@ -1307,7 +1311,14 @@ class DistributedProviderTests(unittest.TestCase):
         self.assertEqual(('analytics/-', 'analytics', '-'), (
             shard['display_name'], shard['native']['keyspace'],
             shard['native']['key_range']))
-        self.assertEqual(5, run.call_count)
+        # Every rule set rides the one routing-rule record.
+        rules = next(item for item in resources
+                     if item['resource_kind'] == 'routing-rule')['native']
+        self.assertEqual(
+            ([], [{'from_keyspace': 'old', 'to_keyspace': 'analytics'}], [],
+             []), (rules['rules'], rules['keyspace_rules'],
+                   rules['shard_rules'], rules['mirror_rules']))
+        self.assertEqual(8, run.call_count)
 
     @patch('pgadmin.cdeadmin.providers.vitess.control_plane._run')
     def test_vitess_catalog_keeps_vtgate_keyspaces_without_topology(
@@ -1317,6 +1328,9 @@ class DistributedProviderTests(unittest.TestCase):
                 raise RelationalClientError('vtctld refused GetKeyspaces')
             documents = {
                 'GetRoutingRules': {'rules': []},
+                'GetKeyspaceRoutingRules': {'rules': []},
+                'GetShardRoutingRules': {'rules': []},
+                'GetMirrorRules': {'rules': []},
                 'FindAllShardsInKeyspace': {'shards': {}},
                 'GetWorkflows': {'workflows': []},
             }
@@ -1416,6 +1430,66 @@ class DistributedProviderTests(unittest.TestCase):
                                     'one target table'):
             compile_rules([{'fromTable': 'commerce.orders', 'toTables': [
                 'customer.orders', 'archive.orders']}])
+
+    def test_vitess_keyspace_and_shard_rules_each_get_a_command(self):
+        def compile_rules(draft):
+            return compile_vitess_action({
+                'resource_kind': 'routing-rule', 'operation_id': 'alter',
+                'target_resource': {
+                    'resource_kind': 'routing-rule',
+                    'display_path': ['global-routing-rules']},
+                'draft': draft})['provider_action']
+
+        action = compile_rules({
+            'keyspace_rules': {'rules': [{'from_keyspace': 'old',
+                                          'to_keyspace': 'new'}]},
+            'shard_rules': {'rules': [{'from_keyspace': 'old',
+                                       'to_keyspace': 'new',
+                                       'shard': '-80'}]},
+            'skip_rebuild': True})
+        self.assertEqual([
+            ['ApplyKeyspaceRoutingRules', '--rules',
+             '{"rules":[{"fromKeyspace":"old","toKeyspace":"new"}]}',
+             '--skip-rebuild'],
+            ['ApplyShardRoutingRules', '--rules',
+             '{"rules":[{"fromKeyspace":"old","shard":"-80",'
+             '"toKeyspace":"new"}]}', '--skip-rebuild'],
+        ], [action['arguments'], *action['more_arguments']])
+        # An edit of one set leaves the others untouched (not sent).
+        self.assertNotIn('more_arguments', compile_rules({
+            'keyspace_rules': {'rules': []}}))
+        for draft, reason in (
+                ({}, 'nothing to change'),
+                ({'keyspace_rules': {'rules': [
+                    {'from_keyspace': 'a', 'to_keyspace': 'a'}]}},
+                 'differ from their targets'),
+                ({'shard_rules': {'rules': [
+                    {'from_keyspace': 'a', 'to_keyspace': 'b',
+                     'shard': '-80'}] * 2}}, 'appears twice'),
+                ({'shard_rules': {'rules': [
+                    {'from_keyspace': 'a', 'to_keyspace': 'b',
+                     'shard': 'x'}]}}, 'shard is invalid')):
+            with self.assertRaisesRegex(RelationalClientError, reason):
+                compile_rules(draft)
+
+    @patch('pgadmin.cdeadmin.providers.vitess.control_plane._run')
+    @patch('pgadmin.cdeadmin.providers.vitess.control_plane.inspect_action')
+    def test_vitess_keyspace_rules_post_state_reads_vtctld_names(
+            self, inspect, run):
+        inspect.return_value = {'provider_observation': {
+            'stdout': '{"rules": []}'}}
+        run.return_value = {'stdout': json.dumps({'rules': [
+            {'from_keyspace': 'old', 'to_keyspace': 'new'}]})}
+        state = vitess_post_validate(None, {
+            'provider_payload': {'route': {}},
+            'plan': {
+                'resource_kind': 'routing-rule', 'operation_id': 'alter',
+                'target_resource': {
+                    'display_path': ['global-routing-rules']},
+                'draft': {'keyspace_rules': {'rules': [
+                    {'from_keyspace': 'old', 'to_keyspace': 'new'}]}}}})
+        self.assertTrue(state['confirmed'], state['reason'])
+        self.assertEqual(['GetKeyspaceRoutingRules'], run.call_args.args[1])
 
     @patch('pgadmin.cdeadmin.providers.vitess.control_plane.inspect_action')
     def test_vitess_routing_rules_post_state_reads_vtctld_names(

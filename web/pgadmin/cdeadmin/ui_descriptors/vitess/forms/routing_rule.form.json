@@ -7,7 +7,7 @@
   ],
   "status": "complete",
   "engine_tab_title": "Vitess",
-  "notes": "Routing rules. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15). Vitess keeps one global rule set and replaces it whole (ApplyRoutingRules), so the editor reopens with the current rules and alter sends the edited set. One target per rule: ApplyRoutingRules accepts several, but vtgate then refuses to route the table (live, 23.0.3). The provider's JSON 'apply' operation stays for the legacy dialog. Round trip (tools/tests/test_ui_descriptor_roundtrip_vitess.py, live 23.0.3): reopen, add a rule and query through it, reopen and add a second with the first kept, the provider post-state check confirms each, a two-target rule is refused at plan.",
+  "notes": "Routing rules. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15). Vitess keeps one global rule set and replaces it whole (ApplyRoutingRules), so the editor reopens with the current rules and alter sends the edited set. One target per rule: ApplyRoutingRules accepts several, but vtgate then refuses to route the table (live, 23.0.3). The provider's JSON 'apply' operation stays for the legacy dialog. Round trip (tools/tests/test_ui_descriptor_roundtrip_vitess.py, live 23.0.3): reopen, add a rule and query through it, reopen and add a second with the first kept, the provider post-state check confirms each, a two-target rule is refused at plan. Keyspace and shard routing rules added 2026-10-30: each rule set the edit sends is replaced whole (ApplyKeyspaceRoutingRules, ApplyShardRoutingRules) and read back; a shard rule must name a shard the target keyspace has (vtctld accepts one it lacks). Mirror rules are shown read only.",
   "fields": [
     {
       "field_id": "rules",
@@ -33,6 +33,96 @@
           "required": true,
           "record_key": "to_tables.0",
           "help": "keyspace.table"
+        }
+      ]
+    },
+    {
+      "field_id": "keyspace_rules",
+      "label": "Keyspace routing rules",
+      "tab": "General",
+      "control": "grid",
+      "required": false,
+      "record_key": "keyspace_rules",
+      "backend_field_id": "keyspace_rules.rules",
+      "help": "Queries for a source keyspace go to the target keyspace (as after MoveTables).",
+      "columns": [
+        {
+          "field_id": "from_keyspace",
+          "label": "Source keyspace",
+          "control": "text",
+          "required": true,
+          "help": "May name a keyspace that does not exist; its queries then go to the target."
+        },
+        {
+          "field_id": "to_keyspace",
+          "label": "Target keyspace",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "keyspace"
+        }
+      ]
+    },
+    {
+      "field_id": "shard_rules",
+      "label": "Shard routing rules",
+      "tab": "General",
+      "control": "grid",
+      "required": false,
+      "record_key": "shard_rules",
+      "backend_field_id": "shard_rules.rules",
+      "help": "Queries for one shard of a source keyspace go to that shard of the target keyspace (partial MoveTables).",
+      "columns": [
+        {
+          "field_id": "from_keyspace",
+          "label": "Source keyspace",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "keyspace"
+        },
+        {
+          "field_id": "shard",
+          "label": "Shard",
+          "control": "text",
+          "required": true,
+          "help": "Key range, e.g. -80; the target keyspace must have this shard."
+        },
+        {
+          "field_id": "to_keyspace",
+          "label": "Target keyspace",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "keyspace"
+        }
+      ]
+    },
+    {
+      "field_id": "mirror_rules",
+      "label": "Mirror rules",
+      "tab": "General",
+      "control": "grid",
+      "required": false,
+      "record_key": "mirror_rules",
+      "readonly": true,
+      "ui_only": true,
+      "help": "Read only: vtctld has no command to apply mirror rules; MoveTables mirrortraffic sets them. Row fields follow the Vitess MirrorRule message; not yet seen with live data.",
+      "columns": [
+        {
+          "field_id": "from_table",
+          "label": "Source table",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "to_table",
+          "label": "Target table",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "percent",
+          "label": "Percent mirrored",
+          "control": "number",
+          "required": false
         }
       ]
     },
