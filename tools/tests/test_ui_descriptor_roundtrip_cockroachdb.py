@@ -198,3 +198,100 @@ def test_user_and_role_create_reopen_alter_drop(live):
             target=find(client, route, kind, name)[0])
     assert not query(f"SELECT 1 FROM pg_roles WHERE rolname IN "
                      f"('{user}', '{role}')")
+
+
+def by_name(rows):
+    return {row['name']: row for row in rows}
+
+
+def test_table_create_reopen_alter_drop(live):
+    route, client = live
+    query('CREATE TABLE public.parent (k INT8 PRIMARY KEY)')
+    form = resolved_form('cockroachdb', 'table')
+    run(client, route, 'table', 'create', backend_draft(form, {
+        'name': 'rt_orders', 'parent': 'public', 'comment': 'orders',
+        'columns': [
+            {'name': 'id', 'type': 'INT8', 'nullable': False},
+            {'name': 'pk2', 'type': 'INT8', 'nullable': False,
+             'default': '0'},
+            {'name': 'seq', 'type': 'INT8', 'identity': 'BY DEFAULT',
+             'family': 'hot'},
+            {'name': 'note', 'type': 'STRING', 'default': "'x'",
+             'on_update': "'y'", 'not_visible': True, 'family': 'hot',
+             'comment': 'a note'},
+            {'name': 'twice', 'type': 'INT8', 'generated_kind': 'VIRTUAL',
+             'generated_expression': 'id * 2'},
+            {'name': 'ref', 'type': 'INT8'},
+        ],
+        'primary_key': [{'name': 'rt_orders_pkey', 'columns': ['id']}],
+        'unique_constraints': [{'name': 'uq_note', 'columns': ['note']}],
+        'foreign_keys': [{'name': 'fk_ref', 'columns': ['ref'],
+                          'references_table': ['public', 'parent'],
+                          'references_columns': ['k'],
+                          'on_delete': 'SET NULL'}],
+        'check_constraints': [{'name': 'ck_id', 'expression': 'id > 0'}],
+        'ttl_expire_after': '30 days'}))
+    target, baseline = record(client, route, 'table', 'rt_orders', 'table')
+    columns = by_name(baseline['columns'])
+    assert list(columns) == ['id', 'pk2', 'seq', 'note', 'twice', 'ref']
+    assert (columns['seq']['identity'], columns['seq']['family'],
+            columns['seq']['default']) == ('BY DEFAULT', 'hot', None)
+    assert (columns['note']['not_visible'], columns['note']['on_update'],
+            columns['note']['comment'], columns['note']['family']) == (
+        True, "'y'", 'a note', 'hot')
+    assert (columns['twice']['generated_kind'],
+            columns['twice']['family']) == ('VIRTUAL', None)
+    assert columns['id']['primary_key'] and columns['note']['unique']
+    assert [(row['name'], row['columns'])
+            for row in baseline['primary_key']] == [
+        ('rt_orders_pkey', ['id'])]
+    fk = baseline['foreign_keys'][0]
+    assert (fk['references_table'], fk['references_columns'],
+            fk['on_delete'], fk['on_update']) == (
+        ['public', 'parent'], ['k'], 'SET NULL', 'NO ACTION')
+    assert baseline['check_constraints'][0]['expression'] == 'id > 0'
+    assert (baseline['ttl_expire_after'], baseline['comment']) == (
+        '30 days', 'orders')
+
+    # Reopened unchanged: nothing to send.
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    changed = [dict(row) for row in baseline['columns']]
+    for row in changed:
+        if row['name'] == 'ref':
+            row.update(name='ref_id', nullable=True, comment='renamed')
+        if row['name'] == 'note':
+            row.update(type='STRING(40)', default='', not_visible=False)
+    changed.append({'name': 'extra', 'type': 'INT8', 'family': 'cold'})
+    alter = backend_draft(form, {
+        **baseline, 'columns': changed,
+        'unique_constraints': [{'name': 'uq_extra', 'columns': ['extra']}],
+        'comment': 'orders v2'}, mode='alter', baseline=baseline)
+    assert sorted(alter) == ['add_columns', 'alter_columns', 'comment',
+                             'rename_columns', 'unique_constraints']
+    run(client, route, 'table', 'alter', alter, target=target)
+    target, after = record(client, route, 'table', 'rt_orders', 'table')
+    columns = by_name(after['columns'])
+    assert (columns['note']['type'], columns['note']['default'],
+            columns['note']['not_visible']) == ('STRING(40)', None, False)
+    assert columns['ref_id']['comment'] == 'renamed'
+    assert columns['extra']['family'] == 'cold'
+    assert [row['name'] for row in after['unique_constraints']] == [
+        'uq_extra']
+    # The untouched grids kept their constraints.
+    assert [row['name'] for row in after['check_constraints']] == ['ck_id']
+    assert after['foreign_keys'][0]['columns'] == ['ref_id']
+    assert after['comment'] == 'orders v2'
+
+    planned = run(client, route, 'table', 'alter', backend_draft(form, {
+        **after, 'primary_key': [{'name': 'rt_orders_pkey',
+                                  'columns': ['id', 'pk2']}],
+        'ttl_expire_after': ''}, mode='alter', baseline=after),
+        target=target)
+    assert 'UNIQUE index' in planned['warnings'][0]
+    target, last = record(client, route, 'table', 'rt_orders', 'table')
+    assert last['primary_key'][0]['columns'] == ['id', 'pk2']
+    assert last['ttl_expire_after'] is None
+    run(client, route, 'table', 'drop', {'confirmation': 'rt_orders'},
+        target=target)
+    assert not query("SELECT 1 FROM pg_class WHERE relname = 'rt_orders'")

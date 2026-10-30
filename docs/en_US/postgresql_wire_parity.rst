@@ -363,6 +363,32 @@ Checked live on 26.1.3 for those forms (not yet in the probe):
    the column.
 -  Tables are created with ``schema_locked = true`` by default (seen in
    ``SHOW CREATE TABLE``).
+-  Tables, checked for the table editor:
+
+   -  ``ALTER PRIMARY KEY`` keeps the old key's columns as a ``UNIQUE``
+      index (``<table>_<columns>_key``). So does ``DROP CONSTRAINT``
+      plus ``ADD CONSTRAINT ... PRIMARY KEY`` in one statement, which was
+      expected not to. The editor uses ``ALTER PRIMARY KEY`` and its plan
+      warns of the index.
+   -  ``DROP IDENTITY`` is refused while the table is ``schema_locked``
+      ("cannot automatically unlock the table"); the editor unlocks and
+      relocks around it. The other column changes it emits unlock by
+      themselves.
+   -  A ``UNIQUE`` constraint is dropped with ``DROP INDEX
+      table@name CASCADE``; ``ALTER TABLE ... DROP CONSTRAINT`` is
+      refused for it.
+   -  ``ALTER COLUMN ... DROP STORED`` turns a stored computed column into
+      a regular one; a virtual column is refused. A virtual computed
+      column cannot belong to a family.
+   -  ``SET DEFAULT`` type-checks strictly (an ``INT`` default on a
+      ``STRING`` column is refused).
+   -  ``ON UPDATE`` expressions and column families are visible only in
+      ``SHOW CREATE TABLE`` (``SHOW CREATE ALL TABLES`` for the catalog);
+      NOT VISIBLE columns share ``is_hidden`` with the engine's own hidden
+      columns (``rowid``, ``crdb_internal_expiration``, hash-shard
+      columns), which the catalog tells apart by name and default.
+   -  A collation tag is stored normalized (``"en-US"`` reads back as
+      ``en_US``).
 
 Plan
 ----
@@ -404,3 +430,11 @@ Progress, 2026-10-30: the descriptor folder exists; trigger and role
 and routine are drafts and type is pending. The table form's existing
 columns take add, drop and rename only (the shared column diff), so a type,
 default or nullability change on an existing column is not yet sent.
+Update, same day: the table form is ``complete``
+(``providers/cockroachdb/tables.py``). It creates tables with identity,
+computed (stored or virtual), NOT VISIBLE, ON UPDATE, family and comment
+per column, the four constraint kinds with foreign-key actions, row-level
+TTL and a table comment; in alter mode it changes existing columns (type,
+default, nullability, visibility, ON UPDATE, identity, stored to regular,
+comment) and diffs each changed constraint grid against the table record.
+Key membership and family stay fixed on existing columns.

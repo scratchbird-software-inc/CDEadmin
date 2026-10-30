@@ -101,10 +101,12 @@ def test_hidden_columns_and_the_engines_own_constraints_stay_out():
             'WHERE (v > 0)')),
     ]
     cursor = Cursor({
-        'is_hidden': [('public', 't', 'v', 'NO', 'INT8'),
-                      ('public', 't', 'rowid', 'YES', 'INT8'),
+        # is_hidden, crdb_sql_type, column_comment, column_default
+        'is_hidden': [('public', 't', 'v', 'NO', 'INT8', None, None),
+                      ('public', 't', 'rowid', 'YES', 'INT8', None,
+                       'unique_rowid()'),
                       ('public', 't', 'crdb_internal_ts_shard_8', 'YES',
-                       'INT8')],
+                       'INT8', None, None)],
         'information_schema.statistics': [
             ('public', 't', 't_pkey', 'rowid', 'ASC', 'NO', 'NO', 'NO', 1.0),
             # The primary index stores every column.
@@ -134,3 +136,44 @@ def test_hidden_columns_and_the_engines_own_constraints_stay_out():
     assert (partial['columns'], partial['directions'], partial['storing'],
             partial['predicate'], partial['visibility']) == (
         ['v'], ['DESC'], ['w'], 'v > 0', 0.5)
+
+
+def test_a_users_not_visible_column_is_kept_and_the_table_carries_its_facts():
+    values = [
+        native(['public', 'u'], 'table'),
+        native(['public', 'u', 'id'], 'column', data_type='bigint',
+               is_nullable='NO', default_expression=None),
+        native(['public', 'u', 'secret'], 'column', data_type='text',
+               is_nullable='YES', default_expression="'x'"),
+        native(['public', 'u', 'crdb_internal_expiration'], 'column'),
+        native(['public', 'u', 'u_pkey'], 'constraint',
+               constraint_type='PRIMARY KEY', columns=['id']),
+    ]
+    cursor = Cursor({
+        'is_hidden': [
+            ('public', 'u', 'id', 'NO', 'INT8', None, None),
+            ('public', 'u', 'secret', 'YES', 'STRING', 'kept', "'x'"),
+            ('public', 'u', 'crdb_internal_expiration', 'YES',
+             'TIMESTAMPTZ', None, 'current_timestamp()')],
+        'attgenerated': [('public', 'u', 'id', '', 'a')],
+        'reloptions': [('public', 'u', [
+            "ttl='on'", "ttl_expire_after='1 day':::INTERVAL",
+            'schema_locked=true'], 'a table')],
+        'SHOW CREATE ALL TABLES': [(
+            'CREATE TABLE public.u (\n\tid INT8 NOT NULL,\n'
+            "\tsecret STRING NOT VISIBLE NULL DEFAULT 'x':::STRING "
+            "ON UPDATE 'y':::STRING,\n\tFAMILY f1 (id, secret)\n);",)],
+    })
+    rows = {item['resource_id']: item['native']
+            for item in _annotate_catalog(Connection(cursor), values)}
+    secret = rows['column:public:u:secret']
+    assert (secret['hidden'], secret['not_visible'], secret['on_update'],
+            secret['family'], secret['comment'], secret['default']) == (
+        False, True, "'y'", 'f1', 'kept', "'x'")
+    assert rows['column:public:u:crdb_internal_expiration']['hidden']
+    assert rows['column:public:u:id']['identity'] == 'ALWAYS'
+    table = rows['table:public:u']
+    assert (table['ttl_expire_after'], table['schema_locked'],
+            table['comment'], table['constraints']) == (
+        '1 day', True, 'a table',
+        [{'name': 'u_pkey', 'kind': 'PRIMARY KEY', 'columns': ['id']}])

@@ -22,7 +22,7 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
-from . import objects
+from . import objects, tables
 from .driver import CockroachDBClient
 from ..distributed_control_plane import DistributedSQLControlPlane
 from pgadmin.cdeadmin.visual_admin import (
@@ -1276,7 +1276,23 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
 
     @staticmethod
     def _native_object(kind, operation):
-        return operation in objects.OPERATIONS.get(kind, ())
+        return operation in objects.OPERATIONS.get(kind, ()) or (
+            kind == 'table' and operation in {'create', 'alter'})
+
+    def _native_compile(self, request):
+        kind, operation = request['resource_kind'], request['operation_id']
+        draft = request.get('draft')
+        if not isinstance(draft, dict):
+            raise RelationalClientError('administration draft is invalid')
+        if kind != 'table':
+            return {'statements': objects.compile_operation(
+                self, kind, operation, draft,
+                request.get('target_resource'))}
+        if operation == 'create':
+            return {'statements': tables.create(self, draft)}
+        statements, warnings = tables.alter(
+            self, draft, request.get('target_resource'))
+        return {'statements': statements, 'warnings': warnings}
 
     def validate(self, request):
         kind = request.get('resource_kind')
@@ -1285,9 +1301,7 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
                 kind, operation):
             return super().validate(request)
         try:
-            objects.compile_operation(
-                self, kind, operation, request.get('draft'),
-                request.get('target_resource'))
+            self._native_compile(request)
         except RelationalClientError as error:
             return {'errors': [{'field_id': None,
                                 'code': f'invalid_cockroachdb_{kind}',
@@ -1305,12 +1319,13 @@ class CockroachDBAdministration(DistributedSQLControlPlane):
     def _compile(self, request):
         kind, operation = request['resource_kind'], request['operation_id']
         if self._native_object(kind, operation):
-            return {'statements': objects.compile_operation(
-                self, kind, operation, request['draft'],
-                request.get('target_resource'))}
+            return self._native_compile(request)
         return super()._compile(request)
 
     def _form(self, kind, operation):
+        if kind == 'table' and operation in {'create', 'alter'}:
+            return tables.extend_form(
+                super()._form(kind, operation), self._field, operation)
         if self._native_object(kind, operation):
             return objects.form(kind, operation, self._field)
         if kind == 'materialized-view' and operation == 'create':
@@ -1605,8 +1620,31 @@ def _annotate_catalog(connection, values):
                    for row in optional_rows(
                        cursor,
                        'SELECT table_schema, table_name, column_name, '
-                       'is_hidden, crdb_sql_type '
+                       'is_hidden, crdb_sql_type, column_comment, '
+                       'column_default '
                        'FROM information_schema.columns')}
+        attributes = {(str(row[0]), str(row[1]), str(row[2])): row[3:]
+                      for row in optional_rows(
+                          cursor,
+                          'SELECT n.nspname, c.relname, a.attname, '
+                          'a.attgenerated, a.attidentity '
+                          'FROM pg_catalog.pg_attribute a '
+                          'JOIN pg_catalog.pg_class c ON c.oid = a.attrelid '
+                          'JOIN pg_catalog.pg_namespace n '
+                          'ON n.oid = c.relnamespace WHERE a.attnum > 0')}
+        relations = {(str(row[0]), str(row[1])): row[2:]
+                     for row in optional_rows(
+                         cursor,
+                         'SELECT n.nspname, c.relname, c.reloptions, '
+                         'obj_description(c.oid) '
+                         'FROM pg_catalog.pg_class c '
+                         'JOIN pg_catalog.pg_namespace n '
+                         "ON n.oid = c.relnamespace WHERE c.relkind = 'r'")}
+        created = {}
+        for row in optional_rows(cursor, 'SHOW CREATE ALL TABLES'):
+            parsed = tables.parse_create(str(row[0]))
+            if parsed:
+                created[parsed[0]] = parsed[1:]
         statistics = optional_rows(
             cursor,
             'SELECT table_schema, table_name, index_name, column_name, '
@@ -1623,11 +1661,24 @@ def _annotate_catalog(connection, values):
         key = tuple(item['display_path'])
         facts = columns.get(key)
         native = item.setdefault('native', {})
-        native['hidden'] = bool(facts) and str(facts[0]) == 'YES'
+        is_hidden = bool(facts) and str(facts[0]) == 'YES'
+        default = None if not facts or facts[3] is None else str(facts[3])
+        # The engine's own hidden columns: rowid (a table without a primary
+        # key), the TTL expiry column and hash-shard columns. Any other
+        # hidden column is the user's NOT VISIBLE column.
+        native['hidden'] = is_hidden and (
+            key[2].startswith('crdb_internal_') or bool(
+                re.fullmatch(r'rowid(_\d+)?', key[2]) and
+                default == 'unique_rowid()'))
         if facts and facts[1]:
             native['native_type'] = str(facts[1])
         if native['hidden']:
             hidden.add(key)
+        generated, identity = attributes.get(key, ('', ''))
+        on_update, families = created.get(key[:2], ({}, []))
+        native.update(_column_editor_fields(
+            native, key[2], is_hidden, facts, generated, identity,
+            on_update, families))
     keys, primaries = {}, set()
     for item in values:
         native = item.get('native') or {}
@@ -1692,7 +1743,74 @@ def _annotate_catalog(connection, values):
             hidden=bool(entry['columns']) and all(
                 (schema, table, column) in hidden
                 for column in entry['columns']))
-    return [item for item in values if not item.pop('_drop', False)]
+    kept = [item for item in values if not item.pop('_drop', False)]
+    held = {}
+    for item in kept:
+        if item['resource_kind'] == 'constraint':
+            native = item['native']
+            row = _constraint_editor_fields(native)
+            native.update(row)
+            held.setdefault(tuple(item['display_path'][:2]), []).append(
+                {'name': item['display_name'], **row})
+    for item in kept:
+        if item['resource_kind'] != 'table':
+            continue
+        key = tuple(item['display_path'])
+        options, comment = relations.get(key, ((), None))
+        settings = tables.parse_reloptions(options)
+        item.setdefault('native', {}).update({
+            'constraints': held.get(key, []),
+            'schema_locked': settings.get('schema_locked') == 'true',
+            'comment': None if comment is None else str(comment),
+            **{name: settings.get(name) for name in tables.TTL_KEYS},
+        })
+    return kept
+
+
+def _column_editor_fields(native, name, is_hidden, facts, generated,
+                          identity, on_update, families):
+    """The column grid's own field ids, from the catalog facts."""
+    generated = {'s': 'STORED', 'v': 'VIRTUAL'}.get(str(generated or ''), '')
+    identity = {'a': 'ALWAYS', 'd': 'BY DEFAULT'}.get(
+        str(identity or ''), '')
+    default = native.get('default_expression')
+    return {
+        'type': native.get('native_type') or native.get('data_type'),
+        'nullable': str(native.get('is_nullable')) == 'YES',
+        # An identity column's default is its sequence; not a choice.
+        'default': None if identity or generated else default,
+        'generated_kind': generated,
+        'generated_expression': (native.get('generation_expression')
+                                 if generated else None),
+        'identity': identity,
+        'not_visible': is_hidden and not native['hidden'],
+        'on_update': on_update.get(name),
+        'family': next((family['name'] for family in families
+                        if name in family['columns']), None),
+        'comment': None if not facts or facts[2] is None else str(facts[2]),
+    }
+
+
+_RULES = {'NO ACTION': 'NO ACTION', 'RESTRICT': 'RESTRICT',
+          'CASCADE': 'CASCADE', 'SET NULL': 'SET NULL',
+          'SET DEFAULT': 'SET DEFAULT'}
+
+
+def _constraint_editor_fields(native):
+    """The constraint grids' field ids (and the alter baseline row)."""
+    kind = native.get('constraint_type')
+    row = {'kind': kind, 'columns': list(native.get('columns') or [])}
+    if kind == 'FOREIGN KEY':
+        row.update(
+            references_table=[native.get('referenced_schema'),
+                              native.get('referenced_table')],
+            references_columns=list(native.get('referenced_columns') or []),
+            on_delete=_RULES.get(native.get('delete_rule'), 'NO ACTION'),
+            on_update=_RULES.get(native.get('update_rule'), 'NO ACTION'))
+    if kind == 'CHECK':
+        row = {'kind': kind, 'expression': tables._unwrap(
+            str(native.get('check_clause') or ''))}
+    return row
 
 
 def _catalog(connection, request):
