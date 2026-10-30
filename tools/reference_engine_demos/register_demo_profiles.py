@@ -115,6 +115,13 @@ def route_for(item, host, registration, provider_route_options):
         item.setdefault('ssl_verify_cert', False)
     if engine in {'postgresql', 'cockroachdb', 'yugabytedb', 'immudb'}:
         item.setdefault('sslmode', 'disable')
+    if item['engine'] == 'cockroachdb':
+        # Node inventory through the demo wrapper (demo_estate.py), which
+        # runs the demo image's cockroach CLI on the host network.
+        item.setdefault('cockroach_path', str(
+            Path(__file__).resolve().parent /
+            'runtime/cockroach_tools/cockroach'))
+        item.setdefault('cockroach_insecure', True)
     if item['engine'] == 'vitess':
         # Control plane through the demo wrapper (demo_estate.py); the
         # wrapper runs vtctldclient inside the vtctld container.

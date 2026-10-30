@@ -297,7 +297,12 @@ Provider findings (2026-10-30)
 -  Node and locality records need the ``cockroach`` CLI (``cockroach_path``
    in the route), which the demo route does not set, so the catalog has no
    nodes. ``crdb_internal`` reads are refused in 26.1 unless the session sets
-   ``allow_unsafe_internals``.
+   ``allow_unsafe_internals``. Fixed the same day: the demo writes a
+   ``cockroach`` wrapper (a one-shot container of the demo image on the host
+   network) and registers it with ``cockroach_insecure``; the catalog now
+   lists node 1, and ``node status --decommission`` reads through it.
+   Decommission and recommission were not run (see "Untested on
+   CockroachDB").
 -  The provider passes CockroachDB through the generic relational forms:
    the trigger form offers Firebird's ``active`` and ``position`` and an
    ``INSTEAD OF`` timing; the user form offers MySQL's ``host`` and
@@ -334,7 +339,7 @@ Plan
 
    Owner decision, 2026-10-30: rangefeeds are on in the demo; there is no
    multi-node demo, and what it would have proved is listed under
-   "Untested on CockroachDB" below.
+   "Untested on CockroachDB" below. The CLI wrapper is in the demo.
 #. Provider forms per family, reusing the PostgreSQL provider's field ids:
    table (columns, constraints, families, TTL, locality), index (method,
    storing, hash-sharded, partial, visibility), trigger (row-level only),

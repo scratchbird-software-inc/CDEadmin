@@ -153,6 +153,11 @@ class ReferenceEngineDemoTestCase(unittest.TestCase):
                 self.assertNotIn('password', route)
                 if item['engine'] == 'vitess':
                     self.assertEqual(15099, route['vtgate_http_port'])
+                if item['engine'] == 'cockroachdb':
+                    # The node inventory needs the demo CLI wrapper.
+                    self.assertTrue(route['cockroach_path'].endswith(
+                        'runtime/cockroach_tools/cockroach'))
+                    self.assertTrue(route['cockroach_insecure'])
                 if item['engine'] == 'tikv':
                     self.assertNotIn('enable_ttl', route)
                 if item['engine'] == 'tidb':
