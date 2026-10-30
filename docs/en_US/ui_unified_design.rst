@@ -628,6 +628,11 @@ The following block goes into ``AGENTS.md`` verbatim as a new owner direction. I
    14. Scope. The six beta engines get full family editors. The other connector roots
        get the generic family skeleton; do not hand-build forms for them before beta.
        Closed-source features remain post-beta as already recorded.
+       Extended by owner direction 2026-10-29 (``AGENTS.md``, "Engine expansion to
+       full parity"): Dolt, TiDB and Vitess, then CockroachDB and YugabyteDB YSQL,
+       then immudb and XTDB, get full family editors and their distinctive native
+       features at the six engines' level. Same family skeletons and shared field
+       ids, filtered per engine; never lowest common denominator.
 
 Two existing ``AGENTS.md`` statements change meaning under this direction and should be amended in the same commit:
 

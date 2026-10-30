@@ -1,0 +1,193 @@
+{
+ "engine": "tidb",
+ "leftover_objects": [],
+ "probe_database": "scratch",
+ "results": {
+  "analyze-table": "supported",
+  "auto-increment": "supported",
+  "binary-log": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 16 near \"LOGS\" ",
+   "statement": "SHOW BINARY LOGS",
+   "step": 0
+  },
+  "charset-collation": "supported",
+  "check-table": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 5 near \"CHECK TABLE cde_probe_f0c4cf00.ck2\" ",
+   "statement": "CHECK TABLE {db}.ck2",
+   "step": 1
+  },
+  "column-generated": "supported",
+  "component": {
+   "connection_lost": false,
+   "errno": 1146,
+   "msg": "Table 'mysql.component' doesn't exist",
+   "statement": "SELECT * FROM",
+   "step": 0
+  },
+  "constraint-check": "supported",
+  "constraint-foreign-key": "supported",
+  "constraint-unique": "supported",
+  "database": "supported",
+  "event": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 12 near \"EVENT cde_probe_f0c4cf00.ev ON SCHEDULE EVERY 1 DAY DISA",
+   "statement": "CREATE EVENT {db}.ev",
+   "step": 0
+  },
+  "explain": "supported",
+  "explain-analyze": "supported",
+  "flush-privileges": "supported",
+  "function": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 15 near \"FUNCTION cde_probe_f0c4cf00.fn(a INT) RETURNS INT DETERM",
+   "statement": "CREATE FUNCTION {db}.fn(a",
+   "step": 0
+  },
+  "index": "supported",
+  "index-fulltext": {
+   "connection_lost": false,
+   "errno": 8200,
+   "msg": "FULLTEXT and SPATIAL index is not supported",
+   "statement": "CREATE FULLTEXT INDEX",
+   "step": 1
+  },
+  "index-functional": "supported",
+  "index-invisible": "supported",
+  "index-spatial": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 62 near \"POINT NOT NULL SRID 0)\" ",
+   "statement": "CREATE TABLE {db}.s",
+   "step": 0
+  },
+  "json-type": "supported",
+  "lock-catalog": {
+   "connection_lost": false,
+   "errno": 1146,
+   "msg": "Table 'performance_schema.data_locks' doesn't exist",
+   "statement": "SELECT * FROM",
+   "step": 0
+  },
+  "lock-tables": "supported",
+  "optimize-table": {
+   "connection_lost": false,
+   "errno": 8200,
+   "msg": "OPTIMIZE TABLE is not supported",
+   "statement": "OPTIMIZE TABLE {db}.op",
+   "step": 1
+  },
+  "partition-hash": "supported",
+  "partition-range": "supported",
+  "plugin": "supported",
+  "privilege": "supported",
+  "procedure": {
+   "connection_lost": false,
+   "errno": 8108,
+   "msg": "Unsupported type *resolve.NodeW",
+   "statement": "CREATE PROCEDURE {db}.pr()",
+   "step": 0
+  },
+  "replication-channel": {
+   "connection_lost": false,
+   "errno": 1235,
+   "msg": "This version of TiDB doesn't yet support 'SHOW {REPLICA | SLAVE} STATUS'",
+   "statement": "SHOW REPLICA STATUS",
+   "step": 0
+  },
+  "resource-group-mysql": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 38 near \"TYPE = USER\" ",
+   "statement": "CREATE RESOURCE GROUP",
+   "step": 0
+  },
+  "resource-group-tidb": "supported",
+  "retained-check": {
+   "errno": null,
+   "msg": "accepted but not retained: CREATE TABLE `rck` ( `id` int NOT NULL, `v` int DEFAULT NULL, PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+  },
+  "retained-fulltext": {
+   "errno": null,
+   "msg": "accepted but not retained: CREATE TABLE `rft` ( `id` int NOT NULL, `b` text DEFAULT NULL, PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+  },
+  "retained-generated-stored": "supported",
+  "retained-index-invisible": "supported",
+  "retained-partition-hash": "supported",
+  "retained-row-format": {
+   "errno": null,
+   "msg": "accepted but not retained: CREATE TABLE `rrf` ( `id` int NOT NULL, PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+  },
+  "retained-spatial": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 64 near \"POINT NOT NULL SRID 0, SPATIAL KEY sp (p))\" ",
+   "step": "create"
+  },
+  "retained-system-versioning": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 79 near \"VERSIONING\" ",
+   "step": "create"
+  },
+  "retained-table-comment": "supported",
+  "role": "supported",
+  "savepoint": "supported",
+  "sequence": "supported",
+  "server-link": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 13 near \"SERVER sl_f0c4cf00 FOREIGN DATA WRAPPER mysql OPTIONS (H",
+   "statement": "CREATE SERVER sl_{suffix}",
+   "step": 0
+  },
+  "session": "supported",
+  "spatial-reference-system": {
+   "connection_lost": false,
+   "errno": 1146,
+   "msg": "Table 'information_schema.ST_SPATIAL_REFERENCE_SYSTEMS' doesn't exist",
+   "statement": "SELECT COUNT(*) FROM",
+   "step": 0
+  },
+  "status-metric": "supported",
+  "system-variable": "supported",
+  "system-versioning": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 78 near \"VERSIONING\" ",
+   "statement": "CREATE TABLE {db}.sv",
+   "step": 0
+  },
+  "table": "supported",
+  "tablespace": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 17 near \"TABLESPACE ts_f0c4cf00 ADD DATAFILE 'ts_f0c4cf00.ibd'\" ",
+   "statement": "CREATE TABLESPACE ts_{suffix}",
+   "step": 0
+  },
+  "temporary-table": "supported",
+  "trigger": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 14 near \"TRIGGER cde_probe_f0c4cf00.trg BEFORE INSERT ON cde_prob",
+   "statement": "CREATE TRIGGER {db}.trg",
+   "step": 1
+  },
+  "user": "supported",
+  "view": "supported",
+  "xa": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 2 near \"XA START 'x_f0c4cf00'\" ",
+   "statement": "XA START 'x_{suffix}'",
+   "step": 0
+  }
+ },
+ "version": "8.0.11-TiDB-v8.5.6"
+}

@@ -159,6 +159,23 @@ explicitly retires an older version by raising the floor. Never widen a version
 check without the matching gate. The existing 3.53.0 tests stay mandatory; a
 version with no available runtime is reported as not run.
 
+## Engine expansion to full parity (owner direction, 2026-10-29)
+
+Dolt, TiDB, Vitess, CockroachDB, YugabyteDB YSQL, immudb and XTDB are to reach
+the same level as PostgreSQL, Firebird, MySQL, MariaDB, SQLite and DuckDB: full
+functionality, including each engine's distinctive native features. Order:
+the MySQL-wire engines (Dolt, TiDB, Vitess) first, then the PostgreSQL-wire
+engines (CockroachDB, YugabyteDB YSQL); immudb and XTDB are not yet ordered.
+
+Forms: use the same forms as much as possible, but never lowest common
+denominator. Surface every feature and filter per engine, so nothing is offered
+that the engine does not directly support. Each engine keeps its own descriptor
+folder over the shared family skeletons, reusing the shared field ids where the
+backend field is the same.
+
+Versions: track only significant compatibility breaks, not every minor
+version; newer clients generally serve older servers.
+
 ## MySQL priorities and MariaDB handoff
 
 Owner direction, 2026-10-22: adopt the eleven comparison-derived MySQL work

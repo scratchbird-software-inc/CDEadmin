@@ -1,0 +1,161 @@
+{
+ "engine": "dolt",
+ "leftover_objects": [],
+ "probe_database": "scratch",
+ "results": {
+  "analyze-table": "supported",
+  "auto-increment": "supported",
+  "binary-log": "supported",
+  "charset-collation": "supported",
+  "check-table": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 6 near 'CHECK'",
+   "statement": "CHECK TABLE {db}.ck2",
+   "step": 1
+  },
+  "column-generated": "supported",
+  "component": {
+   "connection_lost": false,
+   "errno": 1146,
+   "msg": "table not found: component",
+   "statement": "SELECT * FROM",
+   "step": 0
+  },
+  "constraint-check": "supported",
+  "constraint-foreign-key": "supported",
+  "constraint-unique": "supported",
+  "database": "supported",
+  "event": "supported",
+  "explain": {
+   "errno": -1,
+   "msg": "client: Unread result found",
+   "statement": "EXPLAIN SELECT 1",
+   "step": 0
+  },
+  "explain-analyze": "supported",
+  "flush-privileges": "supported",
+  "function": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 16 near 'FUNCTION'",
+   "statement": "CREATE FUNCTION {db}.fn(a",
+   "step": 0
+  },
+  "index": "supported",
+  "index-fulltext": "supported",
+  "index-functional": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "column \"v\" could not be found in any table in scope",
+   "statement": "CREATE TABLE {db}.fx",
+   "step": 0
+  },
+  "index-invisible": "supported",
+  "index-spatial": "supported",
+  "json-type": "supported",
+  "lock-catalog": {
+   "connection_lost": false,
+   "errno": 1049,
+   "msg": "database not found: performance_schema",
+   "statement": "SELECT * FROM",
+   "step": 0
+  },
+  "lock-tables": "supported",
+  "optimize-table": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 9 near 'OPTIMIZE'",
+   "statement": "OPTIMIZE TABLE {db}.op",
+   "step": 1
+  },
+  "partition-hash": "supported",
+  "partition-range": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 156 near 'MAXVALUE'",
+   "statement": "CREATE TABLE {db}.pr",
+   "step": 0
+  },
+  "plugin": "supported",
+  "privilege": "supported",
+  "procedure": "supported",
+  "replication-channel": "supported",
+  "resource-group-mysql": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 16 near 'RESOURCE'",
+   "statement": "CREATE RESOURCE GROUP",
+   "step": 0
+  },
+  "resource-group-tidb": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 16 near 'RESOURCE'",
+   "statement": "CREATE RESOURCE GROUP",
+   "step": 0
+  },
+  "retained-check": "supported",
+  "retained-fulltext": "supported",
+  "retained-generated-stored": "supported",
+  "retained-index-invisible": {
+   "errno": null,
+   "msg": "accepted but not retained: CREATE TABLE `rii` ( `id` int NOT NULL, `v` int, PRIMARY KEY (`id`), KEY `ix` (`v`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin"
+  },
+  "retained-partition-hash": {
+   "errno": null,
+   "msg": "accepted but not retained: CREATE TABLE `rph` ( `id` int NOT NULL, PRIMARY KEY (`id`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin"
+  },
+  "retained-row-format": {
+   "errno": null,
+   "msg": "accepted but not retained: CREATE TABLE `rrf` ( `id` int NOT NULL, PRIMARY KEY (`id`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin"
+  },
+  "retained-spatial": "supported",
+  "retained-system-versioning": {
+   "errno": null,
+   "msg": "accepted but not retained: CREATE TABLE `rsv` ( `id` int NOT NULL, PRIMARY KEY (`id`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin"
+  },
+  "retained-table-comment": "supported",
+  "role": "supported",
+  "savepoint": "supported",
+  "sequence": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 16 near 'SEQUENCE'",
+   "statement": "CREATE SEQUENCE {db}.sq",
+   "step": 0
+  },
+  "server-link": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 14 near 'SERVER'",
+   "statement": "CREATE SERVER sl_{suffix}",
+   "step": 0
+  },
+  "session": "supported",
+  "spatial-reference-system": "supported",
+  "status-metric": "supported",
+  "system-variable": "supported",
+  "system-versioning": "supported",
+  "table": "supported",
+  "tablespace": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 18 near 'TABLESPACE'",
+   "statement": "CREATE TABLESPACE ts_{suffix}",
+   "step": 0
+  },
+  "temporary-table": "supported",
+  "trigger": "supported",
+  "user": "supported",
+  "view": "supported",
+  "xa": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 3 near 'XA'",
+   "statement": "XA START 'x_{suffix}'",
+   "step": 0
+  }
+ },
+ "version": "8.0.31"
+}

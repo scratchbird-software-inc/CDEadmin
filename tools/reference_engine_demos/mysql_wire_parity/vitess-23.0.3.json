@@ -1,0 +1,181 @@
+{
+ "engine": "vitess",
+ "leftover_objects": [
+  "v (VIEW)"
+ ],
+ "probe_database": null,
+ "results": {
+  "analyze-table": "supported",
+  "auto-increment": "supported",
+  "binary-log": "supported",
+  "charset-collation": "supported",
+  "check-table": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 6 near 'CHECK'",
+   "statement": "CHECK TABLE {db}.ck2",
+   "step": 1
+  },
+  "column-generated": "supported",
+  "component": "supported",
+  "constraint-check": "supported",
+  "constraint-foreign-key": "supported",
+  "constraint-unique": "supported",
+  "database": {
+   "connection_lost": false,
+   "errno": 1235,
+   "msg": "VT12001: unsupported: create database by failDBDDL",
+   "statement": "CREATE DATABASE {db}_x",
+   "step": 0
+  },
+  "event": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 13 near 'EVENT'",
+   "statement": "CREATE EVENT {db}.ev",
+   "step": 0
+  },
+  "explain": "supported",
+  "explain-analyze": "supported",
+  "flush-privileges": "supported",
+  "function": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 16 near 'FUNCTION'",
+   "statement": "CREATE FUNCTION {db}.fn(a",
+   "step": 0
+  },
+  "index": "supported",
+  "index-fulltext": "supported",
+  "index-functional": "supported",
+  "index-invisible": "supported",
+  "index-spatial": "supported",
+  "json-type": "supported",
+  "lock-catalog": "supported",
+  "lock-tables": "supported",
+  "optimize-table": "supported",
+  "partition-hash": "supported",
+  "partition-range": "supported",
+  "plugin": "supported",
+  "privilege": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 12 near 'USER'",
+   "statement": "CREATE USER 'g_{suffix}'@'%'",
+   "step": 0
+  },
+  "procedure": {
+   "connection_lost": false,
+   "errno": 1235,
+   "msg": "VT12001: unsupported: CREATE PROCEDURE is not supported on sharded keyspaces",
+   "statement": "CREATE PROCEDURE {db}.pr()",
+   "step": 0
+  },
+  "replication-channel": "supported",
+  "resource-group-mysql": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 16 near 'RESOURCE'",
+   "statement": "CREATE RESOURCE GROUP",
+   "step": 0
+  },
+  "resource-group-tidb": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 16 near 'RESOURCE'",
+   "statement": "CREATE RESOURCE GROUP",
+   "step": 0
+  },
+  "retained-check": "supported",
+  "retained-fulltext": "supported",
+  "retained-generated-stored": "supported",
+  "retained-index-invisible": "supported",
+  "retained-partition-hash": "supported",
+  "retained-row-format": "supported",
+  "retained-spatial": "supported",
+  "retained-system-versioning": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "target: test_keyspace.-80.primary: vttablet: rpc error: code = InvalidArgument desc = You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right",
+   "step": "create"
+  },
+  "retained-table-comment": "supported",
+  "role": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 12 near 'ROLE'",
+   "statement": "CREATE ROLE 'r_{suffix}'",
+   "step": 0
+  },
+  "savepoint": "supported",
+  "sequence": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 16 near 'SEQUENCE'",
+   "statement": "CREATE SEQUENCE {db}.sq",
+   "step": 0
+  },
+  "server-link": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 14 near 'SERVER'",
+   "statement": "CREATE SERVER sl_{suffix}",
+   "step": 0
+  },
+  "session": "supported",
+  "spatial-reference-system": "supported",
+  "status-metric": "supported",
+  "system-variable": "supported",
+  "system-versioning": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "target: test_keyspace.-80.primary: vttablet: rpc error: code = InvalidArgument desc = You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right",
+   "statement": "CREATE TABLE {db}.sv",
+   "step": 0
+  },
+  "table": "supported",
+  "tablespace": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 18 near 'TABLESPACE'",
+   "statement": "CREATE TABLESPACE ts_{suffix}",
+   "step": 0
+  },
+  "temporary-table": {
+   "connection_lost": false,
+   "errno": 1235,
+   "msg": "Temporary table not supported in sharded database test_keyspace",
+   "statement": "CREATE TEMPORARY TABLE",
+   "step": 0
+  },
+  "trigger": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 15 near 'TRIGGER'",
+   "statement": "CREATE TRIGGER {db}.trg",
+   "step": 1
+  },
+  "user": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 12 near 'USER'",
+   "statement": "CREATE USER 'u_{suffix}'@'%'",
+   "step": 0
+  },
+  "view": {
+   "connection_lost": false,
+   "errno": 1051,
+   "msg": "target: test_keyspace.-80.primary: vttablet: rpc error: code = InvalidArgument desc = Unknown table 'test_keyspace.v' (errno 1051) (sqlstate 42S02) (CallerID: userData1): Sql: \"drop view test_keyspace",
+   "statement": "DROP VIEW {db}.v",
+   "step": 2
+  },
+  "xa": {
+   "connection_lost": false,
+   "errno": 1105,
+   "msg": "syntax error at position 3 near 'XA'",
+   "statement": "XA START 'x_{suffix}'",
+   "step": 0
+  }
+ },
+ "version": "8.4.6-Vitess"
+}

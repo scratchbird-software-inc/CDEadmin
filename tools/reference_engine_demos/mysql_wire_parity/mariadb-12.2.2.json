@@ -1,0 +1,142 @@
+{
+ "engine": "mariadb",
+ "leftover_objects": [],
+ "probe_database": "scratch",
+ "results": {
+  "analyze-table": "supported",
+  "auto-increment": "supported",
+  "binary-log": "supported",
+  "charset-collation": "supported",
+  "check-table": "supported",
+  "column-generated": "supported",
+  "component": {
+   "connection_lost": false,
+   "errno": 1146,
+   "msg": "Table 'mysql.component' doesn't exist",
+   "statement": "SELECT * FROM",
+   "step": 0
+  },
+  "constraint-check": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'CHECK ck' at line 1",
+   "statement": "ALTER TABLE {db}.k",
+   "step": 1
+  },
+  "constraint-foreign-key": "supported",
+  "constraint-unique": "supported",
+  "database": "supported",
+  "event": "supported",
+  "explain": "supported",
+  "explain-analyze": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'ANALYZE SELECT 1' at line 1",
+   "statement": "EXPLAIN ANALYZE SELECT",
+   "step": 0
+  },
+  "flush-privileges": "supported",
+  "function": "supported",
+  "index": "supported",
+  "index-fulltext": "supported",
+  "index-functional": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near '(LOWER(v))))' at line 1",
+   "statement": "CREATE TABLE {db}.fx",
+   "step": 0
+  },
+  "index-invisible": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'INVISIBLE)' at line 1",
+   "statement": "CREATE TABLE {db}.iv",
+   "step": 0
+  },
+  "index-spatial": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near '0)' at line 1",
+   "statement": "CREATE TABLE {db}.s",
+   "step": 0
+  },
+  "json-type": "supported",
+  "lock-catalog": {
+   "connection_lost": false,
+   "errno": 1146,
+   "msg": "Table 'performance_schema.data_locks' doesn't exist",
+   "statement": "SELECT * FROM",
+   "step": 0
+  },
+  "lock-tables": "supported",
+  "optimize-table": "supported",
+  "partition-hash": "supported",
+  "partition-range": "supported",
+  "plugin": "supported",
+  "privilege": "supported",
+  "procedure": "supported",
+  "replication-channel": "supported",
+  "resource-group-mysql": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'RESOURCE GROUP rg_cf19b05c TYPE = USER' at line 1",
+   "statement": "CREATE RESOURCE GROUP",
+   "step": 0
+  },
+  "resource-group-tidb": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'RESOURCE GROUP rg_cf19b05c RU_PER_SEC = 100' at line 1",
+   "statement": "CREATE RESOURCE GROUP",
+   "step": 0
+  },
+  "retained-check": "supported",
+  "retained-fulltext": "supported",
+  "retained-generated-stored": "supported",
+  "retained-index-invisible": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'INVISIBLE)' at line 1",
+   "step": "create"
+  },
+  "retained-partition-hash": "supported",
+  "retained-row-format": "supported",
+  "retained-spatial": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near '0, SPATIAL KEY sp (p))' at line 1",
+   "step": "create"
+  },
+  "retained-system-versioning": "supported",
+  "retained-table-comment": "supported",
+  "role": "supported",
+  "savepoint": "supported",
+  "sequence": "supported",
+  "server-link": "supported",
+  "session": "supported",
+  "spatial-reference-system": {
+   "connection_lost": false,
+   "errno": 1109,
+   "msg": "Unknown table 'ST_SPATIAL_REFERENCE_SYSTEMS' in information_schema",
+   "statement": "SELECT COUNT(*) FROM",
+   "step": 0
+  },
+  "status-metric": "supported",
+  "system-variable": "supported",
+  "system-versioning": "supported",
+  "table": "supported",
+  "tablespace": {
+   "connection_lost": false,
+   "errno": 1064,
+   "msg": "You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'TABLESPACE ts_cf19b05c ADD DATAFILE 'ts_cf19b05c.ibd'' at line ",
+   "statement": "CREATE TABLESPACE ts_{suffix}",
+   "step": 0
+  },
+  "temporary-table": "supported",
+  "trigger": "supported",
+  "user": "supported",
+  "view": "supported",
+  "xa": "supported"
+ },
+ "version": "12.2.2-MariaDB-ubu2404-log"
+}
