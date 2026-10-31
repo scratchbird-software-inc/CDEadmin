@@ -518,7 +518,36 @@ with its comment) are not atomic: a failure part way leaves the earlier
 statements in place. Every such plan now carries a warning saying so.
 Plain data changes (``INSERT`` / ``UPDATE`` / ``DELETE``) are not
 affected. Not checked: whether enabling the setting on the server makes
-these plans atomic.
+these plans atomic. (Checked the same day, below.)
+
+CDEadmin now detects either mode (``providers/yugabytedb/ddl_mode.py``).
+The demo starts YugabyteDB with
+``--tserver_flags=ysql_yb_ddl_transaction_block_enabled=true``; with it,
+``CREATE TABLE`` / ``INDEX`` / ``SEQUENCE`` / ``ROLE`` / ``EXTENSION``,
+``ALTER TABLE ... ADD COLUMN`` and ``COMMENT`` (on a table or a database)
+all rolled back with their transaction, and a plan failing at its third
+statement left nothing; ``CREATE TABLESPACE`` (and ``CREATE DATABASE``)
+still refuse a transaction block. The mode is read from
+``yb_ddl_transaction_block_enabled``,
+``yb_disable_ddl_transaction_block_for_read_committed`` (which turns it
+back off for READ COMMITTED sessions) and ``transaction_isolation``:
+
+-  Every catalog read records the server's mode. A plan of several DDL
+   statements carries ``ddl_transaction_mode`` (``atomic``,
+   ``per-statement`` or ``unknown``) and warns only when the server is
+   known to run DDL per statement, or its mode is not known yet.
+-  Apply reads the mode again before running several DDL statements; the
+   response carries it, and a failure on a per-statement server says that
+   the statements before the failing one stay applied.
+
+Live: on the atomic demo a two-statement plan whose second statement
+failed left nothing and carried no warning. The per-statement path is
+covered by unit tests, and by the earlier live check before the flag was
+set; it was not re-run live after the change. Changing the flag recreated
+the demo container, and YugabyteDB keeps its data under ``/root/var``,
+which is not a retained volume, so the demo cluster started empty and was
+re-seeded (``dev.sh seed yugabytedb``). The demo's start check now waits
+for a new node to record its masters.
 
 Untested on CockroachDB
 ~~~~~~~~~~~~~~~~~~~~~~~

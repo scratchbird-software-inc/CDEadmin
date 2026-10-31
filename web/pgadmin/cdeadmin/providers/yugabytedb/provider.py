@@ -21,8 +21,9 @@ from ..distributed_sql import (
     sql_administration,
 )
 from . import (
-    databases, extensions, indexes as index_sql, objects, policies,
-    routines, sequences, tables as tables_sql, tablespaces, types, views,
+    databases, ddl_mode, extensions, indexes as index_sql, objects,
+    policies, routines, sequences, tables as tables_sql, tablespaces, types,
+    views,
 )
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
@@ -131,15 +132,6 @@ _CONTROL_ADMINISTRATION = DistributedSQLControlPlane(
     inspector=inspect_action, canceller=cancel_action,
     post_validator=post_validate_action, action_executor=execute_action,
 )
-
-
-_DML = ('INSERT', 'UPDATE', 'DELETE', 'SELECT', 'WITH', 'MERGE')
-
-
-def _ddl_count(statements):
-    return sum(1 for item in statements
-               if not str(item.get('source', '')).lstrip().upper().startswith(
-                   _DML))
 
 
 class YugabyteDBAdministration(RelationalAdministration):
@@ -328,16 +320,16 @@ class YugabyteDBAdministration(RelationalAdministration):
                 compiled.setdefault('warnings', []).append(
                     'These statements run outside a transaction and commit '
                     'one at a time.')
-        elif _ddl_count(compiled.get('statements', [])) and len(
-                compiled.get('statements', [])) > 1:
-            # Live, 2025.2.2.2: with yb_ddl_transaction_block_enabled off
-            # (the default; a server-start setting), CREATE TABLE / SEQUENCE
-            # / ROLE / EXTENSION and COMMENT all survived ROLLBACK.
-            compiled.setdefault('warnings', []).append(
-                'YugabyteDB runs each DDL statement in its own transaction '
-                'unless the server enables yb_ddl_transaction_block_enabled '
-                '(off by default): if a later statement fails, the earlier '
-                'ones stay applied.')
+        elif ddl_mode.several_ddl(compiled):
+            # Several DDL statements are atomic only when the server runs
+            # DDL in the transaction block (yugabytedb/ddl_mode.py).
+            known = ddl_mode.known(request.get('_provider_route'))
+            compiled['ddl_transaction_mode'] = known
+            if known != ddl_mode.ATOMIC:
+                compiled.setdefault('warnings', []).append(
+                    ddl_mode.PER_STATEMENT_WARNING
+                    if known == ddl_mode.PER_STATEMENT
+                    else ddl_mode.UNKNOWN_WARNING)
         return compiled
 
     def _compile_create(self, request):
@@ -388,7 +380,35 @@ class YugabyteDBAdministration(RelationalAdministration):
             return _CONTROL_ADMINISTRATION.apply(
                 client, request, connection=connection
             )
-        return super().apply(client, request, connection=connection)
+        payload = request.get('provider_payload') or {}
+        compiled = payload.get('compiled') or {}
+        route = payload.get('route') or {}
+        if connection is not None or not isinstance(compiled, Mapping) or \
+                compiled.get('statements_outside_transaction') or \
+                not ddl_mode.several_ddl(compiled):
+            return super().apply(client, request, connection=connection)
+        # Read the server's DDL mode again: the plan's may be stale.
+        probe = client._connect({'route': route})
+        try:
+            current = ddl_mode.mode(probe.cursor())
+            probe.rollback()
+        finally:
+            client._forget_and_close(probe)
+        ddl_mode.remember(route, current)
+        try:
+            response = super().apply(client, request, connection=connection)
+        except RelationalClientError as error:
+            if current == ddl_mode.ATOMIC:
+                raise
+            failure = RelationalClientError(
+                f'{error}; this YugabyteDB server ran each DDL statement in '
+                'its own transaction, so the statements before the failing '
+                'one stay applied')
+            failure.__dict__.update(error.__dict__)
+            failure.ddl_transaction_mode = current
+            raise failure from error
+        response['ddl_transaction_mode'] = current
+        return response
 
     @staticmethod
     def _control_request(request):
@@ -1064,6 +1084,7 @@ def _catalog(connection, request):
         ))
     }
     route = request.get('route') or request.get('_provider_route') or {}
+    ddl_mode.remember(route, ddl_mode.mode(connection.cursor()))
     for item in control_catalog_resources(route, generation):
         values[item['resource_id']] = item
     return list(values.values())

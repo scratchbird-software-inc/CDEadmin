@@ -894,3 +894,28 @@ def test_extensions(live):
     assert not query("SELECT 1 FROM pg_extension WHERE extname IN "
                      "('hstore', 'cube', 'earthdistance')")
     query('DROP SCHEMA ext')
+
+
+def test_ddl_mode_detected_and_plans_atomic(live):
+    """The demo enables ysql_yb_ddl_transaction_block_enabled."""
+    route, client = live
+    resources(client, route)  # the catalog read records the server's mode
+    request = {'resource_kind': 'sequence', 'operation_id': 'create',
+               'target_resource': None, '_provider_route': route,
+               'draft': {'name': 'rt_atomic', 'parent': 'public',
+                         'comment': 'c'}}
+    planned = ADMINISTRATION.plan(request)
+    compiled = planned['provider_payload']['compiled']
+    assert compiled['ddl_transaction_mode'] == 'atomic'
+    assert not compiled.get('warnings')
+    # The second statement fails: the first must not stay applied.
+    compiled['statements'][1]['source'] = (
+        "COMMENT ON SEQUENCE public.rt_absent IS 'x'")
+    with pytest.raises(Exception) as failure:
+        ADMINISTRATION.apply(client, executor_request(request, planned))
+    assert 'stay applied' not in str(failure.value)
+    assert not query("SELECT 1 FROM pg_class WHERE relname = 'rt_atomic'")
+    result = run(client, route, 'sequence', 'create', request['draft'])
+    assert result['provider_payload']['compiled'][
+        'ddl_transaction_mode'] == 'atomic'
+    query('DROP SEQUENCE public.rt_atomic')

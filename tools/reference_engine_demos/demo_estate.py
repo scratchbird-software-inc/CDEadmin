@@ -225,12 +225,15 @@ CONTAINERS = {
     },
     "yugabytedb": {
         "image": "yugabytedb/yugabyte:2025.2.2.2-b11",
-        "configuration": "ycql-password-auth-v1",
+        "configuration": "ycql-password-auth-ddl-transaction-block-v2",
         "ports": ((55433, 5433), (59042, 9042), (57000, 7000),
                   (59000, 9000)),
         "args": (
             "bin/yugabyted", "start", "--daemon=false", "--ui=false",
             "--use_cassandra_authentication=true",
+            # DDL in YSQL transaction blocks (off by default in 2025.2):
+            # CDEadmin detects either mode; the demo runs the atomic one.
+            "--tserver_flags=ysql_yb_ddl_transaction_block_enabled=true",
         ),
         "volumes": (("cdeadmin-demo-yugabyte-disk0", "/mnt/disk0"),
                     ("cdeadmin-demo-yugabyte-disk1", "/mnt/disk1")),
@@ -400,6 +403,9 @@ def start_standard(engine):
     elif actual in {'clickhouse', 'opensearch'}:
         wait_until(lambda: _http_engine_ready(actual), timeout=300, interval=2)
     elif actual == 'yugabytedb':
+        # A new node records its masters only once yugabyted is up.
+        wait_until(lambda: _yugabyte_masters_recorded(name), timeout=300,
+                   interval=3)
         _check_yugabyte_master_addresses(name)
     elif actual == 'cockroachdb':
         wait_until(lambda: _cockroach_settings(name), timeout=180, interval=2)
@@ -456,6 +462,15 @@ def _mysql_greeting_ready(port):
             header += chunk
     if header[4] != 10:
         raise ConnectionError("unexpected MySQL greeting")
+    return True
+
+
+def _yugabyte_masters_recorded(name):
+    # wait_until retries on an exception, so not-yet raises.
+    observed = run(['docker', 'exec', name, 'cat',
+                    '/root/var/conf/yugabyted.conf'], capture=True)
+    if not json.loads(observed.stdout).get('current_masters'):
+        raise RuntimeError('YugabyteDB masters not recorded yet')
     return True
 
 
