@@ -1,0 +1,6 @@
+{
+  "_comment": "Edited by hand only. Each entry: {\"id\", \"error\", \"date\", \"reason\"}. tools/cdeadmin_verify.py proposes entries in its report; it never adds them.",
+  "python": [],
+  "jest": [],
+  "live": []
+}

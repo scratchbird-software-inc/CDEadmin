@@ -201,7 +201,9 @@ Front-end family suite: 158 passed (one earlier run failed the SQLite
 registration test under load; it passed alone and on the rerun). ESLint could
 not be run here: loading ``.eslintrc.js`` fails inside ``@eslint/eslintrc``
 ("Converting circular structure to JSON") before any file is checked. Lint
-counts from ``make ui-descriptors-check`` are unchanged.
+counts from ``make ui-descriptors-check`` are unchanged. (Corrected
+2026-10-31: ``.eslintrc.js`` is a flat config. That error appears only in
+legacy mode; ``yarn run linter`` passes ``-c .eslintrc.js`` and runs.)
 
 Firebird diagram physical edits to reviewed plan (2026-10-29)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1058,5 +1060,37 @@ failures varied from run to run, and four suites (Firebird activity and
 ERD, MySQL dashboard editor, PostgreSQL logical stream) failed with and
 without these changes; run serially all four pass. No browser check was
 made: the guide's screenshots are mock-ups, and these changes are tested
-with jest only. ESLint still does not run here. Lint before/after: JSON 301/301, MUI 244/244, UI engine branches
+with jest only. ESLint still does not run here. (Corrected the same day:
+it does run, as ``yarn run linter`` calls it, with ``-c .eslintrc.js``;
+the failure came from calling it without that flag. Every file this
+entry changed passes it.) Lint before/after: JSON 301/301, MUI 244/244, UI engine branches
 111/111, panels 113/113, context-menu branches 14/14.
+
+Verification process, 2026-10-31
+---------------------------------
+
+``make verify`` (``tools/cdeadmin_verify.py``) is the single entry point,
+described in ``tools/development/README.md`` section 8. Tiers: quick, unit,
+live (per engine, on the reference demos) and browser
+(``native_verify.py``'s sandboxed launcher). It refreshes DDN first, keeps one
+demo at a time, never stops a demo it did not start, runs engines that leave
+permanent objects only on opt-in, and compares failures with a hand-edited
+known-failures list (empty so far): new failures fail the run, open known
+failures stay in the verdict, flaky Jest suites are reported as flaky. The
+quick tier (195 family tests) and a live Dolt round trip passed through it.
+
+Corrections from setting it up:
+
+-  Every pytest count reported on 2026-10-31 before this entry was taken with
+   the system Python 3.12, not the project's ``.venv`` Python 3.14 (README
+   minimum). That includes the immudb, XTDB and YugabyteDB unit counts and the
+   1,275-failure full-suite figure.
+-  The full ``tools/tests`` run, as ``native_verify.py`` runs it (Python 3.14,
+   ``config`` imported first, history deselected), has 951 failures and 42
+   errors (17,811 passed). 32 collection errors are a missing ``selenium``
+   (``web/regression/requirements.txt`` is not installed in ``.venv``). 804
+   failures are "Invalid or unsupported native catalog DDN document"; they are
+   the same with the DDN snapshot before ``d6eca60cc``, so that refresh did not
+   cause them. None of these is in the known-failures list: adding entries is
+   the owner's decision.
+-  ESLint runs; see the corrections above.

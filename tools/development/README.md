@@ -348,6 +348,50 @@ use their explicitly configured demo authentication mode; do not invent one.
 Images and exact versions are recorded in
 [engine_versions.json](../reference_engine_demos/engine_versions.json).
 
+## 8. Verify a working tree
+
+`make verify` (or `python3 tools/cdeadmin_verify.py`) is the one entry point.
+Run it with the project's Python 3.14 environment active (`source
+.venv/bin/activate`; the gates call `python3` from `PATH`). Pick tiers:
+
+```bash
+make verify                                   # quick
+make verify TIERS="quick unit"                # + check-gates, all Python and Jest tests
+make verify TIERS=live ENGINES=dolt,tidb      # engine round trips on the demos
+make verify TIERS=browser                     # sandboxed launcher in a headless browser
+python3 tools/cdeadmin_verify.py --tier live --engines immudb --allow-permanent
+```
+
+| Tier | Runs | Proves | Does not prove |
+| --- | --- | --- | --- |
+| quick | preflight, DDN refresh, descriptor gate, ESLint and pycodestyle on files changed against upstream, family render suite | the tree is consistent and every engine form renders | behaviour against a server |
+| unit | quick, `make check-gates`, every `tools/tests` test (as `native_verify.py` runs them), the whole Jest suite | unit and contract behaviour | live engines; browser behaviour |
+| live | per engine: start its demo if needed, verify it, run `test_ui_descriptor_roundtrip_<engine>.py` with settings from the demo profiles | forms plan, apply and read back on the reference demo | other versions and topologies |
+| browser | `native_verify.py`'s sandboxed launcher (own data directory and port) and headless browser | the built workbench mounts without console errors | that any form works; it uses the last bundle built |
+
+Rules the runner keeps:
+
+- The DDN refresh runs first: `AGENTS.md` requires it before any test run that
+  validates a commit. `--skip-ddn` is allowed, but the report then says the run
+  does not validate a commit. If the refresh changes vendored files, the report
+  says so; commit them separately.
+- One demo at a time. A demo the run did not start is never stopped. Engines
+  whose tests leave objects the engine cannot remove (immudb users; XTDB users
+  and tables) run only with `--allow-permanent`. An engine with no round-trip
+  test is reported as a gap, not a pass.
+- Failures are compared with `tools/cdeadmin_verify_known_failures.json`. A new
+  failure fails the run. A listed failure that passes is reported for removal.
+  The list is edited by hand only: each entry needs `id`, `error`, `date` and
+  `reason`. The run writes `proposed_known_failures.json` and never adds entries
+  itself. Open known failures appear in the verdict; "no new failures" is not
+  "passed".
+- A Jest suite that fails in the parallel run and passes alone is reported as
+  flaky, never as passed.
+
+Each run writes `.devstate/verify/<UTC time>/report.md`, `report.json` and one
+log per stage. The report is evidence for the owner to review, not a completion
+claim.
+
 ## Isolation, networking and persistence
 
 - Demo credentials are public test credentials. Several engines intentionally

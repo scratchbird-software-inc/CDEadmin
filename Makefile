@@ -167,6 +167,13 @@ cdeadmin-baseline:
 cdeadmin-baseline-test:
 	python3 -m unittest discover -s tools/tests -p 'test_cdeadmin_*.py'
 
+# One entry point for verification; see tools/cdeadmin_verify.py.
+# make verify TIERS="quick unit" ENGINES=sqlite,duckdb
+TIERS ?= quick
+verify:
+	python3 tools/cdeadmin_verify.py $(foreach tier,$(TIERS),--tier $(tier)) \
+		$(if $(ENGINES),--engines $(ENGINES),)
+
 ui-descriptors-check:
 	python3 tools/validate_ui_descriptors.py --counts --enforce-counts tools/ui_lint_maximums.json
 	python3 -m pytest -q -p no:cacheprovider tools/tests/test_ui_descriptor_service.py tools/tests/test_ui_descriptor_tools.py tools/tests/test_ui_descriptor_postgresql_schema_ids.py tools/tests/test_ui_descriptor_roundtrip_sqlite.py tools/tests/test_ui_descriptor_roundtrip_duckdb.py tools/tests/test_ui_descriptor_operations_sqlite.py tools/tests/test_ui_descriptor_operations_duckdb.py tools/tests/test_ui_descriptor_roundtrip_firebird.py tools/tests/test_ui_descriptor_roundtrip_mariadb.py tools/tests/test_ui_descriptor_roundtrip_dolt.py tools/tests/test_ui_descriptor_roundtrip_tidb.py tools/tests/test_ui_descriptor_server_forms.py tools/tests/test_ui_descriptor_operations_firebird.py tools/tests/test_ui_descriptor_operations_mariadb.py tools/tests/test_ui_descriptor_operations_postgresql.py tools/tests/test_ui_descriptor_engine_filtering.py
@@ -483,7 +490,7 @@ msg-update:
 	bundle bundle-dev linter help \
 	check check-gates check-audit check-auditjs check-auditjs-html \
 	check-auditpy check-pep8 check-python check-resql check-feature \
-	check-js check-js-coverage ui-descriptors-check \
+	check-js check-js-coverage ui-descriptors-check verify \
 	cdeadmin-baseline cdeadmin-baseline-test cdeadmin-architecture-gate \
 	cdeadmin-dependency-licenses cdeadmin-contracts-generate \
 	cdeadmin-contracts-check cdeadmin-endpoint-persistence-test \
