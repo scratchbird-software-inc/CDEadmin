@@ -440,6 +440,27 @@ as ``text[]``, as PostgreSQL drops declared sizes). CockroachDB's table
 editor still refuses arrays; it moves to ``_safe_type`` when its demo next
 runs, so its narrower array support (no nested arrays) is checked live.
 
+The database form is ``complete`` (``providers/yugabytedb/databases.py``):
+owner, template, encoding, libc or ICU locale, connection limit, allowing
+connections, the template flag, colocation, comment, session defaults and
+rename. Refused by YugabyteDB 2025.2.2.2 and so not offered: a database
+tablespace (at create or after) and changing the template flag. Colocation
+can be read only from inside the database (``yb_is_database_colocated()``),
+so it is create-only and the record reports it for the connected database
+alone. Two fixes found on the way:
+
+-  The catalog listed only databases that allow connections, so a database
+   edited to refuse them disappeared. It now lists every database except a
+   template that refuses connections (``template0``); this is shared with
+   CockroachDB, whose databases all allow connections, and immudb. I did
+   not check immudb's catalog for ``datistemplate``, so when the wider
+   query returns nothing the earlier connectable-only list is used.
+-  A list setting such as ``search_path = public, x`` was written back
+   quoted, which PostgreSQL reads as one schema named ``public, x``. A
+   comma list of plain words is now written bare. CockroachDB's database
+   editor still quotes it; whether CockroachDB reads it the same way is
+   checked when its demo next runs.
+
 Provider finding, 2026-10-30: the shared relational apply runs a plan in
 one transaction, and YugabyteDB refuses ``CREATE DATABASE`` and ``CREATE
 TABLESPACE`` there ("cannot run inside a transaction block"), so the

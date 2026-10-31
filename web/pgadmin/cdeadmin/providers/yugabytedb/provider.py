@@ -21,8 +21,8 @@ from ..distributed_sql import (
     sql_administration,
 )
 from . import (
-    indexes as index_sql, objects, routines, sequences, tables as tables_sql,
-    types, views,
+    databases, indexes as index_sql, objects, routines, sequences,
+    tables as tables_sql, types, views,
 )
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
@@ -137,7 +137,7 @@ class YugabyteDBAdministration(RelationalAdministration):
         return operation in objects.OPERATIONS.get(kind, ()) or (
             kind in {'table', 'index', 'type', 'domain', 'view',
                      'materialized-view', 'sequence', 'function',
-                     'procedure'} and
+                     'procedure', 'database'} and
             operation in {'create', 'alter'}) or (
             # Dropped by signature: overloads share a name.
             operation == 'drop' and kind in {'function', 'procedure'})
@@ -146,6 +146,11 @@ class YugabyteDBAdministration(RelationalAdministration):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if request['resource_kind'] == 'database':
+            if request['operation_id'] == 'create':
+                return {'statements': databases.create(self, draft)}
+            return {'statements': databases.alter(
+                self, draft, request.get('target_resource'))}
         if request['resource_kind'] in {'function', 'procedure'}:
             kind, target = request['resource_kind'], request.get(
                 'target_resource')
@@ -200,6 +205,8 @@ class YugabyteDBAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def _form(self, kind, operation):
+        if kind == 'database' and operation in {'create', 'alter'}:
+            return databases.form(self._field, operation)
         if kind in {'function', 'procedure'} and operation in {
                 'create', 'alter'}:
             return routines.form(self._field, kind, operation)
@@ -290,8 +297,9 @@ class YugabyteDBAdministration(RelationalAdministration):
     def _compile(self, request):
         if self._native_object(request['resource_kind'],
                                request['operation_id']):
-            return self._native_compile(request)
-        compiled = super()._compile(request)
+            compiled = self._native_compile(request)
+        else:
+            compiled = super()._compile(request)
         if request['resource_kind'] in {'database', 'tablespace'} and \
                 request['operation_id'] in {'create', 'drop'}:
             # Live, 2025.2.2.2: "CREATE DATABASE / CREATE TABLESPACE cannot
@@ -865,6 +873,19 @@ def _annotate_catalog(connection, values):
                       'JOIN pg_catalog.pg_attribute a '
                       'ON a.attrelid = t.oid AND a.attnum = d.refobjsubid '
                       "WHERE s.relkind = 'S' AND d.deptype = 'a'")}
+        database_facts = {str(row[0]): row[1:] for row in optional_rows(
+            cursor,
+            'SELECT d.datname, pg_get_userbyid(d.datdba), '
+            'pg_encoding_to_char(d.encoding), d.datcollate, d.datctype, '
+            'd.datlocprovider, d.daticulocale, d.datconnlimit, '
+            'd.datallowconn, d.datistemplate, '
+            "shobj_description(d.oid, 'pg_database'), s.setconfig "
+            'FROM pg_catalog.pg_database d '
+            'LEFT JOIN pg_catalog.pg_db_role_setting s '
+            'ON s.setdatabase = d.oid AND s.setrole = 0')}
+        # Answers only for the database this connection is in.
+        colocated = dict(optional_rows(
+            cursor, 'SELECT current_database(), yb_is_database_colocated()'))
         view_facts = {(str(row[0]), str(row[1])): row[2:]
                       for row in optional_rows(
                           cursor,
@@ -949,6 +970,25 @@ def _annotate_catalog(connection, values):
                 collation=None if collation is None else str(collation),
                 comment=None if comment is None else str(comment),
                 column_key=membership.get(path, ''))
+        elif item['resource_kind'] == 'database':
+            facts = database_facts.get(path[-1] if path else '')
+            if not facts:
+                continue
+            (owner, encoding, collate, ctype, provider, icu, limit, allow,
+             template, comment, config) = facts
+            native.update(
+                owner=str(owner), encoding=str(encoding),
+                collate=str(collate), ctype=str(ctype),
+                locale_provider={'i': 'icu'}.get(str(provider), 'libc'),
+                icu_locale=None if icu is None else str(icu),
+                connection_limit=limit, allow_connections=bool(allow),
+                is_template=bool(template),
+                colocation=(None if path[-1] not in colocated
+                            else bool(colocated[path[-1]])),
+                comment=None if comment is None else str(comment),
+                settings=[dict(zip(('name', 'value'),
+                                   str(entry).split('=', 1)))
+                          for entry in config or ()])
         elif item['resource_kind'] == 'sequence':
             facts = sequence_facts.get(path)
             if not facts:

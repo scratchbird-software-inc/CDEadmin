@@ -684,3 +684,66 @@ def test_array_columns(live):
     assert by_name(after['columns'])['a']['type'] == 'bigint[]'
     run(client, route, 'table', 'drop', {'confirmation': 'rt_arr'},
         target=target)
+
+
+def test_databases(live):
+    route, client = live
+    name, icu, owner = (f'rt_db_{UNIQUE}', f'rt_icu_{UNIQUE}',
+                        f'rt_role_{UNIQUE}')
+    query(f'CREATE ROLE {owner}', 'yugabyte')
+    form = resolved_form('yugabytedb', 'database')
+    try:
+        run(client, route, 'database', 'create', backend_draft(form, {
+            'name': name, 'owner': owner, 'template': 'template0',
+            'encoding': 'UTF8', 'collate': 'C', 'ctype': 'C',
+            'connection_limit': 5, 'colocation': True, 'comment': 'a db',
+            'settings': [{'name': 'work_mem', 'value': '8MB'},
+                         {'name': 'search_path', 'value': 'public, x'}]}))
+        run(client, route, 'database', 'create', backend_draft(form, {
+            'name': icu, 'template': 'template0',
+            'locale_provider': 'icu', 'icu_locale': 'en-US'}))
+        target, baseline = record(client, route, 'database', name,
+                                  'database')
+        assert {key: baseline[key] for key in (
+            'owner', 'encoding', 'collate', 'ctype', 'connection_limit',
+            'allow_connections', 'is_template', 'comment')} == {
+            'owner': owner, 'encoding': 'UTF8', 'collate': 'C', 'ctype': 'C',
+            'connection_limit': 5, 'allow_connections': True,
+            'is_template': False, 'comment': 'a db'}
+        assert [(row['name'], row['value'])
+                for row in baseline['settings']] == [
+            ('work_mem', '8MB'), ('search_path', 'public, x')]
+        # Colocation is read only from inside the database itself.
+        assert query('SELECT yb_is_database_colocated()', name) == [(True,)]
+        _, own = record(client, route, 'database', DATABASE, 'database')
+        assert own['colocation'] is False
+        _, icu_record = record(client, route, 'database', icu, 'database')
+        assert (icu_record['locale_provider'],
+                icu_record['icu_locale']) == ('icu', 'en-US')
+        assert backend_draft(form, baseline, mode='alter',
+                             baseline=baseline) == {}
+        run(client, route, 'database', 'alter', backend_draft(form, {
+            **baseline, 'name': f'{name}_b', 'owner': SETTINGS['user'],
+            'connection_limit': 7, 'allow_connections': False,
+            'comment': '',
+            'settings': [{'name': 'search_path', 'value': 'x, public'}]},
+            mode='alter', baseline=baseline), target=target)
+        target, after = record(client, route, 'database', f'{name}_b',
+                               'database')
+        assert (after['owner'], after['connection_limit'],
+                after['allow_connections'], after['comment'],
+                [(row['name'], row['value']) for row in after['settings']]
+                ) == (SETTINGS['user'], 7, False, None,
+                      [('search_path', 'x, public')])
+        assert 'cannot change in place' in refused(
+            'database', 'alter', {'is_template': True}, target)
+        for value in (f'{name}_b', icu):
+            run(client, route, 'database', 'drop', {'confirmation': value},
+                target=find(client, route, 'database', value)[0])
+        assert not query("SELECT 1 FROM pg_database WHERE datname IN "
+                         f"('{name}', '{name}_b', '{icu}')", 'yugabyte')
+    finally:
+        for value in (name, f'{name}_b', icu):
+            query(f'DROP DATABASE IF EXISTS {value} WITH (FORCE)',
+                  'yugabyte')
+        query(f'DROP ROLE IF EXISTS {owner}', 'yugabyte')

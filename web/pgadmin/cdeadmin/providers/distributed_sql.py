@@ -567,7 +567,15 @@ def postgresql_catalog(connection, request, engine_name, extras=None):
 
     cursor = CatalogCursor()
     try:
+        # A database that refuses connections is still one to edit;
+        # template0 (a template that refuses them) is left out. A catalog
+        # without datistemplate (not checked on every engine here) gets
+        # the earlier connectable-only list.
         databases = optional_rows(
+            cursor,
+            'SELECT datname FROM pg_catalog.pg_database '
+            'WHERE datallowconn OR NOT datistemplate ORDER BY datname',
+        ) or optional_rows(
             cursor,
             'SELECT datname FROM pg_catalog.pg_database '
             'WHERE datallowconn ORDER BY datname',

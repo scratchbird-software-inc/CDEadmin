@@ -5,14 +5,29 @@
   "resource_kinds": [
     "database"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "yugabytedb",
   "omitted_tabs": [],
   "gaps": [
     {
-      "concept": "database.alter.properties",
-      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
-      "tracking": "ui-unification"
+      "concept": "Database tablespace",
+      "reason": "Refused on 2025.2.2.2: \"value other than default for tablespace option is not yet supported\", and ALTER DATABASE SET TABLESPACE likewise",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Changing IS_TEMPLATE",
+      "reason": "Refused on 2025.2.2.2: \"altering is_template option is not yet supported\"",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Per-role settings in a database (ALTER ROLE ... IN DATABASE ... SET)",
+      "reason": "Runs but has no editor yet",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Database clones (CREATE DATABASE ... TEMPLATE ... AS OF)",
+      "reason": "Not checked on the demo yet",
+      "tracking": "postgresql-wire-parity"
     }
   ],
   "fields": [
@@ -21,18 +36,139 @@
       "label": "Name",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "help": "Renaming runs ALTER DATABASE ... RENAME TO."
     },
     {
-      "field_id": "properties",
-      "label": "Changed properties",
+      "field_id": "owner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "role",
+      "reference_value": "display_name"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON DATABASE"
+    },
+    {
+      "field_id": "connection_limit",
+      "label": "Connection limit",
+      "tab": "General",
+      "control": "number",
+      "help": "CONNECTION LIMIT; -1 or empty for no limit."
+    },
+    {
+      "field_id": "allow_connections",
+      "label": "Allow connections",
+      "tab": "General",
+      "control": "boolean",
+      "default": true,
+      "help": "ALLOW_CONNECTIONS: off refuses new connections to this database."
+    },
+    {
+      "field_id": "template",
+      "label": "Template",
+      "tab": "Options",
+      "control": "reference",
+      "reference_kind": "database",
+      "reference_value": "display_name",
+      "editable_after_create": false,
+      "help": "TEMPLATE: the database to copy; template0 to choose a different encoding or locale."
+    },
+    {
+      "field_id": "encoding",
+      "label": "Encoding",
+      "tab": "Options",
+      "control": "text",
+      "editable_after_create": false,
+      "help": "ENCODING, for example UTF8."
+    },
+    {
+      "field_id": "locale_provider",
+      "label": "Locale provider",
+      "tab": "Options",
+      "control": "select",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "libc",
+          "label": "libc"
+        },
+        {
+          "value": "icu",
+          "label": "ICU"
+        }
+      ]
+    },
+    {
+      "field_id": "icu_locale",
+      "label": "ICU locale",
+      "tab": "Options",
+      "control": "text",
+      "editable_after_create": false,
+      "visible_when": {
+        "field": "locale_provider",
+        "equals": "icu"
+      },
+      "help": "ICU_LOCALE, for example en-US."
+    },
+    {
+      "field_id": "collate",
+      "label": "Collation (LC_COLLATE)",
+      "tab": "Options",
+      "control": "text",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "ctype",
+      "label": "Character type (LC_CTYPE)",
+      "tab": "Options",
+      "control": "text",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "is_template",
+      "label": "Template database",
+      "tab": "Options",
+      "control": "boolean",
+      "default": false,
+      "editable_after_create": false,
+      "help": "IS_TEMPLATE; YugabyteDB does not change it after create."
+    },
+    {
+      "field_id": "colocation",
+      "label": "Colocation",
       "tab": "Engine",
-      "control": "keyvalue",
-      "required": true,
-      "modes": [
-        "alter"
+      "control": "boolean",
+      "default": false,
+      "editable_after_create": false,
+      "help": "COLOCATION: small tables share one tablet. Read back only for the database you are connected to."
+    },
+    {
+      "field_id": "settings",
+      "label": "Session defaults",
+      "tab": "Engine",
+      "control": "grid",
+      "help": "ALTER DATABASE ... SET: defaults for every session in this database. Removing a row runs RESET.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Variable",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
       ]
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
+  "notes": "Started from the CockroachDB database form (same field ids; YSQL adds connection limit, allow connections, template, locale, template flag and colocation); providers/yugabytedb/databases.py. CREATE and DROP DATABASE run outside a transaction. Colocation is read with yb_is_database_colocated(), which answers only for the connected database. Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
 }
