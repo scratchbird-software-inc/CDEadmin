@@ -18,6 +18,11 @@
       "concept": "Rename",
       "reason": "immudb has no database rename",
       "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Untested: replica settings and automatic history truncation",
+      "reason": "The round trip did not create a replica (is_replica and the primary_* settings need a second server) or set a retention period (immudb requires at least 24 hours); these rest on the provider's mapping and the source",
+      "tracking": "postgresql-wire-parity"
     }
   ],
   "fields": [

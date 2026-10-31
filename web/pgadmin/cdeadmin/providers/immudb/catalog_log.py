@@ -22,7 +22,12 @@ from the latest such copy. Views and sequences are not read here: on
 
 The scan reads keys only (ONLY_DIGEST), so row contents are not fetched;
 the few transactions with catalog keys are then read with their values.
-Anything not established is reported unread, never empty.
+Anything not established is reported unread, never empty. A key-only scan
+does not read the value log (pkg/database/database.go serializeTx), and a
+truncation discards value logs but keeps the transaction log, so a
+truncated database still scans; values are read only from the latest
+catalog copy on. A read that reaches the budget keeps what it read, so the
+next read resumes from there.
 """
 import base64
 import binascii
@@ -168,11 +173,13 @@ def read(scan, cache_key=None, budget=DEFAULT_BUDGET):
             state.entries = dict(cached['entries'])
             start = int(cached['last_id']) + 1
     last = cached if start > 1 else None
-    seen = 0
-    while True:
+    seen, finished = 0, False
+    while seen < budget:
         page = scan(start, 'ONLY_DIGEST', 0)
         if not page:
+            finished = True
             break
+        page = page[:budget - seen]
         for tx in page:
             if _truncation_copy(tx):
                 # A full copy: what came before it no longer counts.
@@ -180,8 +187,6 @@ def read(scan, cache_key=None, budget=DEFAULT_BUDGET):
             if _truncation_copy(tx) or _has_catalog(tx):
                 catalog_txs.append(int(tx['header']['id']))
         seen += len(page)
-        if seen > budget:
-            raise Unread(f'more than {budget} transactions to read')
         header = page[-1]['header']
         last = {'last_id': int(header['id']), 'last_hash': header.get('eH')}
         start = last['last_id'] + 1
@@ -193,6 +198,9 @@ def read(scan, cache_key=None, budget=DEFAULT_BUDGET):
             state.apply(key, value, deleted)
     if cache_key is not None and last:
         _CACHE[cache_key] = {**last, 'entries': dict(state.entries)}
+    if not finished:
+        raise Unread(f'{seen} transactions read so far (budget {budget}); '
+                     'the next read continues')
     return state.tables()
 
 

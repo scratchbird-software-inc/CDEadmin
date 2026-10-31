@@ -143,8 +143,13 @@ def test_a_recreated_database_is_read_afresh():
 
 
 def test_unread_rather_than_empty():
-    with pytest.raises(catalog_log.Unread, match='more than 2'):
-        catalog_log.read(Log(created()).scan, budget=2)
+    log = Log(created())
+    with pytest.raises(catalog_log.Unread, match='2 transactions read so'):
+        catalog_log.read(log.scan, cache_key='big', budget=2)
+    # The next read resumes after transaction 2 and finishes.
+    log.calls.clear()
+    assert 't' in catalog_log.read(log.scan, cache_key='big', budget=2)
+    assert log.calls[:2] == [(2, 'ONLY_DIGEST', 1), (3, 'ONLY_DIGEST', 0)]
 
     class Gone(Log):
         def scan(self, start, action, limit):

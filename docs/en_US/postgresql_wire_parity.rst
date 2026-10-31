@@ -646,8 +646,14 @@ by any engine method.
    (``/serverinfo``) defaults and checks are reported unread, never empty.
    While they are unread, the editor refuses check changes and column
    renames or drops.
--  A key-only scan read 3,004 transactions in 0.14 s on the demo; a
-   catalog read stops at 500,000 transactions and reports unread.
+-  A key-only scan read 3,004 transactions in 0.14 s on the demo. A
+   catalog read stops at 500,000 transactions and reports unread, keeping
+   what it read, so the next read resumes. A key-only scan does not read
+   the value log, and a truncation discards value logs but keeps the
+   transaction log (source), so a truncated database still scans.
+-  Untested on immudb: replica settings (a second server) and automatic
+   history truncation (at least 24 hours of history); both are listed as
+   gaps on the database form.
 -  Engine behaviour the editor accounts for:
 
    -  Names fold to lowercase, quoted or not (``embedded/sql/parser.go``),
