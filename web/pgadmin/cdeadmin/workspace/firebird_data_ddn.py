@@ -2,7 +2,6 @@
 from copy import deepcopy
 import hashlib
 import json
-import os
 from pathlib import Path
 import subprocess
 from . import ddn_source as ddn
@@ -86,9 +85,9 @@ def read(source):
     if not _SLOTS.acquire(timeout=1):
         raise ValueError('Data reader is busy; retry shortly')
     try:
-        result = subprocess.run(['node', ddn.NODE_HEAP_OPTION, str(Path(__file__).parent/'ddn/read_data.mjs')],
+        result = subprocess.run([ddn.node_executable(), ddn.NODE_HEAP_OPTION, str(Path(__file__).parent/'ddn/read_data.mjs')],
             input=_json(snapshot), text=True, encoding='utf-8', capture_output=True, timeout=20,
-            env={key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ})
+            env=ddn.runner_environment())
         if result.returncode:
             raise ValueError('Invalid static data DDN')
         from .firebird_data_import import unique

@@ -5,12 +5,53 @@ the result through the standalone DDN language/runtime/verifier APIs.
 """
 import json
 import math
+import os
+import subprocess
+import threading
 
 CONTRACT = 'ddn-next-1'
 FORMAT = 'ddn-source-workspace@1'
 # The adopted verifier's source/model records require a larger bounded worker
 # heap than the former parser. The web process and input limits are unchanged.
 NODE_HEAP_OPTION = '--max-old-space-size=384'
+# DDN runners get only these variables: no HOME, credentials or proxies.
+RUNNER_ENVIRONMENT = ('PATH', 'SYSTEMROOT', 'TMPDIR')
+_NODE_PATHS = {}
+_NODE_LOCK = threading.Lock()
+
+
+def runner_environment():
+    """The minimal environment every DDN runner process receives."""
+    return {key: os.environ[key] for key in RUNNER_ENVIRONMENT
+            if key in os.environ}
+
+
+def node_executable(node='node'):
+    """The Node binary behind ``node``, as an absolute path.
+
+    A version-manager shim (asdf, nvm and the like) is a script that needs
+    HOME and its own variables, which the minimal runner environment does
+    not carry: it fails before Node starts ("$HOME is not defined"). So
+    Node is asked once, with the inherited environment, for its own
+    executable, and runners start that binary directly. When the answer
+    is not an executable file, ``node`` is returned unchanged and the
+    runner reports its own failure.
+    """
+    with _NODE_LOCK:
+        if node not in _NODE_PATHS:
+            try:
+                result = subprocess.run(
+                    [node, '-p', 'process.execPath'], capture_output=True,
+                    text=True, timeout=15, check=False)
+                path = result.stdout.strip()
+                ok = (result.returncode == 0 and os.path.isabs(path) and
+                      os.path.isfile(path) and os.access(path, os.X_OK))
+            except (OSError, subprocess.TimeoutExpired):
+                ok, path = False, ''
+            if not ok:
+                return node
+            _NODE_PATHS[node] = path
+        return _NODE_PATHS[node]
 
 
 def quoted(value):

@@ -1,13 +1,12 @@
 """Bounded host validation using the paired DDN runtime, never browser code."""
 from functools import lru_cache
 import json
-import os
 from pathlib import Path
 import subprocess
 import threading
 
 from .assets import ProjectAssetError
-from .ddn_source import NODE_HEAP_OPTION
+from .ddn_source import NODE_HEAP_OPTION, node_executable, runner_environment
 
 _ROOT = Path(__file__).resolve().parents[2]
 _RUNNER = Path(__file__).parent / 'ddn/validate_dashboard.mjs'
@@ -21,9 +20,8 @@ def _validate(node, payload, generation):
     if not _SLOTS.acquire(timeout=1):
         raise RuntimeError('Dashboard validator is busy')
     try:
-        env = {key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR')
-               if key in os.environ}
-        result = subprocess.run([node, NODE_HEAP_OPTION, str(_RUNNER)], input=payload, text=True,
+        env = runner_environment()
+        result = subprocess.run([node_executable(node), NODE_HEAP_OPTION, str(_RUNNER)], input=payload, text=True,
                                 capture_output=True, timeout=8, env=env, check=False)
         if result.returncode:
             raise ProjectAssetError('Dashboard source or metric bindings are invalid')

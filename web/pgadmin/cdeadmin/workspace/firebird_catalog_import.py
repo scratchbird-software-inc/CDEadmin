@@ -3,7 +3,6 @@ from . import ddn_source as ddn
 from decimal import Decimal
 import hashlib
 import json
-import os
 import re
 from pathlib import Path
 import subprocess
@@ -49,8 +48,8 @@ def read_catalog(source, node='node', *, engine='firebird'):
     if not _SLOTS.acquire(timeout=1):
         raise ValueError('Catalog reader is busy; retry shortly')
     try:
-        env = {key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ}
-        result = subprocess.run([node, ddn.NODE_HEAP_OPTION, str(_RUNNER), engine],
+        env = ddn.runner_environment()
+        result = subprocess.run([ddn.node_executable(node), ddn.NODE_HEAP_OPTION, str(_RUNNER), engine],
                                 input=json.dumps(snapshot, ensure_ascii=False), text=True, encoding='utf-8',
                                 capture_output=True, timeout=15, env=env, check=False)
         if result.returncode:

@@ -1,7 +1,6 @@
 """Bounded engine-independent DDN source conversion; never executes native SQL."""
 from . import ddn_source as ddn
 import json
-import os
 from pathlib import Path
 import subprocess
 import threading
@@ -22,9 +21,9 @@ def merge_design(request):
     if not _SLOTS.acquire(timeout=1):
         raise ValueError('Design conversion is busy; retry shortly')
     try:
-        result = subprocess.run(['node', ddn.NODE_HEAP_OPTION, str(_RUNNER)],
+        result = subprocess.run([ddn.node_executable(), ddn.NODE_HEAP_OPTION, str(_RUNNER)],
             input=encoded, text=True, encoding='utf-8', capture_output=True, timeout=30,
-            env={key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ})
+            env=ddn.runner_environment())
         if result.returncode:
             # Only the runner's structured diagnostic is admitted; never return
             # native stack traces, process diagnostics or server filesystem paths.

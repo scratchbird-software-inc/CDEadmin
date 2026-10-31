@@ -3,7 +3,6 @@ from . import ddn_source as ddn
 from copy import deepcopy
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import subprocess
@@ -50,9 +49,9 @@ def read(source, node='node', *, engine='mysql'):
     if not SLOTS.acquire(timeout=1):
         raise ValueError('Data DDN reader is busy')
     try:
-        result = subprocess.run([node, ddn.NODE_HEAP_OPTION, str(Path(__file__).parent / 'ddn/read_mysql_data.mjs')],
+        result = subprocess.run([ddn.node_executable(node), ddn.NODE_HEAP_OPTION, str(Path(__file__).parent / 'ddn/read_mysql_data.mjs')],
             input=json.dumps(snapshot), text=True, encoding='utf8', capture_output=True, timeout=15,
-            env={key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ})
+            env=ddn.runner_environment())
         if result.returncode:
             raise ValueError('Invalid native static data DDN')
         parsed = decode(result.stdout)

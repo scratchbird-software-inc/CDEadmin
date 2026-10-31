@@ -4,7 +4,6 @@ from . import ddn_source as ddn
 from decimal import Decimal
 import hashlib
 import json
-import os
 from pathlib import Path
 import subprocess
 from .firebird_catalog_export import _json
@@ -55,9 +54,9 @@ def _read(snapshot, engine):
     if not _SLOTS.acquire(timeout=1):
         raise ValueError('Catalog reader is busy; retry shortly')
     try:
-        result = subprocess.run(['node', ddn.NODE_HEAP_OPTION, str(Path(__file__).parent / 'ddn/read_relations.mjs'), engine],
+        result = subprocess.run([ddn.node_executable(), ddn.NODE_HEAP_OPTION, str(Path(__file__).parent / 'ddn/read_relations.mjs'), engine],
             input=encoded, text=True, encoding='utf-8', capture_output=True, timeout=20,
-            env={key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ})
+            env=ddn.runner_environment())
         if result.returncode:
             raise ValueError('Invalid or unsupported relational design')
         parsed = _decode(result.stdout)
