@@ -383,6 +383,8 @@ export function validateDraft(form, draft, {mode='create', baseline=null}={}) {
       if(field.control === 'grid' && Array.isArray(value)) {
         value.forEach((row, index) => {
           for(const column of field.columns || []) {
+            // A hidden column is never shown, so it cannot be the user's omission.
+            if(column.hidden) continue;
             if(column.required && (row?.[column.field_id] === undefined || row?.[column.field_id] === '')) {
               errors[`${field.field_id}[${index}].${column.field_id}`] = `${column.label} is required in row ${index + 1}.`;
             }

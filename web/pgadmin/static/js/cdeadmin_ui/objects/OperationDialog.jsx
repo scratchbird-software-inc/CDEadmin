@@ -132,6 +132,9 @@ export default function OperationDialog({open, operation, targetName, context={}
       </Button>
     </>}>
     <Stack gap="comfortable" data-cdeadmin-qa-key={`operation-dialog.${operation.operation_id}`}>
+      {operation.status === 'draft' && <Banner status="info">
+        This operation is a draft: verification against a live server is pending.
+      </Banner>}
       {operation.description && <Banner status="info">{operation.description}</Banner>}
       {operation.tier === 3 && operation.execution_host && <Select label="Execution host" fullWidth size="small"
         options={executionHosts.length ? executionHosts : [{value: 'local', label: 'This CDEadmin server'}]}

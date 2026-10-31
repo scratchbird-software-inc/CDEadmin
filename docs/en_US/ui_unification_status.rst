@@ -1020,7 +1020,11 @@ form already has six tabs) were not taken.
 -  One click on Apply (editor) or "Preview and run" (operation dialog)
    plans and runs. It stops to show the plan when the plan is blocked,
    asks for confirmation, or carries the provider's warnings (for
-   example, the immudb unload warning).
+   example, the immudb unload warning). ``confirmation_required`` comes
+   from the catalog operation and is set for destructive ones (drop,
+   delete, erase, unload and the like), so those still show their plan
+   and take a second click; one click covers the rest, mostly creates and
+   alters.
 -  The editor has a Reset button once the draft changes. A tab whose
    family declares sections (Constraints) shows one section at a time.
 -  Grids leave out ``hidden`` columns (new form-schema key; PostgreSQL's
@@ -1033,16 +1037,26 @@ form already has six tabs) were not taken.
    ``notes`` (internal: test evidence, status) are no longer shown; a new
    ``description`` key carries user-facing text, written for 28
    operations whose notes held advice users need. The drafter keeps it.
+   About 230 notes no longer reach the dialog, the immudb and XTDB ones
+   included. A draft operation (``status: draft``; drafts are not
+   filtered from menus) now says so in a banner, worded like the editor's
+   draft-form banner, since notes had been its only sign.
+-  A required ``hidden`` grid column is not validated: the user cannot see
+   or fill it.
 -  Enter does not submit a dialog or form from a picker, button or select
    (one shared rule, ``enterSubmits``), and the connection wizard's review
    step shows labels instead of field ids.
 
 Tests: ``web/regression/javascript/families/FormErgonomics.spec.jsx``
-(14; 12 of them fail on the previous components); the family render test
-now opens a field's section before checking it. Family suite 193 passed.
-Specs that use the changed component folders: 227 passed, run serially.
-The full ``regression/javascript/cdeadmin`` run had failures that change
-from run to run under load; four suites (Firebird activity and ERD, MySQL
-dashboard editor, PostgreSQL logical stream) fail without these changes
-too. Lint before/after: JSON 301/301, MUI 244/244, UI engine branches
+(16; 12 of the first 14 fail on the previous components); the family
+render test now opens a field's section before checking it. DDN was
+refreshed first (``dev.sh ddn``, ``ddn-next-1`` 783a7f8d, committed
+separately). Family suite 195 passed; the other specs using the changed
+component folders 48 passed; the 88 DDN-consuming specs 1,024 passed,
+run serially. In a parallel run of ``regression/javascript/cdeadmin``,
+failures varied from run to run, and four suites (Firebird activity and
+ERD, MySQL dashboard editor, PostgreSQL logical stream) failed with and
+without these changes; run serially all four pass. No browser check was
+made: the guide's screenshots are mock-ups, and these changes are tested
+with jest only. ESLint still does not run here. Lint before/after: JSON 301/301, MUI 244/244, UI engine branches
 111/111, panels 113/113, context-menu branches 14/14.

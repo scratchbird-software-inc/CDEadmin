@@ -10,6 +10,7 @@ import Theme from 'sources/Theme';
 import {FieldControl, ObjectEditor, OperationDialog, RecordGrid} from '../../../pgadmin/static/js/cdeadmin_ui/objects';
 import {gridColumns, MAX_INLINE_COLUMNS} from '../../../pgadmin/static/js/cdeadmin_ui/objects/RecordGrid';
 import {enterSubmits} from '../../../pgadmin/static/js/cdeadmin_ui/overlays/Dialog';
+import {validateDraft} from '../../../pgadmin/static/js/cdeadmin_ui/objects/descriptors';
 import {loadEngineBundle} from './familyFixtures';
 
 const READY = {plan_id: 'p1', state: 'ready', execution_available: true,
@@ -122,6 +123,14 @@ describe('record grid', () => {
     expect(gridColumns(all, [{c0: 'x'}]).detail.map((column) => column.field_id)).toContain('cond');
   });
 
+  it('does not report a required hidden column the user cannot fill', () => {
+    const form = {tabs: [{tab: 'Columns', fields: [{field_id: 'cols', label: 'Columns', control: 'grid',
+      columns: [{field_id: 'name', label: 'Name', control: 'text', required: true},
+        {field_id: 'oid', label: 'Oid', control: 'text', required: true, hidden: true}]}]}]};
+    expect(validateDraft(form, {cols: [{name: 'a'}]})).toEqual({});
+    expect(validateDraft(form, {cols: [{}]})).toEqual({'cols[0].name': 'Name is required in row 1.'});
+  });
+
   it('opens the rest in a row drawer and marks cell errors', () => {
     const field = {field_id: 'cols', label: 'Columns', control: 'grid', columns};
     render(<Theme><RecordGrid field={field} rows={[{c0: 'a'}]} onChange={() => {}}
@@ -152,6 +161,11 @@ describe('operation dialog', () => {
     expect(screen.getByRole('textbox', {name: 'Type orders to confirm'})).toBeTruthy();
     expect(screen.getByText('Drops one partition and its rows.')).toBeTruthy();
     expect(screen.queryByText(/Round-tripped by/)).toBeNull();
+  });
+
+  it('says when the operation is a draft', () => {
+    dialog({...dropPartition, status: 'draft'}, jest.fn(), jest.fn());
+    expect(screen.getByText(/This operation is a draft/)).toBeTruthy();
   });
 
   it('previews and runs in one click, sending the typed name as the confirmation', async () => {
