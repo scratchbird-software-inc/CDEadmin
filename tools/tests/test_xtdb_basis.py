@@ -18,7 +18,7 @@ if 'pgadmin' not in sys.modules:
 
 from pgadmin.cdeadmin.providers.xtdb import basis  # noqa: E402
 from pgadmin.cdeadmin.providers.xtdb.client import (  # noqa: E402
-    XTDBClientError, _initial_document,
+    XTDBClientError, _initial_document, _same_instant,
 )
 
 # SHOW SNAPSHOT_TOKEN on the 2.1.0 demo with probe_db1 attached (live).
@@ -74,3 +74,14 @@ def test_first_document_is_typed_by_its_grid_rows():
 def test_bad_rows_are_refused(rows, reason):
     with pytest.raises(XTDBClientError, match=reason):
         _initial_document({'document_fields': rows})
+
+
+def test_valid_time_read_back_compares_instants():
+    utc = datetime.timezone.utc
+    sent = datetime.datetime(2026, 1, 1, tzinfo=utc)
+    assert _same_instant(sent, '2026-01-01T00:00:00Z')
+    assert _same_instant(sent, '2025-12-31T19:00:00-05:00')
+    assert not _same_instant(sent, '2026-01-01T00:00:01Z')
+    # A naive instant cannot be compared; it is not read back.
+    assert not _same_instant(sent, '2026-01-01T00:00:00')
+    assert not _same_instant(None, '2026-01-01T00:00:00Z')

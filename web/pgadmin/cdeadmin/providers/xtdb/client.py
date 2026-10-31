@@ -249,6 +249,19 @@ def _initial_document(draft):
     return document
 
 
+def _same_instant(actual, expected):
+    """Whether a read-back instant is the ISO 8601 instant that was sent."""
+    if not isinstance(actual, datetime.datetime):
+        return False
+    try:
+        expected = datetime.datetime.fromisoformat(str(expected))
+    except ValueError:
+        return False
+    if expected.tzinfo is None or actual.tzinfo is None:
+        return False
+    return actual == expected
+
+
 def _sql_string(value):
     value = _text(value, 'SQL literal', 1024 * 1024, required=False)
     return "'" + (value or '').replace("'", "''") + "'"
@@ -1588,7 +1601,7 @@ class XTDBClient:
             self._forget_and_close(session)
 
     def _password_digest(self, session, username):
-        """A digest of the stored password hash; the hash never leaves."""
+        """A SHA-256 digest of the stored password hash, never the hash."""
         rows = self._query_rows(
             session,
             'SELECT passwd FROM pg_catalog.pg_user WHERE username = %s',
@@ -1656,15 +1669,26 @@ class XTDBClient:
                         'WHERE table_schema = %s AND table_name = %s',
                         (draft['schema'], draft['name']))
                 }
+                # All valid time: a document valid from a later instant is
+                # not visible now.
                 rows = self._query_rows(
-                    session, f'SELECT _id FROM {target} WHERE _id = %s',
+                    session,
+                    f'SELECT _valid_from, _valid_to FROM {target} '
+                    'FOR ALL VALID_TIME WHERE _id = %s',
                     (self._adapt_value(document['_id']),))
                 missing = sorted(set(document) - columns)
+                options = draft.get('options') or {}
+                mismatched = [
+                    bound for bound in ('valid_from', 'valid_to')
+                    if options.get(bound) and not any(
+                        _same_instant(row.get('_' + bound), options[bound])
+                        for row in rows)]
+                read = bool(rows) and not missing and not mismatched
                 return self._observed(
-                    bool(rows) and not missing,
-                    'xtdb_table_document_read' if rows and not missing
+                    read, 'xtdb_table_document_read' if read
                     else 'xtdb_table_document_not_read',
-                    {'missing_columns': missing})
+                    {'missing_columns': missing,
+                     'valid_time_not_read': mismatched})
             if operation == 'erase' and kind in {
                     'table', 'document', 'entity'} and native.get('table'):
                 target = _qualified(

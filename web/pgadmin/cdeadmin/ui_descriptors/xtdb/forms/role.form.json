@@ -64,5 +64,5 @@
       ]
     }
   ],
-  "notes": "Hand-written for providers/xtdb/client.py. The post-state check reads pg_catalog.pg_user: a new user must be listed, and a password change must change the stored hash (compared by digest; the hash is never returned)."
+  "notes": "Hand-written for providers/xtdb/client.py. The post-state check reads pg_catalog.pg_user: a new user must be listed, and a password change must change the stored hash (compared by a SHA-256 digest of it; the hash is never returned, but the digest taken before the change is in the operation's result)."
 }

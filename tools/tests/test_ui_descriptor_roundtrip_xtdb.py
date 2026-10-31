@@ -16,7 +16,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -33,7 +33,9 @@ if not SETTINGS:
     pytest.skip('CDEADMIN_ROUNDTRIP_XTDB is not set',
                 allow_module_level=True)
 
-from pgadmin.cdeadmin.providers.xtdb.client import XTDBClient  # noqa: E402
+from pgadmin.cdeadmin.providers.xtdb.provider import (  # noqa: E402
+    PROFILE, create_provider,
+)
 from ui_descriptor_roundtrip import (  # noqa: E402
     backend_draft, engine_operations, operation_backend_draft,
     operation_draft, record_draft, record_from_resource, resolved_form,
@@ -77,7 +79,19 @@ def live():
         'healthz_url': f"http://{SETTINGS['host']}:"
                        f"{int(SETTINGS['healthz_port'])}",
         'principal_reference': 'rt'}
-    return route, XTDBClient(acquire)
+    # The client the UI gets: create_provider's XTDBNativeClient.
+    context = SimpleNamespace(
+        endpoint_id=str(uuid.uuid4()), session_namespace='rt-xtdb',
+        pool_namespace='rt-xtdb', cache_namespace='rt-xtdb',
+        provider_id=PROFILE.provider_id, profile_id=PROFILE.profile_id,
+        profile_version=PROFILE.exact_version, provider_version='0.2.0')
+    client = create_provider(context, SimpleNamespace(
+        acquire_secret=acquire, require=lambda *_args: None,
+        allows=lambda *_args: True)).client
+    try:
+        yield route, client
+    finally:
+        client.close()
 
 
 def run(client, route, kind, operation, draft, target=None):
@@ -144,7 +158,9 @@ def test_table_create_from_document_reopen_erase(live):
             {'name': 'tags', 'value_type': 'nested',
              'value': '{"bin": "A4"}'}],
         'valid_from': '2026-01-01T00:00:00Z', 'valid_to': ''}))
+    # Confirmed only if the valid-from instant read back as sent.
     assert observed['confirmed'], observed
+    assert observed['observation']['valid_time_not_read'] == []
     target, after = record(client, route, 'table', name, 'table')
     types = {row['name']: row['type'] for row in after['columns']
              if not row['temporal']}

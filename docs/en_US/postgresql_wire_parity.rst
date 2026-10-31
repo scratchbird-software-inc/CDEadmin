@@ -761,7 +761,9 @@ back, by any engine method.
    pg_catalog/pg_user"). ``pg_user.passwd`` returns each user's argon2id
    hash to any client; the provider reads only the name and the superuser
    flag. A password change is confirmed by comparing a digest of the
-   stored hash before and after, and the hash itself is never returned.
+   stored hash before and after. The hash itself is never returned; the
+   SHA-256 digest taken before the change is in the operation's result,
+   which the operation record shows.
 -  The default authentication rule is TRUST for every connection
    (``core/src/main/kotlin/xtdb/api/Authenticator.kt`` ``DEFAULT_RULES``),
    and the demo uses it. A wrong password logged in, and
@@ -785,13 +787,15 @@ back, by any engine method.
    ``information_schema.columns``. The provider had no post-state check;
    it now reads back attach and detach (snapshot token), a new user
    (``pg_user``), a password change (stored-hash digest), table create
-   (the document and its columns) and erase (no version remains, ``FOR ALL
-   VALID_TIME FOR ALL SYSTEM_TIME``). The check sets the write's await
+   (the document, its columns and any valid-from or valid-to instant it
+   was given) and erase (no version remains, ``FOR ALL VALID_TIME FOR ALL
+   SYSTEM_TIME``). The check sets the write's await
    token first, so it reads its own write.
 -  Descriptor folder ``ui_descriptors/xtdb`` (beta-engine gate lists).
    Table and role forms are ``complete``, and so is Erase on a table,
    after live round trips (``tools/tests/test_ui_descriptor_roundtrip_
-   xtdb.py``, three runs). The database form is a draft, as above. Erase
+   xtdb.py``, through ``create_provider``'s client, as the UI gets it;
+   passed on repeated runs). The database form is a draft, as above. Erase
    from the document and entity kinds is untested (draft): it is the same
    provider path. Finishing a transaction block (``POST /system/
    finish-block``) is untested (draft): no query reports the block index,
