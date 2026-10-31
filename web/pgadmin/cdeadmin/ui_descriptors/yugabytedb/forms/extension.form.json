@@ -1,0 +1,67 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "extension"
+  ],
+  "status": "complete",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Extension name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "help": "One of pg_available_extensions on the server (66 on the 2025.2.2.2 demo, among them vector, pg_cron, pg_partman, documentdb and hll)."
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON EXTENSION"
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "Definition",
+      "control": "reference",
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "help": "WITH SCHEMA at install; afterwards SET SCHEMA, for relocatable extensions only."
+    },
+    {
+      "field_id": "version",
+      "label": "Version",
+      "tab": "Definition",
+      "control": "text",
+      "help": "Empty: the default version. Afterwards ALTER EXTENSION UPDATE TO a version this one has an update path to (the record lists them). YugabyteDB spells its own versions, for example 1.8-yb-1.0."
+    },
+    {
+      "field_id": "cascade",
+      "label": "Install dependencies",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": false,
+      "editable_after_create": false,
+      "help": "CASCADE: also install extensions this one requires."
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Choosing from the server's available extensions and versions",
+      "reason": "The form offers text; a server-fed choice list needs a catalog-driven options source",
+      "tracking": "ui-unification"
+    },
+    {
+      "concept": "DROP EXTENSION ... CASCADE",
+      "reason": "Drop removes the extension alone; dependent objects make it fail",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "notes": "YugabyteDB extensions; providers/yugabytedb/extensions.py, replacing the provider's create-only form. The record reads version, schema, relocatable, comment and update_versions (pg_extension_update_paths from the installed version). Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
+}

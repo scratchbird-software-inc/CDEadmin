@@ -219,11 +219,17 @@
           "mutation_class": "write"
         },
         {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/extension.form.json"
     },
     {
       "resource_kind": "table",

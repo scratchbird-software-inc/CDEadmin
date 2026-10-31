@@ -1410,7 +1410,7 @@
         {"resource_kind": "function", "title": "Function", "operation_profile": "definition", "exclude_operations": ["alter", "rename"]},
         {"resource_kind": "procedure", "title": "Procedure", "operation_profile": "definition", "exclude_operations": ["alter", "rename"]},
         {"resource_kind": "trigger", "title": "Trigger", "operation_profile": "definition", "exclude_operations": ["alter", "rename"]},
-        {"resource_kind": "extension", "title": "Extension", "operation_profile": "definition", "exclude_operations": ["alter", "rename"]},
+        {"resource_kind": "extension", "title": "Extension", "operation_profile": "definition", "exclude_operations": ["rename"]},
         {"resource_kind": "partition", "title": "Partition", "operation_profile": "read_only"},
         {"resource_kind": "tablespace", "title": "Placement tablespace", "operation_profile": "definition", "exclude_operations": ["rename"]},
         {"resource_kind": "tablet", "title": "Tablet", "operation_profile": "topology"},

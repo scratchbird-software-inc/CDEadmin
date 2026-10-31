@@ -856,3 +856,41 @@ def test_placement_tablespaces(live):
         query('DROP TABLE IF EXISTS public.placed')
         query(f'DROP TABLESPACE IF EXISTS {space}', 'yugabyte')
         query(f'DROP ROLE IF EXISTS {owner}', 'yugabyte')
+
+
+def test_extensions(live):
+    route, client = live
+    form = resolved_form('yugabytedb', 'engine_object:extension')
+    query('CREATE SCHEMA ext')
+    run(client, route, 'extension', 'create', backend_draft(form, {
+        'name': 'hstore', 'schema': 'ext', 'version': '1.5',
+        'comment': 'key-value'}))
+    run(client, route, 'extension', 'create', backend_draft(form, {
+        'name': 'earthdistance', 'cascade': True}))
+    target, baseline = record(client, route, 'extension', 'hstore',
+                              'engine_object:extension')
+    assert (baseline['schema'], baseline['version'],
+            baseline['comment']) == ('ext', '1.5', 'key-value')
+    assert target['native']['update_versions'] == ['1.5-yb-1.0',
+                                                   '1.8-yb-1.0']
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    assert 'no update path' in refused('extension', 'alter', {
+        'version': '1.4'}, target)
+    run(client, route, 'extension', 'alter', backend_draft(form, {
+        **baseline, 'version': '1.8-yb-1.0', 'schema': 'public',
+        'comment': ''}, mode='alter', baseline=baseline), target=target)
+    target, after = record(client, route, 'extension', 'hstore',
+                           'engine_object:extension')
+    assert (after['schema'], after['version'], after['comment']) == (
+        'public', '1.8-yb-1.0', None)
+    assert query("SELECT 'a=>1'::hstore -> 'a'") == [('1',)]
+    assert {'cube', 'earthdistance'} <= {
+        row['display_name'] for row in resources(client, route)
+        if row['resource_kind'] == 'extension'}
+    for name in ('earthdistance', 'cube', 'hstore'):
+        run(client, route, 'extension', 'drop', {'confirmation': name},
+            target=find(client, route, 'extension', name)[0])
+    assert not query("SELECT 1 FROM pg_extension WHERE extname IN "
+                     "('hstore', 'cube', 'earthdistance')")
+    query('DROP SCHEMA ext')

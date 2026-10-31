@@ -483,6 +483,18 @@ without gaps; the editor says so before sending. It accepts unknown
 placement keys and ``LOCATION`` without effect, so neither is sent. The
 JSON-control cap drops to 304.
 
+Extensions have a ``complete`` engine-object form
+(``providers/yugabytedb/extensions.py``), replacing the provider's
+create-only form: install with schema, version, dependencies
+(``CASCADE``) and comment; afterwards ``ALTER EXTENSION UPDATE TO``, ``SET
+SCHEMA`` (relocatable extensions only) and the comment. YugabyteDB spells
+its own versions (``1.8-yb-1.0``), so the record lists the versions the
+installed one has an update path to (``pg_extension_update_paths``) and
+the editor refuses any other. 66 extensions are available on the demo,
+among them ``vector``, ``pg_cron``, ``pg_partman``, ``documentdb``,
+``orafce`` and ``hll``; the form takes the name as text, since a
+server-fed choice list needs a catalog-driven options source.
+
 Provider finding, 2026-10-30: the shared relational apply runs a plan in
 one transaction, and YugabyteDB refuses ``CREATE DATABASE`` and ``CREATE
 TABLESPACE`` there ("cannot run inside a transaction block"), so the

@@ -21,8 +21,8 @@ from ..distributed_sql import (
     sql_administration,
 )
 from . import (
-    databases, indexes as index_sql, objects, policies, routines, sequences,
-    tables as tables_sql, tablespaces, types, views,
+    databases, extensions, indexes as index_sql, objects, policies,
+    routines, sequences, tables as tables_sql, tablespaces, types, views,
 )
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
@@ -101,7 +101,8 @@ _YSQL_SUPPORTED.update({
     'procedure': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # alter: CREATE OR REPLACE, rename, enable, comment (objects.py).
     'trigger': frozenset({'inspect', 'create', 'alter', 'drop'}),
-    'extension': frozenset({'inspect', 'create', 'drop'}),
+    # alter: UPDATE TO, SET SCHEMA, comment (providers/yugabytedb/extensions).
+    'extension': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # Row-level security policies (providers/yugabytedb/policies).
     'row-policy': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # Partition bounds are part of CREATE TABLE in YSQL. Until the table form
@@ -150,7 +151,7 @@ class YugabyteDBAdministration(RelationalAdministration):
             kind in {'table', 'index', 'type', 'domain', 'view',
                      'materialized-view', 'sequence', 'function',
                      'procedure', 'database', 'row-policy',
-                     'tablespace'} and
+                     'tablespace', 'extension'} and
             operation in {'create', 'alter'}) or (
             # Dropped by signature (overloads share a name) or by table.
             operation == 'drop' and kind in {'function', 'procedure',
@@ -160,6 +161,11 @@ class YugabyteDBAdministration(RelationalAdministration):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if request['resource_kind'] == 'extension':
+            if request['operation_id'] == 'create':
+                return {'statements': extensions.create(self, draft)}
+            return {'statements': extensions.alter(
+                self, draft, request.get('target_resource'))}
         if request['resource_kind'] == 'tablespace':
             if request['operation_id'] == 'create':
                 return {'statements': tablespaces.create(self, draft)}
@@ -301,18 +307,8 @@ class YugabyteDBAdministration(RelationalAdministration):
                 ],
                 'notes': 'Checks are a descriptor grid (type.form.json).',
             }
-        if operation == 'create' and kind == 'extension':
-            return {
-                'form_id': 'extension.create',
-                'title': 'Install YSQL extension',
-                'fields': [
-                    self._field('name', 'Extension name', 'text', True),
-                    self._field('schema', 'Install schema', 'text'),
-                    self._field('version', 'Version', 'text'),
-                    self._field('cascade', 'Install dependencies', 'boolean',
-                                default=False),
-                ],
-            }
+        if kind == 'extension' and operation in {'create', 'alter'}:
+            return extensions.form(self._field, operation)
         if kind == 'tablespace' and operation in {'create', 'alter'}:
             return tablespaces.form(self._field, operation)
         return super()._form(kind, operation)
@@ -350,22 +346,6 @@ class YugabyteDBAdministration(RelationalAdministration):
         options = draft.get('options') or {}
         name = self._identifier(draft['name'])
         qualified = self._new_object_name(name, options)
-        if kind == 'extension':
-            source = f'CREATE EXTENSION {self._quote(name)}'
-            schema = options.get('schema')
-            version = options.get('version')
-            clauses = []
-            if schema:
-                clauses.append('SCHEMA ' + self._quote(
-                    self._identifier(schema)
-                ))
-            if version:
-                clauses.append('VERSION ' + self._literal(str(version)))
-            if options.get('cascade'):
-                clauses.append('CASCADE')
-            if clauses:
-                source += ' WITH ' + ' '.join(clauses)
-            return [{'source': source, 'parameters': ()}]
         return super()._compile_create(request)
 
     def supports(self, resource_kind, operation_id):
@@ -715,14 +695,23 @@ def _extras(cursor, _request, generation):
             'with_check': None if with_check is None else str(with_check),
             'comment': None if comment is None else str(comment),
         }))
-    for name, version, schema in optional_rows(
-        cursor,
-        'SELECT e.extname, e.extversion, n.nspname '
-        'FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n '
-        'ON n.oid = e.extnamespace ORDER BY e.extname',
-    ):
+    for name, version, schema, relocatable, comment, targets in \
+            optional_rows(
+                cursor,
+                'SELECT e.extname, e.extversion, n.nspname, '
+                "e.extrelocatable, obj_description(e.oid, 'pg_extension'), "
+                # The versions this one has an update path to.
+                '(SELECT array_agg(p.target ORDER BY p.target) '
+                'FROM pg_catalog.pg_extension_update_paths(e.extname) p '
+                'WHERE p.source = e.extversion AND p.path IS NOT NULL) '
+                'FROM pg_catalog.pg_extension e '
+                'JOIN pg_catalog.pg_namespace n '
+                'ON n.oid = e.extnamespace ORDER BY e.extname'):
         values.append(resource('extension', [], name, generation, {
             'version': str(version), 'schema': str(schema),
+            'relocatable': bool(relocatable),
+            'comment': None if comment is None else str(comment),
+            'update_versions': [str(item) for item in targets or ()],
         }))
     for schema, parent, child, bound in optional_rows(
         cursor,
