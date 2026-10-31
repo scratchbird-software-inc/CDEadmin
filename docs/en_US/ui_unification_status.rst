@@ -972,7 +972,11 @@ Later on 2026-10-31 the database, index and role forms also became
 ``complete`` after live round trips; the sentence above describes the first
 commit only. Database unload and load remain drafts: while any database is
 unloaded, immudb 1.11.0 cannot list databases (see
-:ref:`postgresql_wire_parity`).
+:ref:`postgresql_wire_parity`). (Owner decision later the same day: keep
+unload. The endpoint now lists the metrics endpoint's databases, each
+checked with ``/db/use``, while one is unloaded; unload, load and a new
+server-level "Load database by name" are ``complete`` after a live round
+trip.)
 
 XTDB descriptor folder, 2026-10-31
 ----------------------------------

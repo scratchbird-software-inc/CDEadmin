@@ -291,8 +291,18 @@ CONTROL_OPERATIONS = (
     ),
     ControlPlaneOperation(
         'database', 'unload', 'Unload database', 'destructive',
-        'topology_admin', impact_scope='cluster', long_running=True,
-        post_state_required=False
+        'topology_admin', impact_scope='cluster', long_running=True
+    ),
+    # By typed name: while a database is unloaded immudb 1.11.0 cannot
+    # list databases, and the metrics endpoint names only those seen
+    # since the server started.
+    ControlPlaneOperation(
+        'server', 'load_database', 'Load database by name', 'admin',
+        'topology_admin', (
+            cp_field('name', 'Database name', 'text', True,
+                     max_length=128, pattern=_NAME_PATTERN),
+        ), target_required=False, impact_scope='cluster',
+        long_running=True
     ),
     ControlPlaneOperation(
         'database', 'drop', 'Delete database permanently', 'destructive',
@@ -583,6 +593,15 @@ CONTROL_OPERATIONS = (
 )
 
 
+# Prometheus labels naming a database (1.11.0 metrics endpoint).
+_METRICS_DATABASE = re.compile(r'\bdb="([^"\\]{1,128})"')
+
+
+def _closed(error):
+    """Whether immudb refused because a database is unloaded."""
+    return 'already closed' in str(error)
+
+
 def _target_name(request, label):
     target = request.get('target_resource')
     if not isinstance(target, Mapping):
@@ -765,6 +784,9 @@ def _compile_control(request):
     api_version = 1
     if kind == 'server' and operation == 'health':
         method, path, body = 'GET', '/health', None
+    elif kind == 'server' and operation == 'load_database':
+        path = '/db/load'
+        body = {'database': _name(draft.get('name'), 'database')}
     elif kind == 'database':
         name = _name(draft.get('name'), 'database') if (
             operation == 'create'
@@ -1122,6 +1144,19 @@ def _compile_control(request):
                     'replicationSettings', {}).get('primaryPassword')
             ),
         },
+        'warnings': [
+            'While any database is unloaded, immudb 1.11.0 cannot list '
+            'databases or report server information, whichever client '
+            'unloaded it. CDEadmin then lists the databases the metrics '
+            'endpoint names, without their settings, until every database '
+            'is loaded again. Unloading the database this endpoint '
+            'connects to also stops its tables, keys and documents being '
+            'read here until it is loaded.' + (
+                ' Delete unloads first: if the delete then fails, the '
+                'database stays unloaded; load it again from the navigator '
+                'or with Load database by name.' if operation == 'drop'
+                else '')
+        ] if kind == 'database' and operation in {'unload', 'drop'} else [],
         'impact': {
             'scope': (
                 'database' if kind in {
@@ -1448,7 +1483,43 @@ def _mapping_contains(actual, expected):
 
 def _post_validate(client, request):
     plan, route, _compiled = _parts(request)
-    observation = _inspect_control(client, request)
+    operation = plan['operation_id']
+    if operation in {'load', 'unload', 'load_database'}:
+        # Read per database: the list fails while any is unloaded.
+        name = (plan.get('draft') or {}).get('name') if (
+            operation == 'load_database') else (
+            plan.get('target_resource', {}).get('display_path') or [None])[-1]
+        state = client.database_state(route, _name(name, 'database'))
+        return {
+            'confirmed': state is (operation != 'unload'),
+            'observation': {'database': name, 'loaded': state},
+            'provider_finality_authority': True,
+        }
+    try:
+        observation = _inspect_control(client, request)
+    except RelationalClientError as error:
+        if not (_closed(error) and plan['resource_kind'] == 'database' and
+                operation in {'create', 'drop', 'update_settings'}):
+            raise
+        if operation == 'update_settings':
+            # Settings are read only from the list.
+            return {
+                'confirmed': False,
+                'observation': {'database_list_unread': str(error)},
+                'provider_finality_authority': True,
+            }
+        # Another database is unloaded, so the list fails; a created or
+        # deleted database still answers /db/use (live, 1.11.0).
+        name = (plan.get('draft') or {}).get('name') if (
+            operation == 'create') else (
+            plan.get('target_resource', {}).get('display_path') or [None])[-1]
+        state = client.database_state(route, _name(name, 'database'))
+        return {
+            'confirmed': (state is not None) == (operation == 'create'),
+            'observation': {'database': name, 'loaded': state,
+                            'database_list_unread': str(error)},
+            'provider_finality_authority': True,
+        }
     document = observation['provider_observation'].get('document')
     operation = plan['operation_id']
     draft = plan.get('draft', {})
@@ -2106,6 +2177,97 @@ class ImmudbDBAPIClient(ImmudbNativeMixin, PsycopgPoolDBAPIClient):
             'automatic_mutation_retry': False,
         }
 
+    def _server_version(self, route):
+        """(version, started_at) from /serverinfo, or /health while a
+        database is unloaded: 1.11.0's /serverinfo then fails "already
+        closed" too, and /health still reports 1.11.0-<commit> (live)."""
+        try:
+            info = self._request(route, 'GET', '/serverinfo')
+            return str(info.get('version') or ''), info.get('startedAt')
+        except RelationalClientError as error:
+            if not _closed(error):
+                raise
+        health = self._request(route, 'GET', '/health')
+        return str(health.get('version') or '').split('-', 1)[0], None
+
+    def _metrics_databases(self, route):
+        """Database names on the metrics endpoint (db="..." labels)."""
+        host = str(route.get('web_host') or route.get('host') or '')
+        try:
+            port = int(route.get('metrics_port') or 9497)
+        except (TypeError, ValueError):
+            raise RelationalClientError(
+                'immudb metrics port is invalid') from None
+        if not host or any(character in host for character in '/?#@') or \
+                not 1 <= port <= 65535:
+            raise RelationalClientError('immudb metrics route is invalid')
+        try:
+            with self._opener(urllib.request.Request(
+                    f'http://{host}:{port}/metrics', method='GET'),
+                    timeout=float(route.get('web_timeout', 30))) as response:
+                payload = response.read(self.MAX_REST_BYTES + 1)
+        except (OSError, urllib.error.URLError) as exc:
+            raise RelationalClientError(
+                f'immudb metrics request failed ({type(exc).__name__})'
+            ) from None
+        if len(payload) > self.MAX_REST_BYTES:
+            raise RelationalClientError(
+                'immudb metrics response exceeds limit')
+        return set(_METRICS_DATABASE.findall(
+            payload.decode('utf-8', errors='replace')))
+
+    def database_state(self, route, name, token=None):
+        """True loaded, False unloaded, None absent: by /db/use, which
+        answers per database while the list cannot (1.11.0, live)."""
+        try:
+            self._request(route, 'GET', '/db/use/' + urllib.parse.quote(
+                name, safe=''), token=token or self._login(route))
+            return True
+        except RelationalClientError as error:
+            if _closed(error):
+                return False
+            if 'does not exist' in str(error):
+                return None
+            raise
+
+    def _database_records(self, route, connected):
+        """The native database list, or, while a database is unloaded,
+        the databases the metrics endpoint names, each checked by
+        /db/use."""
+        try:
+            return list(self.rest_admin(route, 'POST', '/db/list/v2', {})[
+                'document'].get('databases') or [])
+        except RelationalClientError as error:
+            if not _closed(error):
+                raise
+        reason = (
+            'immudb 1.11.0 cannot list databases while one is unloaded '
+            '(/db/list/v2 fails "already closed"). These are the databases '
+            'the metrics endpoint names, each checked with /db/use; '
+            'settings cannot be read until every database is loaded')
+        names = {connected}
+        try:
+            names |= self._metrics_databases(route)
+        except RelationalClientError as error:
+            reason += (f'. The metrics endpoint could not be read ({error}), '
+                       'so only the connected database was checked')
+        token = self._login(route)
+        found, unchecked = [], []
+        for name in sorted(names - {'systemdb'}):
+            try:
+                state = self.database_state(route, name, token)
+            except RelationalClientError:
+                # e.g. a database this user may not use: leave it out
+                # rather than fail the whole catalog.
+                unchecked.append(name)
+                continue
+            if state is not None:
+                found.append((name, state))
+        if unchecked:
+            reason += ('. Not checked, so not shown: ' + ', '.join(unchecked))
+        return [{'name': name, 'loaded': state,
+                 'database_list_unread': reason} for name, state in found]
+
     def _table_facts(self, route, database):
         """Column defaults and checks from the catalog log, or why not.
 
@@ -2113,8 +2275,7 @@ class ImmudbDBAPIClient(ImmudbNativeMixin, PsycopgPoolDBAPIClient):
         layouts are that version's own, so another version is unread.
         """
         try:
-            version = str(self._request(route, 'GET', '/serverinfo').get(
-                'version') or '')
+            version, _started = self._server_version(route)
             if version != catalog_log.SUPPORTED_VERSION:
                 return (f'immudb {version or "of unknown version"}: the '
                         'catalog log layout is read for '
@@ -2154,10 +2315,12 @@ class ImmudbDBAPIClient(ImmudbNativeMixin, PsycopgPoolDBAPIClient):
         database = str(
             route.get('database') or route.get('dbname') or 'defaultdb'
         )
-        databases = self.rest_admin(
-            route, 'POST', '/db/list/v2', {}
-        )['document']
-        for database_item in databases.get('databases', []):
+        records = self._database_records(route, database)
+        connected_loaded = next((
+            item.get('loaded') is not False for item in records
+            if isinstance(item, Mapping) and item.get('name') == database),
+            True)
+        for database_item in records:
             if not isinstance(database_item, Mapping):
                 continue
             name = database_item.get('name')
@@ -2240,6 +2403,11 @@ class ImmudbDBAPIClient(ImmudbNativeMixin, PsycopgPoolDBAPIClient):
                     },
                 )
                 values[item['resource_id']] = item
+        if not connected_loaded:
+            # The connected database is unloaded: every native call on it
+            # fails "already closed" (live, 1.11.0), so its keys, documents
+            # and catalog-log facts are not read until it is loaded.
+            return list(values.values())
         tables_held = [item for item in values.values()
                        if item.get('resource_kind') == 'table']
         if tables_held:
@@ -2446,14 +2614,13 @@ class ImmudbDBAPIClient(ImmudbNativeMixin, PsycopgPoolDBAPIClient):
                 raise RelationalClientError(
                     'PostgreSQL wire endpoint is not immudb')
             route = self._route(request)
-            info = self._request(route, 'GET', '/serverinfo')
-            version = str(info.get('version') or '')
+            version, started = self._server_version(route)
             if re.fullmatch(r'\d+\.\d+\.\d+', version) is None:
                 raise RelationalClientError('immudb version is unavailable')
             return {
                 'engine_id': PROFILE.engine_id,
                 'version': version,
-                'build_id': f'immudb:{version}:{info.get("startedAt")}',
+                'build_id': f'immudb:{version}:{started}',
                 'protocol_id': PROFILE.protocol_id,
             }
         finally:

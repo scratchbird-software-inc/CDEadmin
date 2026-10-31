@@ -4,7 +4,8 @@ descriptor fields -> provider plan -> apply on a live server -> re-inspect.
 Owner direction 2026-10-29: immudb reaches full parity with the beta
 engines including its native features; 2026-10-31: offer only what can be
 read back, by any engine method. Set ``CDEADMIN_ROUNDTRIP_IMMUDB`` to a
-JSON object ``{"host", "port", "web_port", "user", "password"}`` for the
+JSON object ``{"host", "port", "web_port", "user", "password"}`` (and
+``"metrics_port"``, default 9497) for the
 demo server (`dev.sh start immudb`). The test creates its own databases
 and removes them (native unload and delete). immudb keeps every user, so
 each run leaves one deactivated rt_user_* user. Skipped otherwise.
@@ -84,6 +85,7 @@ def sql(client, route, statement):
 def live():
     route = {'host': SETTINGS['host'], 'port': int(SETTINGS['port']),
              'web_port': int(SETTINGS['web_port']),
+             'metrics_port': int(SETTINGS.get('metrics_port', 9497)),
              'user': SETTINGS['user'], 'database': DATABASE,
              'sslmode': 'disable', 'credential_reference_id': 'rt',
              'principal_reference': 'rt'}
@@ -324,11 +326,30 @@ def test_database_create_reopen_settings_drop(live):
         assert 'can not be changed after database creation' in refused(
             client, route, 'database', 'update_settings',
             {'max_value_length': 2048}, target)
-        # Not exercised: unload and load. Live, 1.11.0: while any database
-        # is unloaded the server cannot list databases ("already closed"
-        # from /db/list, /db/list/v2 and DATABASES()), so neither the
-        # unload's post-state nor the catalog can be read until it is
-        # loaded again (pkg/server/server.go DatabaseListV2).
+        # Unload and load. Live, 1.11.0: while any database is unloaded the
+        # server cannot list databases ("already closed" from /db/list,
+        # /db/list/v2 and DATABASES(), pkg/server/server.go
+        # DatabaseListV2), nor answer /serverinfo. The catalog then lists
+        # the databases the metrics endpoint names, checked by /db/use.
+        operate(client, route, 'database', 'unload', {}, target,
+                confirmation=name)
+        unloaded, rows = find(client, route, 'database', name)
+        assert unloaded['native']['loaded'] is False
+        assert 'cannot list databases' in unloaded['native'][
+            'database_list_unread']
+        # The rest of the endpoint's catalog is still read.
+        assert any(row['resource_kind'] == 'user' for row in rows)
+        operate(client, route, 'database', 'load', {}, unloaded)
+        loaded, _ = find(client, route, 'database', name)
+        assert loaded['native']['loaded'] is True
+        assert 'database_list_unread' not in loaded['native']
+        # Load by typed name, for a database the navigator cannot show.
+        operate(client, route, 'database', 'unload', {}, loaded,
+                confirmation=name)
+        operate(client, route, 'server', 'load_database', {'name': name},
+                find(client, route, 'server', 'immudb')[0])
+        assert find(client, route, 'database', name)[0]['native'][
+            'max_concurrency'] == 20
     finally:
         names = [row['display_name'] for row in client.list_resources(
             {'route': dict(route)}) if row['resource_kind'] == 'database']
@@ -337,3 +358,27 @@ def test_database_create_reopen_settings_drop(live):
                 find(client, route, 'database', name)[0])
     assert name not in [row['display_name'] for row in client.list_resources(
         {'route': dict(route)}) if row['resource_kind'] == 'database']
+
+
+def test_unload_and_load_the_connected_database(live):
+    route, client = live
+    target, _ = find(client, route, 'database', DATABASE)
+    operate(client, route, 'database', 'unload', {}, target,
+            confirmation=DATABASE)
+    try:
+        # Still listed: marked unloaded; its own keys are not read.
+        unloaded, rows = find(client, route, 'database', DATABASE)
+        assert unloaded['native']['loaded'] is False
+        assert not [row for row in rows if row['resource_kind'] == 'key']
+        # Create and delete still confirm while the list cannot be read.
+        side = f'rt_side_{UNIQUE}'
+        form = resolved_form('immudb', 'database')
+        run(client, route, 'database', 'create', backend_draft(
+            form, {'name': side, 'autoload': True}))
+        run(client, route, 'database', 'drop', {'confirmation': side},
+            find(client, route, 'database', side)[0])
+    finally:
+        operate(client, route, 'database', 'load', {},
+                find(client, route, 'database', DATABASE)[0])
+    assert find(client, route, 'database', DATABASE)[0]['native'][
+        'loaded'] is True

@@ -11,7 +11,7 @@
     {"engine": "duckdb", "name": "Local DuckDB Demo", "database": "${DEMO_ROOT}/data/cdeadmin_demo.duckdb"},
     {"engine": "firebird", "name": "localhost", "port": 53050, "database": "/var/lib/firebird/data/cdeadmin_demo.fdb", "database_create_root": "/var/lib/firebird/data", "user": "SYSDBA", "password": "CDEadminDemo-2026!"},
     {"engine": "foundationdb", "name": "Local FoundationDB Demo", "port": 54500, "database": "default", "cluster_file": "${DEMO_ROOT}/runtime/fdb.cluster", "fdbcli_path": "${DEMO_ROOT}/runtime/foundationdb/bin/fdbcli", "fdbbackup_path": "${DEMO_ROOT}/runtime/foundationdb/bin/fdbbackup", "fdbrestore_path": "${DEMO_ROOT}/runtime/foundationdb/bin/fdbrestore"},
-    {"engine": "immudb", "name": "Local immudb Demo", "port": 55435, "native_port": 53322, "http_port": 58082, "database": "cdeadmin_demo", "user": "immudb", "password": "immudb"},
+    {"engine": "immudb", "name": "Local immudb Demo", "port": 55435, "native_port": 53322, "http_port": 58082, "metrics_port": 59497, "database": "cdeadmin_demo", "user": "immudb", "password": "immudb"},
     {"engine": "influxdb", "name": "Local InfluxDB Demo", "port": 58181, "database": "cdeadmin_demo", "auth_mode": "disabled_local_demo"},
     {"engine": "mariadb", "name": "Local MariaDB Demo", "port": 53307, "database": "cdeadmin_demo", "user": "cdeadmin_demo", "password": "CDEadminDemo-2026!", "tool_workspace": "${DEMO_ROOT}/runtime/tool_workspaces/mariadb"},
     {"engine": "milvus", "name": "Local Milvus Demo", "port": 59530, "database": "cdeadmin_demo", "user": "root", "password": "CDEadminDemo-2026!"},

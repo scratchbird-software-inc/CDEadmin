@@ -715,7 +715,36 @@ by any engine method.
    deleting the leftover databases. The metrics endpoint keeps every
    database seen since the server started, deleted ones included, so it
    cannot stand in. Unload and load stay draft, untested, pending an owner
-   decision.
+   decision. (Owner decision later on 2026-10-31: keep unload. Done the
+   same day. ``/serverinfo`` also fails "already closed" while a database
+   is unloaded, which had taken down the whole endpoint's catalog, not
+   only the database list. The provider now reads the version from
+   ``/health``, which still answers (``1.11.0-<commit>``). When the list
+   fails, it takes the database names the metrics endpoint gives (new
+   optional ``metrics_port`` connection field, default 9497) and checks
+   each with ``/db/use``. That call succeeds for a loaded database, fails
+   "already closed" for an unloaded one and "does not exist" for a deleted
+   one, so the deleted names the metrics keep are filtered out, and an
+   unloaded database is shown, marked unloaded, without settings, and can
+   be loaded from the navigator. A name ``/db/use`` refuses for another
+   reason is left out and named in the notice. If the connected database
+   is the unloaded one, its tables, keys and documents are not read until
+   it is loaded. A server-level "Load database by name" covers a database
+   the metrics do not name. Unload and delete warn before running. Unload
+   and load read back their state by ``/db/use``; so do database create
+   and delete while the list cannot be read. Unload (of another database
+   and of the connected one), load from the navigator and load by name
+   passed live round trips and are ``complete``.)
+-  Left after that work: while any database is unloaded, "Update database
+   settings" cannot confirm its change (settings come only from the list),
+   so it reports the outcome unconfirmed. The metrics read is plain HTTP;
+   behind TLS it fails and only the connected database is checked, with
+   the reason shown. Found on the way: the demo registration
+   (``tools/reference_engine_demos/register_demo_profiles.py``) never set
+   immudb's REST port, so a registered demo endpoint used the default
+   8080 and its native features could not reach the demo's 58082. It now
+   sets the REST and metrics ports; an endpoint registered earlier needs
+   registering again.
 -  The database listing fallback noted for immudb under YugabyteDB:
    ``pg_database`` lists only the connected database. immudb's databases
    come from the native list (``/db/list/v2``), which the provider already

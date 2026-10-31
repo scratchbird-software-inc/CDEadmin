@@ -152,6 +152,12 @@ def route_for(item, host, registration, provider_route_options):
         item.setdefault('vtgate_http_port', item['http_port'])
         item.setdefault('vtgate_http_host', host)
         item.setdefault('vtgate_http_tls_mode', 'disable')
+    if engine == 'immudb':
+        # The REST and metrics ports are connection fields of their own;
+        # the metrics port lists databases while one is unloaded.
+        item.setdefault('web_host', host)
+        item.setdefault('web_port', item['http_port'])
+        item.setdefault('metrics_port', 59497)
     database = item.get("database")
     if database is None:
         database = "default"
