@@ -363,6 +363,11 @@ def require_observation(handle):
     observed = observe(handle)
     if observed is not None:
         return observed
+    # MySQL-wire engines without this observer declare their own source.
+    wire = getattr(handle, '_cdeadmin_wire_language', None)
+    if callable(wire) and not hasattr(
+            handle, '_cdeadmin_session_variable_observer_status'):
+        return wire()
     from .mysql_values import MySQLParameterAdmissionError
     status = getattr(handle, '_cdeadmin_session_variable_observer_status', {})
     status = status if isinstance(status, dict) else {}

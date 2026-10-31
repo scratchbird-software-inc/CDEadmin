@@ -23,6 +23,28 @@ def server_error(exc):
             len(state) == 5)
 
 
+def session_language(handle):
+    """Read the native language on the session itself, as before 2026-10-25.
+
+    Dolt, TiDB and Vitess have no MySQL Performance Schema session observer,
+    so the MySQL family's independent observation cannot be admitted for
+    them. The source is labelled so it is never taken for that observation.
+    """
+    cursor = handle.cursor()
+    try:
+        cursor.execute('SELECT VERSION(), @@SESSION.sql_mode')
+        version, mode = cursor.fetchone()
+    finally:
+        cursor.close()
+    if isinstance(mode, bytes):
+        mode = mode.decode('ascii')
+    if isinstance(version, bytes):
+        version = version.decode('ascii')
+    return {'observation_source': 'mysql-wire-original-session',
+            'original_session_commands_sent': 1, 'version': version,
+            'variables': {'sql_mode': mode}}
+
+
 class CatalogCursor:
     _cde_catalog_isolated = True
 
@@ -170,6 +192,8 @@ class RetainedMySQLWireClient(RelationalDBAPIClient):
             if self._closing:
                 raise ERROR('MySQL-wire owner is closed')
             handle = super()._connect(request)
+            handle._cdeadmin_wire_language = (
+                lambda: session_language(handle))
             self._states[id(handle)] = {}
             self._requests[id(handle)] = copy.deepcopy(request)
             return handle

@@ -48,7 +48,8 @@ PROFILE = PilotProfile(
     (
         'cluster', 'cell', 'keyspace', 'shard', 'tablet', 'vtgate',
         'vttablet', 'vschema', 'database', 'table', 'view', 'column', 'index',
-        'constraint', 'partition', 'sequence', 'vindex', 'routing-rule',
+        'constraint', 'partition', 'sequence', 'procedure', 'vindex',
+        'routing-rule',
         'workflow', 'vreplication-stream', 'replica', 'materialize',
         'online-ddl', 'backup',
     ),
@@ -596,6 +597,14 @@ _CONTROL_ADMINISTRATION = DistributedSQLControlPlane(
 
 class VitessControlAdministration(VitessAdministration):
     """Combine VSchema SQL administration with vtctld control actions."""
+
+    def requires_dialect(self, resource_kind, operation_id):
+        # vtctld work (view drop runs ApplySchema: vtgate's DROP VIEW
+        # leaves the view on every shard) is not SQL dialect text.
+        if _CONTROL_ADMINISTRATION.control_plane.supports(
+                resource_kind, operation_id):
+            return False
+        return super().requires_dialect(resource_kind, operation_id)
 
     def supports(self, resource_kind, operation_id):
         return _CONTROL_ADMINISTRATION.control_plane.supports(
