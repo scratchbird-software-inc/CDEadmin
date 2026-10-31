@@ -6,82 +6,309 @@
     "function",
     "procedure"
   ],
-  "status": "draft",
-  "engine_tab_title": "yugabytedb",
+  "status": "complete",
+  "engine_tab_title": "YugabyteDB",
   "omitted_tabs": [],
   "gaps": [
     {
-      "concept": "function.create.return_parameters",
-      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
-      "tracking": "ui-unification"
+      "concept": "Owner, SET SCHEMA, dependencies on extensions",
+      "reason": "Run on 2025.2.2.2 but have no editor yet",
+      "tracking": "postgresql-wire-parity"
     },
     {
-      "concept": "procedure.create.return_parameters",
-      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
-      "tracking": "ui-unification"
+      "concept": "Aggregates",
+      "reason": "Run on 2025.2.2.2 (probe) but have no editor yet",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Other languages (C, internal, PL/Python)",
+      "reason": "Not offered; only SQL and PL/pgSQL are available on the demo",
+      "tracking": "postgresql-wire-parity"
     }
   ],
   "fields": [
+    {
+      "field_id": "variant",
+      "label": "Kind",
+      "tab": "General",
+      "control": "select",
+      "ui_only": true,
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "function",
+          "label": "Function"
+        },
+        {
+          "value": "procedure",
+          "label": "Procedure"
+        }
+      ]
+    },
     {
       "field_id": "name",
       "label": "Name",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "help": "Renaming runs ALTER ... RENAME TO."
     },
     {
       "field_id": "parent",
-      "label": "Database",
+      "label": "Schema",
       "tab": "General",
       "control": "reference",
-      "required": false,
-      "help": "Use a qualified database or schema name where needed.",
-      "reference_kind": "database"
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "editable_after_create": false
     },
     {
       "field_id": "returns",
       "label": "Return type",
       "tab": "General",
       "control": "text",
-      "required": false
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "editable_after_create": false,
+      "help": "Empty with OUT parameters: record; leave empty for RETURNS TABLE. TRIGGER for a trigger function."
+    },
+    {
+      "field_id": "returns_set",
+      "label": "Returns a set (SETOF)",
+      "tab": "General",
+      "control": "boolean",
+      "default": false,
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "editable_after_create": false
+    },
+    {
+      "field_id": "language",
+      "label": "Language",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "SQL",
+      "options": [
+        {
+          "value": "SQL",
+          "label": "SQL"
+        },
+        {
+          "value": "PLPGSQL",
+          "label": "PL/pgSQL"
+        }
+      ]
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON FUNCTION / PROCEDURE"
     },
     {
       "field_id": "parameters",
-      "label": "Input parameters",
+      "label": "Parameters",
       "tab": "Parameters",
       "control": "grid",
+      "reorderable": true,
+      "editable_after_create": false,
+      "help": "Part of the routine's identity; fixed once created. Table-column rows make a RETURNS TABLE function.",
       "columns": [
         {
+          "field_id": "mode",
+          "label": "Mode",
+          "control": "select",
+          "default": "IN",
+          "options": [
+            {
+              "value": "IN",
+              "label": "In"
+            },
+            {
+              "value": "OUT",
+              "label": "Out"
+            },
+            {
+              "value": "INOUT",
+              "label": "In/out"
+            },
+            {
+              "value": "VARIADIC",
+              "label": "Variadic"
+            },
+            {
+              "value": "TABLE",
+              "label": "Table column"
+            }
+          ]
+        },
+        {
           "field_id": "name",
-          "label": "Parameter name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "type",
+          "label": "Type",
           "control": "text",
           "required": true
         },
         {
-          "field_id": "type",
-          "label": "Native data type",
-          "control": "text",
-          "required": true
+          "field_id": "default",
+          "label": "Default",
+          "control": "text"
         }
-      ],
-      "required": false
-    },
-    {
-      "field_id": "return_parameters",
-      "label": "Output parameters",
-      "tab": "Parameters",
-      "control": "keyvalue",
-      "required": false
+      ]
     },
     {
       "field_id": "body",
-      "label": "Function body",
+      "label": "Body",
       "tab": "Definition",
       "control": "code",
       "language": "sql",
       "required": true,
-      "help": "Enter only the function body, not a CREATE command."
+      "help": "The body only. Changing it runs CREATE OR REPLACE."
+    },
+    {
+      "field_id": "security",
+      "label": "Security",
+      "tab": "Options",
+      "control": "select",
+      "default": "INVOKER",
+      "options": [
+        {
+          "value": "INVOKER",
+          "label": "Invoker"
+        },
+        {
+          "value": "DEFINER",
+          "label": "Definer"
+        }
+      ]
+    },
+    {
+      "field_id": "volatility",
+      "label": "Volatility",
+      "tab": "Options",
+      "control": "select",
+      "default": "VOLATILE",
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "options": [
+        {
+          "value": "IMMUTABLE",
+          "label": "Immutable"
+        },
+        {
+          "value": "STABLE",
+          "label": "Stable"
+        },
+        {
+          "value": "VOLATILE",
+          "label": "Volatile"
+        }
+      ]
+    },
+    {
+      "field_id": "strict",
+      "label": "Strict",
+      "tab": "Options",
+      "control": "boolean",
+      "default": false,
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "help": "STRICT: returns NULL when any argument is NULL."
+    },
+    {
+      "field_id": "leakproof",
+      "label": "Leakproof",
+      "tab": "Options",
+      "control": "boolean",
+      "default": false,
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "help": "Immutable functions only."
+    },
+    {
+      "field_id": "parallel",
+      "label": "Parallel",
+      "tab": "Options",
+      "control": "select",
+      "default": "UNSAFE",
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "options": [
+        {
+          "value": "UNSAFE",
+          "label": "Unsafe"
+        },
+        {
+          "value": "RESTRICTED",
+          "label": "Restricted"
+        },
+        {
+          "value": "SAFE",
+          "label": "Safe"
+        }
+      ]
+    },
+    {
+      "field_id": "cost",
+      "label": "Cost",
+      "tab": "Options",
+      "control": "number",
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "help": "COST: estimated execution cost."
+    },
+    {
+      "field_id": "rows",
+      "label": "Rows",
+      "tab": "Options",
+      "control": "number",
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      },
+      "help": "ROWS: estimated rows of a set-returning function."
+    },
+    {
+      "field_id": "settings",
+      "label": "Settings",
+      "tab": "Engine",
+      "control": "grid",
+      "help": "SET name = value while the routine runs.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Variable",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ]
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database)."
+  "notes": "Started from the CockroachDB routine form (same field ids); providers/yugabytedb/routines.py. A routine resource is named name(argument types); parameters come from pg_get_function_arguments (names, modes, defaults) and RETURNS TABLE columns from pg_get_function_result. Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
 }

@@ -420,6 +420,26 @@ comment and rename. ``pg_sequences`` reports YSQL sequences accurately
 (CockroachDB's does not); a cache below the server's minimum is raised to
 it (``CACHE 10`` read back as 100 on the demo).
 
+The routine form (functions and procedures) is ``complete``
+(``providers/yugabytedb/routines.py``): ``IN`` / ``OUT`` / ``INOUT`` /
+``VARIADIC`` parameters with defaults, ``RETURNS [SETOF]`` or ``RETURNS
+TABLE``, SQL and PL/pgSQL bodies, volatility, ``STRICT``, ``LEAKPROOF``,
+``SECURITY DEFINER``, ``PARALLEL``, ``COST``, ``ROWS``, ``SET`` options,
+comments and rename. Overloads share a name, so a routine's resource is
+now ``name(argument types)`` (before, overloads collided on one name); its
+parameters and return type are its identity and fixed once created, and
+the rest is changed with ``CREATE OR REPLACE``.
+
+Array types were refused by the editor, for routine parameters and table
+columns alike, although YugabyteDB accepts them: the shared type check
+had no brackets. A shared ``_safe_type`` now accepts array suffixes
+(``int[]``, ``text[3][]``) and checks the base type as before; YugabyteDB
+tables and routines use it, and a live test creates array columns and
+changes one's type (``int[]`` to ``bigint[]``; ``text[3][]`` reads back
+as ``text[]``, as PostgreSQL drops declared sizes). CockroachDB's table
+editor still refuses arrays; it moves to ``_safe_type`` when its demo next
+runs, so its narrower array support (no nested arrays) is checked live.
+
 Provider finding, 2026-10-30: the shared relational apply runs a plan in
 one transaction, and YugabyteDB refuses ``CREATE DATABASE`` and ``CREATE
 TABLESPACE`` there ("cannot run inside a transaction block"), so the

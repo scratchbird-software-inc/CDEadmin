@@ -21,8 +21,8 @@ from ..distributed_sql import (
     sql_administration,
 )
 from . import (
-    indexes as index_sql, objects, sequences, tables as tables_sql, types,
-    views,
+    indexes as index_sql, objects, routines, sequences, tables as tables_sql,
+    types, views,
 )
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
@@ -95,8 +95,9 @@ _YSQL_SUPPORTED.update({
     # alter: values, default, comment, rename (providers/yugabytedb/types).
     'domain': frozenset({'inspect', 'create', 'alter', 'rename', 'drop'}),
     'type': frozenset({'inspect', 'create', 'alter', 'rename', 'drop'}),
-    'function': frozenset({'inspect', 'create', 'drop'}),
-    'procedure': frozenset({'inspect', 'create', 'drop'}),
+    # alter: CREATE OR REPLACE, comment, rename (yugabytedb/routines).
+    'function': frozenset({'inspect', 'create', 'alter', 'drop'}),
+    'procedure': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # alter: CREATE OR REPLACE, rename, enable, comment (objects.py).
     'trigger': frozenset({'inspect', 'create', 'alter', 'drop'}),
     'extension': frozenset({'inspect', 'create', 'drop'}),
@@ -135,13 +136,24 @@ class YugabyteDBAdministration(RelationalAdministration):
     def _native_object(kind, operation):
         return operation in objects.OPERATIONS.get(kind, ()) or (
             kind in {'table', 'index', 'type', 'domain', 'view',
-                     'materialized-view', 'sequence'} and
-            operation in {'create', 'alter'})
+                     'materialized-view', 'sequence', 'function',
+                     'procedure'} and
+            operation in {'create', 'alter'}) or (
+            # Dropped by signature: overloads share a name.
+            operation == 'drop' and kind in {'function', 'procedure'})
 
     def _native_compile(self, request):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if request['resource_kind'] in {'function', 'procedure'}:
+            kind, target = request['resource_kind'], request.get(
+                'target_resource')
+            if request['operation_id'] == 'drop':
+                return {'statements': routines.drop(self, kind, target)}
+            if request['operation_id'] == 'create':
+                return {'statements': routines.create(self, kind, draft)}
+            return {'statements': routines.alter(self, kind, draft, target)}
         if request['resource_kind'] == 'sequence':
             if request['operation_id'] == 'create':
                 return {'statements': sequences.create(self, draft)}
@@ -188,6 +200,9 @@ class YugabyteDBAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def _form(self, kind, operation):
+        if kind in {'function', 'procedure'} and operation in {
+                'create', 'alter'}:
+            return routines.form(self._field, kind, operation)
         if kind == 'sequence' and operation in {'create', 'alter'}:
             return sequences.form(self._field, operation)
         if kind in {'view', 'materialized-view'} and operation in {
@@ -599,19 +614,55 @@ def _extras(cursor, _request, generation):
             else str(subtype_diff),
             'comment': comment,
         }))
-    for schema, name, routine_kind, arguments in optional_rows(
+    # Overloads share a name, so a routine's resource is name(argument
+    # types); its record keeps the bare name and the signature apart.
+    for (schema, name, routine_kind, types, arguments, result, names,
+         modes, language, volatility, strict, security, leakproof,
+         parallel, cost, rows, config, body, comment) in optional_rows(
         cursor,
         'SELECT n.nspname, p.proname, p.prokind, '
-        'pg_catalog.pg_get_function_identity_arguments(p.oid) '
+        'oidvectortypes(p.proargtypes), '
+        'pg_catalog.pg_get_function_arguments(p.oid), '
+        'pg_catalog.pg_get_function_result(p.oid), p.proargnames, '
+        'p.proargmodes, l.lanname, p.provolatile, p.proisstrict, '
+        'p.prosecdef, p.proleakproof, p.proparallel, p.procost, p.prorows, '
+        "p.proconfig, p.prosrc, obj_description(p.oid, 'pg_proc') "
         'FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n '
         'ON n.oid = p.pronamespace '
+        'JOIN pg_catalog.pg_language l ON l.oid = p.prolang '
         f'WHERE n.nspname NOT IN {excluded} '
         "AND p.prokind IN ('f', 'p') ORDER BY 1, 2, 4",
     ):
         kind = 'procedure' if str(routine_kind) == 'p' else 'function'
-        values.append(resource(kind, [schema], name, generation, {
-            'identity_arguments': str(arguments),
-        }))
+        signature = str(types or '')
+        returns, returns_set = routines.returns_from(
+            None if result is None else str(result))
+        native = {
+            'name': str(name), 'signature': signature,
+            'identity_arguments': signature, 'parent': str(schema),
+            'parameters': routines.parameters_from(
+                str(arguments or ''), None if result is None
+                else str(result), names, modes),
+            'language': 'PLPGSQL' if str(language) == 'plpgsql' else 'SQL',
+            'security': 'DEFINER' if security else 'INVOKER',
+            'settings': [dict(zip(('name', 'value'),
+                                  str(entry).split('=', 1)))
+                         for entry in config or ()],
+            'body': None if body is None else str(body).strip(),
+            'comment': None if comment is None else str(comment),
+        }
+        if kind == 'function':
+            native.update(
+                returns=returns, returns_set=returns_set,
+                volatility={'i': 'IMMUTABLE', 's': 'STABLE'}.get(
+                    str(volatility), 'VOLATILE'),
+                strict=bool(strict), leakproof=bool(leakproof),
+                parallel={'s': 'SAFE', 'r': 'RESTRICTED'}.get(
+                    str(parallel), 'UNSAFE'),
+                cost=float(cost) if cost is not None else None,
+                rows=float(rows) if rows else None)
+        values.append(resource(kind, [schema], f'{name}({signature})',
+                               generation, native))
     # pg_trigger, one record per trigger (information_schema.triggers has
     # one row per event); WHEN and UPDATE OF from pg_get_triggerdef.
     for (schema, table, name, tgtype, enabled, function_schema, function,

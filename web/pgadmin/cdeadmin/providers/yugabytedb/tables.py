@@ -68,7 +68,7 @@ def column_definition(admin, item):
         raise RelationalClientError(
             'unknown column option: ' + ', '.join(sorted(unknown)))
     parts = [admin._quote(item.get('name')),
-             admin._safe_fragment(item.get('type'), 'column type')]
+             admin._safe_type(item.get('type'), 'column type')]
     if not _blank(item.get('collation')):
         parts.append('COLLATE ' + admin._quote(item['collation']))
     identity = _choice(item.get('identity'), IDENTITY, 'identity')
@@ -299,7 +299,7 @@ def _alter_column(admin, table, name, changes, types=None):
         if _blank(kind):
             raise RelationalClientError(
                 f'column {name}: changing the collation re-states the type')
-        source = head + 'TYPE ' + admin._safe_fragment(kind, 'column type')
+        source = head + 'TYPE ' + admin._safe_type(kind, 'column type')
         if not _blank(changes.get('collation')):
             source += ' COLLATE ' + admin._quote(changes['collation'])
         out.append(source)

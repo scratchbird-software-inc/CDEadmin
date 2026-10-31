@@ -580,3 +580,107 @@ def test_sequence_create_reopen_alter_drop(live):
     run(client, route, 'sequence', 'drop', {'confirmation': 'rt_seq2'},
         target=target)
     assert not query("SELECT 1 FROM pg_class WHERE relname = 'rt_seq2'")
+
+
+def test_functions_and_procedures(live):
+    route, client = live
+    form = resolved_form('yugabytedb', 'routine')
+    run(client, route, 'function', 'create', backend_draft(form, {
+        'variant': 'function', 'name': 'rt_add', 'parent': 'public',
+        'parameters': [{'name': 'a', 'type': 'integer'},
+                       {'name': 'b', 'type': 'integer', 'default': '2'}],
+        'returns': 'integer', 'volatility': 'IMMUTABLE', 'strict': True,
+        'parallel': 'SAFE', 'cost': 5, 'body': 'SELECT a + b',
+        'comment': 'adds'}))
+    run(client, route, 'function', 'create', backend_draft(form, {
+        'variant': 'function', 'name': 'rt_add', 'parent': 'public',
+        'parameters': [{'mode': 'VARIADIC', 'name': 'xs',
+                        'type': 'integer[]'}],
+        'returns': 'integer', 'body': 'SELECT array_length(xs, 1)'}))
+    run(client, route, 'function', 'create', backend_draft(form, {
+        'variant': 'function', 'name': 'rt_rows', 'parent': 'public',
+        'parameters': [{'name': 'n', 'type': 'integer'},
+                       {'mode': 'TABLE', 'name': 'k', 'type': 'integer'},
+                       {'mode': 'TABLE', 'name': 'v', 'type': 'text'}],
+        'rows': 10, 'body': "SELECT g, 'x' FROM generate_series(1, n) g",
+        'settings': [{'name': 'search_path', 'value': 'public'}]}))
+    run(client, route, 'procedure', 'create', backend_draft(form, {
+        'variant': 'procedure', 'name': 'rt_proc', 'parent': 'public',
+        'parameters': [{'mode': 'INOUT', 'name': 'n', 'type': 'integer'}],
+        'language': 'PLPGSQL', 'security': 'DEFINER',
+        'body': 'BEGIN n := n + 1; END'}))
+    names = sorted(row['display_name'] for row in resources(client, route)
+                   if row['resource_kind'] in {'function', 'procedure'} and
+                   row['display_name'].startswith('rt_'))
+    assert names == ['rt_add(integer, integer)', 'rt_add(integer[])',
+                     'rt_proc(integer)', 'rt_rows(integer)']
+    target, baseline = record(client, route, 'function',
+                              'rt_add(integer, integer)', 'routine',
+                              'function')
+    assert ([(row['name'], row['type'], row['default'], row['mode'])
+             for row in baseline['parameters']], baseline['returns'],
+            baseline['volatility'], baseline['strict'],
+            baseline['parallel'], baseline['cost'],
+            baseline['comment']) == (
+        [('a', 'integer', None, 'IN'), ('b', 'integer', '2', 'IN')],
+        'integer', 'IMMUTABLE', True, 'SAFE', 5, 'adds')
+    _, rows = record(client, route, 'function', 'rt_rows(integer)',
+                     'routine', 'function')
+    assert ([(row['mode'], row['name']) for row in rows['parameters']],
+            rows['rows'],
+            [(row['name'], row['value']) for row in rows['settings']]) == (
+        [('IN', 'n'), ('TABLE', 'k'), ('TABLE', 'v')], 10,
+        [('search_path', 'public')])
+    assert query('SELECT count(*) FROM public.rt_rows(3)') == [(3,)]
+    assert query('SELECT public.rt_add(1, 2, 3)') == [(3,)]
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    run(client, route, 'function', 'alter', backend_draft(form, {
+        **baseline, 'body': 'SELECT a * b', 'volatility': 'STABLE',
+        'parallel': 'RESTRICTED', 'comment': '', 'name': 'rt_mul'},
+        mode='alter', baseline=baseline), target=target)
+    assert query('SELECT public.rt_mul(3)') == [(6,)]
+    _, after = record(client, route, 'function', 'rt_mul(integer, integer)',
+                      'routine', 'function')
+    assert (after['volatility'], after['parallel'], after['comment']) == (
+        'STABLE', 'RESTRICTED', None)
+    assert 'identity' in refused('function', 'alter', {'parameters': []},
+                                 find(client, route, 'function',
+                                      'rt_mul(integer, integer)')[0])
+    _, proc = record(client, route, 'procedure', 'rt_proc(integer)',
+                     'routine', 'procedure')
+    assert (proc['security'], proc['parameters'][0]['mode']) == (
+        'DEFINER', 'INOUT')
+    for kind, name in (('function', 'rt_mul(integer, integer)'),
+                       ('function', 'rt_add(integer[])'),
+                       ('function', 'rt_rows(integer)'),
+                       ('procedure', 'rt_proc(integer)')):
+        run(client, route, kind, 'drop', {'confirmation': name},
+            target=find(client, route, kind, name)[0])
+    assert not query("SELECT 1 FROM pg_proc WHERE proname LIKE 'rt\\_%'")
+
+
+def test_array_columns(live):
+    route, client = live
+    form = resolved_form('yugabytedb', 'table')
+    run(client, route, 'table', 'create', backend_draft(form, {
+        'name': 'rt_arr', 'parent': 'public',
+        'columns': [{'name': 'id', 'type': 'int', 'nullable': False},
+                    {'name': 'a', 'type': 'int[]'},
+                    {'name': 'b', 'type': 'text [3][]'}],
+        'primary_key': [{'columns': ['id']}]}))
+    target, baseline = record(client, route, 'table', 'rt_arr', 'table')
+    columns = by_name(baseline['columns'])
+    assert (columns['a']['type'], columns['b']['type']) == (
+        'integer[]', 'text[]')
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    changed = [{**row, 'type': 'bigint[]'} if row['name'] == 'a' else row
+               for row in baseline['columns']]
+    run(client, route, 'table', 'alter', backend_draft(form, {
+        **baseline, 'columns': changed}, mode='alter', baseline=baseline),
+        target=target)
+    _, after = record(client, route, 'table', 'rt_arr', 'table')
+    assert by_name(after['columns'])['a']['type'] == 'bigint[]'
+    run(client, route, 'table', 'drop', {'confirmation': 'rt_arr'},
+        target=target)

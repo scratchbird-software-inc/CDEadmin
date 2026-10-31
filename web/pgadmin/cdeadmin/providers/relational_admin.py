@@ -73,6 +73,7 @@ from .firebird.service_connection import (
 
 
 _FRAGMENT = re.compile(r'^[\w\s(),.+*/%<>=\'"-]+$', re.UNICODE)
+_ARRAY_SUFFIX = re.compile(r'(?:\s*\[\s*[0-9]*\s*\])+$')
 FIREBIRD_SYSTEM_PRIVILEGES = (
     'USER_MANAGEMENT', 'READ_RAW_PAGES', 'CREATE_USER_TYPES',
     'USE_NBACKUP_UTILITY', 'CHANGE_SHUTDOWN_MODE', 'TRACE_ANY_ATTACHMENT',
@@ -9047,6 +9048,21 @@ class RelationalAdministration:
         ):
             raise RelationalClientError(f'{label} contains unsafe syntax')
         return value
+
+    @classmethod
+    def _safe_type(cls, value, label):
+        """A type, also with PostgreSQL array suffixes (int[], text[3][]).
+
+        For engines with array types; the bracket suffixes are split off
+        and the base type is checked as _safe_fragment checks it.
+        """
+        if isinstance(value, str):
+            suffix = _ARRAY_SUFFIX.search(value.strip())
+            if suffix and suffix.start():
+                base = value.strip()[:suffix.start()]
+                return cls._safe_fragment(base, label) + re.sub(
+                    r'\s+', '', suffix.group(0))
+        return cls._safe_fragment(value, label)
 
     @staticmethod
     def _safe_definition(value):

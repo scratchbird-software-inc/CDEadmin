@@ -112,3 +112,14 @@ def test_alter_restates_type_for_collation_and_rewrites_primary_key():
 def test_refusals(operation, draft, reason):
     with pytest.raises(RelationalClientError, match=reason):
         plan(operation, draft, TARGET)
+
+
+def test_array_column_types():
+    """Array suffixes pass; the base type is still checked."""
+    assert ADMINISTRATION._safe_type('text [3][]', 'column type') == \
+        'text[3][]'
+    assert ADMINISTRATION._safe_type('int ARRAY', 'column type') == \
+        'int ARRAY'
+    for value in ('int[];', 'int[x]', '[]', 'int[] --'):
+        with pytest.raises(RelationalClientError, match='unsafe|empty'):
+            ADMINISTRATION._safe_type(value, 'column type')
