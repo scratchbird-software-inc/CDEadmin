@@ -5,8 +5,9 @@ Owner direction 2026-10-29: immudb reaches full parity with the beta
 engines including its native features; 2026-10-31: offer only what can be
 read back, by any engine method. Set ``CDEADMIN_ROUNDTRIP_IMMUDB`` to a
 JSON object ``{"host", "port", "web_port", "user", "password"}`` for the
-demo server (`dev.sh start immudb`). The test creates its own database
-and removes it (native unload and delete). Skipped otherwise.
+demo server (`dev.sh start immudb`). The test creates its own databases
+and removes them (native unload and delete). immudb keeps every user, so
+each run leaves one deactivated rt_user_* user. Skipped otherwise.
 """
 import json
 import os
@@ -34,7 +35,8 @@ from pgadmin.cdeadmin.providers.immudb.provider import (  # noqa: E402
     PROFILE, create_provider,
 )
 from ui_descriptor_roundtrip import (  # noqa: E402
-    backend_draft, record_draft, record_from_resource, resolved_form,
+    backend_draft, engine_operations, operation_backend_draft,
+    operation_draft, record_draft, record_from_resource, resolved_form,
 )
 
 SETTINGS = json.loads(SETTINGS)
@@ -106,6 +108,14 @@ def run(client, route, kind, operation, draft, target=None):
     assert result['accepted'], result
     assert client.validate_admin_post_state(handle)['confirmed'] is True
     return planned
+
+
+def operate(client, route, kind, operation, values, target=None,
+            confirmation=None):
+    """Run an operation from its descriptor, as the OperationDialog does."""
+    declared = engine_operations('immudb')[f'{operation}@{kind}']
+    return run(client, route, kind, operation, operation_backend_draft(
+        declared, operation_draft(declared, values, confirmation)), target)
 
 
 def refused(client, route, kind, operation, draft, target=None):
@@ -210,3 +220,120 @@ def test_table_create_reopen_alter_drop(live):
         target)
     assert not [row for row in client.list_resources({'route': dict(route)})
                 if row['resource_kind'] == 'table']
+
+
+def test_index_create_reopen_drop(live):
+    route, client = live
+    sql(client, route, 'CREATE TABLE "rt_ix" ("id" INTEGER, "a" VARCHAR[32], '
+        '"b" INTEGER, PRIMARY KEY ("id"))')
+    form = resolved_form('immudb', 'index')
+    run(client, route, 'index', 'create', backend_draft(form, {
+        'table': 'rt_ix', 'columns': [{'value': 'b'}, {'value': 'a'}],
+        'unique': True}))
+    indexes = [row for row in client.list_resources({'route': dict(route)})
+               if row['resource_kind'] == 'index' and
+               row['native'].get('table') == 'rt_ix' and
+               not row['native'].get('columns') == ['id']]
+    assert len(indexes) == 1
+    form_record = record_draft(form, record_from_resource(
+        form, indexes[0], []))
+    assert (form_record['table'],
+            [row['value'] for row in form_record['columns']],
+            form_record['unique']) == ('rt_ix', ['b', 'a'], True)
+    assert backend_draft(form, form_record, mode='alter',
+                         baseline=form_record) == {}
+    run(client, route, 'index', 'drop',
+        {'confirmation': indexes[0]['display_name']}, indexes[0])
+    sql(client, route, 'DROP TABLE "rt_ix"')
+
+
+def test_user_create_reopen_operations_drop(live):
+    route, client = live
+    name = f'rt_user_{UNIQUE}'
+    form = resolved_form('immudb', 'role')
+    run(client, route, 'user', 'create', backend_draft(form, {
+        'variant': 'user', 'name': name, 'password': 'Rt-pass-2026!',
+        'database': DATABASE, 'permission': 'readwrite'}))
+    target, baseline = record(client, route, 'user', name, 'role')
+    assert (baseline['active'], baseline['createdby'],
+            [{key: row[key] for key in ('database', 'permission')}
+             for row in baseline['database_permissions']]) == (
+        True, SETTINGS['user'],
+        [{'database': DATABASE, 'permission': 'readwrite'}])
+    operate(client, route, 'user', 'change_password', {
+        'old_password': 'Rt-pass-2026!', 'new_password': 'Rt-pass-2027!'},
+        target)
+    operate(client, route, 'permission', 'grant_sql', {
+        'username': name, 'database': DATABASE,
+        'privileges': ['SELECT', 'INSERT']})
+    _, granted = record(client, route, 'user', name, 'role')
+    assert {row['privilege'] for row in granted['sql_privileges']
+            if row['database'] == DATABASE} >= {'SELECT', 'INSERT'}
+    operate(client, route, 'permission', 'revoke_sql', {
+        'username': name, 'database': DATABASE, 'privileges': ['INSERT']})
+    _, revoked = record(client, route, 'user', name, 'role')
+    assert 'INSERT' not in {row['privilege']
+                            for row in revoked['sql_privileges']
+                            if row['database'] == DATABASE}
+    run(client, route, 'permission', 'grant', backend_draft(form, {
+        'variant': 'grant', 'username': name, 'database': 'defaultdb',
+        'permission': 'read'}))
+    _, widened = record(client, route, 'user', name, 'role')
+    assert {(row['database'], row['permission'])
+            for row in widened['database_permissions']} == {
+        (DATABASE, 'readwrite'), ('defaultdb', 'read')}
+    run(client, route, 'permission', 'revoke', backend_draft(form, {
+        'variant': 'grant', 'username': name, 'database': 'defaultdb',
+        'permission': 'read'}))
+    _, narrowed = record(client, route, 'user', name, 'role')
+    assert [row['database'] for row in narrowed['database_permissions']] \
+        == [DATABASE]
+    operate(client, route, 'user', 'set_active', {'active': False}, target)
+    assert record(client, route, 'user', name, 'role')[1]['active'] is False
+    operate(client, route, 'user', 'set_active', {'active': True}, target)
+    # immudb keeps every user: drop deactivates it.
+    run(client, route, 'user', 'drop', {'confirmation': name}, target)
+    assert record(client, route, 'user', name, 'role')[1]['active'] is False
+
+
+def test_database_create_reopen_settings_drop(live):
+    route, client = live
+    name = f'rt_db_{UNIQUE}'
+    form = resolved_form('immudb', 'database')
+    try:
+        run(client, route, 'database', 'create', backend_draft(form, {
+            'name': name, 'autoload': True, 'max_value_length': 1048576,
+            'max_transaction_entries': 2048, 'max_concurrency': 12,
+            'index_cache_size': 1000, 'aht_sync_threshold': 50000}))
+        target, baseline = record(client, route, 'database', name,
+                                  'database')
+        assert {key: baseline.get(key) for key in (
+            'max_value_length', 'max_transaction_entries',
+            'max_concurrency', 'index_cache_size',
+            'aht_sync_threshold')} == {
+            'max_value_length': 1048576, 'max_transaction_entries': 2048,
+            'max_concurrency': 12, 'index_cache_size': 1000,
+            'aht_sync_threshold': 50000}
+        operate(client, route, 'database', 'update_settings', {
+            'max_concurrency': 20, 'index_cache_size': 2000,
+            'autoload': True}, target)
+        _, after = record(client, route, 'database', name, 'database')
+        assert (after['max_concurrency'], after['index_cache_size'],
+                after['max_value_length']) == (20, 2000, 1048576)
+        # Permanent after create: refused before it reaches the server.
+        assert 'can not be changed after database creation' in refused(
+            client, route, 'database', 'update_settings',
+            {'max_value_length': 2048}, target)
+        # Not exercised: unload and load. Live, 1.11.0: while any database
+        # is unloaded the server cannot list databases ("already closed"
+        # from /db/list, /db/list/v2 and DATABASES()), so neither the
+        # unload's post-state nor the catalog can be read until it is
+        # loaded again (pkg/server/server.go DatabaseListV2).
+    finally:
+        names = [row['display_name'] for row in client.list_resources(
+            {'route': dict(route)}) if row['resource_kind'] == 'database']
+        if name in names:
+            run(client, route, 'database', 'drop', {'confirmation': name},
+                find(client, route, 'database', name)[0])
+    assert name not in [row['display_name'] for row in client.list_resources(
+        {'route': dict(route)}) if row['resource_kind'] == 'database']

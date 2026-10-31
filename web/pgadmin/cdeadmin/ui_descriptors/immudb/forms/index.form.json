@@ -5,14 +5,19 @@
   "resource_kinds": [
     "index"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "immudb",
   "omitted_tabs": [],
   "gaps": [
     {
-      "concept": "index.create.columns",
-      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
-      "tracking": "ui-unification"
+      "concept": "Partial index (WHERE)",
+      "reason": "immudb 1.11.0 accepts CREATE INDEX ... WHERE but stores no predicate in the index catalog entry, and neither INDEXES() nor pg_indexes returns one (live, 2026-10-31)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Index name, method, included columns",
+      "reason": "immudb names an index by its table and columns (t(a,b)) and has one index kind",
+      "tracking": "postgresql-wire-parity"
     }
   ],
   "fields": [
@@ -22,23 +27,38 @@
       "tab": "General",
       "control": "reference",
       "required": true,
-      "reference_kind": "table"
+      "reference_kind": "table",
+      "reference_value": "display_name",
+      "editable_after_create": false
     },
     {
       "field_id": "columns",
-      "label": "Indexed columns",
+      "label": "Columns",
       "tab": "General",
-      "control": "keyvalue",
-      "required": true
+      "control": "grid",
+      "item_kind": "string",
+      "required": true,
+      "reorderable": true,
+      "editable_after_create": false,
+      "help": "In key order. An index is identified by its table and columns, so it cannot change; drop it and create another. A VARCHAR or BLOB column needs a maximum length of at most 1024 to be indexed.",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Column",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "column"
+        }
+      ]
     },
     {
       "field_id": "unique",
-      "label": "Unique index",
+      "label": "Unique",
       "tab": "General",
       "control": "boolean",
-      "required": false,
-      "default": false
+      "default": false,
+      "editable_after_create": false
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: table picker."
+  "notes": "Hand-finished for the provider's native index operations (CREATE [UNIQUE] INDEX ON t(cols) and DROP INDEX ON t(cols) through /db/sqlexec; over the PostgreSQL wire DROP INDEX is a reported success that does nothing, pkg/pgsql/server/stmts_handler.go:190). The record reads table, columns and uniqueness from the index definition (pg_indexes). Round trip verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31). Create with ordered columns, reopen with no changes, drop."
 }

@@ -105,6 +105,8 @@ def test_dropping_the_check_first_frees_its_column():
      'set at create'),
     ('alter', {}, TARGET, 'nothing to change'),
     ('alter', {'name': 'Orders'}, TARGET, 'folds names to lowercase'),
+    ('create', {'name': 't', 'columns': [{'name': 'k', 'type': 'VARCHAR'}],
+                'primary_key': ['k']}, None, 'at most 1024'),
 ])
 def test_refusals(operation, draft, target, reason):
     with pytest.raises(RelationalClientError, match=reason):

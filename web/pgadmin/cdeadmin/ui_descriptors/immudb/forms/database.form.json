@@ -5,17 +5,30 @@
   "resource_kinds": [
     "database"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "immudb",
   "omitted_tabs": [],
-  "gaps": [],
+  "gaps": [
+    {
+      "concept": "Changing settings from the editor",
+      "reason": "Changeable settings go through Update database settings (operations.json); the seven immudb fixes at create are locked here",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Rename",
+      "reason": "immudb has no database rename",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
   "fields": [
     {
       "field_id": "name",
       "label": "Database name",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "editable_after_create": false,
+      "help": "Database names are immudb identifiers; there is no rename."
     },
     {
       "field_id": "if_not_exists",
@@ -23,12 +36,15 @@
       "tab": "General",
       "control": "boolean",
       "required": false,
-      "default": false
+      "default": false,
+      "modes": [
+        "create"
+      ]
     },
     {
       "field_id": "autoload",
       "label": "Load automatically",
-      "tab": "Engine",
+      "tab": "General",
       "control": "boolean",
       "required": false,
       "default": true
@@ -39,273 +55,327 @@
       "tab": "Engine",
       "control": "boolean",
       "required": false,
-      "default": false
+      "default": false,
+      "group": "Storage"
     },
     {
       "field_id": "max_concurrency",
       "label": "Maximum commit concurrency",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Concurrency"
     },
     {
       "field_id": "read_tx_pool_size",
       "label": "Read transaction pool size",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Concurrency"
     },
     {
       "field_id": "sync_frequency_ms",
       "label": "Fsync frequency (milliseconds)",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Storage"
     },
     {
       "field_id": "file_size",
       "label": "Maximum data file size",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Storage",
+      "editable_after_create": false,
+      "help": "Fixed once the database is created (immudb refuses the change)."
     },
     {
       "field_id": "max_key_length",
       "label": "Maximum key length",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Storage",
+      "editable_after_create": false,
+      "help": "Fixed once the database is created (immudb refuses the change)."
     },
     {
       "field_id": "max_value_length",
       "label": "Maximum value length",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Storage",
+      "editable_after_create": false,
+      "help": "Fixed once the database is created (immudb refuses the change)."
     },
     {
       "field_id": "max_transaction_entries",
       "label": "Maximum entries per transaction",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Storage",
+      "editable_after_create": false,
+      "help": "Fixed once the database is created (immudb refuses the change)."
     },
     {
       "field_id": "max_io_concurrency",
       "label": "Maximum I/O concurrency",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Concurrency"
     },
     {
       "field_id": "tx_log_cache_size",
       "label": "Transaction-log cache size",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Logs and caches"
     },
     {
       "field_id": "value_log_cache_size",
       "label": "Value-log cache size",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Logs and caches"
     },
     {
       "field_id": "value_log_open_files",
       "label": "Open value-log file limit",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Logs and caches"
     },
     {
       "field_id": "tx_log_open_files",
       "label": "Open transaction-log file limit",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Logs and caches"
     },
     {
       "field_id": "commit_log_open_files",
       "label": "Open commit-log file limit",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Logs and caches"
     },
     {
       "field_id": "write_tx_header_version",
       "label": "Transaction-header write version",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Storage"
     },
     {
       "field_id": "write_buffer_size",
       "label": "Write buffer size",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Storage"
     },
     {
       "field_id": "max_active_transactions",
       "label": "Maximum active transactions",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Concurrency"
     },
     {
       "field_id": "mvcc_read_set_limit",
       "label": "MVCC read-set limit",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Concurrency"
     },
     {
       "field_id": "embedded_values",
       "label": "Embed values in transaction headers",
       "tab": "Engine",
       "control": "boolean",
-      "required": false
+      "required": false,
+      "group": "Storage",
+      "editable_after_create": false,
+      "help": "Fixed once the database is created (immudb refuses the change)."
     },
     {
       "field_id": "preallocate_files",
       "label": "Preallocate database files",
       "tab": "Engine",
       "control": "boolean",
-      "required": false
+      "required": false,
+      "group": "Storage",
+      "editable_after_create": false,
+      "help": "Fixed once the database is created (immudb refuses the change)."
     },
     {
       "field_id": "index_flush_threshold",
       "label": "Index flush threshold",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_sync_threshold",
       "label": "Index sync threshold",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_cache_size",
       "label": "Index node-cache size",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_max_node_size",
       "label": "Index maximum node size",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index",
+      "editable_after_create": false,
+      "help": "Fixed once the database is created (immudb refuses the change)."
     },
     {
       "field_id": "index_max_active_snapshots",
       "label": "Index active-snapshot limit",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_renew_snapshot_root_after_ms",
       "label": "Index snapshot-root renewal (milliseconds)",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_compaction_threshold",
       "label": "Index compaction threshold",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_compaction_delay_ms",
       "label": "Index compaction delay (milliseconds)",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_nodes_log_open_files",
       "label": "Open index node-log file limit",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_history_log_open_files",
       "label": "Open index history-log file limit",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_commit_log_open_files",
       "label": "Open index commit-log file limit",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_flush_buffer_size",
       "label": "Index flush buffer size",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_cleanup_percentage",
       "label": "Index cleanup percentage",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_max_bulk_size",
       "label": "Index maximum bulk size",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "index_bulk_preparation_timeout_ms",
       "label": "Index bulk preparation timeout (milliseconds)",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Index"
     },
     {
       "field_id": "aht_sync_threshold",
       "label": "AHT sync threshold",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Append-only hash tree"
     },
     {
       "field_id": "aht_write_buffer_size",
       "label": "AHT write buffer size",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Append-only hash tree"
     },
     {
       "field_id": "history_retention_period_ms",
       "label": "Automatic history retention (milliseconds)",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "History truncation",
+      "help": "Automatic truncation keeps at least this much history; immudb requires at least 24 hours (86400000)."
     },
     {
       "field_id": "history_truncation_frequency_ms",
       "label": "Automatic history truncation frequency (milliseconds)",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "History truncation"
     },
     {
       "field_id": "is_replica",
@@ -313,7 +383,8 @@
       "tab": "Engine",
       "control": "boolean",
       "required": false,
-      "default": false
+      "default": false,
+      "group": "Replication"
     },
     {
       "field_id": "primary_database",
@@ -324,7 +395,8 @@
       "visible_when": {
         "field": "is_replica",
         "equals": true
-      }
+      },
+      "group": "Replication"
     },
     {
       "field_id": "primary_host",
@@ -335,7 +407,8 @@
       "visible_when": {
         "field": "is_replica",
         "equals": true
-      }
+      },
+      "group": "Replication"
     },
     {
       "field_id": "primary_port",
@@ -346,7 +419,8 @@
       "visible_when": {
         "field": "is_replica",
         "equals": true
-      }
+      },
+      "group": "Replication"
     },
     {
       "field_id": "primary_username",
@@ -357,7 +431,8 @@
       "visible_when": {
         "field": "is_replica",
         "equals": true
-      }
+      },
+      "group": "Replication"
     },
     {
       "field_id": "primary_password",
@@ -368,7 +443,12 @@
       "visible_when": {
         "field": "is_replica",
         "equals": true
-      }
+      },
+      "group": "Replication",
+      "modes": [
+        "create"
+      ],
+      "help": "Not read back; change it with Update database settings."
     },
     {
       "field_id": "synchronous_replication",
@@ -376,50 +456,57 @@
       "tab": "Engine",
       "control": "boolean",
       "required": false,
-      "default": false
+      "default": false,
+      "group": "Replication"
     },
     {
       "field_id": "synchronous_acknowledgements",
       "label": "Required synchronous acknowledgements",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Replication"
     },
     {
       "field_id": "replication_prefetch_transactions",
       "label": "Replication prefetch transaction limit",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Replication"
     },
     {
       "field_id": "replication_commit_concurrency",
       "label": "Replication commit concurrency",
       "tab": "Engine",
       "control": "number",
-      "required": false
+      "required": false,
+      "group": "Replication"
     },
     {
       "field_id": "replication_allow_tx_discarding",
       "label": "Allow divergent transaction discard",
       "tab": "Engine",
       "control": "boolean",
-      "required": false
+      "required": false,
+      "group": "Replication"
     },
     {
       "field_id": "replication_skip_integrity_check",
       "label": "Skip replication integrity checks",
       "tab": "Engine",
       "control": "boolean",
-      "required": false
+      "required": false,
+      "group": "Replication"
     },
     {
       "field_id": "replication_wait_for_indexing",
       "label": "Wait for replication indexing",
       "tab": "Engine",
       "control": "boolean",
-      "required": false
+      "required": false,
+      "group": "Replication"
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip."
+  "notes": "Hand-finished from the provider's native create (/db/create/v2) settings. The record is the native /db/list/v2 entry with each setting added under its field id (provider _settings_record); unset settings are left blank. Permanent after create, per pkg/server/db_options.go overwriteWith: file size, maximum key and value length, maximum entries per transaction, embedded values, preallocated files and index node size. Load, unload, index flush and compaction, history truncation and settings updates are operations (operations.json). Round trip verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31). Create with permanent and changeable settings, reopen, update changeable settings, refused permanent change, drop."
 }

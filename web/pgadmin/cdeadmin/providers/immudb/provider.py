@@ -196,6 +196,75 @@ _DATABASE_SETTINGS = (
     cp_field('replication_wait_for_indexing',
              'Wait for replication indexing', 'boolean', False),
 )
+# Live (pkg/server/db_options.go overwriteWith): "can not be changed after
+# database creation".
+_PERMANENT_SETTINGS = frozenset({
+    'file_size', 'max_key_length', 'max_value_length',
+    'max_transaction_entries', 'embedded_values', 'preallocate_files',
+    'index_max_node_size',
+})
+_UPDATABLE_SETTINGS = tuple(
+    item for item in _DATABASE_SETTINGS
+    if item['field_id'] not in _PERMANENT_SETTINGS)
+_SETTING_KEYS = {
+    'autoload': 'autoload', 'exclude_commit_time': 'excludeCommitTime',
+    'embedded_values': 'embeddedValues',
+    'preallocate_files': 'preallocFiles',
+    'max_concurrency': 'maxConcurrency',
+    'read_tx_pool_size': 'readTxPoolSize',
+    'sync_frequency_ms': 'syncFrequency', 'file_size': 'fileSize',
+    'max_key_length': 'maxKeyLen', 'max_value_length': 'maxValueLen',
+    'max_transaction_entries': 'maxTxEntries',
+    'max_io_concurrency': 'maxIOConcurrency',
+    'tx_log_cache_size': 'txLogCacheSize',
+    'value_log_cache_size': 'vLogCacheSize',
+    'value_log_open_files': 'vLogMaxOpenedFiles',
+    'tx_log_open_files': 'txLogMaxOpenedFiles',
+    'commit_log_open_files': 'commitLogMaxOpenedFiles',
+    'write_tx_header_version': 'writeTxHeaderVersion',
+    'write_buffer_size': 'writeBufferSize',
+    'max_active_transactions': 'maxActiveTransactions',
+    'mvcc_read_set_limit': 'mvccReadSetLimit',
+}
+_NESTED_SETTING_KEYS = {
+    'replicationSettings': {
+        'is_replica': 'replica', 'primary_database': 'primaryDatabase',
+        'primary_host': 'primaryHost', 'primary_port': 'primaryPort',
+        'primary_username': 'primaryUsername',
+        'synchronous_replication': 'syncReplication',
+        'synchronous_acknowledgements': 'syncAcks',
+        'replication_prefetch_transactions': 'prefetchTxBufferSize',
+        'replication_commit_concurrency': 'replicationCommitConcurrency',
+        'replication_allow_tx_discarding': 'allowTxDiscarding',
+        'replication_skip_integrity_check': 'skipIntegrityCheck',
+        'replication_wait_for_indexing': 'waitForIndexing',
+    },
+    'indexSettings': {
+        'index_flush_threshold': 'flushThreshold',
+        'index_sync_threshold': 'syncThreshold',
+        'index_cache_size': 'cacheSize',
+        'index_max_node_size': 'maxNodeSize',
+        'index_max_active_snapshots': 'maxActiveSnapshots',
+        'index_renew_snapshot_root_after_ms': 'renewSnapRootAfter',
+        'index_compaction_threshold': 'compactionThld',
+        'index_compaction_delay_ms': 'delayDuringCompaction',
+        'index_nodes_log_open_files': 'nodesLogMaxOpenedFiles',
+        'index_history_log_open_files': 'historyLogMaxOpenedFiles',
+        'index_commit_log_open_files': 'commitLogMaxOpenedFiles',
+        'index_flush_buffer_size': 'flushBufferSize',
+        'index_cleanup_percentage': 'cleanupPercentage',
+        'index_max_bulk_size': 'maxBulkSize',
+        'index_bulk_preparation_timeout_ms': 'bulkPreparationTimeout',
+    },
+    'ahtSettings': {
+        'aht_sync_threshold': 'syncThreshold',
+        'aht_write_buffer_size': 'writeBufferSize',
+    },
+    'truncationSettings': {
+        'history_retention_period_ms': 'retentionPeriod',
+        'history_truncation_frequency_ms': 'truncationFrequency',
+    },
+}
 
 CONTROL_OPERATIONS = (
     ControlPlaneOperation(
@@ -214,7 +283,7 @@ CONTROL_OPERATIONS = (
     ),
     ControlPlaneOperation(
         'database', 'update_settings', 'Update database settings', 'admin',
-        'topology_admin', _DATABASE_SETTINGS, impact_scope='cluster'
+        'topology_admin', _UPDATABLE_SETTINGS, impact_scope='cluster'
     ),
     ControlPlaneOperation(
         'database', 'load', 'Load database', 'admin', 'topology_admin',
@@ -534,6 +603,36 @@ def _nullable(value):
     return {'value': value}
 
 
+def _settings_record(settings):
+    """A database's settings by the form's field ids (field_id: value).
+
+    The native list nests them (settings.indexSettings.cacheSize.value);
+    the database form reads them flat. An unset value is left out.
+    """
+    settings = settings if isinstance(settings, Mapping) else {}
+    out = {}
+    for field_id, value in _flat_settings(settings).items():
+        if isinstance(value, Mapping) and 'value' in value:
+            raw = value['value']
+            # Durations arrive as strings ("1000").
+            if isinstance(raw, str) and raw.isdigit():
+                raw = int(raw)
+            out[field_id] = raw
+    return out
+
+
+def _flat_settings(settings):
+    found = {}
+    for field_id, native in _SETTING_KEYS.items():
+        found[field_id] = settings.get(native)
+    for group_name, fields in _NESTED_SETTING_KEYS.items():
+        group = settings.get(group_name)
+        group = group if isinstance(group, Mapping) else {}
+        for field_id, native in fields.items():
+            found[field_id] = group.get(native)
+    return found
+
+
 def _database_settings(draft, include_defaults=False):
     settings = {}
     boolean_fields = {
@@ -678,6 +777,13 @@ def _compile_control(request):
                 'ifNotExists': bool(draft.get('if_not_exists', False)),
             }
         elif operation == 'update_settings':
+            fixed = sorted(_PERMANENT_SETTINGS & {
+                key for key, value in draft.items()
+                if value not in (None, '')})
+            if fixed:
+                raise RelationalClientError(
+                    ', '.join(fixed) + ' can not be changed after database '
+                    'creation')
             path = '/db/update/v2'
             body = {'database': name, 'settings': _database_settings(draft)}
         elif operation in {'load', 'unload', 'drop'}:
@@ -1329,6 +1435,11 @@ def _mapping_contains(actual, expected):
         return actual == expected
     if not isinstance(actual, Mapping):
         return False
+    if set(expected) == {'value'} and not actual and expected['value'] in (
+            False, 0, ''):
+        # Protobuf JSON leaves out a default: {"value": false} reads back
+        # as {} (live, 1.11.0 /db/list/v2).
+        return True
     return all(
         key in actual and _mapping_contains(actual[key], value)
         for key, value in expected.items()
@@ -1722,6 +1833,17 @@ class ImmudbAdministration(DistributedSQLControlPlane):
 
     def validate(self, request):
         checked = super().validate(request)
+        draft = request.get('draft') or {}
+        if request.get('resource_kind') == 'database' and request.get(
+                'operation_id') == 'update_settings':
+            fixed = sorted(_PERMANENT_SETTINGS & {
+                key for key, value in draft.items()
+                if value not in (None, '')})
+            if fixed:
+                checked['errors'].append({
+                    'field_id': fixed[0], 'code': 'permanent_setting',
+                    'message': ', '.join(fixed) + ' can not be changed '
+                               'after database creation'})
         if request.get('resource_kind') == 'table' and request.get(
                 'operation_id') in {'create', 'alter'} and not checked[
                 'errors']:
@@ -2041,10 +2163,10 @@ class ImmudbDBAPIClient(ImmudbNativeMixin, PsycopgPoolDBAPIClient):
             name = database_item.get('name')
             if not isinstance(name, str) or not name:
                 continue
-            item = resource(
-                'database', [], name, generation,
-                copy.deepcopy(dict(database_item)),
-            )
+            native = copy.deepcopy(dict(database_item))
+            # The database form reads each setting by its field id.
+            native.update(_settings_record(database_item.get('settings')))
+            item = resource('database', [], name, generation, native)
             values[item['resource_id']] = item
             replication = (
                 database_item.get('settings', {}).get(
@@ -2067,10 +2189,25 @@ class ImmudbDBAPIClient(ImmudbNativeMixin, PsycopgPoolDBAPIClient):
             username = self._byte_label(user_item.get('user'))
             if not username:
                 continue
-            item = resource(
-                'user', [], username, generation,
-                copy.deepcopy(dict(user_item)),
-            )
+            native = copy.deepcopy(dict(user_item))
+            # The list omits active when false (a dropped user).
+            native['active'] = bool(user_item.get('active'))
+            # The editor's read-only grids: permissions by name, SQL
+            # privileges as listed (255 is the built-in sysadmin).
+            native['database_permissions'] = [{
+                'database': value.get('database'),
+                'permission': {255: 'sysadmin'}.get(
+                    value.get('permission'), permission_names.get(
+                        value.get('permission'),
+                        str(value.get('permission')))),
+            } for value in user_item.get('permissions') or []
+                if isinstance(value, Mapping)]
+            native['sql_privileges'] = [{
+                'database': value.get('database'),
+                'privilege': value.get('privilege'),
+            } for value in user_item.get('sqlPrivileges') or []
+                if isinstance(value, Mapping)]
+            item = resource('user', [], username, generation, native)
             values[item['resource_id']] = item
             for permission in user_item.get('permissions', []):
                 if not isinstance(permission, Mapping):

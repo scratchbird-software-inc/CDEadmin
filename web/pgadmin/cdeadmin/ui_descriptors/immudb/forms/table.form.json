@@ -113,7 +113,7 @@
           "control": "number",
           "min": 1,
           "editable_after_create": false,
-          "help": "VARCHAR and BLOB only"
+          "help": "VARCHAR and BLOB only. A key or indexed column needs one, at most 1024."
         },
         {
           "field_id": "nullable",

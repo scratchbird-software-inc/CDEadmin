@@ -675,6 +675,38 @@ by any engine method.
    index and role forms are drafts. View, sequence, routine, trigger and
    type are listed in ``omitted_families.json`` with the reasons above.
    The provider no longer declares view, sequence or constraint kinds.
+   (Update the same day: the index, role and database forms are
+   ``complete`` too, after live round trips, and the view, sequence and
+   constraint entries are gone from ``visual_admin/portfolio_catalog.json``
+   as well.)
+-  Indexes: a VARCHAR or BLOB column needs a maximum length of at most
+   1024 to be in a key or index ("Max key length for variable columns is
+   1024"). The table editor refuses an unsized key column before sending,
+   and the length and index help say so.
+-  Users: immudb keeps every user. ``DROP USER`` deactivates it
+   (``pkg/server/multidb_handler.go``), and the user list omits ``active``
+   when it is false, so the record sets it. Each live test run leaves one
+   deactivated ``rt_user_*`` user. Database permissions read back as
+   numbers (1, 2, 254, 255 for sysadmin); the record names them.
+-  Database settings: seven are fixed at create (``pkg/server/
+   db_options.go`` ``overwriteWith``): file size, maximum key and value
+   length, maximum entries per transaction, embedded values, preallocated
+   files and index node size. ``update_settings`` offered all of them, and
+   the dialog defaults booleans to false, so it always sent embedded
+   values and preallocated files and was always refused. It now offers
+   only the changeable settings and refuses the fixed ones. Protobuf JSON
+   leaves out a false or zero value, so ``{"value": false}`` reads back as
+   ``{}``; the post-state check accepts that.
+-  Not fixed (engine): while any database is unloaded, immudb cannot list
+   databases. ``/db/list``, ``/db/list/v2`` and ``SELECT * FROM
+   DATABASES()`` all fail "already closed" (``DatabaseListV2`` reads each
+   database's current state, a closed one included). The whole endpoint's
+   catalog then fails until the database is loaded again. A failed test
+   run left the demo in that state; it was recovered by loading and then
+   deleting the leftover databases. The metrics endpoint keeps every
+   database seen since the server started, deleted ones included, so it
+   cannot stand in. Unload and load stay draft, untested, pending an owner
+   decision.
 -  The database listing fallback noted for immudb under YugabyteDB:
    ``pg_database`` lists only the connected database. immudb's databases
    come from the native list (``/db/list/v2``), which the provider already

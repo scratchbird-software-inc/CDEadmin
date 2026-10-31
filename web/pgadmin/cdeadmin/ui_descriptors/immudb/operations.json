@@ -12,7 +12,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "notes": "Untested (draft)."
     },
     {
       "operation_id": "update_settings",
@@ -22,7 +23,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -54,30 +55,6 @@
         {
           "field_id": "sync_frequency_ms",
           "label": "Fsync frequency (milliseconds)",
-          "control": "number",
-          "required": false
-        },
-        {
-          "field_id": "file_size",
-          "label": "Maximum data file size",
-          "control": "number",
-          "required": false
-        },
-        {
-          "field_id": "max_key_length",
-          "label": "Maximum key length",
-          "control": "number",
-          "required": false
-        },
-        {
-          "field_id": "max_value_length",
-          "label": "Maximum value length",
-          "control": "number",
-          "required": false
-        },
-        {
-          "field_id": "max_transaction_entries",
-          "label": "Maximum entries per transaction",
           "control": "number",
           "required": false
         },
@@ -142,18 +119,6 @@
           "required": false
         },
         {
-          "field_id": "embedded_values",
-          "label": "Embed values in transaction headers",
-          "control": "boolean",
-          "required": false
-        },
-        {
-          "field_id": "preallocate_files",
-          "label": "Preallocate database files",
-          "control": "boolean",
-          "required": false
-        },
-        {
           "field_id": "index_flush_threshold",
           "label": "Index flush threshold",
           "control": "number",
@@ -168,12 +133,6 @@
         {
           "field_id": "index_cache_size",
           "label": "Index node-cache size",
-          "control": "number",
-          "required": false
-        },
-        {
-          "field_id": "index_max_node_size",
-          "label": "Index maximum node size",
           "control": "number",
           "required": false
         },
@@ -367,7 +326,8 @@
           "control": "boolean",
           "required": false
         }
-      ]
+      ],
+      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31). Permanent settings are not offered and are refused (pkg/server/db_options.go overwriteWith)."
     },
     {
       "operation_id": "load",
@@ -379,7 +339,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Untested: while any database is unloaded, immudb 1.11.0 cannot list databases (\"already closed\" from /db/list, /db/list/v2 and DATABASES(), pkg/server/server.go DatabaseListV2), so the unload's post-state and the endpoint's catalog cannot be read until it is loaded again (live, 2026-10-31)."
     },
     {
       "operation_id": "unload",
@@ -391,7 +352,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "notes": "Untested: while any database is unloaded, immudb 1.11.0 cannot list databases (\"already closed\" from /db/list, /db/list/v2 and DATABASES(), pkg/server/server.go DatabaseListV2), so the unload's post-state and the endpoint's catalog cannot be read until it is loaded again (live, 2026-10-31)."
     },
     {
       "operation_id": "flush_index",
@@ -418,7 +380,8 @@
           "required": false,
           "default": true
         }
-      ]
+      ],
+      "notes": "Untested (draft)."
     },
     {
       "operation_id": "compact_index",
@@ -430,7 +393,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Untested (draft)."
     },
     {
       "operation_id": "truncate_history",
@@ -449,7 +413,8 @@
           "control": "number",
           "required": true
         }
-      ]
+      ],
+      "notes": "Untested (draft)."
     },
     {
       "operation_id": "change_password",
@@ -459,7 +424,7 @@
         "category": "security"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -474,7 +439,8 @@
           "control": "password",
           "required": true
         }
-      ]
+      ],
+      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31)."
     },
     {
       "operation_id": "set_active",
@@ -484,7 +450,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -494,7 +460,8 @@
           "required": true,
           "default": true
         }
-      ]
+      ],
+      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31)."
     },
     {
       "operation_id": "grant_sql",
@@ -504,7 +471,7 @@
         "category": "security"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -555,7 +522,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31)."
     },
     {
       "operation_id": "revoke_sql",
@@ -565,7 +533,7 @@
         "category": "security"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -616,7 +584,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31)."
     }
   ]
 }

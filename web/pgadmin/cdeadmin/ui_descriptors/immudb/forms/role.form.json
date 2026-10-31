@@ -6,17 +6,61 @@
     "user",
     "permission"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "immudb",
-  "omitted_tabs": [],
-  "gaps": [],
+  "omitted_tabs": [
+    {
+      "tab": "Membership",
+      "reason": "immudb has users only: no roles or role membership"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Renaming a user",
+      "reason": "No statement in immudb 1.11.0",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Per-table privileges",
+      "reason": "immudb grants SQL privileges per database (GRANT ... ON DATABASE)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Deleting a user",
+      "reason": "immudb keeps every user; DROP USER deactivates it (live and source, 1.11.0)",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
   "fields": [
+    {
+      "field_id": "variant",
+      "label": "Kind",
+      "tab": "General",
+      "control": "select",
+      "ui_only": true,
+      "default": "user",
+      "options": [
+        {
+          "value": "user",
+          "label": "User"
+        },
+        {
+          "value": "grant",
+          "label": "Database permission"
+        }
+      ]
+    },
     {
       "field_id": "name",
       "label": "Username",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "editable_after_create": false,
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
     },
     {
       "field_id": "password",
@@ -24,19 +68,46 @@
       "tab": "General",
       "control": "password",
       "required": true,
-      "group": "Authentication"
+      "group": "Authentication",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      },
+      "help": "Change it afterwards with Change user password."
+    },
+    {
+      "field_id": "username",
+      "label": "Username",
+      "tab": "General",
+      "control": "reference",
+      "required": true,
+      "reference_kind": "user",
+      "reference_value": "display_name",
+      "visible_when": {
+        "field": "variant",
+        "equals": "grant"
+      }
     },
     {
       "field_id": "database",
       "label": "Database",
       "tab": "General",
-      "control": "text",
-      "required": true
+      "control": "reference",
+      "required": true,
+      "reference_kind": "database",
+      "reference_value": "display_name",
+      "modes": [
+        "create"
+      ],
+      "help": "A new user starts with one database permission; grant more afterwards."
     },
     {
       "field_id": "permission",
       "label": "Database permission",
-      "tab": "Engine",
+      "tab": "General",
       "control": "select",
       "required": true,
       "default": "read",
@@ -53,8 +124,108 @@
           "value": "admin",
           "label": "Administrator"
         }
+      ],
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "active",
+      "label": "Active",
+      "tab": "General",
+      "control": "boolean",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      },
+      "help": "Change it with Set user activation. Drop user deactivates: immudb 1.11.0 keeps every user (multidb_handler.go DropUser sets it inactive)."
+    },
+    {
+      "field_id": "createdby",
+      "label": "Created by",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "createdat",
+      "label": "Created at",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "database_permissions",
+      "label": "Database permissions",
+      "tab": "Privileges",
+      "control": "grid",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      },
+      "help": "Granted and revoked with the permission operations; * is every database.",
+      "columns": [
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "text"
+        },
+        {
+          "field_id": "permission",
+          "label": "Permission",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "field_id": "sql_privileges",
+      "label": "SQL privileges",
+      "tab": "Privileges",
+      "control": "grid",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      },
+      "help": "Granted and revoked with Grant SQL privileges and Revoke SQL privileges.",
+      "columns": [
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "text"
+        },
+        {
+          "field_id": "privilege",
+          "label": "Privilege",
+          "control": "text"
+        }
       ]
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. permission: provider exposes no create form (grant, grant_sql, inspect, revoke, revoke_sql)"
+  "notes": "Hand-finished for the provider's native user and permission operations (/user, /user/changepermission, /user/changesqlprivileges): over the PostgreSQL wire GRANT and REVOKE are reported successes that do nothing (pkg/pgsql/server/stmts_handler.go:190). The record is the native /user/list entry with database_permissions and sql_privileges added by the provider. Round trip verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31). Create a user, reopen its read-only state, change its password, grant and revoke a database permission and SQL privileges, deactivate and reactivate, drop (deactivates)."
 }

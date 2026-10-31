@@ -28,6 +28,8 @@ from ...sdk.relational import RelationalClientError
 TYPES = ('INTEGER', 'BOOLEAN', 'VARCHAR', 'UUID', 'BLOB', 'TIMESTAMP',
          'FLOAT', 'JSON')
 SIZED = ('VARCHAR', 'BLOB')
+# A VARCHAR or BLOB in a key or index (live, 1.11.0).
+MAX_KEY_LENGTH = 1024
 COLUMN_KEYS = {'name', 'type', 'max_length', 'nullable', 'default',
                'auto_increment'}
 CHECK_KEYS = {'name', 'expression'}
@@ -134,10 +136,19 @@ def create(admin, draft):
     key = draft.get('primary_key')
     if not isinstance(key, list) or not key:
         raise RelationalClientError('immudb tables need a primary key')
+    sizes = {item['name']: item for item in columns}
     for item in key:
         if item not in names:
             raise RelationalClientError(
                 f'primary key column {item!r} is not a column')
+        column_row = sizes[item]
+        if str(column_row.get('type') or '').upper() in SIZED and (
+                _blank(column_row.get('max_length')) or
+                column_row['max_length'] > MAX_KEY_LENGTH):
+            # Live: "Max key length for variable columns is 1024".
+            raise RelationalClientError(
+                f'key column {item} needs a maximum length of at most '
+                f'{MAX_KEY_LENGTH}')
     elements += [_check(admin, item)
                  for item in draft.get('check_constraints') or []]
     elements.append('PRIMARY KEY (' + ', '.join(
