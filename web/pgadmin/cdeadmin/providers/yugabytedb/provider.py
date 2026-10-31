@@ -21,11 +21,12 @@ from ..distributed_sql import (
     sql_administration,
 )
 from . import (
-    databases, indexes as index_sql, objects, routines, sequences,
+    databases, indexes as index_sql, objects, policies, routines, sequences,
     tables as tables_sql, types, views,
 )
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
+from ..cockroachdb.policies import form as shared_policy_form
 from .control_plane import (
     OPERATIONS as CONTROL_OPERATIONS,
     catalog_resources as control_catalog_resources,
@@ -48,7 +49,7 @@ PROFILE = PilotProfile(
         'view', 'materialized-view', 'domain', 'type', 'function',
         'procedure', 'trigger', 'extension', 'partition', 'tablespace',
         'tablet', 'tserver', 'master', 'placement-policy', 'user', 'role',
-        'privilege', 'changefeed', 'snapshot', 'schedule',
+        'privilege', 'row-policy', 'changefeed', 'snapshot', 'schedule',
         'xcluster-replication',
     ),
     ('ysqlsh', 'yb-admin', 'backup-restore'),
@@ -82,7 +83,7 @@ PROFILE = PilotProfile(
 _BASE_ADMINISTRATION = sql_administration('yugabytedb', 'postgresql', (
     'universe', 'node', 'region', 'zone', 'tablet', 'tserver', 'master',
     'placement-policy', 'changefeed', 'snapshot', 'schedule',
-    'xcluster-replication',
+    'xcluster-replication', 'row-policy',
 ))
 _YSQL_SUPPORTED = dict(_BASE_ADMINISTRATION.dialect.supported)
 _YSQL_SUPPORTED.update({
@@ -101,6 +102,8 @@ _YSQL_SUPPORTED.update({
     # alter: CREATE OR REPLACE, rename, enable, comment (objects.py).
     'trigger': frozenset({'inspect', 'create', 'alter', 'drop'}),
     'extension': frozenset({'inspect', 'create', 'drop'}),
+    # Row-level security policies (providers/yugabytedb/policies).
+    'row-policy': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # Partition bounds are part of CREATE TABLE in YSQL. Until the table form
     # has a complete structured bound editor, partitions remain inspect-only.
     'partition': frozenset({'inspect'}),
@@ -137,15 +140,23 @@ class YugabyteDBAdministration(RelationalAdministration):
         return operation in objects.OPERATIONS.get(kind, ()) or (
             kind in {'table', 'index', 'type', 'domain', 'view',
                      'materialized-view', 'sequence', 'function',
-                     'procedure', 'database'} and
+                     'procedure', 'database', 'row-policy'} and
             operation in {'create', 'alter'}) or (
-            # Dropped by signature: overloads share a name.
-            operation == 'drop' and kind in {'function', 'procedure'})
+            # Dropped by signature (overloads share a name) or by table.
+            operation == 'drop' and kind in {'function', 'procedure',
+                                             'row-policy'})
 
     def _native_compile(self, request):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if request['resource_kind'] == 'row-policy':
+            target = request.get('target_resource')
+            if request['operation_id'] == 'drop':
+                return {'statements': policies.drop(self, target)}
+            if request['operation_id'] == 'create':
+                return {'statements': policies.create(self, draft)}
+            return {'statements': policies.alter(self, draft, target)}
         if request['resource_kind'] == 'database':
             if request['operation_id'] == 'create':
                 return {'statements': databases.create(self, draft)}
@@ -205,6 +216,13 @@ class YugabyteDBAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def _form(self, kind, operation):
+        if kind == 'row-policy' and operation in {'create', 'alter'}:
+            value = shared_policy_form(self._field, operation)
+            value['form_id'] = f'yugabytedb.row-policy.{operation}'
+            value['fields'].append(self._field('comment', 'Comment', 'text'))
+            if operation == 'alter':
+                value['fields'][-1]['initial_value_path'] = ['comment']
+            return value
         if kind == 'database' and operation in {'create', 'alter'}:
             return databases.form(self._field, operation)
         if kind in {'function', 'procedure'} and operation in {
@@ -700,6 +718,29 @@ def _extras(cursor, _request, generation):
                  columns.group(1).split(',')] if columns else [],
                 None if comment is None else str(comment)),
         ))
+    for (schema, table, name, kind, roles, command, using, with_check,
+         comment) in optional_rows(
+        cursor,
+        'SELECT p.schemaname, p.tablename, p.policyname, p.permissive, '
+        'p.roles, p.cmd, p.qual, p.with_check, '
+        "obj_description(o.oid, 'pg_policy') "
+        'FROM pg_catalog.pg_policies p '
+        'JOIN pg_catalog.pg_namespace n ON n.nspname = p.schemaname '
+        'JOIN pg_catalog.pg_class c '
+        'ON c.relnamespace = n.oid AND c.relname = p.tablename '
+        'JOIN pg_catalog.pg_policy o '
+        'ON o.polrelid = c.oid AND o.polname = p.policyname '
+        'ORDER BY 1, 2, 3',
+    ):
+        values.append(resource('row-policy', [schema, table], name,
+                               generation, {
+            'table': f'{schema}.{table}',
+            'policy_type': str(kind).upper(), 'command': str(command),
+            'roles': sorted(str(role) for role in roles or []),
+            'using': None if using is None else str(using),
+            'with_check': None if with_check is None else str(with_check),
+            'comment': None if comment is None else str(comment),
+        }))
     for name, version, schema in optional_rows(
         cursor,
         'SELECT e.extname, e.extversion, n.nspname '

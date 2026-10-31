@@ -747,3 +747,65 @@ def test_databases(live):
             query(f'DROP DATABASE IF EXISTS {value} WITH (FORCE)',
                   'yugabyte')
         query(f'DROP ROLE IF EXISTS {owner}', 'yugabyte')
+
+
+def test_row_security_policies(live):
+    route, client = live
+    reader = f'rt_reader_{UNIQUE}'
+    query(f'CREATE ROLE {reader}', 'yugabyte')
+    try:
+        query('CREATE TABLE public.secured (id INT PRIMARY KEY, '
+              'owner TEXT, v INT)')
+        query('ALTER TABLE public.secured ENABLE ROW LEVEL SECURITY')
+        form = resolved_form('yugabytedb', 'engine_object:row-policy')
+        run(client, route, 'row-policy', 'create', backend_draft(form, {
+            'name': 'rt_own', 'table': 'public.secured',
+            'policy_type': 'PERMISSIVE', 'command': 'ALL',
+            'roles': [{'role': reader}],
+            'using': 'owner = current_user', 'with_check': 'v > 0',
+            'comment': 'own rows'}))
+        run(client, route, 'row-policy', 'create', backend_draft(form, {
+            'name': 'rt_cap', 'table': 'public.secured',
+            'policy_type': 'RESTRICTIVE', 'command': 'SELECT',
+            'using': 'v < 100'}))
+        target, baseline = record(client, route, 'row-policy', 'rt_own',
+                                  'engine_object:row-policy')
+        assert (baseline['table'], baseline['policy_type'],
+                baseline['command'],
+                [row['role'] for row in baseline['roles']],
+                baseline['using'], baseline['with_check'],
+                baseline['comment']) == (
+            'public.secured', 'PERMISSIVE', 'ALL', [reader],
+            '(owner = CURRENT_USER)', '(v > 0)', 'own rows')
+        _, cap = record(client, route, 'row-policy', 'rt_cap',
+                        'engine_object:row-policy')
+        assert ([row['role'] for row in cap['roles']], cap['with_check'],
+                cap['policy_type']) == (['public'], None, 'RESTRICTIVE')
+        assert backend_draft(form, baseline, mode='alter',
+                             baseline=baseline) == {}
+        assert 'YugabyteDB cannot remove' in refused(
+            'row-policy', 'alter', {'with_check': ''}, target)
+        run(client, route, 'row-policy', 'alter', backend_draft(form, {
+            **baseline, 'name': 'rt_own2', 'roles': [],
+            'using': 'v = 1', 'with_check': 'v > 1', 'comment': 'changed'},
+            mode='alter', baseline=baseline), target=target)
+        target, after = record(client, route, 'row-policy', 'rt_own2',
+                               'engine_object:row-policy')
+        assert ([row['role'] for row in after['roles']], after['using'],
+                after['with_check'], after['comment']) == (
+            ['public'], '(v = 1)', '(v > 1)', 'changed')
+        run(client, route, 'row-policy', 'alter', {'comment': ''},
+            target=target)
+        _, after = record(client, route, 'row-policy', 'rt_own2',
+                          'engine_object:row-policy')
+        assert after['comment'] is None
+        assert 'cannot change in place' in refused(
+            'row-policy', 'alter', {'command': 'SELECT'}, target)
+        for name in ('rt_own2', 'rt_cap'):
+            run(client, route, 'row-policy', 'drop', {'confirmation': name},
+                target=find(client, route, 'row-policy', name)[0])
+        assert not query("SELECT 1 FROM pg_policies WHERE "
+                         "tablename = 'secured'")
+    finally:
+        query('DROP TABLE IF EXISTS public.secured')
+        query(f'DROP ROLE IF EXISTS {reader}', 'yugabyte')

@@ -72,7 +72,8 @@
       "kinds": [
         "user",
         "role",
-        "privilege"
+        "privilege",
+        "row-policy"
       ],
       "order": 6
     },
@@ -92,7 +93,8 @@
       "index",
       "constraint",
       "partition",
-      "trigger"
+      "trigger",
+      "row-policy"
     ],
     "view": [
       "column"
@@ -131,6 +133,7 @@
     "role": "object.role",
     "privilege": "object.privilege",
     "snapshot": "object.snapshot",
-    "schedule": "object.job"
+    "schedule": "object.job",
+    "row-policy": "object.privilege"
   }
 }

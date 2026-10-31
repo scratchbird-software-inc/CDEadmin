@@ -69,12 +69,13 @@ def create(admin, draft):
     return [{'source': source, 'parameters': ()}]
 
 
-def alter(admin, draft, target):
+def alter(admin, draft, target, engine='CockroachDB'):
+    # engine: the name in refusals; YugabyteDB YSQL shares these rules.
     unknown = set(draft) - ALTER_KEYS
     if unknown:
         raise RelationalClientError(
             ', '.join(sorted(unknown)) + ' cannot change in place; '
-            'CockroachDB fixes AS and FOR when the policy is created')
+            f'{engine} fixes AS and FOR when the policy is created')
     native = (target or {}).get('native') or {}
     path = admin._target_path(target)
     head = f'ALTER POLICY {admin._quote(path[-1])} ON ' + admin._qualified(
@@ -91,7 +92,7 @@ def alter(admin, draft, target):
                 # every row, and nothing removes the clause. Drop and create
                 # would leave the table unguarded in between.
                 raise RelationalClientError(
-                    f'CockroachDB cannot remove a policy\'s {keyword}; '
+                    f'{engine} cannot remove a policy\'s {keyword}; '
                     'drop the policy and create it without one')
             clauses.append(f'{keyword} (' + admin._safe_fragment(
                 draft[key], keyword) + ')')

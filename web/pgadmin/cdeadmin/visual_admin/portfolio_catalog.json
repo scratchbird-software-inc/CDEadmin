@@ -1420,6 +1420,7 @@
         {"resource_kind": "user", "title": "User", "operation_profile": "security"},
         {"resource_kind": "role", "title": "Role", "operation_profile": "security"},
         {"resource_kind": "privilege", "title": "Privilege", "operation_profile": "security"},
+        {"resource_kind": "row-policy", "title": "Row security policy", "operation_profile": "security", "exclude_operations": ["rename", "grant", "revoke", "set_default"]},
         {"resource_kind": "changefeed", "title": "CDC stream", "operation_profile": "operational"},
         {"resource_kind": "snapshot", "title": "Snapshot", "operation_profile": "operational"},
         {"resource_kind": "schedule", "title": "Snapshot schedule", "operation_profile": "operational"},

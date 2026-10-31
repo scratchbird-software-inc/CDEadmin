@@ -461,6 +461,16 @@ alone. Two fixes found on the way:
    editor still quotes it; whether CockroachDB reads it the same way is
    checked when its demo next runs.
 
+YugabyteDB had no row security policy kind; it now has one, registered
+as CockroachDB's is (portfolio catalog, capabilities, navigator Security
+group and table child) with a ``complete`` form
+(``providers/yugabytedb/policies.py``). It reuses CockroachDB's rules,
+which PostgreSQL shares (type and command fixed once created, a clause
+cannot be removed; the refusals now name the engine), and adds ``COMMENT
+ON POLICY``, which YugabyteDB accepts and CockroachDB refuses. The table's
+``ENABLE`` / ``FORCE ROW LEVEL SECURITY`` switches were already in the
+YugabyteDB table form.
+
 Provider finding, 2026-10-30: the shared relational apply runs a plan in
 one transaction, and YugabyteDB refuses ``CREATE DATABASE`` and ``CREATE
 TABLESPACE`` there ("cannot run inside a transaction block"), so the

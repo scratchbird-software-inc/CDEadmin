@@ -687,6 +687,34 @@
       ]
     },
     {
+      "resource_kind": "row-policy",
+      "family": "engine_object",
+      "title": "Row security policy",
+      "form": "forms/row-policy.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
       "resource_kind": "changefeed",
       "family": "engine_object",
       "title": "CDC stream",
