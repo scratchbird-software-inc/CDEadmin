@@ -132,6 +132,15 @@ _CONTROL_ADMINISTRATION = DistributedSQLControlPlane(
 )
 
 
+_DML = ('INSERT', 'UPDATE', 'DELETE', 'SELECT', 'WITH', 'MERGE')
+
+
+def _ddl_count(statements):
+    return sum(1 for item in statements
+               if not str(item.get('source', '')).lstrip().upper().startswith(
+                   _DML))
+
+
 class YugabyteDBAdministration(RelationalAdministration):
     """Combine YSQL object administration with native cluster controls."""
 
@@ -323,6 +332,16 @@ class YugabyteDBAdministration(RelationalAdministration):
                 compiled.setdefault('warnings', []).append(
                     'These statements run outside a transaction and commit '
                     'one at a time.')
+        elif _ddl_count(compiled.get('statements', [])) and len(
+                compiled.get('statements', [])) > 1:
+            # Live, 2025.2.2.2: with yb_ddl_transaction_block_enabled off
+            # (the default; a server-start setting), CREATE TABLE / SEQUENCE
+            # / ROLE / EXTENSION and COMMENT all survived ROLLBACK.
+            compiled.setdefault('warnings', []).append(
+                'YugabyteDB runs each DDL statement in its own transaction '
+                'unless the server enables yb_ddl_transaction_block_enabled '
+                '(off by default): if a later statement fails, the earlier '
+                'ones stay applied.')
         return compiled
 
     def _compile_create(self, request):

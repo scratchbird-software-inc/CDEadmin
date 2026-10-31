@@ -491,7 +491,22 @@ now set ``statements_outside_transaction``; YugabyteDB sets it for database
 and tablespace create and drop, and such a plan runs on an owned
 autocommit connection (each statement commits on its own, with a warning
 when there are several). Index creation on a populated table and a failed
-statement's rollback behaved correctly in the same check.
+statement's rollback behaved correctly in the same check. (Correction,
+same day: that rollback check covered one failing statement, not earlier
+DDL in the same plan; see below.)
+
+DDL is not transactional on YugabyteDB 2025.2.2.2 by default. With
+``yb_ddl_transaction_block_enabled`` off (its default, and a server-start
+setting a session cannot change), ``CREATE TABLE``, ``CREATE SEQUENCE``,
+``CREATE ROLE``, ``CREATE EXTENSION`` and ``COMMENT`` all survived a
+``ROLLBACK``, and in a plan whose third statement failed the first two
+stayed applied. So the editor's multi-statement YugabyteDB plans (a table
+with comments, a view's column renames before its replacement, a routine
+with its comment) are not atomic: a failure part way leaves the earlier
+statements in place. Every such plan now carries a warning saying so.
+Plain data changes (``INSERT`` / ``UPDATE`` / ``DELETE``) are not
+affected. Not checked: whether enabling the setting on the server makes
+these plans atomic.
 
 Untested on CockroachDB
 ~~~~~~~~~~~~~~~~~~~~~~~

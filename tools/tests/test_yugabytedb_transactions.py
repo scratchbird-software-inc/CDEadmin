@@ -59,3 +59,11 @@ def test_a_borrowed_connection_is_refused():
             'plan': {'resource_kind': 'database', 'operation_id': 'create'},
             'provider_payload': planned['provider_payload']},
             connection=Connection())
+
+
+def test_multi_statement_ddl_plans_warn_they_are_not_atomic():
+    """Live, 2025.2.2.2: DDL commits on its own inside a transaction."""
+    many = compiled('sequence', 'create', {'name': 's', 'comment': 'c'})
+    assert any('yb_ddl_transaction_block_enabled' in warning
+               for warning in many['warnings'])
+    assert not compiled('sequence', 'create', {'name': 's'}).get('warnings')
