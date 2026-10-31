@@ -21,7 +21,8 @@ from ..distributed_sql import (
     sql_administration,
 )
 from . import (
-    indexes as index_sql, objects, tables as tables_sql, types, views,
+    indexes as index_sql, objects, sequences, tables as tables_sql, types,
+    views,
 )
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
@@ -134,13 +135,18 @@ class YugabyteDBAdministration(RelationalAdministration):
     def _native_object(kind, operation):
         return operation in objects.OPERATIONS.get(kind, ()) or (
             kind in {'table', 'index', 'type', 'domain', 'view',
-                     'materialized-view'} and
+                     'materialized-view', 'sequence'} and
             operation in {'create', 'alter'})
 
     def _native_compile(self, request):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if request['resource_kind'] == 'sequence':
+            if request['operation_id'] == 'create':
+                return {'statements': sequences.create(self, draft)}
+            return {'statements': sequences.alter(
+                self, draft, request.get('target_resource'))}
         if request['resource_kind'] in {'view', 'materialized-view'}:
             kind = request['resource_kind']
             if request['operation_id'] == 'create':
@@ -182,6 +188,8 @@ class YugabyteDBAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def _form(self, kind, operation):
+        if kind == 'sequence' and operation in {'create', 'alter'}:
+            return sequences.form(self._field, operation)
         if kind in {'view', 'materialized-view'} and operation in {
                 'create', 'alter'}:
             return views.form(super()._form(kind, 'create')
@@ -778,6 +786,34 @@ def _annotate_catalog(connection, values):
                            'ON n.oid = t.relnamespace '
                            'LEFT JOIN pg_catalog.pg_tablespace ts '
                            'ON ts.oid = i.reltablespace')}
+        sequence_facts = {(str(row[0]), str(row[1])): row[2:]
+                          for row in optional_rows(
+                              cursor,
+                              'SELECT s.schemaname, s.sequencename, '
+                              's.data_type::text, s.start_value, '
+                              's.increment_by, s.min_value, s.max_value, '
+                              's.cache_size, s.cycle, '
+                              "obj_description(c.oid, 'pg_class') "
+                              'FROM pg_catalog.pg_sequences s '
+                              'JOIN pg_catalog.pg_namespace n '
+                              'ON n.nspname = s.schemaname '
+                              'JOIN pg_catalog.pg_class c '
+                              'ON c.relnamespace = n.oid '
+                              'AND c.relname = s.sequencename')}
+        owners = {(str(row[0]), str(row[1])): f'{row[2]}.{row[3]}.{row[4]}'
+                  for row in optional_rows(
+                      cursor,
+                      'SELECT n.nspname, s.relname, tn.nspname, t.relname, '
+                      'a.attname FROM pg_catalog.pg_depend d '
+                      'JOIN pg_catalog.pg_class s ON s.oid = d.objid '
+                      'JOIN pg_catalog.pg_namespace n '
+                      'ON n.oid = s.relnamespace '
+                      'JOIN pg_catalog.pg_class t ON t.oid = d.refobjid '
+                      'JOIN pg_catalog.pg_namespace tn '
+                      'ON tn.oid = t.relnamespace '
+                      'JOIN pg_catalog.pg_attribute a '
+                      'ON a.attrelid = t.oid AND a.attnum = d.refobjsubid '
+                      "WHERE s.relkind = 'S' AND d.deptype = 'a'")}
         view_facts = {(str(row[0]), str(row[1])): row[2:]
                       for row in optional_rows(
                           cursor,
@@ -862,6 +898,18 @@ def _annotate_catalog(connection, values):
                 collation=None if collation is None else str(collation),
                 comment=None if comment is None else str(comment),
                 column_key=membership.get(path, ''))
+        elif item['resource_kind'] == 'sequence':
+            facts = sequence_facts.get(path)
+            if not facts:
+                continue
+            (data_type, start, increment, minimum, maximum, cache, cycle,
+             comment) = facts
+            native.update(
+                parent=path[0], data_type=str(data_type), start=start,
+                increment=increment, minimum=minimum, maximum=maximum,
+                cache=cache, cycle=bool(cycle),
+                owned_by=owners.get(path),
+                comment=None if comment is None else str(comment))
         elif item['resource_kind'] in {'view', 'materialized-view'}:
             facts = view_facts.get(path)
             if not facts:

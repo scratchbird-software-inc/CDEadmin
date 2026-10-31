@@ -546,3 +546,37 @@ def test_views_and_materialized_views(live):
             target=find(client, route, kind, name)[0])
     assert not query("SELECT 1 FROM pg_class WHERE relname LIKE "
                      "'rt\\_%'")
+
+
+def test_sequence_create_reopen_alter_drop(live):
+    route, client = live
+    query('CREATE TABLE public.st (id INT PRIMARY KEY, n INT)')
+    form = resolved_form('yugabytedb', 'sequence')
+    run(client, route, 'sequence', 'create', backend_draft(form, {
+        'name': 'rt_seq', 'parent': 'public', 'data_type': 'integer',
+        'start': 5, 'increment': 2, 'minimum': 1, 'maximum': 1000,
+        'cache': 200, 'cycle': True, 'owned_by': 'public.st.n',
+        'comment': 'a sequence'}))
+    target, baseline = record(client, route, 'sequence', 'rt_seq',
+                              'sequence')
+    assert {key: baseline[key] for key in (
+        'data_type', 'start', 'increment', 'minimum', 'maximum', 'cache',
+        'cycle', 'owned_by', 'comment')} == {
+        'data_type': 'integer', 'start': 5, 'increment': 2, 'minimum': 1,
+        'maximum': 1000, 'cache': 200, 'cycle': True,
+        'owned_by': 'public.st.n', 'comment': 'a sequence'}
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    run(client, route, 'sequence', 'alter', backend_draft(form, {
+        **baseline, 'name': 'rt_seq2', 'data_type': 'bigint',
+        'increment': 4, 'maximum': None, 'cycle': False, 'owned_by': '',
+        'restart': 100, 'comment': ''}, mode='alter', baseline=baseline),
+        target=target)
+    target, after = record(client, route, 'sequence', 'rt_seq2', 'sequence')
+    assert (after['data_type'], after['increment'], after['maximum'],
+            after['cycle'], after['owned_by'], after['comment']) == (
+        'bigint', 4, 9223372036854775807, False, None, None)
+    assert query("SELECT nextval('public.rt_seq2')") == [(100,)]
+    run(client, route, 'sequence', 'drop', {'confirmation': 'rt_seq2'},
+        target=target)
+    assert not query("SELECT 1 FROM pg_class WHERE relname = 'rt_seq2'")

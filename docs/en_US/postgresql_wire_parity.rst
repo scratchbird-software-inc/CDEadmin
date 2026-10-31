@@ -414,6 +414,12 @@ view's query is fixed, its name, tablespace and comment change. YugabyteDB
 had no refresh operation; it now has one (``CONCURRENTLY``, ``WITH NO
 DATA``) in its control plane.
 
+The sequence form is ``complete`` (``providers/yugabytedb/sequences.py``):
+type, start, increment, bounds, cache, ``CYCLE``, ``OWNED BY``, restart,
+comment and rename. ``pg_sequences`` reports YSQL sequences accurately
+(CockroachDB's does not); a cache below the server's minimum is raised to
+it (``CACHE 10`` read back as 100 on the demo).
+
 Provider finding, 2026-10-30: the shared relational apply runs a plan in
 one transaction, and YugabyteDB refuses ``CREATE DATABASE`` and ``CREATE
 TABLESPACE`` there ("cannot run inside a transaction block"), so the
