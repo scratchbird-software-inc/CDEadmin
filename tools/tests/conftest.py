@@ -1,5 +1,18 @@
-"""Portable identities for large payload test cases."""
+"""Portable identities for large payload test cases, and the native SQLite
+CLI that matches this interpreter."""
 import hashlib
+import os
+from pathlib import Path
+import sqlite3
+
+# Native schema binding needs a CLI built from exactly this interpreter's
+# SQLite; the application checks its version and source ID. bootstrap.py
+# builds pinned releases under the reference runtime. An explicit setting wins.
+_REFERENCE_CLI = (Path(__file__).resolve().parents[1] /
+                  'reference_engine_demos/runtime' /
+                  f'sqlite-{sqlite3.sqlite_version}/bin/sqlite3')
+if 'CDEADMIN_SQLITE_BINARY' not in os.environ and _REFERENCE_CLI.is_file():
+    os.environ['CDEADMIN_SQLITE_BINARY'] = str(_REFERENCE_CLI)
 
 
 def pytest_make_parametrize_id(config, val, argname):

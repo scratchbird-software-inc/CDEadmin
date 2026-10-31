@@ -19,11 +19,27 @@ import zipfile
 ROOT = Path(__file__).resolve().parent
 REPOSITORY = ROOT.parents[1]
 RUNTIME = ROOT / "runtime"
+# The reference profile stays 3.53.0 (contracts, tracked table and proof).
+# Other pinned releases build alongside it, for example the CLI that must
+# equal an interpreter's own SQLite for native schema binding.
 SQLITE_VERSION = "3.53.0"
-SQLITE_URL = "https://www.sqlite.org/2026/sqlite-src-3530000.zip"
-SQLITE_SHA256 = (
-    "fbc30cdbfcfa42c78fe7bddd3fd37ab8995369a31d39097a5d0633296c0b6e65"
-)
+SQLITE_RELEASES = {
+    "3.53.0": {
+        "url": "https://www.sqlite.org/2026/sqlite-src-3530000.zip",
+        "sha256": "fbc30cdbfcfa42c78fe7bddd3fd37ab8995369a31d39097a5d0633296c0b6e65",
+        "check_in": "4525003a53a7fc63ca75c59b22c79608659ca12f0131f52c18637f829977f20b",
+    },
+    # Verified 2026-10-31 against https://www.sqlite.org/releaselog/3_53_1.html
+    # (SQLITE_SOURCE_ID 2026-05-05 10:34:17 c88b2201...; sqlite3.c SHA3-256
+    # 414432ae...). The standalone CPython 3.14 that uv installs embeds it.
+    "3.53.1": {
+        "url": "https://www.sqlite.org/2026/sqlite-src-3530100.zip",
+        "sha256": "1b2b5755d9064c4d5d1b0bf5307b48b089963e291c40cc7351318aa1b61c460e",
+        "check_in": "c88b22011a54b4f6fbd149e9f8e4de77658ce58143a1af0e3785e4e6475127e9",
+    },
+}
+SQLITE_URL = SQLITE_RELEASES[SQLITE_VERSION]["url"]
+SQLITE_SHA256 = SQLITE_RELEASES[SQLITE_VERSION]["sha256"]
 FOUNDATIONDB_IMAGE = "foundationdb/foundationdb:7.3.77"
 FIREBIRD_IMAGE = "firebirdsql/firebird:5.0.4"
 MARIADB_IMAGE = "mariadb:12.2.2"
@@ -56,11 +72,11 @@ def install_python_requirements():
          '--receipt', REPOSITORY / '.devstate/mysql-driver.json'], cwd=REPOSITORY)
 
 
-def _sqlite_runtime_ready(prefix):
+def _sqlite_runtime_ready(prefix, version=SQLITE_VERSION):
     output = prefix / "bin/sqlite3"
     library = prefix / "lib/libsqlite3.so"
     if output.exists() and library.exists():
-        version = subprocess.check_output(
+        reported = subprocess.check_output(
             [str(output), "--version"], text=True,
         ).split()[0]
         modules = subprocess.check_output([
@@ -68,15 +84,16 @@ def _sqlite_runtime_ready(prefix):
             "SELECT name FROM pragma_module_list "
             "WHERE name IN ('fts5','rtree') ORDER BY name;",
         ], text=True).splitlines()
-        return version == SQLITE_VERSION and modules == ["fts5", "rtree"]
+        return reported == version and modules == ["fts5", "rtree"]
     return False
 
 
-def build_sqlite(archive_source=None):
-    prefix = RUNTIME / f"sqlite-{SQLITE_VERSION}"
+def build_sqlite(archive_source=None, version=SQLITE_VERSION):
+    release = SQLITE_RELEASES[version]
+    prefix = RUNTIME / f"sqlite-{version}"
     output = prefix / "bin/sqlite3"
-    if _sqlite_runtime_ready(prefix):
-        print(f"SQLite {SQLITE_VERSION} already bootstrapped: {output}")
+    if _sqlite_runtime_ready(prefix, version):
+        print(f"SQLite {version} already bootstrapped: {output}")
         return
     require_program("cc")
     require_program("make")
@@ -84,18 +101,21 @@ def build_sqlite(archive_source=None):
         temporary_path = Path(temporary)
         archive = temporary_path / "sqlite.zip"
         if archive_source is None:
-            print(f"+ download {SQLITE_URL}", flush=True)
-            urllib.request.urlretrieve(SQLITE_URL, archive)
+            print(f"+ download {release['url']}", flush=True)
+            urllib.request.urlretrieve(release["url"], archive)
         else:
             shutil.copy2(archive_source.resolve(), archive)
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-        if digest != SQLITE_SHA256:
+        if digest != release["sha256"]:
             raise RuntimeError(
                 f"SQLite archive checksum mismatch: {digest}"
             )
         with zipfile.ZipFile(archive) as source:
             source.extractall(temporary_path / "source")
-        source_root = temporary_path / "source/sqlite-src-3530000"
+        source_root = next((temporary_path / "source").iterdir())
+        if (source_root / "manifest.uuid").read_text().strip() != (
+                release["check_in"]):
+            raise RuntimeError(f"SQLite archive is not {version}")
         # Python's zip extraction intentionally does not restore executable
         # mode bits. SQLite's configure wrapper invokes this helper directly.
         (source_root / "configure").chmod(0o755)
@@ -108,7 +128,7 @@ def build_sqlite(archive_source=None):
         ], cwd=build)
         run(["make", "-j2"], cwd=build)
         run(["make", "install"], cwd=build)
-        if not _sqlite_runtime_ready(prefix):
+        if not _sqlite_runtime_ready(prefix, version):
             raise RuntimeError(
                 "SQLite runtime lacks the required FTS5 or RTREE module"
             )
@@ -451,7 +471,14 @@ def arguments():
     parser.add_argument("--skip-sqlite", action="store_true")
     parser.add_argument(
         "--sqlite-archive", type=Path,
-        help="Use this verified SQLite source archive instead of downloading",
+        help="Use this verified SQLite source archive instead of downloading "
+             "(reference version only)",
+    )
+    parser.add_argument(
+        "--sqlite-version", action="append", default=[],
+        choices=sorted(SQLITE_RELEASES),
+        help="Also build this pinned SQLite release (repeatable); the "
+             "running interpreter's own SQLite is added when it is pinned",
     )
     parser.add_argument(
         "--sqlite-tracked", action="store_true",
@@ -476,6 +503,12 @@ def main():
         install_python_requirements()
     if not args.skip_sqlite:
         build_sqlite(args.sqlite_archive)
+        import sqlite3
+        extra = set(args.sqlite_version)
+        if sqlite3.sqlite_version in SQLITE_RELEASES:
+            extra.add(sqlite3.sqlite_version)
+        for version in sorted(extra - {SQLITE_VERSION}):
+            build_sqlite(version=version)
     if args.sqlite_tracked:
         from sqlite_tracked import build_tracked
         build_tracked()

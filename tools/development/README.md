@@ -198,6 +198,11 @@ different SQLite version; see the
 > `tools/reference_engine_demos/sqlite_version_matrix.py` with an interpreter
 > whose `_sqlite3` links libsqlite3 dynamically; see
 > `tools/reference_engine_demos/README.md`.
+>
+> Added 2026-10-31: uv's CPython 3.14 embeds SQLite 3.53.1, so it is not the
+> 3.53.0 reference interpreter and the exact-3.53.0 qualification gates refuse
+> it. `tools/reference_engine_demos/bootstrap.py` builds a matching 3.53.1 CLI
+> beside the reference build so its native schema-binding tests can run.
 
 Use the team's release/branch/commit if different. Record the commit for QA.
 `doctor` checks tools, versions, CPU/OS and Docker access without installing

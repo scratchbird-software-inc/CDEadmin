@@ -45,6 +45,13 @@ Bootstrap performs these reproducible client-side steps:
 
 1. downloads SQLite 3.53.0 source, verifies its pinned SHA-256, and builds its
    CLI under ignored `runtime/` state;
+   > Added 2026-10-31: bootstrap also builds the running interpreter's own
+   > SQLite when it is a pinned release (`SQLITE_RELEASES`; 3.53.1 for uv's
+   > CPython 3.14), and any release named with `--sqlite-version`, each under
+   > `runtime/sqlite-<version>`. Native schema binding needs a CLI that equals
+   > the interpreter's SQLite; `tools/tests` selects that CLI when
+   > `CDEADMIN_SQLITE_BINARY` is unset. The 3.53.0 reference build and
+   > profile are unchanged.
 2. tests and builds the TiKV client-go helper from the CDEadmin repository;
 3. extracts the matching FoundationDB CLI and C client library from the pinned
    FoundationDB image;
