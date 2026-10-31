@@ -1,0 +1,98 @@
+{
+  "schema": "cdeadmin.ui-navigator.v1",
+  "engine": "immudb",
+  "sort": "alphabetical",
+  "groups": [
+    {
+      "group_id": "server",
+      "title": "Server and replication",
+      "kinds": [
+        "server",
+        "replica"
+      ],
+      "order": 1
+    },
+    {
+      "group_id": "databases",
+      "title": "Databases",
+      "kinds": [
+        "database"
+      ],
+      "order": 2
+    },
+    {
+      "group_id": "relations",
+      "title": "Tables",
+      "kinds": [
+        "table",
+        "column",
+        "index"
+      ],
+      "order": 3
+    },
+    {
+      "group_id": "documents",
+      "title": "Document collections",
+      "kinds": [
+        "collection",
+        "collection-index",
+        "document"
+      ],
+      "order": 4
+    },
+    {
+      "group_id": "keys",
+      "title": "Keys and verification",
+      "kinds": [
+        "key",
+        "ttl",
+        "revision",
+        "transaction",
+        "proof"
+      ],
+      "order": 5
+    },
+    {
+      "group_id": "security",
+      "title": "Users and permissions",
+      "kinds": [
+        "user",
+        "permission"
+      ],
+      "order": 6
+    }
+  ],
+  "resource_children": {
+    "table": [
+      "column",
+      "index"
+    ],
+    "collection": [
+      "collection-index",
+      "document"
+    ],
+    "key": [
+      "ttl",
+      "revision",
+      "proof"
+    ]
+  },
+  "kind_icons": {
+    "server": "object.server",
+    "replica": "object.replication",
+    "database": "object.database",
+    "table": "object.table",
+    "column": "object.column",
+    "index": "object.index",
+    "collection": "object.columnar_table",
+    "collection-index": "object.index",
+    "document": "object.component",
+    "key": "object.secret",
+    "ttl": "object.event",
+    "revision": "object.snapshot",
+    "transaction": "object.lock",
+    "proof": "object.statistics",
+    "user": "object.user",
+    "permission": "object.privilege"
+  }
+}

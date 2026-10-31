@@ -1,0 +1,44 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "immudb",
+  "family": "index",
+  "resource_kinds": [
+    "index"
+  ],
+  "status": "draft",
+  "engine_tab_title": "immudb",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "index.create.columns",
+      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
+      "tracking": "ui-unification"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "reference",
+      "required": true,
+      "reference_kind": "table"
+    },
+    {
+      "field_id": "columns",
+      "label": "Indexed columns",
+      "tab": "General",
+      "control": "keyvalue",
+      "required": true
+    },
+    {
+      "field_id": "unique",
+      "label": "Unique index",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: table picker."
+}

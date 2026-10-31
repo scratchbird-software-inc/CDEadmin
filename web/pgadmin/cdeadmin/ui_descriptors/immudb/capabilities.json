@@ -1,0 +1,360 @@
+{
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "immudb",
+  "profiles": [
+    "immudb-native"
+  ],
+  "beta_tier": "full",
+  "version_range": {
+    "minimum": "1.11.0",
+    "tested": [
+      "1.11.0"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "server",
+      "family": "engine_object",
+      "title": "immudb server",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "replica",
+      "family": "engine_object",
+      "title": "Replication",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "database",
+      "family": "database",
+      "title": "Database",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ],
+      "form": "forms/database.form.json"
+    },
+    {
+      "resource_kind": "table",
+      "family": "table",
+      "title": "Table",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "insert",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "update",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "delete",
+          "tier": 1,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ],
+      "form": "forms/table.form.json"
+    },
+    {
+      "resource_kind": "column",
+      "family": "engine_object",
+      "title": "Column",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "index",
+      "family": "index",
+      "title": "Index",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ],
+      "form": "forms/index.form.json"
+    },
+    {
+      "resource_kind": "key",
+      "family": "engine_object",
+      "title": "Key",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "insert",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "update",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "delete",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "ttl",
+      "family": "engine_object",
+      "title": "Key expiration",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "revision",
+      "family": "engine_object",
+      "title": "Revision",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "proof",
+      "family": "engine_object",
+      "title": "Proof",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "transaction",
+      "family": "engine_object",
+      "title": "Transaction",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "collection",
+      "family": "engine_object",
+      "title": "Document collection",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "collection-index",
+      "family": "engine_object",
+      "title": "Collection index",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "document",
+      "family": "engine_object",
+      "title": "Document",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "insert",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "update",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "delete",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "user",
+      "family": "role",
+      "title": "User",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ],
+      "form": "forms/role.form.json",
+      "variant": "user"
+    },
+    {
+      "resource_kind": "permission",
+      "family": "role",
+      "title": "Permission",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "grant",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ],
+      "form": "forms/role.form.json",
+      "variant": "grant"
+    }
+  ]
+}

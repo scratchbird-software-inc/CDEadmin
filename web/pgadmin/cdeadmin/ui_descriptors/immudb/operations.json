@@ -1,0 +1,622 @@
+{
+  "schema": "cdeadmin.ui-operations.v1",
+  "engine": "immudb",
+  "operations": [
+    {
+      "operation_id": "health",
+      "resource_kind": "server",
+      "title": "Inspect server health",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": []
+    },
+    {
+      "operation_id": "update_settings",
+      "resource_kind": "database",
+      "title": "Update database settings",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "autoload",
+          "label": "Load automatically",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "exclude_commit_time",
+          "label": "Exclude commit time from checksums",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "max_concurrency",
+          "label": "Maximum commit concurrency",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "read_tx_pool_size",
+          "label": "Read transaction pool size",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "sync_frequency_ms",
+          "label": "Fsync frequency (milliseconds)",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "file_size",
+          "label": "Maximum data file size",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "max_key_length",
+          "label": "Maximum key length",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "max_value_length",
+          "label": "Maximum value length",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "max_transaction_entries",
+          "label": "Maximum entries per transaction",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "max_io_concurrency",
+          "label": "Maximum I/O concurrency",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "tx_log_cache_size",
+          "label": "Transaction-log cache size",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "value_log_cache_size",
+          "label": "Value-log cache size",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "value_log_open_files",
+          "label": "Open value-log file limit",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "tx_log_open_files",
+          "label": "Open transaction-log file limit",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "commit_log_open_files",
+          "label": "Open commit-log file limit",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "write_tx_header_version",
+          "label": "Transaction-header write version",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "write_buffer_size",
+          "label": "Write buffer size",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "max_active_transactions",
+          "label": "Maximum active transactions",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "mvcc_read_set_limit",
+          "label": "MVCC read-set limit",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "embedded_values",
+          "label": "Embed values in transaction headers",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "preallocate_files",
+          "label": "Preallocate database files",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "index_flush_threshold",
+          "label": "Index flush threshold",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_sync_threshold",
+          "label": "Index sync threshold",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_cache_size",
+          "label": "Index node-cache size",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_max_node_size",
+          "label": "Index maximum node size",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_max_active_snapshots",
+          "label": "Index active-snapshot limit",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_renew_snapshot_root_after_ms",
+          "label": "Index snapshot-root renewal (milliseconds)",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_compaction_threshold",
+          "label": "Index compaction threshold",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_compaction_delay_ms",
+          "label": "Index compaction delay (milliseconds)",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_nodes_log_open_files",
+          "label": "Open index node-log file limit",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_history_log_open_files",
+          "label": "Open index history-log file limit",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_commit_log_open_files",
+          "label": "Open index commit-log file limit",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_flush_buffer_size",
+          "label": "Index flush buffer size",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_cleanup_percentage",
+          "label": "Index cleanup percentage",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_max_bulk_size",
+          "label": "Index maximum bulk size",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "index_bulk_preparation_timeout_ms",
+          "label": "Index bulk preparation timeout (milliseconds)",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "aht_sync_threshold",
+          "label": "AHT sync threshold",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "aht_write_buffer_size",
+          "label": "AHT write buffer size",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "history_retention_period_ms",
+          "label": "Automatic history retention (milliseconds)",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "history_truncation_frequency_ms",
+          "label": "Automatic history truncation frequency (milliseconds)",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "is_replica",
+          "label": "Configure as replica",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "primary_database",
+          "label": "Primary database",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "is_replica",
+            "equals": true
+          }
+        },
+        {
+          "field_id": "primary_host",
+          "label": "Primary host",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "is_replica",
+            "equals": true
+          }
+        },
+        {
+          "field_id": "primary_port",
+          "label": "Primary port",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "is_replica",
+            "equals": true
+          }
+        },
+        {
+          "field_id": "primary_username",
+          "label": "Replication username",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "is_replica",
+            "equals": true
+          }
+        },
+        {
+          "field_id": "primary_password",
+          "label": "Replication password",
+          "control": "password",
+          "required": false,
+          "visible_when": {
+            "field": "is_replica",
+            "equals": true
+          }
+        },
+        {
+          "field_id": "synchronous_replication",
+          "label": "Synchronous replication",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "synchronous_acknowledgements",
+          "label": "Required synchronous acknowledgements",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "replication_prefetch_transactions",
+          "label": "Replication prefetch transaction limit",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "replication_commit_concurrency",
+          "label": "Replication commit concurrency",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "replication_allow_tx_discarding",
+          "label": "Allow divergent transaction discard",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "replication_skip_integrity_check",
+          "label": "Skip replication integrity checks",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "replication_wait_for_indexing",
+          "label": "Wait for replication indexing",
+          "control": "boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "operation_id": "load",
+      "resource_kind": "database",
+      "title": "Load database",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "unload",
+      "resource_kind": "database",
+      "title": "Unload database",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "flush_index",
+      "resource_kind": "database",
+      "title": "Flush database index",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "cleanup_percentage",
+          "label": "Cleanup percentage",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "synced",
+          "label": "Synchronize to storage",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        }
+      ]
+    },
+    {
+      "operation_id": "compact_index",
+      "resource_kind": "database",
+      "title": "Compact database index",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "truncate_history",
+      "resource_kind": "database",
+      "title": "Truncate retained history",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "retention_period_ms",
+          "label": "Retention period (milliseconds)",
+          "control": "number",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "change_password",
+      "resource_kind": "user",
+      "title": "Change user password",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "old_password",
+          "label": "Current password",
+          "control": "password",
+          "required": false
+        },
+        {
+          "field_id": "new_password",
+          "label": "New password",
+          "control": "password",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "set_active",
+      "resource_kind": "user",
+      "title": "Set user activation",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "active",
+          "label": "Active",
+          "control": "boolean",
+          "required": true,
+          "default": true
+        }
+      ]
+    },
+    {
+      "operation_id": "grant_sql",
+      "resource_kind": "permission",
+      "title": "Grant SQL privileges",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "username",
+          "label": "Username",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "SQL privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "SELECT",
+              "label": "Select"
+            },
+            {
+              "value": "CREATE",
+              "label": "Create"
+            },
+            {
+              "value": "INSERT",
+              "label": "Insert"
+            },
+            {
+              "value": "UPDATE",
+              "label": "Update"
+            },
+            {
+              "value": "DELETE",
+              "label": "Delete"
+            },
+            {
+              "value": "DROP",
+              "label": "Drop"
+            },
+            {
+              "value": "ALTER",
+              "label": "Alter"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "revoke_sql",
+      "resource_kind": "permission",
+      "title": "Revoke SQL privileges",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "username",
+          "label": "Username",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "SQL privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "SELECT",
+              "label": "Select"
+            },
+            {
+              "value": "CREATE",
+              "label": "Create"
+            },
+            {
+              "value": "INSERT",
+              "label": "Insert"
+            },
+            {
+              "value": "UPDATE",
+              "label": "Update"
+            },
+            {
+              "value": "DELETE",
+              "label": "Delete"
+            },
+            {
+              "value": "DROP",
+              "label": "Drop"
+            },
+            {
+              "value": "ALTER",
+              "label": "Alter"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

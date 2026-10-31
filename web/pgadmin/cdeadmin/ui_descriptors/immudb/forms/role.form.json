@@ -1,0 +1,60 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "immudb",
+  "family": "role",
+  "resource_kinds": [
+    "user",
+    "permission"
+  ],
+  "status": "draft",
+  "engine_tab_title": "immudb",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Username",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "General",
+      "control": "password",
+      "required": true,
+      "group": "Authentication"
+    },
+    {
+      "field_id": "database",
+      "label": "Database",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "permission",
+      "label": "Database permission",
+      "tab": "Engine",
+      "control": "select",
+      "required": true,
+      "default": "read",
+      "options": [
+        {
+          "value": "read",
+          "label": "Read"
+        },
+        {
+          "value": "readwrite",
+          "label": "Read and write"
+        },
+        {
+          "value": "admin",
+          "label": "Administrator"
+        }
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. permission: provider exposes no create form (grant, grant_sql, inspect, revoke, revoke_sql)"
+}

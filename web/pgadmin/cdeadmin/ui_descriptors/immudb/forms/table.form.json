@@ -1,0 +1,194 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "immudb",
+  "family": "table",
+  "resource_kinds": [
+    "table"
+  ],
+  "status": "complete",
+  "engine_tab_title": "immudb",
+  "omitted_tabs": [
+    {
+      "tab": "Triggers",
+      "reason": "immudb has no triggers"
+    },
+    {
+      "tab": "Partitions",
+      "reason": "immudb has no table partitioning"
+    },
+    {
+      "tab": "Security",
+      "reason": "SQL privileges are granted per database (user permissions), not per table"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Changing an existing column (type, NOT NULL, default)",
+      "reason": "immudb 1.11.0 accepts ALTER COLUMN and does not keep it (embedded/sql/stmt.go:1179; live 2026-10-31); add a new column instead",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Adding a check to an existing table",
+      "reason": "immudb has no ADD CONSTRAINT; checks are set at create and can be dropped",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "FOREIGN KEY",
+      "reason": "Accepted by 1.11.0 and neither stored nor enforced (live: a row referencing a missing parent went in)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Primary key change",
+      "reason": "No statement; create a new table",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Table name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "Lowercase letters, digits and underscores: immudb folds names to lowercase. Renaming is RENAME TO."
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns",
+      "tab": "Columns",
+      "control": "grid",
+      "record_key": "columns",
+      "help": "After create, a column can be added, renamed or dropped; its type, length, NOT NULL, default and auto-increment are fixed (immudb 1.11.0 does not keep ALTER COLUMN). A column a check uses cannot be renamed or dropped until the check is dropped: immudb keeps the check text, and every insert would fail.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "type",
+          "label": "Type",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "INTEGER",
+              "label": "INTEGER"
+            },
+            {
+              "value": "BOOLEAN",
+              "label": "BOOLEAN"
+            },
+            {
+              "value": "VARCHAR",
+              "label": "VARCHAR"
+            },
+            {
+              "value": "UUID",
+              "label": "UUID"
+            },
+            {
+              "value": "BLOB",
+              "label": "BLOB"
+            },
+            {
+              "value": "TIMESTAMP",
+              "label": "TIMESTAMP"
+            },
+            {
+              "value": "FLOAT",
+              "label": "FLOAT"
+            },
+            {
+              "value": "JSON",
+              "label": "JSON"
+            }
+          ],
+          "editable_after_create": false
+        },
+        {
+          "field_id": "max_length",
+          "label": "Maximum length",
+          "control": "number",
+          "min": 1,
+          "editable_after_create": false,
+          "help": "VARCHAR and BLOB only"
+        },
+        {
+          "field_id": "nullable",
+          "label": "Nullable",
+          "control": "boolean",
+          "default": true,
+          "editable_after_create": false
+        },
+        {
+          "field_id": "default",
+          "label": "Default",
+          "control": "text",
+          "editable_after_create": false,
+          "help": "An expression, e.g. 'none', 1.5 or NOW(); read back from the catalog log"
+        },
+        {
+          "field_id": "auto_increment",
+          "label": "Auto-increment",
+          "control": "boolean",
+          "default": false,
+          "editable_after_create": false,
+          "help": "On the primary key column, at create"
+        }
+      ]
+    },
+    {
+      "field_id": "primary_key",
+      "label": "Primary key",
+      "tab": "Constraints",
+      "control": "multiselect",
+      "required": true,
+      "option_values_path": [
+        "draft",
+        "columns"
+      ],
+      "editable_after_create": false,
+      "help": "Every immudb table has one; it cannot change after create."
+    },
+    {
+      "field_id": "check_constraints",
+      "label": "Checks",
+      "tab": "Constraints",
+      "control": "grid",
+      "help": "Enforced on every insert and update, and, unlike standard SQL, a check fails on NULL: write p IS NULL OR p >= 0 to allow a nullable column. Set at create; afterwards a check can only be dropped (no ADD CONSTRAINT). An unnamed check is named <table>_check<n>. Read back from the catalog log.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "editable_after_create": false
+        },
+        {
+          "field_id": "expression",
+          "label": "Expression",
+          "control": "text",
+          "required": true,
+          "editable_after_create": false
+        }
+      ]
+    },
+    {
+      "field_id": "catalog_log_unread",
+      "label": "Defaults and checks not read",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "catalog_log_unread",
+        "truthy": true
+      },
+      "help": "Why the catalog log could not be read; while unread, checks cannot be changed and columns cannot be renamed or dropped here."
+    }
+  ],
+  "notes": "Hand-written for providers/immudb/tables.py, which sends every statement through the native /db/sqlexec endpoint as one transaction: over the PostgreSQL wire immudb 1.11.0 reports ALTER TABLE ... ADD as done and does nothing, and drops a check name. Types, lengths, nullability, auto-increment and the key come from COLUMNS() and INDEXES(); defaults and checks from the catalog log (providers/immudb/catalog_log.py, native TxScan), which no catalog query returns. Indexes are their own kind (index.form.json). Round trip verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31): create with every type, defaults and named and unnamed checks; reopen with no changes; refused rename of a column a check reads; drop a check, rename a column, add and drop columns and rename the table in one batch; refused column change and added check; drop."
+}

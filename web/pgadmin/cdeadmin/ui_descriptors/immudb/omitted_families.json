@@ -1,0 +1,25 @@
+{
+  "engine": "immudb",
+  "omitted": [
+    {
+      "family": "view",
+      "reason": "immudb 1.11.0 accepts CREATE VIEW but keeps no catalog entry: the view was gone after a database unload and load (live, 2026-10-31), and pg_views is registered empty; nothing can read one back"
+    },
+    {
+      "family": "sequence",
+      "reason": "immudb 1.11.0 accepts CREATE SEQUENCE, but NEXTVAL restarted at 1 after a database unload and load (live, 2026-10-31), so it can hand out the same values twice; pg_sequences is empty. AUTO_INCREMENT is a column property"
+    },
+    {
+      "family": "routine",
+      "reason": "No functions or procedures; the PostgreSQL-wire layer turns CREATE FUNCTION into a reported success that does nothing (pkg/pgsql/server/stmts_handler.go:190)"
+    },
+    {
+      "family": "trigger",
+      "reason": "No triggers; CREATE TRIGGER is a reported success that does nothing over the PostgreSQL wire (stmts_handler.go:190)"
+    },
+    {
+      "family": "type",
+      "reason": "Eight fixed column types and no user-defined types or domains; CREATE TYPE / DOMAIN are reported successes that do nothing over the PostgreSQL wire"
+    }
+  ]
+}

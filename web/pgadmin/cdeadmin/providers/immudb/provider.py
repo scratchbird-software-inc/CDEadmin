@@ -23,6 +23,7 @@ from pgadmin.cdeadmin.visual_admin import (
     ControlPlaneOperation,
     control_plane_field as cp_field,
 )
+from . import catalog_log, tables
 from .driver import ImmudbNativeMixin
 from ..distributed_control_plane import DistributedSQLControlPlane
 from ..distributed_sql import (
@@ -40,10 +41,12 @@ PROFILE = PilotProfile(
     'postgresql_wire', 'immutable-multimodel', 'immudb-sql', 'immudb SQL',
     'immudb-transaction-native', 'tabular',
     (
+        # No view, sequence or constraint kinds: 1.11.0 keeps no view across
+        # a reload, restarts sequences, and returns checks only through the
+        # catalog log, as table facts (providers/immudb/catalog_log.py).
         'server', 'replica', 'database', 'table', 'column', 'index', 'key',
-        'view', 'sequence', 'constraint', 'ttl', 'collection',
-        'collection-index', 'document', 'revision', 'proof', 'transaction',
-        'user', 'permission',
+        'ttl', 'collection', 'collection-index', 'document', 'revision',
+        'proof', 'transaction', 'user', 'permission',
     ),
     ('immuadmin', 'immuclient', 'proof-verifier', 'hot-backup'),
     parameter_shape='object-or-array',
@@ -344,15 +347,29 @@ CONTROL_OPERATIONS = (
                      ]),
         ), target_required=False, impact_scope='cluster'
     ),
+    # Tables are created and altered natively (providers/immudb/tables.py),
+    # which checks every key it is sent. The column, key and check lists are
+    # typed by the descriptor form's grids (ui_descriptors/immudb/forms/
+    # table.form.json), not declared here.
+    ControlPlaneOperation(
+        'table', 'create', 'Create table', 'admin', 'administer', (
+            cp_field('name', 'Table name', 'text', True, max_length=128,
+                     pattern=_NAME_PATTERN),
+            cp_field('parent', 'Namespace', 'text', False, max_length=16),
+        ), target_required=False, confirmation_required=False,
+        impact_scope='database'
+    ),
     ControlPlaneOperation(
         'table', 'alter', 'Alter table columns', 'admin', 'administer', (
-            cp_field('add_columns', 'Columns to add', 'json', False,
-                     json_type='array', default=[]),
-            cp_field('drop_columns', 'Columns to drop', 'json', False,
-                     json_type='array', default=[]),
-            cp_field('rename_columns', 'Columns to rename', 'json', False,
-                     json_type='array', default=[]),
+            cp_field('name', 'Table name', 'text', False, max_length=128,
+                     pattern=_NAME_PATTERN),
         ), confirmation_required=False, impact_scope='database'
+    ),
+    # Native too: a pooled PostgreSQL-wire session kept the catalog from
+    # before a native rename and could not find the table (live).
+    ControlPlaneOperation(
+        'table', 'drop', 'Drop table', 'destructive', 'administer',
+        impact_scope='database'
     ),
     ControlPlaneOperation(
         'column', 'create', 'Create column', 'admin', 'administer', (
@@ -748,9 +765,21 @@ def _compile_control(request):
             'database': _name(draft.get('database'), 'database'),
             'privileges': privileges,
         }
+    elif kind == 'table' and operation in {'create', 'alter', 'drop'}:
+        database = str(
+            (request.get('_provider_route') or {}).get('database') or
+            (request.get('_provider_route') or {}).get('dbname') or
+            'defaultdb'
+        )
+        target = request.get('target_resource')
+        statements = (
+            tables.create(ADMINISTRATION, draft) if operation == 'create'
+            else tables.drop(target) if operation == 'drop'
+            else tables.alter(ADMINISTRATION, draft, target))
+        source = '; '.join(statements)
+        path = '/db/sqlexec'
+        body = {'sql': source, 'params': [], 'noWait': False}
     elif (
-        kind == 'table' and operation == 'alter'
-    ) or (
         kind == 'column' and operation in {
             'create', 'rename', 'drop',
         }
@@ -974,6 +1003,12 @@ def _compile_control(request):
                 'parameter_count': 0,
                 'parameters_redacted': False,
             } if kind == 'user' and operation == 'drop' else {}),
+            # Native SQL is shown as sent (one transaction).
+            **({
+                'source': body['sql'], 'parameter_count': 0,
+                'parameters_redacted': False,
+            } if path == '/db/sqlexec' and kind in {
+                'table', 'column', 'index'} else {}),
             'sensitive_values_redacted': kind in {
                 'user', 'key', 'document',
             } or bool(
@@ -1439,6 +1474,15 @@ def _post_validate(client, request):
                 item.get('display_name') == expected_name and
                 draft.get('collection') in item.get('display_path', [])
             ]
+        elif kind == 'table' and operation in {'create', 'alter'}:
+            # After a rename the table is found by its new name.
+            expected_name = draft.get('name') or (
+                target.get('display_path') or [None])[-1]
+            matches = [
+                item for item in resources
+                if item.get('resource_kind') == kind and
+                item.get('display_name') == expected_name
+            ]
         elif kind == 'document' and operation == 'insert':
             response = request.get('provider_result') or {}
             document = (response.get('provider_response') or {}).get(
@@ -1467,11 +1511,10 @@ def _post_validate(client, request):
                 'document_id_field'
             ) == draft.get('document_id_field')
         if confirmed and kind == 'table' and operation == 'alter':
-            table_name = (target.get('display_path') or [None])[-1]
+            native = matches[0].get('native') or {}
             column_names = {
-                item.get('display_name') for item in resources
-                if item.get('resource_kind') == 'column' and
-                table_name in item.get('display_path', [])
+                item.get('name') for item in native.get('columns') or []
+                if isinstance(item, Mapping)
             }
             added = {
                 item.get('name') for item in draft.get('add_columns', [])
@@ -1492,6 +1535,13 @@ def _post_validate(client, request):
                 renamed_from.isdisjoint(column_names) and
                 renamed_to <= column_names
             )
+            if confirmed and isinstance(
+                    draft.get('check_constraints'), list):
+                held = native.get('check_constraints')
+                confirmed = held is not None and sorted(
+                    item.get('name') for item in held) == sorted(
+                    item.get('name') for item in draft['check_constraints']
+                    if isinstance(item, Mapping))
         if confirmed and kind == 'column' and operation == 'alter':
             expected_nullable = 'YES' if draft.get('nullable') else 'NO'
             confirmed = str(matches[0].get('native', {}).get(
@@ -1669,6 +1719,25 @@ _DIALECT = replace(
 
 class ImmudbAdministration(DistributedSQLControlPlane):
     """Account for exact immudb PostgreSQL-wire DML result semantics."""
+
+    def validate(self, request):
+        checked = super().validate(request)
+        if request.get('resource_kind') == 'table' and request.get(
+                'operation_id') in {'create', 'alter'} and not checked[
+                'errors']:
+            # The lists are not control-plane fields; the table compile
+            # checks them (providers/immudb/tables.py).
+            try:
+                draft = request.get('draft') or {}
+                if request['operation_id'] == 'create':
+                    tables.create(self, draft)
+                else:
+                    tables.alter(self, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None,
+                                    'code': 'invalid_immudb_table',
+                                    'message': str(error)}]}
+        return checked
 
     def _compile_identity_dml(self, request):
         statement = super()._compile_identity_dml(request)
@@ -1915,6 +1984,42 @@ class ImmudbDBAPIClient(ImmudbNativeMixin, PsycopgPoolDBAPIClient):
             'automatic_mutation_retry': False,
         }
 
+    def _table_facts(self, route, database):
+        """Column defaults and checks from the catalog log, or why not.
+
+        catalog_log.py: no catalog query returns them on 1.11.0; the key
+        layouts are that version's own, so another version is unread.
+        """
+        try:
+            version = str(self._request(route, 'GET', '/serverinfo').get(
+                'version') or '')
+            if version != catalog_log.SUPPORTED_VERSION:
+                return (f'immudb {version or "of unknown version"}: the '
+                        'catalog log layout is read for '
+                        f'{catalog_log.SUPPORTED_VERSION} only')
+            token = self._request(
+                route, 'GET', '/db/use/' + urllib.parse.quote(
+                    _name(database, 'database'), safe=''),
+                token=self._login(route)).get('token')
+            if not isinstance(token, str) or not token:
+                return 'the database token is unavailable'
+
+            def scan(start, action, limit):
+                spec = {'action': 'EXCLUDE'}
+                document = self._request(route, 'POST', '/db/tx', {
+                    'initialTx': str(start), 'limit': limit, 'desc': False,
+                    'entriesSpec': {'kvEntriesSpec': spec,
+                                    'zEntriesSpec': spec,
+                                    'sqlEntriesSpec': {'action': action}},
+                }, token)
+                return list(document.get('txs') or [])
+
+            return catalog_log.read(scan, cache_key=(
+                str(route.get('web_host') or route.get('host')),
+                str(route.get('web_port', 8080)), database))
+        except (catalog_log.Unread, RelationalClientError) as error:
+            return f'the catalog log could not be read ({error})'
+
     def list_resources(self, request):
         """Join SQL catalogs with bounded native KV/document discovery."""
         values = {
@@ -1998,6 +2103,15 @@ class ImmudbDBAPIClient(ImmudbNativeMixin, PsycopgPoolDBAPIClient):
                     },
                 )
                 values[item['resource_id']] = item
+        tables_held = [item for item in values.values()
+                       if item.get('resource_kind') == 'table']
+        if tables_held:
+            facts = self._table_facts(route, database)
+            for item in tables_held:
+                tables.with_facts(
+                    item.setdefault('native', {}),
+                    facts if isinstance(facts, str) else facts.get(
+                        item.get('display_name')))
         scan = self.rest_admin(
             route, 'POST', '/db/scan', {
                 'seekKey': '', 'endKey': '', 'prefix': '', 'desc': False,
@@ -2226,6 +2340,28 @@ def _catalog(connection, request):
             connection, request, 'immudb', _extras):
         if item['resource_kind'] not in PROFILE.resource_kinds:
             continue
+        if item['resource_kind'] == 'table':
+            # COLUMNS() and INDEXES() give immudb's own types, lengths and
+            # key columns (information_schema maps them to PostgreSQL's).
+            name = str(item['display_name'])
+            if re.fullmatch(_NAME_PATTERN, name):
+                cursor = connection.cursor()
+                try:
+                    columns = [{
+                        'name': str(row[1]), 'type': str(row[2]),
+                        'max_length': row[3], 'nullable': row[4],
+                        'auto_increment': row[5],
+                    } for row in optional_rows(
+                        cursor, f"SELECT * FROM COLUMNS('{name}')")]
+                    indexes = [{
+                        'name': str(row[1]), 'unique': row[2],
+                        'primary': row[3],
+                    } for row in optional_rows(
+                        cursor, f"SELECT * FROM INDEXES('{name}')")]
+                finally:
+                    cursor.close()
+                item.setdefault('native', {}).update(
+                    tables.record(columns, indexes))
         if item['resource_kind'] == 'index':
             definition = item.get('native', {}).get('definition', '')
             match = re.fullmatch(

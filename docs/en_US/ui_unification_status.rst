@@ -952,3 +952,18 @@ against fixtures generated from the real backend validators. Structure, state
 model and gaps are in :doc:`bi_dashboard_ui`. No shared schema, form or family
 renderer was edited. Lint before/after: JSON297/297, MUI244/244, UI engine
 branches111/111, panels113/113, context-menu branches14/14.
+
+immudb descriptor folder, 2026-10-31
+------------------------------------
+
+``ui_descriptors/immudb`` is added and immudb joins the beta-engine gate
+lists. The table form is ``complete`` after a live round trip on 1.11.0. The
+database, index and role forms are drafts. Evidence and engine findings are
+in :ref:`postgresql_wire_parity` ("immudb 1.11.0"). The immudb table
+create, alter and drop control operations declare only their scalar fields:
+their column, key and check lists are typed by the form's grids and checked
+by ``providers/immudb/tables.py``, so the three ``json`` list declarations
+on table alter are gone. No shared schema, form or family renderer was
+edited. Lint before/after: JSON 304/301 (maximum lowered to 301), MUI
+244/244, UI engine branches 111/111, panels 113/113, context-menu branches
+14/14.

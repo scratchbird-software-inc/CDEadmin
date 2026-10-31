@@ -11,6 +11,11 @@ engine does not directly support. This page records the live evidence for
 that filter and the plan that follows from it. The MySQL-wire engines have the
 same record in :ref:`mysql_wire_parity`.
 
+(Added 2026-10-31: immudb 1.11.0, also reached over the PostgreSQL wire and
+named in the same direction, is recorded here too; see "immudb 1.11.0"
+below. Owner decision the same day: offer only what immudb can return, by
+any engine method, SQL or not.)
+
 Method
 ------
 
@@ -597,6 +602,83 @@ published and the masters answer only at the node's advertised address
    shared PostgreSQL-wire catalog's (``YugabyteDB``) and the control
    plane's (``YugabyteDB cluster``, which the load-balancer operation
    targets).
+
+immudb 1.11.0
+~~~~~~~~~~~~~
+
+Checked live on the demo and against the pinned 1.11.0 source,
+2026-10-31. Owner decision the same day: offer only what can be read back,
+by any engine method.
+
+-  The PostgreSQL-wire layer turns a list of statements into reported
+   successes that do nothing (``pkg/pgsql/server/stmts_handler.go:190``).
+   The list includes ``ALTER TABLE ... ADD``, ``ALTER TABLE ... ALTER
+   COLUMN``, ``GRANT``, ``REVOKE``, ``DROP INDEX``, ``COMMENT ON`` and
+   ``CREATE FUNCTION`` / ``TYPE`` / ``TRIGGER`` / ``DOMAIN``. Seen live: an
+   added column did not appear. It also drops a CHECK's name. The provider
+   already sent column, index and grant changes through the native
+   ``/db/sqlexec`` endpoint; table create, alter and drop now go there too.
+   A batch there is one transaction: a batch whose second statement failed
+   left nothing.
+-  Not kept although accepted: ``ALTER COLUMN`` (``SET`` / ``DROP NOT
+   NULL``, ``TYPE``) changes only the loaded catalog (``embedded/sql/
+   stmt.go:1179``). A view is gone after a database unload and load. A
+   sequence restarts: ``NEXTVAL`` gave 1 again after a reload, so it can
+   hand out the same values twice. ``FOREIGN KEY`` is neither stored nor
+   enforced (a row naming a missing parent went in). None is offered.
+-  Read back, but by no catalog query: column defaults and CHECK
+   constraints. ``COLUMNS()``, ``SHOW TABLE``, ``information_schema``
+   (``column_default`` is the literal ``DEFAULT``) and ``pg_constraint``
+   (primary and unique only) omit them. They are in the database's own
+   catalog entries in the transaction log, which the native TxScan
+   endpoint returns. ``providers/immudb/catalog_log.py`` scans keys only
+   (row contents are not fetched), then reads the few catalog transactions
+   with values. It caches per database and checks the cached last
+   transaction's hash, so a database recreated under the same name is read
+   afresh. A truncation commits a full catalog copy marked with its
+   truncation point (``pkg/database/sql.go`` ``CopySQLCatalog``), and the
+   reader restarts from the latest copy.
+-  Untested: that truncation path. immudb requires a retention period of
+   at least 24 hours, and nothing on the demo is that old except its
+   seeded data, which was not truncated. It rests on the source and a
+   unit test.
+-  The key layouts are 1.11.0's own. On any other server version
+   (``/serverinfo``) defaults and checks are reported unread, never empty.
+   While they are unread, the editor refuses check changes and column
+   renames or drops.
+-  A key-only scan read 3,004 transactions in 0.14 s on the demo; a
+   catalog read stops at 500,000 transactions and reports unread.
+-  Engine behaviour the editor accounts for:
+
+   -  Names fold to lowercase, quoted or not (``embedded/sql/parser.go``),
+      so the editor refuses uppercase and quotes names (reserved words
+      such as ``key`` then work).
+   -  A CHECK fails on NULL, unlike standard SQL: ``CHECK (p >= 0)``
+      refused an omitted ``p``. ``p IS NULL OR p >= 0`` allows it; the
+      check help says so.
+   -  A check keeps its text, so after renaming a column it reads every
+      insert failed ("column does not exist (qty)"). The editor refuses
+      renaming or dropping a column a check uses until the check is
+      dropped.
+   -  ``DROP TABLE`` failed ("tbtree: key not found") for every table that
+      still had a check, and succeeded once the checks were dropped
+      first. The drop sends both in one batch.
+   -  There is no ``ADD CONSTRAINT``; a check is set at create and can only
+      be dropped. ``CHECK (expr)`` with parentheses failed to parse over
+      the PostgreSQL wire and parses natively.
+   -  A partial index's ``WHERE`` is not stored in its catalog entry and no
+      read returns it, so it is not offered.
+
+-  Descriptor folder ``ui_descriptors/immudb`` (beta-engine gate lists).
+   The table form is ``complete``, after a live round trip on 1.11.0
+   (``tools/tests/test_ui_descriptor_roundtrip_immudb.py``). Database,
+   index and role forms are drafts. View, sequence, routine, trigger and
+   type are listed in ``omitted_families.json`` with the reasons above.
+   The provider no longer declares view, sequence or constraint kinds.
+-  The database listing fallback noted for immudb under YugabyteDB:
+   ``pg_database`` lists only the connected database. immudb's databases
+   come from the native list (``/db/list/v2``), which the provider already
+   used.
 
 Untested on CockroachDB
 ~~~~~~~~~~~~~~~~~~~~~~~

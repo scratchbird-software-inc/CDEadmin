@@ -59,6 +59,8 @@ def administrations():
     found["cockroachdb"] = cockroachdb.ADMINISTRATION
     from pgadmin.cdeadmin.providers.yugabytedb import provider as yugabytedb
     found["yugabytedb"] = yugabytedb.ADMINISTRATION
+    from pgadmin.cdeadmin.providers.immudb import provider as immudb
+    found["immudb"] = immudb.ADMINISTRATION
     return found
 
 
