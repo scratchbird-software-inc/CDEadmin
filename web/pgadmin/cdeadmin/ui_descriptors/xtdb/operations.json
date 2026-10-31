@@ -1,0 +1,121 @@
+{
+  "schema": "cdeadmin.ui-operations.v1",
+  "engine": "xtdb",
+  "operations": [
+    {
+      "operation_id": "erase",
+      "resource_kind": "table",
+      "title": "Erase document history",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "row_identity",
+          "label": "Provider row identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "acknowledge_irreversible",
+          "label": "I understand all bitemporal history is destroyed",
+          "control": "boolean",
+          "required": true,
+          "default": false
+        }
+      ],
+      "notes": "Erases one document and all its valid-time and system-time history; the row identity comes from the data grid. Read back: no version of the document remains (FOR ALL VALID_TIME FOR ALL SYSTEM_TIME). The table stays listed."
+    },
+    {
+      "operation_id": "erase",
+      "resource_kind": "document",
+      "title": "Erase document history",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "row_identity",
+          "label": "Provider row identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "acknowledge_irreversible",
+          "label": "I understand all bitemporal history is destroyed",
+          "control": "boolean",
+          "required": true,
+          "default": false
+        }
+      ],
+      "notes": "Same provider path as Erase on a table; untested from this kind (draft)."
+    },
+    {
+      "operation_id": "erase",
+      "resource_kind": "entity",
+      "title": "Erase document history",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "row_identity",
+          "label": "Provider row identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "acknowledge_irreversible",
+          "label": "I understand all bitemporal history is destroyed",
+          "control": "boolean",
+          "required": true,
+          "default": false
+        }
+      ],
+      "notes": "Same provider path as Erase on a table; untested from this kind (draft)."
+    },
+    {
+      "operation_id": "execute",
+      "resource_kind": "health",
+      "title": "Finish the current transaction block",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "action",
+          "label": "Action",
+          "control": "select",
+          "required": true,
+          "default": "finish-block",
+          "options": [
+            {
+              "value": "finish-block",
+              "label": "Finish transaction block"
+            }
+          ]
+        },
+        {
+          "field_id": "acknowledge_operation",
+          "label": "Confirm block maintenance",
+          "control": "boolean",
+          "required": true,
+          "default": false
+        }
+      ],
+      "notes": "POST /system/finish-block on the health endpoint. Untested (draft): no query reports the block index, so the effect cannot be read back here."
+    }
+  ]
+}

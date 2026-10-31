@@ -26,11 +26,12 @@ PROFILE = PilotProfile(
     language_name='XTDB SQL 2.1',
     transaction_model='xtdb-bitemporal-native-outcome',
     result_kind='document',
+    # What the client lists. XTDB 2.1.0 has no indexes, modules, roles,
+    # privileges or user-visible snapshots or compactor objects (2026-10-31).
     resource_kinds=(
         'cluster', 'node', 'database', 'schema', 'table', 'column',
         'document', 'entity', 'valid-time', 'system-time',
-        'transaction', 'transaction-log', 'index', 'module', 'user',
-        'role', 'privilege', 'metric', 'health', 'snapshot', 'compactor',
+        'transaction', 'transaction-log', 'user', 'metric', 'health',
     ),
     admin_tools=('psql', 'healthz', 'finish-block'),
     parameter_shape='object-or-array',

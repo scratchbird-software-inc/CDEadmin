@@ -16,6 +16,9 @@ named in the same direction, is recorded here too; see "immudb 1.11.0"
 below. Owner decision the same day: offer only what immudb can return, by
 any engine method, SQL or not.)
 
+(Added later on 2026-10-31: XTDB 2.1.0, also reached over the PostgreSQL
+wire, under the same decision; see "XTDB 2.1.0" below.)
+
 Method
 ------
 
@@ -717,6 +720,93 @@ by any engine method.
    ``pg_database`` lists only the connected database. immudb's databases
    come from the native list (``/db/list/v2``), which the provider already
    used.
+
+XTDB 2.1.0
+~~~~~~~~~~
+
+Checked live on the demo and against the pinned 2.1.0 source,
+2026-10-31, under the same owner decision: offer only what can be read
+back, by any engine method.
+
+-  XTDB 2.1.0's SQL has no table, index, view, constraint, sequence,
+   routine, trigger or type statements (``core/src/main/antlr/xtdb/antlr/
+   Sql.g4``). Its administration statements are ``CREATE USER`` / ``ALTER
+   USER ... WITH PASSWORD`` and ``ATTACH`` / ``DETACH DATABASE``. A table
+   comes into being with its first document. The provider no longer
+   declares index, module, role, privilege, snapshot or compactor kinds,
+   and the portfolio catalog no longer lists the first four. The families
+   XTDB lacks are in ``ui_descriptors/xtdb/omitted_families.json``.
+-  Databases: ``pg_database`` returns only the connected database, and
+   ``information_schema.tables`` reports one catalog. ``SHOW
+   SNAPSHOT_TOKEN`` names every attached database. It is the base64 of
+   the ``TimeBasis`` protobuf (``api/src/main/proto/xtdb/proto/
+   basis.proto``), keyed by database name. ``providers/xtdb/basis.py``
+   decodes it by field number, version-gated to 2.1.0. On another
+   version, or if the token cannot be decoded, the navigator shows the
+   connected database and says why. Metrics carry no database name.
+-  An attached database's log and storage configuration is not returned
+   by anything. It is kept only in the primary database's log and block
+   files (``core/src/main/clojure/xtdb/db_catalog.clj``). Attach without
+   a configuration keeps log and storage in memory (``Database.kt``
+   ``Config`` defaults), and the data is lost on restart. The database
+   form stays a draft pending an owner decision on offering a
+   configuration that cannot be read back.
+-  Attach and detach both survived a restart (live). Detach leaves the
+   database's files, and attaching the same paths again reopened the old
+   data. After a restart, an attached database reappears only when the
+   primary log replay reaches its attach message. One check right after
+   ``/healthz/ready`` found it missing; a later one found it back.
+-  Users are permanent. There is no ``DROP USER``, and
+   ``pg_catalog.pg_user`` refuses writes ("Cannot write to table:
+   pg_catalog/pg_user"). ``pg_user.passwd`` returns each user's argon2id
+   hash to any client; the provider reads only the name and the superuser
+   flag. A password change is confirmed by comparing a digest of the
+   stored hash before and after, and the hash itself is never returned.
+-  The default authentication rule is TRUST for every connection
+   (``core/src/main/kotlin/xtdb/api/Authenticator.kt`` ``DEFAULT_RULES``),
+   and the demo uses it. A wrong password logged in, and
+   ``current_user`` read ``xtdb`` for a session opened as another user. A
+   password is stored, but checked only where the server's rules ask for
+   it. The role form says so.
+-  Tables: ``ERASE`` of every document leaves the table listed in
+   ``information_schema.tables`` and ``xt.live_tables``, so "drop" is not
+   offered. A column's type is the union of every type the field has
+   held, including in erased documents. ``_id`` written as int2 and then
+   int8 reads ``[:union :i16 :i64]`` for good. psycopg binds a small
+   Python int as int2, so the provider now binds integers as int8, as
+   XTDB SQL integer literals are typed. A decimal's type carries its
+   value's precision (``[:decimal 32 2 128]``).
+-  ``information_schema.schemata`` lists only the four built-in schemas.
+   A schema created by a write is listed through its tables, which is how
+   the navigator already found schemas.
+-  Table create takes the first document as typed rows (``document_fields``:
+   field, value type, value) instead of a raw JSON document. The record
+   lists every column with XTDB's own type from
+   ``information_schema.columns``. The provider had no post-state check;
+   it now reads back attach and detach (snapshot token), a new user
+   (``pg_user``), a password change (stored-hash digest), table create
+   (the document and its columns) and erase (no version remains, ``FOR ALL
+   VALID_TIME FOR ALL SYSTEM_TIME``). The check sets the write's await
+   token first, so it reads its own write.
+-  Descriptor folder ``ui_descriptors/xtdb`` (beta-engine gate lists).
+   Table and role forms are ``complete``, and so is Erase on a table,
+   after live round trips (``tools/tests/test_ui_descriptor_roundtrip_
+   xtdb.py``, three runs). The database form is a draft, as above. Erase
+   from the document and entity kinds is untested (draft): it is the same
+   provider path. Finishing a transaction block (``POST /system/
+   finish-block``) is untested (draft): no query reports the block index,
+   so its effect cannot be read back here.
+-  Left on the demo, all permanent: the probe user ``probe_u1``, the empty
+   probe table ``probe_s.t1``, the round-trip user ``rt_xtdb_user``, the
+   empty table ``rt_xtdb.orders`` (its ``_id`` and ``qty`` read
+   ``[:union :i16 :i64]`` from a run before the int8 binding), and
+   ``rt_xtdb.order_lines``, which the test reuses. Earlier runs had already
+   left eight ``cdeadmin_user_*`` / ``visual_user_*`` users and ten
+   ``cdeadmin_*`` tables. ``tools/cdeadmin_xtdb_live_gate.py``, run once
+   here without its destructive checks as a regression check (every
+   category it ran passed), writes a new table per run and added
+   ``cdeadmin_xtdb_50fc76ab4c77``. The probe database's files were removed
+   from the container after detach.
 
 Untested on CockroachDB
 ~~~~~~~~~~~~~~~~~~~~~~~

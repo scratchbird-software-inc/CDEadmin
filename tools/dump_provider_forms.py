@@ -61,7 +61,26 @@ def administrations():
     found["yugabytedb"] = yugabytedb.ADMINISTRATION
     from pgadmin.cdeadmin.providers.immudb import provider as immudb
     found["immudb"] = immudb.ADMINISTRATION
+    # XTDB has no relational administration: its client adapts the catalog.
+    found["xtdb"] = ClientCatalog("xtdb")
     return found
+
+
+class ClientCatalog:
+    """A client-adapted catalog, keeping the operations the client runs."""
+
+    def __init__(self, engine_id):
+        from pgadmin.cdeadmin.providers.xtdb.client import XTDBClient
+        self.client = {"xtdb": XTDBClient}[engine_id]()
+
+    def catalog(self, catalog):
+        adapted = self.client.visual_admin_catalog(catalog)
+        for resource in adapted.get("objects", []):
+            resource["operations"] = [
+                operation for operation in resource.get("operations", [])
+                if self.client.supports_admin_operation(
+                    resource["resource_kind"], operation["operation_id"])]
+        return adapted
 
 
 def compact_field(field):

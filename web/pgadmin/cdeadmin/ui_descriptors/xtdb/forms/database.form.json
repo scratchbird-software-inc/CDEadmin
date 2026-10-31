@@ -1,0 +1,89 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "xtdb",
+  "family": "database",
+  "resource_kinds": [
+    "database"
+  ],
+  "status": "draft",
+  "engine_tab_title": "XTDB",
+  "omitted_tabs": [
+    {
+      "tab": "Security",
+      "reason": "XTDB 2.1.0 has no database privileges"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Reading an attached database's log and storage configuration",
+      "reason": "XTDB 2.1.0 keeps it only in the primary database's log and block files (db_catalog.clj, block.proto); no query or HTTP endpoint returns it. Owner decision pending on offering a create-only configuration",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Renaming or changing an attached database",
+      "reason": "XTDB 2.1.0 has ATTACH and DETACH only",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Database name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "help": "Attach and detach run on the primary xtdb database. Attached databases are listed from SHOW SNAPSHOT_TOKEN, which names every one (pg_database shows only the connected database)."
+    },
+    {
+      "field_id": "config_yaml",
+      "label": "Log and storage configuration (YAML)",
+      "tab": "Options",
+      "control": "code",
+      "language": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "placeholder": "log: !Local\n  path: /var/lib/xtdb/sales/log\nstorage: !Local\n  path: /var/lib/xtdb/sales/buffers",
+      "help": "XTDB does not return this after attach. Paths are on the XTDB server. Leaving log or storage out keeps it in memory, and its data is lost when the server restarts. Detach leaves the files; attaching the same paths again reopens the old data. After a restart, an attached database returns only once the primary log has been replayed, which can be after the server reports ready."
+    },
+    {
+      "field_id": "primary",
+      "label": "Primary database",
+      "tab": "General",
+      "control": "boolean",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "The primary xtdb database cannot be detached."
+    },
+    {
+      "field_id": "connected",
+      "label": "Connected database",
+      "tab": "General",
+      "control": "boolean",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "database_list_unread",
+      "label": "Attached databases not read",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "database_list_unread",
+        "truthy": true
+      },
+      "help": "Why only the connected database is shown."
+    }
+  ],
+  "notes": "Hand-written for providers/xtdb/client.py and providers/xtdb/basis.py. The post-state check reads the snapshot token: an attached database must be listed, a detached one must not. Attach (in memory) and detach passed a live round trip on 2.1.0 (2026-10-31); the form stays a draft until the owner decides whether a configuration that cannot be read back may be offered."
+}

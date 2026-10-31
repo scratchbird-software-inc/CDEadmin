@@ -35,6 +35,8 @@ from typing import Any, Mapping, Sequence
 from pgadmin.cdeadmin.sdk import PilotProviderError
 from pgadmin.cdeadmin.providers.distributed_sql import _PsycopgPoolConnector
 
+from . import basis
+
 
 QUALIFIED_DRIVER_VERSION = '3.3.4'
 MAX_SOURCE_BYTES = 2 * 1024 * 1024
@@ -49,6 +51,11 @@ _XTDB_VERSION = re.compile(
     r'^XTDB\s*@\s*(?P<version>\d+\.\d+\.\d+)(?:[-+ ].*)?$', re.I
 )
 _XTDB_USER_IDENTIFIER = re.compile(r'^[A-Za-z_][A-Za-z0-9_$]*$')
+# Every table carries these; information_schema.columns lists them with the
+# user columns (2.1.0, information_schema.clj).
+_TEMPORAL_COLUMNS = frozenset({
+    '_valid_from', '_valid_to', '_system_from', '_system_to',
+})
 _READ_PREFIXES = frozenset({'SELECT', 'SHOW', 'EXPLAIN', 'VALUES', 'WITH'})
 _TX_PREFIXES = frozenset({'BEGIN', 'START', 'COMMIT', 'ROLLBACK', 'SET'})
 _MUTATION_PREFIXES = frozenset({
@@ -181,6 +188,65 @@ def _user_identifier(value):
 
 def _qualified(schema, table):
     return f'{_quote_identifier(schema)}.{_quote_identifier(table)}'
+
+
+def _typed_value(value_type, text, label):
+    text = '' if text is None else str(text)
+    try:
+        if value_type == 'text':
+            return text
+        if value_type == 'integer':
+            return int(text)
+        if value_type == 'decimal':
+            return decimal.Decimal(text)
+        if value_type == 'float':
+            return float(text)
+        if value_type == 'boolean':
+            if text.lower() not in {'true', 'false'}:
+                raise ValueError(text)
+            return text.lower() == 'true'
+        if value_type == 'timestamp':
+            return datetime.datetime.fromisoformat(text)
+        if value_type == 'date':
+            return datetime.date.fromisoformat(text)
+        if value_type == 'uuid':
+            return uuid.UUID(text)
+        if value_type == 'nested':
+            value = json.loads(text)
+            if not isinstance(value, (dict, list)):
+                raise ValueError(text)
+            return value
+    except (ValueError, decimal.InvalidOperation, json.JSONDecodeError):
+        raise XTDBClientError(
+            f'{label} is not a valid {_TYPE_WORDS.get(value_type, value_type)}'
+            ' value') from None
+    raise XTDBClientError(f'{label} type must be one of '
+                          f'{", ".join(DOCUMENT_VALUE_TYPES)}')
+
+
+_TYPE_WORDS = {'nested': 'nested (a JSON object or list)'}
+# The first-document grid's value types (table create).
+DOCUMENT_VALUE_TYPES = ('text', 'integer', 'decimal', 'float', 'boolean',
+                        'timestamp', 'date', 'uuid', 'nested')
+
+
+def _initial_document(draft):
+    """The table-create document: typed grid rows, or a values mapping."""
+    rows = draft.get('document_fields')
+    if rows is None:
+        return draft.get('values')
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        raise XTDBClientError('document fields must be a list')
+    document = {}
+    for row in rows:
+        row = _mapping(row, 'document field')
+        name = row.get('name')
+        if name in document:
+            raise XTDBClientError(f'document field {name} is repeated')
+        document[name] = _typed_value(
+            row.get('value_type') or 'text', row.get('value'),
+            f'document field {name}')
+    return document
 
 
 def _sql_string(value):
@@ -828,10 +894,16 @@ class XTDBClient:
                     'version': identity['version'],
                     'build_id': identity['build_id'],
                 }),
-                self._resource('database', database, {
-                    'database': database, 'attached': database != 'xtdb'
-                }),
             ]
+            names, unread = self._database_names(session, identity)
+            for name in names:
+                native = {
+                    'database': name, 'attached': name != 'xtdb',
+                    'primary': name == 'xtdb', 'connected': name == database,
+                }
+                if unread:
+                    native['database_list_unread'] = unread
+                resources.append(self._resource('database', name, native))
             tables = self._query_rows(session, (
                 'SELECT table_schema, table_name, table_type '
                 'FROM information_schema.tables '
@@ -842,6 +914,15 @@ class XTDBClient:
                 'FROM information_schema.columns '
                 'ORDER BY table_schema, table_name, column_name'
             ))
+            table_columns = {}
+            for row in columns:
+                name = str(row.get('column_name'))
+                table_columns.setdefault((
+                    str(row.get('table_schema')), str(row.get('table_name'))
+                ), []).append({
+                    'name': name, 'type': row.get('data_type'),
+                    'temporal': name in _TEMPORAL_COLUMNS,
+                })
             schemas = sorted({
                 str(row.get('table_schema')) for row in tables
                 if row.get('table_schema')
@@ -870,7 +951,10 @@ class XTDBClient:
                     ))
                     continue
                 resources.append(self._resource(
-                    'table', f'{schema}.{table}', native, database
+                    'table', f'{schema}.{table}', {
+                        **native, 'name': table, 'columns': table_columns.get(
+                            (schema, table), []),
+                    }, database
                 ))
                 if schema not in {'information_schema', 'pg_catalog', 'xt'}:
                     resources.extend((
@@ -933,6 +1017,25 @@ class XTDBClient:
             return resources
         finally:
             self._forget_and_close(session)
+
+    def _database_names(self, session, identity):
+        """Attached database names, or the connected one and why."""
+        connected = session.route['database']
+        if identity.get('version') != basis.SUPPORTED_VERSION:
+            return [connected], (
+                f'attached databases are listed on XTDB '
+                f'{basis.SUPPORTED_VERSION} only; showing the connected one')
+        try:
+            rows = self._query_rows(session, 'SHOW SNAPSHOT_TOKEN')
+            names = basis.database_names(
+                rows[0].get('snapshot_token') if rows else None)
+        except basis.Unread as exc:
+            return [connected], (
+                f'attached databases could not be read ({exc}); showing the '
+                'connected one')
+        if connected not in names:
+            names = sorted({*names, connected})
+        return names, None
 
     def inspect_resource(self, request):
         resource_id = request.get('resource_id')
@@ -1308,7 +1411,7 @@ class XTDBClient:
                         'system-time fields are provider controlled'
                     )
         if operation == 'create':
-            document = draft.get('values')
+            document = _initial_document(draft)
             if not isinstance(document, Mapping) or '_id' not in document:
                 raise XTDBClientError('initial document must contain _id')
             if document.get('_id') is None:
@@ -1411,6 +1514,10 @@ class XTDBClient:
         mutation = payload['operation'] not in {'inspect'}
         try:
             source, parameters = self._compile_admin(payload, route)
+            password_before = None
+            if payload['kind'] == 'user' and payload['operation'] == 'alter':
+                password_before = self._password_digest(
+                    session, payload.get('target', {}).get('username'))
             identity = payload.get('_resolved_identity')
             if identity is not None:
                 self._require_current_row_identity(
@@ -1447,8 +1554,19 @@ class XTDBClient:
                     raise XTDBClientError(
                         'XTDB document changed or no longer exists'
                     )
+            erased = None
+            if payload['operation'] == 'erase':
+                erased = self._json_value(identity.document_id)
+            await_token = None
+            if mutation:
+                token_rows = self._query_rows(session, 'SHOW AWAIT_TOKEN')
+                await_token = token_rows[0].get('await_token') \
+                    if token_rows else None
             return {
                 'native_response_observed': True,
+                'await_token': await_token,
+                'password_digest_before': password_before,
+                'erased_document_id': erased,
                 'rowcount': rowcount,
                 'rows': rows,
                 'automatic_retry': False,
@@ -1466,6 +1584,103 @@ class XTDBClient:
             raise XTDBClientError(
                 f'XTDB administration failed ({type(exc).__name__})'
             ) from None
+        finally:
+            self._forget_and_close(session)
+
+    def _password_digest(self, session, username):
+        """A digest of the stored password hash; the hash never leaves."""
+        rows = self._query_rows(
+            session,
+            'SELECT passwd FROM pg_catalog.pg_user WHERE username = %s',
+            (username,))
+        if not rows or rows[0].get('passwd') is None:
+            return None
+        return hashlib.sha256(
+            str(rows[0]['passwd']).encode('utf-8')).hexdigest()
+
+    @staticmethod
+    def _observed(confirmed, reason, observation=None):
+        return {
+            'confirmed': bool(confirmed), 'reason': reason,
+            'observation': observation or {},
+            'provider_finality_authority': True,
+        }
+
+    def validate_admin_post_state(self, request):
+        """Read the changed object back from the server."""
+        payload = _mapping(request.get('provider_payload'), 'provider payload')
+        result = request.get('provider_result') or {}
+        route = _mapping(payload.get('route'), 'provider route')
+        kind, operation = payload['kind'], payload['operation']
+        draft = payload.get('draft') or {}
+        native = payload.get('target') or {}
+        session = self._connect({'route': route})
+        try:
+            if result.get('await_token'):
+                session.connection.cursor().execute(
+                    'SET AWAIT_TOKEN = ' + _sql_string(result['await_token']))
+            if kind == 'database' and operation in {'create', 'drop'}:
+                identity = self.runtime_identity({'route': route}, session)
+                names, unread = self._database_names(session, identity)
+                if unread:
+                    return self._observed(
+                        False, 'xtdb_database_list_unread', {'reason': unread})
+                name = draft.get('name') if operation == 'create' \
+                    else native.get('database')
+                attached = name in names
+                return self._observed(
+                    attached == (operation == 'create'),
+                    'xtdb_database_attached' if attached
+                    else 'xtdb_database_not_attached',
+                    {'databases': names})
+            if kind == 'user' and operation in {'create', 'alter'}:
+                username = draft.get('username') if operation == 'create' \
+                    else native.get('username')
+                digest = self._password_digest(session, username)
+                if operation == 'create':
+                    return self._observed(
+                        digest is not None, 'xtdb_user_listed'
+                        if digest else 'xtdb_user_not_listed')
+                before = result.get('password_digest_before')
+                changed = None not in (before, digest) and before != digest
+                return self._observed(
+                    changed, 'xtdb_password_hash_changed' if changed
+                    else 'xtdb_password_hash_unchanged')
+            if kind == 'table' and operation == 'create':
+                document = _initial_document(draft)
+                target = _qualified(draft['schema'], draft['name'])
+                columns = {
+                    row['column_name'] for row in self._query_rows(
+                        session,
+                        'SELECT column_name FROM information_schema.columns '
+                        'WHERE table_schema = %s AND table_name = %s',
+                        (draft['schema'], draft['name']))
+                }
+                rows = self._query_rows(
+                    session, f'SELECT _id FROM {target} WHERE _id = %s',
+                    (self._adapt_value(document['_id']),))
+                missing = sorted(set(document) - columns)
+                return self._observed(
+                    bool(rows) and not missing,
+                    'xtdb_table_document_read' if rows and not missing
+                    else 'xtdb_table_document_not_read',
+                    {'missing_columns': missing})
+            if operation == 'erase' and kind in {
+                    'table', 'document', 'entity'} and native.get('table'):
+                target = _qualified(
+                    native.get('schema', 'public'), native['table'])
+                document_id = result.get('erased_document_id')
+                remaining = self._query_rows(
+                    session,
+                    f'SELECT COUNT(*) AS remaining FROM {target} '
+                    'FOR ALL VALID_TIME FOR ALL SYSTEM_TIME WHERE _id = %s',
+                    (self._adapt_value(document_id),))
+                gone = document_id is not None and remaining and int(
+                    remaining[0]['remaining']) == 0
+                return self._observed(
+                    gone, 'xtdb_history_erased' if gone
+                    else 'xtdb_history_not_erased')
+            return self._observed(False, 'xtdb_post_state_not_checked')
         finally:
             self._forget_and_close(session)
 
@@ -1576,7 +1791,7 @@ class XTDBClient:
         if kind in {'table', 'document', 'entity'}:
             if kind == 'table' and operation == 'create':
                 target = _qualified(draft['schema'], draft['name'])
-                document = dict(draft['values'])
+                document = dict(_initial_document(draft))
                 options = draft.get('options') or {}
                 if options.get('valid_from'):
                     document['_valid_from'] = options['valid_from']
@@ -1738,6 +1953,14 @@ class XTDBClient:
             return lease.use(lambda view: bytes(view).decode('utf-8'))
 
     def _adapt_value(self, value):
+        if isinstance(value, int) and not isinstance(value, bool):
+            # psycopg sends a small int as int2 and XTDB types the column by
+            # it (:i16, live 2.1.0); bind int8, as XTDB SQL integers are.
+            numeric = getattr(getattr(self.module, 'types', None),
+                              'numeric', None)
+            int8 = getattr(numeric, 'Int8', None)
+            if callable(int8):
+                return int8(value)
         if isinstance(value, (Mapping, list)):
             types = getattr(self.module, 'types', None)
             json_types = getattr(types, 'json', None)

@@ -1,0 +1,191 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "xtdb",
+  "family": "table",
+  "resource_kinds": [
+    "table"
+  ],
+  "status": "complete",
+  "engine_tab_title": "XTDB",
+  "omitted_tabs": [
+    {
+      "tab": "Constraints",
+      "reason": "XTDB 2.1.0 has no constraint statements: every table is keyed by _id and has no declared columns (Sql.g4 has no CREATE TABLE)"
+    },
+    {
+      "tab": "Indexes",
+      "reason": "Indexing is automatic; XTDB 2.1.0 has no index statement"
+    },
+    {
+      "tab": "Triggers",
+      "reason": "XTDB has no triggers"
+    },
+    {
+      "tab": "Partitions",
+      "reason": "No user partitioning; storage is organised by the engine (xt.trie_stats)"
+    },
+    {
+      "tab": "Security",
+      "reason": "XTDB 2.1.0 has no grants: users authenticate, and the server's authentication rules decide access"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Altering, renaming or dropping a table",
+      "reason": "XTDB 2.1.0 has no table statements. A table appears on its first write; ERASE of every document empties it but information_schema still lists it (live, 2026-10-31)",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "default": "public",
+      "editable_after_create": false,
+      "help": "A new schema comes into being with its first table. XTDB 2.1.0 lists it through its tables, not in information_schema.schemata."
+    },
+    {
+      "field_id": "name",
+      "label": "Table name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "help": "XTDB has no CREATE TABLE: the table is created by writing its first document."
+    },
+    {
+      "field_id": "document_fields",
+      "label": "First document",
+      "tab": "Columns",
+      "control": "grid",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "default": [
+        {
+          "name": "_id",
+          "value_type": "integer",
+          "value": ""
+        }
+      ],
+      "help": "One row per field. _id is required and identifies the document. Each field becomes a column with the type of its value; later documents may add fields. Integers are written as 64-bit (:i64), as XTDB SQL writes them; a decimal keeps the precision of its value.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Field",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value_type",
+          "label": "Value type",
+          "control": "select",
+          "required": true,
+          "default": "text",
+          "options": [
+            {
+              "value": "text",
+              "label": "Text"
+            },
+            {
+              "value": "integer",
+              "label": "Integer"
+            },
+            {
+              "value": "decimal",
+              "label": "Decimal"
+            },
+            {
+              "value": "float",
+              "label": "Floating point"
+            },
+            {
+              "value": "boolean",
+              "label": "Boolean (true or false)"
+            },
+            {
+              "value": "timestamp",
+              "label": "Timestamp (ISO 8601)"
+            },
+            {
+              "value": "date",
+              "label": "Date (ISO 8601)"
+            },
+            {
+              "value": "uuid",
+              "label": "UUID"
+            },
+            {
+              "value": "nested",
+              "label": "Nested object or list (written as JSON)"
+            }
+          ]
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "valid_from",
+      "label": "Valid from",
+      "tab": "Options",
+      "control": "text",
+      "backend_field_id": "options.valid_from",
+      "placeholder": "2026-01-01T00:00:00Z",
+      "modes": [
+        "create"
+      ],
+      "help": "Start of the first document's valid time; empty means now."
+    },
+    {
+      "field_id": "valid_to",
+      "label": "Valid to",
+      "tab": "Options",
+      "control": "text",
+      "backend_field_id": "options.valid_to",
+      "placeholder": "2027-01-01T00:00:00Z",
+      "modes": [
+        "create"
+      ],
+      "help": "End of the first document's valid time; empty means open-ended."
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns",
+      "tab": "Columns",
+      "control": "grid",
+      "record_key": "columns",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "Read from information_schema.columns: every field any document has had, with XTDB's type. A type shown as [:union ...] lists every type the field has held, including in erased documents (live, 2.1.0). The four temporal columns are kept by XTDB on every table.",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text"
+        },
+        {
+          "field_id": "type",
+          "label": "XTDB type",
+          "control": "text"
+        },
+        {
+          "field_id": "temporal",
+          "label": "Temporal",
+          "control": "boolean"
+        }
+      ]
+    }
+  ],
+  "notes": "Hand-written for providers/xtdb/client.py. Create writes the first document with INSERT (typed by the grid, providers/xtdb/client.py _initial_document); the post-state check reads the document and its columns back."
+}

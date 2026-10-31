@@ -1,0 +1,29 @@
+{
+  "engine": "xtdb",
+  "omitted": [
+    {
+      "family": "view",
+      "reason": "XTDB 2.1.0 has no CREATE VIEW (Sql.g4); pg_views and pg_matviews are registered empty"
+    },
+    {
+      "family": "index",
+      "reason": "Indexing is automatic; XTDB 2.1.0 has no index statement"
+    },
+    {
+      "family": "sequence",
+      "reason": "No sequences in XTDB 2.1.0; documents are keyed by the _id the writer supplies"
+    },
+    {
+      "family": "routine",
+      "reason": "No user functions or procedures in XTDB 2.1.0; pg_proc lists built-ins only"
+    },
+    {
+      "family": "trigger",
+      "reason": "XTDB has no triggers"
+    },
+    {
+      "family": "type",
+      "reason": "Value types come from the data written; XTDB 2.1.0 has no CREATE TYPE or DOMAIN"
+    }
+  ]
+}

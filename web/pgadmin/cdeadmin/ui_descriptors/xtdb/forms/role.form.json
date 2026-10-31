@@ -1,0 +1,68 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "xtdb",
+  "family": "role",
+  "resource_kinds": [
+    "user"
+  ],
+  "status": "complete",
+  "engine_tab_title": "XTDB",
+  "omitted_tabs": [
+    {
+      "tab": "Membership",
+      "reason": "XTDB 2.1.0 has users only: no roles or role membership"
+    },
+    {
+      "tab": "Privileges",
+      "reason": "XTDB 2.1.0 has no GRANT; the server's authentication rules decide access"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Deleting a user",
+      "reason": "No DROP USER in XTDB 2.1.0, and pg_catalog.pg_user refuses writes (\"Cannot write to table: pg_catalog/pg_user\", live 2026-10-31): every user is permanent",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Renaming a user",
+      "reason": "No statement in XTDB 2.1.0",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Superuser",
+      "reason": "Shown read-only: only the built-in xtdb user is a superuser, and no statement changes it",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "username",
+      "label": "Username",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "help": "Letters, digits, _ and $, starting with a letter or _. A user cannot be deleted or renamed afterwards."
+    },
+    {
+      "field_id": "password_reference",
+      "label": "Password",
+      "tab": "General",
+      "control": "secret-reference",
+      "required": true,
+      "help": "Changing it on an existing user runs ALTER USER. Whether XTDB asks for it depends on the server's authentication rules: the default rule trusts every connection (Authenticator.kt DEFAULT_RULES), so the password is stored but not checked.",
+      "group": "Authentication"
+    },
+    {
+      "field_id": "usesuper",
+      "label": "Superuser",
+      "tab": "General",
+      "control": "boolean",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ]
+    }
+  ],
+  "notes": "Hand-written for providers/xtdb/client.py. The post-state check reads pg_catalog.pg_user: a new user must be listed, and a password change must change the stored hash (compared by digest; the hash is never returned)."
+}

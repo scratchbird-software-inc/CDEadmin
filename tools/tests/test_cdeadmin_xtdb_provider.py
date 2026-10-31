@@ -477,10 +477,12 @@ class XTDBClientContractTests(unittest.TestCase):
             'provider_payload': user_plan['provider_payload']
         })
         self.assertTrue(user_result['native_response_observed'])
-        self.assertEqual(
+        # The statement, then the await token the post-state check uses.
+        self.assertEqual([
             'CREATE USER ada WITH PASSWORD \'correct horse battery staple\'',
-            self.module.connections[-1].calls[-1][0],
-        )
+            'SHOW AWAIT_TOKEN',
+        ], [call[0] for call in self.module.connections[-1].calls[-2:]])
+        self.assertNotIn('correct horse', str(user_result))
         database_plan = self.client.plan_admin_operation({
             'resource_kind': 'database', 'operation_id': 'create',
             'target_resource': None,
@@ -576,16 +578,10 @@ class XTDBClientContractTests(unittest.TestCase):
         self.assertEqual(
             'bitemporal-object', temporal['editor']['editor_kind']
         )
-        index = next(
-            item for item in descriptor['objects']
-            if item['resource_kind'] == 'index'
-        )
-        create = next(
-            item for item in index['operations']
-            if item['operation_id'] == 'create'
-        )
-        self.assertFalse(create['native_supported'])
-        self.assertIn('provider_operation_unavailable', create['blockers'])
+        # XTDB 2.1.0 has no indexes, modules, roles or privileges: none is
+        # offered, not even as a blocked kind (owner direction 2026-10-31).
+        self.assertFalse({'index', 'module', 'role', 'privilege'} & {
+            item['resource_kind'] for item in descriptor['objects']})
         table = next(
             item for item in descriptor['objects']
             if item['resource_kind'] == 'table'

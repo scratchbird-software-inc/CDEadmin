@@ -967,3 +967,31 @@ on table alter are gone. No shared schema, form or family renderer was
 edited. Lint before/after: JSON 304/301 (maximum lowered to 301), MUI
 244/244, UI engine branches 111/111, panels 113/113, context-menu branches
 14/14.
+
+Later on 2026-10-31 the database, index and role forms also became
+``complete`` after live round trips; the sentence above describes the first
+commit only. Database unload and load remain drafts: while any database is
+unloaded, immudb 1.11.0 cannot list databases (see
+:ref:`postgresql_wire_parity`).
+
+XTDB descriptor folder, 2026-10-31
+----------------------------------
+
+``ui_descriptors/xtdb`` is added and XTDB joins the beta-engine gate lists.
+It is the first folder for a provider with no relational administration:
+``tools/dump_provider_forms.py`` reads XTDB's forms through
+``ClientCatalog``, which applies the client's ``visual_admin_catalog`` and
+keeps only the operations the client runs. The table and role forms are
+``complete`` after live round trips on 2.1.0. The database form is a draft,
+because XTDB returns no attached database's configuration. Evidence is in
+:ref:`postgresql_wire_parity` ("XTDB 2.1.0"). The first-document grid's
+nested value type has the id ``nested`` rather than ``json``. The JSON
+control lint counts every literal ``'json'`` followed by a comma or
+bracket in provider code, and this is a value type, not a control.
+immudb and XTDB were added to the front-end family fixtures
+(``web/regression/javascript/families/familyFixtures.js``). immudb had been
+missed there when its folder landed, so its forms had not been rendered by
+the family suite until now; the suite passes with both (179 tests). No
+shared schema, form or family renderer was edited. Lint before/after:
+JSON 301/301, MUI 244/244, UI engine branches 111/111, panels 113/113,
+context-menu branches 14/14.

@@ -1,0 +1,86 @@
+{
+  "schema": "cdeadmin.ui-navigator.v1",
+  "engine": "xtdb",
+  "sort": "alphabetical",
+  "groups": [
+    {
+      "group_id": "server",
+      "title": "Server",
+      "kinds": [
+        "cluster",
+        "node",
+        "health",
+        "metric"
+      ],
+      "order": 1
+    },
+    {
+      "group_id": "databases",
+      "title": "Databases",
+      "kinds": [
+        "database"
+      ],
+      "order": 2
+    },
+    {
+      "group_id": "relations",
+      "title": "Schemas and tables",
+      "kinds": [
+        "schema",
+        "table",
+        "column"
+      ],
+      "order": 3
+    },
+    {
+      "group_id": "documents",
+      "title": "Documents and history",
+      "kinds": [
+        "document",
+        "entity",
+        "valid-time",
+        "system-time"
+      ],
+      "order": 4
+    },
+    {
+      "group_id": "transactions",
+      "title": "Transactions",
+      "kinds": [
+        "transaction",
+        "transaction-log"
+      ],
+      "order": 5
+    },
+    {
+      "group_id": "security",
+      "title": "Users",
+      "kinds": [
+        "user"
+      ],
+      "order": 6
+    }
+  ],
+  "resource_children": {
+    "table": [
+      "column"
+    ]
+  },
+  "kind_icons": {
+    "cluster": "object.cluster",
+    "node": "object.node",
+    "health": "object.statistics",
+    "metric": "object.metric",
+    "database": "object.database",
+    "schema": "object.schema",
+    "table": "object.table",
+    "column": "object.column",
+    "document": "object.component",
+    "entity": "object.component",
+    "valid-time": "object.event",
+    "system-time": "object.snapshot",
+    "transaction": "object.lock",
+    "transaction-log": "object.lock",
+    "user": "object.user"
+  }
+}

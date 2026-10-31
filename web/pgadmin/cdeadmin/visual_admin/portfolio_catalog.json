@@ -1378,11 +1378,7 @@
         {"resource_kind": "transaction", "title": "Transaction", "operation_profile": "read_only"},
         {"resource_kind": "transaction-log", "title": "Transaction log", "operation_profile": "read_only"},
         {"resource_kind": "health", "title": "Health and block maintenance", "operation_profile": "operational"},
-        {"resource_kind": "index", "title": "Index", "operation_profile": "definition"},
-        {"resource_kind": "module", "title": "Module", "operation_profile": "operational"},
-        {"resource_kind": "user", "title": "User", "operation_profile": "security"},
-        {"resource_kind": "role", "title": "Role", "operation_profile": "security"},
-        {"resource_kind": "privilege", "title": "Privilege", "operation_profile": "security"}
+        {"resource_kind": "user", "title": "User", "operation_profile": "security"}
       ]
     },
     {
