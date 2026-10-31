@@ -40,7 +40,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -50,7 +50,8 @@
           "required": true,
           "default": true
         }
-      ]
+      ],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): load balancer off and on (get_load_balancer_state)."
     },
     {
       "operation_id": "add_blacklist",
@@ -62,7 +63,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Untested: on the one-node demo the command is accepted but there is no other node to move replicas to."
     },
     {
       "operation_id": "remove_blacklist",
@@ -74,7 +76,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Untested: accepted on the one-node demo; no movement to observe."
     },
     {
       "operation_id": "add_leader_blacklist",
@@ -86,7 +89,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Untested: accepted on the one-node demo; no other node to take leaders."
     },
     {
       "operation_id": "remove_leader_blacklist",
@@ -98,7 +102,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Untested: accepted on the one-node demo; no movement to observe."
     },
     {
       "operation_id": "configure_placement",
@@ -108,7 +113,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -117,7 +122,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): table moved onto a placement tablespace."
     },
     {
       "operation_id": "compact",
@@ -127,7 +133,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -151,7 +157,36 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node)."
+    },
+    {
+      "operation_id": "flush",
+      "resource_kind": "table",
+      "title": "Flush table tablets",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "timeout_seconds",
+          "label": "Completion timeout (seconds)",
+          "control": "number",
+          "required": false,
+          "default": 20
+        },
+        {
+          "field_id": "include_indexes",
+          "label": "Also flush YCQL indexes",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "notes": "Writes the tablets' memory to disk files (SST). A tablet split needs them: without flushed data the master drops a split it accepted (live, 2025.2.2.2). Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node)."
     },
     {
       "operation_id": "leader_stepdown",
@@ -170,7 +205,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "notes": "Untested: needs a tablet with another replica (more than one node)."
     },
     {
       "operation_id": "split",
@@ -180,9 +216,10 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "notes": "Asynchronous: yb-admin accepts the split and the master performs it. A tablet with no flushed data (SST files) is not split (live, 2025.2.2.2: \"Either no SST file or too small SST files\"); flush the table first. Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): a flushed one-tablet table split into two."
     },
     {
       "operation_id": "leader_stepdown",
@@ -201,7 +238,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "notes": "Untested: accepted with a single master, which stays leader; needs several masters."
     },
     {
       "operation_id": "configure",
@@ -211,14 +249,40 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
           "field_id": "placements",
-          "label": "Cloud/region/zone placements",
-          "control": "keyvalue",
-          "required": true
+          "label": "Placement blocks",
+          "control": "grid",
+          "required": true,
+          "help": "Where live replicas go (modify_placement_info). The blocks' minimum replicas cannot exceed the replication factor.",
+          "columns": [
+            {
+              "field_id": "cloud",
+              "label": "Cloud",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "region",
+              "label": "Region",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "zone",
+              "label": "Zone",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "min_num_replicas",
+              "label": "Minimum replicas",
+              "control": "number"
+            }
+          ]
         },
         {
           "field_id": "replication_factor",
@@ -233,7 +297,7 @@
           "required": false
         }
       ],
-      "notes": "typed_from_json: placement-policy.configure.placements"
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): the live placement restated."
     },
     {
       "operation_id": "clear",
@@ -245,7 +309,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "notes": "Ran on the demo (clear_placement_info) and left the universe with no live placement until it was configured again; not in a descriptor round trip."
     },
     {
       "operation_id": "create_database",
@@ -255,7 +320,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -270,7 +335,8 @@
           "control": "number",
           "required": false
         }
-      ]
+      ],
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): snapshot reached COMPLETE."
     },
     {
       "operation_id": "restore",
@@ -280,7 +346,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -291,7 +357,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): deleted rows came back."
     },
     {
       "operation_id": "restore",
@@ -301,18 +368,20 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
           "field_id": "restore_timestamp",
           "label": "Restore timestamp",
           "control": "text",
-          "required": true
+          "required": true,
+          "help": "YYYY-MM-DD HH:MM:SS within the schedule's retention, in the server's time (UTC on the demo)."
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): point-in-time restore brought deleted rows back."
     },
     {
       "operation_id": "set_enabled",
@@ -332,7 +401,8 @@
           "required": true,
           "default": true
         }
-      ]
+      ],
+      "notes": "Untested: needs a second cluster."
     },
     {
       "operation_id": "add_tables",
@@ -348,17 +418,35 @@
         {
           "field_id": "table_ids",
           "label": "Producer table IDs",
-          "control": "keyvalue",
-          "required": true
+          "control": "grid",
+          "required": true,
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Table ID",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "bootstrap_ids",
           "label": "Producer bootstrap IDs",
-          "control": "keyvalue",
-          "required": false
+          "control": "grid",
+          "required": false,
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Bootstrap ID",
+              "control": "text",
+              "required": true
+            }
+          ]
         }
       ],
-      "notes": "typed_from_json: xcluster-replication.add_tables.table_ids, xcluster-replication.add_tables.bootstrap_ids"
+      "notes": "Untested: needs a second cluster."
     },
     {
       "operation_id": "remove_tables",
@@ -374,8 +462,17 @@
         {
           "field_id": "table_ids",
           "label": "Producer table IDs",
-          "control": "keyvalue",
-          "required": true
+          "control": "grid",
+          "required": true,
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Table ID",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "ignore_errors",
@@ -385,7 +482,7 @@
           "default": false
         }
       ],
-      "notes": "typed_from_json: xcluster-replication.remove_tables.table_ids"
+      "notes": "Untested: needs a second cluster."
     }
   ]
 }

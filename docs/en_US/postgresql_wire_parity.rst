@@ -549,6 +549,51 @@ which is not a retained volume, so the demo cluster started empty and was
 re-seeded (``dev.sh seed yugabytedb``). The demo's start check now waits
 for a new node to record its masters.
 
+The ``yb-admin`` operations, live on the one-node demo through their
+descriptors (``test_control_plane_operations``). The demo writes a
+``yb-admin`` wrapper that runs inside the node
+(``demo_estate.write_yugabyte_tools``), since the master RPC port is not
+published and the masters answer only at the node's advertised address
+(its container hostname, read from ``yugabyted.conf`` at registration).
+
+-  ``complete``: load balancer off and on; table flush (new) and compact;
+   tablet split; moving a table onto a placement tablespace; restating the
+   live placement; database snapshot, restore and delete; snapshot
+   schedules (create, reopen, alter, point-in-time restore, delete) and
+   CDCSDK streams (create with options, read back, delete), each with a
+   new engine-object form.
+-  Fixed on the way: schedules and streams sent a bare database name,
+   which ``yb-admin`` reads as a YCQL keyspace, so both were rejected for
+   YSQL; a namespace type (YSQL database by default) now prefixes
+   ``ysql.``. The live-placement form took a key-value box the compiler
+   refused; it is a grid of cloud, region, zone and minimum replicas.
+   Rejections said only "rejected"; they now carry ``yb-admin``'s error
+   line. Stream records held every stream's raw listing; each now carries
+   its own options and state, and schedule records the form's interval,
+   retention and namespace.
+-  Found live: a split is accepted asynchronously and the master drops it
+   when the tablet has no flushed data ("Either no SST file or too small
+   SST files"), hence the flush operation. The server refuses ``IMPLICIT``
+   stream checkpointing by default. A deleted stream stays listed as
+   ``DELETING_METADATA`` for a while (over half an hour on the demo).
+-  Untested, still ``draft``: node and leader draining (accepted on one
+   node, nothing to move to), tablet and master leader step-down (need
+   several replicas or masters), clearing the live placement (it ran on
+   the demo and left no placement until reconfigured, which I restored by
+   hand), and xCluster replication (needs a second cluster).
+-  Fixed: with ``yb-admin`` configured, the control plane's table records
+   replaced the SQL ones of the same id, so a table reopened with none of
+   the editor's fields (found when the full live suite first ran with the
+   wrapper). The catalog now keeps the SQL record and adds ``yb-admin``'s
+   facts (``table_id``, which compact and flush use).
+-  Timing, not explained: that full suite took 45 minutes against 18
+   before; one catalog read of the demo database takes 12 to 14 seconds,
+   with ``yb-admin`` adding about 1.6.
+-  Not fixed: the navigator shows two cluster records for YugabyteDB, the
+   shared PostgreSQL-wire catalog's (``YugabyteDB``) and the control
+   plane's (``YugabyteDB cluster``, which the load-balancer operation
+   targets).
+
 Untested on CockroachDB
 ~~~~~~~~~~~~~~~~~~~~~~~
 

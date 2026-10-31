@@ -32,6 +32,11 @@ def _choice(field_id, label, values, **options):
     )
 
 
+_NAMESPACE_TYPE = _choice('namespace_type', 'Namespace type', (
+    ('ysql', 'YSQL database'), ('ycql', 'YCQL keyspace'),
+), default='ysql')
+
+
 OPERATIONS = (
     ControlPlaneOperation(
         'materialized-view', 'refresh', 'Refresh materialized view',
@@ -49,8 +54,10 @@ OPERATIONS = (
     ControlPlaneOperation(
         'placement-policy', 'configure', 'Configure live placement', 'admin',
         'topology_admin', (
-            cp_field('placements', 'Cloud/region/zone placements', 'json',
-                     True, json_type='array'),
+            cp_field('placements', 'Placement blocks', 'json', True,
+                     json_type='array',
+                     help='Rows of cloud, region, zone and minimum '
+                     'replicas (the descriptor shows a grid).'),
             cp_field('replication_factor', 'Replication factor', 'number',
                      True, minimum=1, maximum=64),
             cp_field('placement_uuid', 'Placement UUID', 'text', False,
@@ -80,6 +87,19 @@ OPERATIONS = (
             cp_field('include_vector_indexes',
                      'Also compact vector indexes', 'boolean', False,
                      default=False),
+        ), impact_scope='resource', long_running=True,
+        post_state_required=False
+    ),
+    ControlPlaneOperation(
+        # Live, 2025.2.2.2: a tablet split needs flushed data (SST files);
+        # without them the master drops the split it accepted.
+        'table', 'flush', 'Flush table tablets', 'admin',
+        'maintenance_admin', (
+            cp_field('timeout_seconds', 'Completion timeout (seconds)',
+                     'number', False, default=20, minimum=1,
+                     maximum=86400),
+            cp_field('include_indexes', 'Also flush YCQL indexes',
+                     'boolean', False, default=False),
         ), impact_scope='resource', long_running=True,
         post_state_required=False
     ),
@@ -152,8 +172,9 @@ OPERATIONS = (
                      'number', True, minimum=1, maximum=525600),
             cp_field('retention_minutes', 'Snapshot retention (minutes)',
                      'number', True, minimum=1, maximum=5256000),
-            cp_field('namespace', 'YSQL or YCQL namespace', 'text', True,
+            cp_field('namespace', 'Database or keyspace', 'text', True,
                      max_length=256, pattern=_ID_PATTERN),
+            _NAMESPACE_TYPE,
         ), target_required=False, impact_scope='cluster', long_running=True
     ),
     ControlPlaneOperation(
@@ -180,8 +201,9 @@ OPERATIONS = (
     ControlPlaneOperation(
         'changefeed', 'create', 'Create CDCSDK stream', 'admin',
         'replication_admin', (
-            cp_field('namespace', 'YSQL or YCQL namespace', 'text', True,
+            cp_field('namespace', 'Database or keyspace', 'text', True,
                      max_length=256, pattern=_ID_PATTERN),
+            _NAMESPACE_TYPE,
             _choice('checkpoint_type', 'Checkpoint type', (
                 ('EXPLICIT', 'Explicit'), ('IMPLICIT', 'Implicit'),
             ), default='EXPLICIT'),
@@ -295,8 +317,11 @@ def _qualified_table(request):
     ))
 
 
-def _compact_table_arguments(request, draft):
-    """Compile the exact 2025.2.2.2 ``yb-admin compact_table`` shape."""
+def _compact_table_arguments(request, draft, command='compact'):
+    """Compile the exact 2025.2.2.2 ``yb-admin compact_table`` shape.
+
+    ``flush_table`` takes the same shape without vector indexes.
+    """
     target = request.get('target_resource')
     if not isinstance(target, dict):
         raise RelationalClientError('YugabyteDB compact target is required')
@@ -305,7 +330,7 @@ def _compact_table_arguments(request, draft):
     table_id = native.get('table_id')
     if table_id:
         arguments = [
-            'compact_table_by_id',
+            f'{command}_table_by_id',
             _safe(table_id, 'table ID', _UUID_PATTERN),
         ]
     else:
@@ -321,7 +346,7 @@ def _compact_table_arguments(request, draft):
             )
             namespace = 'ysql.' + _safe(database, 'YSQL database')
             table = _target(request)
-        arguments = ['compact_table', namespace, table]
+        arguments = [f'{command}_table', namespace, table]
 
     timeout = draft.get('timeout_seconds', 20)
     arguments.append(_positive_integer(
@@ -343,6 +368,23 @@ def _compact_table_arguments(request, draft):
 
 
 def _placements(value):
+    # Rows (cloud, region, zone, min_num_replicas) as the descriptor grid
+    # sends them, or cloud.region.zone[:count] strings.
+    if isinstance(value, list) and value and all(
+            isinstance(item, dict) for item in value):
+        rows = []
+        for item in value:
+            where = [str(item.get(key) or '').strip()
+                     for key in ('cloud', 'region', 'zone')]
+            if not all(where):
+                raise RelationalClientError(
+                    'YugabyteDB placement needs a cloud, region and zone')
+            text = '.'.join(where)
+            if item.get('min_num_replicas') not in (None, ''):
+                text += ':' + _positive_integer(
+                    item['min_num_replicas'], 'placement replica count', 64)
+            rows.append(text)
+        value = rows
     placements = _list(value, 'placement', r'[A-Za-z0-9_.:-]+', 256)
     for placement in placements:
         parts = placement.split(':', 1)[0].split('.')
@@ -355,6 +397,18 @@ def _placements(value):
                 raise RelationalClientError(
                     'YugabyteDB placement replica count is invalid')
     return ','.join(placements)
+
+
+def _namespace(draft):
+    """yb-admin reads a bare name as a YCQL keyspace; YSQL needs ysql."""
+    name = _safe(draft.get('namespace'), 'namespace')
+    if name.startswith(('ysql.', 'ycql.')):
+        return name
+    kind = draft.get('namespace_type', 'ysql')
+    if kind not in {'ysql', 'ycql'}:
+        raise RelationalClientError(
+            'YugabyteDB namespace type is ysql or ycql')
+    return f'{kind}.{name}'
 
 
 def _positive_integer(value, label, maximum):
@@ -420,8 +474,8 @@ def compile_action(request):
                 'data_movement_possible': False,
             },
         }
-    if kind == 'table' and operation == 'compact':
-        arguments = _compact_table_arguments(request, draft)
+    if kind == 'table' and operation in {'compact', 'flush'}:
+        arguments = _compact_table_arguments(request, draft, operation)
     elif kind == 'placement-policy':
         if operation == 'clear':
             arguments = ['clear_placement_info']
@@ -502,7 +556,7 @@ def compile_action(request):
                     draft.get('retention_minutes'), 'snapshot retention',
                     5256000,
                 ),
-                _safe(draft.get('namespace'), 'namespace'),
+                _namespace(draft),
             ]
         elif operation == 'alter':
             arguments = ['edit_snapshot_schedule', _target(
@@ -542,7 +596,7 @@ def compile_action(request):
                     'YugabyteDB changefeed options are invalid')
             arguments = [
                 'create_change_data_stream',
-                _safe(draft.get('namespace'), 'namespace'), checkpoint,
+                _namespace(draft), checkpoint,
                 record, snapshot,
                 'DYNAMIC_TABLES_ENABLED' if dynamic
                 else 'DYNAMIC_TABLES_DISABLED',
@@ -699,7 +753,7 @@ def _run(route, arguments, timeout=120):
             'YugabyteDB control response exceeds size limit')
     if result.returncode != 0:
         raise RelationalClientError(
-            'YugabyteDB control request was rejected')
+            'YugabyteDB control request was rejected' + _reason(output))
     return {
         'exit_code': 0, 'stdout': result.stdout or '',
         'stderr': result.stderr or '',
@@ -707,6 +761,17 @@ def _run(route, arguments, timeout=120):
         'provider_finality_authority': True,
         'automatic_mutation_retry': False,
     }
+
+
+def _reason(output):
+    """yb-admin's own last message, bounded, for the person who asked."""
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if not lines:
+        return ''
+    # The error line, not the usage text yb-admin prints after it.
+    errors = [line for line in lines if 'error' in line.lower()]
+    text = (errors[0] if errors else lines[-1]).replace('\x00', '')
+    return ': ' + (text[:400] + '...' if len(text) > 400 else text)
 
 
 def _json_document(text):
@@ -777,6 +842,56 @@ def _changefeed_ids(text):
     return set(re.findall(
         r'(?m)^\s*stream_id:\s*"([A-Fa-f0-9-]+)"\s*$', text or ''
     ))
+
+
+def changefeed_streams(text):
+    """Each ``streams { ... }`` block of list_change_data_streams.
+
+    Field ids are the changefeed form's; ``state`` shows a stream still
+    being deleted (DELETING_METADATA lingers after delete_change_data_stream).
+    """
+    streams = []
+    for block in re.split(r'(?m)^streams \{\s*$', text or '')[1:]:
+        identifier = re.search(r'(?m)^\s*stream_id:\s*"([A-Fa-f0-9-]+)"',
+                               block)
+        if not identifier:
+            continue
+        options = dict(re.findall(
+            r'options \{\s*key:\s*"([^"]*)"\s*value:\s*"([^"]*)"\s*\}',
+            block))
+        facts = dict(re.findall(r'(?m)^\s*([a-z_]+):\s*"?([^"\n{]*?)"?\s*$',
+                                block))
+        disabled = facts.get('cdcsdk_disable_dynamic_table_addition')
+        streams.append({
+            'stream_id': identifier.group(1),
+            'checkpoint_type': options.get('checkpoint_type'),
+            'record_type': options.get('record_type'),
+            'source_type': options.get('source_type'),
+            'state': options.get('state'),
+            'namespace_id': facts.get('namespace_id'),
+            'snapshot_mode': facts.get('cdcsdk_consistent_snapshot_option'),
+            'dynamic_tables': None if disabled is None
+            else disabled != 'true',
+        })
+    return streams
+
+
+def schedule_facts(row):
+    """The schedule form's field ids from list_snapshot_schedules."""
+    options = row.get('options') if isinstance(row.get('options'), dict) \
+        else {}
+    facts = dict(row)
+    target = str(options.get('filter') or '')
+    kind, _, name = target.partition('.')
+    if kind in {'ysql', 'ycql'} and name:
+        facts.update(namespace=name, namespace_type=kind)
+    # A deleted schedule stays listed for a while with its delete_time.
+    facts['deleting'] = bool(options.get('delete_time'))
+    for key in ('interval', 'retention'):
+        match = re.fullmatch(r'(\d+) min', str(options.get(key) or ''))
+        if match:
+            facts[f'{key}_minutes'] = int(match.group(1))
+    return facts
 
 
 def _xcluster_ids(text):
@@ -860,11 +975,12 @@ def catalog_resources(route, generation):
             for row in _schedule_rows(document):
                 if isinstance(row, dict) and isinstance(row.get('id'), str):
                     resources.append(_resource(
-                        kind, row['id'], generation, row))
+                        kind, row['id'], generation, schedule_facts(row)))
         elif kind == 'changefeed':
-            for identifier in sorted(_changefeed_ids(text)):
+            for stream in sorted(changefeed_streams(text),
+                                 key=lambda item: item['stream_id']):
                 resources.append(_resource(
-                    kind, identifier, generation, {'raw': text}))
+                    kind, stream['stream_id'], generation, stream))
         elif kind == 'xcluster-replication':
             for identifier in sorted(_xcluster_ids(text)):
                 resources.append(_resource(

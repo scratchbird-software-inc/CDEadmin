@@ -746,7 +746,8 @@
           "tier": 1,
           "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/changefeed.form.json"
     },
     {
       "resource_kind": "snapshot",
@@ -790,7 +791,8 @@
           "tier": 1,
           "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/schedule.form.json"
     },
     {
       "resource_kind": "xcluster-replication",

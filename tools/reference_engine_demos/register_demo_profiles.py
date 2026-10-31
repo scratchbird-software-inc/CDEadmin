@@ -128,6 +128,20 @@ def route_for(item, host, registration, provider_route_options):
                         'nodelocal://1/cdeadmin-backups/')
         item.setdefault('changefeed_sink_allowlist',
                         'null://,nodelocal://1/cdeadmin-changefeeds/')
+    if item['engine'] == 'yugabytedb':
+        # Control plane through the demo wrapper (demo_estate.py), which
+        # runs yb-admin inside the node at its advertised master address.
+        item.setdefault('yb_admin_path', str(
+            Path(__file__).resolve().parent /
+            'runtime/yugabyte_tools/yb-admin'))
+        if 'master_addresses' not in item:
+            try:
+                from demo_estate import yugabyte_master_addresses
+                masters = yugabyte_master_addresses()
+            except Exception:  # node not running: register without it
+                masters = ''
+            if masters:
+                item['master_addresses'] = masters
     if item['engine'] == 'vitess':
         # Control plane through the demo wrapper (demo_estate.py); the
         # wrapper runs vtctldclient inside the vtctld container.

@@ -1,0 +1,67 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "schedule"
+  ],
+  "status": "complete",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Schedule",
+      "tab": "General",
+      "control": "text",
+      "help": "YugabyteDB names a schedule by the UUID it returns.",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "namespace",
+      "label": "Database or keyspace",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "namespace_type",
+      "label": "Namespace type",
+      "tab": "General",
+      "control": "select",
+      "default": "ysql",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "ysql",
+          "label": "YSQL database"
+        },
+        {
+          "value": "ycql",
+          "label": "YCQL keyspace"
+        }
+      ],
+      "help": "yb-admin reads a bare name as a YCQL keyspace; a YSQL database is sent as ysql.<name>."
+    },
+    {
+      "field_id": "interval_minutes",
+      "label": "Snapshot interval (minutes)",
+      "tab": "Definition",
+      "control": "number",
+      "required": true
+    },
+    {
+      "field_id": "retention_minutes",
+      "label": "Snapshot retention (minutes)",
+      "tab": "Definition",
+      "control": "number",
+      "required": true
+    }
+  ],
+  "gaps": [],
+  "notes": "YugabyteDB snapshot schedules (yb-admin create_snapshot_schedule / edit_snapshot_schedule / delete_snapshot_schedule); restore is an operation. Round trip verified live on YugabyteDB 2025.2.2.2 (create, reopen, alter interval, point-in-time restore, drop) by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
+}

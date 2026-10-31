@@ -9,7 +9,9 @@ its own database and roles and removes them. Skipped otherwise.
 """
 import json
 import os
+import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -34,12 +36,15 @@ from pgadmin.cdeadmin.providers.yugabytedb.provider import (  # noqa: E402
     ADMINISTRATION, PROFILE, create_provider,
 )
 from ui_descriptor_roundtrip import (  # noqa: E402
-    backend_draft, record_draft, record_from_resource, resolved_form,
+    backend_draft, engine_operations, operation_backend_draft,
+    operation_draft, record_draft, record_from_resource, resolved_form,
 )
 
 SETTINGS = json.loads(SETTINGS)
 UNIQUE = uuid.uuid4().hex[:6]
 DATABASE = f'rt_{UNIQUE}'
+YB_ADMIN = (ROOT / 'tools/reference_engine_demos/runtime/yugabyte_tools/'
+            'yb-admin')
 
 
 def connect(database='yugabyte'):
@@ -60,6 +65,13 @@ def live():
     route = {'host': SETTINGS['host'], 'port': int(SETTINGS['port']),
              'user': SETTINGS['user'], 'database': DATABASE,
              'sslmode': 'disable'}
+    # yb-admin through the demo wrapper (demo_estate.write_yugabyte_tools),
+    # at the node's current master address.
+    if YB_ADMIN.is_file():
+        sys.path.insert(0, str(ROOT / 'tools/reference_engine_demos'))
+        from demo_estate import yugabyte_master_addresses
+        route.update(yb_admin_path=str(YB_ADMIN),
+                     master_addresses=yugabyte_master_addresses())
     context = SimpleNamespace(
         endpoint_id=str(uuid.uuid4()), session_namespace=f'rt{UNIQUE}',
         pool_namespace=f'rt{UNIQUE}', cache_namespace=f'rt{UNIQUE}',
@@ -77,9 +89,17 @@ def live():
               'END $$')
         yield route, client
     finally:
+        if 'yb_admin_path' in route:
+            # A schedule left on the database blocks dropping it.
+            listed = json.loads(admin('list_snapshot_schedules') or '{}')
+            for row in listed.get('schedules') or []:
+                if (row.get('options') or {}).get('filter') == \
+                        f'ysql.{DATABASE}':
+                    admin('delete_snapshot_schedule', row['id'])
         with connect() as connection:
             connection.execute(f'DROP DATABASE IF EXISTS {DATABASE} '
                                'WITH (FORCE)')
+            connection.execute(f'DROP TABLESPACE IF EXISTS rt_opsts_{UNIQUE}')
             for role in (f'rt_user_{UNIQUE}', f'rt_role_{UNIQUE}',
                          f'rt_user2_{UNIQUE}'):
                 connection.execute(f'DROP ROLE IF EXISTS {role}')
@@ -919,3 +939,176 @@ def test_ddl_mode_detected_and_plans_atomic(live):
     assert result['provider_payload']['compiled'][
         'ddl_transaction_mode'] == 'atomic'
     query('DROP SEQUENCE public.rt_atomic')
+
+
+def operate(client, route, kind, operation, values, target,
+            confirmation=None):
+    """Run an operation from its descriptor, as the OperationDialog does."""
+    declared = engine_operations('yugabytedb')[f'{operation}@{kind}']
+    return run(client, route, kind, operation, operation_backend_draft(
+        declared, operation_draft(declared, values, confirmation)),
+        target=target)
+
+
+def until(check, timeout=120, interval=2):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            value = check()
+        except psycopg.Error:
+            # A restore restarts the tablets ("aborted pending operations").
+            value = None
+        if value:
+            return value
+        time.sleep(interval)
+    raise AssertionError('condition not reached in time')
+
+
+def admin(*arguments):
+    return subprocess.run(
+        [str(YB_ADMIN), '--master_addresses',
+         live_masters(), *arguments],
+        capture_output=True, text=True, check=True).stdout
+
+
+def live_masters():
+    sys.path.insert(0, str(ROOT / 'tools/reference_engine_demos'))
+    from demo_estate import yugabyte_master_addresses
+    return yugabyte_master_addresses()
+
+
+def test_control_plane_operations(live):
+    """The yb-admin operations a one-node demo can carry out and show."""
+    route, client = live
+    if 'yb_admin_path' not in route:
+        pytest.skip('demo yb-admin wrapper is not written')
+
+    def one(kind):
+        return [row for row in resources(client, route)
+                if row['resource_kind'] == kind]
+    query('CREATE TABLE public.ops (id INT PRIMARY KEY, v TEXT) '
+          'SPLIT INTO 1 TABLETS')
+    query("INSERT INTO public.ops SELECT g, repeat('x', 200) "
+          'FROM generate_series(1, 50000) g')
+    table = find(client, route, 'table', 'ops')[0]
+    # Load balancer off and on again.
+    cluster = next(row for row in one('cluster')
+                   if row['resource_id'] == 'cluster:YugabyteDB cluster')
+    operate(client, route, 'cluster', 'set_load_balancer',
+            {'enabled': False}, cluster)
+    assert 'DISABLED' in admin('get_load_balancer_state')
+    operate(client, route, 'cluster', 'set_load_balancer',
+            {'enabled': True}, cluster)
+    assert 'ENABLED' in admin('get_load_balancer_state')
+    # Flush, then a split the master carries out; then compact.
+    operate(client, route, 'table', 'flush', {'timeout_seconds': 60},
+            table)
+    tablets = [row for row in one('tablet')
+               if (row.get('native') or {}).get('table') == 'ops']
+    assert len(tablets) == 1
+    operate(client, route, 'tablet', 'split', {}, tablets[0])
+    until(lambda: len([row for row in one('tablet') if (
+        row.get('native') or {}).get('table') == 'ops']) == 2, 180, 5)
+    operate(client, route, 'table', 'compact', {'timeout_seconds': 60},
+            table)
+    # Move the table onto a placement tablespace.
+    space = f'rt_opsts_{UNIQUE}'
+    with connect() as connection:
+        connection.execute(f"CREATE TABLESPACE {space} WITH "
+                           f"(replica_placement='{PLACEMENT}')")
+    operate(client, route, 'table', 'configure_placement',
+            {'tablespace': space}, table)
+    assert query("SELECT s.spcname FROM pg_class c JOIN pg_tablespace s "
+                 "ON s.oid = c.reltablespace WHERE c.relname = 'ops'") == [
+        (space,)]
+    # Live placement restated as it is (one node: cloud1.datacenter1.rack1).
+    policy = one('placement-policy')[0]
+    held = policy['native']['liveReplicas']
+    operate(client, route, 'placement-policy', 'configure', {
+        'placements': [{'cloud': 'cloud1', 'region': 'datacenter1',
+                        'zone': 'rack1', 'min_num_replicas': 1}],
+        'replication_factor': 1}, policy)
+    assert one('placement-policy')[0]['native']['liveReplicas'][
+        'placementBlocks'] == held['placementBlocks']
+    # A database snapshot, restored after a delete, then removed.
+    operate(client, route, 'snapshot', 'create_database', {
+        'database': DATABASE, 'retention_hours': 1}, None)
+    snapshot = until(lambda: next((
+        row for row in one('snapshot')
+        if (row.get('native') or {}).get('state') == 'COMPLETE'), None))
+    query('DELETE FROM public.ops WHERE id > 100')
+    operate(client, route, 'snapshot', 'restore', {}, snapshot,
+            confirmation=snapshot['display_name'])
+    until(lambda: query('SELECT count(*) FROM public.ops') == [(50000,)])
+    run(client, route, 'snapshot', 'drop',
+        {'confirmation': snapshot['display_name']}, target=snapshot)
+    assert not [row for row in one('snapshot')
+                if row['display_name'] == snapshot['display_name']]
+    # A snapshot schedule through its form: create, alter, drop.
+    form = resolved_form('yugabytedb', 'engine_object:schedule')
+    run(client, route, 'schedule', 'create', backend_draft(form, {
+        'namespace': DATABASE, 'namespace_type': 'ysql',
+        'interval_minutes': 60, 'retention_minutes': 120}))
+    schedule = until(lambda: next((
+        row for row in one('schedule')
+        if (row.get('native') or {}).get('options', {}).get('filter') ==
+        f'ysql.{DATABASE}'), None))
+    _, baseline = record(client, route, 'schedule', schedule['display_name'],
+                         'engine_object:schedule')
+    assert (baseline['namespace'], baseline['namespace_type'],
+            baseline['interval_minutes'], baseline['retention_minutes']) == (
+        DATABASE, 'ysql', 60, 120)
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    run(client, route, 'schedule', 'alter', backend_draft(form, {
+        **baseline, 'interval_minutes': 30}, mode='alter',
+        baseline=baseline), target=schedule)
+    _, after = record(client, route, 'schedule', schedule['display_name'],
+                      'engine_object:schedule')
+    assert after['interval_minutes'] == 30
+    # Point-in-time restore from the schedule's snapshots.
+    until(lambda: next(row for row in one('schedule') if row[
+        'resource_id'] == schedule['resource_id'])['native'].get('snapshots'))
+    time.sleep(2)
+    moment = query("SELECT to_char(now() AT TIME ZONE 'UTC', "
+                   "'YYYY-MM-DD HH24:MI:SS')")[0][0]
+    time.sleep(2)
+    query('DELETE FROM public.ops WHERE id > 10')
+    operate(client, route, 'schedule', 'restore',
+            {'restore_timestamp': moment}, schedule,
+            confirmation=schedule['display_name'])
+    until(lambda: query('SELECT count(*) FROM public.ops') == [(50000,)])
+    run(client, route, 'schedule', 'drop',
+        {'confirmation': schedule['display_name']}, target=schedule)
+    # A CDCSDK stream through its form: create, drop.
+    form = resolved_form('yugabytedb', 'engine_object:changefeed')
+    before = {row['resource_id'] for row in one('changefeed')}
+    run(client, route, 'changefeed', 'create', backend_draft(form, {
+        'namespace': DATABASE, 'namespace_type': 'ysql',
+        'record_type': 'ALL', 'snapshot_mode': 'NOEXPORT_SNAPSHOT',
+        'dynamic_tables': False}))
+    stream = until(lambda: next((row for row in one('changefeed')
+                                 if row['resource_id'] not in before), None))
+    assert {key: stream['native'][key] for key in (
+        'checkpoint_type', 'record_type', 'snapshot_mode',
+        'dynamic_tables')} == {
+        'checkpoint_type': 'EXPLICIT', 'record_type': 'ALL',
+        'snapshot_mode': 'NOEXPORT_SNAPSHOT', 'dynamic_tables': False}
+    # Live: "Stream creation with IMPLICIT checkpointing is disabled".
+    assert 'IMPLICIT checkpointing is disabled' in str(pytest.raises(
+        Exception, run, client, route, 'changefeed', 'create', {
+            'namespace': DATABASE, 'checkpoint_type': 'IMPLICIT'}).value)
+    run(client, route, 'changefeed', 'drop',
+        {'confirmation': stream['display_name']}, target=stream)
+    # A dropped stream can stay listed while its metadata is deleted.
+    assert all((row.get('native') or {}).get('state', '').startswith(
+        'DELETING') for row in one('changefeed')
+        if row['resource_id'] == stream['resource_id'])
+    # A bare YSQL name is sent as ysql.<name>; a missing one says why.
+    assert 'not found' in str(pytest.raises(
+        Exception, run, client, route, 'schedule', 'create', {
+            'namespace': 'rt_no_such_db', 'interval_minutes': 60,
+            'retention_minutes': 120}).value)
+    query('DROP TABLE public.ops')
+    with connect() as connection:
+        connection.execute(f'DROP TABLESPACE {space}')

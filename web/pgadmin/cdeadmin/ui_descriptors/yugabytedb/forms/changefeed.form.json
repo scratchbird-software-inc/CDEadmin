@@ -1,0 +1,137 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "changefeed"
+  ],
+  "status": "complete",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Stream",
+      "tab": "General",
+      "control": "text",
+      "help": "YugabyteDB names a stream by the ID it returns.",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "namespace",
+      "label": "Database or keyspace",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "namespace_type",
+      "label": "Namespace type",
+      "tab": "General",
+      "control": "select",
+      "default": "ysql",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "ysql",
+          "label": "YSQL database"
+        },
+        {
+          "value": "ycql",
+          "label": "YCQL keyspace"
+        }
+      ],
+      "help": "yb-admin reads a bare name as a YCQL keyspace; a YSQL database is sent as ysql.<name>."
+    },
+    {
+      "field_id": "checkpoint_type",
+      "label": "Checkpoint type",
+      "tab": "Definition",
+      "control": "select",
+      "default": "EXPLICIT",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "EXPLICIT",
+          "label": "Explicit"
+        },
+        {
+          "value": "IMPLICIT",
+          "label": "Implicit"
+        }
+      ],
+      "help": "IMPLICIT is refused unless the server enables implicit checkpointing (2025.2.2.2 demo: \"Stream creation with IMPLICIT checkpointing is disabled\")."
+    },
+    {
+      "field_id": "record_type",
+      "label": "Record type",
+      "tab": "Definition",
+      "control": "select",
+      "default": "CHANGE",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "CHANGE",
+          "label": "Change"
+        },
+        {
+          "value": "ALL",
+          "label": "All"
+        }
+      ]
+    },
+    {
+      "field_id": "snapshot_mode",
+      "label": "Consistent snapshot mode",
+      "tab": "Definition",
+      "control": "select",
+      "default": "EXPORT_SNAPSHOT",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "EXPORT_SNAPSHOT",
+          "label": "Export snapshot"
+        },
+        {
+          "value": "USE_SNAPSHOT",
+          "label": "Use snapshot"
+        },
+        {
+          "value": "NOEXPORT_SNAPSHOT",
+          "label": "No exported snapshot"
+        }
+      ]
+    },
+    {
+      "field_id": "dynamic_tables",
+      "label": "Include new tables",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "state",
+      "label": "State",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "help": "DELETING_METADATA: dropped, its metadata still being removed."
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Changing a stream",
+      "reason": "yb-admin has no edit for a CDCSDK stream; drop and create",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "notes": "YugabyteDB CDCSDK streams (yb-admin create_change_data_stream / delete_change_data_stream). Round trip verified live on YugabyteDB 2025.2.2.2 (create with options, read back, IMPLICIT refused, drop) by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
+}

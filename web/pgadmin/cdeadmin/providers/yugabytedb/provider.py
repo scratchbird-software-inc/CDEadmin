@@ -1086,7 +1086,15 @@ def _catalog(connection, request):
     route = request.get('route') or request.get('_provider_route') or {}
     ddl_mode.remember(route, ddl_mode.mode(connection.cursor()))
     for item in control_catalog_resources(route, generation):
-        values[item['resource_id']] = item
+        held = values.get(item['resource_id'])
+        if held is None:
+            values[item['resource_id']] = item
+            continue
+        # A table is in both: keep the SQL record (the editor's fields) and
+        # add what yb-admin knows (table_id, used by compact and flush).
+        native = held.setdefault('native', {})
+        for key, value in (item.get('native') or {}).items():
+            native.setdefault(key, value)
     return list(values.values())
 
 
