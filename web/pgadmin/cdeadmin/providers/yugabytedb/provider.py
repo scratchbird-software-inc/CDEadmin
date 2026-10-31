@@ -22,7 +22,7 @@ from ..distributed_sql import (
 )
 from . import (
     databases, indexes as index_sql, objects, policies, routines, sequences,
-    tables as tables_sql, types, views,
+    tables as tables_sql, tablespaces, types, views,
 )
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
@@ -107,9 +107,9 @@ _YSQL_SUPPORTED.update({
     # Partition bounds are part of CREATE TABLE in YSQL. Until the table form
     # has a complete structured bound editor, partitions remain inspect-only.
     'partition': frozenset({'inspect'}),
-    # YugabyteDB 2025.2.2.2 rejects ALTER TABLESPACE ... RENAME TO as not
-    # supported. Keep the provider surface aligned with the exact runtime.
-    'tablespace': frozenset({'inspect', 'create', 'drop'}),
+    # YugabyteDB 2025.2.2.2 rejects ALTER TABLESPACE ... RENAME TO and SET
+    # as not supported; alter is owner and comment (yugabytedb/tablespaces).
+    'tablespace': frozenset({'inspect', 'create', 'alter', 'drop'}),
 })
 _YSQL_DIALECT = replace(
     _BASE_ADMINISTRATION.dialect,
@@ -140,7 +140,8 @@ class YugabyteDBAdministration(RelationalAdministration):
         return operation in objects.OPERATIONS.get(kind, ()) or (
             kind in {'table', 'index', 'type', 'domain', 'view',
                      'materialized-view', 'sequence', 'function',
-                     'procedure', 'database', 'row-policy'} and
+                     'procedure', 'database', 'row-policy',
+                     'tablespace'} and
             operation in {'create', 'alter'}) or (
             # Dropped by signature (overloads share a name) or by table.
             operation == 'drop' and kind in {'function', 'procedure',
@@ -150,6 +151,11 @@ class YugabyteDBAdministration(RelationalAdministration):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if request['resource_kind'] == 'tablespace':
+            if request['operation_id'] == 'create':
+                return {'statements': tablespaces.create(self, draft)}
+            return {'statements': tablespaces.alter(
+                self, draft, request.get('target_resource'))}
         if request['resource_kind'] == 'row-policy':
             target = request.get('target_resource')
             if request['operation_id'] == 'drop':
@@ -298,18 +304,8 @@ class YugabyteDBAdministration(RelationalAdministration):
                                 default=False),
                 ],
             }
-        if operation == 'create' and kind == 'tablespace':
-            return {
-                'form_id': 'tablespace.create',
-                'title': 'Create YSQL placement tablespace',
-                'fields': [
-                    self._field('name', 'Name', 'text', True),
-                    self._field(
-                        'replica_placement', 'Replica placement', 'json',
-                        True, 'YSQL num_replicas and placement_blocks object.',
-                    ),
-                ],
-            }
+        if kind == 'tablespace' and operation in {'create', 'alter'}:
+            return tablespaces.form(self._field, operation)
         return super()._form(kind, operation)
 
     def _compile(self, request):
@@ -351,47 +347,6 @@ class YugabyteDBAdministration(RelationalAdministration):
             if clauses:
                 source += ' WITH ' + ' '.join(clauses)
             return [{'source': source, 'parameters': ()}]
-        if kind == 'tablespace':
-            placement = options.get('replica_placement')
-            if not isinstance(placement, dict):
-                raise RelationalClientError(
-                    'YSQL replica placement must be an object'
-                )
-            replicas = placement.get('num_replicas')
-            blocks = placement.get('placement_blocks')
-            if (
-                isinstance(replicas, bool) or not isinstance(replicas, int) or
-                replicas < 1 or not isinstance(blocks, list) or not blocks
-            ):
-                raise RelationalClientError(
-                    'YSQL replica placement is incomplete'
-                )
-            for block in blocks:
-                if not isinstance(block, dict) or not all(
-                    isinstance(block.get(key), str) and block[key]
-                    for key in ('cloud', 'region', 'zone')
-                ):
-                    raise RelationalClientError(
-                        'YSQL placement block is invalid'
-                    )
-                minimum = block.get('min_num_replicas')
-                if (
-                    isinstance(minimum, bool) or
-                    not isinstance(minimum, int) or minimum < 1
-                ):
-                    raise RelationalClientError(
-                        'YSQL placement block replica count is invalid'
-                    )
-            serialized = json.dumps(
-                placement, separators=(',', ':'), sort_keys=True,
-            )
-            return [{
-                'source': (
-                    f'CREATE TABLESPACE {self._quote(name)} WITH '
-                    f'(replica_placement={self._literal(serialized)})'
-                ),
-                'parameters': (),
-            }]
         return super()._compile_create(request)
 
     def supports(self, resource_kind, operation_id):
@@ -764,15 +719,19 @@ def _extras(cursor, _request, generation):
             'partition', [schema, parent], child, generation,
             {'bound': str(bound)},
         ))
-    for name, owner, options in optional_rows(
+    for name, owner, options, comment in optional_rows(
         cursor,
-        'SELECT s.spcname, r.rolname, s.spcoptions '
+        'SELECT s.spcname, r.rolname, s.spcoptions, '
+        "shobj_description(s.oid, 'pg_tablespace') "
         'FROM pg_catalog.pg_tablespace s JOIN pg_catalog.pg_roles r '
         'ON r.oid = s.spcowner '
         "WHERE s.spcname NOT IN ('pg_default', 'pg_global') ORDER BY 1",
     ):
+        replicas, blocks = tablespaces.from_options(options)
         values.append(resource('tablespace', [], name, generation, {
             'owner': str(owner), 'options': list(options or ()),
+            'num_replicas': replicas, 'placement_blocks': blocks,
+            'comment': None if comment is None else str(comment),
         }))
     memberships = {}
     for member, role in optional_rows(

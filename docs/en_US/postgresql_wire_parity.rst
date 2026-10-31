@@ -471,6 +471,18 @@ ON POLICY``, which YugabyteDB accepts and CockroachDB refuses. The table's
 ``ENABLE`` / ``FORCE ROW LEVEL SECURITY`` switches were already in the
 YugabyteDB table form.
 
+Placement tablespaces have a ``complete`` engine-object form
+(``providers/yugabytedb/tablespaces.py``), replacing the provider form's
+raw JSON ``replica_placement`` control: replicas and a grid of placement
+blocks (cloud, region, zone or ``*``, minimum replicas, leader
+preference), owner and comment. YugabyteDB 2025.2.2.2 refuses changing
+the placement or name ("ALTER TABLESPACE not supported yet"), so after
+create only owner and comment change. The engine refuses minimum replicas
+summing past the replicas and leader preferences that do not run from 1
+without gaps; the editor says so before sending. It accepts unknown
+placement keys and ``LOCATION`` without effect, so neither is sent. The
+JSON-control cap drops to 304.
+
 Provider finding, 2026-10-30: the shared relational apply runs a plan in
 one transaction, and YugabyteDB refuses ``CREATE DATABASE`` and ``CREATE
 TABLESPACE`` there ("cannot run inside a transaction block"), so the

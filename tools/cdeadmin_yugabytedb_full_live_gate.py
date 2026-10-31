@@ -325,13 +325,11 @@ def _exercise(args, consumer, producer, consumer_route, producer_route):
         tablespace_created = qualification.apply(
             consumer, consumer_route, 'tablespace', 'create', {
                 'name': tablespace_name,
-                'replica_placement': {
-                    'num_replicas': 1,
-                    'placement_blocks': [{
-                        'cloud': 'cloud1', 'region': 'datacenter1',
-                        'zone': 'rack1', 'min_num_replicas': 1,
-                    }],
-                },
+                'num_replicas': 1,
+                'placement_blocks': [{
+                    'cloud': 'cloud1', 'region': 'datacenter1',
+                    'zone': 'rack1', 'min_num_replicas': 1,
+                }],
             },
         )
         if tablespace_created is not None:

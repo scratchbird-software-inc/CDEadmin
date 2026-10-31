@@ -809,3 +809,50 @@ def test_row_security_policies(live):
     finally:
         query('DROP TABLE IF EXISTS public.secured')
         query(f'DROP ROLE IF EXISTS {reader}', 'yugabyte')
+
+
+def test_placement_tablespaces(live):
+    route, client = live
+    space, owner = f'rt_space_{UNIQUE}', f'rt_role_{UNIQUE}'
+    query(f'CREATE ROLE {owner}', 'yugabyte')
+    form = resolved_form('yugabytedb', 'engine_object:tablespace')
+    blocks = [{'cloud': 'cloud1', 'region': 'datacenter1', 'zone': 'rack1',
+               'min_num_replicas': 1, 'leader_preference': 1}]
+    try:
+        assert 'exceed the replicas' in refused('tablespace', 'create', {
+            'name': space, 'num_replicas': 1, 'placement_blocks': [
+                {**blocks[0], 'min_num_replicas': 2}]})
+        assert 'without gaps' in refused('tablespace', 'create', {
+            'name': space, 'num_replicas': 1, 'placement_blocks': [
+                {**blocks[0], 'leader_preference': 2}]})
+        run(client, route, 'tablespace', 'create', backend_draft(form, {
+            'name': space, 'owner': owner, 'comment': 'a space',
+            'num_replicas': 1, 'placement_blocks': blocks}))
+        target, baseline = record(client, route, 'tablespace', space,
+                                  'engine_object:tablespace')
+        assert (baseline['owner'], baseline['comment'],
+                baseline['num_replicas'],
+                [{key: value for key, value in row.items() if key != '_id'}
+                 for row in baseline['placement_blocks']]) == (
+            owner, 'a space', 1, blocks)
+        assert backend_draft(form, baseline, mode='alter',
+                             baseline=baseline) == {}
+        query(f'CREATE TABLE public.placed (id INT PRIMARY KEY) '
+              f'TABLESPACE {space}')
+        run(client, route, 'tablespace', 'alter', backend_draft(form, {
+            **baseline, 'owner': SETTINGS['user'], 'comment': ''},
+            mode='alter', baseline=baseline), target=target)
+        target, after = record(client, route, 'tablespace', space,
+                               'engine_object:tablespace')
+        assert (after['owner'], after['comment']) == (SETTINGS['user'], None)
+        assert 'does not alter' in refused('tablespace', 'alter', {
+            'num_replicas': 3}, target)
+        query('DROP TABLE public.placed')
+        run(client, route, 'tablespace', 'drop', {'confirmation': space},
+            target=target)
+        assert not query("SELECT 1 FROM pg_tablespace WHERE spcname = "
+                         f"'{space}'", 'yugabyte')
+    finally:
+        query('DROP TABLE IF EXISTS public.placed')
+        query(f'DROP TABLESPACE IF EXISTS {space}', 'yugabyte')
+        query(f'DROP ROLE IF EXISTS {owner}', 'yugabyte')

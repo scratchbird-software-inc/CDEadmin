@@ -29,10 +29,8 @@ def compiled(kind, operation, draft, target=None):
 
 @pytest.mark.parametrize('kind, draft', [
     ('database', {'name': 'd'}),
-    ('tablespace', {'name': 'ts', 'replica_placement': {
-        'num_replicas': 1, 'placement_blocks': [
-            {'cloud': 'c', 'region': 'r', 'zone': 'z',
-             'min_num_replicas': 1}]}}),
+    ('tablespace', {'name': 'ts', 'num_replicas': 1, 'placement_blocks': [
+        {'cloud': 'c', 'region': 'r', 'zone': 'z', 'min_num_replicas': 1}]}),
 ])
 def test_database_and_tablespace_create_run_outside_a_transaction(
         kind, draft):

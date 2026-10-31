@@ -938,13 +938,11 @@ class DistributedProviderTests(unittest.TestCase):
             'target_resource': None,
             'draft': {
                 'name': 'canada',
-                'replica_placement': {
-                    'num_replicas': 1,
-                    'placement_blocks': [{
-                        'cloud': 'cloud1', 'region': 'datacenter1',
-                        'zone': 'rack1', 'min_num_replicas': 1,
-                    }],
-                },
+                'num_replicas': 1,
+                'placement_blocks': [{
+                    'cloud': 'cloud1', 'region': 'datacenter1',
+                    'zone': 'rack1', 'min_num_replicas': 1,
+                }],
             },
             '_provider_route': route,
         })
@@ -956,16 +954,14 @@ class DistributedProviderTests(unittest.TestCase):
 
     def test_yugabytedb_ysql_tablespace_rejects_untyped_placement(self):
         with self.assertRaisesRegex(
-            RelationalClientError, 'replica placement is incomplete'
+            RelationalClientError, 'replicas is a whole number'
         ):
             YUGABYTEDB_ADMIN.plan({
                 'resource_kind': 'tablespace', 'operation_id': 'create',
                 'target_resource': None,
                 'draft': {
                     'name': 'unsafe',
-                    'replica_placement': {
-                        'num_replicas': 0, 'placement_blocks': [],
-                    },
+                    'num_replicas': 0, 'placement_blocks': [],
                 },
                 '_provider_route': {
                     'host': '127.0.0.1', 'port': 5433,

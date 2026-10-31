@@ -2106,8 +2106,7 @@ def _relational_editor_evidence(provider, request, engine):
         }
         if attempt(
             'tablespace.create', 'tablespace', 'create', {
-                'name': 'cde_editor_tablespace',
-                'replica_placement': placement,
+                'name': 'cde_editor_tablespace', **placement,
             },
         ):
             tablespace = inspect_created(

@@ -1,0 +1,101 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "tablespace"
+  ],
+  "status": "complete",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "help": "YugabyteDB does not rename tablespaces yet."
+    },
+    {
+      "field_id": "owner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "role",
+      "reference_value": "display_name"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON TABLESPACE"
+    },
+    {
+      "field_id": "num_replicas",
+      "label": "Replicas",
+      "tab": "Definition",
+      "control": "number",
+      "required": true,
+      "editable_after_create": false,
+      "help": "num_replicas: copies of each tablet. Fixed once created."
+    },
+    {
+      "field_id": "placement_blocks",
+      "label": "Placement blocks",
+      "tab": "Definition",
+      "control": "grid",
+      "required": true,
+      "editable_after_create": false,
+      "help": "Where replicas live. The blocks' minimum replicas cannot exceed Replicas; leader preferences run from 1 without gaps.",
+      "columns": [
+        {
+          "field_id": "cloud",
+          "label": "Cloud",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "region",
+          "label": "Region",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "zone",
+          "label": "Zone",
+          "control": "text",
+          "required": true,
+          "help": "* for any zone in the region."
+        },
+        {
+          "field_id": "min_num_replicas",
+          "label": "Minimum replicas",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "leader_preference",
+          "label": "Leader preference",
+          "control": "number",
+          "help": "1 is most preferred; empty for no preference."
+        }
+      ]
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Changing placement or name",
+      "reason": "Refused on 2025.2.2.2: \"ALTER TABLESPACE not supported yet\"",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "LOCATION",
+      "reason": "Accepted on 2025.2.2.2 with no effect (pg_tablespace_location is empty); not offered",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "notes": "YugabyteDB placement tablespaces; providers/yugabytedb/tablespaces.py. Replaces the provider form's JSON control with typed fields; the record reads num_replicas and placement_blocks back from pg_tablespace.spcoptions. CREATE and DROP run outside a transaction. Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
+}
