@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+from pathlib import Path
 import threading
 import time
 from types import SimpleNamespace
@@ -273,7 +274,9 @@ def test_pending_intent_survives_an_independent_process(fixture, monkeypatch, tm
             'v=json.loads(sys.argv[1]); j=MySQLBinlogJobs(v["path"],v["root"]); '
             'r=remove(j,v["job_id"],1,v["endpoint"],v["job_id"],reconcile=True); '
             'assert r["artifact_removed"] and r["artifact_removal"]["state"]=="completed"')
-    subprocess.run([sys.executable, '-B', '-c', code, json.dumps(payload)], check=True, timeout=30)
+    # Independent of the caller's working directory and sys.path.
+    web = Path(retention.__file__).resolve().parents[3]
+    subprocess.run([sys.executable, '-B', '-c', code, json.dumps(payload)], check=True, timeout=30, cwd=web)
     assert f.jobs.get(record['job_id'], 1, f.endpoint)['artifact_removed']
 
 
