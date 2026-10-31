@@ -983,7 +983,9 @@ It is the first folder for a provider with no relational administration:
 ``ClientCatalog``, which applies the client's ``visual_admin_catalog`` and
 keeps only the operations the client runs. The table and role forms are
 ``complete`` after live round trips on 2.1.0. The database form is a draft,
-because XTDB returns no attached database's configuration. Evidence is in
+because XTDB returns no attached database's configuration. (Owner decision
+later the same day: offer that configuration at create only, labelled as not
+readable afterwards; the database form is now ``complete``.) Evidence is in
 :ref:`postgresql_wire_parity` ("XTDB 2.1.0"). The first-document grid's
 nested value type has the id ``nested`` rather than ``json``. The JSON
 control lint counts every literal ``'json'`` followed by a comma or

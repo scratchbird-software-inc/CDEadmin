@@ -5,7 +5,7 @@
   "resource_kinds": [
     "database"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "XTDB",
   "omitted_tabs": [
     {
@@ -16,7 +16,7 @@
   "gaps": [
     {
       "concept": "Reading an attached database's log and storage configuration",
-      "reason": "XTDB 2.1.0 keeps it only in the primary database's log and block files (db_catalog.clj, block.proto); no query or HTTP endpoint returns it. Owner decision pending on offering a create-only configuration",
+      "reason": "XTDB 2.1.0 keeps it only in the primary database's log and block files (db_catalog.clj, block.proto); no query or HTTP endpoint returns it. Owner decision 2026-10-31: offer it at create only, labelled as not readable afterwards",
       "tracking": "postgresql-wire-parity"
     },
     {
@@ -37,7 +37,7 @@
     },
     {
       "field_id": "config_yaml",
-      "label": "Log and storage configuration (YAML)",
+      "label": "Log and storage configuration (YAML, create only)",
       "tab": "Options",
       "control": "code",
       "language": "text",
@@ -46,7 +46,7 @@
         "create"
       ],
       "placeholder": "log: !Local\n  path: /var/lib/xtdb/sales/log\nstorage: !Local\n  path: /var/lib/xtdb/sales/buffers",
-      "help": "XTDB does not return this after attach. Paths are on the XTDB server. Leaving log or storage out keeps it in memory, and its data is lost when the server restarts. Detach leaves the files; attaching the same paths again reopens the old data. After a restart, an attached database returns only once the primary log has been replayed, which can be after the server reports ready."
+      "help": "Set once, at attach: XTDB never returns it, so CDEadmin cannot show it afterwards. Paths are on the XTDB server. Leaving log or storage out keeps it in memory, and its data is lost when the server restarts. Detach leaves the files; attaching the same paths again reopens the old data. After a restart, an attached database returns only once the primary log has been replayed, which can be after the server reports ready."
     },
     {
       "field_id": "primary",
@@ -85,5 +85,5 @@
       "help": "Why only the connected database is shown."
     }
   ],
-  "notes": "Hand-written for providers/xtdb/client.py and providers/xtdb/basis.py. The post-state check reads the snapshot token: an attached database must be listed, a detached one must not. Attach (in memory) and detach passed a live round trip on 2.1.0 (2026-10-31); the form stays a draft until the owner decides whether a configuration that cannot be read back may be offered."
+  "notes": "Hand-written for providers/xtdb/client.py and providers/xtdb/basis.py. The post-state check reads the snapshot token: an attached database must be listed, a detached one must not. Attach (in memory) and detach passed a live round trip on 2.1.0 (2026-10-31). Owner decision 2026-10-31: the configuration is offered at create only, labelled as not readable afterwards; the name and the attach itself are read back."
 }

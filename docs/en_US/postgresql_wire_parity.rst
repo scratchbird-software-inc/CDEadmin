@@ -750,7 +750,11 @@ back, by any engine method.
    a configuration keeps log and storage in memory (``Database.kt``
    ``Config`` defaults), and the data is lost on restart. The database
    form stays a draft pending an owner decision on offering a
-   configuration that cannot be read back.
+   configuration that cannot be read back. (Owner decision later on
+   2026-10-31: offer it at create only, labelled as not readable
+   afterwards. The database form is now ``complete``: the name and the
+   attach itself are read back, and the attach and detach round trip
+   passed live.)
 -  Attach and detach both survived a restart (live). Detach leaves the
    database's files, and attaching the same paths again reopened the old
    data. After a restart, an attached database reappears only when the
@@ -795,7 +799,8 @@ back, by any engine method.
    Table and role forms are ``complete``, and so is Erase on a table,
    after live round trips (``tools/tests/test_ui_descriptor_roundtrip_
    xtdb.py``, through ``create_provider``'s client, as the UI gets it;
-   passed on repeated runs). The database form is a draft, as above. Erase
+   passed on repeated runs). The database form is a draft, as above (now
+   ``complete``, see the decision noted above). Erase
    from the document and entity kinds is untested (draft): it is the same
    provider path. Finishing a transaction block (``POST /system/
    finish-block``) is untested (draft): no query reports the block index,
