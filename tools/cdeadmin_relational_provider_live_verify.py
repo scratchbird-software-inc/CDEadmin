@@ -745,6 +745,13 @@ def _relational_editor_evidence(provider, request, engine):
             if probe is not None:
                 attempt(
                     'table.drop', 'table', 'drop', {
+                        # Vitess confirms with the table name and also
+                        # removes the table's VSchema registration.
+                        'drop_vschema_registration': True,
+                        'confirmation': (
+                            'cde_editor_probe_renamed' if renamed else
+                            'cde_editor_probe'),
+                    } if engine == 'vitess' else {
                         'cascade': False,
                         'confirmation': 'drop-live-editor-probe',
                     }, probe,
@@ -840,7 +847,8 @@ def _relational_editor_evidence(provider, request, engine):
                     )
                 if view is not None:
                     attempt(
-                        'view.drop', 'view', 'drop', {
+                        'view.drop', 'view', 'drop', {} if engine == 'vitess'
+                        else {
                             'cascade': False,
                             'confirmation': 'drop-live-editor-view',
                         }, view,
@@ -1762,6 +1770,24 @@ def _relational_editor_evidence(provider, request, engine):
                         'sequence.drop', 'sequence', 'drop', {
                             'confirmation': 'drop-live-editor-sequence',
                         }, sequence,
+                    )
+            # vtgate refuses routines in a sharded keyspace (VT12001).
+            if attempt(
+                'procedure.create', 'procedure', 'create', {
+                    'name': 'cde_editor_procedure',
+                    'parent': 'lookup_keyspace',
+                    'parameters': [{'name': 'a', 'type': 'INT'}],
+                    'body': 'BEGIN DECLARE b INT; SET b = a; END',
+                },
+            ):
+                procedure = inspect_created(
+                    'procedure.inspect', 'procedure', 'cde_editor_procedure'
+                )
+                if procedure is not None:
+                    attempt(
+                        'procedure.drop', 'procedure', 'drop', {
+                            'confirmation': 'cde_editor_procedure',
+                        }, procedure,
                     )
         finally:
             route['database'] = original_database
@@ -2809,6 +2835,12 @@ def _relational_editor_evidence(provider, request, engine):
                         'character_set': 'utf8mb4',
                     }, database,
                 )
+            elif engine == 'dolt':
+                attempt(
+                    'database.alter', 'database', 'alter', {
+                        'collation': 'utf8mb4_bin',
+                    }, database,
+                )
             elif engine in {'cockroachdb', 'yugabytedb'} and attempt(
                 'database.alter', 'database', 'alter', {
                     'properties': {
@@ -3706,7 +3738,8 @@ class _TemporaryAccount:
 class _VitessAccount:
     """Seed an existing exact Vitess topology without SQL account DDL."""
 
-    def __init__(self, host, port, http_port, database='test_keyspace'):
+    def __init__(self, host, port, http_port, database='test_keyspace',
+                 vtctldclient=None, vtctld_server=None):
         self.host = host
         self.port = port
         self.http_port = http_port
@@ -3724,6 +3757,11 @@ class _VitessAccount:
             # response (notably CREATE VIEW).
             'autocommit': True,
         }
+        # Control-plane tasks (VSchema registration, keyspace and shard
+        # actions) run the pinned vtctldclient against vtctld.
+        if vtctldclient:
+            self.route_options['vtctldclient_path'] = str(vtctldclient)
+            self.route_options['vtctld_server'] = vtctld_server
 
     def _connect(self):
         import mysql.connector
@@ -4243,9 +4281,17 @@ class _FirebirdAccount:
             self.password = ''
 
 
+# Results arrive through the native asynchronous contract. Dolt, TiDB and
+# Vitess joined on 2026-10-10 with the shared MySQL-wire driver.
+ASYNCHRONOUS_RESULT_ENGINES = frozenset({
+    'mysql', 'mariadb', 'duckdb', 'sqlite', 'firebird', 'dolt', 'tidb',
+    'vitess',
+})
+
+
 def _live_result(provider, operation, engine):
     """Consume the native asynchronous contract before inspecting evidence."""
-    if engine not in {'mysql', 'mariadb', 'duckdb', 'sqlite', 'firebird'}:
+    if engine not in ASYNCHRONOUS_RESULT_ENGINES:
         return provider.describe_result(operation)
     rows = []
     deadline = time.monotonic() + 30
@@ -5211,7 +5257,7 @@ def verify(
                 'execution_id': f'{engine}-live-fault',
                 'source': 'SELECT * FROM cdeadmin_live_missing_object',
             })
-            if engine in {'mysql', 'mariadb', 'firebird'}:
+            if engine in ASYNCHRONOUS_RESULT_ENGINES - {'duckdb', 'sqlite'}:
                 _live_result(provider, fault_operation, engine)
         except Exception as exc:
             if secret_leak_marker and secret_leak_marker in str(exc):
@@ -5301,6 +5347,10 @@ def main():
     parser.add_argument('--tls-client-cert')
     parser.add_argument('--tls-client-key')
     parser.add_argument('--http-port', type=int)
+    parser.add_argument('--vtctldclient', type=Path,
+                        help='Vitess: the pinned vtctldclient executable')
+    parser.add_argument('--vtctld-server', default='localhost:15999',
+                        help='Vitess: the vtctld gRPC address')
     parser.add_argument(
         '--dialect-qualification', action='store_true',
         help='Exercise exact generated tasks without activating the dialect.',
@@ -5361,6 +5411,7 @@ def main():
         account = _VitessAccount(
             args.host, args.port, args.http_port,
             database=args.database or 'test_keyspace',
+            vtctldclient=args.vtctldclient, vtctld_server=args.vtctld_server,
         )
         result = verify(
             args.engine, args.host, args.port, account=account,

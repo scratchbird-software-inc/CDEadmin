@@ -1,12 +1,12 @@
 {
   "collection_authority": "Vitess 23.0.3 native VTGate and VTctld Prometheus endpoints",
   "completeness": {
-    "admitted_metric_count": 188,
+    "admitted_metric_count": 191,
     "components_exhausted": [
       "vtgate",
       "vtctld"
     ],
-    "observation_count": 188,
+    "observation_count": 191,
     "prometheus_help_type_catalog_exhausted": true,
     "runtime_version": "23.0.3"
   },
@@ -310,6 +310,12 @@
     },
     {
       "component": "vtgate",
+      "description": "Commit Mode Time",
+      "native_name": "vtgate_commit_mode_timings",
+      "prometheus_type": "histogram"
+    },
+    {
+      "component": "vtgate",
       "description": "Atomic Commit failed to conclude after commit decision is made",
       "native_name": "vtgate_commit_unresolved",
       "prometheus_type": "counter"
@@ -354,6 +360,12 @@
       "component": "vtgate",
       "description": "Healthcheck Errors",
       "native_name": "vtgate_healthcheck_errors",
+      "prometheus_type": "counter"
+    },
+    {
+      "component": "vtgate",
+      "description": "Primary promoted in keyspace/shard name because of health check errors",
+      "native_name": "vtgate_healthcheck_primary_promoted",
       "prometheus_type": "counter"
     },
     {
@@ -601,6 +613,12 @@
       "description": "Scatter connection timings",
       "native_name": "vtgate_vttablet_call",
       "prometheus_type": "histogram"
+    },
+    {
+      "component": "vtgate",
+      "description": "Error count from tablet calls in scatter conns",
+      "native_name": "vtgate_vttablet_call_error_count",
+      "prometheus_type": "counter"
     },
     {
       "component": "vtgate",

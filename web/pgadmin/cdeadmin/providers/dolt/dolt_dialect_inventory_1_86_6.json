@@ -9,7 +9,7 @@
       "functions": 347,
       "lexical_rules": 747,
       "operators": 147,
-      "session_settings": 392,
+      "session_settings": 442,
       "statements": 39
     },
     "pinned_parser_productions_exhausted": true,
@@ -12828,2106 +12828,2406 @@
       },
       {
         "item_id": "session_settings.0042",
-        "native_name": "cdeadmin_demo_default_branch",
+        "native_name": "cde_editor_database_default_branch",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0043",
-        "native_name": "cdeadmin_demo_head",
-        "observed_value": "1ugup9oa336gsh6odks3u0j9krc3kbln",
+        "native_name": "cde_editor_database_head",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0044",
-        "native_name": "cdeadmin_demo_head_ref",
-        "observed_value": "refs/heads/main",
+        "native_name": "cde_editor_database_head_ref",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0045",
-        "native_name": "cdeadmin_demo_staged",
-        "observed_value": "no45l65koavpm9cn9ga77cta0cf5c50v",
+        "native_name": "cde_editor_database_staged",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0046",
-        "native_name": "cdeadmin_demo_working",
-        "observed_value": "no45l65koavpm9cn9ga77cta0cf5c50v",
+        "native_name": "cde_editor_database_working",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0047",
-        "native_name": "character_set_client",
-        "observed_value": "utf8mb4",
+        "native_name": "cde_live_15f2808a24e8_default_branch",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0048",
-        "native_name": "character_set_connection",
-        "observed_value": "utf8mb4",
+        "native_name": "cde_live_15f2808a24e8_head",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0049",
-        "native_name": "character_set_database",
-        "observed_value": "utf8mb4",
+        "native_name": "cde_live_15f2808a24e8_head_ref",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0050",
-        "native_name": "character_set_filesystem",
-        "observed_value": "binary",
+        "native_name": "cde_live_15f2808a24e8_staged",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0051",
-        "native_name": "character_set_results",
-        "observed_value": "utf8mb4",
+        "native_name": "cde_live_15f2808a24e8_working",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0052",
-        "native_name": "character_set_server",
-        "observed_value": "utf8mb4",
+        "native_name": "cde_live_51da1b8377f5_default_branch",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0053",
-        "native_name": "character_set_system",
-        "observed_value": "utf8mb4",
+        "native_name": "cde_live_51da1b8377f5_head",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0054",
-        "native_name": "character_sets_dir",
+        "native_name": "cde_live_51da1b8377f5_head_ref",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0055",
-        "native_name": "check_constraint_checks",
-        "observed_value": "ON",
+        "native_name": "cde_live_51da1b8377f5_staged",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0056",
-        "native_name": "check_proxy_users",
-        "observed_value": "OFF",
+        "native_name": "cde_live_51da1b8377f5_working",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0057",
-        "native_name": "collation_connection",
-        "observed_value": "utf8mb4_0900_ai_ci",
+        "native_name": "cde_live_7a48183c4599_default_branch",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0058",
-        "native_name": "collation_database",
-        "observed_value": "utf8mb4_0900_bin",
+        "native_name": "cde_live_7a48183c4599_head",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0059",
-        "native_name": "collation_server",
-        "observed_value": "utf8mb4_0900_bin",
+        "native_name": "cde_live_7a48183c4599_head_ref",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0060",
-        "native_name": "completion_type",
-        "observed_value": "NO_CHAIN",
+        "native_name": "cde_live_7a48183c4599_staged",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0061",
-        "native_name": "concurrent_insert",
-        "observed_value": "AUTO",
+        "native_name": "cde_live_7a48183c4599_working",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0062",
-        "native_name": "connect_timeout",
-        "observed_value": "10",
+        "native_name": "cde_live_801ccc8c40f9_default_branch",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0063",
-        "native_name": "core_file",
-        "observed_value": "OFF",
+        "native_name": "cde_live_801ccc8c40f9_head",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0064",
-        "native_name": "create_admin_listener_thread",
-        "observed_value": "OFF",
+        "native_name": "cde_live_801ccc8c40f9_head_ref",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0065",
-        "native_name": "cte_max_recursion_depth",
-        "observed_value": "1000",
+        "native_name": "cde_live_801ccc8c40f9_staged",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0066",
-        "native_name": "datadir",
+        "native_name": "cde_live_801ccc8c40f9_working",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0067",
-        "native_name": "debug_sync",
+        "native_name": "cde_live_996241781e40_default_branch",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0068",
-        "native_name": "default_authentication_plugin",
-        "observed_value": "caching_sha2_password",
+        "native_name": "cde_live_996241781e40_head",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0069",
-        "native_name": "default_collation_for_utf8mb4",
-        "observed_value": "utf8mb4_0900_ai_ci",
+        "native_name": "cde_live_996241781e40_head_ref",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0070",
-        "native_name": "default_password_lifetime",
-        "observed_value": "0",
+        "native_name": "cde_live_996241781e40_staged",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0071",
-        "native_name": "default_storage_engine",
-        "observed_value": "InnoDB",
+        "native_name": "cde_live_996241781e40_working",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0072",
-        "native_name": "default_table_encryption",
-        "observed_value": "OFF",
+        "native_name": "cde_live_a8821ea446b9_default_branch",
+        "observed_value": "main",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0073",
-        "native_name": "default_tmp_storage_engine",
-        "observed_value": "InnoDB",
+        "native_name": "cde_live_a8821ea446b9_head",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0074",
-        "native_name": "default_week_format",
-        "observed_value": "0",
+        "native_name": "cde_live_a8821ea446b9_head_ref",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0075",
-        "native_name": "delay_key_write",
-        "observed_value": "ON",
+        "native_name": "cde_live_a8821ea446b9_staged",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0076",
-        "native_name": "delayed_insert_limit",
-        "observed_value": "100",
+        "native_name": "cde_live_a8821ea446b9_working",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0077",
-        "native_name": "delayed_insert_timeout",
-        "observed_value": "300",
+        "native_name": "cde_live_d5d319bc2d23_default_branch",
+        "observed_value": "main",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0078",
-        "native_name": "delayed_queue_size",
-        "observed_value": "1000",
+        "native_name": "cde_live_d5d319bc2d23_head",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0079",
-        "native_name": "disable_merge_join",
-        "observed_value": "OFF",
+        "native_name": "cde_live_d5d319bc2d23_head_ref",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0080",
-        "native_name": "disabled_storage_engines",
+        "native_name": "cde_live_d5d319bc2d23_staged",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0081",
-        "native_name": "disconnect_on_expired_password",
-        "observed_value": "ON",
+        "native_name": "cde_live_d5d319bc2d23_working",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0082",
-        "native_name": "div_precision_increment",
-        "observed_value": "4",
+        "native_name": "cde_restore_a8821ea446b9_default_branch",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0083",
-        "native_name": "dolt_allow_ci_creation",
-        "observed_value": "OFF",
+        "native_name": "cde_restore_a8821ea446b9_head",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0084",
-        "native_name": "dolt_allow_commit_conflicts",
-        "observed_value": "OFF",
+        "native_name": "cde_restore_a8821ea446b9_head_ref",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0085",
-        "native_name": "dolt_async_replication",
-        "observed_value": "OFF",
+        "native_name": "cde_restore_a8821ea446b9_staged",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0086",
-        "native_name": "dolt_auto_gc_enabled",
-        "observed_value": "ON",
+        "native_name": "cde_restore_a8821ea446b9_working",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0087",
-        "native_name": "dolt_cluster_ack_writes_timeout_secs",
-        "observed_value": "0",
+        "native_name": "cde_restore_d5d319bc2d23_default_branch",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0088",
-        "native_name": "dolt_commit_verification_groups",
+        "native_name": "cde_restore_d5d319bc2d23_head",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0089",
-        "native_name": "dolt_dont_merge_json",
-        "observed_value": "OFF",
+        "native_name": "cde_restore_d5d319bc2d23_head_ref",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0090",
-        "native_name": "dolt_force_transaction_commit",
-        "observed_value": "OFF",
+        "native_name": "cde_restore_d5d319bc2d23_staged",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0091",
-        "native_name": "dolt_log_level",
-        "observed_value": "info",
+        "native_name": "cde_restore_d5d319bc2d23_working",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0092",
-        "native_name": "dolt_optimize_json",
-        "observed_value": "ON",
+        "native_name": "cdeadmin_demo_default_branch",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0093",
-        "native_name": "dolt_override_schema",
-        "observed_value": "",
+        "native_name": "cdeadmin_demo_head",
+        "observed_value": "r1q7tdaglhm8kb99krjgca24vctiqon8",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0094",
-        "native_name": "dolt_read_replica_force_pull",
-        "observed_value": "ON",
+        "native_name": "cdeadmin_demo_head_ref",
+        "observed_value": "refs/heads/main",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0095",
-        "native_name": "dolt_read_replica_remote",
-        "observed_value": "",
+        "native_name": "cdeadmin_demo_staged",
+        "observed_value": "pf592dv1phrajv2nis98vpsf98tr7k6k",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0096",
-        "native_name": "dolt_replicate_all_heads",
-        "observed_value": "OFF",
+        "native_name": "cdeadmin_demo_working",
+        "observed_value": "pf592dv1phrajv2nis98vpsf98tr7k6k",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0097",
-        "native_name": "dolt_replicate_heads",
-        "observed_value": "",
+        "native_name": "character_set_client",
+        "observed_value": "utf8mb4",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0098",
-        "native_name": "dolt_replicate_to_remote",
-        "observed_value": "",
+        "native_name": "character_set_connection",
+        "observed_value": "utf8mb4",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0099",
-        "native_name": "dolt_replication_remote_url_template",
-        "observed_value": "",
+        "native_name": "character_set_database",
+        "observed_value": "utf8mb4",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0100",
-        "native_name": "dolt_show_branch_databases",
-        "observed_value": "OFF",
+        "native_name": "character_set_filesystem",
+        "observed_value": "binary",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0101",
-        "native_name": "dolt_show_system_tables",
-        "observed_value": "OFF",
+        "native_name": "character_set_results",
+        "observed_value": "utf8mb4",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0102",
-        "native_name": "dolt_skip_replication_errors",
-        "observed_value": "OFF",
+        "native_name": "character_set_server",
+        "observed_value": "utf8mb4",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0103",
-        "native_name": "dolt_stats_branches",
-        "observed_value": "",
+        "native_name": "character_set_system",
+        "observed_value": "utf8mb4",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0104",
-        "native_name": "dolt_stats_enabled",
-        "observed_value": "ON",
+        "native_name": "character_sets_dir",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0105",
-        "native_name": "dolt_stats_gc_enabled",
+        "native_name": "check_constraint_checks",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0106",
-        "native_name": "dolt_stats_gc_interval",
-        "observed_value": "3600000",
+        "native_name": "check_proxy_users",
+        "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0107",
-        "native_name": "dolt_stats_job_interval",
-        "observed_value": "30",
+        "native_name": "collation_connection",
+        "observed_value": "utf8mb4_0900_ai_ci",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0108",
-        "native_name": "dolt_stats_memory_only",
-        "observed_value": "OFF",
+        "native_name": "collation_database",
+        "observed_value": "utf8mb4_0900_bin",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0109",
-        "native_name": "dolt_stats_paused",
-        "observed_value": "OFF",
+        "native_name": "collation_server",
+        "observed_value": "utf8mb4_0900_bin",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0110",
-        "native_name": "dolt_transaction_commit",
-        "observed_value": "OFF",
+        "native_name": "completion_type",
+        "observed_value": "NO_CHAIN",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0111",
-        "native_name": "dolt_transaction_commit_message",
-        "observed_value": "",
+        "native_name": "concurrent_insert",
+        "observed_value": "AUTO",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0112",
-        "native_name": "dolt_transactions_disabled",
-        "observed_value": "OFF",
+        "native_name": "connect_timeout",
+        "observed_value": "10",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0113",
-        "native_name": "dragnet.log_error_filter_rules",
-        "observed_value": "drop",
+        "native_name": "core_file",
+        "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0114",
-        "native_name": "end_markers_in_json",
+        "native_name": "create_admin_listener_thread",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0115",
-        "native_name": "enforce_gtid_consistency",
-        "observed_value": "OFF",
+        "native_name": "cte_max_recursion_depth",
+        "observed_value": "1000",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0116",
-        "native_name": "eq_range_index_dive_limit",
-        "observed_value": "200",
-        "source": "SHOW VARIABLES"
-      },
-      {
-        "item_id": "session_settings.0117",
-        "native_name": "event_scheduler",
-        "observed_value": "ON",
-        "source": "SHOW VARIABLES"
-      },
-      {
-        "item_id": "session_settings.0118",
-        "native_name": "explicit_defaults_for_timestamp",
-        "observed_value": "ON",
-        "source": "SHOW VARIABLES"
-      },
-      {
-        "item_id": "session_settings.0119",
-        "native_name": "external_user",
+        "native_name": "datadir",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0120",
-        "native_name": "flush",
-        "observed_value": "OFF",
+        "item_id": "session_settings.0117",
+        "native_name": "debug_sync",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0121",
-        "native_name": "flush_time",
+        "item_id": "session_settings.0118",
+        "native_name": "default_authentication_plugin",
+        "observed_value": "caching_sha2_password",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0119",
+        "native_name": "default_collation_for_utf8mb4",
+        "observed_value": "utf8mb4_0900_ai_ci",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0120",
+        "native_name": "default_password_lifetime",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
+        "item_id": "session_settings.0121",
+        "native_name": "default_storage_engine",
+        "observed_value": "InnoDB",
+        "source": "SHOW VARIABLES"
+      },
+      {
         "item_id": "session_settings.0122",
-        "native_name": "foreign_key_checks",
-        "observed_value": "ON",
+        "native_name": "default_table_encryption",
+        "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0123",
-        "native_name": "ft_boolean_syntax",
-        "observed_value": "+ -><()~*:\"\"&|",
+        "native_name": "default_tmp_storage_engine",
+        "observed_value": "InnoDB",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0124",
-        "native_name": "ft_max_word_len",
+        "native_name": "default_week_format",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0125",
-        "native_name": "ft_min_word_len",
-        "observed_value": "4",
+        "native_name": "delay_key_write",
+        "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0126",
-        "native_name": "ft_query_expansion_limit",
-        "observed_value": "20",
+        "native_name": "delayed_insert_limit",
+        "observed_value": "100",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0127",
-        "native_name": "ft_stopword_file",
-        "observed_value": "",
+        "native_name": "delayed_insert_timeout",
+        "observed_value": "300",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0128",
-        "native_name": "general_log",
-        "observed_value": "OFF",
+        "native_name": "delayed_queue_size",
+        "observed_value": "1000",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0129",
-        "native_name": "general_log_file",
-        "observed_value": "host_name.log",
+        "native_name": "disable_merge_join",
+        "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0130",
-        "native_name": "generated_random_password_length",
-        "observed_value": "20",
-        "source": "SHOW VARIABLES"
-      },
-      {
-        "item_id": "session_settings.0131",
-        "native_name": "gpgsign",
-        "observed_value": "OFF",
-        "source": "SHOW VARIABLES"
-      },
-      {
-        "item_id": "session_settings.0132",
-        "native_name": "group_concat_max_len",
-        "observed_value": "1024",
-        "source": "SHOW VARIABLES"
-      },
-      {
-        "item_id": "session_settings.0133",
-        "native_name": "gtid_domain_id",
-        "observed_value": "0",
-        "source": "SHOW VARIABLES"
-      },
-      {
-        "item_id": "session_settings.0134",
-        "native_name": "gtid_executed",
+        "native_name": "disabled_storage_engines",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0135",
-        "native_name": "gtid_executed_compression_period",
-        "observed_value": "0",
+        "item_id": "session_settings.0131",
+        "native_name": "disconnect_on_expired_password",
+        "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0136",
-        "native_name": "gtid_mode",
+        "item_id": "session_settings.0132",
+        "native_name": "div_precision_increment",
+        "observed_value": "4",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0133",
+        "native_name": "dolt_allow_ci_creation",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
+        "item_id": "session_settings.0134",
+        "native_name": "dolt_allow_commit_conflicts",
+        "observed_value": "OFF",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0135",
+        "native_name": "dolt_async_replication",
+        "observed_value": "OFF",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0136",
+        "native_name": "dolt_auto_gc_enabled",
+        "observed_value": "ON",
+        "source": "SHOW VARIABLES"
+      },
+      {
         "item_id": "session_settings.0137",
-        "native_name": "gtid_next",
-        "observed_value": "AUTOMATIC",
+        "native_name": "dolt_cluster_ack_writes_timeout_secs",
+        "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0138",
-        "native_name": "gtid_owned",
+        "native_name": "dolt_commit_verification_groups",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0139",
-        "native_name": "gtid_purged",
-        "observed_value": "",
-        "source": "SHOW VARIABLES"
-      },
-      {
-        "item_id": "session_settings.0140",
-        "native_name": "gtid_seq_no",
-        "observed_value": "0",
-        "source": "SHOW VARIABLES"
-      },
-      {
-        "item_id": "session_settings.0141",
-        "native_name": "have_statement_timeout",
+        "native_name": "dolt_dont_merge_json",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
+        "item_id": "session_settings.0140",
+        "native_name": "dolt_force_transaction_commit",
+        "observed_value": "OFF",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0141",
+        "native_name": "dolt_log_level",
+        "observed_value": "info",
+        "source": "SHOW VARIABLES"
+      },
+      {
         "item_id": "session_settings.0142",
-        "native_name": "histogram_generation_max_mem_size",
-        "observed_value": "20000000",
+        "native_name": "dolt_optimize_json",
+        "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0143",
-        "native_name": "host_cache_size",
-        "observed_value": "-1",
+        "native_name": "dolt_override_schema",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0144",
-        "native_name": "hostname",
-        "observed_value": "f39222bfc7e7",
+        "native_name": "dolt_read_replica_force_pull",
+        "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0145",
-        "native_name": "immediate_server_version",
-        "observed_value": "80017",
+        "native_name": "dolt_read_replica_remote",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0146",
-        "native_name": "information_schema_stats_expiry",
-        "observed_value": "86400",
+        "native_name": "dolt_replicate_all_heads",
+        "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0147",
-        "native_name": "init_connect",
+        "native_name": "dolt_replicate_heads",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0148",
-        "native_name": "init_file",
+        "native_name": "dolt_replicate_to_remote",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0149",
-        "native_name": "inmemory_joins",
-        "observed_value": "OFF",
+        "native_name": "dolt_replication_remote_url_template",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0150",
-        "native_name": "innodb_autoinc_lock_mode",
-        "observed_value": "2",
+        "native_name": "dolt_show_branch_databases",
+        "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0151",
-        "native_name": "innodb_buffer_pool_size",
-        "observed_value": "134217728",
+        "native_name": "dolt_show_system_tables",
+        "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0152",
-        "native_name": "innodb_lock_wait_timeout",
-        "observed_value": "1",
+        "native_name": "dolt_skip_replication_errors",
+        "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0153",
-        "native_name": "innodb_stats_auto_recalc",
-        "observed_value": "ON",
+        "native_name": "dolt_stats_branches",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0154",
-        "native_name": "insert_id",
-        "observed_value": "0",
+        "native_name": "dolt_stats_enabled",
+        "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0155",
-        "native_name": "interactive_timeout",
-        "observed_value": "28800",
+        "native_name": "dolt_stats_gc_enabled",
+        "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0156",
-        "native_name": "internal_tmp_disk_storage_engine",
-        "observed_value": "INNODB",
+        "native_name": "dolt_stats_gc_interval",
+        "observed_value": "3600000",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0157",
-        "native_name": "internal_tmp_mem_storage_engine",
-        "observed_value": "TempTable",
+        "native_name": "dolt_stats_job_interval",
+        "observed_value": "30",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0158",
-        "native_name": "join_buffer_size",
-        "observed_value": "262144",
+        "native_name": "dolt_stats_memory_only",
+        "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0159",
-        "native_name": "join_complexity_limit",
-        "observed_value": "12",
+        "native_name": "dolt_stats_paused",
+        "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0160",
-        "native_name": "keep_files_on_create",
+        "native_name": "dolt_transaction_commit",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0161",
-        "native_name": "key_buffer_size",
-        "observed_value": "8388608",
+        "native_name": "dolt_transaction_commit_message",
+        "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0162",
-        "native_name": "key_cache_age_threshold",
-        "observed_value": "300",
+        "native_name": "dolt_transactions_disabled",
+        "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0163",
-        "native_name": "key_cache_block_size",
-        "observed_value": "1024",
+        "native_name": "dragnet.log_error_filter_rules",
+        "observed_value": "drop",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0164",
-        "native_name": "key_cache_division_limit",
-        "observed_value": "100",
+        "native_name": "end_markers_in_json",
+        "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0165",
-        "native_name": "large_files_support",
+        "native_name": "enforce_gtid_consistency",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0166",
+        "native_name": "eq_range_index_dive_limit",
+        "observed_value": "200",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0167",
+        "native_name": "event_scheduler",
+        "observed_value": "ON",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0168",
+        "native_name": "explicit_defaults_for_timestamp",
+        "observed_value": "ON",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0169",
+        "native_name": "external_user",
+        "observed_value": "",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0170",
+        "native_name": "flush",
+        "observed_value": "OFF",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0171",
+        "native_name": "flush_time",
+        "observed_value": "0",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0172",
+        "native_name": "foreign_key_checks",
+        "observed_value": "ON",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0173",
+        "native_name": "ft_boolean_syntax",
+        "observed_value": "+ -><()~*:\"\"&|",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0174",
+        "native_name": "ft_max_word_len",
+        "observed_value": "0",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0175",
+        "native_name": "ft_min_word_len",
+        "observed_value": "4",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0176",
+        "native_name": "ft_query_expansion_limit",
+        "observed_value": "20",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0177",
+        "native_name": "ft_stopword_file",
+        "observed_value": "",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0178",
+        "native_name": "general_log",
+        "observed_value": "OFF",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0179",
+        "native_name": "general_log_file",
+        "observed_value": "host_name.log",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0180",
+        "native_name": "generated_random_password_length",
+        "observed_value": "20",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0181",
+        "native_name": "gpgsign",
+        "observed_value": "OFF",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0182",
+        "native_name": "group_concat_max_len",
+        "observed_value": "1024",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0183",
+        "native_name": "gtid_domain_id",
+        "observed_value": "0",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0184",
+        "native_name": "gtid_executed",
+        "observed_value": "",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0185",
+        "native_name": "gtid_executed_compression_period",
+        "observed_value": "0",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0186",
+        "native_name": "gtid_mode",
+        "observed_value": "OFF",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0187",
+        "native_name": "gtid_next",
+        "observed_value": "AUTOMATIC",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0188",
+        "native_name": "gtid_owned",
+        "observed_value": "",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0189",
+        "native_name": "gtid_purged",
+        "observed_value": "",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0190",
+        "native_name": "gtid_seq_no",
+        "observed_value": "0",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0191",
+        "native_name": "have_statement_timeout",
+        "observed_value": "OFF",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0192",
+        "native_name": "histogram_generation_max_mem_size",
+        "observed_value": "20000000",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0193",
+        "native_name": "host_cache_size",
+        "observed_value": "-1",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0194",
+        "native_name": "hostname",
+        "observed_value": "f39222bfc7e7",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0195",
+        "native_name": "immediate_server_version",
+        "observed_value": "80017",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0196",
+        "native_name": "information_schema_stats_expiry",
+        "observed_value": "86400",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0197",
+        "native_name": "init_connect",
+        "observed_value": "",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0198",
+        "native_name": "init_file",
+        "observed_value": "",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0199",
+        "native_name": "inmemory_joins",
+        "observed_value": "OFF",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0200",
+        "native_name": "innodb_autoinc_lock_mode",
+        "observed_value": "2",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0201",
+        "native_name": "innodb_buffer_pool_size",
+        "observed_value": "134217728",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0202",
+        "native_name": "innodb_lock_wait_timeout",
+        "observed_value": "1",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0203",
+        "native_name": "innodb_stats_auto_recalc",
+        "observed_value": "ON",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0204",
+        "native_name": "insert_id",
+        "observed_value": "0",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0205",
+        "native_name": "interactive_timeout",
+        "observed_value": "28800",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0206",
+        "native_name": "internal_tmp_disk_storage_engine",
+        "observed_value": "INNODB",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0207",
+        "native_name": "internal_tmp_mem_storage_engine",
+        "observed_value": "TempTable",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0208",
+        "native_name": "join_buffer_size",
+        "observed_value": "262144",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0209",
+        "native_name": "join_complexity_limit",
+        "observed_value": "12",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0210",
+        "native_name": "keep_files_on_create",
+        "observed_value": "OFF",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0211",
+        "native_name": "key_buffer_size",
+        "observed_value": "8388608",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0212",
+        "native_name": "key_cache_age_threshold",
+        "observed_value": "300",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0213",
+        "native_name": "key_cache_block_size",
+        "observed_value": "1024",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0214",
+        "native_name": "key_cache_division_limit",
+        "observed_value": "100",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0215",
+        "native_name": "large_files_support",
+        "observed_value": "OFF",
+        "source": "SHOW VARIABLES"
+      },
+      {
+        "item_id": "session_settings.0216",
         "native_name": "large_page_size",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0167",
+        "item_id": "session_settings.0217",
         "native_name": "large_pages",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0168",
+        "item_id": "session_settings.0218",
         "native_name": "last_insert_id",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0169",
+        "item_id": "session_settings.0219",
         "native_name": "lc_messages",
         "observed_value": "en_US",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0170",
+        "item_id": "session_settings.0220",
         "native_name": "lc_messages_dir",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0171",
+        "item_id": "session_settings.0221",
         "native_name": "lc_time_names",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0172",
+        "item_id": "session_settings.0222",
         "native_name": "license",
         "observed_value": "GPL",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0173",
+        "item_id": "session_settings.0223",
         "native_name": "local_infile",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0174",
+        "item_id": "session_settings.0224",
         "native_name": "lock_wait_timeout",
         "observed_value": "31536000",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0175",
+        "item_id": "session_settings.0225",
         "native_name": "lock_warnings",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0176",
+        "item_id": "session_settings.0226",
         "native_name": "log_bin",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0177",
+        "item_id": "session_settings.0227",
         "native_name": "log_bin_branch",
         "observed_value": "main",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0178",
+        "item_id": "session_settings.0228",
         "native_name": "log_error",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0179",
+        "item_id": "session_settings.0229",
         "native_name": "log_error_services",
         "observed_value": "log_filter_internal; log_sink_internal",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0180",
+        "item_id": "session_settings.0230",
         "native_name": "log_error_suppression_list",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0181",
+        "item_id": "session_settings.0231",
         "native_name": "log_error_verbosity",
         "observed_value": "2",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0182",
+        "item_id": "session_settings.0232",
         "native_name": "log_output",
         "observed_value": "FILE",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0183",
+        "item_id": "session_settings.0233",
         "native_name": "log_queries_not_using_indexes",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0184",
+        "item_id": "session_settings.0234",
         "native_name": "log_raw",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0185",
+        "item_id": "session_settings.0235",
         "native_name": "log_replica_updates",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0186",
+        "item_id": "session_settings.0236",
         "native_name": "log_slave_updates",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0187",
+        "item_id": "session_settings.0237",
         "native_name": "log_slow_admin_statements",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0188",
+        "item_id": "session_settings.0238",
         "native_name": "log_slow_extra",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0189",
+        "item_id": "session_settings.0239",
         "native_name": "log_syslog",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0190",
+        "item_id": "session_settings.0240",
         "native_name": "log_syslog_facility",
         "observed_value": "daemon",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0191",
+        "item_id": "session_settings.0241",
         "native_name": "log_syslog_include_pid",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0192",
+        "item_id": "session_settings.0242",
         "native_name": "log_syslog_tag",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0193",
+        "item_id": "session_settings.0243",
         "native_name": "log_throttle_queries_not_using_indexes",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0194",
+        "item_id": "session_settings.0244",
         "native_name": "log_timestamps",
         "observed_value": "UTC",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0195",
+        "item_id": "session_settings.0245",
         "native_name": "long_query_time",
         "observed_value": "10",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0196",
+        "item_id": "session_settings.0246",
         "native_name": "low_priority_updates",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0197",
+        "item_id": "session_settings.0247",
         "native_name": "lower_case_file_system",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0198",
+        "item_id": "session_settings.0248",
         "native_name": "lower_case_table_names",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0199",
+        "item_id": "session_settings.0249",
         "native_name": "mandatory_roles",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0200",
+        "item_id": "session_settings.0250",
         "native_name": "max_allowed_packet",
         "observed_value": "1073741824",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0201",
+        "item_id": "session_settings.0251",
         "native_name": "max_binlog_size",
         "observed_value": "1073741824",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0202",
+        "item_id": "session_settings.0252",
         "native_name": "max_connect_errors",
         "observed_value": "100",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0203",
+        "item_id": "session_settings.0253",
         "native_name": "max_connections",
         "observed_value": "151",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0204",
+        "item_id": "session_settings.0254",
         "native_name": "max_delayed_threads",
         "observed_value": "20",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0205",
+        "item_id": "session_settings.0255",
         "native_name": "max_digest_length",
         "observed_value": "1024",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0206",
+        "item_id": "session_settings.0256",
         "native_name": "max_error_count",
         "observed_value": "1024",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0207",
+        "item_id": "session_settings.0257",
         "native_name": "max_execution_time",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0208",
+        "item_id": "session_settings.0258",
         "native_name": "max_heap_table_size",
         "observed_value": "16777216",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0209",
+        "item_id": "session_settings.0259",
         "native_name": "max_insert_delayed_threads",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0210",
+        "item_id": "session_settings.0260",
         "native_name": "max_join_size",
         "observed_value": "18446744073709551615",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0211",
+        "item_id": "session_settings.0261",
         "native_name": "max_length_for_sort_data",
         "observed_value": "4096",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0212",
+        "item_id": "session_settings.0262",
         "native_name": "max_points_in_geometry",
         "observed_value": "65536",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0213",
+        "item_id": "session_settings.0263",
         "native_name": "max_prepared_stmt_count",
         "observed_value": "16382",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0214",
+        "item_id": "session_settings.0264",
         "native_name": "max_seeks_for_key",
         "observed_value": "18446744073709551615",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0215",
+        "item_id": "session_settings.0265",
         "native_name": "max_sort_length",
         "observed_value": "1024",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0216",
+        "item_id": "session_settings.0266",
         "native_name": "max_sp_recursion_depth",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0217",
+        "item_id": "session_settings.0267",
         "native_name": "max_user_connections",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0218",
+        "item_id": "session_settings.0268",
         "native_name": "max_write_lock_count",
         "observed_value": "18446744073709551615",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0219",
+        "item_id": "session_settings.0269",
         "native_name": "mecab_rc_file",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0220",
+        "item_id": "session_settings.0270",
         "native_name": "metadata_locks_cache_size",
         "observed_value": "1024",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0221",
+        "item_id": "session_settings.0271",
         "native_name": "metadata_locks_hash_instances",
         "observed_value": "8",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0222",
+        "item_id": "session_settings.0272",
         "native_name": "min_examined_row_limit",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0223",
+        "item_id": "session_settings.0273",
         "native_name": "myisam_data_pointer_size",
         "observed_value": "6",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0224",
+        "item_id": "session_settings.0274",
         "native_name": "myisam_max_sort_file_size",
         "observed_value": "9223372036853727232",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0225",
+        "item_id": "session_settings.0275",
         "native_name": "myisam_mmap_size",
         "observed_value": "18446744073709551615",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0226",
+        "item_id": "session_settings.0276",
         "native_name": "myisam_recover_options",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0227",
+        "item_id": "session_settings.0277",
         "native_name": "myisam_repair_threads",
         "observed_value": "1",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0228",
+        "item_id": "session_settings.0278",
         "native_name": "myisam_sort_buffer_size",
         "observed_value": "8388608",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0229",
+        "item_id": "session_settings.0279",
         "native_name": "myisam_stats_method",
         "observed_value": "nulls_unequal",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0230",
+        "item_id": "session_settings.0280",
         "native_name": "myisam_use_mmap",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0231",
+        "item_id": "session_settings.0281",
         "native_name": "mysql_native_password_proxy_users",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0232",
+        "item_id": "session_settings.0282",
         "native_name": "named_pipe",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0233",
+        "item_id": "session_settings.0283",
         "native_name": "named_pipe_full_access_group",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0234",
+        "item_id": "session_settings.0284",
         "native_name": "ndbinfo_version",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0235",
+        "item_id": "session_settings.0285",
         "native_name": "net_buffer_length",
         "observed_value": "16384",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0236",
+        "item_id": "session_settings.0286",
         "native_name": "net_read_timeout",
         "observed_value": "28800",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0237",
+        "item_id": "session_settings.0287",
         "native_name": "net_retry_count",
         "observed_value": "10",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0238",
+        "item_id": "session_settings.0288",
         "native_name": "net_write_timeout",
         "observed_value": "28800",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0239",
+        "item_id": "session_settings.0289",
         "native_name": "new",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0240",
+        "item_id": "session_settings.0290",
         "native_name": "ngram_token_size",
         "observed_value": "2",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0241",
+        "item_id": "session_settings.0291",
         "native_name": "offline_mode",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0242",
+        "item_id": "session_settings.0292",
         "native_name": "old",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0243",
+        "item_id": "session_settings.0293",
         "native_name": "old_alter_table",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0244",
+        "item_id": "session_settings.0294",
         "native_name": "open_files_limit",
         "observed_value": "5000",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0245",
+        "item_id": "session_settings.0295",
         "native_name": "optimizer_prune_level",
         "observed_value": "1",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0246",
+        "item_id": "session_settings.0296",
         "native_name": "optimizer_search_depth",
         "observed_value": "62",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0247",
+        "item_id": "session_settings.0297",
         "native_name": "optimizer_trace",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0248",
+        "item_id": "session_settings.0298",
         "native_name": "optimizer_trace_features",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0249",
+        "item_id": "session_settings.0299",
         "native_name": "optimizer_trace_limit",
         "observed_value": "1",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0250",
+        "item_id": "session_settings.0300",
         "native_name": "optimizer_trace_max_mem_size",
         "observed_value": "1048576",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0251",
+        "item_id": "session_settings.0301",
         "native_name": "optimizer_trace_offset",
         "observed_value": "-1",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0252",
+        "item_id": "session_settings.0302",
         "native_name": "original_server_version",
         "observed_value": "80017",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0253",
+        "item_id": "session_settings.0303",
         "native_name": "parser_max_mem_size",
         "observed_value": "18446744073709551615",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0254",
+        "item_id": "session_settings.0304",
         "native_name": "partial_revokes",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0255",
+        "item_id": "session_settings.0305",
         "native_name": "password_history",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0256",
+        "item_id": "session_settings.0306",
         "native_name": "password_require_current",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0257",
+        "item_id": "session_settings.0307",
         "native_name": "password_reuse_interval",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0258",
+        "item_id": "session_settings.0308",
         "native_name": "performance_schema",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0259",
+        "item_id": "session_settings.0309",
         "native_name": "persist_only_admin_x509_subject",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0260",
+        "item_id": "session_settings.0310",
         "native_name": "persisted_globals_load",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0261",
+        "item_id": "session_settings.0311",
         "native_name": "pid_file",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0262",
+        "item_id": "session_settings.0312",
         "native_name": "plugin_dir",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0263",
+        "item_id": "session_settings.0313",
         "native_name": "port",
         "observed_value": "3306",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0264",
+        "item_id": "session_settings.0314",
         "native_name": "preload_buffer_size",
         "observed_value": "32768",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0265",
+        "item_id": "session_settings.0315",
         "native_name": "print_identified_with_as_hex",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0266",
+        "item_id": "session_settings.0316",
         "native_name": "protocol_compression_algorithms",
         "observed_value": "zlib,zstd,uncompressed",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0267",
+        "item_id": "session_settings.0317",
         "native_name": "protocol_version",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0268",
+        "item_id": "session_settings.0318",
         "native_name": "proxy_user",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0269",
+        "item_id": "session_settings.0319",
         "native_name": "pseudo_slave_mode",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0270",
+        "item_id": "session_settings.0320",
         "native_name": "pseudo_thread_id",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0271",
+        "item_id": "session_settings.0321",
         "native_name": "query_cache_size",
         "observed_value": "1",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0272",
+        "item_id": "session_settings.0322",
         "native_name": "query_cache_type",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0273",
+        "item_id": "session_settings.0323",
         "native_name": "rand_seed1",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0274",
+        "item_id": "session_settings.0324",
         "native_name": "range_optimizer_max_mem_size",
         "observed_value": "8388608",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0275",
+        "item_id": "session_settings.0325",
         "native_name": "rbr_exec_mode",
         "observed_value": "STRICT",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0276",
+        "item_id": "session_settings.0326",
         "native_name": "read_buffer_size",
         "observed_value": "131072",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0277",
+        "item_id": "session_settings.0327",
         "native_name": "read_only",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0278",
+        "item_id": "session_settings.0328",
         "native_name": "read_rnd_buffer_size",
         "observed_value": "262144",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0279",
+        "item_id": "session_settings.0329",
         "native_name": "regexp_buffer_size",
         "observed_value": "524288",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0280",
+        "item_id": "session_settings.0330",
         "native_name": "regexp_stack_limit",
         "observed_value": "8000000",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0281",
+        "item_id": "session_settings.0331",
         "native_name": "regexp_time_limit",
         "observed_value": "32",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0282",
+        "item_id": "session_settings.0332",
         "native_name": "require_row_format",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0283",
+        "item_id": "session_settings.0333",
         "native_name": "require_secure_transport",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0284",
+        "item_id": "session_settings.0334",
         "native_name": "resultset_metadata",
         "observed_value": "FULL",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0285",
+        "item_id": "session_settings.0335",
         "native_name": "schema_definition_cache",
         "observed_value": "256",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0286",
+        "item_id": "session_settings.0336",
         "native_name": "secondary_engine_cost_threshold",
         "observed_value": "100000",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0287",
+        "item_id": "session_settings.0337",
         "native_name": "secure_file_priv",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0288",
+        "item_id": "session_settings.0338",
         "native_name": "select_into_buffer_size",
         "observed_value": "131072",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0289",
+        "item_id": "session_settings.0339",
         "native_name": "select_into_disk_sync",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0290",
+        "item_id": "session_settings.0340",
         "native_name": "select_into_disk_sync_delay",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0291",
+        "item_id": "session_settings.0341",
         "native_name": "server_id",
         "observed_value": "1",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0292",
+        "item_id": "session_settings.0342",
         "native_name": "server_uuid",
         "observed_value": "6760cb9e-ea93-4bfd-9e12-413c64880231",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0293",
+        "item_id": "session_settings.0343",
         "native_name": "session_track_gtids",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0294",
+        "item_id": "session_settings.0344",
         "native_name": "session_track_schema",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0295",
+        "item_id": "session_settings.0345",
         "native_name": "session_track_state_change",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0296",
+        "item_id": "session_settings.0346",
         "native_name": "session_track_system_variables",
         "observed_value": "time_zone, autocommit, character_set_client, character_set_results, character_set_connection",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0297",
+        "item_id": "session_settings.0347",
         "native_name": "session_track_transaction_info",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0298",
+        "item_id": "session_settings.0348",
         "native_name": "sha256_password_auto_generate_rsa_keys",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0299",
+        "item_id": "session_settings.0349",
         "native_name": "sha256_password_private_key_path",
         "observed_value": "private_key.pem",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0300",
+        "item_id": "session_settings.0350",
         "native_name": "sha256_password_proxy_users",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0301",
+        "item_id": "session_settings.0351",
         "native_name": "sha256_password_public_key_path",
         "observed_value": "public_key.pem",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0302",
+        "item_id": "session_settings.0352",
         "native_name": "shared_memory",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0303",
+        "item_id": "session_settings.0353",
         "native_name": "shared_memory_base_name",
         "observed_value": "MYSQL",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0304",
+        "item_id": "session_settings.0354",
         "native_name": "show_create_table_skip_secondary_engine",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0305",
+        "item_id": "session_settings.0355",
         "native_name": "show_create_table_verbosity",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0306",
+        "item_id": "session_settings.0356",
         "native_name": "show_external_procedures",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0307",
+        "item_id": "session_settings.0357",
         "native_name": "show_old_temporals",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0308",
+        "item_id": "session_settings.0358",
         "native_name": "signingkey",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0309",
+        "item_id": "session_settings.0359",
         "native_name": "skip_external_locking",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0310",
+        "item_id": "session_settings.0360",
         "native_name": "skip_name_resolve",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0311",
+        "item_id": "session_settings.0361",
         "native_name": "skip_networking",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0312",
+        "item_id": "session_settings.0362",
         "native_name": "skip_parallel_replication",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0313",
+        "item_id": "session_settings.0363",
         "native_name": "skip_show_database",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0314",
+        "item_id": "session_settings.0364",
         "native_name": "slow_launch_time",
         "observed_value": "2",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0315",
+        "item_id": "session_settings.0365",
         "native_name": "slow_query_log",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0316",
+        "item_id": "session_settings.0366",
         "native_name": "slow_query_log_file",
         "observed_value": "host_name-slow.log",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0317",
+        "item_id": "session_settings.0367",
         "native_name": "socket",
         "observed_value": "/tmp/mysql.sock",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0318",
+        "item_id": "session_settings.0368",
         "native_name": "sort_buffer_size",
         "observed_value": "262144",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0319",
+        "item_id": "session_settings.0369",
         "native_name": "sql_auto_is_null",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0320",
+        "item_id": "session_settings.0370",
         "native_name": "sql_big_selects",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0321",
+        "item_id": "session_settings.0371",
         "native_name": "sql_buffer_result",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0322",
+        "item_id": "session_settings.0372",
         "native_name": "sql_if_exists",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0323",
+        "item_id": "session_settings.0373",
         "native_name": "sql_log_bin",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0324",
+        "item_id": "session_settings.0374",
         "native_name": "sql_log_off",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0325",
+        "item_id": "session_settings.0375",
         "native_name": "sql_mode",
         "observed_value": "NO_ENGINE_SUBSTITUTION,ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0326",
+        "item_id": "session_settings.0376",
         "native_name": "sql_notes",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0327",
+        "item_id": "session_settings.0377",
         "native_name": "sql_quote_show_create",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0328",
+        "item_id": "session_settings.0378",
         "native_name": "sql_require_primary_key",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0329",
+        "item_id": "session_settings.0379",
         "native_name": "sql_safe_updates",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0330",
+        "item_id": "session_settings.0380",
         "native_name": "sql_select_limit",
         "observed_value": "2147483647",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0331",
+        "item_id": "session_settings.0381",
         "native_name": "sql_warnings",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0332",
+        "item_id": "session_settings.0382",
         "native_name": "ssl_ca",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0333",
+        "item_id": "session_settings.0383",
         "native_name": "ssl_capath",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0334",
+        "item_id": "session_settings.0384",
         "native_name": "ssl_cert",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0335",
+        "item_id": "session_settings.0385",
         "native_name": "ssl_cipher",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0336",
+        "item_id": "session_settings.0386",
         "native_name": "ssl_crl",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0337",
+        "item_id": "session_settings.0387",
         "native_name": "ssl_crlpath",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0338",
+        "item_id": "session_settings.0388",
         "native_name": "ssl_fips_mode",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0339",
+        "item_id": "session_settings.0389",
         "native_name": "ssl_key",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0340",
+        "item_id": "session_settings.0390",
         "native_name": "stored_program_cache",
         "observed_value": "256",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0341",
+        "item_id": "session_settings.0391",
         "native_name": "stored_program_definition_cache",
         "observed_value": "256",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0342",
+        "item_id": "session_settings.0392",
         "native_name": "strict_mysql_compatibility",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0343",
+        "item_id": "session_settings.0393",
         "native_name": "super_read_only",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0344",
+        "item_id": "session_settings.0394",
         "native_name": "syseventlog.facility",
         "observed_value": "daemon",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0345",
+        "item_id": "session_settings.0395",
         "native_name": "syseventlog.include_pid",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0346",
+        "item_id": "session_settings.0396",
         "native_name": "syseventlog.tag",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0347",
+        "item_id": "session_settings.0397",
         "native_name": "system_time_zone",
         "observed_value": "UTC",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0348",
+        "item_id": "session_settings.0398",
         "native_name": "system_versioning_insert_history",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0349",
+        "item_id": "session_settings.0399",
         "native_name": "table_definition_cache",
         "observed_value": "-1",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0350",
+        "item_id": "session_settings.0400",
         "native_name": "table_encryption_privilege_check",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0351",
+        "item_id": "session_settings.0401",
         "native_name": "table_open_cache",
         "observed_value": "4000",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0352",
+        "item_id": "session_settings.0402",
         "native_name": "table_open_cache_instances",
         "observed_value": "16",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0353",
+        "item_id": "session_settings.0403",
         "native_name": "tablespace_definition_cache",
         "observed_value": "256",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0354",
+        "item_id": "session_settings.0404",
         "native_name": "temptable_max_mmap",
         "observed_value": "1073741824",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0355",
+        "item_id": "session_settings.0405",
         "native_name": "temptable_max_ram",
         "observed_value": "1073741824",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0356",
+        "item_id": "session_settings.0406",
         "native_name": "temptable_use_mmap",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0357",
+        "item_id": "session_settings.0407",
         "native_name": "thread_cache_size",
         "observed_value": "-1",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0358",
+        "item_id": "session_settings.0408",
         "native_name": "thread_handling",
         "observed_value": "one-thread-per-connection",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0359",
+        "item_id": "session_settings.0409",
         "native_name": "thread_pool_algorithm",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0360",
+        "item_id": "session_settings.0410",
         "native_name": "thread_pool_high_priority_connection",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0361",
+        "item_id": "session_settings.0411",
         "native_name": "thread_pool_max_active_query_threads",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0362",
+        "item_id": "session_settings.0412",
         "native_name": "thread_pool_max_unused_threads",
         "observed_value": "0",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0363",
+        "item_id": "session_settings.0413",
         "native_name": "thread_pool_prio_kickup_timer",
         "observed_value": "1000",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0364",
+        "item_id": "session_settings.0414",
         "native_name": "thread_pool_size",
         "observed_value": "16",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0365",
+        "item_id": "session_settings.0415",
         "native_name": "thread_pool_stall_limit",
         "observed_value": "6",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0366",
+        "item_id": "session_settings.0416",
         "native_name": "time_zone",
         "observed_value": "SYSTEM",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0367",
+        "item_id": "session_settings.0417",
         "native_name": "timestamp",
         "observed_value": "1000",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0368",
+        "item_id": "session_settings.0418",
         "native_name": "tls_ciphersuites",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0369",
+        "item_id": "session_settings.0419",
         "native_name": "tls_version",
         "observed_value": "TLSv1,TLSv1.1,TLSv1.2,TLSv1.3",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0370",
+        "item_id": "session_settings.0420",
         "native_name": "tmp_table_size",
         "observed_value": "16777216",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0371",
+        "item_id": "session_settings.0421",
         "native_name": "tmpdir",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0372",
+        "item_id": "session_settings.0422",
         "native_name": "transaction_isolation",
         "observed_value": "REPEATABLE-READ",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0373",
+        "item_id": "session_settings.0423",
         "native_name": "transaction_prealloc_size",
         "observed_value": "4096",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0374",
+        "item_id": "session_settings.0424",
         "native_name": "transaction_read_only",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0375",
+        "item_id": "session_settings.0425",
         "native_name": "tx_isolation",
         "observed_value": "REPEATABLE-READ",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0376",
+        "item_id": "session_settings.0426",
         "native_name": "tx_read_only",
         "observed_value": "OFF",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0377",
+        "item_id": "session_settings.0427",
         "native_name": "unique_checks",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0378",
+        "item_id": "session_settings.0428",
         "native_name": "updatable_views_with_limit",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0379",
+        "item_id": "session_settings.0429",
         "native_name": "uptime",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0380",
+        "item_id": "session_settings.0430",
         "native_name": "use_secondary_engine",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0381",
+        "item_id": "session_settings.0431",
         "native_name": "validate_password.length",
         "observed_value": "8",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0382",
+        "item_id": "session_settings.0432",
         "native_name": "validate_password.mixed_case_count",
         "observed_value": "1",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0383",
+        "item_id": "session_settings.0433",
         "native_name": "validate_password.number_count",
         "observed_value": "1",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0384",
+        "item_id": "session_settings.0434",
         "native_name": "validate_password.special_char_count",
         "observed_value": "1",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0385",
+        "item_id": "session_settings.0435",
         "native_name": "validate_user_plugins",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0386",
+        "item_id": "session_settings.0436",
         "native_name": "version",
         "observed_value": "8.0.31",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0387",
+        "item_id": "session_settings.0437",
         "native_name": "version_comment",
         "observed_value": "Dolt",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0388",
+        "item_id": "session_settings.0438",
         "native_name": "version_compile_machine",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0389",
+        "item_id": "session_settings.0439",
         "native_name": "version_compile_os",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0390",
+        "item_id": "session_settings.0440",
         "native_name": "version_compile_zlib",
         "observed_value": "",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0391",
+        "item_id": "session_settings.0441",
         "native_name": "wait_timeout",
         "observed_value": "28800",
         "source": "SHOW VARIABLES"
       },
       {
-        "item_id": "session_settings.0392",
+        "item_id": "session_settings.0442",
         "native_name": "windowing_use_high_precision",
         "observed_value": "ON",
         "source": "SHOW VARIABLES"

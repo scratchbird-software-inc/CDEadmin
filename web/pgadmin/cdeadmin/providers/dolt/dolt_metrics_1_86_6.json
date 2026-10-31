@@ -1,5 +1,5 @@
 {
-  "authoritative_metric_count": 646,
+  "authoritative_metric_count": 676,
   "authoritative_metric_ids": [
     "dolt.status.0001.aborted_clients",
     "dolt.status.0002.aborted_connects",
@@ -12,12 +12,14 @@
     "dolt.status.0009.audit_log_events_written",
     "dolt.status.0010.audit_log_total_size",
     "dolt.status.0011.audit_log_write_waits",
+    "dolt.status.0012.authentication_ldap_sasl_supported_methods",
     "dolt.status.0013.binlog_cache_disk_use",
     "dolt.status.0014.binlog_cache_use",
     "dolt.status.0015.binlog_stmt_cache_disk_use",
     "dolt.status.0016.binlog_stmt_cache_use",
     "dolt.status.0017.bytes_received",
     "dolt.status.0018.bytes_sent",
+    "dolt.status.0019.caching_sha2_password_rsa_public_key",
     "dolt.status.0020.com_admin_commands",
     "dolt.status.0021.com_alter_db",
     "dolt.status.0022.com_alter_event",
@@ -187,6 +189,7 @@
     "dolt.status.0186.com_xa_rollback",
     "dolt.status.0187.com_xa_start",
     "dolt.status.0188.compression",
+    "dolt.status.0189.compression_algorithm",
     "dolt.status.0190.compression_level",
     "dolt.status.0191.connection_control_delay_generated",
     "dolt.status.0192.connection_errors_accept",
@@ -199,6 +202,15 @@
     "dolt.status.0199.created_tmp_disk_tables",
     "dolt.status.0200.created_tmp_files",
     "dolt.status.0201.created_tmp_tables",
+    "dolt.status.0202.current_tls_ca",
+    "dolt.status.0203.current_tls_capath",
+    "dolt.status.0204.current_tls_cert",
+    "dolt.status.0205.current_tls_cipher",
+    "dolt.status.0206.current_tls_ciphersuites",
+    "dolt.status.0207.current_tls_crl",
+    "dolt.status.0208.current_tls_crlpath",
+    "dolt.status.0209.current_tls_key",
+    "dolt.status.0210.current_tls_version",
     "dolt.status.0211.delayed_errors",
     "dolt.status.0212.delayed_insert_threads",
     "dolt.status.0213.delayed_writes",
@@ -231,6 +243,8 @@
     "dolt.status.0240.handler_write",
     "dolt.status.0241.innodb_buffer_pool_bytes_data",
     "dolt.status.0242.innodb_buffer_pool_bytes_dirty",
+    "dolt.status.0243.innodb_buffer_pool_dump_status",
+    "dolt.status.0244.innodb_buffer_pool_load_status",
     "dolt.status.0245.innodb_buffer_pool_pages_data",
     "dolt.status.0246.innodb_buffer_pool_pages_dirty",
     "dolt.status.0247.innodb_buffer_pool_pages_flushed",
@@ -243,6 +257,7 @@
     "dolt.status.0254.innodb_buffer_pool_read_ahead_rnd",
     "dolt.status.0255.innodb_buffer_pool_read_requests",
     "dolt.status.0256.innodb_buffer_pool_reads",
+    "dolt.status.0257.innodb_buffer_pool_resize_status",
     "dolt.status.0258.innodb_buffer_pool_resize_status_code",
     "dolt.status.0259.innodb_buffer_pool_resize_status_progress",
     "dolt.status.0260.innodb_buffer_pool_wait_free",
@@ -278,6 +293,7 @@
     "dolt.status.0290.innodb_redo_log_logical_size",
     "dolt.status.0291.innodb_redo_log_physical_size",
     "dolt.status.0292.innodb_redo_log_read_only",
+    "dolt.status.0293.innodb_redo_log_resize_status",
     "dolt.status.0294.innodb_redo_log_uuid",
     "dolt.status.0295.innodb_row_lock_current_waits",
     "dolt.status.0296.innodb_row_lock_time",
@@ -311,7 +327,9 @@
     "dolt.status.0324.max_execution_time_set",
     "dolt.status.0325.max_execution_time_set_failed",
     "dolt.status.0326.max_used_connections",
+    "dolt.status.0327.max_used_connections_time",
     "dolt.status.0328.mysqlx_aborted_clients",
+    "dolt.status.0329.mysqlx_address",
     "dolt.status.0330.mysqlx_bytes_received",
     "dolt.status.0331.mysqlx_bytes_received_compressed_payload",
     "dolt.status.0332.mysqlx_bytes_received_uncompressed_frame",
@@ -343,6 +361,7 @@
     "dolt.status.0360.mysqlx_notice_other_sent",
     "dolt.status.0361.mysqlx_notice_warning_sent",
     "dolt.status.0362.mysqlx_notified_by_group_replication",
+    "dolt.status.0363.mysqlx_port",
     "dolt.status.0364.mysqlx_prep_deallocate",
     "dolt.status.0365.mysqlx_prep_execute",
     "dolt.status.0366.mysqlx_prep_prepare",
@@ -353,6 +372,7 @@
     "dolt.status.0371.mysqlx_sessions_fatal_error",
     "dolt.status.0372.mysqlx_sessions_killed",
     "dolt.status.0373.mysqlx_sessions_rejected",
+    "dolt.status.0374.mysqlx_socket",
     "dolt.status.0375.mysqlx_ssl_accept_renegotiates",
     "dolt.status.0376.mysqlx_ssl_accepts",
     "dolt.status.0377.mysqlx_ssl_active",
@@ -560,6 +580,7 @@
     "dolt.status.0580.queries",
     "dolt.status.0581.questions",
     "dolt.status.0582.replica_open_temp_tables",
+    "dolt.status.0583.replica_rows_last_search_algorithm_used",
     "dolt.status.0584.resource_group_supported",
     "dolt.status.0585.rewriter_number_loaded_rules",
     "dolt.status.0586.rewriter_number_reloads",
@@ -595,6 +616,7 @@
     "dolt.status.0616.rpl_semi_sync_source_wait_pos_backtraverse",
     "dolt.status.0617.rpl_semi_sync_source_wait_sessions",
     "dolt.status.0618.rpl_semi_sync_source_yes_tx",
+    "dolt.status.0619.rsa_public_key",
     "dolt.status.0620.secondary_engine_execution_count",
     "dolt.status.0621.select_full_join",
     "dolt.status.0622.select_full_range_join",
@@ -602,6 +624,7 @@
     "dolt.status.0624.select_range_check",
     "dolt.status.0625.select_scan",
     "dolt.status.0626.slave_open_temp_tables",
+    "dolt.status.0627.slave_rows_last_search_algorithm_used",
     "dolt.status.0628.slow_launch_threads",
     "dolt.status.0629.slow_queries",
     "dolt.status.0630.sort_merge_passes",
@@ -622,6 +645,7 @@
     "dolt.status.0647.ssl_server_not_before",
     "dolt.status.0648.ssl_session_cache_hits",
     "dolt.status.0649.ssl_session_cache_misses",
+    "dolt.status.0650.ssl_session_cache_mode",
     "dolt.status.0651.ssl_session_cache_overflows",
     "dolt.status.0652.ssl_session_cache_size",
     "dolt.status.0653.ssl_session_cache_timeout",
@@ -643,9 +667,15 @@
     "dolt.status.0670.threads_connected",
     "dolt.status.0671.threads_created",
     "dolt.status.0672.threads_running",
+    "dolt.status.0673.tls_library_version",
     "dolt.status.0674.uptime",
     "dolt.status.0675.uptime_since_flush_status",
+    "dolt.status.0676.dragnet_status",
+    "dolt.status.0677.group_replication_primary_member",
+    "dolt.status.0678.mecab_charset",
+    "dolt.status.0679.validate_password_dictionary_file_last_parsed",
     "dolt.status.0680.validate_password_dictionary_file_words_count",
+    "dolt.status.0681.validate_password_dictionary_file_last_parsed",
     "dolt.status.0682.validate_password_dictionary_file_words_count"
   ],
   "authoritative_observation_count": 682,
@@ -1338,7 +1368,7 @@
     "authority": "Dolt 1.86.6 runtime",
     "format": "cdeadmin.engine-metrics-inventory.v1",
     "license_id": "PostgreSQL",
-    "sha256": "f73501e788633edfeece25ab14d15c4beb82662eed89d62a9c9fa75e20cd7dd7"
+    "sha256": "015fd82c963ae96bd2fa8f461bf3323e19c551d7ef0ed0de792b5563a69eec9b"
   },
   "classification_evidence": [
     {
@@ -1357,7 +1387,7 @@
       "evidence_kind": "catalog",
       "format": "cdeadmin.engine-metrics-inventory.v1",
       "license_id": "PostgreSQL",
-      "sha256": "f73501e788633edfeece25ab14d15c4beb82662eed89d62a9c9fa75e20cd7dd7"
+      "sha256": "015fd82c963ae96bd2fa8f461bf3323e19c551d7ef0ed0de792b5563a69eec9b"
     },
     {
       "artifact": "dialect_qualification_live.json",
@@ -1366,7 +1396,7 @@
       "evidence_kind": "live_execution",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "09b7c896dbecf13bed4a3ba33cbdb903141c17b53f1075cfd032098665a7097a"
+      "sha256": "99c194a5f28b5ac9faabb8dfe6e40668b8968462ac949860afb346ba0cb8e170"
     }
   ],
   "contract_id": "dolt.metrics.1.86.6.v1",
@@ -1528,6 +1558,19 @@
         "dolt-1.86.6-task-live-execution"
       ],
       "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0012.authentication_ldap_sasl_supported_methods",
+      "observation_id": "dolt.status.0012.authentication_ldap_sasl_supported_methods",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0013.binlog_cache_disk_use",
       "observation_id": "dolt.status.0013.binlog_cache_disk_use",
       "reset_behavior": "server_restart_or_status_reset",
@@ -1595,6 +1638,19 @@
       "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0018.bytes_sent",
       "observation_id": "dolt.status.0018.bytes_sent",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0019.caching_sha2_password_rsa_public_key",
+      "observation_id": "dolt.status.0019.caching_sha2_password_rsa_public_key",
       "reset_behavior": "server_restart_or_status_reset",
       "unit": "native_unit"
     },
@@ -3803,6 +3859,19 @@
         "dolt-1.86.6-task-live-execution"
       ],
       "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0189.compression_algorithm",
+      "observation_id": "dolt.status.0189.compression_algorithm",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0190.compression_level",
       "observation_id": "dolt.status.0190.compression_level",
       "reset_behavior": "server_restart_or_status_reset",
@@ -3948,6 +4017,123 @@
       "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0201.created_tmp_tables",
       "observation_id": "dolt.status.0201.created_tmp_tables",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0202.current_tls_ca",
+      "observation_id": "dolt.status.0202.current_tls_ca",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0203.current_tls_capath",
+      "observation_id": "dolt.status.0203.current_tls_capath",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0204.current_tls_cert",
+      "observation_id": "dolt.status.0204.current_tls_cert",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0205.current_tls_cipher",
+      "observation_id": "dolt.status.0205.current_tls_cipher",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0206.current_tls_ciphersuites",
+      "observation_id": "dolt.status.0206.current_tls_ciphersuites",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0207.current_tls_crl",
+      "observation_id": "dolt.status.0207.current_tls_crl",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0208.current_tls_crlpath",
+      "observation_id": "dolt.status.0208.current_tls_crlpath",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0209.current_tls_key",
+      "observation_id": "dolt.status.0209.current_tls_key",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0210.current_tls_version",
+      "observation_id": "dolt.status.0210.current_tls_version",
       "reset_behavior": "server_restart_or_status_reset",
       "unit": "native_unit"
     },
@@ -4375,6 +4561,32 @@
         "dolt-1.86.6-task-live-execution"
       ],
       "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0243.innodb_buffer_pool_dump_status",
+      "observation_id": "dolt.status.0243.innodb_buffer_pool_dump_status",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0244.innodb_buffer_pool_load_status",
+      "observation_id": "dolt.status.0244.innodb_buffer_pool_load_status",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0245.innodb_buffer_pool_pages_data",
       "observation_id": "dolt.status.0245.innodb_buffer_pool_pages_data",
       "reset_behavior": "server_restart_or_status_reset",
@@ -4520,6 +4732,19 @@
       "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0256.innodb_buffer_pool_reads",
       "observation_id": "dolt.status.0256.innodb_buffer_pool_reads",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0257.innodb_buffer_pool_resize_status",
+      "observation_id": "dolt.status.0257.innodb_buffer_pool_resize_status",
       "reset_behavior": "server_restart_or_status_reset",
       "unit": "native_unit"
     },
@@ -4986,6 +5211,19 @@
         "dolt-1.86.6-task-live-execution"
       ],
       "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0293.innodb_redo_log_resize_status",
+      "observation_id": "dolt.status.0293.innodb_redo_log_resize_status",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0294.innodb_redo_log_uuid",
       "observation_id": "dolt.status.0294.innodb_redo_log_uuid",
       "reset_behavior": "server_restart_or_status_reset",
@@ -5415,8 +5653,34 @@
         "dolt-1.86.6-task-live-execution"
       ],
       "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0327.max_used_connections_time",
+      "observation_id": "dolt.status.0327.max_used_connections_time",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0328.mysqlx_aborted_clients",
       "observation_id": "dolt.status.0328.mysqlx_aborted_clients",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0329.mysqlx_address",
+      "observation_id": "dolt.status.0329.mysqlx_address",
       "reset_behavior": "server_restart_or_status_reset",
       "unit": "native_unit"
     },
@@ -5831,6 +6095,19 @@
         "dolt-1.86.6-task-live-execution"
       ],
       "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0363.mysqlx_port",
+      "observation_id": "dolt.status.0363.mysqlx_port",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0364.mysqlx_prep_deallocate",
       "observation_id": "dolt.status.0364.mysqlx_prep_deallocate",
       "reset_behavior": "server_restart_or_status_reset",
@@ -5950,6 +6227,19 @@
       "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0373.mysqlx_sessions_rejected",
       "observation_id": "dolt.status.0373.mysqlx_sessions_rejected",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0374.mysqlx_socket",
+      "observation_id": "dolt.status.0374.mysqlx_socket",
       "reset_behavior": "server_restart_or_status_reset",
       "unit": "native_unit"
     },
@@ -8652,6 +8942,19 @@
         "dolt-1.86.6-task-live-execution"
       ],
       "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0583.replica_rows_last_search_algorithm_used",
+      "observation_id": "dolt.status.0583.replica_rows_last_search_algorithm_used",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0584.resource_group_supported",
       "observation_id": "dolt.status.0584.resource_group_supported",
       "reset_behavior": "server_restart_or_status_reset",
@@ -9107,6 +9410,19 @@
         "dolt-1.86.6-task-live-execution"
       ],
       "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0619.rsa_public_key",
+      "observation_id": "dolt.status.0619.rsa_public_key",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0620.secondary_engine_execution_count",
       "observation_id": "dolt.status.0620.secondary_engine_execution_count",
       "reset_behavior": "server_restart_or_status_reset",
@@ -9187,6 +9503,19 @@
       "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0626.slave_open_temp_tables",
       "observation_id": "dolt.status.0626.slave_open_temp_tables",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0627.slave_rows_last_search_algorithm_used",
+      "observation_id": "dolt.status.0627.slave_rows_last_search_algorithm_used",
       "reset_behavior": "server_restart_or_status_reset",
       "unit": "native_unit"
     },
@@ -9447,6 +9776,19 @@
       "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0649.ssl_session_cache_misses",
       "observation_id": "dolt.status.0649.ssl_session_cache_misses",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0650.ssl_session_cache_mode",
+      "observation_id": "dolt.status.0650.ssl_session_cache_mode",
       "reset_behavior": "server_restart_or_status_reset",
       "unit": "native_unit"
     },
@@ -9731,6 +10073,19 @@
         "dolt-1.86.6-task-live-execution"
       ],
       "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0673.tls_library_version",
+      "observation_id": "dolt.status.0673.tls_library_version",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0674.uptime",
       "observation_id": "dolt.status.0674.uptime",
       "reset_behavior": "server_restart_or_status_reset",
@@ -9757,8 +10112,73 @@
         "dolt-1.86.6-task-live-execution"
       ],
       "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0676.dragnet_status",
+      "observation_id": "dolt.status.0676.dragnet_status",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0677.group_replication_primary_member",
+      "observation_id": "dolt.status.0677.group_replication_primary_member",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0678.mecab_charset",
+      "observation_id": "dolt.status.0678.mecab_charset",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0679.validate_password_dictionary_file_last_parsed",
+      "observation_id": "dolt.status.0679.validate_password_dictionary_file_last_parsed",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
       "metric_id": "dolt.status.0680.validate_password_dictionary_file_words_count",
       "observation_id": "dolt.status.0680.validate_password_dictionary_file_words_count",
+      "reset_behavior": "server_restart_or_status_reset",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "latest_server_value",
+      "evidence_ids": [
+        "dolt-1.86.6-source-status-implementation",
+        "dolt-1.86.6-runtime-status-catalog",
+        "dolt-1.86.6-task-live-execution"
+      ],
+      "kind": "gauge_or_counter_as_declared_by_server",
+      "metric_id": "dolt.status.0681.validate_password_dictionary_file_last_parsed",
+      "observation_id": "dolt.status.0681.validate_password_dictionary_file_last_parsed",
       "reset_behavior": "server_restart_or_status_reset",
       "unit": "native_unit"
     },
@@ -10014,7 +10434,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -10154,7 +10574,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -13554,7 +13974,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -13814,7 +14234,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -13834,7 +14254,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -13854,7 +14274,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -13874,7 +14294,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -13894,7 +14314,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -13914,7 +14334,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -13934,7 +14354,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -13954,7 +14374,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -13974,7 +14394,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -14634,7 +15054,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -14654,7 +15074,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -14914,7 +15334,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -15634,7 +16054,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -16314,7 +16734,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -16354,7 +16774,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -17034,7 +17454,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -17254,7 +17674,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -21434,7 +21854,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -22154,7 +22574,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -22314,7 +22734,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -22774,7 +23194,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -23234,7 +23654,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -23294,7 +23714,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -23314,7 +23734,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -23334,7 +23754,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -23354,7 +23774,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {
@@ -23394,7 +23814,7 @@
       "redaction": "none",
       "scope": "server",
       "source": "SHOW STATUS",
-      "value_type": "text",
+      "value_type": "number",
       "version_condition": "1.86.6"
     },
     {

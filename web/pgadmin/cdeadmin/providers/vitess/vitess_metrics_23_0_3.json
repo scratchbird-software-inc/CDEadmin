@@ -1,5 +1,5 @@
 {
-  "authoritative_metric_count": 188,
+  "authoritative_metric_count": 191,
   "authoritative_metric_ids": [
     "vitess.vtgate.go_gc_duration_seconds",
     "vitess.vtgate.go_gc_gogc_percent",
@@ -50,6 +50,7 @@
     "vitess.vtgate.vtgate_build_information",
     "vitess.vtgate.vtgate_build_number",
     "vitess.vtgate.vtgate_build_timestamp",
+    "vitess.vtgate.vtgate_commit_mode_timings",
     "vitess.vtgate.vtgate_commit_unresolved",
     "vitess.vtgate.vtgate_compressed_transaction_payloads_in_memory",
     "vitess.vtgate.vtgate_compressed_transaction_payloads_via_stream",
@@ -58,6 +59,7 @@
     "vitess.vtgate.vtgate_healthcheck_checksum",
     "vitess.vtgate.vtgate_healthcheck_connections",
     "vitess.vtgate.vtgate_healthcheck_errors",
+    "vitess.vtgate.vtgate_healthcheck_primary_promoted",
     "vitess.vtgate.vtgate_max_fds",
     "vitess.vtgate.vtgate_mysql_server_conn_accepted",
     "vitess.vtgate.vtgate_mysql_server_conn_count",
@@ -99,6 +101,7 @@
     "vitess.vtgate.vtgate_vindex_unknown_parameters",
     "vitess.vtgate.vtgate_vtgatevschema_counts",
     "vitess.vtgate.vtgate_vttablet_call",
+    "vitess.vtgate.vtgate_vttablet_call_error_count",
     "vitess.vtgate.vtgate_warnings",
     "vitess.vtctld.go_gc_duration_seconds",
     "vitess.vtctld.go_gc_gogc_percent",
@@ -190,7 +193,7 @@
     "vitess.vtctld.vtctld_v_replication_throttled_count_total",
     "vitess.vtctld.vtctld_v_replication_trx_query_batch_count_total"
   ],
-  "authoritative_observation_count": 188,
+  "authoritative_observation_count": 191,
   "authoritative_observation_ids": [
     "vitess.vtgate.go_gc_duration_seconds",
     "vitess.vtgate.go_gc_gogc_percent",
@@ -241,6 +244,7 @@
     "vitess.vtgate.vtgate_build_information",
     "vitess.vtgate.vtgate_build_number",
     "vitess.vtgate.vtgate_build_timestamp",
+    "vitess.vtgate.vtgate_commit_mode_timings",
     "vitess.vtgate.vtgate_commit_unresolved",
     "vitess.vtgate.vtgate_compressed_transaction_payloads_in_memory",
     "vitess.vtgate.vtgate_compressed_transaction_payloads_via_stream",
@@ -249,6 +253,7 @@
     "vitess.vtgate.vtgate_healthcheck_checksum",
     "vitess.vtgate.vtgate_healthcheck_connections",
     "vitess.vtgate.vtgate_healthcheck_errors",
+    "vitess.vtgate.vtgate_healthcheck_primary_promoted",
     "vitess.vtgate.vtgate_max_fds",
     "vitess.vtgate.vtgate_mysql_server_conn_accepted",
     "vitess.vtgate.vtgate_mysql_server_conn_count",
@@ -290,6 +295,7 @@
     "vitess.vtgate.vtgate_vindex_unknown_parameters",
     "vitess.vtgate.vtgate_vtgatevschema_counts",
     "vitess.vtgate.vtgate_vttablet_call",
+    "vitess.vtgate.vtgate_vttablet_call_error_count",
     "vitess.vtgate.vtgate_warnings",
     "vitess.vtctld.go_gc_duration_seconds",
     "vitess.vtctld.go_gc_gogc_percent",
@@ -386,7 +392,7 @@
     "authority": "Vitess 23.0.3 runtime",
     "format": "cdeadmin.engine-metrics-inventory.v1",
     "license_id": "PostgreSQL",
-    "sha256": "d2e3aa182db5f20ae8a5d6545f5a79d5826b787607245147a2b36aa0ba65be2e"
+    "sha256": "01a8e7cc127ebd37a49cad3154c387d082fc8f13a514f5d5e0dfe17d976aa0f7"
   },
   "classification_evidence": [
     {
@@ -405,7 +411,7 @@
       "evidence_kind": "catalog",
       "format": "cdeadmin.engine-metrics-inventory.v1",
       "license_id": "PostgreSQL",
-      "sha256": "d2e3aa182db5f20ae8a5d6545f5a79d5826b787607245147a2b36aa0ba65be2e"
+      "sha256": "01a8e7cc127ebd37a49cad3154c387d082fc8f13a514f5d5e0dfe17d976aa0f7"
     },
     {
       "artifact": "dialect_qualification_live.json",
@@ -414,7 +420,7 @@
       "evidence_kind": "live_execution",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "a2afe50f3042ccf5a74ac5c4121b25e29a98d1b0328e18b59761b7211a34e1e8"
+      "sha256": "82361e59c5081137b82e362d877d9e4c8cdb32e20126d7f4d2bb38616296cd88"
     }
   ],
   "contract_id": "vitess.metrics.23.0.3.v1",
@@ -1063,6 +1069,19 @@
       "unit": "native_unit"
     },
     {
+      "aggregation": "preserve_native_labels",
+      "evidence_ids": [
+        "vitess-23.0.3-source-metric-registry",
+        "vitess-23.0.3-runtime-prometheus-catalog",
+        "vitess-23.0.3-task-live-execution"
+      ],
+      "kind": "histogram",
+      "metric_id": "vitess.vtgate.vtgate_commit_mode_timings",
+      "observation_id": "vitess.vtgate.vtgate_commit_mode_timings",
+      "reset_behavior": "process_restart",
+      "unit": "native_unit"
+    },
+    {
       "aggregation": "sum_by_native_labels",
       "evidence_ids": [
         "vitess-23.0.3-source-metric-registry",
@@ -1163,6 +1182,19 @@
       "kind": "counter",
       "metric_id": "vitess.vtgate.vtgate_healthcheck_errors",
       "observation_id": "vitess.vtgate.vtgate_healthcheck_errors",
+      "reset_behavior": "process_restart",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "sum_by_native_labels",
+      "evidence_ids": [
+        "vitess-23.0.3-source-metric-registry",
+        "vitess-23.0.3-runtime-prometheus-catalog",
+        "vitess-23.0.3-task-live-execution"
+      ],
+      "kind": "counter",
+      "metric_id": "vitess.vtgate.vtgate_healthcheck_primary_promoted",
+      "observation_id": "vitess.vtgate.vtgate_healthcheck_primary_promoted",
       "reset_behavior": "process_restart",
       "unit": "native_unit"
     },
@@ -1696,6 +1728,19 @@
       "kind": "histogram",
       "metric_id": "vitess.vtgate.vtgate_vttablet_call",
       "observation_id": "vitess.vtgate.vtgate_vttablet_call",
+      "reset_behavior": "process_restart",
+      "unit": "native_unit"
+    },
+    {
+      "aggregation": "sum_by_native_labels",
+      "evidence_ids": [
+        "vitess-23.0.3-source-metric-registry",
+        "vitess-23.0.3-runtime-prometheus-catalog",
+        "vitess-23.0.3-task-live-execution"
+      ],
+      "kind": "counter",
+      "metric_id": "vitess.vtgate.vtgate_vttablet_call_error_count",
+      "observation_id": "vitess.vtgate.vtgate_vttablet_call_error_count",
       "reset_behavior": "process_restart",
       "unit": "native_unit"
     },
@@ -3903,6 +3948,27 @@
     {
       "cardinality": "one_per_native_label_set",
       "collection_cost": "single_prometheus_catalog_snapshot",
+      "description": "Commit Mode Time",
+      "evidence_ids": [
+        "vitess-23.0.3-source-metric-registry",
+        "vitess-23.0.3-runtime-prometheus-catalog",
+        "vitess-23.0.3-task-live-execution"
+      ],
+      "native_name": "vtgate_commit_mode_timings",
+      "observation_class": "operational_metric",
+      "observation_id": "vitess.vtgate.vtgate_commit_mode_timings",
+      "poll_interval_seconds": 15,
+      "privilege": "vtgate_metrics_endpoint_access",
+      "prometheus_type": "histogram",
+      "redaction": "provider_label_redaction_policy",
+      "scope": "vtgate_native_label_set",
+      "source": "GET vtgate /metrics",
+      "value_type": "number",
+      "version_condition": "23.0.3"
+    },
+    {
+      "cardinality": "one_per_native_label_set",
+      "collection_cost": "single_prometheus_catalog_snapshot",
       "description": "Atomic Commit failed to conclude after commit decision is made",
       "evidence_ids": [
         "vitess-23.0.3-source-metric-registry",
@@ -4059,6 +4125,27 @@
       "native_name": "vtgate_healthcheck_errors",
       "observation_class": "operational_metric",
       "observation_id": "vitess.vtgate.vtgate_healthcheck_errors",
+      "poll_interval_seconds": 15,
+      "privilege": "vtgate_metrics_endpoint_access",
+      "prometheus_type": "counter",
+      "redaction": "provider_label_redaction_policy",
+      "scope": "vtgate_native_label_set",
+      "source": "GET vtgate /metrics",
+      "value_type": "number",
+      "version_condition": "23.0.3"
+    },
+    {
+      "cardinality": "one_per_native_label_set",
+      "collection_cost": "single_prometheus_catalog_snapshot",
+      "description": "Primary promoted in keyspace/shard name because of health check errors",
+      "evidence_ids": [
+        "vitess-23.0.3-source-metric-registry",
+        "vitess-23.0.3-runtime-prometheus-catalog",
+        "vitess-23.0.3-task-live-execution"
+      ],
+      "native_name": "vtgate_healthcheck_primary_promoted",
+      "observation_class": "operational_metric",
+      "observation_id": "vitess.vtgate.vtgate_healthcheck_primary_promoted",
       "poll_interval_seconds": 15,
       "privilege": "vtgate_metrics_endpoint_access",
       "prometheus_type": "counter",
@@ -4923,6 +5010,27 @@
       "poll_interval_seconds": 15,
       "privilege": "vtgate_metrics_endpoint_access",
       "prometheus_type": "histogram",
+      "redaction": "provider_label_redaction_policy",
+      "scope": "vtgate_native_label_set",
+      "source": "GET vtgate /metrics",
+      "value_type": "number",
+      "version_condition": "23.0.3"
+    },
+    {
+      "cardinality": "one_per_native_label_set",
+      "collection_cost": "single_prometheus_catalog_snapshot",
+      "description": "Error count from tablet calls in scatter conns",
+      "evidence_ids": [
+        "vitess-23.0.3-source-metric-registry",
+        "vitess-23.0.3-runtime-prometheus-catalog",
+        "vitess-23.0.3-task-live-execution"
+      ],
+      "native_name": "vtgate_vttablet_call_error_count",
+      "observation_class": "operational_metric",
+      "observation_id": "vitess.vtgate.vtgate_vttablet_call_error_count",
+      "poll_interval_seconds": 15,
+      "privilege": "vtgate_metrics_endpoint_access",
+      "prometheus_type": "counter",
       "redaction": "provider_label_redaction_policy",
       "scope": "vtgate_native_label_set",
       "source": "GET vtgate /metrics",

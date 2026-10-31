@@ -10825,7 +10825,7 @@
       {
         "item_id": "session_settings.0073",
         "native_name": "datadir",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/data/",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/data/",
         "source": "SHOW VARIABLES"
       },
       {
@@ -11017,7 +11017,7 @@
       {
         "item_id": "session_settings.0105",
         "native_name": "general_log_file",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/data/0db3c9c41d47.log",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/data/cb9c5794be75.log",
         "source": "SHOW VARIABLES"
       },
       {
@@ -11053,7 +11053,7 @@
       {
         "item_id": "session_settings.0111",
         "native_name": "gtid_executed",
-        "observed_value": "48604498-a9a0-11f1-84ff-124a01bdbb61:1-220",
+        "observed_value": "485eef50-a9a0-11f1-96e8-4207d468ea09:1-295,\n485f03dd-a9a0-11f1-807e-b237e9603a27:1-1924",
         "source": "SHOW VARIABLES"
       },
       {
@@ -11083,7 +11083,7 @@
       {
         "item_id": "session_settings.0116",
         "native_name": "gtid_purged",
-        "observed_value": "48604498-a9a0-11f1-84ff-124a01bdbb61:1-51",
+        "observed_value": "485eef50-a9a0-11f1-96e8-4207d468ea09:1-295",
         "source": "SHOW VARIABLES"
       },
       {
@@ -11149,7 +11149,7 @@
       {
         "item_id": "session_settings.0127",
         "native_name": "hostname",
-        "observed_value": "0db3c9c41d47",
+        "observed_value": "cb9c5794be75",
         "source": "SHOW VARIABLES"
       },
       {
@@ -11395,7 +11395,7 @@
       {
         "item_id": "session_settings.0168",
         "native_name": "innodb_data_home_dir",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/innodb/data",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/innodb/data",
         "source": "SHOW VARIABLES"
       },
       {
@@ -11677,7 +11677,7 @@
       {
         "item_id": "session_settings.0215",
         "native_name": "innodb_log_group_home_dir",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/innodb/logs",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/innodb/logs",
         "source": "SHOW VARIABLES"
       },
       {
@@ -12235,13 +12235,13 @@
       {
         "item_id": "session_settings.0308",
         "native_name": "log_bin_basename",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/bin-logs/vt-0000000102-bin",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/bin-logs/vt-0000000202-bin",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0309",
         "native_name": "log_bin_index",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/bin-logs/vt-0000000102-bin.index",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/bin-logs/vt-0000000202-bin.index",
         "source": "SHOW VARIABLES"
       },
       {
@@ -12253,7 +12253,7 @@
       {
         "item_id": "session_settings.0311",
         "native_name": "log_error",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/error.log",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/error.log",
         "source": "SHOW VARIABLES"
       },
       {
@@ -13015,7 +13015,7 @@
       {
         "item_id": "session_settings.0438",
         "native_name": "pid_file",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/mysql.pid",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/mysql.pid",
         "source": "SHOW VARIABLES"
       },
       {
@@ -13165,19 +13165,19 @@
       {
         "item_id": "session_settings.0463",
         "native_name": "relay_log",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/relay-logs/vt-0000000102-relay-bin",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/relay-logs/vt-0000000202-relay-bin",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0464",
         "native_name": "relay_log_basename",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/relay-logs/vt-0000000102-relay-bin",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/relay-logs/vt-0000000202-relay-bin",
         "source": "SHOW VARIABLES"
       },
       {
         "item_id": "session_settings.0465",
         "native_name": "relay_log_index",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/relay-logs/vt-0000000102-relay-bin.index",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/relay-logs/vt-0000000202-relay-bin.index",
         "source": "SHOW VARIABLES"
       },
       {
@@ -13231,7 +13231,7 @@
       {
         "item_id": "session_settings.0474",
         "native_name": "replica_load_tmpdir",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/tmp",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/tmp",
         "source": "SHOW VARIABLES"
       },
       {
@@ -13435,7 +13435,7 @@
       {
         "item_id": "session_settings.0508",
         "native_name": "secure_file_priv",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/tmp/",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/tmp/",
         "source": "SHOW VARIABLES"
       },
       {
@@ -13459,7 +13459,7 @@
       {
         "item_id": "session_settings.0512",
         "native_name": "server_id",
-        "observed_value": "1908090906",
+        "observed_value": "471085360",
         "source": "SHOW VARIABLES"
       },
       {
@@ -13471,7 +13471,7 @@
       {
         "item_id": "session_settings.0514",
         "native_name": "server_uuid",
-        "observed_value": "48604498-a9a0-11f1-84ff-124a01bdbb61",
+        "observed_value": "485f03dd-a9a0-11f1-807e-b237e9603a27",
         "source": "SHOW VARIABLES"
       },
       {
@@ -13621,7 +13621,7 @@
       {
         "item_id": "session_settings.0539",
         "native_name": "slave_load_tmpdir",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/tmp",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/tmp",
         "source": "SHOW VARIABLES"
       },
       {
@@ -13699,7 +13699,7 @@
       {
         "item_id": "session_settings.0552",
         "native_name": "slow_query_log_file",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/slow-query.log",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/slow-query.log",
         "source": "SHOW VARIABLES"
       },
       {
@@ -13873,7 +13873,7 @@
       {
         "item_id": "session_settings.0581",
         "native_name": "statement_id",
-        "observed_value": "5214",
+        "observed_value": "8498",
         "source": "SHOW VARIABLES"
       },
       {
@@ -14011,7 +14011,7 @@
       {
         "item_id": "session_settings.0604",
         "native_name": "timestamp",
-        "observed_value": "1789016036.171550",
+        "observed_value": "1793475230.807633",
         "source": "SHOW VARIABLES"
       },
       {
@@ -14041,7 +14041,7 @@
       {
         "item_id": "session_settings.0609",
         "native_name": "tmpdir",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/tmp",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/tmp",
         "source": "SHOW VARIABLES"
       },
       {

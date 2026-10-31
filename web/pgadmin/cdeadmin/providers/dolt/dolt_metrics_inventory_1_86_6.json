@@ -1,7 +1,7 @@
 {
   "collection_authority": "Dolt 1.86.6 exhaustive SHOW STATUS",
   "completeness": {
-    "admitted_metric_count": 646,
+    "admitted_metric_count": 676,
     "observation_count": 682,
     "runtime_version": "1.86.6",
     "show_status_catalog_exhausted": true
@@ -79,8 +79,8 @@
     {
       "description": "Dolt SHOW STATUS variable Authentication_ldap_sasl_supported_methods.",
       "native_name": "Authentication_ldap_sasl_supported_methods",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Binlog_cache_disk_use.",
@@ -121,8 +121,8 @@
     {
       "description": "Dolt SHOW STATUS variable Caching_sha2_password_rsa_public_key.",
       "native_name": "Caching_sha2_password_rsa_public_key",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Com_admin_commands.",
@@ -1141,8 +1141,8 @@
     {
       "description": "Dolt SHOW STATUS variable Compression_algorithm.",
       "native_name": "Compression_algorithm",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Compression_level.",
@@ -1195,7 +1195,7 @@
     {
       "description": "Dolt SHOW STATUS variable Connections.",
       "native_name": "Connections",
-      "observed_value": "5",
+      "observed_value": "102",
       "observed_value_type": "number"
     },
     {
@@ -1219,56 +1219,56 @@
     {
       "description": "Dolt SHOW STATUS variable Current_tls_ca.",
       "native_name": "Current_tls_ca",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Current_tls_capath.",
       "native_name": "Current_tls_capath",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Current_tls_cert.",
       "native_name": "Current_tls_cert",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Current_tls_cipher.",
       "native_name": "Current_tls_cipher",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Current_tls_ciphersuites.",
       "native_name": "Current_tls_ciphersuites",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Current_tls_crl.",
       "native_name": "Current_tls_crl",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Current_tls_crlpath.",
       "native_name": "Current_tls_crlpath",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Current_tls_key.",
       "native_name": "Current_tls_key",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Current_tls_version.",
       "native_name": "Current_tls_version",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Delayed_errors.",
@@ -1465,14 +1465,14 @@
     {
       "description": "Dolt SHOW STATUS variable Innodb_buffer_pool_dump_status.",
       "native_name": "Innodb_buffer_pool_dump_status",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Innodb_buffer_pool_load_status.",
       "native_name": "Innodb_buffer_pool_load_status",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Innodb_buffer_pool_pages_data.",
@@ -1549,8 +1549,8 @@
     {
       "description": "Dolt SHOW STATUS variable Innodb_buffer_pool_resize_status.",
       "native_name": "Innodb_buffer_pool_resize_status",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Innodb_buffer_pool_resize_status_code.",
@@ -1765,8 +1765,8 @@
     {
       "description": "Dolt SHOW STATUS variable Innodb_redo_log_resize_status.",
       "native_name": "Innodb_redo_log_resize_status",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Innodb_redo_log_uuid.",
@@ -1963,14 +1963,14 @@
     {
       "description": "Dolt SHOW STATUS variable Max_used_connections.",
       "native_name": "Max_used_connections",
-      "observed_value": "1",
+      "observed_value": "18446744073709551615",
       "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Max_used_connections_time.",
       "native_name": "Max_used_connections_time",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Mysqlx_aborted_clients.",
@@ -1981,8 +1981,8 @@
     {
       "description": "Dolt SHOW STATUS variable Mysqlx_address.",
       "native_name": "Mysqlx_address",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Mysqlx_bytes_received.",
@@ -2185,8 +2185,8 @@
     {
       "description": "Dolt SHOW STATUS variable Mysqlx_port.",
       "native_name": "Mysqlx_port",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Mysqlx_prep_deallocate.",
@@ -2251,8 +2251,8 @@
     {
       "description": "Dolt SHOW STATUS variable Mysqlx_socket.",
       "native_name": "Mysqlx_socket",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Mysqlx_ssl_accept_renegotiates.",
@@ -3505,8 +3505,8 @@
     {
       "description": "Dolt SHOW STATUS variable Replica_rows_last_search_algorithm_used.",
       "native_name": "Replica_rows_last_search_algorithm_used",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Resource_group_supported.",
@@ -3721,8 +3721,8 @@
     {
       "description": "Dolt SHOW STATUS variable Rsa_public_key.",
       "native_name": "Rsa_public_key",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Secondary_engine_execution_count.",
@@ -3769,8 +3769,8 @@
     {
       "description": "Dolt SHOW STATUS variable Slave_rows_last_search_algorithm_used.",
       "native_name": "Slave_rows_last_search_algorithm_used",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Slow_launch_threads.",
@@ -3907,8 +3907,8 @@
     {
       "description": "Dolt SHOW STATUS variable Ssl_session_cache_mode.",
       "native_name": "Ssl_session_cache_mode",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Ssl_session_cache_overflows.",
@@ -4027,7 +4027,7 @@
     {
       "description": "Dolt SHOW STATUS variable Threads_connected.",
       "native_name": "Threads_connected",
-      "observed_value": "1",
+      "observed_value": "18446744073709551615",
       "observed_value_type": "number"
     },
     {
@@ -4039,14 +4039,14 @@
     {
       "description": "Dolt SHOW STATUS variable Threads_running.",
       "native_name": "Threads_running",
-      "observed_value": "1",
+      "observed_value": "0",
       "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Tls_library_version.",
       "native_name": "Tls_library_version",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable Uptime.",
@@ -4063,26 +4063,26 @@
     {
       "description": "Dolt SHOW STATUS variable dragnet.Status.",
       "native_name": "dragnet.Status",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable group_replication_primary_member.",
       "native_name": "group_replication_primary_member",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable mecab_charset.",
       "native_name": "mecab_charset",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable validate_password.dictionary_file_last_parsed.",
       "native_name": "validate_password.dictionary_file_last_parsed",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable validate_password.dictionary_file_words_count.",
@@ -4093,8 +4093,8 @@
     {
       "description": "Dolt SHOW STATUS variable validate_password_dictionary_file_last_parsed.",
       "native_name": "validate_password_dictionary_file_last_parsed",
-      "observed_value": "",
-      "observed_value_type": "text"
+      "observed_value": "0",
+      "observed_value_type": "number"
     },
     {
       "description": "Dolt SHOW STATUS variable validate_password_dictionary_file_words_count.",

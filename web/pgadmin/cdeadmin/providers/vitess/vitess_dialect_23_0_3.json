@@ -16,7 +16,7 @@
     },
     "runtime_catalogs_exhausted": true,
     "runtime_version": "23.0.3",
-    "sha256": "36963d9059489cc5916c058c41ac21725afa998b0a52785b1437109015662e1c"
+    "sha256": "ad46c61f29abed9672f1dc959d98be21e823e36d8153906c755ef294e541f826"
   },
   "contract_id": "vitess.dialect.23.0.3.v1",
   "coverage": {
@@ -30,7 +30,7 @@
       "session_settings": 626,
       "statements": 36
     },
-    "authoritative_task_count": 22,
+    "authoritative_task_count": 23,
     "authoritative_task_ids": [
       "visual_admin.column.alter",
       "visual_admin.column.create",
@@ -40,6 +40,8 @@
       "visual_admin.constraint.drop",
       "visual_admin.index.create",
       "visual_admin.index.drop",
+      "visual_admin.procedure.create",
+      "visual_admin.procedure.drop",
       "visual_admin.sequence.alter",
       "visual_admin.sequence.create",
       "visual_admin.sequence.drop",
@@ -51,11 +53,10 @@
       "visual_admin.table.update",
       "visual_admin.view.alter",
       "visual_admin.view.create",
-      "visual_admin.view.drop",
       "visual_admin.vindex.create",
       "visual_admin.vindex.drop"
     ],
-    "implemented_task_count": 22,
+    "implemented_task_count": 23,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -16501,7 +16502,7 @@
       {
         "item_id": "session_settings.0073",
         "native_name": "datadir",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/data/",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/data/",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -16789,7 +16790,7 @@
       {
         "item_id": "session_settings.0105",
         "native_name": "general_log_file",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/data/0db3c9c41d47.log",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/data/cb9c5794be75.log",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -16843,7 +16844,7 @@
       {
         "item_id": "session_settings.0111",
         "native_name": "gtid_executed",
-        "observed_value": "48604498-a9a0-11f1-84ff-124a01bdbb61:1-220",
+        "observed_value": "485eef50-a9a0-11f1-96e8-4207d468ea09:1-295,\n485f03dd-a9a0-11f1-807e-b237e9603a27:1-1924",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -16888,7 +16889,7 @@
       {
         "item_id": "session_settings.0116",
         "native_name": "gtid_purged",
-        "observed_value": "48604498-a9a0-11f1-84ff-124a01bdbb61:1-51",
+        "observed_value": "485eef50-a9a0-11f1-96e8-4207d468ea09:1-295",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -16987,7 +16988,7 @@
       {
         "item_id": "session_settings.0127",
         "native_name": "hostname",
-        "observed_value": "0db3c9c41d47",
+        "observed_value": "cb9c5794be75",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -17356,7 +17357,7 @@
       {
         "item_id": "session_settings.0168",
         "native_name": "innodb_data_home_dir",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/innodb/data",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/innodb/data",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -17779,7 +17780,7 @@
       {
         "item_id": "session_settings.0215",
         "native_name": "innodb_log_group_home_dir",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/innodb/logs",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/innodb/logs",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -18616,7 +18617,7 @@
       {
         "item_id": "session_settings.0308",
         "native_name": "log_bin_basename",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/bin-logs/vt-0000000102-bin",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/bin-logs/vt-0000000202-bin",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -18625,7 +18626,7 @@
       {
         "item_id": "session_settings.0309",
         "native_name": "log_bin_index",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/bin-logs/vt-0000000102-bin.index",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/bin-logs/vt-0000000202-bin.index",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -18643,7 +18644,7 @@
       {
         "item_id": "session_settings.0311",
         "native_name": "log_error",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/error.log",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/error.log",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -19786,7 +19787,7 @@
       {
         "item_id": "session_settings.0438",
         "native_name": "pid_file",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/mysql.pid",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/mysql.pid",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -20011,7 +20012,7 @@
       {
         "item_id": "session_settings.0463",
         "native_name": "relay_log",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/relay-logs/vt-0000000102-relay-bin",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/relay-logs/vt-0000000202-relay-bin",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -20020,7 +20021,7 @@
       {
         "item_id": "session_settings.0464",
         "native_name": "relay_log_basename",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/relay-logs/vt-0000000102-relay-bin",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/relay-logs/vt-0000000202-relay-bin",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -20029,7 +20030,7 @@
       {
         "item_id": "session_settings.0465",
         "native_name": "relay_log_index",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/relay-logs/vt-0000000102-relay-bin.index",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/relay-logs/vt-0000000202-relay-bin.index",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -20110,7 +20111,7 @@
       {
         "item_id": "session_settings.0474",
         "native_name": "replica_load_tmpdir",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/tmp",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/tmp",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -20416,7 +20417,7 @@
       {
         "item_id": "session_settings.0508",
         "native_name": "secure_file_priv",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/tmp/",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/tmp/",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -20452,7 +20453,7 @@
       {
         "item_id": "session_settings.0512",
         "native_name": "server_id",
-        "observed_value": "1908090906",
+        "observed_value": "471085360",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -20470,7 +20471,7 @@
       {
         "item_id": "session_settings.0514",
         "native_name": "server_uuid",
-        "observed_value": "48604498-a9a0-11f1-84ff-124a01bdbb61",
+        "observed_value": "485f03dd-a9a0-11f1-807e-b237e9603a27",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -20695,7 +20696,7 @@
       {
         "item_id": "session_settings.0539",
         "native_name": "slave_load_tmpdir",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/tmp",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/tmp",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -20812,7 +20813,7 @@
       {
         "item_id": "session_settings.0552",
         "native_name": "slow_query_log_file",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/slow-query.log",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/slow-query.log",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -21073,7 +21074,7 @@
       {
         "item_id": "session_settings.0581",
         "native_name": "statement_id",
-        "observed_value": "5214",
+        "observed_value": "8498",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -21280,7 +21281,7 @@
       {
         "item_id": "session_settings.0604",
         "native_name": "timestamp",
-        "observed_value": "1789016036.171550",
+        "observed_value": "1793475230.807633",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -21325,7 +21326,7 @@
       {
         "item_id": "session_settings.0609",
         "native_name": "tmpdir",
-        "observed_value": "/vt/vtdataroot/vt_0000000102/tmp",
+        "observed_value": "/vt/vtdataroot/vt_0000000202/tmp",
         "proof_ids": [
           "vitess-23.0.3-runtime-catalog"
         ],
@@ -21836,7 +21837,7 @@
       "evidence_kind": "catalog",
       "format": "cdeadmin.engine-dialect-inventory.v1",
       "license_id": "PostgreSQL",
-      "sha256": "36963d9059489cc5916c058c41ac21725afa998b0a52785b1437109015662e1c"
+      "sha256": "ad46c61f29abed9672f1dc959d98be21e823e36d8153906c755ef294e541f826"
     },
     {
       "artifact": "dialect_qualification_live.json",
@@ -21845,7 +21846,7 @@
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "a2afe50f3042ccf5a74ac5c4121b25e29a98d1b0328e18b59761b7211a34e1e8"
+      "sha256": "82361e59c5081137b82e362d877d9e4c8cdb32e20126d7f4d2bb38616296cd88"
     },
     {
       "artifact": "dialect_qualification_live.json",
@@ -21854,7 +21855,7 @@
       "evidence_kind": "live_execution",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "a2afe50f3042ccf5a74ac5c4121b25e29a98d1b0328e18b59761b7211a34e1e8"
+      "sha256": "82361e59c5081137b82e362d877d9e4c8cdb32e20126d7f4d2bb38616296cd88"
     },
     {
       "artifact": "__init__.py",
@@ -22032,6 +22033,34 @@
         "vitess-23.0.3-task-parser-acceptance",
         "vitess-23.0.3-task-live-execution"
       ],
+      "required_bindings": [],
+      "source": "CREATE PROCEDURE `lookup_keyspace`.`cde_editor_procedure` (`a` INT) BEGIN DECLARE b INT; SET b = a; END",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE PROCEDURE `lookup_keyspace`.`cde_editor_procedure` (`a` INT) BEGIN DECLARE b INT; SET b = a; END"
+      ],
+      "task_id": "visual_admin.procedure.create"
+    },
+    {
+      "binding_style": "mysql_connector_percent_s",
+      "proof_ids": [
+        "vitess-23.0.3-task-parser-acceptance",
+        "vitess-23.0.3-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP PROCEDURE `lookup_keyspace`.`cde_editor_procedure`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP PROCEDURE `lookup_keyspace`.`cde_editor_procedure`"
+      ],
+      "task_id": "visual_admin.procedure.drop"
+    },
+    {
+      "binding_style": "mysql_connector_percent_s",
+      "proof_ids": [
+        "vitess-23.0.3-task-parser-acceptance",
+        "vitess-23.0.3-task-live-execution"
+      ],
       "required_bindings": [
         "parameter_1",
         "parameter_2"
@@ -22098,11 +22127,11 @@
         "vitess-23.0.3-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE TABLE `test_keyspace`.`cde_editor_probe` (`id` INTEGER NOT NULL PRIMARY KEY, `value` INTEGER)\n;\nALTER VSCHEMA ON `cde_editor_probe` ADD VINDEX `xxhash` (`id`)",
+      "source": "CREATE TABLE `test_keyspace`.`cde_editor_probe` (`id` INTEGER NOT NULL PRIMARY KEY, `value` INTEGER)\n;\nALTER VSCHEMA ON `test_keyspace`.`cde_editor_probe` ADD VINDEX `xxhash` (`id`)",
       "source_format": "ordered_native_statements",
       "statements": [
         "CREATE TABLE `test_keyspace`.`cde_editor_probe` (`id` INTEGER NOT NULL PRIMARY KEY, `value` INTEGER)",
-        "ALTER VSCHEMA ON `cde_editor_probe` ADD VINDEX `xxhash` (`id`)"
+        "ALTER VSCHEMA ON `test_keyspace`.`cde_editor_probe` ADD VINDEX `xxhash` (`id`)"
       ],
       "task_id": "visual_admin.table.create"
     },
@@ -22130,10 +22159,10 @@
         "vitess-23.0.3-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER VSCHEMA DROP TABLE `cde_editor_probe`\n;\nDROP TABLE `test_keyspace`.`cde_editor_probe`",
+      "source": "ALTER VSCHEMA DROP TABLE `test_keyspace`.`cde_editor_probe`\n;\nDROP TABLE `test_keyspace`.`cde_editor_probe`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER VSCHEMA DROP TABLE `cde_editor_probe`",
+        "ALTER VSCHEMA DROP TABLE `test_keyspace`.`cde_editor_probe`",
         "DROP TABLE `test_keyspace`.`cde_editor_probe`"
       ],
       "task_id": "visual_admin.table.drop"
@@ -22208,20 +22237,6 @@
         "vitess-23.0.3-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP VIEW IF EXISTS `test_keyspace`.`cde_editor_view`",
-      "source_format": "ordered_native_statements",
-      "statements": [
-        "DROP VIEW IF EXISTS `test_keyspace`.`cde_editor_view`"
-      ],
-      "task_id": "visual_admin.view.drop"
-    },
-    {
-      "binding_style": "mysql_connector_percent_s",
-      "proof_ids": [
-        "vitess-23.0.3-task-parser-acceptance",
-        "vitess-23.0.3-task-live-execution"
-      ],
-      "required_bindings": [],
       "source": "ALTER VSCHEMA CREATE VINDEX `cde_editor_vindex` USING `xxhash`",
       "source_format": "ordered_native_statements",
       "statements": [
@@ -22236,10 +22251,10 @@
         "vitess-23.0.3-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER VSCHEMA DROP VINDEX `cde_editor_vindex`",
+      "source": "ALTER VSCHEMA DROP VINDEX `test_keyspace`.`cde_editor_vindex`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER VSCHEMA DROP VINDEX `cde_editor_vindex`"
+        "ALTER VSCHEMA DROP VINDEX `test_keyspace`.`cde_editor_vindex`"
       ],
       "task_id": "visual_admin.vindex.drop"
     }
