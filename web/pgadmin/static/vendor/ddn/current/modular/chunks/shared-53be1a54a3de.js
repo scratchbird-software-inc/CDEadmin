@@ -5,7 +5,7 @@
  * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
  * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
  */
-(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-aea9ceabbf71","version":"ddn-next-1","releaseHash":"4f601dab202a346b52c70ff1ec6bfdfb7c17ab3fbd59854e38cda422320d3131","dependencies":[],"modules":[{"id":"presentation/src/table.js","bytes":3740,"sha256":"01576f7de6152d47b9834e2ce548e454b51a47bcbbc60af13f7903e7ebe27980","dependencies":[]}],"hash":"f2abe8a3107ecffe9d75b65294fc17588bff8118cd6b776c9b4c7eed9f373ea7"},{"presentation/src/table.js":function(module,exports,require){
+(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-53be1a54a3de","version":"ddn-next-1","releaseHash":"a013ac52c7b3173ca4a5c5558fb8bac7b899854da330646dcd39702d0d86b778","dependencies":[],"modules":[{"id":"presentation/src/table.js","bytes":3740,"sha256":"01576f7de6152d47b9834e2ce548e454b51a47bcbbc60af13f7903e7ebe27980","dependencies":[]}],"hash":"3ae071053365d732b0bb970f17d93ce81f7e68b1f1c107bc2a9b449c2e300768"},{"presentation/src/table.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.columnPercentages = columnPercentages;

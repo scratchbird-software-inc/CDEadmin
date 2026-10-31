@@ -5,7 +5,7 @@
  * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
  * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
  */
-(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-673390dbad9b","version":"ddn-next-1","releaseHash":"4f601dab202a346b52c70ff1ec6bfdfb7c17ab3fbd59854e38cda422320d3131","dependencies":["shared-5331ef8070e8","shared-6cf9d24a4527","shared-73905c5bd21c","shared-822f2cb38cc6","shared-89ca0b52749b","shared-8f37b97a0edc","shared-a1e32f51fc2a","shared-ebd47c4e1fef","shared-f98a38a4da4d"],"modules":[{"id":"designer/src/appearance.js","bytes":25048,"sha256":"191cc2082cf49c111764bd10d86de1864f8a23f1f371601f81fa30599165ac9c","dependencies":["viewer/src/native.js","viewer/src/fonts.js","viewer/src/texture.js","viewer/src/choice-field.js","designer/src/live-settings.js","presentation/src/native.js","runtime/src/runtime.js","language/src/index.js","designer/src/dialogs.js","designer/src/presets.js"]},{"id":"designer/src/clipboard.js","bytes":5227,"sha256":"9387bba21551b61f4d9b14945282a248cc74e2e27d6bb765fb92f1060815a7bf","dependencies":["language/src/index.js","model/src/index.js"]},{"id":"designer/src/dialogs.js","bytes":814,"sha256":"b960e10ed44876f8e7c50867b413ecba51f6a57536d0f24b79c8368e03d31a74","dependencies":["viewer/src/dialogs.js"]},{"id":"designer/src/element-preview.js","bytes":2780,"sha256":"a141c80ce15b85e8f0c8e3aef87c89dded8426945798754a90ef61c331f3e9d4","dependencies":["profiles/src/core.js","presentation/src/graph-glyphs.js","presentation/src/node-dimensions.js","presentation/src/native-render.js","presentation/src/model.js","viewer/src/core.js"]},{"id":"designer/src/index.js","bytes":195263,"sha256":"6cf44c3c0e957d22b3582a9d7765c4ec510cc85a943734bd2f2d853993130aa2","dependencies":["designer/src/element-preview.js","viewer/src/drawer.js","viewer/src/side-tabs.js","designer/src/palette-groups.js","designer/src/dialogs.js","viewer/src/choice-field.js","designer/src/live-settings.js","designer/src/appearance.js","designer/src/symbol.js","viewer/src/ui-icons.js","designer/src/properties.js","designer/src/mindmap-actions.js","designer/src/resize-handles.js","designer/src/relation-menu.js","designer/src/mindmap-source.js","designer/src/view-picker.js","designer/src/new-diagram.js","designer/src/view-layout-picker.js","profiles/src/view-surfaces.js","designer/src/presets.js","runtime/src/commands.js","runtime/src/layout-edit.js","runtime/src/profile-loading.js","runtime/src/registry.js","profiles/src/schema-core.js","designer/src/schema-editor.js","runtime/src/runtime.js","runtime/src/save.js","language/src/index.js","viewer/src/ui-commands.js","viewer/src/grid.js","designer/src/clipboard.js","model/src/index.js","profiles/src/core.js","viewer/src/native.js","presentation/src/native.js"]},{"id":"designer/src/live-settings.js","bytes":6769,"sha256":"a0f861b6d09e59a02ec796df5b3705be87da7f32749fd002f395948ca1f496a5","dependencies":["runtime/src/commands.js","execution/src/index.js"]},{"id":"designer/src/mindmap-actions.js","bytes":6702,"sha256":"dbac9711402552aa522ab1e95a278305c3f0f7e7e2d1bfef625f3779df80ee40","dependencies":["presentation/src/native.js","profiles/src/mindmap.js"]},{"id":"designer/src/mindmap-source.js","bytes":10465,"sha256":"ca13e999101935ae6a33dde89e9760419addcf27587bc8fff4a111ee262901e6","dependencies":["language/src/index.js","model/src/index.js","runtime/src/runtime.js","execution/src/index.js"]},{"id":"designer/src/new-diagram.js","bytes":10661,"sha256":"83ac1ff9bd3c334e0e04aa66e5f236ae0392a41674aab576734dae630ddcc5ad","dependencies":["viewer/src/native.js","viewer/src/ui-icons.js","language/src/index.js","designer/src/dialogs.js","designer/src/view-picker.js","designer/src/view-layout-picker.js","profiles/src/view-surfaces.js","runtime/src/profile-loading.js","runtime/src/registry.js"]},{"id":"designer/src/palette-groups.js","bytes":2920,"sha256":"4877b878ecd8af5278dfed835e57106edaf2ed6fe7a1a0ef970468ae92dc9002","dependencies":["profiles/src/core.js"]},{"id":"designer/src/presets.js","bytes":4839,"sha256":"f25ff9f00a8659a55e65d555dae615db99a01a2022d6bfa286a42a211c1d5d64","dependencies":["defaults/src/index.js"]},{"id":"designer/src/properties.js","bytes":15921,"sha256":"a6ace3c10cd479aa5b958f96d67dd4cf564ae51bebb3981f6ec248cc406ea25f","dependencies":["viewer/src/native.js","profiles/src/schema-core.js","profiles/src/core.js","presentation/src/native.js","runtime/src/runtime.js","language/src/index.js","designer/src/dialogs.js","viewer/src/choice-field.js","viewer/src/fonts.js","designer/src/live-settings.js","designer/src/schema-editor.js"]},{"id":"designer/src/relation-menu.js","bytes":1736,"sha256":"ca95cfebfd680c84203f8af79a7113a2bc6d17d6beb2372f97512f6d0621d8f2","dependencies":["presentation/src/native.js"]},{"id":"designer/src/resize-handles.js","bytes":5829,"sha256":"f1258255e8866531b16ead078e3527638d1dc0a3250c4535b9e03fd2880db308","dependencies":["presentation/src/native.js"]},{"id":"designer/src/schema-editor.js","bytes":13462,"sha256":"740428e867de5130fbfcb9545cd5ed0908b3b5a3c4033bd559005354a1c55351","dependencies":["profiles/src/schema-core.js","designer/src/dialogs.js","viewer/src/choice-field.js","designer/src/live-settings.js"]},{"id":"designer/src/symbol.js","bytes":9676,"sha256":"112c1ad19c21bd1cb118f872b19233dfbe17125741e8020134d96f9a7dd187f8","dependencies":["viewer/src/native.js","presentation/src/native.js","runtime/src/runtime.js","language/src/index.js","designer/src/dialogs.js","viewer/src/choice-field.js","designer/src/live-settings.js"]},{"id":"designer/src/view-layout-picker.js","bytes":12124,"sha256":"4b5c8b21b86b933bc934cde05c7fc6b5087c086329a367365aee5b566ee1cbe2","dependencies":["profiles/src/view-surfaces.js","designer/src/dialogs.js"]},{"id":"designer/src/view-picker.js","bytes":11937,"sha256":"4045f8dc5f4bc626c37fbd040d15ab63d230bee918e70e2b55c21f2efba9ed0d","dependencies":["profiles/src/core.js","language/src/index.js","designer/src/view-previews.js"]},{"id":"designer/src/view-previews.js","bytes":54794,"sha256":"06deb7f06e2a0c0982181e392b7c209e7e3087f9e0b0070b4beab9031fdc7e10","dependencies":[]},{"id":"runtime/src/commands.js","bytes":56649,"sha256":"78a94404f7a3074fd39a6bd983f992ed9ede811f4e458e5b0f618aea05d9b78a","dependencies":["language/src/index.js","model/src/index.js","defaults/src/index.js","runtime/src/layout-edit.js","execution/src/index.js","runtime/src/runtime.js","runtime/src/registry.js","runtime/src/profile-loading.js","profiles/src/core.js","runtime/src/guards.js"]},{"id":"runtime/src/layout-edit.js","bytes":3537,"sha256":"82ba90f78718ad2964b21bfab8b94ed60a9afa0cc60d439bd9d7218e1bdd173b","dependencies":["language/src/index.js","model/src/index.js","defaults/src/index.js","profiles/src/core.js","runtime/src/runtime.js"]},{"id":"runtime/src/save.js","bytes":2687,"sha256":"ddefcdd0cb5f69187a18349daa5c674092d0c56940e24e37a20b7451207c6a9e","dependencies":["language/src/index.js","model/src/index.js","execution/src/index.js","runtime/src/runtime.js"]},{"id":"standalone/src/modular-designer-api.js","bytes":2523,"sha256":"def2b0d21b5b4fd54a4d9cd268e0acf66ac9aa7dbc2a568a05d0f86aabc2225f","dependencies":["designer/src/index.js","runtime/src/commands.js","standalone/src/modular-viewer.js","standalone/src/modular-runtime.js","standalone/src/modular-loading.js","standalone/src/modular-verifier.js","standalone/src/browser-options.js"]}],"hash":"63a770fcf3b872d131b8a49b9dd8816a437c145a19cba27c113d055d1a5b2e62"},{"designer/src/appearance.js":function(module,exports,require){
+(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-7ada2b877c52","version":"ddn-next-1","releaseHash":"a013ac52c7b3173ca4a5c5558fb8bac7b899854da330646dcd39702d0d86b778","dependencies":["shared-0e2e62c8ac26","shared-4dfa2129e2cc","shared-646a07aa4889","shared-86dfe18929a0","shared-8776885c04b2","shared-9019e1da906d","shared-a54850724181","shared-c435f270a427","shared-cca37dc67bcd"],"modules":[{"id":"designer/src/appearance.js","bytes":28216,"sha256":"2eb18c86c0cf7d9a975e151aa824d0bdbbc24d0a6549a24f683f39121a55bec8","dependencies":["viewer/src/native.js","viewer/src/fonts.js","viewer/src/texture.js","viewer/src/choice-field.js","designer/src/live-settings.js","presentation/src/native.js","runtime/src/runtime.js","language/src/index.js","designer/src/dialogs.js","designer/src/presets.js"]},{"id":"designer/src/clipboard.js","bytes":5227,"sha256":"9387bba21551b61f4d9b14945282a248cc74e2e27d6bb765fb92f1060815a7bf","dependencies":["language/src/index.js","model/src/index.js"]},{"id":"designer/src/dialogs.js","bytes":814,"sha256":"b960e10ed44876f8e7c50867b413ecba51f6a57536d0f24b79c8368e03d31a74","dependencies":["viewer/src/dialogs.js"]},{"id":"designer/src/element-preview.js","bytes":2780,"sha256":"a141c80ce15b85e8f0c8e3aef87c89dded8426945798754a90ef61c331f3e9d4","dependencies":["profiles/src/core.js","presentation/src/graph-glyphs.js","presentation/src/node-dimensions.js","presentation/src/native-render.js","presentation/src/model.js","viewer/src/core.js"]},{"id":"designer/src/index.js","bytes":205950,"sha256":"2fc3d437f9f0af7bf0fcf48434c9974312cdc442ffab37ed3e605e7b4642c2dc","dependencies":["designer/src/element-preview.js","viewer/src/drawer.js","viewer/src/side-tabs.js","designer/src/palette-groups.js","designer/src/dialogs.js","viewer/src/choice-field.js","designer/src/live-settings.js","designer/src/appearance.js","designer/src/symbol.js","viewer/src/ui-icons.js","designer/src/properties.js","designer/src/mindmap-actions.js","designer/src/resize-handles.js","designer/src/relation-menu.js","designer/src/mindmap-source.js","designer/src/view-picker.js","designer/src/new-diagram.js","designer/src/view-layout-picker.js","profiles/src/view-surfaces.js","designer/src/presets.js","runtime/src/commands.js","runtime/src/layout-edit.js","runtime/src/profile-loading.js","runtime/src/registry.js","profiles/src/schema-core.js","designer/src/schema-editor.js","runtime/src/runtime.js","runtime/src/save.js","language/src/index.js","viewer/src/ui-commands.js","viewer/src/grid.js","designer/src/clipboard.js","model/src/index.js","profiles/src/core.js","viewer/src/native.js","presentation/src/native.js"]},{"id":"designer/src/live-settings.js","bytes":6769,"sha256":"a0f861b6d09e59a02ec796df5b3705be87da7f32749fd002f395948ca1f496a5","dependencies":["runtime/src/commands.js","execution/src/index.js"]},{"id":"designer/src/mindmap-actions.js","bytes":6971,"sha256":"a0dc91f31169496e0cb6415fc220e75336bd40a9d00819995106ed54b2737144","dependencies":["viewer/src/ui-icons.js","presentation/src/native.js","profiles/src/mindmap.js"]},{"id":"designer/src/mindmap-source.js","bytes":10465,"sha256":"ca13e999101935ae6a33dde89e9760419addcf27587bc8fff4a111ee262901e6","dependencies":["language/src/index.js","model/src/index.js","runtime/src/runtime.js","execution/src/index.js"]},{"id":"designer/src/new-diagram.js","bytes":10661,"sha256":"83ac1ff9bd3c334e0e04aa66e5f236ae0392a41674aab576734dae630ddcc5ad","dependencies":["viewer/src/native.js","viewer/src/ui-icons.js","language/src/index.js","designer/src/dialogs.js","designer/src/view-picker.js","designer/src/view-layout-picker.js","profiles/src/view-surfaces.js","runtime/src/profile-loading.js","runtime/src/registry.js"]},{"id":"designer/src/palette-groups.js","bytes":2920,"sha256":"4877b878ecd8af5278dfed835e57106edaf2ed6fe7a1a0ef970468ae92dc9002","dependencies":["profiles/src/core.js"]},{"id":"designer/src/presets.js","bytes":4839,"sha256":"f25ff9f00a8659a55e65d555dae615db99a01a2022d6bfa286a42a211c1d5d64","dependencies":["defaults/src/index.js"]},{"id":"designer/src/properties.js","bytes":19708,"sha256":"ba0ac1cf85cc7c8a4a1ac9baf9728f0c46eb30e26621182a3f850431b4acf621","dependencies":["viewer/src/native.js","profiles/src/schema-core.js","profiles/src/core.js","presentation/src/native.js","runtime/src/runtime.js","language/src/index.js","designer/src/dialogs.js","viewer/src/choice-field.js","viewer/src/fonts.js","designer/src/live-settings.js","designer/src/schema-editor.js"]},{"id":"designer/src/relation-menu.js","bytes":1736,"sha256":"ca95cfebfd680c84203f8af79a7113a2bc6d17d6beb2372f97512f6d0621d8f2","dependencies":["presentation/src/native.js"]},{"id":"designer/src/resize-handles.js","bytes":8426,"sha256":"665517ca8263107166dbfe7a3079c4555c7e4879283d7112a644d49e70de6959","dependencies":["presentation/src/native.js"]},{"id":"designer/src/schema-editor.js","bytes":13462,"sha256":"740428e867de5130fbfcb9545cd5ed0908b3b5a3c4033bd559005354a1c55351","dependencies":["profiles/src/schema-core.js","designer/src/dialogs.js","viewer/src/choice-field.js","designer/src/live-settings.js"]},{"id":"designer/src/symbol.js","bytes":9676,"sha256":"112c1ad19c21bd1cb118f872b19233dfbe17125741e8020134d96f9a7dd187f8","dependencies":["viewer/src/native.js","presentation/src/native.js","runtime/src/runtime.js","language/src/index.js","designer/src/dialogs.js","viewer/src/choice-field.js","designer/src/live-settings.js"]},{"id":"designer/src/view-layout-picker.js","bytes":14037,"sha256":"1131d84c5c4baca8951ce3fface05792259fd020f20428b208a7bc20c7b60055","dependencies":["profiles/src/view-surfaces.js","designer/src/dialogs.js"]},{"id":"designer/src/view-picker.js","bytes":12646,"sha256":"21d4acb9a059f38e250849fe65a3ca2be76d431ff66f655cb75168088e400273","dependencies":["profiles/src/core.js","language/src/index.js","designer/src/view-previews.js"]},{"id":"designer/src/view-previews.js","bytes":54794,"sha256":"06deb7f06e2a0c0982181e392b7c209e7e3087f9e0b0070b4beab9031fdc7e10","dependencies":[]},{"id":"runtime/src/commands.js","bytes":56649,"sha256":"78a94404f7a3074fd39a6bd983f992ed9ede811f4e458e5b0f618aea05d9b78a","dependencies":["language/src/index.js","model/src/index.js","defaults/src/index.js","runtime/src/layout-edit.js","execution/src/index.js","runtime/src/runtime.js","runtime/src/registry.js","runtime/src/profile-loading.js","profiles/src/core.js","runtime/src/guards.js"]},{"id":"runtime/src/layout-edit.js","bytes":3537,"sha256":"82ba90f78718ad2964b21bfab8b94ed60a9afa0cc60d439bd9d7218e1bdd173b","dependencies":["language/src/index.js","model/src/index.js","defaults/src/index.js","profiles/src/core.js","runtime/src/runtime.js"]},{"id":"runtime/src/save.js","bytes":2687,"sha256":"ddefcdd0cb5f69187a18349daa5c674092d0c56940e24e37a20b7451207c6a9e","dependencies":["language/src/index.js","model/src/index.js","execution/src/index.js","runtime/src/runtime.js"]},{"id":"standalone/src/modular-designer-api.js","bytes":2523,"sha256":"def2b0d21b5b4fd54a4d9cd268e0acf66ac9aa7dbc2a568a05d0f86aabc2225f","dependencies":["designer/src/index.js","runtime/src/commands.js","standalone/src/modular-viewer.js","standalone/src/modular-runtime.js","standalone/src/modular-loading.js","standalone/src/modular-verifier.js","standalone/src/browser-options.js"]}],"hash":"ed696c947036d7ff1650c2d585cbb3f75a5bff490407ae67c073f2baa005f3b2"},{"designer/src/appearance.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.openAppearance = openAppearance;
@@ -23,22 +23,25 @@ const sessionLibraries = new WeakMap();
 const unsavedLibraries = new WeakSet();
 const valueAt = (values, path, fallback) => values.get(path) ?? fallback;
 function download(document, name, text) { const url = URL.createObjectURL(new Blob([text], { type: 'application/json' })), a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-function openAppearance(viewer, panel, commit) {
+function openAppearance(viewer, panel, commit, initialTab = 'Background') {
     const handle = (0, native_js_1.getViewerHandle)(viewer), document = handle.ownerDocument, snapshot = handle.runtime.snapshot();
     if (!snapshot)
         throw Error('Open a workarea first.');
     const all = (0, native_js_2.records)(snapshot), entry = handle.selectedEntry(), scopes = [];
+    const activeViewRef = handle.viewport().activeView;
+    const fallbackView = (activeViewRef ? handle.scene()?.views.find(v => (0, native_js_2.refKey)(v.ref) === (0, native_js_2.refKey)(activeViewRef)) : undefined) ?? entry?.view ?? handle.scene()?.views[0];
+    const targetView = entry?.view ?? fallbackView;
     if (entry && entry.definition.owner === 'definition' && entry.definition.record.category !== 'relation') {
         const decoded = (0, runtime_js_1.runtimeState)(handle.runtime).decoded;
         if (entry.appearance && decoded && !(0, index_js_1.findNode)(decoded, entry.appearance.ref)?.implicit)
             scopes.push({ ref: entry.appearance.ref, label: 'This appearance', target: 'element', profile: (0, native_js_2.str)(entry.view.record.profile) });
         scopes.push({ ref: entry.definition.ref, label: 'Shared element', target: 'element', profile: (0, native_js_2.str)(entry.view.record.profile) });
     }
-    if (entry) {
+    if (targetView) {
         const decoded = (0, runtime_js_1.runtimeState)(handle.runtime).decoded;
-        if (entry.placement && decoded && !(0, index_js_1.findNode)(decoded, entry.placement.ref)?.implicit)
-            scopes.push({ ref: entry.placement.ref, label: 'This view placement', target: 'view', profile: (0, native_js_2.str)(entry.view.record.profile) });
-        scopes.push({ ref: entry.view.ref, label: 'View background and text', target: 'view', profile: (0, native_js_2.str)(entry.view.record.profile) });
+        if (entry?.placement && decoded && !(0, index_js_1.findNode)(decoded, entry.placement.ref)?.implicit)
+            scopes.push({ ref: entry.placement.ref, label: 'This view placement', target: 'view', profile: (0, native_js_2.str)(targetView.record.profile) });
+        scopes.push({ ref: targetView.ref, label: 'View background and text', target: 'view', profile: (0, native_js_2.str)(targetView.record.profile) });
     }
     const workarea = all.find(r => r.owner === 'workarea' && r.file === snapshot.rootFile);
     if (workarea)
@@ -77,7 +80,7 @@ function openAppearance(viewer, panel, commit) {
         message.className = 'ddn-appearance-message';
         message.setAttribute('role', 'status');
         body.append(message);
-        let changes = {}, values = new Map(), chosen = 0, tab = 'Background', loading = false, ticket = 0;
+        let changes = {}, values = new Map(), chosen = 0, tab = initialTab, loading = false, ticket = 0;
         const field = (container, name, value, type = 'text') => { const wrap = document.createElement('label'); wrap.textContent = name; const input = document.createElement('input'); input.setAttribute('aria-label', name); input.type = type; input.value = value; wrap.append(input); container.append(wrap); return input; };
         const select = (container, name, choices, value) => (0, choice_field_js_1.choiceField)(container, name, choices, value);
         const effective = (path, fallback) => Object.hasOwn(changes, path) && changes[path] !== undefined ? changes[path] : valueAt(values, path, fallback);
@@ -130,7 +133,7 @@ function openAppearance(viewer, panel, commit) {
         };
         const render = () => {
             const current = scopes[chosen];
-            targetLabel.textContent = 'Editing: ' + (0, native_js_2.titleOf)(current.target === 'element' ? entry.definition.record : current.target === 'view' ? entry.view.record : workarea.record);
+            targetLabel.textContent = 'Editing: ' + (0, native_js_2.titleOf)(current.target === 'element' ? entry.definition.record : current.target === 'view' ? targetView.record : workarea.record);
             if (current.target === 'workarea' && tab === 'Font')
                 tab = 'Background';
             content.replaceChildren();
@@ -234,6 +237,43 @@ function openAppearance(viewer, panel, commit) {
                 content.append(note);
                 update();
             }
+            else if (tab === 'Style') {
+                const update = preview(content), grid = document.createElement('div');
+                grid.className = 'ddn-appearance-grid';
+                content.append(grid);
+                const look = select(grid, 'Drawing style', ['classic', 'handdrawn', 'clean', 'neo'], String(effective('style.look', 'classic')));
+                look.addEventListener('change', () => { changed('style.look', look.value); update(); });
+                inherit(grid, 'style.look');
+                const theme = select(grid, 'Colour theme', ['default', 'neutral', 'dark', 'night', 'blueprint', 'warm'], String(effective('style.theme', 'default')));
+                theme.addEventListener('change', () => { changed('style.theme', theme.value); update(); });
+                inherit(grid, 'style.theme');
+                const roughness = (0, dialogs_js_1.numberField)(grid, 'Hand-drawn roughness', Number(effective('style.roughness', 1)), { min: 0, max: 4, step: .1 });
+                roughness.step = 'any';
+                (0, dialogs_js_1.syncNumberField)(roughness);
+                roughness.addEventListener('input', () => { changed('style.roughness', roughness.valueAsNumber); });
+                inherit(grid, 'style.roughness');
+                const note = document.createElement('p');
+                note.textContent = 'Setting a drawing style or theme on the workarea cascades to all views, documents and elements unless overridden.';
+                content.append(note);
+                update();
+            }
+            else if (tab === 'Border') {
+                const update = preview(content), grid = document.createElement('div');
+                grid.className = 'ddn-appearance-grid';
+                content.append(grid);
+                const style = select(grid, 'Border style', ['solid', 'dashed', 'dotted', 'none'], String(effective('border.style', 'solid')));
+                style.addEventListener('change', () => { changed('border.style', style.value); });
+                inherit(grid, 'border.style');
+                const width = (0, dialogs_js_1.numberField)(grid, 'Border width', Number(effective('border.width', 1)), { min: 0, max: 16, step: .5 });
+                width.step = 'any';
+                (0, dialogs_js_1.syncNumberField)(width);
+                width.addEventListener('input', () => { changed('border.width', width.valueAsNumber); });
+                inherit(grid, 'border.width');
+                const borderColor = (0, dialogs_js_1.colourField)(grid, 'Border colour', String(effective('border.color', '#94a3b8')));
+                borderColor.addEventListener('input', () => { changed('border.color', borderColor.value); });
+                inherit(grid, 'border.color');
+                update();
+            }
             else {
                 const choices = [...(0, presets_js_1.standardPresets)(current.target), ...library.filter(p => p.target === current.target && (!p.profile || p.profile === current.profile))];
                 const selectedPreset = choices.find(p => Object.entries(p.properties).every(([path, value]) => JSON.stringify(effective(path, undefined)) === JSON.stringify(value)))?.id ?? '';
@@ -317,7 +357,7 @@ function openAppearance(viewer, panel, commit) {
                 content.append(note);
             }
         };
-        for (const name of ['Background', 'Font', 'Presets']) {
+        for (const name of ['Background', 'Font', 'Style', 'Border', 'Presets']) {
             const button = document.createElement('button');
             button.type = 'button';
             button.textContent = name;
@@ -656,7 +696,7 @@ function createDesigner(viewer, options) {
 .ddn-palette-search{display:flex;align-items:center;gap:6px;margin:0 0 8px;padding:0 8px;border:1px solid var(--ddn-ui-border);border-radius:8px;background:var(--ddn-ui-input)}.ddn-palette-search[hidden]{display:none}.ddn-palette-search input{flex:1;min-width:0;border:0;background:transparent;color:var(--ddn-ui-text);padding:7px 0;font-size:12px;outline-offset:1px}.ddn-palette-group{margin:6px 0 2px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ddn-ui-muted)}.ddn-palette-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-bottom:6px}.ddn-viewer .ddn-palette-grid button{min-width:0;display:grid;grid-template-rows:auto auto;justify-items:center;gap:3px;padding:7px 4px 6px;min-height:0;border:1px solid var(--ddn-ui-border);border-radius:9px;background:var(--ddn-ui-surface);color:var(--ddn-ui-text);text-align:center;font-size:11px;line-height:1.25;cursor:grab}.ddn-viewer .ddn-palette-grid button:hover,.ddn-viewer .ddn-palette-grid button:focus-visible{border-color:var(--ddn-ui-accent);color:var(--ddn-ui-text)}.ddn-viewer .ddn-palette-grid button[aria-pressed=true]{border-color:var(--ddn-ui-accent);box-shadow:inset 0 0 0 1px var(--ddn-ui-accent)}.ddn-palette-grid svg{width:54px;height:34px;display:block}.ddn-palette-grid .ddn-palette-id{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9.5px;color:var(--ddn-ui-muted);font-family:ui-monospace,monospace}.ddn-palette-empty{font-size:11px;color:var(--ddn-ui-muted);padding:6px 2px}
 .ddn-port{fill:#ffffff;stroke:#2563eb;stroke-width:1.5;cursor:crosshair}.ddn-port:hover{fill:#2563eb}.ddn-connect-line{fill:none;stroke:#2563eb;stroke-width:2;stroke-dasharray:6 4;pointer-events:none}.ddn-connect-target{filter:drop-shadow(0 0 4px #2563eb)}.ddn-placing .ddn-viewer-stage>svg{cursor:crosshair}
 .ddn-inline-rename{position:absolute;z-index:30;min-width:120px;padding:4px 8px;border:2px solid var(--ddn-ui-accent);border-radius:8px;background:var(--ddn-ui-surface);color:var(--ddn-ui-text);font:600 14px Inter,system-ui,sans-serif;box-shadow:0 8px 24px color-mix(in srgb,var(--ddn-ui-shadow) 60%,transparent)}
-.ddn-verb-list{display:grid;gap:4px;margin:4px 0 8px}.ddn-viewer .ddn-verb-list button,.ddn-ui-dialog .ddn-verb-list button{justify-content:flex-start;text-align:left;font-size:12px;padding:6px 9px}.ddn-verb-list button b{font-weight:650;color:var(--ddn-ui-accent)}.ddn-verb-list small{margin-left:auto;color:var(--ddn-ui-muted);font:10px ui-monospace,monospace}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-outline,.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-stage{grid-row:3}.ddn-viewer:has(.ddn-designer-toolbar){grid-template-rows:auto auto minmax(200px,1fr) auto}.ddn-appearance-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:end}.ddn-appearance-grid>label{min-width:0}.ddn-appearance-grid>.ddn-ui-number-field{grid-column:1/-1}.ddn-appearance-tabs{display:flex;gap:4px;margin:10px 0}.ddn-appearance-tabs [aria-selected=true]{background:var(--ddn-ui-accent);color:var(--ddn-ui-accent-text)}.ddn-appearance-message{font-size:12px;color:var(--ddn-ui-muted)}.ddn-designer-menu{position:absolute;z-index:25;display:grid;gap:3px;padding:6px;background:var(--ddn-ui-surface);color:var(--ddn-ui-text);border:1px solid var(--ddn-ui-border);border-radius:6px;box-shadow:0 6px 20px #14243633}.ddn-designer-menu button{text-align:left}.ddn-designer-preview{fill:#3b82f622;stroke:#2563eb;stroke-width:2;stroke-dasharray:4 3;pointer-events:none}@media(max-width:480px){.ddn-appearance-grid{grid-template-columns:minmax(0,1fr)}}@media(max-width:760px){.ddn-viewer:has(.ddn-designer-toolbar){grid-template-rows:auto auto auto minmax(340px,1fr) auto}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-outline{grid-row:3}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-stage{grid-row:4}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-status{grid-row:5}}`;
+.ddn-verb-list{display:grid;gap:4px;margin:4px 0 8px}.ddn-viewer .ddn-verb-list button,.ddn-ui-dialog .ddn-verb-list button{justify-content:flex-start;text-align:left;font-size:12px;padding:6px 9px}.ddn-verb-list button b{font-weight:650;color:var(--ddn-ui-accent)}.ddn-verb-list small{margin-left:auto;color:var(--ddn-ui-muted);font:10px ui-monospace,monospace}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-outline,.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-stage{grid-row:3}.ddn-viewer:has(.ddn-designer-toolbar){grid-template-rows:auto auto minmax(200px,1fr) auto}.ddn-appearance-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:end}.ddn-appearance-grid>label{min-width:0}.ddn-appearance-grid>.ddn-ui-number-field{grid-column:1/-1}.ddn-appearance-tabs{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0}.ddn-appearance-tabs [aria-selected=true]{background:var(--ddn-ui-accent);color:var(--ddn-ui-accent-text)}.ddn-appearance-message{font-size:12px;color:var(--ddn-ui-muted)}.ddn-designer-menu{position:absolute;z-index:25;display:grid;gap:3px;padding:6px;background:var(--ddn-ui-surface);color:var(--ddn-ui-text);border:1px solid var(--ddn-ui-border);border-radius:6px;box-shadow:0 6px 20px #14243633}.ddn-designer-menu button{text-align:left}.ddn-designer-preview{fill:#3b82f622;stroke:#2563eb;stroke-width:2;stroke-dasharray:4 3;pointer-events:none}@media(max-width:480px){.ddn-appearance-grid{grid-template-columns:minmax(0,1fr)}}@media(max-width:760px){.ddn-viewer:has(.ddn-designer-toolbar){grid-template-rows:auto auto auto minmax(340px,1fr) auto}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-outline{grid-row:3}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-stage{grid-row:4}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-status{grid-row:5}}`;
     css.textContent += `@media(max-width:760px){.ddn-viewer[data-ddn-dock-left],.ddn-viewer[data-ddn-dock-right],.ddn-viewer[data-ddn-dock-left][data-ddn-dock-right]{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(340px,1fr) auto auto}.ddn-viewer[data-ddn-dock-left] .ddn-designer-dock-left{grid-column:1;grid-row:3;min-height:180px;max-height:240px}.ddn-viewer[data-ddn-dock-right] .ddn-designer-dock-right{grid-column:1;grid-row:5;min-height:200px;max-height:300px}.ddn-viewer[data-ddn-dock-left] .ddn-viewer-stage,.ddn-viewer[data-ddn-dock-right] .ddn-viewer-stage{grid-column:1;grid-row:4}.ddn-viewer[data-ddn-dock-left] .ddn-viewer-status,.ddn-viewer[data-ddn-dock-right] .ddn-viewer-status{grid-row:6}.ddn-designer-toolbar .ddn-toolbar-group{flex-wrap:wrap}}.ddn-designer-menu{max-height:calc(100% - 8px);overflow:auto}.ddn-designer-toolbar .ddn-toolbar-group{border-right:1px solid var(--ddn-ui-border);padding-right:8px}`;
     css.textContent += `@media(min-width:761px){.ddn-designer-dock-left{display:flex;flex-direction:column;overflow:hidden}.ddn-designer-dock-left>.ddn-dock-head{flex:none}.ddn-designer-dock-left>.ddn-dock-body{display:flex;flex-direction:column;flex:1;min-height:0}.ddn-designer-dock-left .ddn-panel-sections{flex:1;min-height:0;overflow:hidden}.ddn-designer-dock-left .ddn-side-tabs{position:static;max-height:100%;overflow:auto;scrollbar-width:thin}.ddn-designer-dock-left .ddn-panel-section{overflow:auto;min-height:0}.ddn-designer-dock-left .ddn-palette-search{flex:none}}`;
     handle.container.append(css);
@@ -718,10 +758,10 @@ function createDesigner(viewer, options) {
         const element = document.createElement('button');
         element.type = 'button';
         element.textContent = label;
-        const icon = { 'Add view': 'plus', 'Add entity': 'plus', 'Add element': 'grid', 'Connect': 'link', 'Reflow': 'reflow', 'Appearance & presets': 'palette', 'Properties': 'settings', 'Rename': 'type', 'Undo': 'undo', 'Redo': 'redo', 'Delete': 'minus' }[label];
+        const icon = { 'Add view': 'plus', 'Add entity': 'plus', 'Add element': 'grid', 'Connect': 'link', 'Reflow': 'reflow', 'Style': 'pen', 'Font': 'type', 'Border': 'border', 'Shadow': 'shadow', 'Pin': 'pin', 'Paper & attachments': 'shadow', 'Appearance & presets': 'palette', 'Properties': 'settings', 'Rename': 'type', 'Undo': 'undo', 'Redo': 'redo', 'Delete': 'minus' }[label];
         if (icon)
             element.prepend((0, ui_icons_js_1.uiIcon)(document, icon));
-        const groupName = ['Add element', 'Add existing element', 'Connect', 'Add view', 'Add entity', 'Workarea', 'Reflow'].includes(label) ? 'Create' : ['Undo', 'Redo'].includes(label) ? 'History' : ['Datasets', 'Source', 'Projection'].includes(label) ? 'Document' : 'Selection';
+        const groupName = ['Add element', 'Add existing element', 'Connect', 'Add view', 'Add entity', 'Workarea', 'Reflow'].includes(label) ? 'Create' : ['Undo', 'Redo'].includes(label) ? 'History' : ['Datasets', 'Source', 'Projection', 'Style', 'Font', 'Border', 'Shadow'].includes(label) ? 'Document' : 'Selection';
         let group = toolbarGroups.get(groupName);
         if (!group) {
             group = document.createElement('div');
@@ -741,9 +781,14 @@ function createDesigner(viewer, options) {
         let submit;
         const existing = [...panels][0];
         if (existing) {
-            existing.focus();
-            handle.announce('Close the open editor before opening another settings form.');
-            return existing;
+            if (existing.dataset.ddnLiveSettings !== undefined) {
+                panelClosers.get(existing)?.();
+            }
+            else {
+                existing.focus();
+                handle.announce('Close the open editor before opening another settings form.');
+                return existing;
+            }
         }
         const live = ['Edit title', 'Draft body', 'Details shown (this appearance)', 'Details shown (entity default)', 'Edit table data', 'Comments', 'Constraints', 'Properties', 'Paper & attachments', 'Appearance & presets', 'Symbol & label', 'Projection settings', 'Element and relationship details', 'Datasets', 'Workarea settings', 'Edit topic name', 'Topic notes', 'Page setup', 'Header', 'Footer'].includes(title);
         let session;
@@ -973,16 +1018,18 @@ function createDesigner(viewer, options) {
         });
     }
     function properties() { (0, properties_js_1.openProperties)(viewer, panel, applyProperties); }
-    function paperAttachments(entry = requireSelection()) {
-        if (entry.definition.record.category === 'relation' || !['definition', 'view'].includes(entry.definition.owner))
+    function paperAttachments(entry = selected()) {
+        const viewFallback = !entry ? currentView() : undefined;
+        const targetEntry = entry ?? (viewFallback ? handle.scene()?.entries.find(e => e.definition.owner === 'view' && (0, native_js_2.refKey)(e.definition.ref) === (0, native_js_2.refKey)(viewFallback.ref)) : undefined);
+        if (!targetEntry || targetEntry.definition.record.category === 'relation' || !['definition', 'view'].includes(targetEntry.definition.owner))
             throw Error('Select an element or view for paper and attachment settings.');
         const state = (0, runtime_js_1.runtimeState)(handle.runtime);
         if (!state.decoded || !state.source)
             throw Error('Editable sources must be open.');
         const explicit = (record) => record && (0, index_js_1.findNode)(state.decoded, record.ref) && !(0, index_js_1.findNode)(state.decoded, record.ref).implicit;
-        const scopes = entry.definition.owner === 'view'
-            ? [...(explicit(entry.placement) ? [{ record: entry.placement, label: 'This view placement' }] : []), { record: entry.view, label: 'View definition' }]
-            : [...(explicit(entry.appearance) ? [{ record: entry.appearance, label: 'This appearance' }] : []), { record: entry.definition, label: 'Shared definition' }];
+        const scopes = targetEntry.definition.owner === 'view'
+            ? [...(explicit(targetEntry.placement) ? [{ record: targetEntry.placement, label: 'This view placement' }] : []), { record: targetEntry.view, label: 'View definition' }]
+            : [...(explicit(targetEntry.appearance) ? [{ record: targetEntry.appearance, label: 'This appearance' }] : []), { record: targetEntry.definition, label: 'Shared definition' }];
         const defaults = { 'style.paper': 'plain', 'shadow.kind': 'none', 'shadow.color': '#000000', 'shadow.opacity': .24, 'shadow.blur': 4, 'shadow.lift': 10, 'shadow.spread': 0 };
         const attachmentColors = { 'push-pin': '#df4545', 'round-pin': '#45a3da', 'paper-clip': '#5b83b4', 'binder-clip': '#3b414b', tape: '#e4c788' };
         panel('Paper & attachments', body => {
@@ -991,7 +1038,7 @@ function createDesigner(viewer, options) {
             scope.dataset.ddnLiveIgnore = '';
             scopes.forEach(({ label }, index) => { const option = document.createElement('option'); option.value = String(index); option.textContent = label; scope.append(option); });
             const targetLabel = document.createElement('p');
-            targetLabel.textContent = 'Editing: ' + (0, native_js_2.titleOf)(entry.definition.record);
+            targetLabel.textContent = 'Editing: ' + (0, native_js_2.titleOf)(targetEntry.definition.record);
             body.append(targetLabel);
             const instructions = document.createElement('p');
             instructions.textContent = 'Only changed settings are saved. Inherit removes the setting here so file defaults and CSS can supply it. Attachments are visual decorations; they do not change meaning or review status.';
@@ -1342,7 +1389,7 @@ function createDesigner(viewer, options) {
         const editable = resizeSources.get((0, native_js_2.refKey)(target.ref));
         return editable === true || editable === false && entry.view.record.profile === 'mindmap.basic@1';
     };
-    async function resizeElement(entry, width, height) {
+    async function resizeElement(entry, width, height, nextPos) {
         if (!canResize(entry))
             return;
         const target = (entry.appearance ?? entry.placement), size = { width: Math.max(40, snap(width)), height: Math.max(40, snap(height)) };
@@ -1351,10 +1398,15 @@ function createDesigner(viewer, options) {
             const draft = (0, mindmap_source_js_1.mindmapSource)(handle.runtime, entry.view.ref);
             draft.materialize();
             draft.set(target.ref, 'size', size);
+            if (nextPos)
+                draft.set(target.ref, 'position', { x: snap(nextPos.x), y: snap(nextPos.y) });
             await commitMindmap(draft);
         }
-        else
+        else {
             await nativeCommand('ddn.set-size', target.ref, size);
+            if (nextPos)
+                await nativeCommand('ddn.set-position', target.ref, { x: snap(nextPos.x), y: snap(nextPos.y) });
+        }
     }
     async function statusChange(next, entry = requireSelection()) {
         const snapshot = handle.runtime.snapshot();
@@ -1781,12 +1833,15 @@ function createDesigner(viewer, options) {
             return { x: cx, y: cy };
         return { x: fb.x + fb.width / 2, y: fb.y + fb.height / 2 };
     }
+    let placePreview;
     function startPlacing(role, view) {
         placing = { role, view };
         handle.container.classList.add('ddn-placing');
-        handle.announce(`${roleLabel(role)}: click on the view where it should go. Esc cancels.`);
+        handle.announce(`${roleLabel(role)}: click on the view where it should go (hold Shift to place several). Esc cancels.`);
     }
     function cancelPlacing() {
+        placePreview?.remove();
+        placePreview = undefined;
         if (!placing)
             return;
         placing = undefined;
@@ -1959,6 +2014,9 @@ function createDesigner(viewer, options) {
         handle.announce(isNew ? 'Type a name for the new element, then press Enter.' : 'Type the new name, then press Enter.');
     }
     function sourceEditor() {
+        const toggleEvt = new CustomEvent('ddn:toggle-source', { bubbles: true, cancelable: true });
+        if (!handle.container.dispatchEvent(toggleEvt))
+            return;
         const input = handle.runtime.sources();
         if (!input)
             return;
@@ -2052,6 +2110,17 @@ function createDesigner(viewer, options) {
             editTopicName(created);
         }
     }
+    async function addSiblingTopic(entry) {
+        const topology = (0, mindmap_actions_js_1.mindmapSelection)(handle, entry);
+        if (!topology)
+            return;
+        const parentLink = topology.internal.find(link => (0, native_js_2.refKey)(link.to.ref) === (0, native_js_2.refKey)(entry.definition.ref));
+        const parentEntry = parentLink ? handle.scene()?.entries.find(item => (0, native_js_2.refKey)(item.definition.ref) === (0, native_js_2.refKey)(parentLink.from.ref) && (0, native_js_2.refKey)(item.view.ref) === (0, native_js_2.refKey)(entry.view.ref)) : undefined;
+        const target = parentEntry ?? entry;
+        const targetTopology = (0, mindmap_actions_js_1.mindmapSelection)(handle, target);
+        const side = targetTopology?.right ? 'right' : targetTopology?.left ? 'left' : 'right';
+        await addTopic(target, side);
+    }
     function topicNotes(entry) { notes(entry, true); }
     function deleteTopic(entry) {
         const topology = (0, mindmap_actions_js_1.mindmapSelection)(handle, entry);
@@ -2130,7 +2199,28 @@ function createDesigner(viewer, options) {
             notifyError(error);
         }
     };
-    const tooltips = { 'Add element': 'Open the element palette — click a type, then click where it goes (A)', 'Add existing element': 'Show an element that already exists in another view here', 'Connect': 'Connect two elements: click the first, then the second — or drag from a selected element\'s handle (C)', 'Add view': 'Add another view (diagram) to this document', 'Add entity': 'Add an ERD entity to this view (ERD views only)', 'Workarea': 'Workarea settings — background, grid, allowed diagram types', 'Rename': 'Rename the selected element (F2, or double-click it)', 'Properties': 'Open the inspector for the selected element — name, description, colours, lock (P)', 'Draft': 'Free-form text inside the element', 'Columns': 'Turn the draft text into fields', 'Table': 'Edit the element\'s table rows', 'Details': 'Choose which details (columns) are shown', 'Paper & attachments': 'Paper surface, shadow, pins and tape for the selected element', 'Symbol & label': 'How the element is drawn: card, image symbol or bare text, and where its name sits', 'Appearance & presets': 'Colours, fonts, textures and saved presets', 'Profile details': 'Notation-specific details for this element', 'Projection': 'How this data-bound view is projected (chart, matrix, …)', 'Datasets': 'Datasets that feed data-bound views', 'Status': 'Design status: in progress, in review, accepted', 'Source': 'Edit the DDN source of a file in a dialog', 'Delete': 'Delete the selected element (Delete key)', 'Undo': 'Undo (Ctrl+Z)', 'Redo': 'Redo (Ctrl+Shift+Z)' };
+    const isPinned = (entry = selected()) => !!entry && typeof entry.appearance?.record.position === 'object' && entry.appearance?.record.pinned !== false;
+    async function togglePin(entry = requireSelection()) {
+        if (entry.definition.owner === 'view' || entry.definition.record.category === 'relation')
+            return;
+        const name = (0, native_js_2.titleOf)(entry.definition.record);
+        if (isPinned(entry) && entry.appearance) {
+            await applyProperties(entry.appearance.ref, { position: undefined, pinned: undefined });
+            handle.announce(`Unpinned "${name}" — it now places dynamically and reroutes connections.`);
+        }
+        else {
+            const frame = handle.scene()?.entries.find(e => e.definition.owner === 'view' && (0, native_js_2.refKey)(e.definition.ref) === (0, native_js_2.refKey)(entry.view.ref));
+            const origin = frame ? semanticBounds(frame) : { x: 0, y: 0 };
+            const local = logicalPoint(entry, semanticBounds(entry));
+            const pos = { x: Math.max(0, Math.round(local.x - origin.x)), y: Math.max(0, Math.round(local.y - origin.y)) };
+            if (entry.appearance)
+                await nativeCommand('ddn.set-position', entry.appearance.ref, pos);
+            else
+                await apply({ kind: 'create-occurrence', view: entry.view.ref, target: entry.definition.ref, properties: { position: pos } });
+            handle.announce(`Pinned "${name}" at (${pos.x}, ${pos.y}).`);
+        }
+    }
+    const tooltips = { 'Add element': 'Open the element palette — click a type, then click where it goes (A)', 'Add existing element': 'Show an element that already exists in another view here', 'Connect': 'Connect two elements: click the first, then the second — or drag from a selected element\'s handle (C)', 'Add view': 'Add another view (diagram) to this document', 'Add entity': 'Add an ERD entity to this view (ERD views only)', 'Workarea': 'Workarea settings — background, grid, allowed diagram types', 'Style': 'Set drawing style (hand-drawn, classic, clean, neo) and theme for workarea, view or element', 'Font': 'Set font family, size and text colour for workarea, view or element', 'Border': 'Set border style, width and colour for workarea, view or element', 'Shadow': 'Set shadow, paper surface and attachments for view or element', 'Pin': 'Pin or unpin the selected element in this view — unpinned elements place dynamically', 'Rename': 'Rename the selected element (F2, or double-click it)', 'Properties': 'Open the inspector for the selected element — name, description, colours, lock (P)', 'Draft': 'Free-form text inside the element', 'Columns': 'Turn the draft text into fields', 'Table': 'Edit the element\'s table rows', 'Details': 'Choose which details (columns) are shown', 'Paper & attachments': 'Paper surface, shadow, pins and tape for the selected element', 'Symbol & label': 'How the element is drawn: card, image symbol or bare text, and where its name sits', 'Appearance & presets': 'Colours, fonts, textures and saved presets', 'Profile details': 'Notation-specific details for this element', 'Projection': 'How this data-bound view is projected (chart, matrix, …)', 'Datasets': 'Datasets that feed data-bound views', 'Status': 'Design status: in progress, in review, accepted', 'Source': 'Edit the DDN source of a file in a dialog', 'Delete': 'Delete the selected element (Delete key)', 'Undo': 'Undo (Ctrl+Z)', 'Redo': 'Redo (Ctrl+Shift+Z)' };
     const buttons = {};
     tooltips['Add element'] = 'Open the element palette — drag a type onto the view, or click a type then its position (A)';
     tooltips.Reflow = 'Release fixed and pinned element positions in this view, then arrange it using its diagram type and connections (undoable)';
@@ -2163,6 +2253,7 @@ function createDesigner(viewer, options) {
     add('Reflow', () => run(() => reflowView()));
     add('Rename', guarded(() => inlineRename()));
     add('Properties', guarded(() => openInspectorDock()));
+    add('Pin', () => run(() => togglePin()));
     add('Draft', guarded(() => editDraft()));
     add('Columns', guarded(() => convert()));
     add('Table', guarded(() => editRows()));
@@ -2174,6 +2265,10 @@ function createDesigner(viewer, options) {
     add('Projection', guarded(() => profileEditor(true)));
     add('Status', guarded(() => statusDialog()));
     add('Delete', guarded(() => deleteItem()));
+    add('Style', guarded(() => (0, appearance_js_1.openAppearance)(viewer, panel, applyProperties, 'Style')));
+    add('Font', guarded(() => (0, appearance_js_1.openAppearance)(viewer, panel, applyProperties, 'Font')));
+    add('Border', guarded(() => (0, appearance_js_1.openAppearance)(viewer, panel, applyProperties, 'Border')));
+    add('Shadow', guarded(() => paperAttachments()));
     add('Datasets', datasets);
     add('Source', sourceEditor);
     add('Undo', () => run(async () => {
@@ -2261,6 +2356,11 @@ function createDesigner(viewer, options) {
         const elementOnly = ['Draft', 'Columns', 'Table', 'Details', 'Symbol & label', 'Paper & attachments', 'Profile details'];
         for (const label of elementOnly)
             has(label).hidden = !entry || isRelation || isView;
+        has('Pin').hidden = !entry || isRelation || isView || !graphView;
+        has('Pin').disabled = !entry || !writable(entry.view.ref);
+        has('Pin').setAttribute('aria-pressed', String(isPinned(entry)));
+        for (const label of ['Style', 'Font', 'Border', 'Shadow'])
+            has(label).disabled = !!view && !writable(view.ref);
         for (const label of moreLabels)
             has(label).dataset.inMenu = '';
         moreButton.hidden = !entry || isRelation || isView;
@@ -2780,6 +2880,24 @@ function createDesigner(viewer, options) {
         const point = handle.toWorld(event.clientX, event.clientY);
         run(async () => { requireCurrent(drop.revision); await createElementAt(drop.view, drop.role, point); });
     });
+    on(handle.surface, 'pointermove', event => {
+        if (!placing) {
+            placePreview?.remove();
+            placePreview = undefined;
+            return;
+        }
+        const point = handle.toWorld(event.clientX, event.clientY);
+        if (!placePreview) {
+            placePreview = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            placePreview.setAttribute('class', 'ddn-designer-preview');
+            placePreview.setAttribute('width', '140');
+            placePreview.setAttribute('height', '64');
+            placePreview.setAttribute('rx', '6');
+            handle.surface.append(placePreview);
+        }
+        placePreview.setAttribute('x', String(snap(point.x - 70)));
+        placePreview.setAttribute('y', String(snap(point.y - 32)));
+    });
     on(handle.surface, 'click', event => {
         if (!placing)
             return;
@@ -2787,7 +2905,8 @@ function createDesigner(viewer, options) {
             return;
         const role = placing.role, view = placing.view;
         const point = handle.toWorld(event.clientX, event.clientY);
-        cancelPlacing();
+        if (!event.shiftKey)
+            cancelPlacing();
         run(() => createElementAt(view, role, point));
     });
     updateToolbar();
@@ -2865,10 +2984,10 @@ function createDesigner(viewer, options) {
             else
                 await apply({ kind: 'create-occurrence', view: entry.view.ref, target: entry.definition.ref, properties: { [path]: value } });
         })) : [];
-        const items = !entry ? [['Add element…', () => openPaletteDock()], ['Add existing element…', () => reuseItem()], ['Add view…', () => addView()], ['Fit all', () => void viewer.navigate({ kind: 'fit-workarea' })]]
-            : isView ? [['Rename', () => inlineRename()], ['Properties', () => openInspectorDock()], ['Appearance & presets', () => (0, appearance_js_1.openAppearance)(viewer, panel, applyProperties)], ['Expand view', () => void viewer.navigate({ kind: 'expand-view', target: entry.definition.ref })]]
+        const items = !entry ? [['Add element…', () => openPaletteDock()], ['Add existing element…', () => reuseItem()], ['Add view…', () => addView()], ['Appearance & presets', () => (0, appearance_js_1.openAppearance)(viewer, panel, applyProperties)], ['Paper & attachments', () => paperAttachments()], ['Fit all', () => void viewer.navigate({ kind: 'fit-workarea' })]]
+            : isView ? [['Rename', () => inlineRename()], ['Properties', () => openInspectorDock()], ['Appearance & presets', () => (0, appearance_js_1.openAppearance)(viewer, panel, applyProperties)], ['Paper & attachments', () => paperAttachments()], ['Expand view', () => void viewer.navigate({ kind: 'expand-view', target: entry.definition.ref })]]
                 : isRelation ? [...toggles, ['Rename label', () => inlineRename()], ['Properties', () => openInspectorDock()], ['Appearance & presets', () => (0, appearance_js_1.openAppearance)(viewer, panel, applyProperties)], ['Delete', () => deleteItem()]]
-                    : [['Rename', () => inlineRename()], ['Connect from here', () => { connectFrom = entry.definition.ref; updateToolbar(); handle.announce(`Connect from "${(0, native_js_2.titleOf)(entry.definition.record)}" — click the target element.`); }], ['Properties', () => openInspectorDock()], ['Appearance & presets', () => (0, appearance_js_1.openAppearance)(viewer, panel, applyProperties)], ['Symbol & label', () => (0, symbol_js_1.openSymbol)(viewer, panel, applyProperties)], ['Paper & attachments', () => paperAttachments()], ['Draft text', () => editDraft()], ['Columns', () => convert()], ['Details shown', () => details()], ['Edit table', () => editRows()], ['Comments', () => notes()], ['Constraints', () => constraints()], ['Status', () => statusDialog()], ['Delete', () => deleteItem()]];
+                    : [['Rename', () => inlineRename()], [isPinned(entry) ? 'Unpin position (auto-place)' : 'Pin position in view', () => run(() => togglePin(entry))], ['Connect from here', () => { connectFrom = entry.definition.ref; updateToolbar(); handle.announce(`Connect from "${(0, native_js_2.titleOf)(entry.definition.record)}" — click the target element.`); }], ['Properties', () => openInspectorDock()], ['Appearance & presets', () => (0, appearance_js_1.openAppearance)(viewer, panel, applyProperties)], ['Symbol & label', () => (0, symbol_js_1.openSymbol)(viewer, panel, applyProperties)], ['Paper & attachments', () => paperAttachments()], ['Draft text', () => editDraft()], ['Columns', () => convert()], ['Details shown', () => details()], ['Edit table', () => editRows()], ['Comments', () => notes()], ['Constraints', () => constraints()], ['Status', () => statusDialog()], ['Delete', () => deleteItem()]];
         for (const [label, action, toggle] of items) {
             if (standalone() && ['Add view…', 'Expand view'].includes(label))
                 continue;
@@ -2948,7 +3067,7 @@ function createDesigner(viewer, options) {
             pinching = false;
     });
     on(handle.surface, 'pointerdown', event => {
-        if (pinching || event.button !== 0 || placing || connectDrag || event.target.closest('.ddn-element-resize') || (event.pointerType !== 'touch' && event.pointerType !== 'pen'))
+        if (pinching || event.button !== 0 || placing || connectDrag || event.target.closest('.ddn-element-resize,.ddn-element-resize-handles') || (event.pointerType !== 'touch' && event.pointerType !== 'pen'))
             return;
         cancelPress();
         const { clientX, clientY } = event, target = event.target.closest('[data-ref]');
@@ -3018,18 +3137,41 @@ function createDesigner(viewer, options) {
                 guarded(() => openInspectorDock())();
             }
         }
-        if ((key.ctrlKey || key.metaKey) && key.key.toLowerCase() === 'z') {
+        if ((key.ctrlKey || key.metaKey) && (key.key.toLowerCase() === 'z' || key.key.toLowerCase() === 'y')) {
             key.preventDefault();
+            const isRedo = key.key.toLowerCase() === 'y' || key.shiftKey;
             run(async () => {
-                const result = await (key.shiftKey ? commands.redo() : commands.undo());
+                const result = await (isRedo ? commands.redo() : commands.undo());
                 if (!result.ok)
                     throw new Error(result.failure.code);
                 await handle.refresh();
             });
         }
-        if (key.key === 'Delete' && selected() && selected().definition.owner !== 'view') {
+        if ((key.key === 'Tab' || key.key === 'Insert' || key.key === 'Enter') && !key.ctrlKey && !key.metaKey && !key.altKey && selected()) {
+            const mm = (0, mindmap_actions_js_1.mindmapSelection)(handle, selected());
+            if (mm) {
+                key.preventDefault();
+                const entry = selected();
+                if (key.key === 'Enter')
+                    run(() => addSiblingTopic(entry));
+                else
+                    run(() => addTopic(entry, mm.right ? 'right' : mm.left ? 'left' : 'right'));
+                return;
+            }
+        }
+        if ((key.key === 'Delete' || key.key === 'Backspace') && selected() && selected().definition.owner !== 'view') {
             key.preventDefault();
-            guarded(() => deleteItem())();
+            const entry = selected();
+            if (key.shiftKey && !(0, mindmap_actions_js_1.mindmapSelection)(handle, entry) && writable(entry.definition.ref)) {
+                const name = (0, native_js_2.titleOf)(entry.definition.record);
+                run(async () => {
+                    await apply({ kind: 'remove', target: entry.definition.ref, references: 'remove-dependents' });
+                    handle.announce(`Deleted ${name}. Ctrl+Z undoes it.`);
+                });
+            }
+            else {
+                guarded(() => deleteItem())();
+            }
         }
         if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key.key)) {
             const entry = selected();
@@ -3067,18 +3209,20 @@ function createDesigner(viewer, options) {
         const frameBounds = current.entry.appearance && frame ? semanticBounds(frame) : { x: 0, y: 0 };
         const initial = semanticBounds(current.entry), position = (0, native_js_2.object)(movable.record.position);
         const scale = surfaceScale(current.entry), local = current.entry.appearance ? logicalPoint(current.entry, initial) : initial;
-        run(() => current.resizing ? resizeElement(current.entry, width / scale, height / scale) : nativeCommand('ddn.set-position', movable.ref, { x: snap((0, native_js_2.num)(position.x, local.x - frameBounds.x) + (x - initial.x) / scale), y: snap((0, native_js_2.num)(position.y, local.y - frameBounds.y) + (y - initial.y) / scale) }));
+        const nextPos = { x: snap((0, native_js_2.num)(position.x, local.x - frameBounds.x) + (x - initial.x) / scale), y: snap((0, native_js_2.num)(position.y, local.y - frameBounds.y) + (y - initial.y) / scale) };
+        const posChanged = Math.abs(x - initial.x) > 0.5 || Math.abs(y - initial.y) > 0.5;
+        run(() => current.resizing ? resizeElement(current.entry, width / scale, height / scale, posChanged ? nextPos : undefined) : nativeCommand('ddn.set-position', movable.ref, nextPos));
     };
     function snapStep() { return (0, grid_js_1.viewSetting)(handle.container, 'snap') === 'on' ? (0, grid_js_1.gridStep)(handle.runtime.snapshot()) : 0; }
     function snap(value) { const step = snapStep(); return step ? Math.round(value / step) * step : value; }
-    function beginGesture(entry, pointer, resizing) {
+    function beginGesture(entry, pointer, resizing, direction = 'se') {
         handle.select(entry.definition.ref, entry.item.occurrence);
         const position = handle.toWorld(pointer.clientX, pointer.clientY);
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         for (const [key, value] of Object.entries(semanticBounds(entry)))
             rect.setAttribute(key, String(value));
         rect.setAttribute('class', 'ddn-designer-preview');
-        gesture = { id: pointer.pointerId, start: position, entry, rect, resizing, moved: false, revision: revision() };
+        gesture = { id: pointer.pointerId, start: position, entry, rect, resizing, direction, moved: false, revision: revision() };
         if (resizing && pointer.pointerType !== 'mouse')
             try {
                 handle.surface.setPointerCapture(pointer.pointerId);
@@ -3087,7 +3231,7 @@ function createDesigner(viewer, options) {
     }
     on(handle.surface, 'pointerdown', event => {
         const pointer = event;
-        if (pointer.button !== 0 || pinching || placing || connectDrag || pointer.target.closest('.ddn-ports,.ddn-element-resize'))
+        if (pointer.button !== 0 || pinching || placing || connectDrag || pointer.target.closest('.ddn-ports,.ddn-element-resize,.ddn-element-resize-handles'))
             return;
         const group = pointer.target.closest('[data-occurrence]');
         if (!group)
@@ -3118,12 +3262,32 @@ function createDesigner(viewer, options) {
         }
         if (gesture.resizing) {
             const minimum = 40 * surfaceScale(gesture.entry);
-            gesture.rect.setAttribute('width', String(Math.max(minimum, bounds.width + dx)));
-            gesture.rect.setAttribute('height', String(Math.max(minimum, bounds.height + dy)));
+            const dir = gesture.direction;
+            let nextX = bounds.x, nextY = bounds.y, nextW = bounds.width, nextH = bounds.height;
+            if (dir.includes('e'))
+                nextW = Math.max(minimum, snap(bounds.width + dx));
+            if (dir.includes('s'))
+                nextH = Math.max(minimum, snap(bounds.height + dy));
+            if (dir.includes('w')) {
+                const maxDx = bounds.width - minimum;
+                const clampedDx = Math.min(maxDx, dx);
+                nextX = snap(bounds.x + clampedDx);
+                nextW = Math.max(minimum, bounds.x + bounds.width - nextX);
+            }
+            if (dir.includes('n')) {
+                const maxDy = bounds.height - minimum;
+                const clampedDy = Math.min(maxDy, dy);
+                nextY = snap(bounds.y + clampedDy);
+                nextH = Math.max(minimum, bounds.y + bounds.height - nextY);
+            }
+            gesture.rect.setAttribute('x', String(nextX));
+            gesture.rect.setAttribute('y', String(nextY));
+            gesture.rect.setAttribute('width', String(nextW));
+            gesture.rect.setAttribute('height', String(nextH));
         }
         else {
-            gesture.rect.setAttribute('x', String(bounds.x + dx));
-            gesture.rect.setAttribute('y', String(bounds.y + dy));
+            gesture.rect.setAttribute('x', String(snap(bounds.x + dx)));
+            gesture.rect.setAttribute('y', String(snap(bounds.y + dy)));
         }
     });
     on(handle.surface, 'pointerup', event => {
@@ -3147,12 +3311,12 @@ function createDesigner(viewer, options) {
     if (document.defaultView)
         on(document.defaultView, 'blur', () => { finishGesture(false); finishConnectDrag(undefined, false); cancelPress(); pinching = false; });
     cleanups.push((0, resize_handles_js_1.mountResizeHandles)(viewer, handle, { bounds: semanticBounds, allowed: canResize,
-        start(entry, event) {
+        start(entry, event, direction = 'se') {
             if (event.button !== 0 || pinching || placing || connectDrag || gesture || connectArmed || connectFrom)
                 return;
             event.preventDefault();
             cancelPress();
-            beginGesture(entry, event, true);
+            beginGesture(entry, event, true, direction);
             handle.surface.focus({ preventScroll: true });
         },
         step(entry, dx, dy) {
@@ -3167,6 +3331,7 @@ function createDesigner(viewer, options) {
     const copyable = (entry = selected()) => !!entry && entry.definition.owner === 'definition' && entry.definition.record.category !== 'relation' && !Array.isArray(entry.definition.record.endpoints) && !(0, mindmap_actions_js_1.mindmapSelection)(handle, entry);
     const pasteView = () => { const entry = selected(); return entry && entry.definition.owner === 'view' ? entry.view : entry?.view ?? currentView(); };
     const graphView = (view) => !!view && (0, native_js_2.str)(view.record.kind) !== 'document' && (0, core_js_1.getProfile)((0, native_js_2.str)(view.record.profile))?.projection === 'graph';
+    let pasteSerial = 0;
     function copySelection() {
         const entry = requireSelection();
         if (!copyable(entry))
@@ -3174,6 +3339,7 @@ function createDesigner(viewer, options) {
         const position = (0, native_js_2.object)(entry.appearance?.record.position);
         const item = { record: (0, clipboard_js_1.clipRecord)(entry.definition.record), source: entry.definition.ref, ...(typeof position.x === 'number' && typeof position.y === 'number' ? { position: { x: position.x, y: position.y } } : {}) };
         clipboard = [item];
+        pasteSerial = 0;
         clipboardWritten = (0, clipboard_js_1.clipboardText)(clipboard);
         void document.defaultView?.navigator.clipboard?.writeText(clipboardWritten).catch(() => { });
         handle.announce(`Copied "${(0, native_js_2.titleOf)(entry.definition.record)}".`);
@@ -3206,7 +3372,8 @@ function createDesigner(viewer, options) {
         if (!decoded)
             throw Error('The document is not ready.');
         const taken = new Set((0, native_js_2.records)(handle.runtime.snapshot()).filter(r => r.file === view.ref.file).map(r => (0, native_js_2.str)(r.record.name)).filter(Boolean));
-        const text = (0, clipboard_js_1.pasteRecords)(content, taken, inPlace ? { x: 0, y: 0 } : { x: 24, y: 24 });
+        const step = inPlace ? 0 : ++pasteSerial;
+        const text = (0, clipboard_js_1.pasteRecords)(content, taken, inPlace ? { x: 0, y: 0 } : { x: 24 * step, y: 24 * step });
         const before = new Set((handle.scene()?.entries ?? []).map(e => e.item.occurrence));
         const receipt = await apply({ kind: 'edit-source', patches: (0, index_js_1.appendDeclaration)(decoded, view.ref.file, text, view.ref) });
         const changed = new Set(receipt.changed.map(native_js_2.refKey));
@@ -3246,6 +3413,18 @@ function createDesigner(viewer, options) {
             const outputLabel = document.createElement('label');
             outputLabel.append('Output', output);
             body.append(outputLabel);
+            const pageLayout = document.createElement('select');
+            pageLayout.setAttribute('aria-label', 'Page layout');
+            for (const [val, text] of [['content', 'Content-sized (default)'], ['letter', 'Letter (8.5 × 11 in)'], ['legal', 'Legal (8.5 × 14 in)'], ['a4', 'A4 (210 × 297 mm)'], ['a3', 'A3 (297 × 420 mm)'], ['tabloid', 'Tabloid (11 × 17 in)']])
+                pageLayout.add(new Option(text, val));
+            for (const text of ['A1 (594 × 841 mm) — ScratchWeaver', 'A2 (420 × 594 mm) — ScratchWeaver', 'A5 (148 × 210 mm) — ScratchWeaver', 'Custom page — ScratchWeaver', 'Widescreen 16:9 Slide — ScratchWeaver', 'Standard 4:3 Slide — ScratchWeaver']) {
+                const option = new Option(text, '');
+                option.disabled = true;
+                pageLayout.add(option);
+            }
+            const pageLayoutLabel = document.createElement('label');
+            pageLayoutLabel.append('Page layout', pageLayout);
+            body.append(pageLayoutLabel);
             const include = document.createElement('input');
             include.type = 'checkbox';
             include.checked = !!source && (0, native_js_2.str)(source.record.kind) !== 'document';
@@ -3264,7 +3443,8 @@ function createDesigner(viewer, options) {
                 if (names.has(label))
                     throw Error('That name is already used in this workarea.');
                 const useName = source && include.checked ? (0, native_js_2.str)(source.record.name) : '';
-                const text = `document ${(0, index_js_1.quoteText)(label)} as ${output.value}\n` + (useName ? `    use ${source.ref.file === snapshot.rootFile ? '' : (0, index_js_1.quoteText)(source.ref.file) + '::'}${(0, index_js_1.quoteText)(useName)}\n` : '');
+                const pageBlock = pageLayout.value && pageLayout.value !== 'content' ? `    with\n        page.size ${pageLayout.value}\n` : '';
+                const text = `document ${(0, index_js_1.quoteText)(label)} as ${output.value}\n` + (useName ? `    use ${source.ref.file === snapshot.rootFile ? '' : (0, index_js_1.quoteText)(source.ref.file) + '::'}${(0, index_js_1.quoteText)(useName)}\n` : '') + pageBlock;
                 await apply({ kind: 'edit-source', patches: (0, index_js_1.appendDeclaration)(decoded, snapshot.rootFile, text) });
                 const created = handle.scene()?.views.find(v => (0, native_js_2.str)(v.record.name) === label);
                 if (created)
@@ -3347,6 +3527,16 @@ function createDesigner(viewer, options) {
                 run(() => paste(false, [{ record: (0, clipboard_js_1.clipRecord)(entry.definition.record), ...(typeof position.x === 'number' && typeof position.y === 'number' ? { position: { x: position.x, y: position.y } } : {}) }]));
             }, enabled: () => copyable() && writable(selected().definition.ref) },
         clickCommand('edit.delete', 'Delete'),
+        { id: 'edit.select-all', label: 'Select all in view', run: () => {
+                const view = currentView();
+                const entries = (handle.scene()?.entries ?? []).filter(e => e.definition.owner === 'definition' && (!view || (0, native_js_2.refKey)(e.view.ref) === (0, native_js_2.refKey)(view.ref)));
+                if (entries.length) {
+                    handle.select(entries[0].definition.ref, entries[0].item.occurrence);
+                    for (let i = 1; i < entries.length; i++)
+                        handle.select(entries[i].definition.ref, entries[i].item.occurrence, true);
+                    handle.announce(`Selected ${entries.length} item${entries.length === 1 ? '' : 's'}.`);
+                }
+            }, enabled: () => !!(handle.scene()?.entries ?? []).some(e => e.definition.owner === 'definition') },
         { id: 'edit.deselect', label: 'Deselect', run: () => handle.clearSelection(), enabled: () => !!selected() },
         clickCommand('edit.rename', 'Rename'),
         clickCommand('edit.properties', 'Properties'),
@@ -3608,6 +3798,7 @@ function createLiveSettings(options) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.mindmapSelection = mindmapSelection;
 exports.mountMindmapActions = mountMindmapActions;
+const ui_icons_js_1 = require("viewer/src/ui-icons.js");
 const native_js_1 = require("presentation/src/native.js");
 const mindmap_js_1 = require("profiles/src/mindmap.js");
 function mindmapSelection(handle, selected = handle.selectedEntry()) {
@@ -3631,7 +3822,7 @@ function mountMindmapActions(viewer, handle, bounds, actions) {
     bar.setAttribute('role', 'toolbar');
     bar.setAttribute('aria-label', 'Mind map topic actions');
     bar.hidden = true;
-    css.textContent = '.ddn-mindmap-actions{position:absolute;z-index:8;display:flex;justify-content:space-evenly;align-items:center;gap:4px;height:30px;pointer-events:none!important}.ddn-mindmap-actions[hidden]{display:none}.ddn-mindmap-actions>button{pointer-events:auto;flex:none;display:grid;place-items:center;min-width:26px;width:26px;height:26px;padding:0;border:1px solid var(--ddn-ui-border);border-radius:50%;background:var(--ddn-ui-surface);color:var(--ddn-ui-text);font-size:15px;line-height:1;box-shadow:0 1px 4px #14243626}.ddn-mindmap-actions>button:hover{border-color:var(--ddn-ui-accent);background:var(--ddn-ui-surface-alt)}.ddn-mindmap-actions>button:focus-visible{outline:2px solid var(--ddn-ui-accent);outline-offset:2px}';
+    css.textContent = '.ddn-mindmap-actions{position:absolute;z-index:8;display:flex;justify-content:space-evenly;align-items:center;gap:4px;height:30px;pointer-events:none!important}.ddn-mindmap-actions[hidden]{display:none}.ddn-mindmap-actions>button{pointer-events:auto;flex:none;display:grid;place-items:center;min-width:26px;width:26px;height:26px;padding:0;border:1px solid var(--ddn-ui-border);border-radius:50%;background:var(--ddn-ui-surface);color:var(--ddn-ui-text);font-size:15px;line-height:1;box-shadow:0 1px 4px #14243626}.ddn-mindmap-actions>button>svg{width:14px;height:14px}.ddn-mindmap-actions>button:hover{border-color:var(--ddn-ui-accent);background:var(--ddn-ui-surface-alt)}.ddn-mindmap-actions>button:focus-visible{outline:2px solid var(--ddn-ui-accent);outline-offset:2px}';
     handle.container.append(css);
     handle.overlays.append(bar);
     let signature = '', disposed = false;
@@ -3668,12 +3859,13 @@ function mountMindmapActions(viewer, handle, bounds, actions) {
             return;
         signature = next;
         bar.replaceChildren();
-        const button = (symbol, name, action) => {
+        const button = (icon, actionName, name, action) => {
             const element = document.createElement('button');
             element.type = 'button';
-            element.textContent = symbol;
+            element.dataset.action = actionName;
             element.title = name;
             element.setAttribute('aria-label', name);
+            element.append((0, ui_icons_js_1.uiIcon)(document, icon));
             element.addEventListener('click', event => {
                 event.stopPropagation();
                 try {
@@ -3686,12 +3878,12 @@ function mountMindmapActions(viewer, handle, bounds, actions) {
             bar.append(element);
         };
         if (selected.left)
-            button('⥆', 'Add linked topic to the left', () => actions.add(handle.selectedEntry(), 'left'));
+            button('branch-left', 'add-left', 'Add linked topic to the left', () => actions.add(handle.selectedEntry(), 'left'));
         if (selected.right)
-            button('⥅', 'Add linked topic to the right', () => actions.add(handle.selectedEntry(), 'right'));
-        button('🗑️', 'Delete topic', () => actions.remove(handle.selectedEntry()));
-        button('📝', 'Edit topic name', () => actions.name(handle.selectedEntry()));
-        button('📓', 'Add, edit or delete topic notes', () => actions.notes(handle.selectedEntry()));
+            button('branch-right', 'add-right', 'Add linked topic to the right', () => actions.add(handle.selectedEntry(), 'right'));
+        button('trash', 'delete', 'Delete topic', () => actions.remove(handle.selectedEntry()));
+        button('pen', 'rename', 'Edit topic name', () => actions.name(handle.selectedEntry()));
+        button('notes', 'notes', 'Add, edit or delete topic notes', () => actions.notes(handle.selectedEntry()));
     };
     const unsubscribe = viewer.subscribe(event => {
         if (['ready', 'selection', 'viewport'].includes(event.kind))
@@ -4249,6 +4441,18 @@ function openProperties(viewer, panel, commit) {
         };
         const scope = makeSelect('Apply settings to');
         scopes.forEach((item, index) => scope.add(new Option(item.label, String(index))));
+        const activeChips = document.createElement('div');
+        activeChips.className = 'ddn-active-properties';
+        activeChips.setAttribute('aria-label', 'Configured settings');
+        activeChips.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin:2px 0';
+        body.append(activeChips);
+        const filterWrap = document.createElement('label'), filterInput = document.createElement('input');
+        filterInput.type = 'search';
+        filterInput.placeholder = 'Filter settings…';
+        filterInput.setAttribute('aria-label', 'Filter settings');
+        filterInput.dataset.ddnLiveIgnore = '';
+        filterWrap.append('Filter settings', filterInput);
+        body.append(filterWrap);
         const property = makeSelect('Setting'), editorArea = document.createElement('div');
         body.append(editorArea);
         const resetLabel = document.createElement('label'), reset = document.createElement('input');
@@ -4358,19 +4562,69 @@ function openProperties(viewer, panel, commit) {
         });
         reset.addEventListener('change', () => { dirty = true; editorArea.inert = reset.checked; });
         editorArea.addEventListener('ddn-settings-change', () => { dirty = true; });
-        property.addEventListener('change', event => {
-            event.stopPropagation();
-            const next = property.value;
-            property.value = selectedPath;
+        const selectProperty = (nextPath) => {
+            if (!nextPath || nextPath === selectedPath)
+                return;
             property.disabled = true;
             editorArea.inert = true;
             void (0, live_settings_js_1.flushLiveSettings)(body).then(() => {
                 if (!body.isConnected)
                     return;
-                property.value = next;
+                if (![...property.options].some(o => o.value === nextPath)) {
+                    const def = choices.find(c => c.path === nextPath);
+                    if (def)
+                        property.add(new Option(labels[def.path] ?? def.path, def.path));
+                }
+                property.value = nextPath;
                 render();
+                renderActiveChips();
                 message.textContent = '';
             }).catch(error => { message.textContent = error.message; }).finally(() => { property.disabled = false; editorArea.inert = reset.checked; });
+        };
+        const renderActiveChips = () => {
+            activeChips.replaceChildren();
+            const current = scopes[chosen];
+            if (!current || !handle.runtime.snapshot())
+                return;
+            const authoredRecord = (0, native_js_2.records)(handle.runtime.snapshot()).find(record => (0, native_js_2.refKey)(record.ref) === (0, native_js_2.refKey)(current.record.ref))?.record ?? current.record.record;
+            for (const item of choices) {
+                const authored = Object.hasOwn(changes, item.path) ? changes[item.path] : (0, native_js_2.pathValue)(authoredRecord, item.path);
+                if (authored === undefined)
+                    continue;
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'ddn-active-property-chip';
+                chip.dataset.propertyPath = item.path;
+                chip.dataset.ddnLiveIgnore = '';
+                const summaryVal = typeof authored === 'object' ? '…' : String(authored);
+                chip.textContent = `${labels[item.path] ?? item.path}: ${summaryVal.length > 18 ? summaryVal.slice(0, 18) + '…' : summaryVal}`;
+                chip.title = `Jump to ${labels[item.path] ?? item.path} (${item.path})`;
+                chip.style.cssText = `font-size:11px;padding:2px 7px;border-radius:999px;border:1px solid ${item.path === selectedPath ? 'var(--ddn-ui-accent)' : 'var(--ddn-ui-border)'};background:${item.path === selectedPath ? 'color-mix(in srgb,var(--ddn-ui-accent) 14%,var(--ddn-ui-surface))' : 'var(--ddn-ui-surface)'}`;
+                chip.addEventListener('click', event => { event.stopPropagation(); selectProperty(item.path); });
+                activeChips.append(chip);
+            }
+            activeChips.hidden = activeChips.childElementCount === 0;
+        };
+        const populatePropertyOptions = () => {
+            const q = filterInput.value.trim().toLowerCase();
+            const filtered = q ? choices.filter(item => `${labels[item.path] ?? ''} ${item.path}`.toLowerCase().includes(q)) : choices;
+            const list = filtered.length ? filtered : choices;
+            property.replaceChildren();
+            list.forEach(item => property.add(new Option(labels[item.path] ?? item.path, item.path)));
+            property.value = list.some(item => item.path === selectedPath) ? selectedPath : list[0]?.path ?? '';
+        };
+        filterInput.addEventListener('input', event => {
+            event.stopPropagation();
+            const prev = selectedPath;
+            populatePropertyOptions();
+            if (property.value && property.value !== prev)
+                selectProperty(property.value);
+        });
+        property.addEventListener('change', event => {
+            event.stopPropagation();
+            const next = property.value;
+            property.value = selectedPath;
+            selectProperty(next);
         });
         for (const input of [advancedValue, advancedReset])
             input.addEventListener('input', () => { advancedDirty = true; });
@@ -4394,12 +4648,11 @@ function openProperties(viewer, panel, commit) {
                 const ai = preferred.indexOf(a.path), bi = preferred.indexOf(b.path);
                 return (ai < 0 ? preferred.length : ai) - (bi < 0 ? preferred.length : bi) || a.path.localeCompare(b.path);
             });
-            property.replaceChildren();
-            choices.forEach(item => property.add(new Option(labels[item.path] ?? item.path, item.path)));
-            property.value = choices.some(item => item.path === selectedPath) ? selectedPath : choices[0]?.path ?? '';
+            populatePropertyOptions();
             loading = false;
             property.disabled = reset.disabled = false;
             render();
+            renderActiveChips();
         };
         scope.addEventListener('change', event => {
             event.stopPropagation();
@@ -4455,6 +4708,7 @@ function openProperties(viewer, panel, commit) {
                     if (item.effective !== undefined)
                         (0, schema_core_js_1.setPath)(values, item.path, clone(item.effective));
                 initialValue = clone(effective(selectedPath));
+                renderActiveChips();
             }
         };
     });
@@ -4490,7 +4744,7 @@ function mountResizeHandles(viewer, handle, options) {
     const document = handle.ownerDocument, NS = 'http://www.w3.org/2000/svg';
     let focusedOccurrence;
     const css = document.createElement('style');
-    css.textContent = '.ddn-element-resize{cursor:nwse-resize;touch-action:none;opacity:.65;outline:none}.ddn-element-resize:hover,.ddn-element-resize:focus-visible,[data-selected=true]>.ddn-element-resize{opacity:1}.ddn-element-resize .ddn-resize-pad{fill:#fff;fill-opacity:.85;stroke:#5278a1;stroke-opacity:.4}.ddn-element-resize path{fill:none;stroke:#416b98;stroke-width:1.5;stroke-linecap:round;pointer-events:none}.ddn-element-resize:focus-visible .ddn-resize-pad{stroke:#2563eb;stroke-width:2}';
+    css.textContent = '.ddn-element-resize{cursor:nwse-resize;touch-action:none;opacity:.65;outline:none}.ddn-element-resize:hover,.ddn-element-resize:focus-visible,[data-selected=true]>.ddn-element-resize{opacity:1}.ddn-element-resize .ddn-resize-pad,.ddn-element-resize-handles .ddn-resize-handle{fill:#fff;fill-opacity:.85;stroke:#5278a1;stroke-opacity:.55}.ddn-element-resize-handles .ddn-resize-handle{touch-action:none}.ddn-element-resize-handles .ddn-resize-handle:hover{stroke:#2563eb;stroke-width:1.5;fill-opacity:1}.ddn-element-resize path{fill:none;stroke:#416b98;stroke-width:1.5;stroke-linecap:round;pointer-events:none}.ddn-element-resize:focus-visible .ddn-resize-pad{stroke:#2563eb;stroke-width:2}';
     handle.container.append(css);
     const stopClick = (event) => { event.preventDefault(); event.stopPropagation(); };
     const clearFocus = (event) => {
@@ -4500,6 +4754,15 @@ function mountResizeHandles(viewer, handle, options) {
     };
     document.addEventListener('focusin', clearFocus);
     document.addEventListener('pointerdown', clearFocus, true);
+    const extraDirs = [
+        { dir: 'nw', cursor: 'nwse-resize' },
+        { dir: 'n', cursor: 'ns-resize' },
+        { dir: 'ne', cursor: 'nesw-resize' },
+        { dir: 'e', cursor: 'ew-resize' },
+        { dir: 's', cursor: 'ns-resize' },
+        { dir: 'sw', cursor: 'nesw-resize' },
+        { dir: 'w', cursor: 'ew-resize' },
+    ];
     function update() {
         const entries = new Map(handle.scene()?.entries.map(entry => [entry.item.occurrence, entry]));
         const matrix = handle.surface.getScreenCTM(), scale = matrix ? Math.hypot(matrix.a, matrix.b) : 1;
@@ -4511,15 +4774,40 @@ function mountResizeHandles(viewer, handle, options) {
                 continue;
             const entry = entries.get(occurrence);
             let grip = group.querySelector(':scope > .ddn-element-resize');
+            let extras = group.querySelector(':scope > .ddn-element-resize-handles');
             if (group.getAttribute('data-selected') !== 'true' || !entry || !options.allowed(entry) || handle.surface.dataset.lod === 'mini') {
                 if (focusedOccurrence === occurrence)
                     focusedOccurrence = undefined;
                 grip?.remove();
+                extras?.remove();
                 continue;
+            }
+            const current = () => handle.scene()?.entries.find(item => item.item.occurrence === occurrence);
+            if (!extras) {
+                extras = document.createElementNS(NS, 'g');
+                extras.classList.add('ddn-element-resize-handles');
+                for (const { dir, cursor } of extraDirs) {
+                    const rect = document.createElementNS(NS, 'rect');
+                    rect.setAttribute('class', 'ddn-resize-handle');
+                    rect.dataset.handle = dir;
+                    rect.style.cursor = cursor;
+                    for (const [k, v] of Object.entries({ width: 10, height: 10, rx: 2.5 }))
+                        rect.setAttribute(k, String(v));
+                    rect.addEventListener('pointerdown', event => {
+                        const target = current();
+                        if (group.getAttribute('data-selected') === 'true' && target && options.allowed(target))
+                            options.start(target, event, dir);
+                    });
+                    rect.addEventListener('click', stopClick);
+                    rect.addEventListener('dblclick', stopClick);
+                    extras.append(rect);
+                }
+                group.append(extras);
             }
             if (!grip) {
                 grip = document.createElementNS(NS, 'g');
-                grip.classList.add('ddn-element-resize');
+                grip.classList.add('ddn-element-resize', 'ddn-resize-handle');
+                grip.dataset.handle = 'se';
                 grip.setAttribute('role', 'button');
                 grip.setAttribute('tabindex', '0');
                 const title = document.createElementNS(NS, 'title');
@@ -4531,12 +4819,11 @@ function mountResizeHandles(viewer, handle, options) {
                 const lines = document.createElementNS(NS, 'path');
                 lines.setAttribute('d', 'M6 16L16 6M11 16L16 11M16 16L16 16');
                 grip.append(title, pad, lines);
-                const current = () => handle.scene()?.entries.find(item => item.item.occurrence === occurrence);
                 grip.addEventListener('focus', () => { focusedOccurrence = occurrence; });
                 grip.addEventListener('pointerdown', event => {
                     const target = current();
                     if (group.getAttribute('data-selected') === 'true' && target && options.allowed(target))
-                        options.start(target, event);
+                        options.start(target, event, 'se');
                 });
                 grip.addEventListener('keydown', event => {
                     const target = current();
@@ -4557,6 +4844,20 @@ function mountResizeHandles(viewer, handle, options) {
             }
             grip.setAttribute('aria-label', 'Resize ' + (0, native_js_1.titleOf)(entry.definition.record));
             const b = options.bounds(entry);
+            const coords = {
+                nw: [b.x, b.y],
+                n: [b.x + b.width / 2, b.y],
+                ne: [b.x + b.width, b.y],
+                e: [b.x + b.width, b.y + b.height / 2],
+                s: [b.x + b.width / 2, b.y + b.height],
+                sw: [b.x, b.y + b.height],
+                w: [b.x, b.y + b.height / 2],
+            };
+            for (const rect of extras.querySelectorAll('.ddn-resize-handle')) {
+                const dir = rect.dataset.handle;
+                const [hx, hy] = coords[dir];
+                rect.setAttribute('transform', `translate(${hx - 5 / scale} ${hy - 5 / scale}) scale(${1 / scale})`);
+            }
             grip.setAttribute('transform', `translate(${b.x + b.width - 20 / scale} ${b.y + b.height - 20 / scale}) scale(${1 / scale})`);
             if (focusedOccurrence === occurrence && (document.activeElement === document.body || document.activeElement === handle.surface))
                 grip.focus({ preventScroll: true });
@@ -4571,7 +4872,7 @@ function mountResizeHandles(viewer, handle, options) {
     const observer = Resize ? new Resize(update) : undefined;
     observer?.observe(handle.surface);
     update();
-    return () => { unsubscribe(); unselect(); unopen(); observer?.disconnect(); document.removeEventListener('focusin', clearFocus); document.removeEventListener('pointerdown', clearFocus, true); css.remove(); handle.surface.querySelectorAll('.ddn-element-resize').forEach(grip => grip.remove()); };
+    return () => { unsubscribe(); unselect(); unopen(); observer?.disconnect(); document.removeEventListener('focusin', clearFocus); document.removeEventListener('pointerdown', clearFocus, true); css.remove(); handle.surface.querySelectorAll('.ddn-element-resize,.ddn-element-resize-handles').forEach(grip => grip.remove()); };
 }
 
 },
@@ -4976,26 +5277,34 @@ function openSymbol(viewer, panel, commit) {
 "designer/src/view-layout-picker.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.EXTENDED_VIEW_LAYOUTS = void 0;
+exports.viewLayoutLabel = viewLayoutLabel;
 exports.viewLayoutDialog = viewLayoutDialog;
 exports.viewLayoutSource = viewLayoutSource;
 const view_surfaces_js_1 = require("profiles/src/view-surfaces.js");
 const dialogs_js_1 = require("designer/src/dialogs.js");
 const unavailable = ' Available in ScratchWeaver; unavailable in the open-source designer.';
-const pageChoices = [
-    { id: 'page-letter', label: 'Letter', detail: '8.5 × 11 in', hint: 'Letter paper · 8.5 × 11 inches (215.9 × 279.4 mm).' },
-    { id: 'page-legal', label: 'Legal', detail: '8.5 × 14 in', hint: 'Legal paper · 8.5 × 14 inches (215.9 × 355.6 mm).' },
-    { id: 'page-a1', label: 'A1', detail: '594 × 841 mm', hint: 'A1 paper · 594 × 841 mm.' },
-    { id: 'page-a2', label: 'A2', detail: '420 × 594 mm', hint: 'A2 paper · 420 × 594 mm.' },
-    { id: 'page-a3', label: 'A3', detail: '297 × 420 mm', hint: 'A3 paper · 297 × 420 mm.' },
-    { id: 'page-a4', label: 'A4', detail: '210 × 297 mm', hint: 'A4 paper · 210 × 297 mm.' },
-    { id: 'page-a5', label: 'A5', detail: '148 × 210 mm', hint: 'A5 paper · 148 × 210 mm.' },
-    { id: 'page-custom', label: 'Custom page', detail: 'Custom dimensions', hint: 'A physical page with a chosen width, height, units and orientation.' },
-].map(choice => ({ ...choice, kind: 'page', unavailable: true, hint: choice.hint + unavailable }));
-const presentationChoices = [
-    { id: 'presentation-wide', label: 'Widescreen', detail: '16:9 · PPTX / ODP', hint: 'Widescreen presentation layout · 16:9 proportions for PPTX or ODP slides.', width: 16, height: 9 },
-    { id: 'presentation-standard', label: 'Standard', detail: '4:3 · PPTX / ODP', hint: 'Standard presentation layout · 4:3 proportions for PPTX or ODP slides.', width: 4, height: 3 },
-    { id: 'presentation-custom', label: 'Custom slide', detail: 'Custom proportions', hint: 'A presentation layout with chosen proportions for PPTX or ODP slides.', width: 16, height: 10 },
-].map(choice => ({ ...choice, kind: 'presentation', unavailable: true, hint: choice.hint + unavailable }));
+const rawPageChoices = [
+    { id: 'page-letter', label: 'Letter', detail: '8.5 × 11 in', hint: 'Letter paper · 8.5 × 11 inches (215.9 × 279.4 mm).', width: 816, height: 1056 },
+    { id: 'page-legal', label: 'Legal', detail: '8.5 × 14 in', hint: 'Legal paper · 8.5 × 14 inches (215.9 × 355.6 mm).', width: 816, height: 1344 },
+    { id: 'page-a1', label: 'A1', detail: '594 × 841 mm', hint: 'A1 paper · 594 × 841 mm.', width: 2245, height: 3179 },
+    { id: 'page-a2', label: 'A2', detail: '420 × 594 mm', hint: 'A2 paper · 420 × 594 mm.', width: 1587, height: 2245 },
+    { id: 'page-a3', label: 'A3', detail: '297 × 420 mm', hint: 'A3 paper · 297 × 420 mm.', width: 1123, height: 1587 },
+    { id: 'page-a4', label: 'A4', detail: '210 × 297 mm', hint: 'A4 paper · 210 × 297 mm.', width: 794, height: 1123 },
+    { id: 'page-a5', label: 'A5', detail: '148 × 210 mm', hint: 'A5 paper · 148 × 210 mm.', width: 559, height: 794 },
+    { id: 'page-custom', label: 'Custom page', detail: 'Custom dimensions', hint: 'A physical page with a chosen width, height, units and orientation.', width: 816, height: 1056 },
+];
+const rawPresentationChoices = [
+    { id: 'presentation-wide', label: 'Widescreen', detail: '16:9 · PPTX / ODP', hint: 'Widescreen presentation layout · 16:9 proportions for PPTX or ODP slides.', width: 1920, height: 1080 },
+    { id: 'presentation-standard', label: 'Standard', detail: '4:3 · PPTX / ODP', hint: 'Standard presentation layout · 4:3 proportions for PPTX or ODP slides.', width: 1440, height: 1080 },
+    { id: 'presentation-custom', label: 'Custom slide', detail: 'Custom proportions', hint: 'A presentation layout with chosen proportions for PPTX or ODP slides.', width: 1920, height: 1200 },
+];
+exports.EXTENDED_VIEW_LAYOUTS = Object.freeze([
+    ...rawPageChoices.map(choice => Object.freeze({ ...choice, kind: 'page' })),
+    ...rawPresentationChoices.map(choice => Object.freeze({ ...choice, kind: 'presentation' })),
+]);
+const pageChoices = rawPageChoices.map(choice => ({ ...choice, kind: 'page', unavailable: true, hint: choice.hint + unavailable }));
+const presentationChoices = rawPresentationChoices.map(choice => ({ ...choice, kind: 'presentation', unavailable: true, hint: choice.hint + unavailable }));
 const style = `
 .ddn-ui-dialog.ddn-layout-dialog{max-height:min(780px,calc(100vh - 24px));max-height:min(780px,calc(100dvh - 24px))}
 .ddn-layout-intro{margin:0 0 8px;font-size:12px;line-height:1.45;color:var(--ddn-ui-muted)}
@@ -5047,11 +5356,16 @@ function preview(document, choice) {
     }
     return svg;
 }
+function viewLayoutLabel(preset) {
+    return (0, view_surfaces_js_1.getViewSurfacePreset)(preset)?.label ?? exports.EXTENDED_VIEW_LAYOUTS.find(item => item.id === preset)?.label ?? 'Dynamic';
+}
 function viewLayoutDialog(host, options) {
     const document = host.ownerDocument;
-    let selected = (0, view_surfaces_js_1.getViewSurfacePreset)(options.selected)?.id ?? 'dynamic';
+    const extended = options.allowExtended === true;
+    const isAdmitted = (id) => !!(0, view_surfaces_js_1.getViewSurfacePreset)(id) || (extended && exports.EXTENDED_VIEW_LAYOUTS.some(item => item.id === id));
+    let selected = isAdmitted(options.selected) ? options.selected : 'dynamic';
     const dialog = (0, dialogs_js_1.createStandardDialog)(host, { title: 'Choose view layout', applyLabel: 'Continue', onApply() {
-            if (!(0, view_surfaces_js_1.getViewSurfacePreset)(selected))
+            if (!isAdmitted(selected))
                 throw Error('Choose an available view layout.');
             dialog.close();
             options.onContinue(selected);
@@ -5075,14 +5389,16 @@ function viewLayoutDialog(host, options) {
         hint: preset.description + (preset.id === 'dynamic' ? ' Uses the diagram type’s normal appearance defaults.' : ' Fixed size; content fits within the surface. Sans-serif text scales to the display, with dark text on a neutral white background. Customise colours, fonts and branding later.'),
         ...(preset.width && preset.height ? { width: preset.width, height: preset.height } : {}),
     }));
-    const choicesById = new Map([...available, ...pageChoices, ...presentationChoices].map(choice => [choice.id, choice]));
+    const pages = extended ? exports.EXTENDED_VIEW_LAYOUTS.filter(item => item.kind === 'page') : pageChoices;
+    const presentations = extended ? exports.EXTENDED_VIEW_LAYOUTS.filter(item => item.kind === 'presentation') : presentationChoices;
+    const choicesById = new Map([...available, ...pages, ...presentations].map(choice => [choice.id, choice]));
     const defaultHint = () => {
         const focused = document.activeElement;
         return (focused && dialog.body.contains(focused) ? choicesById.get(focused.dataset.layout ?? '') : undefined)?.hint
             ?? choicesById.get(selected).hint;
     };
     hint.textContent = defaultHint();
-    for (const [title, choices, closed] of [['Dynamic and TV dashboards', available, false], ['Physical pages', pageChoices, true], ['Presentations', presentationChoices, true]]) {
+    for (const [title, choices, closed] of [['Dynamic and TV dashboards', available, false], ['Physical pages', pages, !extended], ['Presentations', presentations, !extended]]) {
         const section = document.createElement('section');
         section.className = 'ddn-layout-group';
         const heading = document.createElement('h4');
@@ -5123,6 +5439,14 @@ function viewLayoutDialog(host, options) {
                     button.setAttribute('aria-pressed', String(button.dataset.layout === selected));
                 hint.textContent = choice.hint;
             });
+            tile.addEventListener('dblclick', () => {
+                if (choice.unavailable)
+                    return;
+                selected = choice.id;
+                for (const button of dialog.body.querySelectorAll('.ddn-layout-card[aria-pressed]'))
+                    button.setAttribute('aria-pressed', String(button.dataset.layout === selected));
+                dialog.applyButton?.click();
+            });
             tile.addEventListener('mouseenter', () => { hint.textContent = choice.hint; });
             tile.addEventListener('focus', () => { hint.textContent = choice.hint; });
             tile.addEventListener('mouseleave', () => {
@@ -5147,10 +5471,13 @@ function viewLayoutDialog(host, options) {
     }
     return dialog;
 }
-function viewLayoutSource(preset) {
-    if (!(0, view_surfaces_js_1.getViewSurfacePreset)(preset))
-        throw Error('Choose an available view layout.');
-    return preset === 'dynamic' ? '' : `    with\n        surface.preset ${preset}\n`;
+function viewLayoutSource(preset, allowExtended = false) {
+    if ((0, view_surfaces_js_1.getViewSurfacePreset)(preset))
+        return preset === 'dynamic' ? '' : `    with\n        surface.preset ${preset}\n`;
+    const ext = allowExtended ? exports.EXTENDED_VIEW_LAYOUTS.find(item => item.id === preset) : undefined;
+    if (ext && ext.width && ext.height)
+        return `    with\n        surface.width ${ext.width}\n        surface.height ${ext.height}\n`;
+    throw Error('Choose an available view layout.');
 }
 
 },
@@ -5323,6 +5650,16 @@ function viewTypePicker(body, profiles, label = 'View profile', selected) {
                     for (const button of grid.querySelectorAll('button[data-profile]'))
                         button.setAttribute('aria-pressed', String(button.dataset.profile === value));
                     status.textContent = `${(0, view_previews_js_1.profileLabel)(profile.id)} selected.`;
+                });
+                tile.addEventListener('dblclick', () => {
+                    choose(profile.id);
+                    for (const button of grid.querySelectorAll('button[data-profile]'))
+                        button.setAttribute('aria-pressed', String(button.dataset.profile === value));
+                    status.textContent = `${(0, view_previews_js_1.profileLabel)(profile.id)} selected.`;
+                    const hostDialog = tile.closest('[role="dialog"]');
+                    const primary = hostDialog?.querySelector('button[data-ddn-apply], .ddn-form-actions button:first-child');
+                    if (primary && !primary.disabled)
+                        primary.click();
                 });
                 grid.append(tile);
             }

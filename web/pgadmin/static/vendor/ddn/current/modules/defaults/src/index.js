@@ -391,6 +391,17 @@ export function resolveProperties(snapshot, target, context = {}) {
     const profile = typeof view?.record.profile === 'string' ? view.record.profile : typeof item.record.profile === 'string' ? item.record.profile : 'ddn@1';
     const method = view ? methodNames[getProfile(profile)?.method ?? ''] : typeof wa?.method === 'string' ? wa.method : 'ddn';
     let theme, surfaceTypography;
+    if (wa && item.owner !== 'workarea') {
+        const directTheme = getPath(wa, 'style.theme');
+        if (typeof directTheme === 'string')
+            theme = directTheme;
+        else {
+            const wr = resolve(wa, 'workarea', { file: snapshot.rootFile, ...(method ? { method } : {}), profile, fileDefaults: rules(root?.defaults), workareaDefaults: defaultProviders(wa.defaults, snapshot.rootFile), styles: styleRules });
+            const p = wr.properties.find(x => x.path === 'style.theme');
+            if (p && !p.origin.startsWith('standard:'))
+                theme = String(p.value);
+        }
+    }
     const surfacePreset = getPath(view?.record, 'surface.preset');
     if (view && item.owner !== 'view_definition' && item.owner !== 'document') {
         let cache = viewThemes.get(snapshot);
@@ -403,7 +414,7 @@ export function resolveProperties(snapshot, target, context = {}) {
         if (settings === undefined) {
             const values = resolveProperties(snapshot, view.ref, { styles: context.styles ?? [] }).values;
             const surface = getViewSurfacePreset(surfacePreset);
-            settings = { theme: String(getPath(values, 'style.theme') ?? 'default'), ...(surface && surface.id !== 'dynamic' ? { typography: { font: String(getPath(values, 'style.font') ?? 'sans'), fontSize: Number(getPath(values, 'style.font_size') ?? 24) } } : {}) };
+            settings = { theme: String(getPath(values, 'style.theme') ?? theme ?? 'default'), ...(surface && surface.id !== 'dynamic' ? { typography: { font: String(getPath(values, 'style.font') ?? 'sans'), fontSize: Number(getPath(values, 'style.font_size') ?? 24) } } : {}) };
             if (cache.size > 512)
                 cache.clear();
             cache.set(key, settings);

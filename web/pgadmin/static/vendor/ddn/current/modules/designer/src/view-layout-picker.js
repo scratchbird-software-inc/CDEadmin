@@ -1,21 +1,27 @@
 import { VIEW_SURFACE_PRESETS, getViewSurfacePreset } from '../../profiles/src/view-surfaces.js';
 import { createStandardDialog } from './dialogs.js';
 const unavailable = ' Available in ScratchWeaver; unavailable in the open-source designer.';
-const pageChoices = [
-    { id: 'page-letter', label: 'Letter', detail: '8.5 × 11 in', hint: 'Letter paper · 8.5 × 11 inches (215.9 × 279.4 mm).' },
-    { id: 'page-legal', label: 'Legal', detail: '8.5 × 14 in', hint: 'Legal paper · 8.5 × 14 inches (215.9 × 355.6 mm).' },
-    { id: 'page-a1', label: 'A1', detail: '594 × 841 mm', hint: 'A1 paper · 594 × 841 mm.' },
-    { id: 'page-a2', label: 'A2', detail: '420 × 594 mm', hint: 'A2 paper · 420 × 594 mm.' },
-    { id: 'page-a3', label: 'A3', detail: '297 × 420 mm', hint: 'A3 paper · 297 × 420 mm.' },
-    { id: 'page-a4', label: 'A4', detail: '210 × 297 mm', hint: 'A4 paper · 210 × 297 mm.' },
-    { id: 'page-a5', label: 'A5', detail: '148 × 210 mm', hint: 'A5 paper · 148 × 210 mm.' },
-    { id: 'page-custom', label: 'Custom page', detail: 'Custom dimensions', hint: 'A physical page with a chosen width, height, units and orientation.' },
-].map(choice => ({ ...choice, kind: 'page', unavailable: true, hint: choice.hint + unavailable }));
-const presentationChoices = [
-    { id: 'presentation-wide', label: 'Widescreen', detail: '16:9 · PPTX / ODP', hint: 'Widescreen presentation layout · 16:9 proportions for PPTX or ODP slides.', width: 16, height: 9 },
-    { id: 'presentation-standard', label: 'Standard', detail: '4:3 · PPTX / ODP', hint: 'Standard presentation layout · 4:3 proportions for PPTX or ODP slides.', width: 4, height: 3 },
-    { id: 'presentation-custom', label: 'Custom slide', detail: 'Custom proportions', hint: 'A presentation layout with chosen proportions for PPTX or ODP slides.', width: 16, height: 10 },
-].map(choice => ({ ...choice, kind: 'presentation', unavailable: true, hint: choice.hint + unavailable }));
+const rawPageChoices = [
+    { id: 'page-letter', label: 'Letter', detail: '8.5 × 11 in', hint: 'Letter paper · 8.5 × 11 inches (215.9 × 279.4 mm).', width: 816, height: 1056 },
+    { id: 'page-legal', label: 'Legal', detail: '8.5 × 14 in', hint: 'Legal paper · 8.5 × 14 inches (215.9 × 355.6 mm).', width: 816, height: 1344 },
+    { id: 'page-a1', label: 'A1', detail: '594 × 841 mm', hint: 'A1 paper · 594 × 841 mm.', width: 2245, height: 3179 },
+    { id: 'page-a2', label: 'A2', detail: '420 × 594 mm', hint: 'A2 paper · 420 × 594 mm.', width: 1587, height: 2245 },
+    { id: 'page-a3', label: 'A3', detail: '297 × 420 mm', hint: 'A3 paper · 297 × 420 mm.', width: 1123, height: 1587 },
+    { id: 'page-a4', label: 'A4', detail: '210 × 297 mm', hint: 'A4 paper · 210 × 297 mm.', width: 794, height: 1123 },
+    { id: 'page-a5', label: 'A5', detail: '148 × 210 mm', hint: 'A5 paper · 148 × 210 mm.', width: 559, height: 794 },
+    { id: 'page-custom', label: 'Custom page', detail: 'Custom dimensions', hint: 'A physical page with a chosen width, height, units and orientation.', width: 816, height: 1056 },
+];
+const rawPresentationChoices = [
+    { id: 'presentation-wide', label: 'Widescreen', detail: '16:9 · PPTX / ODP', hint: 'Widescreen presentation layout · 16:9 proportions for PPTX or ODP slides.', width: 1920, height: 1080 },
+    { id: 'presentation-standard', label: 'Standard', detail: '4:3 · PPTX / ODP', hint: 'Standard presentation layout · 4:3 proportions for PPTX or ODP slides.', width: 1440, height: 1080 },
+    { id: 'presentation-custom', label: 'Custom slide', detail: 'Custom proportions', hint: 'A presentation layout with chosen proportions for PPTX or ODP slides.', width: 1920, height: 1200 },
+];
+export const EXTENDED_VIEW_LAYOUTS = Object.freeze([
+    ...rawPageChoices.map(choice => Object.freeze({ ...choice, kind: 'page' })),
+    ...rawPresentationChoices.map(choice => Object.freeze({ ...choice, kind: 'presentation' })),
+]);
+const pageChoices = rawPageChoices.map(choice => ({ ...choice, kind: 'page', unavailable: true, hint: choice.hint + unavailable }));
+const presentationChoices = rawPresentationChoices.map(choice => ({ ...choice, kind: 'presentation', unavailable: true, hint: choice.hint + unavailable }));
 const style = `
 .ddn-ui-dialog.ddn-layout-dialog{max-height:min(780px,calc(100vh - 24px));max-height:min(780px,calc(100dvh - 24px))}
 .ddn-layout-intro{margin:0 0 8px;font-size:12px;line-height:1.45;color:var(--ddn-ui-muted)}
@@ -67,12 +73,17 @@ function preview(document, choice) {
     }
     return svg;
 }
+export function viewLayoutLabel(preset) {
+    return getViewSurfacePreset(preset)?.label ?? EXTENDED_VIEW_LAYOUTS.find(item => item.id === preset)?.label ?? 'Dynamic';
+}
 /** Surface choice is independent of the later diagram method and profile. */
 export function viewLayoutDialog(host, options) {
     const document = host.ownerDocument;
-    let selected = getViewSurfacePreset(options.selected)?.id ?? 'dynamic';
+    const extended = options.allowExtended === true;
+    const isAdmitted = (id) => !!getViewSurfacePreset(id) || (extended && EXTENDED_VIEW_LAYOUTS.some(item => item.id === id));
+    let selected = isAdmitted(options.selected) ? options.selected : 'dynamic';
     const dialog = createStandardDialog(host, { title: 'Choose view layout', applyLabel: 'Continue', onApply() {
-            if (!getViewSurfacePreset(selected))
+            if (!isAdmitted(selected))
                 throw Error('Choose an available view layout.');
             dialog.close();
             options.onContinue(selected);
@@ -96,14 +107,16 @@ export function viewLayoutDialog(host, options) {
         hint: preset.description + (preset.id === 'dynamic' ? ' Uses the diagram type’s normal appearance defaults.' : ' Fixed size; content fits within the surface. Sans-serif text scales to the display, with dark text on a neutral white background. Customise colours, fonts and branding later.'),
         ...(preset.width && preset.height ? { width: preset.width, height: preset.height } : {}),
     }));
-    const choicesById = new Map([...available, ...pageChoices, ...presentationChoices].map(choice => [choice.id, choice]));
+    const pages = extended ? EXTENDED_VIEW_LAYOUTS.filter(item => item.kind === 'page') : pageChoices;
+    const presentations = extended ? EXTENDED_VIEW_LAYOUTS.filter(item => item.kind === 'presentation') : presentationChoices;
+    const choicesById = new Map([...available, ...pages, ...presentations].map(choice => [choice.id, choice]));
     const defaultHint = () => {
         const focused = document.activeElement;
         return (focused && dialog.body.contains(focused) ? choicesById.get(focused.dataset.layout ?? '') : undefined)?.hint
             ?? choicesById.get(selected).hint;
     };
     hint.textContent = defaultHint();
-    for (const [title, choices, closed] of [['Dynamic and TV dashboards', available, false], ['Physical pages', pageChoices, true], ['Presentations', presentationChoices, true]]) {
+    for (const [title, choices, closed] of [['Dynamic and TV dashboards', available, false], ['Physical pages', pages, !extended], ['Presentations', presentations, !extended]]) {
         const section = document.createElement('section');
         section.className = 'ddn-layout-group';
         const heading = document.createElement('h4');
@@ -144,6 +157,14 @@ export function viewLayoutDialog(host, options) {
                     button.setAttribute('aria-pressed', String(button.dataset.layout === selected));
                 hint.textContent = choice.hint;
             });
+            tile.addEventListener('dblclick', () => {
+                if (choice.unavailable)
+                    return;
+                selected = choice.id;
+                for (const button of dialog.body.querySelectorAll('.ddn-layout-card[aria-pressed]'))
+                    button.setAttribute('aria-pressed', String(button.dataset.layout === selected));
+                dialog.applyButton?.click();
+            });
             tile.addEventListener('mouseenter', () => { hint.textContent = choice.hint; });
             tile.addEventListener('focus', () => { hint.textContent = choice.hint; });
             tile.addEventListener('mouseleave', () => { if (document.activeElement !== tile)
@@ -165,9 +186,12 @@ export function viewLayoutDialog(host, options) {
     return dialog;
 }
 /** Dynamic remains implicit; a fixed layout stores only its versioned recipe. */
-export function viewLayoutSource(preset) {
-    if (!getViewSurfacePreset(preset))
-        throw Error('Choose an available view layout.');
-    return preset === 'dynamic' ? '' : `    with\n        surface.preset ${preset}\n`;
+export function viewLayoutSource(preset, allowExtended = false) {
+    if (getViewSurfacePreset(preset))
+        return preset === 'dynamic' ? '' : `    with\n        surface.preset ${preset}\n`;
+    const ext = allowExtended ? EXTENDED_VIEW_LAYOUTS.find(item => item.id === preset) : undefined;
+    if (ext && ext.width && ext.height)
+        return `    with\n        surface.width ${ext.width}\n        surface.height ${ext.height}\n`;
+    throw Error('Choose an available view layout.');
 }
 //# sourceMappingURL=view-layout-picker.js.map

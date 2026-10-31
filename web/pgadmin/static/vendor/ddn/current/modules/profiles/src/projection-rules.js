@@ -169,7 +169,9 @@ export function projectionDiagnostics(view, records, review) {
         const values = [], categories = new Set(), series = new Set(), pairs = new Set(), dates = new Set(), nodeNames = new Set();
         const groups = new Map(), graph = new Map();
         for (const row of rows) {
+            const xKey = str(options.x) || 'x', yKey = str(options[samples ? 'x' : 'y']) || (samples ? 'x' : 'y');
             const x = binding(row, 'x'), y = binding(row, samples ? 'x' : 'y'), s = binding(row, 'series');
+            const numHint = (v, k) => typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? ` (got string "${v}"; declare column "${k}" with "type number" or use a typed column header)` : '';
             const missing = x === undefined || x === null || mark !== 'candlestick' && (y === undefined || y === null);
             if (missing) {
                 if ((options.missing ?? 'error') === 'error')
@@ -178,14 +180,14 @@ export function projectionDiagnostics(view, records, review) {
                     continue;
             }
             if (mark !== 'candlestick' && !num(y))
-                issue('DDN-CHART-NUMBER', 'Chart measurements must be finite numbers; strings are not coerced', row.source);
+                issue('DDN-CHART-NUMBER', 'Chart measurements must be finite numbers; strings are not coerced' + numHint(y, yKey), row.source);
             if (num(y)) {
                 values.push(y);
                 if (nonnegative && y < 0 || (linksMark || mark === 'wordcloud') && y <= 0)
                     issue('DDN-CHART-RANGE', mark + ' has an out-of-range value', row.source);
             }
             if ((samples || options.x_type === 'number') && !num(x))
-                issue('DDN-CHART-NUMBER', 'Numeric x must be finite', row.source);
+                issue('DDN-CHART-NUMBER', 'Numeric x must be finite' + numHint(x, xKey), row.source);
             if (options.x_type === 'date' && (typeof x !== 'string' || !validDate(x)))
                 issue('DDN-CHART-DATE', 'Date axes require ISO dates or zoned instants', row.source);
             if (options.unit !== undefined && row.values.unit !== undefined && options.unit !== row.values.unit)

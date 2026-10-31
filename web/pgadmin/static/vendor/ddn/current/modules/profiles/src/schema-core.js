@@ -123,9 +123,9 @@ export function validateSchema(schema, value, options = {}) {
             }
         }
         if (node.enum && !node.enum.some(x => stableStringify(x) === stableStringify(v)))
-            fail('enum', 'Value is outside the registered choices');
+            fail('enum', 'Value is outside the registered choices (' + node.enum.slice(0, 12).map(x => String(x)).join(', ') + (node.enum.length > 12 ? ', ...' : '') + ')');
         if (own(node, 'const') && stableStringify(node.const) !== stableStringify(v))
-            fail('const', 'Value differs from the required constant');
+            fail('const', 'Value differs from the required constant (' + String(node.const) + ')');
         if (typeof v === 'number') {
             if (!Number.isFinite(v))
                 fail('type', 'A finite number is required');

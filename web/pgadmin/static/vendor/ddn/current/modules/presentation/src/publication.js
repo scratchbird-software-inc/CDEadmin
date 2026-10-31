@@ -37,12 +37,23 @@ export function publicationScene(items, content, publication, title, date) {
     const bounds = { x: 0, y: 0, width, height };
     const primitives = [{ kind: 'rect', bounds, paint: { fill: str(pathValue(record, 'background.color'), '#ffffff'), stroke: 'none', rx: 0 } }];
     const border = num(pathValue(record, 'border.width'));
-    if (border > 0)
-        primitives.push({ kind: 'rect', bounds: { x: left / 2, y: top / 2, width: width - (left + right) / 2, height: height - (top + bottom) / 2 }, paint: { fill: 'none', stroke: str(pathValue(record, 'border.color'), '#475569'), 'stroke-width': border, rx: 0 } });
+    const look = str(pathValue(record, 'style.look'));
+    const defaultFont = str(pathValue(record, 'style.font'), 'sans');
+    if (border > 0) {
+        const b = { x: left / 2, y: top / 2, width: width - (left + right) / 2, height: height - (top + bottom) / 2 }, stroke = str(pathValue(record, 'border.color'), '#475569');
+        if (look === 'handdrawn') {
+            let state = num(pathValue(record, 'style.seed'), 42) >>> 0;
+            const roughness = num(pathValue(record, 'style.roughness'), 1), rnd = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return (state / 4294967296 - .5) * roughness * 2; };
+            const pts = [[b.x, b.y], [b.x + b.width, b.y], [b.x + b.width, b.y + b.height], [b.x, b.y + b.height], [b.x, b.y]].map(([px, py]) => `${px + rnd()},${py + rnd()}`);
+            primitives.push({ kind: 'path', d: 'M' + pts.join('L') + 'Z', paint: { fill: 'none', stroke, 'stroke-width': border } });
+        }
+        else
+            primitives.push({ kind: 'rect', bounds: b, paint: { fill: 'none', stroke, 'stroke-width': border, rx: 0 } });
+    }
     for (const [items, y] of [[header, top], [footer, height - bottom - footerHeight]]) {
         for (const { run, position, fontSize, lines } of items) {
             const align = str(run.align, position);
-            primitives.push({ kind: 'text', runs: lines.map((text, index) => ({ text, x: align === 'right' ? width - right : align === 'center' ? width / 2 : left, y: y + 6 + fontSize + index * fontSize * 1.3, fontKey: str(run.font, 'sans'), style: { 'font-size': fontSize, fill: str(run.color, '#334155'), 'text-anchor': align === 'right' ? 'end' : align === 'center' ? 'middle' : 'start', 'font-weight': num(run.weight, 400), ...(run.italic ? { 'font-style': 'italic' } : {}), ...(run.decoration === 'strike' ? { 'text-decoration': 'line-through' } : {}), ...(run.variant === 'small_caps' ? { 'font-variant': 'small-caps' } : {}) } })) });
+            primitives.push({ kind: 'text', runs: lines.map((text, index) => ({ text, x: align === 'right' ? width - right : align === 'center' ? width / 2 : left, y: y + 6 + fontSize + index * fontSize * 1.3, fontKey: str(run.font, defaultFont), style: { 'font-size': fontSize, fill: str(run.color, '#334155'), 'text-anchor': align === 'right' ? 'end' : align === 'center' ? 'middle' : 'start', 'font-weight': num(run.weight, 400), ...(run.italic ? { 'font-style': 'italic' } : {}), ...(run.decoration === 'strike' ? { 'text-decoration': 'line-through' } : {}), ...(run.variant === 'small_caps' ? { 'font-variant': 'small-caps' } : {}) } })) });
         }
     }
     const frame = { occurrence: 'publication:' + publication.ref.id, target: publication.ref, view: items[0]?.view ?? publication.ref, layer: 'views', bounds, transform: [1, 0, 0, 1, 0, 0], primitives, hitTargets: [], accessible: { role: 'graphics-object', label: title }, evidence: 'current' };

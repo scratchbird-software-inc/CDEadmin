@@ -160,6 +160,16 @@ export function viewTypePicker(body, profiles, label = 'View profile', selected)
                         button.setAttribute('aria-pressed', String(button.dataset.profile === value));
                     status.textContent = `${profileLabel(profile.id)} selected.`;
                 });
+                tile.addEventListener('dblclick', () => {
+                    choose(profile.id);
+                    for (const button of grid.querySelectorAll('button[data-profile]'))
+                        button.setAttribute('aria-pressed', String(button.dataset.profile === value));
+                    status.textContent = `${profileLabel(profile.id)} selected.`;
+                    const hostDialog = tile.closest('[role="dialog"]');
+                    const primary = hostDialog?.querySelector('button[data-ddn-apply], .ddn-form-actions button:first-child');
+                    if (primary && !primary.disabled)
+                        primary.click();
+                });
                 grid.append(tile);
             }
             if (!matches.length) {

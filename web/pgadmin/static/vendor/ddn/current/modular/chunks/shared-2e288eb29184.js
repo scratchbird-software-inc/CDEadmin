@@ -5,7 +5,7 @@
  * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
  * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
  */
-(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-98e37fe0f266","version":"ddn-next-1","releaseHash":"4f601dab202a346b52c70ff1ec6bfdfb7c17ab3fbd59854e38cda422320d3131","dependencies":["shared-89ca0b52749b"],"modules":[{"id":"profiles/src/analysis-profile.js","bytes":7506,"sha256":"2e02a6465751a7392a33d1f9efe9c3837bc71684e057cd5aac1ebf850ae84b8e","dependencies":["profiles/src/core.js","profiles/src/schema-core.js","profiles/src/analysis.js","profiles/src/semantic.js"]},{"id":"profiles/src/analysis.js","bytes":17986,"sha256":"7a00c18e387e248915f5cf372587210dde0fde4a4d6117254e23b2c3d7ea994a","dependencies":["profiles/src/schema-core.js"]},{"id":"profiles/src/projection-rules.js","bytes":49930,"sha256":"26aee5b29aa58a24b0a2ff011ddaec2c662ce0386d56e3a0642c665d5440f7e2","dependencies":["profiles/src/core.js","profiles/src/schema-core.js","profiles/src/semantic.js"]},{"id":"profiles/src/semantic.js","bytes":67094,"sha256":"7f02c00a05eb63e073a1002817d5c8e266b0a0680a9e6d26de138d04f876d264","dependencies":["profiles/src/core.js","profiles/src/schema-core.js","profiles/src/analysis.js","profiles/src/analysis-profile.js","profiles/src/projection-rules.js"]}],"hash":"ed76d8c00864af0e785d2e0879426fc905f2612e496d2e138e6875328c05d1a4"},{"profiles/src/analysis-profile.js":function(module,exports,require){
+(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-2e288eb29184","version":"ddn-next-1","releaseHash":"a013ac52c7b3173ca4a5c5558fb8bac7b899854da330646dcd39702d0d86b778","dependencies":["shared-4dfa2129e2cc"],"modules":[{"id":"profiles/src/analysis-profile.js","bytes":7506,"sha256":"2e02a6465751a7392a33d1f9efe9c3837bc71684e057cd5aac1ebf850ae84b8e","dependencies":["profiles/src/core.js","profiles/src/schema-core.js","profiles/src/analysis.js","profiles/src/semantic.js"]},{"id":"profiles/src/analysis.js","bytes":17986,"sha256":"7a00c18e387e248915f5cf372587210dde0fde4a4d6117254e23b2c3d7ea994a","dependencies":["profiles/src/schema-core.js"]},{"id":"profiles/src/projection-rules.js","bytes":50294,"sha256":"ac49f8bfe243d7d61bc93b1b1dfd3b8e9e03689eb11b97fae4a8c55427e4d812","dependencies":["profiles/src/core.js","profiles/src/schema-core.js","profiles/src/semantic.js"]},{"id":"profiles/src/semantic.js","bytes":67094,"sha256":"7f02c00a05eb63e073a1002817d5c8e266b0a0680a9e6d26de138d04f876d264","dependencies":["profiles/src/core.js","profiles/src/schema-core.js","profiles/src/analysis.js","profiles/src/analysis-profile.js","profiles/src/projection-rules.js"]}],"hash":"15aa8f2605b541200417706b7d8b2a2ad4b981f595bf8783e747a12adc5bbb43"},{"profiles/src/analysis-profile.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.flatTraceAnalysis = flatTraceAnalysis;
@@ -592,7 +592,9 @@ function projectionDiagnostics(view, records, review) {
         const values = [], categories = new Set(), series = new Set(), pairs = new Set(), dates = new Set(), nodeNames = new Set();
         const groups = new Map(), graph = new Map();
         for (const row of rows) {
+            const xKey = str(options.x) || 'x', yKey = str(options[samples ? 'x' : 'y']) || (samples ? 'x' : 'y');
             const x = binding(row, 'x'), y = binding(row, samples ? 'x' : 'y'), s = binding(row, 'series');
+            const numHint = (v, k) => typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? ` (got string "${v}"; declare column "${k}" with "type number" or use a typed column header)` : '';
             const missing = x === undefined || x === null || mark !== 'candlestick' && (y === undefined || y === null);
             if (missing) {
                 if ((options.missing ?? 'error') === 'error')
@@ -601,14 +603,14 @@ function projectionDiagnostics(view, records, review) {
                     continue;
             }
             if (mark !== 'candlestick' && !num(y))
-                issue('DDN-CHART-NUMBER', 'Chart measurements must be finite numbers; strings are not coerced', row.source);
+                issue('DDN-CHART-NUMBER', 'Chart measurements must be finite numbers; strings are not coerced' + numHint(y, yKey), row.source);
             if (num(y)) {
                 values.push(y);
                 if (nonnegative && y < 0 || (linksMark || mark === 'wordcloud') && y <= 0)
                     issue('DDN-CHART-RANGE', mark + ' has an out-of-range value', row.source);
             }
             if ((samples || options.x_type === 'number') && !num(x))
-                issue('DDN-CHART-NUMBER', 'Numeric x must be finite', row.source);
+                issue('DDN-CHART-NUMBER', 'Numeric x must be finite' + numHint(x, xKey), row.source);
             if (options.x_type === 'date' && (typeof x !== 'string' || !validDate(x)))
                 issue('DDN-CHART-DATE', 'Date axes require ISO dates or zoned instants', row.source);
             if (options.unit !== undefined && row.values.unit !== undefined && options.unit !== row.values.unit)

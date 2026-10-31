@@ -5,7 +5,7 @@
  * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
  * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
  */
-(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-f98a38a4da4d","version":"ddn-next-1","releaseHash":"4f601dab202a346b52c70ff1ec6bfdfb7c17ab3fbd59854e38cda422320d3131","dependencies":["shared-89ca0b52749b"],"modules":[{"id":"defaults/src/index.js","bytes":36886,"sha256":"14acd964f86cad4cbcf930b48e97c24dd0cf25e022b52aed632ab6200979918e","dependencies":["profiles/src/schema-core.js","profiles/src/core.js","profiles/src/view-surfaces.js","defaults/src/method-names.js"]},{"id":"defaults/src/method-names.js","bytes":708,"sha256":"ae651ed9a4cf426dbc6577a4a8824efbd2a45ee90e172d2a59466f419e96585a","dependencies":[]},{"id":"execution/src/compute.js","bytes":3539,"sha256":"77700d3fb5bd5ddc261864f5ccd456630d1a00a2b56cfc9642d969a8435b85f5","dependencies":["language/src/index.js","verifier/src/index.js","execution/src/index.js"]},{"id":"execution/src/index.js","bytes":10957,"sha256":"15ecd00834ea6e1403abaacf606aaf98894b4b4640d4565afe143bf95f5cd4cc","dependencies":[]},{"id":"language/src/index.js","bytes":126617,"sha256":"b8eb9ee97db89add0e0a6e40009dc1d355b22a549d5547d7ac384137174c5e4c","dependencies":["model/src/index.js","language/src/schema.js"]},{"id":"language/src/schema.js","bytes":1572,"sha256":"edc9dfd9697f21ec59d860804243265333142daeae550ea4500d43545e91135a","dependencies":["profiles/src/schema-core.js"]},{"id":"model/src/index.js","bytes":7704,"sha256":"ef309bcf235d6d10ec6c21c889c43882ecbb36956a62c56c93ba16c68f3bda7d","dependencies":[]},{"id":"profiles/src/view-surfaces.js","bytes":1426,"sha256":"c31c88b49fc8263b9e98dd49fafa9266bfc2ce7d06f7eee2833eb1c3a828b296","dependencies":[]},{"id":"verifier/src/index.js","bytes":69282,"sha256":"3709c98b354ba804a89aee63e2257d9f278f9b65403b945bb6408aee8b101368","dependencies":["language/src/index.js","execution/src/index.js","model/src/index.js","profiles/src/core.js","profiles/src/schema-core.js","defaults/src/index.js"]}],"hash":"393615f4f4643cbbcd63e28898cc9b88ce418cebab5baa683dadb0984667a3f5"},{"defaults/src/index.js":function(module,exports,require){
+(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-0e2e62c8ac26","version":"ddn-next-1","releaseHash":"a013ac52c7b3173ca4a5c5558fb8bac7b899854da330646dcd39702d0d86b778","dependencies":["shared-4dfa2129e2cc"],"modules":[{"id":"defaults/src/index.js","bytes":37537,"sha256":"54dc7da86968984b9dfbbbb2b726b1b1806000126f33c3d0cd0bacc46dd23a9f","dependencies":["profiles/src/schema-core.js","profiles/src/core.js","profiles/src/view-surfaces.js","defaults/src/method-names.js"]},{"id":"defaults/src/method-names.js","bytes":708,"sha256":"ae651ed9a4cf426dbc6577a4a8824efbd2a45ee90e172d2a59466f419e96585a","dependencies":[]},{"id":"execution/src/compute.js","bytes":3539,"sha256":"77700d3fb5bd5ddc261864f5ccd456630d1a00a2b56cfc9642d969a8435b85f5","dependencies":["language/src/index.js","verifier/src/index.js","execution/src/index.js"]},{"id":"execution/src/index.js","bytes":10957,"sha256":"15ecd00834ea6e1403abaacf606aaf98894b4b4640d4565afe143bf95f5cd4cc","dependencies":[]},{"id":"language/src/index.js","bytes":138941,"sha256":"46cb60eb8b396b3d9179348fddb8a03cab4547874260a5553af01927404468f6","dependencies":["model/src/index.js","language/src/schema.js"]},{"id":"language/src/schema.js","bytes":1616,"sha256":"d20ed2d8681fe8bb20196b24e333e708ee6133d353e09fe6ffbdc6226f37606e","dependencies":["profiles/src/schema-core.js"]},{"id":"model/src/index.js","bytes":7704,"sha256":"ef309bcf235d6d10ec6c21c889c43882ecbb36956a62c56c93ba16c68f3bda7d","dependencies":[]},{"id":"profiles/src/view-surfaces.js","bytes":1426,"sha256":"c31c88b49fc8263b9e98dd49fafa9266bfc2ce7d06f7eee2833eb1c3a828b296","dependencies":[]},{"id":"verifier/src/index.js","bytes":71267,"sha256":"9c7b4bc26ae57125bc5ac7161bbf924b1a9abd0a98d0cc430032839643f1a24b","dependencies":["language/src/index.js","execution/src/index.js","model/src/index.js","profiles/src/core.js","profiles/src/schema-core.js","defaults/src/index.js"]}],"hash":"386a6315a6b154f84182cc11fe4572fb8309b7e1154392b9694336471c125888"},{"defaults/src/index.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.previewPaths = void 0;
@@ -394,6 +394,17 @@ function resolveProperties(snapshot, target, context = {}) {
     const profile = typeof view?.record.profile === 'string' ? view.record.profile : typeof item.record.profile === 'string' ? item.record.profile : 'ddn@1';
     const method = view ? method_names_js_1.methodNames[(0, core_js_1.getProfile)(profile)?.method ?? ''] : typeof wa?.method === 'string' ? wa.method : 'ddn';
     let theme, surfaceTypography;
+    if (wa && item.owner !== 'workarea') {
+        const directTheme = (0, schema_core_js_1.getPath)(wa, 'style.theme');
+        if (typeof directTheme === 'string')
+            theme = directTheme;
+        else {
+            const wr = resolve(wa, 'workarea', { file: snapshot.rootFile, ...(method ? { method } : {}), profile, fileDefaults: rules(root?.defaults), workareaDefaults: defaultProviders(wa.defaults, snapshot.rootFile), styles: styleRules });
+            const p = wr.properties.find(x => x.path === 'style.theme');
+            if (p && !p.origin.startsWith('standard:'))
+                theme = String(p.value);
+        }
+    }
     const surfacePreset = (0, schema_core_js_1.getPath)(view?.record, 'surface.preset');
     if (view && item.owner !== 'view_definition' && item.owner !== 'document') {
         let cache = viewThemes.get(snapshot);
@@ -406,7 +417,7 @@ function resolveProperties(snapshot, target, context = {}) {
         if (settings === undefined) {
             const values = resolveProperties(snapshot, view.ref, { styles: context.styles ?? [] }).values;
             const surface = (0, view_surfaces_js_1.getViewSurfacePreset)(surfacePreset);
-            settings = { theme: String((0, schema_core_js_1.getPath)(values, 'style.theme') ?? 'default'), ...(surface && surface.id !== 'dynamic' ? { typography: { font: String((0, schema_core_js_1.getPath)(values, 'style.font') ?? 'sans'), fontSize: Number((0, schema_core_js_1.getPath)(values, 'style.font_size') ?? 24) } } : {}) };
+            settings = { theme: String((0, schema_core_js_1.getPath)(values, 'style.theme') ?? theme ?? 'default'), ...(surface && surface.id !== 'dynamic' ? { typography: { font: String((0, schema_core_js_1.getPath)(values, 'style.font') ?? 'sans'), fontSize: Number((0, schema_core_js_1.getPath)(values, 'style.font_size') ?? 24) } } : {}) };
             if (cache.size > 512)
                 cache.clear();
             cache.set(key, settings);
@@ -969,6 +980,7 @@ exports.decodeText = decodeText;
 exports.quoteText = quoteText;
 exports.parseTableHeader = parseTableHeader;
 exports.parseTableRow = parseTableRow;
+exports.createSourceSet = createSourceSet;
 exports.decodeSources = decodeSources;
 exports.allNodes = allNodes;
 exports.findNode = findNode;
@@ -987,9 +999,43 @@ exports.replaceNoteBody = replaceNoteBody;
 const index_js_1 = require("model/src/index.js");
 const schema_js_1 = require("language/src/schema.js");
 const aliases = { look: 'style.look', font: 'style.font', 'font-size': 'style.font_size', status: 'design.state', paper: 'style.paper' };
+const OCCURRENCE_ONLY_ROOTS = new Set(['position', 'size', 'body', 'columns', 'pinned', 'rotation', 'visible', 'layer', 'order', 'min_size', 'max_size', 'include_in_output', 'border', 'opacity']);
+const STATEMENT_KEYWORDS = ['element', 'connect', 'relation', 'use', 'notes', 'data', 'source', 'asset', 'template', 'draft', 'fields', 'endpoint', 'with', 'defaults', 'style'];
 const recipeProfiles = { erd: 'ddn@1', mindmap: 'mindmap.basic@1', bar: 'chart.basic@1' };
 const rootKeys = { definition: 'definitions', view: 'views', placement: 'placements', appearance: 'appearances', data: 'data', source: 'sources', asset: 'assets', template: 'templates', publication: 'publications' };
 const prohibited = new Set(['__proto__', 'constructor', 'prototype']);
+function editDistance(a, b) {
+    const al = a.length, bl = b.length;
+    if (Math.abs(al - bl) > 4)
+        return 99;
+    const dp = Array.from({ length: al + 1 }, (_, i) => i);
+    for (let j = 1; j <= bl; j++) {
+        let prev = dp[0];
+        dp[0] = j;
+        for (let i = 1; i <= al; i++) {
+            const temp = dp[i];
+            dp[i] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[i], dp[i - 1]);
+            prev = temp;
+        }
+    }
+    return dp[al];
+}
+function suggestClosest(input, candidates, maxDistance = 3) {
+    const target = input.toLowerCase();
+    let best;
+    let bestDist = maxDistance + 1;
+    for (const candidate of candidates) {
+        if (!candidate || candidate === input)
+            continue;
+        const d = editDistance(target, candidate.toLowerCase());
+        const limit = Math.min(maxDistance, Math.max(1, Math.floor(Math.max(target.length, candidate.length) / 2)));
+        if (d <= limit && d < bestDist) {
+            bestDist = d;
+            best = candidate;
+        }
+    }
+    return best;
+}
 function array(record, key) {
     if (!Array.isArray(record[key]))
         record[key] = [];
@@ -1233,30 +1279,60 @@ function typedValue(raw, shape, file) {
         throw Error('Expected an indented record or collection');
     return text;
 }
+const COLUMN_TYPES = {
+    text: 'text',
+    number: 'number',
+    integer: 'integer',
+    int: 'integer',
+    boolean: 'boolean',
+    bool: 'boolean',
+    date: 'date',
+    timestamp: 'timestamp',
+    datetime: 'timestamp',
+    json: 'json',
+};
 function parseTableHeader(text) {
     const used = new Set();
     return splitDelimited(text, '.').map(raw => {
         const bits = splitDelimited(raw, ':');
-        if (bits.length > 5)
-            throw Error('A column has at most alignment, percentage, minimum characters and maximum lines');
+        if (bits.length > 6)
+            throw Error('A column has at most alignment, percentage, minimum characters, maximum lines and type');
         const id = decodeText(bits[0]).normalize('NFC');
         if (!id || used.has(id) || prohibited.has(id))
             throw Error('Column names must be nonempty and unique');
         used.add(id);
         const c = { id };
         if (bits[1]?.trim()) {
-            const alignment = decodeText(bits[1]);
+            const rawAlign = decodeText(bits[1]);
+            const alignment = /^[rlcf]$/.test(rawAlign) ? rawAlign + 't' : rawAlign;
             if (!/^[rlcf][tmb]$/.test(alignment))
                 throw Error('Invalid column alignment');
             c.alignment = alignment;
         }
-        for (const [i, key] of [[2, 'percentage'], [3, 'min_chars'], [4, 'max_lines']])
+        const shorthandTypeIn2 = bits.length === 3 && !bits[1]?.trim() && bits[2]?.trim() && COLUMN_TYPES[decodeText(bits[2]).toLowerCase()];
+        const shorthandTypeIn4 = bits.length === 5 && bits[4]?.trim() && COLUMN_TYPES[decodeText(bits[4]).toLowerCase()];
+        if (shorthandTypeIn2) {
+            c.type = shorthandTypeIn2;
+            return c;
+        }
+        for (const [i, key] of [[2, 'percentage'], [3, 'min_chars'], [4, 'max_lines']]) {
+            if (i === 4 && shorthandTypeIn4) {
+                c.type = shorthandTypeIn4;
+                continue;
+            }
             if (bits[i]?.trim()) {
                 const value = Number(decodeText(bits[i]));
                 if (!Number.isFinite(value) || (i !== 2 && (!Number.isInteger(value) || value < 1)) || (i === 2 && (value < 0 || value > 100)))
                     throw Error('Invalid column ' + key);
                 c[key] = value;
             }
+        }
+        if (bits[5]?.trim()) {
+            const colType = COLUMN_TYPES[decodeText(bits[5]).toLowerCase()];
+            if (!colType)
+                throw Error('Invalid column type');
+            c.type = colType;
+        }
         return c;
     });
 }
@@ -1332,7 +1408,7 @@ class Decoder {
                 this.sourceMap.set(id, { ...f, id });
         }
     }
-    diagnostic(code, message, line, target, severity = 'error') { this.diagnostics.push({ code, message, severity, ...(this.current && line ? { source: { file: this.current.id, revision: this.current.revision, start: line.contentStart, end: line.end } } : {}), ...(target ? { target } : {}) }); }
+    diagnostic(code, message, line, target, severity = 'error', start, end) { this.diagnostics.push({ code, message, severity, ...(this.current && line ? { source: { file: this.current.id, revision: this.current.revision, start: start ?? line.contentStart, end: end ?? line.end } } : {}), ...(target ? { target } : {}) }); }
     structuralLine(line, literal = false) {
         if (this.current.text.slice(line.start, line.contentStart).includes('\t'))
             this.diagnostic('syntax.tab', 'Tabs are not allowed in structural indentation', line);
@@ -1540,7 +1616,8 @@ class Decoder {
             if (owner === 'definition' && record.category === 'relation' && /^(source|target)\./.test(path))
                 path = 'qualifiers.' + path;
             (0, index_js_1.safePath)(path);
-            const appearancePath = appearance && (['position', 'size', 'body', 'columns', 'pinned'].includes(path.split('.')[0]) || record.category === 'relation' && ['label', 'legend'].includes(path.split('.')[0]));
+            const rootKey = path.split('.')[0];
+            const appearancePath = appearance && (OCCURRENCE_ONLY_ROOTS.has(rootKey) || record.category === 'relation' && ['label', 'legend'].includes(rootKey) || !ownerShape('definition', record, path) && Boolean(ownerShape('appearance', appearance, path)));
             const propertyRecord = appearancePath ? appearance : record, propertyOwner = appearancePath ? 'appearance' : owner;
             const n = this.node(line, stop, 'property');
             if (appearancePath)
@@ -1548,6 +1625,8 @@ class Decoder {
             else if (node.ref || node.owner)
                 n.owner = (node.ref || node.owner);
             n.path = path;
+            n.nameStart = line.contentStart + w[0].start;
+            n.nameEnd = line.contentStart + w[0].end;
             n.valueStart = line.contentStart + (w[1]?.start ?? line.text.length);
             n.valueEnd = line.end - line.eol.length;
             node.children.push(n);
@@ -1556,7 +1635,22 @@ class Decoder {
             if (owner === 'template_record' && !['id', 'name', 'role', 'settings', 'parameters', 'defaults', 'fragment', 'version', 'method', 'profile', 'view'].includes(path.split('.')[0]))
                 shape = ownerShape('definition', { role: record.role }, path);
             if (!shape) {
-                this.diagnostic('property.unknown', 'Unknown or inapplicable property: ' + path, line, node.ref);
+                const nearAlias = { font_size: 'style.font_size', theme: 'style.theme', 'body.mode': 'body' };
+                let match = nearAlias[path] ?? nearAlias[key];
+                if (!match && propertyOwner === 'definition' && ownerShape('definition', propertyRecord, 'content.' + path))
+                    match = 'content.' + path;
+                if (!match) {
+                    const segments = (0, index_js_1.safePath)(path);
+                    const parentPath = segments.slice(0, -1).join('.');
+                    const parentShape = parentPath ? ownerShape(propertyOwner, propertyRecord, parentPath) : schema_js_1.shapes[propertyOwner];
+                    const candidates = [...new Set([
+                            ...variants(parentShape).flatMap(s => Object.keys(s.properties ?? {})).map(k => parentPath ? `${parentPath}.${k}` : k),
+                            ...Object.keys(aliases),
+                            ...(appearance ? variants(schema_js_1.shapes.appearance).flatMap(s => Object.keys(s.properties ?? {})) : []),
+                        ])];
+                    match = suggestClosest(path, candidates) ?? suggestClosest(key, candidates);
+                }
+                this.diagnostic('property.unknown', 'Unknown or inapplicable property: ' + path + (match ? ` (did you mean '${match}'?)` : ''), line, node.ref, 'error', n.nameStart, n.nameEnd);
                 i = stop;
                 continue;
             }
@@ -1608,7 +1702,7 @@ class Decoder {
                     (0, index_js_1.setPath)(destination, path, value);
             }
             catch (error) {
-                this.diagnostic('property.value', error instanceof Error ? error.message : String(error), line, node.ref);
+                this.diagnostic('property.value', error instanceof Error ? error.message : String(error), line, node.ref, 'error', raw.trim() ? n.valueStart : n.nameStart, raw.trim() ? n.valueEnd : n.nameEnd);
             }
             i = stop;
         }
@@ -1634,7 +1728,9 @@ class Decoder {
                 throw Error('Unsafe property name');
             const child = childShape(shape, key);
             if (!child) {
-                this.diagnostic('property.unknown', 'Unknown record property: ' + key, l);
+                const candidates = variants(shape).flatMap(s => Object.keys(s.properties ?? {}));
+                const match = suggestClosest(key, candidates);
+                this.diagnostic('property.unknown', 'Unknown record property: ' + key + (match ? ` (did you mean '${match}'?)` : ''), l, undefined, 'error', l.contentStart + w[0].start, l.contentStart + w[0].end);
                 i = stop;
                 continue;
             }
@@ -1958,9 +2054,11 @@ class Decoder {
                 inputColumns = parseTableHeader(tail(as + 1));
                 record.table_schema = inputColumns;
             }
-            if (keyword !== 'document' && !schema_js_1.profiles.includes(profile))
-                this.diagnostic('profile.unknown', 'Unknown profile: ' + profile, line, node.ref);
-            const next = { kind: keyword === 'document' ? 'document' : 'view', record, owner: keyword === 'document' ? 'document' : 'view_definition' };
+            if (keyword !== 'document' && !Object.hasOwn(schema_js_1.profiles, profile)) {
+                const match = suggestClosest(profile, [...Object.keys(schema_js_1.profiles), ...Object.keys(recipeProfiles)]);
+                this.diagnostic('profile.unknown', 'Unknown profile: ' + profile + (match ? ` (did you mean '${match}'?)` : ''), line, node.ref);
+            }
+            const next = { kind: keyword === 'document' ? 'document' : 'view', record, owner: keyword === 'document' ? 'document' : 'view_definition', ...(keyword !== 'document' ? { profile: profile } : {}) };
             if (recipe)
                 next.recipe = recipe;
             if (inputColumns)
@@ -2014,6 +2112,8 @@ class Decoder {
                 return;
             }
             if (ctx.kind === 'element' && ctx.recipe === 'erd' && keyword !== 'element') {
+                if (keyword === 'withh' && ws.length === 1 && parts.at === undefined)
+                    this.diagnostic('role.keyword-typo', 'Possible statement keyword typo "' + keyword + '" (did you mean "with"?)', line, ctx.record.id ? (0, index_js_1.recordRef)(this.current.id, ctx.record) : undefined, 'warning');
                 node.kind = 'field-row';
                 node.owner = (0, index_js_1.recordRef)(this.current.id, ctx.record);
                 const rows = this.parseData(index, end, node, ctx.inputColumns || ['field', 'type', 'domain', 'key', 'comment'].map(id => ({ id })));
@@ -2037,9 +2137,17 @@ class Decoder {
                 nameSpan(1, as);
             }
             else {
-                role = ctx.recipe === 'erd' ? 'entity' : ctx.recipe === 'mindmap' ? 'object' : '';
-                if (!role)
-                    throw Error('This profile requires an explicit element role');
+                const prof = ctx.profile ? schema_js_1.profiles[ctx.profile] : undefined;
+                role = ctx.recipe === 'erd' ? 'entity' : ctx.recipe === 'mindmap' ? 'object' : prof?.primary_palette?.length === 1 ? prof.primary_palette[0] : '';
+                const isUnquoted = !/^["']/.test(w[0].raw);
+                const typoMatch = isUnquoted ? suggestClosest(keyword, STATEMENT_KEYWORDS, 1) : undefined;
+                if (!role) {
+                    if (typoMatch)
+                        throw Error('Unknown statement keyword "' + keyword + '" (did you mean "' + typoMatch + '"?); or prefix with "element" to declare an element');
+                    throw Error('This profile requires an explicit element role' + (prof?.primary_palette?.length ? ' (allowed: ' + prof.primary_palette.slice(0, 10).join(', ') + ')' : ''));
+                }
+                if (typoMatch && ((keyword === 'withh' && ws.length === 1 && parts.at === undefined) || (keyword === 'connet' && clause('to') >= 0) || (keyword === 'relaton' && clause('as') >= 0) || (keyword === 'uses' && ws.length >= 2)))
+                    this.diagnostic('role.keyword-typo', 'Element name "' + keyword + '" looks like statement keyword "' + typoMatch + '" (did you mean "' + typoMatch + '"?)', line, undefined, 'warning');
                 nameEnd = from >= 0 ? from : ws.length;
                 name = decodeText(tail(0, nameEnd));
                 nameSpan(0, nameEnd);
@@ -2047,8 +2155,14 @@ class Decoder {
             if (['core::Workarea', 'core::View', 'core::Appearance', 'core::Document'].includes(role))
                 throw Error('Structural core types require dedicated declarations');
             const info = schema_js_1.coreTypes[role] || schema_js_1.roleTypes[role];
-            if (!info || info.category !== 'element')
-                this.diagnostic('role.unknown', 'Unknown element role: ' + role, line);
+            if (!info || info.category !== 'element') {
+                const roleCandidates = [
+                    ...Object.entries(schema_js_1.roleTypes).filter(([k, v]) => !k.startsWith('relation::') && v.category === 'element').map(([k]) => k),
+                    ...Object.entries(schema_js_1.coreTypes).filter(([, v]) => v.category === 'element').map(([k]) => k),
+                ];
+                const match = suggestClosest(role, roleCandidates);
+                this.diagnostic('role.unknown', 'Unknown element role: ' + role + (match ? ` (did you mean '${match}'?)` : ''), line);
+            }
             node.kind = 'element';
             const record = this.add('definition', { role }, node, name || undefined);
             if (parts.title !== undefined)
@@ -2083,6 +2197,8 @@ class Decoder {
                 child.appearance = occurrence;
             if (ctx.view)
                 child.view = ctx.view;
+            if (ctx.profile)
+                child.profile = ctx.profile;
             if (ctx.recipe)
                 child.recipe = ctx.recipe;
             if (ctx.inputColumns)
@@ -2128,7 +2244,7 @@ class Decoder {
             else {
                 if (ctx.kind !== 'element')
                     throw Error('Anonymous data belongs to an element');
-                record = {};
+                record = (0, index_js_1.isRecord)(ctx.record.data) ? ctx.record.data : {};
                 ctx.record.data = record;
                 node.owner = (0, index_js_1.recordRef)(this.current.id, ctx.record);
             }
@@ -2136,10 +2252,26 @@ class Decoder {
             if (from >= 0 || firstBody?.text.trim() === 'with') {
                 if (from >= 0)
                     record.source = this.reference(tail(from + 1), line.contentStart + ws[from + 1].start);
-                this.sequence(index + 1, end, line.indent, { kind: 'element', record, owner: 'data_record' }, node.children);
+                if (firstBody?.text.trim() === 'with') {
+                    const firstIndex = this.ls.indexOf(firstBody);
+                    const withStop = this.blockEnd(firstIndex, end);
+                    this.sequence(index + 1, withStop, line.indent, { kind: 'element', record, owner: 'data_record' }, node.children);
+                    const remaining = this.ls.slice(withStop, end).filter(l => l.text.trim() && !l.text.trimStart().startsWith('//'));
+                    if (remaining.length) {
+                        const remKeyword = words(remaining[0].text)[0]?.raw;
+                        if (remKeyword !== 'with' && remKeyword !== 'notes' && Array.isArray(record.columns) && record.columns.length > 0 && record.rows === undefined)
+                            Object.assign(record, this.parseData(withStop, end, node, record.columns));
+                        else
+                            this.sequence(withStop, end, line.indent, { kind: 'element', record, owner: 'data_record' }, node.children);
+                    }
+                }
+                else
+                    this.sequence(index + 1, end, line.indent, { kind: 'element', record, owner: 'data_record' }, node.children);
             }
-            else
-                Object.assign(record, this.parseData(index + 1, end, node));
+            else {
+                const existingCols = Array.isArray(record.columns) && record.columns.length > 0 && record.rows === undefined ? record.columns : undefined;
+                Object.assign(record, this.parseData(index + 1, end, node, existingCols));
+            }
             return;
         }
         if (keyword === 'use') {
@@ -2171,9 +2303,10 @@ class Decoder {
             if (!['file', 'view'].includes(ctx.kind))
                 throw Error('Relations belong at file or view scope');
             const as = clause('as'), named = clause('named');
-            let role = as >= 0 ? decodeText(tail(as + 1, named > as ? named : ws.length)) : ctx.recipe === 'erd' || ctx.recipe === 'mindmap' ? 'assoc' : '';
+            const prof = ctx.profile ? schema_js_1.profiles[ctx.profile] : undefined;
+            let role = as >= 0 ? decodeText(tail(as + 1, named > as ? named : ws.length)) : ctx.recipe === 'erd' || ctx.recipe === 'mindmap' ? 'assoc' : prof?.relation_roles?.length === 1 ? prof.relation_roles[0] : '';
             if (!role)
-                throw Error('Choose a relationship role with as');
+                throw Error('Choose a relationship role with as' + (prof?.relation_roles?.length ? ' (allowed: ' + prof.relation_roles.slice(0, 10).join(', ') + ')' : ''));
             const name = keyword === 'relation' ? decodeText(tail(1, as)) : named >= 0 ? decodeText(tail(named + 1)) : undefined;
             node.kind = 'relation';
             if (keyword === 'relation')
@@ -2418,8 +2551,36 @@ class Decoder {
                 site.reference.id = match.ref.id;
                 site.target = match.ref;
             }
-            else
-                this.diagnostics.push({ code: 'reference.unresolved', severity: 'error', message: 'Unresolved or ambiguous reference: ' + (0, index_js_1.asString)(site.reference.name), source: { file: site.file, revision: this.sourceMap.get(site.file)?.revision || '', start: site.start, end: site.end } });
+            else {
+                const targetFile = (0, index_js_1.asString)(site.reference.file, site.file), refName = (0, index_js_1.asString)(site.reference.name), refId = (0, index_js_1.asString)(site.reference.id);
+                const allRecords = (0, index_js_1.listRecords)(this.bundle);
+                const sameFileMatches = [...scoped, ...allRecords].filter(r => r.file === targetFile && (refId ? r.ref.id === refId : r.record.name === refName || r.ref.id === refName));
+                let detail = '';
+                if (sameFileMatches.length > 1)
+                    detail = ` (ambiguous: ${sameFileMatches.length} matches in scope)`;
+                else if (refName) {
+                    let otherFile = allRecords.find(r => r.file !== targetFile && r.record.name === refName)?.file;
+                    if (!otherFile) {
+                        const escaped = refName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const declPattern = new RegExp(`(?:^|\\n)\\s*(?:element|data|source|asset|template|view|document|publication)\\s+(?:"${escaped}"|'${escaped}'|${escaped})(?:\\s|$|:)`);
+                        for (const [candidateFile, candidateSource] of this.sourceMap.entries()) {
+                            if (candidateFile !== targetFile && declPattern.test(candidateSource.text)) {
+                                otherFile = candidateFile;
+                                break;
+                            }
+                        }
+                    }
+                    if (otherFile)
+                        detail = ` (found in '${otherFile}'; add 'include "${otherFile}"' or qualify as '"${otherFile}"::${refName}')`;
+                    else {
+                        const localNames = [...new Set([...scoped, ...allRecords.filter(r => r.file === targetFile)].map(r => (0, index_js_1.asString)(r.record.name)).filter(Boolean))];
+                        const closest = suggestClosest(refName, localNames);
+                        if (closest)
+                            detail = ` (did you mean '${closest}'?)`;
+                    }
+                }
+                this.diagnostics.push({ code: 'reference.unresolved', severity: 'error', message: 'Unresolved or ambiguous reference: ' + (refName || refId) + detail, source: { file: site.file, revision: this.sourceMap.get(site.file)?.revision || '', start: site.start, end: site.end } });
+            }
         }
     }
     resolveFieldBindings() {
@@ -2494,7 +2655,7 @@ class Decoder {
                 if (typeof binding.key === 'string' && allowedKeys.has(binding.key))
                     content.key = binding.key;
                 else
-                    incomplete('content.key', binding.key, 'The key cell is retained as draft text; use a registered key value to assert its meaning');
+                    incomplete('content.key', binding.key, 'The key cell is retained as draft text; use a registered key value (primary, foreign, candidate, business, partition, clustering) to assert its meaning');
             }
             if (binding.constraints !== undefined) {
                 const values = Array.isArray(binding.constraints) ? binding.constraints : [binding.constraints], resolved = [];
@@ -2574,15 +2735,28 @@ class Decoder {
                     }
                     if ((0, index_js_1.isRecord)(ep.member) && definition) {
                         const id = (0, index_js_1.asString)(ep.member.id), name = (0, index_js_1.asString)(ep.member.name, id), file = (0, index_js_1.asString)(ep.member.file, definition.file);
-                        const candidates = (0, index_js_1.asArray)(definition.record.members).map(ref => (0, index_js_1.resolveReference)(this.bundle, definition.file, ref)).filter(x => x && x.file === file && (id ? x.record.id === id : x.record.id === name || x.record.title === name || x.record.name === name));
+                        const allMembers = (0, index_js_1.asArray)(definition.record.members).map(ref => (0, index_js_1.resolveReference)(this.bundle, definition.file, ref)).filter((x) => !!x && x.file === file);
+                        const candidates = allMembers.filter(x => id ? x.record.id === id : x.record.id === name || x.record.title === name || x.record.name === name);
                         const site = this.references.find(s => s.reference === ep.member);
                         if (candidates.length === 1) {
                             ep.member = { file: candidates[0].file, id: candidates[0].ref.id };
                             if (site)
                                 site.target = candidates[0].ref;
                         }
-                        else
-                            this.diagnostics.push({ code: 'reference.member', severity: 'error', message: 'Missing or ambiguous endpoint member: ' + name, target: entry.ref });
+                        else {
+                            let detail = '';
+                            if (candidates.length > 1)
+                                detail = ` (ambiguous: ${candidates.length} matches on ${(0, index_js_1.asString)(definition.record.name, definition.ref.id)})`;
+                            else {
+                                const memberNames = [...new Set(allMembers.flatMap(m => [(0, index_js_1.asString)(m.record.name), (0, index_js_1.asString)(m.record.title)].filter(Boolean)))];
+                                const closest = suggestClosest(name, memberNames);
+                                if (closest)
+                                    detail = ` (did you mean '${closest}'?)`;
+                                else if (memberNames.length)
+                                    detail = ` (available on ${(0, index_js_1.asString)(definition.record.name, definition.ref.id)}: ${memberNames.slice(0, 8).join(', ')})`;
+                            }
+                            this.diagnostics.push({ code: 'reference.member', severity: 'error', message: 'Missing or ambiguous endpoint member: ' + name + detail, target: entry.ref });
+                        }
                     }
                 }
             if (entry.kind === 'view' && entry.record.kind === 'document')
@@ -2790,6 +2964,27 @@ class Decoder {
     }
     run() { this.parseFile(this.bundle.entry); this.resolve(); this.resolveFieldBindings(); this.expandTemplates(); this.resolveFieldBindings(); this.resolveChildren(); const checked = (0, index_js_1.listRecords)(this.bundle).filter(r => typeof r.record.id === 'string' && r.record.id.length > 0).map(r => r.ref); const unavailable = this.diagnostics.filter(d => ['include.missing', 'reference.unresolved', 'version.unsupported'].includes(d.code)).map(d => d.message); return { syntaxValid: !this.diagnostics.some(d => d.severity === 'error' && /^(syntax|property|table)\./.test(d.code)), normalized: this.bundle, documents: this.documents, diagnostics: this.diagnostics, coverage: { scope: { kind: 'workarea' }, complete: !this.diagnostics.some(d => d.severity === 'error'), checked, unavailable }, references: this.references }; }
 }
+function createSourceSet(input, entry = 'main.ddn') {
+    if (typeof input === 'string') {
+        const id = (0, index_js_1.normalizeLocation)(entry);
+        return { entry: id, files: [{ id, text: input, revision: 'rev-1', encoding: 'utf-8', writable: true }] };
+    }
+    if ((0, index_js_1.isRecord)(input) && typeof input.entry === 'string' && Array.isArray(input.files))
+        return input;
+    const record = input;
+    const keys = Object.keys(record);
+    const normalizedEntry = (0, index_js_1.normalizeLocation)(keys.includes(entry) ? entry : keys[0] ?? entry);
+    return {
+        entry: normalizedEntry,
+        files: Object.entries(record).map(([id, text], index) => ({
+            id: (0, index_js_1.normalizeLocation)(id),
+            text,
+            revision: `rev-${index + 1}`,
+            encoding: 'utf-8',
+            writable: true,
+        })),
+    };
+}
 function decodeSources(input, options = {}) {
     if (options.cancel?.aborted)
         return { syntaxValid: false, normalized: { version: 'ddn-next-1', entry: input.entry, files: [] }, documents: [], diagnostics: [{ code: 'decode.cancelled', severity: 'info', message: 'Decoding was cancelled' }], coverage: { scope: { kind: 'workarea' }, complete: false, checked: [], unavailable: ['cancelled'] }, references: [] };
@@ -2951,8 +3146,9 @@ function patchProperty(result, target, path, value) {
         return replaceDraftBody(result, target, value, (0, index_js_1.asString)((0, index_js_1.asRecord)((0, index_js_1.findRecord)(result.normalized, target)?.draft).format, 'text'));
     if (node.implicit) {
         const occurrence = (0, index_js_1.findRecord)(result.normalized, target);
-        const relationDisplay = ['label', 'legend'].includes(path.split('.')[0]) && (0, index_js_1.resolveReference)(result.normalized, target.file, occurrence?.target)?.record.category === 'relation';
-        if (!['position', 'size', 'body', 'columns', 'pinned'].includes(path.split('.')[0]) && !relationDisplay)
+        const rootKey = path.split('.')[0];
+        const relationDisplay = ['label', 'legend'].includes(rootKey) && (0, index_js_1.resolveReference)(result.normalized, target.file, occurrence?.target)?.record.category === 'relation';
+        if (!OCCURRENCE_ONLY_ROOTS.has(rootKey) && !relationDisplay)
             throw Error('An implicit occurrence supports only unambiguous appearance properties; author an explicit use occurrence for this property');
         const declaration = allNodes(result).find(n => !n.implicit && n.start === node.start && n.file === node.file);
         if (!declaration)
@@ -3154,7 +3350,7 @@ function unfold(shape) {
     return shape;
 }
 const genericOptions = unfold(unfold(schema_core_js_1.lexicalShapes.view_definition)?.properties?.projection)?.properties?.options;
-const aliases = { boolean: 'bool', timestamp: 'instant' };
+const aliases = { boolean: 'bool', timestamp: 'instant', datetime: 'instant', int: 'integer', json: 'json_value' };
 exports.shapes = new Proxy(schema_core_js_1.lexicalShapes, {
     get(target, key) {
         if (typeof key !== 'string')
@@ -3170,7 +3366,7 @@ exports.shapes = new Proxy(schema_core_js_1.lexicalShapes, {
 const descriptor = (entry) => ({ category: entry.category, schema: 'n' + entry.schema, core: entry.core });
 exports.roleTypes = Object.fromEntries(Object.entries(schema_core_js_1.codex.roles).map(([key, value]) => [key, descriptor(value)]));
 exports.coreTypes = Object.fromEntries(Object.entries(schema_core_js_1.codex.coreTypes).map(([key, value]) => [key, descriptor(value)]));
-exports.profiles = Object.keys(schema_core_js_1.codex.knownProfiles);
+exports.profiles = schema_core_js_1.codex.knownProfiles;
 
 },
 "model/src/index.js":function(module,exports,require){
@@ -3360,9 +3556,12 @@ function getViewSurfacePreset(id) {
 "verifier/src/index.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.createSourceSet = void 0;
 exports.verifyDecoded = verifyDecoded;
+exports.verifyText = verifyText;
 exports.createVerifier = createVerifier;
 const index_js_1 = require("language/src/index.js");
+Object.defineProperty(exports, "createSourceSet", { enumerable: true, get: function () { return index_js_1.createSourceSet; } });
 const index_js_2 = require("execution/src/index.js");
 const index_js_3 = require("model/src/index.js");
 const core_js_1 = require("profiles/src/core.js");
@@ -3375,6 +3574,16 @@ function verifyDecoded(verifier, input, options, diagnostics) {
     if (!run)
         throw new TypeError('Expected an instance created by createVerifier');
     return run(input, options, diagnostics);
+}
+function verifyText(verifier, input, options = {}) {
+    return verifier.verifySources((0, index_js_1.createSourceSet)(input), {
+        scope: options.scope ?? { kind: 'workarea' },
+        purpose: options.purpose ?? 'design',
+        level: options.level ?? 'review',
+        ...(options.measurement ? { measurement: options.measurement } : {}),
+        ...(options.budget ? { budget: options.budget } : {}),
+        ...(options.cancel ? { cancel: options.cancel } : {}),
+    });
 }
 const refKey = (r) => r.file + '\0' + r.id;
 const equal = (a, b) => (0, schema_core_js_1.stableStringify)(a) === (0, schema_core_js_1.stableStringify)(b);
@@ -3987,8 +4196,10 @@ function createVerifier(runtimeOptions) {
                 if (file && !reachable.has(file.location))
                     continue;
                 const owner = file && path ? containingRecord(records, file.location, path[2]) : undefined;
-                if (options.scope.kind === 'workarea' || !owner || selected.has(refKey(owner.ref)))
-                    diagnostics.push(issue('DDN-SCHEMA-' + error.keyword.toUpperCase(), error.path + ': ' + error.message, owner?.ref));
+                if (options.scope.kind === 'workarea' || !owner || selected.has(refKey(owner.ref))) {
+                    const ownerLabel = owner ? `${typeof owner.record.name === 'string' && owner.record.name ? owner.record.name : owner.ref.id} (${typeof owner.record.role === 'string' ? owner.record.role : owner.owner}): ` : '';
+                    diagnostics.push(issue('DDN-SCHEMA-' + error.keyword.toUpperCase(), ownerLabel + error.path + ': ' + error.message, owner?.ref));
+                }
             }
             const scopeRecords = records.filter(r => selected.has(refKey(r.ref)));
             const requiredRules = new Map();
@@ -4100,7 +4311,8 @@ function createVerifier(runtimeOptions) {
                         if (checks.length) {
                             incomplete = true;
                             missing.add('complete:' + refKey(record.ref));
-                            diagnostics.push({ code: 'DDN-COMPLETENESS', severity: 'warning', message: checks.map(c => c.message).join('; '), target: record.ref });
+                            const label = `${typeof record.record.name === 'string' && record.record.name ? record.record.name : record.ref.id} (${name})`;
+                            diagnostics.push({ code: 'DDN-COMPLETENESS', severity: 'warning', message: checks.map(c => `${label}: ${c.path ? c.path + ': ' : ''}${c.message}${c.path === '/form' || /\bform\b/.test(c.message) ? ' (e.g. add "with" -> "content.form definition")' : ''}`).join('; '), target: record.ref });
                         }
                     }
                     if (options.purpose === 'physical-schema' && (record.record.role === 'entity' || record.record.role === 'table')) {
@@ -4299,6 +4511,19 @@ function createVerifier(runtimeOptions) {
         }
     }
     const verifier = {
+        verifyText(inputArgument, optionsArgument = {}) {
+            const { entry = 'main.ddn', ...rest } = optionsArgument;
+            const sourceSet = (0, index_js_1.createSourceSet)(inputArgument, entry);
+            const verifyOptions = {
+                scope: rest.scope ?? { kind: 'workarea' },
+                level: rest.level ?? 'semantic',
+                purpose: rest.purpose ?? 'design',
+                ...(rest.budget ? { budget: rest.budget } : {}),
+                ...(rest.cancel ? { cancel: rest.cancel } : {}),
+                ...(rest.measurement ? { measurement: rest.measurement } : {}),
+            };
+            return verifier.verifySources(sourceSet, verifyOptions);
+        },
         async verifySources(inputArgument, optionsArgument) {
             const started = Date.now();
             let input = { entry: 'unavailable.ddn', files: [] };
@@ -4328,7 +4553,7 @@ function createVerifier(runtimeOptions) {
                 coverage = decoded.coverage;
                 for (const node of (0, index_js_1.allNodes)(decoded))
                     if (node.ref && !spans.has(refKey(node.ref)))
-                        spans.set(refKey(node.ref), { file: node.file, revision: input.files.find(file => file.id === node.file).revision, start: node.start, end: node.end });
+                        spans.set(refKey(node.ref), { file: node.file, revision: input.files.find(file => file.id === node.file).revision, start: node.start, end: node.headerEnd ?? node.end });
             }
             catch (error) {
                 stopped = error instanceof index_js_2.ComputationStopped ? error.outcome : 'invalid';

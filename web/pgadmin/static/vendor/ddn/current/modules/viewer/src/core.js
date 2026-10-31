@@ -5,7 +5,7 @@ import { analyzePresentedProfile as analyzeProfile, isDataProfile } from '../../
 import { registrations } from '../../runtime/src/registry.js';
 import { createRuntime } from '../../runtime/src/native.js';
 import { resolveProperties, validatePreview, parseStylesheet } from '../../defaults/src/index.js';
-import { publicationScene, resolveRecord, projectSnapshot, availableProjectionProfiles, recordTableData, findRecord, refKey, titleOf, records, tableData, object, str, num, pathValue, unionBounds } from '../../presentation/src/native.js';
+import { publicationScene, resolveRecord, projectSnapshot, availableProjectionProfiles, recordTableData, findRecord, refKey, titleOf, records, tableData, object, str, num, pathValue, unionBounds, inheritedPresentation } from '../../presentation/src/native.js';
 import { installUITheme } from './ui-theme.js';
 import { uiIcon } from './ui-icons.js';
 import { createStandardDialog } from './dialogs.js';
@@ -179,6 +179,8 @@ export function createViewer(element, options) {
     const ownsRuntime = !options.runtime;
     const runtime = options.runtime ?? createRuntime(options.runtimeOptions);
     let disposed = false, projection, currentSnapshot, selection, selectedOccurrence;
+    const selectedOccurrences = new Set();
+    let spaceHeld = false, announceHoldUntil = 0;
     let viewport = { bounds: { x: 0, y: 0, width: 1280, height: 800 }, zoom: 1 };
     let preview;
     let stale = false, diagnostics = [];
@@ -230,7 +232,7 @@ export function createViewer(element, options) {
 .ddn-viewer-outline input{min-width:0;width:100%;padding:8px 0;border:0;background:transparent;color:var(--ddn-ui-text);font-size:12px;outline-offset:1px}.ddn-viewer .ddn-viewer-outline .ddn-panel-section>button{display:block;text-align:left;width:100%;margin-top:4px;font-size:12px;overflow-wrap:anywhere;padding:8px 10px;line-height:1.4;color:var(--ddn-ui-muted)}.ddn-viewer-outline button[aria-current=true]{background:color-mix(in srgb,var(--ddn-ui-accent) 13%,var(--ddn-ui-surface));color:var(--ddn-ui-accent);font-weight:650}
 .ddn-viewer-stage{grid-column:2;position:relative;min-width:0;min-height:300px;overflow:hidden;background:#ffffff}.ddn-viewer-stage>svg{display:block;width:100%;height:100%;min-height:300px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}.ddn-viewer-stage>svg.ddn-panning{cursor:grabbing}.ddn-viewer-stage>svg [data-ref]{cursor:pointer}.ddn-viewer:not([data-ddn-editing]) .ddn-viewer-stage>svg [data-view-frame=true]{cursor:grab}.ddn-viewer[data-ddn-editing] .ddn-viewer-stage>svg [data-ref][data-movable=true]{cursor:move}.ddn-viewer-stage [data-selected=true]{filter:drop-shadow(0 0 3px #2563eb)}.ddn-viewer-stage>svg .ddn-hit{fill:none;stroke:transparent;stroke-width:14;pointer-events:stroke}.ddn-viewer-stage>svg[data-expanded] g[data-occurrence]:not([data-in-expanded=true]){display:none}.ddn-viewer-stage>svg[data-lod=mini] g[data-occurrence]:not([data-view-frame=true]){display:none}.ddn-viewer-stage>svg[data-lod=mini] g[data-view-frame=true]>g{display:none}.ddn-mini-card{cursor:pointer}.ddn-mini-card .ddn-mini-paper{fill:#ffffff;stroke:#94a3b8;stroke-width:1}.ddn-mini-card[data-active=true] .ddn-mini-paper{stroke:#2563eb;stroke-width:2}.ddn-mini-card text{fill:#1f2933;font-family:Inter,system-ui,sans-serif;font-weight:600}.ddn-mini-card .ddn-mini-meta{fill:#64748b;font-weight:400}.ddn-toolbar-group[aria-label=Zoom]{flex-wrap:nowrap;flex:none}.ddn-zoom-readout{min-width:48px;font-variant-numeric:tabular-nums;color:var(--ddn-ui-muted);font-size:11px;justify-content:center}.ddn-viewer-hint{width:min(420px,calc(100% - 32px));position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:min(420px,calc(100% - 32px));padding:16px 18px;border-radius:12px;background:color-mix(in srgb,var(--ddn-ui-surface) 94%,transparent);color:var(--ddn-ui-text);border:1px solid var(--ddn-ui-border);box-shadow:0 10px 30px color-mix(in srgb,var(--ddn-ui-shadow) 55%,transparent);font-size:13px;line-height:1.5;text-align:center;pointer-events:none}.ddn-viewer-hint button{pointer-events:auto}.ddn-placing .ddn-viewer-hint{width:min(420px,calc(100% - 32px));display:none}.ddn-viewer-hint p{margin:0 0 10px}.ddn-viewer-hint .ddn-hint-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}.ddn-viewer-hint button{border:1px solid var(--ddn-ui-border);background:var(--ddn-ui-input);color:var(--ddn-ui-text);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}.ddn-viewer-hint button[data-primary]{background:var(--ddn-ui-accent);color:var(--ddn-ui-accent-text);border-color:transparent;font-weight:650}.ddn-viewer-hint small{display:block;margin-top:8px;color:var(--ddn-ui-muted);font-size:11px}
 .ddn-viewer-inspector{overflow-wrap:anywhere}.ddn-viewer-inspector>h3{margin:0 0 6px}.ddn-viewer-inspector details{margin-top:12px}.ddn-viewer-inspector summary{cursor:pointer;font-weight:600}.ddn-viewer-inspector dt{font-weight:600;margin-top:8px}.ddn-viewer-inspector dd{margin:2px 0 8px;font:12px 'JetBrains Mono',ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
-.ddn-viewer-status{grid-column:1/-1;padding:8px 12px;border-top:1px solid var(--ddn-ui-border);white-space:pre-wrap;font-size:11px;color:var(--ddn-ui-muted);background:var(--ddn-ui-surface)}.ddn-viewer-overlays{position:absolute;inset:0;pointer-events:none}.ddn-viewer-overlays>*:not(.ddn-ui-layer):not(.ddn-viewer-hint){pointer-events:auto}
+.ddn-viewer-status{grid-column:1/-1;padding:8px 12px;border-top:1px solid var(--ddn-ui-border);white-space:pre-wrap;font-size:11px;color:var(--ddn-ui-muted);background:var(--ddn-ui-surface)}.ddn-viewer-status[data-tone=error]{color:var(--ddn-ui-danger)}.ddn-viewer-status[data-tone=warning]{color:#d97706}.ddn-viewer-stage>svg.ddn-space-pan{cursor:grab}.ddn-viewer-stage>svg.ddn-space-pan.ddn-panning{cursor:grabbing}.ddn-viewer-overlays{position:absolute;inset:0;pointer-events:none}.ddn-viewer-overlays>*:not(.ddn-ui-layer):not(.ddn-viewer-hint){pointer-events:auto}
 .ddn-viewer[data-controls=host]{grid-template-columns:1fr}.ddn-viewer[data-controls=host] .ddn-viewer-stage{grid-column:1}.ddn-viewer[data-controls=host]>.ddn-viewer-toolbar,.ddn-viewer[data-controls=host]>.ddn-viewer-outline{display:none}
 .ddn-viewer[data-ddn-navigator]:not([data-ddn-navigator=docked]):not([data-ddn-dock-left]){grid-template-columns:minmax(0,1fr)}.ddn-viewer[data-ddn-navigator]:not([data-ddn-navigator=docked]):not([data-ddn-dock-left])>.ddn-viewer-stage{grid-column:1}.ddn-viewer[data-ddn-navigator]:not([data-ddn-navigator=docked]):not([data-ddn-dock-left])[data-ddn-dock-right]{grid-template-columns:minmax(0,1fr) 320px}.ddn-viewer[data-ddn-navigator]:not([data-ddn-navigator=docked]):not([data-ddn-dock-left])[data-ddn-dock-right]>.ddn-designer-dock-right{grid-column:2}
 @media(max-width:760px){.ddn-viewer[data-ddn-navigator]:not([data-ddn-navigator=docked]):not([data-ddn-dock-left])[data-ddn-dock-right]{grid-template-columns:minmax(0,1fr)}.ddn-viewer[data-ddn-navigator]:not([data-ddn-navigator=docked]):not([data-ddn-dock-left])[data-ddn-dock-right]>.ddn-designer-dock-right{grid-column:1}.ddn-viewer{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(340px,1fr) auto;overflow:auto}.ddn-viewer-outline{grid-column:1;grid-row:2;max-height:120px;padding:10px;border-right:0;border-bottom:1px solid var(--ddn-ui-border)}.ddn-outline-heading{display:none}.ddn-viewer-stage{grid-column:1;grid-row:3;min-height:340px}.ddn-viewer-status{grid-row:4}.ddn-viewer-toolbar{padding:6px;gap:3px;min-width:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}.ddn-viewer-toolbar button{white-space:nowrap;flex:none}.ddn-toolbar-group{padding-right:4px;margin-right:0;flex-wrap:nowrap;flex:none}}
@@ -293,7 +295,22 @@ export function createViewer(element, options) {
             throw new Error('Viewer is destroyed');
     };
     const on = (target, type, listener, settings) => { target.addEventListener(type, listener, settings); cleanups.push(() => target.removeEventListener(type, listener, settings)); };
-    const announce = (message) => { status.textContent = message; };
+    const setStatusText = (message, tone, holdMs = 0) => {
+        status.textContent = message;
+        if (tone)
+            status.dataset.tone = tone;
+        else if (/not authorized|denied|failed|error|invalid|cannot/i.test(message))
+            status.dataset.tone = 'error';
+        else if (/stale|partial|warning|last valid/i.test(message))
+            status.dataset.tone = 'warning';
+        else
+            delete status.dataset.tone;
+        if (holdMs > 0)
+            announceHoldUntil = Date.now() + holdMs;
+    };
+    const announce = (message, tone) => {
+        setStatusText(message, tone, tone === 'error' || tone === 'warning' ? 2000 : 900);
+    };
     function viewBox() { return { x: viewport.bounds.x, y: viewport.bounds.y, width: viewport.bounds.width / viewport.zoom, height: viewport.bounds.height / viewport.zoom }; }
     function screenScale(view = viewport) {
         const rect = svg.getBoundingClientRect();
@@ -367,7 +384,7 @@ export function createViewer(element, options) {
             const entry = entryOf.get(item.occurrence);
             group.setAttribute('data-ref', JSON.stringify(item.target));
             group.setAttribute('aria-label', item.accessible.label);
-            group.setAttribute('data-selected', String(item.occurrence === selectedOccurrence || !selectedOccurrence && !!selection && refKey(item.target) === refKey(selection)));
+            group.setAttribute('data-selected', String(selectedOccurrences.has(item.occurrence) || item.occurrence === selectedOccurrence || !selectedOccurrence && !selectedOccurrences.size && !!selection && refKey(item.target) === refKey(selection)));
             group.setAttribute('data-view-frame', String(item.occurrence === `view:${refKey(item.view)}`));
             group.setAttribute('data-movable', String(!!(entry?.appearance ?? entry?.placement)));
             if (expandedKey)
@@ -651,27 +668,55 @@ export function createViewer(element, options) {
         section.append(result);
         inspector.append(section);
     }
-    function select(ref, occurrence) {
+    function select(ref, occurrence, additive = false) {
+        if (!ref) {
+            clearSelection();
+            return;
+        }
         if (standalone && !projection?.entries.some(entry => occurrence ? entry.item.occurrence === occurrence && refKey(entry.definition.ref) === refKey(ref) : refKey(entry.definition.ref) === refKey(ref)))
             return;
-        selection = ref;
-        selectedOccurrence = occurrence;
+        if (additive && occurrence) {
+            if (selectedOccurrences.has(occurrence) && selectedOccurrences.size > 1) {
+                selectedOccurrences.delete(occurrence);
+                if (selectedOccurrence === occurrence) {
+                    const lastOcc = [...selectedOccurrences].at(-1);
+                    const lastEntry = projection?.entries.find(e => e.item.occurrence === lastOcc);
+                    selectedOccurrence = lastOcc;
+                    selection = lastEntry?.definition.ref ?? ref;
+                }
+            }
+            else {
+                if (selectedOccurrence && !selectedOccurrences.size)
+                    selectedOccurrences.add(selectedOccurrence);
+                selectedOccurrences.add(occurrence);
+                selection = ref;
+                selectedOccurrence = occurrence;
+            }
+        }
+        else {
+            selectedOccurrences.clear();
+            if (occurrence)
+                selectedOccurrences.add(occurrence);
+            selection = ref;
+            selectedOccurrence = occurrence;
+        }
         for (const group of Array.from(svg.children)) {
-            const selected = occurrence ? group.getAttribute('data-occurrence') === occurrence : group.getAttribute('data-ref') === JSON.stringify(ref);
-            group.setAttribute('data-selected', String(selected));
+            const occ = group.getAttribute('data-occurrence');
+            const selected = (occ && selectedOccurrences.has(occ)) || (occurrence ? occ === selectedOccurrence : group.getAttribute('data-ref') === JSON.stringify(selection));
+            group.setAttribute('data-selected', String(!!selected));
         }
         for (const button of outlineList.querySelectorAll('button')) {
-            if (button.dataset.ref && refKey(JSON.parse(button.dataset.ref)) === refKey(ref))
+            if (button.dataset.ref && selection && refKey(JSON.parse(button.dataset.ref)) === refKey(selection))
                 button.setAttribute('aria-current', 'true');
             else
                 button.removeAttribute('aria-current');
         }
         renderInspection();
         for (const listener of [...selectionListeners])
-            listener(ref);
+            listener(selection);
         updateToolbarState();
         renderHint();
-        emit({ kind: 'selection', target: ref, ...(currentSnapshot ? { revision: currentSnapshot.revision } : {}) });
+        emit({ kind: 'selection', ...(selection ? { target: selection } : {}), ...(currentSnapshot ? { revision: currentSnapshot.revision } : {}) });
     }
     function cameraState() { return { viewport, expandedView, restored }; }
     function rememberCamera(state) {
@@ -707,10 +752,11 @@ export function createViewer(element, options) {
         setCamera({ ...viewport, zoom, bounds: { x, y, width: viewport.bounds.width, height: viewport.bounds.height } }, remember);
     }
     function clearSelection() {
-        if (!selection && !selectedOccurrence)
+        if (!selection && !selectedOccurrence && !selectedOccurrences.size)
             return;
         selection = undefined;
         selectedOccurrence = undefined;
+        selectedOccurrences.clear();
         for (const group of Array.from(svg.children))
             if (group.hasAttribute('data-selected'))
                 group.setAttribute('data-selected', 'false');
@@ -942,7 +988,8 @@ export function createViewer(element, options) {
         updateToolbarState();
         const messages = [stale ? 'Showing the last valid version; the source has an error.' : '', !projection.coverage.complete ? 'Partial display: ' + projection.coverage.unavailable.join(', ') : '', ...diagnostics.filter(d => d.severity !== 'info').slice(0, 5).map(d => d.message)].filter(Boolean);
         const elements = projection.entries.length - projection.views.length;
-        announce(messages.join('\n') || `${projection.views.length} view${projection.views.length === 1 ? '' : 's'} · ${elements} element${elements === 1 ? '' : 's'}`);
+        if (messages.length || Date.now() >= announceHoldUntil || !status.textContent)
+            setStatusText(messages.join('\n') || `${projection.views.length} view${projection.views.length === 1 ? '' : 's'} · ${elements} element${elements === 1 ? '' : 's'}`);
         emit({ kind: 'diagnostics', revision: snapshot.revision, diagnostics });
         emit({ kind: 'ready', revision: snapshot.revision });
     }
@@ -1138,6 +1185,22 @@ export function createViewer(element, options) {
     updateToolbarState();
     on(search, 'input', renderOutline);
     let dragMoved = false;
+    const isEditableTarget = (target) => {
+        const el = target;
+        return !!el?.closest?.('input,textarea,select,[contenteditable="true"],button');
+    };
+    on(win, 'keydown', event => {
+        if ((event.code === 'Space' || event.key === ' ') && !isEditableTarget(event.target)) {
+            spaceHeld = true;
+            svg.classList.add('ddn-space-pan');
+        }
+    });
+    on(win, 'keyup', event => {
+        if (event.code === 'Space' || event.key === ' ') {
+            spaceHeld = false;
+            svg.classList.remove('ddn-space-pan');
+        }
+    });
     on(svg, 'click', event => {
         if (dragMoved) {
             dragMoved = false;
@@ -1146,9 +1209,10 @@ export function createViewer(element, options) {
         const group = event.target.closest('[data-ref]');
         if (group) {
             const ref = JSON.parse(group.getAttribute('data-ref') ?? 'null');
-            select(ref, group.getAttribute('data-occurrence') ?? group.getAttribute('data-occurrence-ref') ?? undefined);
+            const occ = group.getAttribute('data-occurrence') ?? group.getAttribute('data-occurrence-ref') ?? undefined;
+            select(ref, occ, event.shiftKey && group.getAttribute('data-view-frame') !== 'true');
         }
-        else
+        else if (!event.shiftKey)
             clearSelection();
     });
     let wheelTimer;
@@ -1208,10 +1272,10 @@ export function createViewer(element, options) {
             return;
         const group = event.target.closest('[data-ref]');
         const readingPan = !container.hasAttribute('data-ddn-editing') && (event.pointerType === 'touch' || group?.getAttribute('data-view-frame') === 'true');
-        if (pointers.size > 2 || group && !readingPan && event.button !== 1)
+        if (pointers.size > 2 || group && !readingPan && event.button !== 1 && !spaceHeld)
             return;
         drag = { id: event.pointerId, x: event.clientX, y: event.clientY, view: viewport };
-        if (!group)
+        if (!group || spaceHeld)
             try {
                 svg.setPointerCapture(event.pointerId);
             }
@@ -1277,7 +1341,7 @@ export function createViewer(element, options) {
     on(win, 'pointerup', endDrag);
     on(win, 'pointercancel', endDrag);
     on(svg, 'lostpointercapture', endDrag);
-    on(win, 'blur', () => endDrag());
+    on(win, 'blur', () => { spaceHeld = false; svg.classList.remove('ddn-space-pan'); endDrag(); });
     on(svg, 'keydown', event => {
         if (event.key === 'Escape') {
             const wasGesture = !!drag || !!pinch;
@@ -1334,6 +1398,8 @@ export function createViewer(element, options) {
             cssCache.clear();
             selection = undefined;
             selectedOccurrence = undefined;
+            selectedOccurrences.clear();
+            announceHoldUntil = 0;
             restored = undefined;
             expandedView = undefined;
             configuredEmptyViews.clear();
@@ -1453,7 +1519,11 @@ export function createViewer(element, options) {
                 const target = findRecord(snapshot, request.scope.target), publication = target ? resolveRecord(records(snapshot), target.record.publication, target.file) : undefined;
                 if (publication && request.extent === 'content' && ['svg', 'png'].includes(request.format)) {
                     const resolvedPublication = styledResolve(snapshot, publication.ref);
-                    const published = publicationScene(items, bounds, { ...publication, record: resolvedPublication.values }, titleOf(target.record), new Date().toISOString().slice(0, 10));
+                    const workareaRecord = records(snapshot).find(r => r.owner === 'workarea' && r.file === snapshot.rootFile);
+                    const resolvedWorkarea = workareaRecord ? styledResolve(snapshot, workareaRecord.ref) : undefined;
+                    const workareaOrigins = Object.fromEntries((resolvedWorkarea?.properties ?? []).map(p => [p.path, p.origin]));
+                    const pubValues = resolvedWorkarea ? inheritedPresentation(resolvedPublication.values, resolvedPublication.properties, resolvedWorkarea.values, workareaOrigins, undefined, 'view') : resolvedPublication.values;
+                    const published = publicationScene(items, bounds, { ...publication, record: pubValues }, titleOf(target.record), new Date().toISOString().slice(0, 10));
                     if (published.diagnostics.some(d => d.severity === 'error'))
                         return { ok: false, reason: 'invalid', diagnostics: published.diagnostics };
                     items = published.items;
@@ -1555,7 +1625,7 @@ export function createViewer(element, options) {
                 runtime.destroy();
         },
     };
-    handles.set(viewer, { runtime, element, surface: svg, container, overlays, ownerDocument: document, scene: () => projection, viewport: () => viewport, selected: () => selection, clearSelection, expanded: () => expandedView, stage, subscribeOpen(listener) { openListeners.add(listener); return () => openListeners.delete(listener); }, selectedEntry: () => projection?.entries.find(e => selectedOccurrence ? e.item.occurrence === selectedOccurrence : !!selection && refKey(e.definition.ref) === refKey(selection)), select, subscribeSelection(listener) { selectionListeners.add(listener); return () => selectionListeners.delete(listener); }, refresh: async () => { schedule(); await rendering; }, whenRendered: () => rendering, diagnostics: () => diagnostics, toWorld, announce });
+    handles.set(viewer, { runtime, element, surface: svg, container, overlays, ownerDocument: document, selectedOccurrences, scene: () => projection, viewport: () => viewport, selected: () => selection, clearSelection, expanded: () => expandedView, stage, subscribeOpen(listener) { openListeners.add(listener); return () => openListeners.delete(listener); }, selectedEntry: () => projection?.entries.find(e => selectedOccurrence ? e.item.occurrence === selectedOccurrence : !!selection && refKey(e.definition.ref) === refKey(selection)), select, subscribeSelection(listener) { selectionListeners.add(listener); return () => selectionListeners.delete(listener); }, refresh: async () => { schedule(); await rendering; }, whenRendered: () => rendering, diagnostics: () => diagnostics, toWorld, announce });
     if (runtime.snapshot())
         schedule();
     return viewer;

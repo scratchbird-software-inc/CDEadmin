@@ -5,7 +5,7 @@
  * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
  * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
  */
-(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-8f37b97a0edc","version":"ddn-next-1","releaseHash":"4f601dab202a346b52c70ff1ec6bfdfb7c17ab3fbd59854e38cda422320d3131","dependencies":["shared-5331ef8070e8","shared-6cf9d24a4527","shared-89ca0b52749b"],"modules":[{"id":"presentation/src/node-dimensions.js","bytes":2660,"sha256":"67b709bdc955e942d77317da5f70d7b9559e6e69be43f377489976ed89d2c6df","dependencies":["profiles/src/core.js","presentation/src/model.js","presentation/src/graph-glyphs.js"]}],"hash":"e32b5b628ab2521fc105e9f7164b8a4284ca47313fc89de1e09894e1daf0c4e4"},{"presentation/src/node-dimensions.js":function(module,exports,require){
+(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-86dfe18929a0","version":"ddn-next-1","releaseHash":"a013ac52c7b3173ca4a5c5558fb8bac7b899854da330646dcd39702d0d86b778","dependencies":["shared-4dfa2129e2cc","shared-9019e1da906d","shared-c435f270a427"],"modules":[{"id":"presentation/src/node-dimensions.js","bytes":2660,"sha256":"67b709bdc955e942d77317da5f70d7b9559e6e69be43f377489976ed89d2c6df","dependencies":["profiles/src/core.js","presentation/src/model.js","presentation/src/graph-glyphs.js"]}],"hash":"64b5db3b6fc19b0016459a84b4b0047963c34769072e57fcbc67886bda37401d"},{"presentation/src/node-dimensions.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.graphNodeDimensions = graphNodeDimensions;

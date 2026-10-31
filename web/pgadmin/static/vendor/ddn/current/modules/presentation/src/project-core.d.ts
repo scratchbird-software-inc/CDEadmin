@@ -2,6 +2,7 @@ import type { Bounds, Matrix, SceneItem, ModelSnapshot, Ref, Json, Diagnostic, C
 import { type DataRecord, type LocatedRecord } from './model.js';
 import { type StandalonePresentation, type AssetSize } from './symbol-presentation.js';
 export { availableProjectionProfiles } from './adapters.js';
+export { inheritedPresentation } from './native-render.js';
 export interface Resolved {
     readonly values: Record<string, Json>;
     readonly properties: readonly {

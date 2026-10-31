@@ -5,7 +5,7 @@
  * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
  * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
  */
-(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-30b5187aadd6","version":"ddn-next-1","releaseHash":"4f601dab202a346b52c70ff1ec6bfdfb7c17ab3fbd59854e38cda422320d3131","dependencies":["shared-6cf9d24a4527"],"modules":[{"id":"presentation/src/stationery.js","bytes":17617,"sha256":"191e81db7a0da7192e959f97cdf747e45f3c086d221b47cdd57f9cfd9c51017a","dependencies":["presentation/src/model.js"]}],"hash":"b0cc2743b6f16df38a75d3ec66411b32930b7fc47cb8a01d89f7310eef40d2bf"},{"presentation/src/stationery.js":function(module,exports,require){
+(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-4788c79b979a","version":"ddn-next-1","releaseHash":"a013ac52c7b3173ca4a5c5558fb8bac7b899854da330646dcd39702d0d86b778","dependencies":["shared-9019e1da906d"],"modules":[{"id":"presentation/src/stationery.js","bytes":17617,"sha256":"191e81db7a0da7192e959f97cdf747e45f3c086d221b47cdd57f9cfd9c51017a","dependencies":["presentation/src/model.js"]}],"hash":"62731734e477d593265f10ff87d1552ff3b5fca6e7bf5da0756d03bc84744ccd"},{"presentation/src/stationery.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.decoratePaper = decoratePaper;

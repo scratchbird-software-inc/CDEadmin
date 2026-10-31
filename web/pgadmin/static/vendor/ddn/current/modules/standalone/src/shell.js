@@ -18,7 +18,12 @@ const examples = {
     'Concept map': 'view Knowledge as "concept.map@1"\n    element Concept as object\n    element Evidence as object\n    connect Concept to Evidence as assoc : supports\n',
     'Table': 'data Tasks\n    task:lt:60.owner:lt.status:ct\n    Design.Alex.Draft\n    Build.Sam.In-progress\nview Records as table.records@1\n    with\n        projection.options\n            records Tasks\n            columns 3\n            missing gap\n',
 };
+const completeExamples = {
+    'Flowchart': 'element Start as flow.start : Order received\n    with\n        content.form definition\nelement Validate as flow.process : Validate payment\nelement Ship as flow.process : Ship items\nelement Done as flow.end : Order fulfilled\n    with\n        content.form definition\nconnect Start to Validate as flow.control\nconnect Validate to Ship as flow.control\nconnect Ship to Done as flow.control\nview OrderFlow as flow.basic@1 : Order fulfilment\n    use Start\n    use Validate\n    use Ship\n    use Done\n',
+    'Business Model Canvas': 'view Strategy as panels.bmc@1 : Business Model Canvas\n    element KeyPartners as canvas.panel\n        with\n            panel.id key_partners\n            title "Key Partners"\n    element KeyActivities as canvas.panel\n        with\n            panel.id key_activities\n            title "Key Activities"\n    element KeyResources as canvas.panel\n        with\n            panel.id key_resources\n            title "Key Resources"\n    element ValuePropositions as canvas.panel\n        with\n            panel.id value_propositions\n            title "Value Propositions"\n    element CustomerRelationships as canvas.panel\n        with\n            panel.id customer_relationships\n            title "Customer Relationships"\n    element Channels as canvas.panel\n        with\n            panel.id channels\n            title "Channels"\n    element CustomerSegments as canvas.panel\n        with\n            panel.id customer_segments\n            title "Customer Segments"\n    element CostStructure as canvas.panel\n        with\n            panel.id cost_structure\n            title "Cost Structure"\n    element RevenueStreams as canvas.panel\n        with\n            panel.id revenue_streams\n            title "Revenue Streams"\n',
+};
 export function mountShell(factories) {
+    const activeExamples = factories.edition === 'complete' ? { ...examples, ...completeExamples } : examples;
     const doc = document;
     const host = doc.defaultView;
     installUITheme(doc.body);
@@ -57,12 +62,12 @@ button>svg,.app-source-heading>svg{width:16px;height:16px;flex:none}select,input
 .app-menu-host{position:relative}.app-menu{position:absolute;top:calc(100% + 4px);left:0;z-index:60;min-width:230px;display:grid;gap:2px;padding:6px;background:var(--ddn-ui-surface);border:1px solid var(--ddn-ui-border);border-radius:10px;box-shadow:0 14px 40px color-mix(in srgb,var(--ddn-ui-shadow) 70%,transparent)}.app-menu[hidden]{display:none}.app-menu button{justify-content:flex-start;gap:9px;border:0;background:transparent;border-radius:7px;padding:7px 9px;font-size:12px;width:100%;text-align:left}.app-menu button:hover,.app-menu button:focus-visible{background:color-mix(in srgb,var(--ddn-ui-accent) 12%,var(--ddn-ui-surface));color:var(--ddn-ui-text)}.app-menu button kbd{margin-left:auto;font:11px ui-monospace,monospace;color:var(--ddn-ui-muted)}.app-menu hr{width:100%;border:0;border-top:1px solid var(--ddn-ui-border);margin:3px 0}.app-menu .app-menu-head{padding:4px 9px 2px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ddn-ui-muted)}
 .app-main{display:grid;grid-template-columns:minmax(230px,24%) minmax(0,1fr);flex:1;min-height:360px;gap:10px;padding:10px 12px;isolation:isolate;position:relative}.app-source{display:flex;flex-direction:column;min-height:0;min-width:0;border:1px solid var(--ddn-ui-border);border-radius:12px;background:var(--ddn-ui-surface);overflow:hidden;box-shadow:0 6px 24px color-mix(in srgb,var(--ddn-ui-shadow) 45%,transparent)}.app-source-heading{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--ddn-ui-border);font-size:12px;font-weight:650}.app-source-heading>svg{color:var(--ddn-ui-accent)}.app-source-kind{margin-left:auto;font-size:10px;font-weight:500;color:var(--ddn-ui-muted);text-transform:uppercase;letter-spacing:.07em}
 .app-source-toolbar{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:6px 8px;border-bottom:1px solid var(--ddn-ui-border);background:color-mix(in srgb,var(--ddn-ui-surface) 65%,var(--ddn-ui-bg))}.app-source-toolbar button{min-height:28px;padding:3px 9px;font-size:12px}.app-source-toolbar .app-dirty{margin-left:auto;font-size:11px;color:var(--ddn-ui-muted)}.app-source-toolbar .app-dirty[data-state=dirty]{color:var(--ddn-ui-accent);font-weight:600}
-.app-source textarea{width:100%;resize:none;flex:1;min-height:140px;border:0;outline-offset:-3px;padding:12px 14px;background:var(--ddn-ui-input);color:var(--ddn-ui-text);font:12px/1.6 'JetBrains Mono',ui-monospace,monospace;tab-size:4;border-radius:0;scrollbar-color:var(--ddn-ui-border) transparent;white-space:pre;overflow:auto}.app-source textarea[aria-invalid=true]{box-shadow:inset 3px 0 0 var(--ddn-ui-danger)}
+.app-source-editor-wrap{display:flex;flex:1;min-height:140px;min-width:0;overflow:hidden;background:var(--ddn-ui-input)}.app-source-gutter{flex:none;min-width:34px;padding:12px 6px 12px 8px;text-align:right;user-select:none;color:var(--ddn-ui-muted);background:color-mix(in srgb,var(--ddn-ui-surface) 50%,var(--ddn-ui-input));border-right:1px solid var(--ddn-ui-border);font:12px/1.6 'JetBrains Mono',ui-monospace,monospace;white-space:pre;overflow:hidden}.app-source textarea{width:100%;resize:none;flex:1;min-height:140px;border:0;outline-offset:-3px;padding:12px 14px;background:var(--ddn-ui-input);color:var(--ddn-ui-text);font:12px/1.6 'JetBrains Mono',ui-monospace,monospace;tab-size:4;border-radius:0;scrollbar-color:var(--ddn-ui-border) transparent;white-space:pre;overflow:auto}.app-source textarea[aria-invalid=true]{box-shadow:inset 3px 0 0 var(--ddn-ui-danger)}
 .app-diagnostics{max-height:112px;overflow:auto;border-top:1px solid var(--ddn-ui-border);font-size:11px;line-height:1.45;background:color-mix(in srgb,var(--ddn-ui-danger) 7%,var(--ddn-ui-surface))}.app-diagnostics:empty{display:none}.app-diagnostics button{display:flex;gap:8px;width:100%;text-align:left;border:0;border-radius:0;background:transparent;padding:6px 10px;color:var(--ddn-ui-text);font-size:11px;line-height:1.45;justify-content:flex-start}.app-diagnostics button:hover{background:color-mix(in srgb,var(--ddn-ui-danger) 14%,var(--ddn-ui-surface))}.app-diagnostics b{flex:none;color:var(--ddn-ui-danger);font-weight:650}
 .app-note{padding:7px 12px;font-size:11px;line-height:1.5;color:var(--ddn-ui-muted);border-top:1px solid var(--ddn-ui-border)}.app-note kbd{font:10px ui-monospace,monospace;padding:1px 4px;border:1px solid var(--ddn-ui-border);border-radius:4px}
 .app-surface{min-width:0;min-height:0;background:var(--ddn-ui-surface);border:1px solid var(--ddn-ui-border);border-radius:12px;overflow:hidden;box-shadow:0 6px 24px color-mix(in srgb,var(--ddn-ui-shadow) 45%,transparent)}.app-surface>.ddn-viewer{height:100%;min-height:0;border:0}.app-main[data-source-hidden=true]{grid-template-columns:minmax(0,1fr)}.app-main[data-source-hidden=true]>.app-source{display:none}
 .app-banner{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border:1px solid color-mix(in srgb,var(--ddn-ui-accent) 40%,var(--ddn-ui-border));border-radius:10px;background:color-mix(in srgb,var(--ddn-ui-accent) 9%,var(--ddn-ui-surface));font-size:12px}.app-banner button{min-height:28px;padding:3px 9px;font-size:12px}.app-banner .app-primary{background:var(--ddn-ui-accent);color:var(--ddn-ui-accent-text);border-color:transparent;font-weight:650}.app-banner .app-spacer{flex:1 1 auto}
-.app-status{padding:6px 14px;font-size:11px;line-height:1.5;color:var(--ddn-ui-muted);border-top:1px solid var(--ddn-ui-border);background:var(--ddn-ui-surface);flex:none;display:flex;gap:16px;align-items:center}.app-status:empty{display:none}.app-status .app-status-text{flex:1 1 auto;min-width:0}.app-status .app-saved{flex:none;color:var(--ddn-ui-muted)}.app-error .app-status-text{color:var(--ddn-ui-danger)}.app-report{padding:24px;overflow:auto;height:100%}.app-report h2{font-size:20px;letter-spacing:-.03em;margin:0 0 10px}.app-report>p{color:var(--ddn-ui-muted);font-size:12px}.app-report>input{width:min(100%,420px);margin:8px 0 18px}.app-report table{width:100%;border-collapse:collapse;text-align:left;font-size:12px}.app-report th,.app-report td{padding:12px 10px;border-bottom:1px solid var(--ddn-ui-border);vertical-align:top;overflow-wrap:anywhere}.app-report th{background:var(--ddn-ui-bg)}.app-report code{white-space:pre-wrap}.app-pending{font-weight:600;color:var(--ddn-ui-accent)}
+.app-status{padding:6px 14px;font-size:11px;line-height:1.5;color:var(--ddn-ui-muted);border-top:1px solid var(--ddn-ui-border);background:var(--ddn-ui-surface);flex:none;display:flex;gap:16px;align-items:center}.app-status:empty{display:none}.app-status .app-status-text{flex:1 1 auto;min-width:0}.app-status .app-saved{flex:none;color:var(--ddn-ui-muted)}.app-error .app-status-text{color:var(--ddn-ui-danger)}.app-report{padding:24px;overflow:auto;height:100%}.app-report h2{font-size:20px;letter-spacing:-.03em;margin:0 0 10px}.app-report>p{color:var(--ddn-ui-muted);font-size:12px}.app-report .app-report-missing,.app-report .app-report-unavailable{color:var(--ddn-ui-text);background:color-mix(in srgb,var(--ddn-ui-danger) 10%,var(--ddn-ui-surface));border:1px solid color-mix(in srgb,var(--ddn-ui-danger) 35%,var(--ddn-ui-border));border-radius:8px;padding:8px 10px;margin:8px 0}.app-report>input{width:min(100%,420px);margin:8px 0 18px}.app-report table{width:100%;border-collapse:collapse;text-align:left;font-size:12px}.app-report th,.app-report td{padding:12px 10px;border-bottom:1px solid var(--ddn-ui-border);vertical-align:top;overflow-wrap:anywhere}.app-report th{background:var(--ddn-ui-bg)}.app-report tr[data-loc]{cursor:pointer}.app-report tr[data-loc]:hover{background:color-mix(in srgb,var(--ddn-ui-accent) 9%,var(--ddn-ui-surface))}.app-report code{white-space:pre-wrap}.app-pending{font-weight:600;color:var(--ddn-ui-accent)}
 .app-toasts{position:fixed;right:16px;bottom:48px;z-index:80;display:grid;gap:6px;pointer-events:none}.app-toast{pointer-events:auto;display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:var(--ddn-ui-text);color:var(--ddn-ui-bg);font-size:12px;box-shadow:0 10px 30px color-mix(in srgb,var(--ddn-ui-shadow) 60%,transparent);animation:app-toast-in .18s ease-out}.app-toast[data-kind=error]{background:var(--ddn-ui-danger);color:#fff}.app-toast svg{width:14px;height:14px;flex:none}@keyframes app-toast-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .app-samples{display:grid;gap:4px;max-height:360px;overflow:auto;border:1px solid var(--ddn-ui-border);border-radius:8px;padding:4px}.app-samples button{justify-content:flex-start;text-align:left;border:0;background:transparent;border-radius:6px;padding:6px 8px;gap:8px;width:100%}.app-samples button[aria-pressed=true]{background:color-mix(in srgb,var(--ddn-ui-accent) 15%,var(--ddn-ui-surface));color:var(--ddn-ui-accent)}.app-samples small{color:var(--ddn-ui-muted);margin-left:auto;font-size:10px;white-space:nowrap}.app-samples .app-menu-head{padding:6px 8px 2px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ddn-ui-muted)}
 .app-shortcuts{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:12px;margin:0}.app-shortcuts dt{font:11px ui-monospace,monospace;color:var(--ddn-ui-accent);white-space:nowrap}.app-shortcuts dd{margin:0}
@@ -144,6 +149,12 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
     sourceToolbar.className = 'app-source-toolbar';
     sourceToolbar.setAttribute('role', 'toolbar');
     sourceToolbar.setAttribute('aria-label', 'Source actions');
+    const editorWrap = doc.createElement('div');
+    editorWrap.className = 'app-source-editor-wrap';
+    const gutter = doc.createElement('div');
+    gutter.className = 'app-source-gutter';
+    gutter.setAttribute('aria-hidden', 'true');
+    gutter.textContent = '1';
     const editor = doc.createElement('textarea');
     editor.id = 'ddn-source';
     editor.setAttribute('aria-label', 'DDN source');
@@ -151,6 +162,17 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
     editor.readOnly = factories.mode === 'viewer';
     editor.wrap = 'off';
     sourceLabel.htmlFor = editor.id;
+    const updateGutter = () => {
+        const count = Math.max(1, editor.value.split('\n').length);
+        let lines = '';
+        for (let i = 1; i <= count; i++)
+            lines += (i > 1 ? '\n' : '') + i;
+        if (gutter.textContent !== lines)
+            gutter.textContent = lines;
+        gutter.scrollTop = editor.scrollTop;
+    };
+    editor.addEventListener('scroll', () => { gutter.scrollTop = editor.scrollTop; });
+    editorWrap.append(gutter, editor);
     const diagnosticsList = doc.createElement('div');
     diagnosticsList.className = 'app-diagnostics';
     diagnosticsList.setAttribute('role', 'list');
@@ -169,7 +191,7 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
     }
     else
         sourceNote.append(doc.createTextNode('Nothing is uploaded; processing is local to this page.'));
-    panel.append(sourceHeading, sourceToolbar, editor, diagnosticsList, sourceNote);
+    panel.append(sourceHeading, sourceToolbar, editorWrap, diagnosticsList, sourceNote);
     const surface = doc.createElement('section');
     surface.className = 'app-surface';
     surface.setAttribute('aria-label', isVerifier ? 'Verification results' : 'Diagram workspace');
@@ -601,7 +623,7 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
         const dialog = createStandardDialog(doc.body, { title: 'Open a sample', applyLabel: 'Open', onClose() { sampleOpen = false; }, async onApply() {
                 const approvedContent = contentState();
                 if (chosen.kind === 'starter') {
-                    if (!await loadSources({ entry: 'main.ddn', files: [{ id: 'main.ddn', text: examples[chosen.name], revision: '0', encoding: 'utf-8', writable: true }] }, undefined, () => sampleOpen))
+                    if (!await loadSources({ entry: 'main.ddn', files: [{ id: 'main.ddn', text: activeExamples[chosen.name], revision: '0', encoding: 'utf-8', writable: true }] }, undefined, () => sampleOpen))
                         return;
                 }
                 else {
@@ -654,7 +676,7 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
                 item.addEventListener('dblclick', () => { chosen = value; dialog.applyButton?.click(); });
                 list.append(item);
             };
-            const starters = Object.keys(examples).filter(name => !q || name.toLowerCase().includes(q));
+            const starters = Object.keys(activeExamples).filter(name => !q || name.toLowerCase().includes(q));
             if (starters.length) {
                 section('Starters');
                 for (const name of starters)
@@ -696,6 +718,7 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
         }
         entry = fileSelect.value;
         editor.value = files.get(entry)?.text ?? '';
+        updateGutter();
         refreshSourceState();
         validateSoon();
     });
@@ -708,13 +731,22 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
         level.append(option);
     }
     level.value = 'semantic';
-    const purpose = doc.createElement('input');
-    purpose.value = 'design';
+    const purpose = doc.createElement('select');
+    purpose.className = 'app-select';
+    purpose.dataset.role = 'purpose';
     purpose.setAttribute('aria-label', 'Verification purpose');
-    purpose.size = 12;
+    for (const value of ['design', 'review', 'display', 'conceptual', 'documentation', 'physical-schema']) {
+        const option = doc.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        purpose.append(option);
+    }
+    purpose.value = 'design';
     if (isVerifier) {
         labelled('Level', level);
         labelled('Purpose', purpose);
+        level.addEventListener('change', () => { void open().catch(showError); });
+        purpose.addEventListener('change', () => { void open().catch(showError); });
     }
     const spacer = doc.createElement('span');
     spacer.className = 'app-spacer';
@@ -842,6 +874,11 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
     doc.addEventListener('ddn:shortcuts', showShortcuts);
     // ----- Source diagnostics (inline) -----
     const lineOf = (text, offset) => text.slice(0, Math.max(0, offset)).split('\n').length;
+    const lineColOf = (text, offset) => {
+        const slice = text.slice(0, Math.max(0, offset));
+        const lines = slice.split('\n');
+        return { line: lines.length, col: (lines.at(-1)?.length ?? 0) + 1 };
+    };
     const renderDiagnostics = (items) => {
         diagnosticsList.replaceChildren();
         const problems = items.filter(d => d.severity === 'error' || d.severity === 'warning').slice(0, 20);
@@ -851,34 +888,52 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
             row.type = 'button';
             row.setAttribute('role', 'listitem');
             const offset = d.source && (d.source.file === entry || !d.source.file) ? Number(d.source.start) : undefined;
+            const endOffset = d.source && (d.source.file === entry || !d.source.file) && d.source.end !== undefined ? Number(d.source.end) : undefined;
             const line = offset !== undefined && Number.isFinite(offset) ? lineOf(editor.value, offset) : undefined;
             const where = doc.createElement('b');
             where.textContent = line ? `Line ${line}` : d.severity === 'error' ? 'Error' : 'Warning';
             row.append(where, doc.createTextNode(d.message));
             row.title = offset !== undefined && Number.isFinite(offset) ? 'Go to this line in the source' : d.code ?? '';
-            row.addEventListener('click', () => { if (offset !== undefined && Number.isFinite(offset)) {
-                editor.focus();
-                editor.setSelectionRange(offset, offset);
-                const before = editor.value.slice(0, offset).split('\n').length;
-                editor.scrollTop = Math.max(0, (before - 4) * 19.2);
-            } });
+            row.addEventListener('click', () => {
+                if (offset !== undefined && Number.isFinite(offset)) {
+                    showSource(false);
+                    editor.focus();
+                    const spanEnd = Math.max(offset + 1, endOffset !== undefined && Number.isFinite(endOffset) ? endOffset : offset + 1);
+                    editor.setSelectionRange(offset, Math.min(editor.value.length, spanEnd));
+                    const before = editor.value.slice(0, offset).split('\n').length;
+                    editor.scrollTop = Math.max(0, (before - 4) * 19.2);
+                    gutter.scrollTop = editor.scrollTop;
+                }
+            });
             diagnosticsList.append(row);
         }
     };
     let validateTimer;
+    let liveSyncTimer;
+    const canLiveApply = () => {
+        if (!isDesigner || !editorDirty || replacing || pendingDocument || !viewer || !files.has(entry) || !/\.ddn$/i.test(entry))
+            return false;
+        const currentText = factories.getRuntime?.(viewer)?.sources()?.files.find(f => f.id === entry)?.text ?? '';
+        return currentText.trim().length > 0 && editor.value.trim().length > 0 && editor.value !== currentText;
+    };
     const validateNow = () => {
-        if (isVerifier)
-            return;
         try {
             const decoded = decodeSources(workingSources());
             renderDiagnostics(decoded.diagnostics);
+            clearTimeout(liveSyncTimer);
+            if (canLiveApply() && doc.activeElement === editor && decoded.syntaxValid && !decoded.diagnostics.some(d => d.severity === 'error')) {
+                liveSyncTimer = setTimeout(() => {
+                    if (canLiveApply() && doc.activeElement === editor)
+                        void open(false, true).catch(() => { });
+                }, 900);
+            }
         }
         catch {
             /* validation is advisory */
         }
     };
-    const validateSoon = () => { clearTimeout(validateTimer); validateTimer = setTimeout(validateNow, 600); };
-    editor.addEventListener('input', () => { editorDirty = true; editGeneration++; setDirty(contentState() !== cleanState); validateSoon(); scheduleDraft(); });
+    const validateSoon = () => { clearTimeout(validateTimer); clearTimeout(liveSyncTimer); validateTimer = setTimeout(validateNow, 600); };
+    editor.addEventListener('input', () => { editorDirty = true; sourceConflict = false; editGeneration++; updateGutter(); setDirty(contentState() !== cleanState); validateSoon(); scheduleDraft(); });
     // ----- Autosave (designer): the working document is kept in this browser and offered back on the next visit -----
     let draftTimer;
     function persistDraft() {
@@ -920,6 +975,23 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
             const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
             return { bytes, mime: file.type || (/\.svg$/i.test(location) ? 'image/svg+xml' : /\.css$/i.test(location) ? 'text/css' : /\.(geojson|json)$/i.test(location) ? 'application/geo+json' : 'application/octet-stream'), hash: Array.from(digest, b => b.toString(16).padStart(2, '0')).join('') };
         } };
+    surface.addEventListener('ddn:toggle-source', event => {
+        event.preventDefault();
+        showSource(false, true);
+        editor.focus();
+    });
+    surface.addEventListener('pointerdown', () => {
+        if (isDesigner && editorDirty && !replacing && !pendingDocument && files.has(entry) && editor.value.trim().length > 0) {
+            try {
+                const decoded = decodeSources(workingSources());
+                if (decoded.syntaxValid && !decoded.diagnostics.some(d => d.severity === 'error')) {
+                    clearTimeout(validateTimer);
+                    void open(false, true).catch(() => { });
+                }
+            }
+            catch { /* advisory */ }
+        }
+    }, true);
     let unsubscribe;
     function attachViewer() {
         if (!factories.viewer)
@@ -939,9 +1011,8 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
             const source = runtime.sources();
             if (!source)
                 return;
-            if (editorDirty) {
-                sourceConflict = true;
-                notify('The diagram changed while you were editing the source text. Reload source to see the change, then reapply your edit.');
+            if (editorDirty && doc.activeElement === editor) {
+                sourceConflict = false;
             }
             else
                 syncSources(source);
@@ -990,7 +1061,17 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
         if (!files.has(entry))
             entry = source.entry;
         refreshFiles();
-        editor.value = files.get(entry)?.text ?? '';
+        const nextText = files.get(entry)?.text ?? '';
+        const hadFocus = doc.activeElement === editor;
+        const selStart = editor.selectionStart, selEnd = editor.selectionEnd, scrollTop = editor.scrollTop;
+        if (editor.value !== nextText) {
+            editor.value = nextText;
+            if (hadFocus) {
+                editor.setSelectionRange(Math.min(selStart, nextText.length), Math.min(selEnd, nextText.length));
+                editor.scrollTop = scrollTop;
+            }
+        }
+        updateGutter();
         editorDirty = false;
         sourceConflict = false;
         renderDiagnostics([]);
@@ -1039,6 +1120,18 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
         const detail = doc.createElement('p');
         detail.textContent = `${report.level} · ${report.coverage.checked.length} checked records · ${Math.round(report.stats.elapsedMs)} ms`;
         body.append(detail);
+        if (report.missing?.length) {
+            const missingP = doc.createElement('p');
+            missingP.className = 'app-report-missing';
+            missingP.textContent = 'Missing required items: ' + report.missing.join(', ');
+            body.append(missingP);
+        }
+        if (report.coverage?.unavailable?.length) {
+            const unavailP = doc.createElement('p');
+            unavailP.className = 'app-report-unavailable';
+            unavailP.textContent = 'Unavailable coverage: ' + report.coverage.unavailable.map(u => typeof u === 'string' ? u : JSON.stringify(u)).join(', ');
+            body.append(unavailP);
+        }
         const search = doc.createElement('input');
         search.placeholder = 'Filter diagnostics';
         search.setAttribute('aria-label', 'Filter diagnostics');
@@ -1049,7 +1142,33 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
             table.replaceChildren();
             for (const diagnostic of report.diagnostics.filter(d => (d.code + ' ' + d.message).toLowerCase().includes(search.value.toLowerCase()))) {
                 const row = doc.createElement('tr');
-                for (const text of [diagnostic.severity, diagnostic.code, diagnostic.message, diagnostic.source ? diagnostic.source.file + ':' + diagnostic.source.start : '']) {
+                const src = diagnostic.source;
+                const srcFile = src?.file || entry;
+                const fileText = files.get(srcFile)?.text ?? (srcFile === entry ? editor.value : '');
+                const startOffset = src && Number.isFinite(Number(src.start)) ? Number(src.start) : undefined;
+                const endOffset = src && src.end !== undefined && Number.isFinite(Number(src.end)) ? Number(src.end) : undefined;
+                let locText = '';
+                if (src && startOffset !== undefined) {
+                    const { line, col } = lineColOf(fileText, startOffset);
+                    locText = `${srcFile}:${line}:${col}`;
+                    if (srcFile === entry || !src.file) {
+                        row.dataset.loc = locText;
+                        row.title = 'Go to this location in the source';
+                        row.addEventListener('click', () => {
+                            showSource(false);
+                            editor.focus();
+                            const spanEnd = Math.max(startOffset + 1, endOffset ?? startOffset + 1);
+                            editor.setSelectionRange(startOffset, Math.min(editor.value.length, spanEnd));
+                            const before = editor.value.slice(0, startOffset).split('\n').length;
+                            editor.scrollTop = Math.max(0, (before - 4) * 19.2);
+                            gutter.scrollTop = editor.scrollTop;
+                        });
+                    }
+                }
+                else if (src?.file) {
+                    locText = src.file;
+                }
+                for (const text of [diagnostic.severity, diagnostic.code, diagnostic.message, locText]) {
                     const cell = doc.createElement('td');
                     cell.textContent = text;
                     row.append(cell);
@@ -1061,13 +1180,13 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
         fill();
         surface.append(body);
     }
-    async function open(replace = false) {
+    async function open(replace = false, auto = false) {
+        clearTimeout(validateTimer);
         const operation = ++openGeneration, bufferGeneration = editGeneration;
         const currentViewer = viewer, currentDesigner = designer;
         try {
             replace = replace || pendingDocument;
-            if (sourceConflict && !replace)
-                throw Error('The diagram changed since this source edit began. Copy your text, then Reload source and reconcile your edit.');
+            sourceConflict = false;
             const old = files.get(entry);
             if (old?.text !== editor.value)
                 files.set(entry, { id: entry, text: editor.value, revision: String(++sequence), encoding: 'utf-8', writable: old?.writable ?? true });
@@ -1080,8 +1199,10 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
             cancellation = { aborted: false, listeners: new Set() };
             const current = cancellation;
             const cancel = { get aborted() { return current.aborted; }, onAbort(handler) { current.listeners.add(handler); return () => { current.listeners.delete(handler); }; } };
-            notify('Working…');
-            cancelButton.hidden = false;
+            if (!auto) {
+                notify('Working…');
+                cancelButton.hidden = false;
+            }
             await new Promise(resolve => setTimeout(resolve, 0));
             if (operation !== openGeneration)
                 return;
@@ -1090,7 +1211,7 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
                 if (operation !== openGeneration)
                     return;
                 lastReport = report;
-                renderDiagnostics(report.diagnostics.filter(d => d.source));
+                renderDiagnostics(report.diagnostics);
                 renderReport(lastReport);
                 notify('Verification ' + lastReport.outcome + (bufferGeneration !== editGeneration ? ' for the previous source buffer; verify the current edit again.' : ''));
             }
@@ -1122,6 +1243,9 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
                             throw Error(committed.failure.diagnostics.map(d => d.message).join('; '));
                         }
                     }
+                    else {
+                        editorDirty = false;
+                    }
                 }
                 else {
                     editorDirty = false;
@@ -1135,8 +1259,8 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
                 if (operation !== openGeneration)
                     return;
                 if (bufferGeneration !== editGeneration) {
-                    sourceConflict = true;
-                    notify('Your newer source text is retained. The completed operation used an earlier buffer; reconcile before applying.');
+                    sourceConflict = false;
+                    notify('Your newer source text is retained. Apply again to use the current edit.');
                     return;
                 }
                 const openedSources = runtime?.sources();
@@ -1149,7 +1273,8 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
                 const chosen = [...viewSelect.options].find(o => o.value === previousView) ?? [...viewSelect.options].find(o => JSON.parse(o.value).id === requested) ?? viewSelect.options[0];
                 if (chosen) {
                     viewSelect.value = chosen.value;
-                    await currentViewer.navigate({ kind: 'fit-view', target: JSON.parse(chosen.value) });
+                    if (!auto || chosen.value !== previousView || !previousView)
+                        await currentViewer.navigate({ kind: 'fit-view', target: JSON.parse(chosen.value) });
                 }
                 if (operation !== openGeneration)
                     return;
@@ -1646,7 +1771,7 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
                 bus('Cut', 'edit.cut', { shortcut: 'Ctrl+X', hint: 'Select an element first' }), bus('Copy', 'edit.copy', { shortcut: 'Ctrl+C', hint: 'Select an element first' }),
                 bus('Paste', 'edit.paste', { shortcut: 'Ctrl+V' }), bus('Paste in place', 'edit.paste-in-place', { shortcut: 'Ctrl+Shift+V' }), bus('Paste as reference', 'edit.paste-reference', { shortcut: 'Ctrl+Alt+V' }),
                 bus('Duplicate', 'edit.duplicate', { shortcut: 'Ctrl+D', hint: 'Select an element first' }), bus('Delete', 'edit.delete', { shortcut: 'Delete', hint: 'Select an element first' }), separator,
-                later('Select all in view', 'Ctrl+A'), later('Select connected'), bus('Deselect', 'edit.deselect', { shortcut: 'Esc' }), separator,
+                bus('Select all in view', 'edit.select-all', { shortcut: 'Ctrl+A' }), later('Select connected'), bus('Deselect', 'edit.deselect', { shortcut: 'Esc' }), separator,
                 { label: 'Find…', shortcut: 'Ctrl+F', enabled: () => commandEnabled(command('edit.find')), run: () => { runFind(); } },
                 bus('Rename', 'edit.rename', { shortcut: 'F2', hint: 'Select an element first' }), bus('Properties', 'edit.properties', { shortcut: 'P', hint: 'Select an element first' }),
                 bus('Appearance & presets…', 'edit.appearance', { hint: 'Select an element first' }), bus('Review status…', 'edit.status', { hint: 'Select an element first' }),
@@ -1903,10 +2028,12 @@ body[data-ddn-contrast=high]{--ddn-ui-border:var(--ddn-ui-text);--ddn-ui-muted:v
             draftAssets.push(encodeDraftAsset(id, asset.mime, new TextEncoder().encode(asset.text)));
         }
         editor.value = files.get(entry)?.text ?? '';
+        updateGutter();
     }
     else {
-        editor.value = isDesigner ? BLANK_DOCUMENT : examples['ERD whiteboard'];
+        editor.value = isDesigner ? BLANK_DOCUMENT : activeExamples['ERD whiteboard'];
         files.set(entry, { id: entry, text: editor.value, revision: String(++sequence), encoding: 'utf-8', writable: true });
+        updateGutter();
     }
     refreshFiles();
     markClean();

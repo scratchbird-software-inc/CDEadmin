@@ -5,7 +5,7 @@
  * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
  * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
  */
-(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-822f2cb38cc6","version":"ddn-next-1","releaseHash":"4f601dab202a346b52c70ff1ec6bfdfb7c17ab3fbd59854e38cda422320d3131","dependencies":["shared-30b5187aadd6","shared-5331ef8070e8","shared-6cf9d24a4527","shared-73905c5bd21c","shared-89ca0b52749b","shared-aea9ceabbf71","shared-e89a1c8e2b2d","shared-ebd47c4e1fef","shared-f98a38a4da4d"],"modules":[{"id":"presentation/src/graph-isometric.js","bytes":3789,"sha256":"a458b27f75d167c39970168dbc09ee997341a5d3fab6f05c293a886e1801a324","dependencies":["presentation/src/model.js"]},{"id":"presentation/src/native-render.js","bytes":15024,"sha256":"63d9eca016cfed8d97aad524a53126793bccc22280f9eab7ae20bf3a41bca941","dependencies":["profiles/src/core.js","presentation/src/model.js","presentation/src/graph-glyphs.js"]},{"id":"presentation/src/native.js","bytes":1282,"sha256":"4ebdd36f10c8ddd5799185eb245be5d12c9d8e11168a6e812a929bd9786bc613","dependencies":["presentation/src/model.js","presentation/src/table.js","presentation/src/markdown.js","presentation/src/project-core.js","presentation/src/records.js","presentation/src/publication.js","presentation/src/adapters.js","presentation/src/relation-presentation.js"]},{"id":"presentation/src/project-core.js","bytes":65453,"sha256":"ed503eac0c95e75393f95841c912e30026f7c5a82ee9202dbb4fa92ea92970ff","dependencies":["presentation/src/card-text.js","presentation/src/view-surface.js","presentation/src/model.js","presentation/src/table.js","presentation/src/symbol-presentation.js","presentation/src/records.js","presentation/src/graph-native.js","presentation/src/adapters.js","profiles/src/core.js","profiles/src/mindmap.js","presentation/src/graph-isometric.js","presentation/src/stationery.js","presentation/src/native-render.js","presentation/src/publication.js","presentation/src/relation-presentation.js","presentation/src/graph-common.js"]},{"id":"presentation/src/publication.js","bytes":7514,"sha256":"686f0f5e287bddcfdd0adf54c3a98d62795530306f0a5fe78cc26cf60e0b3648","dependencies":["presentation/src/table.js","presentation/src/model.js"]},{"id":"presentation/src/records.js","bytes":5727,"sha256":"d806dcbe4e441eb4e7e41c1b179c05794fba3b7cd73d2bad9d4e5c4a2a327229","dependencies":["presentation/src/model.js"]},{"id":"presentation/src/view-surface.js","bytes":5069,"sha256":"eb76f7c3c5e18906220371e9b5cc68daa5963cd56793cbf9ace75b0f4d43d26b","dependencies":["presentation/src/model.js"]},{"id":"runtime/src/guards.js","bytes":5217,"sha256":"599cd434abf3b85bb5814937ae390fc6b57f455f4d408fbbc2d763a3dc439589","dependencies":["model/src/index.js","profiles/src/schema-core.js","execution/src/index.js"]},{"id":"runtime/src/native.js","bytes":985,"sha256":"53321a5cca5ec40e70ee24d31791ce3d74ba74bc03cb0d6dcde740a78a6de8ec","dependencies":["runtime/src/runtime.js","runtime/src/registry.js","profiles/src/native.js"]},{"id":"runtime/src/profile-loading.js","bytes":541,"sha256":"e9cb562d4cef187d290d1695f7e69f7bc866115b708bb9d748be2acbc56a03c2","dependencies":[]},{"id":"runtime/src/providers.js","bytes":8553,"sha256":"c90061d15a06952fec543029b176dc30fb5084095147bdbb56c87291dd023020","dependencies":["model/src/index.js","execution/src/index.js"]},{"id":"runtime/src/registry.js","bytes":4873,"sha256":"4abe1d53ff14597c50ff699fd26d734630e85f7f4c7db59952f315a1850534c3","dependencies":["execution/src/index.js"]},{"id":"runtime/src/runtime.js","bytes":25454,"sha256":"0a0b790e28bd6fb33fc44f83f1ea51ef4c815504a15b21b3b9547c528f11caa9","dependencies":["language/src/index.js","model/src/index.js","verifier/src/index.js","execution/src/index.js","runtime/src/registry.js","runtime/src/guards.js","runtime/src/providers.js","execution/src/compute.js","runtime/src/versions.js"]},{"id":"standalone/src/modular-runtime.js","bytes":6782,"sha256":"5d7d2d8290f806a86532eec337e3779191d2ad3410ce126555e18652a17f96f6","dependencies":["profiles/src/core.js","profiles/src/family-packs.js","runtime/src/runtime.js","runtime/src/registry.js","runtime/src/profile-loading.js","model/src/index.js","standalone/src/modular-loading.js"]},{"id":"standalone/src/modular-viewer.js","bytes":1190,"sha256":"8772434629795c388056bfb4f8dc0294418a0de5f22aa4f7804551e72d222bcd","dependencies":["viewer/src/native.js","standalone/src/modular-runtime.js","standalone/src/modular-loading.js"]},{"id":"viewer/src/core.js","bytes":103759,"sha256":"9680e695bad24b7fec10c34ba4dd3c730e04ac3ff3c13fef8c79206f3b3524c0","dependencies":["viewer/src/drawer.js","viewer/src/side-tabs.js","viewer/src/svg-assets.js","presentation/src/adapters.js","runtime/src/registry.js","runtime/src/native.js","defaults/src/index.js","presentation/src/native.js","viewer/src/ui-theme.js","viewer/src/ui-icons.js","viewer/src/dialogs.js","viewer/src/fonts.js","viewer/src/texture.js","viewer/src/ui-commands.js","viewer/src/grid.js","viewer/src/status-hint.js","viewer/src/standalone-viewport.js"]},{"id":"viewer/src/grid.js","bytes":842,"sha256":"bd759a47212a66d8a0b0dc9983a2468a34a4576e3cf76714038f2b3fa5430bc1","dependencies":["presentation/src/native.js"]},{"id":"viewer/src/native.js","bytes":811,"sha256":"48e0d16af58c7ebfd2f8079bbfbcf203cca5626ab0e2961dcdc39ebe86d3f8fa","dependencies":["viewer/src/core.js"]},{"id":"viewer/src/side-tabs.js","bytes":4583,"sha256":"4332c26a2cc389c117bbc3c9ca8b49e0d0d8fb49f5d1d5e14e7f7cb44112cfeb","dependencies":["viewer/src/ui-icons.js"]},{"id":"viewer/src/standalone-viewport.js","bytes":933,"sha256":"41752ca40630e30e022ba9c29ef5785a18735f288b92406b3fe9162fc0da06dc","dependencies":[]},{"id":"viewer/src/status-hint.js","bytes":3555,"sha256":"c82bdfba8f4beabac5af5826e1b2aa84f025bee991ec54f5ae44cde48eb7b467","dependencies":[]},{"id":"viewer/src/svg-assets.js","bytes":2956,"sha256":"1772e521ce6e40afd96b1a50adecd89884f168f286eb39b34a07b7375f5dacd9","dependencies":[]}],"hash":"bb7f980cee32d1121397983a48e5d4acab7333d5f7700366049ca3040fb63c8d"},{"presentation/src/graph-isometric.js":function(module,exports,require){
+(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-8776885c04b2","version":"ddn-next-1","releaseHash":"a013ac52c7b3173ca4a5c5558fb8bac7b899854da330646dcd39702d0d86b778","dependencies":["shared-0e2e62c8ac26","shared-4788c79b979a","shared-4dfa2129e2cc","shared-53be1a54a3de","shared-646a07aa4889","shared-9019e1da906d","shared-c435f270a427","shared-cca37dc67bcd","shared-e2b9b2a21e0e"],"modules":[{"id":"presentation/src/graph-isometric.js","bytes":3789,"sha256":"a458b27f75d167c39970168dbc09ee997341a5d3fab6f05c293a886e1801a324","dependencies":["presentation/src/model.js"]},{"id":"presentation/src/native-render.js","bytes":17599,"sha256":"79179f31a81135c22666628adf2d21215ae9639d2ae018a4de544065cb19d89f","dependencies":["profiles/src/core.js","presentation/src/model.js","presentation/src/graph-glyphs.js"]},{"id":"presentation/src/native.js","bytes":1282,"sha256":"4ebdd36f10c8ddd5799185eb245be5d12c9d8e11168a6e812a929bd9786bc613","dependencies":["presentation/src/model.js","presentation/src/table.js","presentation/src/markdown.js","presentation/src/project-core.js","presentation/src/records.js","presentation/src/publication.js","presentation/src/adapters.js","presentation/src/relation-presentation.js"]},{"id":"presentation/src/project-core.js","bytes":67751,"sha256":"d300d594a707bd9199ec20ffa01f69c55b2a174eb1137ef27ea83ac1b304743f","dependencies":["presentation/src/card-text.js","presentation/src/view-surface.js","presentation/src/model.js","presentation/src/table.js","presentation/src/symbol-presentation.js","presentation/src/records.js","presentation/src/graph-native.js","presentation/src/adapters.js","profiles/src/core.js","profiles/src/mindmap.js","presentation/src/graph-isometric.js","presentation/src/stationery.js","presentation/src/native-render.js","presentation/src/publication.js","presentation/src/relation-presentation.js","presentation/src/graph-common.js"]},{"id":"presentation/src/publication.js","bytes":8455,"sha256":"6ece9d615ade311ff9fb5d5a82223707cb4a70369354061651031c5b86e65837","dependencies":["presentation/src/table.js","presentation/src/model.js"]},{"id":"presentation/src/records.js","bytes":5727,"sha256":"d806dcbe4e441eb4e7e41c1b179c05794fba3b7cd73d2bad9d4e5c4a2a327229","dependencies":["presentation/src/model.js"]},{"id":"presentation/src/view-surface.js","bytes":5069,"sha256":"eb76f7c3c5e18906220371e9b5cc68daa5963cd56793cbf9ace75b0f4d43d26b","dependencies":["presentation/src/model.js"]},{"id":"runtime/src/guards.js","bytes":5217,"sha256":"599cd434abf3b85bb5814937ae390fc6b57f455f4d408fbbc2d763a3dc439589","dependencies":["model/src/index.js","profiles/src/schema-core.js","execution/src/index.js"]},{"id":"runtime/src/native.js","bytes":985,"sha256":"53321a5cca5ec40e70ee24d31791ce3d74ba74bc03cb0d6dcde740a78a6de8ec","dependencies":["runtime/src/runtime.js","runtime/src/registry.js","profiles/src/native.js"]},{"id":"runtime/src/profile-loading.js","bytes":541,"sha256":"e9cb562d4cef187d290d1695f7e69f7bc866115b708bb9d748be2acbc56a03c2","dependencies":[]},{"id":"runtime/src/providers.js","bytes":8553,"sha256":"c90061d15a06952fec543029b176dc30fb5084095147bdbb56c87291dd023020","dependencies":["model/src/index.js","execution/src/index.js"]},{"id":"runtime/src/registry.js","bytes":4873,"sha256":"4abe1d53ff14597c50ff699fd26d734630e85f7f4c7db59952f315a1850534c3","dependencies":["execution/src/index.js"]},{"id":"runtime/src/runtime.js","bytes":25454,"sha256":"0a0b790e28bd6fb33fc44f83f1ea51ef4c815504a15b21b3b9547c528f11caa9","dependencies":["language/src/index.js","model/src/index.js","verifier/src/index.js","execution/src/index.js","runtime/src/registry.js","runtime/src/guards.js","runtime/src/providers.js","execution/src/compute.js","runtime/src/versions.js"]},{"id":"standalone/src/modular-runtime.js","bytes":6782,"sha256":"5d7d2d8290f806a86532eec337e3779191d2ad3410ce126555e18652a17f96f6","dependencies":["profiles/src/core.js","profiles/src/family-packs.js","runtime/src/runtime.js","runtime/src/registry.js","runtime/src/profile-loading.js","model/src/index.js","standalone/src/modular-loading.js"]},{"id":"standalone/src/modular-viewer.js","bytes":1190,"sha256":"8772434629795c388056bfb4f8dc0294418a0de5f22aa4f7804551e72d222bcd","dependencies":["viewer/src/native.js","standalone/src/modular-runtime.js","standalone/src/modular-loading.js"]},{"id":"viewer/src/core.js","bytes":107696,"sha256":"0211c0badd6df4a0ef5552bee9774b9dbf10812efb8c0cb06be82a0d882a08a9","dependencies":["viewer/src/drawer.js","viewer/src/side-tabs.js","viewer/src/svg-assets.js","presentation/src/adapters.js","runtime/src/registry.js","runtime/src/native.js","defaults/src/index.js","presentation/src/native.js","viewer/src/ui-theme.js","viewer/src/ui-icons.js","viewer/src/dialogs.js","viewer/src/fonts.js","viewer/src/texture.js","viewer/src/ui-commands.js","viewer/src/grid.js","viewer/src/status-hint.js","viewer/src/standalone-viewport.js"]},{"id":"viewer/src/grid.js","bytes":842,"sha256":"bd759a47212a66d8a0b0dc9983a2468a34a4576e3cf76714038f2b3fa5430bc1","dependencies":["presentation/src/native.js"]},{"id":"viewer/src/native.js","bytes":811,"sha256":"48e0d16af58c7ebfd2f8079bbfbcf203cca5626ab0e2961dcdc39ebe86d3f8fa","dependencies":["viewer/src/core.js"]},{"id":"viewer/src/side-tabs.js","bytes":4583,"sha256":"4332c26a2cc389c117bbc3c9ca8b49e0d0d8fb49f5d1d5e14e7f7cb44112cfeb","dependencies":["viewer/src/ui-icons.js"]},{"id":"viewer/src/standalone-viewport.js","bytes":933,"sha256":"41752ca40630e30e022ba9c29ef5785a18735f288b92406b3fe9162fc0da06dc","dependencies":[]},{"id":"viewer/src/status-hint.js","bytes":3555,"sha256":"c82bdfba8f4beabac5af5826e1b2aa84f025bee991ec54f5ae44cde48eb7b467","dependencies":[]},{"id":"viewer/src/svg-assets.js","bytes":2956,"sha256":"1772e521ce6e40afd96b1a50adecd89884f168f286eb39b34a07b7375f5dacd9","dependencies":[]}],"hash":"3fff5578d65ef4808744066e476d259c93a18f05eb3a26ed47a5e35e8c768e7e"},{"presentation/src/graph-isometric.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isometricGraph = isometricGraph;
@@ -53,6 +53,7 @@ exports.nativeIcon = nativeIcon;
 exports.nativeContour = nativeContour;
 exports.nativeBadges = nativeBadges;
 exports.badgePrimitives = badgePrimitives;
+exports.originRank = originRank;
 exports.inheritedPresentation = inheritedPresentation;
 const core_js_1 = require("profiles/src/core.js");
 const model_js_1 = require("presentation/src/model.js");
@@ -177,18 +178,70 @@ function badgePrimitives(values, b, size, color, fill) {
     }
     return result;
 }
-function inheritedPresentation(values, properties, view) {
+function originRank(origin, level) {
+    if (!origin || origin.startsWith('standard:'))
+        return 0;
+    if (origin === 'css:workarea')
+        return 1;
+    if (origin === 'css:view')
+        return 2;
+    if (origin === 'css:element')
+        return 3;
+    if (origin === 'css')
+        return level === 'workarea' ? 1 : level === 'view' ? 2 : 3;
+    if (origin === 'file:defaults')
+        return 4;
+    if (origin === 'file:workarea defaults')
+        return 5;
+    if (origin === 'file:workarea' || level === 'workarea')
+        return 6;
+    if (origin === 'file:view defaults')
+        return 7;
+    if (origin === 'file:view' || level === 'view')
+        return 8;
+    if (origin === 'file:definition defaults')
+        return 9;
+    if (origin === 'file:definition')
+        return 10;
+    if (origin === 'file:occurrence')
+        return 11;
+    return 10;
+}
+const INHERITABLE_STYLE_KEYS = ['look', 'font', 'font_size', 'seed', 'roughness', 'theme', 'hachure'];
+function inheritedPresentation(values, properties, view, viewOrigins, targetOrigins, level = 'element') {
     const result = { ...values };
-    for (const group of ['style', 'text']) {
+    const parentLevel = level === 'view' ? 'workarea' : 'view';
+    const groups = level === 'view' ? ['style', 'text', 'border'] : ['style', 'text'];
+    for (const group of groups) {
         const next = { ...(0, model_js_1.object)(values[group]) };
         for (const [key, value] of Object.entries((0, model_js_1.object)(view[group]))) {
-            if (group === 'style' && !['look', 'font', 'font_size', 'seed', 'roughness', 'theme'].includes(key))
+            if (group === 'style' && !INHERITABLE_STYLE_KEYS.includes(key))
                 continue;
-            const origin = properties.find(p => p.path === group + '.' + key)?.origin;
-            if (!origin || origin === 'standard:definition' || origin === 'standard:appearance')
+            const path = group + '.' + key;
+            const origin = targetOrigins?.[path] ?? properties.find(p => p.path === path)?.origin;
+            const parentOrigin = viewOrigins ? viewOrigins[path] : 'file:view';
+            if (originRank(parentOrigin, parentLevel) > originRank(origin, level)) {
                 next[key] = value;
+                if (targetOrigins) {
+                    const inheritedOrigin = !parentOrigin || parentOrigin.startsWith('standard:')
+                        ? origin ?? ('standard:' + level)
+                        : parentOrigin.startsWith('css')
+                            ? (parentOrigin === 'css:workarea' || parentLevel === 'workarea' ? 'css:workarea' : 'css:view')
+                            : (parentOrigin === 'file:workarea' || parentLevel === 'workarea' ? 'file:workarea' : 'file:view');
+                    targetOrigins[path] = inheritedOrigin;
+                }
+            }
         }
         result[group] = next;
+    }
+    if (level === 'view' && view.shadow && typeof view.shadow === 'object') {
+        const shadowOrigin = targetOrigins?.shadow ?? properties.find(p => p.path === 'shadow' || p.path.startsWith('shadow.'))?.origin;
+        const parentShadowOrigin = viewOrigins?.shadow ?? Object.entries(viewOrigins ?? {}).find(([k]) => k.startsWith('shadow.'))?.[1];
+        if (originRank(parentShadowOrigin, 'workarea') > originRank(shadowOrigin, 'view')) {
+            result.shadow = { ...(0, model_js_1.object)(view.shadow) };
+            if (targetOrigins && parentShadowOrigin)
+                targetOrigins.shadow = parentShadowOrigin.startsWith('css') ? 'css:workarea' : 'file:workarea';
+        }
     }
     return result;
 }
@@ -224,7 +277,7 @@ __exportStar(require("presentation/src/relation-presentation.js"), exports);
 "presentation/src/project-core.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.availableProjectionProfiles = void 0;
+exports.inheritedPresentation = exports.availableProjectionProfiles = void 0;
 exports.unionBounds = unionBounds;
 exports.projectSnapshot = projectSnapshot;
 const card_text_js_1 = require("presentation/src/card-text.js");
@@ -242,6 +295,8 @@ const mindmap_js_1 = require("profiles/src/mindmap.js");
 const graph_isometric_js_1 = require("presentation/src/graph-isometric.js");
 const stationery_js_1 = require("presentation/src/stationery.js");
 const native_render_js_1 = require("presentation/src/native-render.js");
+var native_render_js_2 = require("presentation/src/native-render.js");
+Object.defineProperty(exports, "inheritedPresentation", { enumerable: true, get: function () { return native_render_js_2.inheritedPresentation; } });
 const publication_js_1 = require("presentation/src/publication.js");
 const relation_presentation_js_1 = require("presentation/src/relation-presentation.js");
 const graph_common_js_1 = require("presentation/src/graph-common.js");
@@ -356,6 +411,11 @@ function projectSnapshot(snapshot, options) {
     const diagnostics = [];
     const unavailable = [];
     const measure = options.measure ?? ((s, size) => s.length * size * .58);
+    const workarea = all.find(r => r.owner === 'workarea' && r.file === snapshot.rootFile);
+    const wr = workarea ? options.resolve(workarea.ref) : undefined;
+    if (wr)
+        diagnostics.push(...wr.diagnostics);
+    const workareaOrigins = Object.fromEntries((wr?.properties ?? []).map(p => [p.path, p.origin]));
     let nextViewX = 0, nextViewY = 0, rowBottom = 0;
     for (const [viewIndex, view] of views.entries()) {
         const vr = options.resolve(view.ref);
@@ -366,7 +426,9 @@ function projectSnapshot(snapshot, options) {
         const pv = pr?.values ?? {};
         const placedPaper = Object.fromEntries((pr?.properties ?? []).filter(p => (p.path === 'style.paper' || p.path === 'background.color' || p.path === 'background.texture' || p.path.startsWith('background.texture.') || p.path === 'decorations' || p.path === 'shadow' || p.path.startsWith('shadow.')) &&
             (p.origin.startsWith('file:') || p.origin === 'css' || p.origin === 'standard:paper' && !vr.properties.some(v => v.path === 'background.color' && !v.origin.startsWith('standard:')))).map(p => [p.path, p.value]));
-        const effectiveView = withPreview(withPreview(vr.values, placedPaper), options.preview);
+        const viewOrigins = Object.fromEntries(vr.properties.map(p => [p.path, p.origin]));
+        const cascadedView = wr ? (0, native_render_js_1.inheritedPresentation)(vr.values, vr.properties, wr.values, workareaOrigins, viewOrigins, 'view') : vr.values;
+        const effectiveView = withPreview(withPreview(cascadedView, placedPaper), options.preview);
         const surface = (0, view_surface_js_1.fixedViewSurface)(effectiveView);
         const vp = (0, model_js_1.object)(pv.position);
         const vs = (0, model_js_1.object)(pv.size);
@@ -483,7 +545,7 @@ function projectSnapshot(snapshot, options) {
                 const resolved = options.resolve(definition.ref, { view: view.ref, ...(appearance ? { appearance: appearance.ref } : {}) });
                 diagnostics.push(...resolved.diagnostics);
                 const propertyOrigins = Object.fromEntries(resolved.properties.map(p => [p.path, p.origin]));
-                let effective = withPreview((0, native_render_js_1.inheritedPresentation)(resolved.values, resolved.properties, effectiveView), options.preview);
+                let effective = withPreview((0, native_render_js_1.inheritedPresentation)(resolved.values, resolved.properties, effectiveView, viewOrigins, propertyOrigins, 'element'), options.preview);
                 let fontSize = (0, model_js_1.num)((0, model_js_1.pathValue)(effective, 'style.font_size'), 16);
                 const font = (0, model_js_1.str)((0, model_js_1.pathValue)(effective, 'style.font'), 'sans');
                 const color = (0, model_js_1.str)((0, model_js_1.pathValue)(effective, 'text.color'), '#1f2933');
@@ -697,8 +759,10 @@ function projectSnapshot(snapshot, options) {
                 const d = route === 'straight' ? `M${x1},${y1}L${x2},${y2}` : route === 'curved' ? `M${x1},${y1}C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}` : `M${x1},${y1}H${(x1 + x2) / 2}V${y2}H${x2}`;
                 const bounds = { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.max(1, Math.abs(x2 - x1)), height: Math.max(1, Math.abs(y2 - y1)) };
                 const resolved = options.resolve(definition.ref, { view: view.ref, ...(appearance ? { appearance: appearance.ref } : {}) });
-                const item = { occurrence: appearance?.ref.id ?? `${(0, model_js_1.refKey)(view.ref)}:${(0, model_js_1.refKey)(definition.ref)}`, target: definition.ref, view: view.ref, layer: 'relations', bounds, transform: identity, primitives: [{ kind: 'path', d, paint: { fill: 'none', stroke: (0, model_js_1.str)((0, model_js_1.pathValue)(resolved.values, 'stroke.color'), '#64748b'), 'stroke-width': 1.5 } }, text((0, model_js_1.str)(definition.record.title) || (0, model_js_1.str)(definition.record.name), bounds.x + bounds.width / 2, bounds.y - 5, 12, '#334155', { 'text-anchor': 'middle' })], hitTargets: [{ id: definition.ref.id, target: definition.ref, bounds }], accessible: { role: 'graphics-symbol', label: (0, model_js_1.titleOf)(definition.record) }, evidence: snapshot.coverage.complete ? 'current' : 'partial' };
-                entries.push({ item, definition, view, ...(appearance ? { appearance } : {}), effective: resolved.values, propertyOrigins: Object.fromEntries(resolved.properties.map(p => [p.path, p.origin])) });
+                const relOrigins = Object.fromEntries(resolved.properties.map(p => [p.path, p.origin]));
+                const relEffective = (0, native_render_js_1.inheritedPresentation)(resolved.values, resolved.properties, effectiveView, viewOrigins, relOrigins, 'element');
+                const item = { occurrence: appearance?.ref.id ?? `${(0, model_js_1.refKey)(view.ref)}:${(0, model_js_1.refKey)(definition.ref)}`, target: definition.ref, view: view.ref, layer: 'relations', bounds, transform: identity, primitives: [{ kind: 'path', d, paint: { fill: 'none', stroke: (0, model_js_1.str)((0, model_js_1.pathValue)(relEffective, 'stroke.color'), '#64748b'), 'stroke-width': 1.5 } }, text((0, model_js_1.str)(definition.record.title) || (0, model_js_1.str)(definition.record.name), bounds.x + bounds.width / 2, bounds.y - 5, 12, '#334155', { 'text-anchor': 'middle' })], hitTargets: [{ id: definition.ref.id, target: definition.ref, bounds }], accessible: { role: 'graphics-symbol', label: (0, model_js_1.titleOf)(definition.record) }, evidence: snapshot.coverage.complete ? 'current' : 'partial' };
+                entries.push({ item, definition, view, ...(appearance ? { appearance } : {}), effective: relEffective, propertyOrigins: relOrigins });
             }
             const contentBounds = unionBounds(positioned.map(e => e.item.bounds));
             if (positioned.length && (0, model_js_1.pathValue)(effectiveView, 'layout.frame_overflow') !== 'confine') {
@@ -821,7 +885,17 @@ function projectSnapshot(snapshot, options) {
             else
                 diagnostics.push({ code: 'asset-unavailable', severity: 'warning', message: 'View background image does not resolve.', target: view.ref });
         }
-        viewPrimitives.unshift(rect(bounds, (0, model_js_1.str)((0, model_js_1.pathValue)(effectiveView, 'background.color'), '#f8fafc'), (0, model_js_1.str)((0, model_js_1.pathValue)(effectiveView, 'border.color'), '#cbd5e1')));
+        const viewFill = (0, model_js_1.str)((0, model_js_1.pathValue)(effectiveView, 'background.color'), '#f8fafc');
+        const viewBorderStyle = (0, model_js_1.pathValue)(effectiveView, 'border.style');
+        const viewStroke = viewBorderStyle === 'none' ? 'none' : (0, model_js_1.str)((0, model_js_1.pathValue)(effectiveView, 'border.color'), '#cbd5e1');
+        const viewBorderWidth = (0, model_js_1.num)((0, model_js_1.pathValue)(effectiveView, 'border.width')) > 0 ? (0, model_js_1.num)((0, model_js_1.pathValue)(effectiveView, 'border.width')) : 1;
+        const viewBorderDash = viewBorderStyle === 'dashed' ? '6 4' : viewBorderStyle === 'dotted' ? '2 3' : undefined;
+        let frameOutline = (0, model_js_1.str)((0, model_js_1.pathValue)(effectiveView, 'style.look')) === 'handdrawn'
+            ? sketch(bounds, viewFill, viewStroke, (0, model_js_1.num)((0, model_js_1.pathValue)(effectiveView, 'style.seed'), 42) + viewIndex, (0, model_js_1.num)((0, model_js_1.pathValue)(effectiveView, 'style.roughness'), 1))
+            : rect(bounds, viewFill, viewStroke, viewBorderWidth);
+        if ('paint' in frameOutline && (viewBorderWidth !== 1 || viewBorderDash))
+            frameOutline = { ...frameOutline, paint: { ...frameOutline.paint, 'stroke-width': viewBorderWidth, ...(viewBorderDash ? { 'stroke-dasharray': viewBorderDash } : {}) } };
+        viewPrimitives.unshift(frameOutline);
         const chromeScale = surface?.scale ?? 1;
         if (banner)
             viewPrimitives.push(text((0, model_js_1.str)(chrome.banner_text) || 'DDN / ' + profile + ' / ddn-next-1', viewX + 20 * chromeScale, viewY + 16 * chromeScale, 10 * chromeScale, chromeColor, { 'font-weight': 600 }));
@@ -831,7 +905,7 @@ function projectSnapshot(snapshot, options) {
             viewPrimitives.push({ kind: 'path', d: `M${viewX + 20 * chromeScale},${viewY + viewHeight - 30 * chromeScale}H${viewX + viewWidth - 20 * chromeScale}`, paint: { fill: 'none', stroke: chromeColor, 'stroke-width': .5 * chromeScale, opacity: .3 } }, text((0, model_js_1.str)(chrome.footer_text) || profile, viewX + 20 * chromeScale, viewY + viewHeight - 12 * chromeScale, 10 * chromeScale, chromeColor));
         }
         const frame = { occurrence: `view:${(0, model_js_1.refKey)(view.ref)}`, target: view.ref, view: view.ref, layer: 'views', bounds, transform: identity, primitives: viewPrimitives, hitTargets: [{ id: view.ref.id, target: view.ref, bounds }], accessible: { role: 'graphics-object', label: `${title}, ${profile || 'document'}` }, evidence: supported || isDocument ? snapshot.coverage.complete ? 'current' : 'partial' : 'invalid' };
-        let decoratedFrame = (0, stationery_js_1.decoratePaper)({ item: frame, definition: view, view, ...(placement ? { placement } : {}), effective: effectiveView });
+        let decoratedFrame = (0, stationery_js_1.decoratePaper)({ item: frame, definition: view, view, ...(placement ? { placement } : {}), effective: effectiveView, propertyOrigins: viewOrigins });
         if (surface)
             decoratedFrame = { ...decoratedFrame, surfaceTransform: surfaceTransform, item: { ...decoratedFrame.item, bounds, clip: bounds, hitTargets: frame.hitTargets } };
         const viewEntries = entries.slice(firstEntry);
@@ -928,12 +1002,23 @@ function publicationScene(items, content, publication, title, date) {
     const bounds = { x: 0, y: 0, width, height };
     const primitives = [{ kind: 'rect', bounds, paint: { fill: (0, model_js_1.str)((0, model_js_1.pathValue)(record, 'background.color'), '#ffffff'), stroke: 'none', rx: 0 } }];
     const border = (0, model_js_1.num)((0, model_js_1.pathValue)(record, 'border.width'));
-    if (border > 0)
-        primitives.push({ kind: 'rect', bounds: { x: left / 2, y: top / 2, width: width - (left + right) / 2, height: height - (top + bottom) / 2 }, paint: { fill: 'none', stroke: (0, model_js_1.str)((0, model_js_1.pathValue)(record, 'border.color'), '#475569'), 'stroke-width': border, rx: 0 } });
+    const look = (0, model_js_1.str)((0, model_js_1.pathValue)(record, 'style.look'));
+    const defaultFont = (0, model_js_1.str)((0, model_js_1.pathValue)(record, 'style.font'), 'sans');
+    if (border > 0) {
+        const b = { x: left / 2, y: top / 2, width: width - (left + right) / 2, height: height - (top + bottom) / 2 }, stroke = (0, model_js_1.str)((0, model_js_1.pathValue)(record, 'border.color'), '#475569');
+        if (look === 'handdrawn') {
+            let state = (0, model_js_1.num)((0, model_js_1.pathValue)(record, 'style.seed'), 42) >>> 0;
+            const roughness = (0, model_js_1.num)((0, model_js_1.pathValue)(record, 'style.roughness'), 1), rnd = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return (state / 4294967296 - .5) * roughness * 2; };
+            const pts = [[b.x, b.y], [b.x + b.width, b.y], [b.x + b.width, b.y + b.height], [b.x, b.y + b.height], [b.x, b.y]].map(([px, py]) => `${px + rnd()},${py + rnd()}`);
+            primitives.push({ kind: 'path', d: 'M' + pts.join('L') + 'Z', paint: { fill: 'none', stroke, 'stroke-width': border } });
+        }
+        else
+            primitives.push({ kind: 'rect', bounds: b, paint: { fill: 'none', stroke, 'stroke-width': border, rx: 0 } });
+    }
     for (const [items, y] of [[header, top], [footer, height - bottom - footerHeight]]) {
         for (const { run, position, fontSize, lines } of items) {
             const align = (0, model_js_1.str)(run.align, position);
-            primitives.push({ kind: 'text', runs: lines.map((text, index) => ({ text, x: align === 'right' ? width - right : align === 'center' ? width / 2 : left, y: y + 6 + fontSize + index * fontSize * 1.3, fontKey: (0, model_js_1.str)(run.font, 'sans'), style: { 'font-size': fontSize, fill: (0, model_js_1.str)(run.color, '#334155'), 'text-anchor': align === 'right' ? 'end' : align === 'center' ? 'middle' : 'start', 'font-weight': (0, model_js_1.num)(run.weight, 400), ...(run.italic ? { 'font-style': 'italic' } : {}), ...(run.decoration === 'strike' ? { 'text-decoration': 'line-through' } : {}), ...(run.variant === 'small_caps' ? { 'font-variant': 'small-caps' } : {}) } })) });
+            primitives.push({ kind: 'text', runs: lines.map((text, index) => ({ text, x: align === 'right' ? width - right : align === 'center' ? width / 2 : left, y: y + 6 + fontSize + index * fontSize * 1.3, fontKey: (0, model_js_1.str)(run.font, defaultFont), style: { 'font-size': fontSize, fill: (0, model_js_1.str)(run.color, '#334155'), 'text-anchor': align === 'right' ? 'end' : align === 'center' ? 'middle' : 'start', 'font-weight': (0, model_js_1.num)(run.weight, 400), ...(run.italic ? { 'font-style': 'italic' } : {}), ...(run.decoration === 'strike' ? { 'text-decoration': 'line-through' } : {}), ...(run.variant === 'small_caps' ? { 'font-variant': 'small-caps' } : {}) } })) });
         }
     }
     const frame = { occurrence: 'publication:' + publication.ref.id, target: publication.ref, view: items[0]?.view ?? publication.ref, layer: 'views', bounds, transform: [1, 0, 0, 1, 0, 0], primitives, hitTargets: [], accessible: { role: 'graphics-object', label: title }, evidence: 'current' };
@@ -2163,6 +2248,8 @@ function createViewer(element, options) {
     const ownsRuntime = !options.runtime;
     const runtime = options.runtime ?? (0, native_js_1.createRuntime)(options.runtimeOptions);
     let disposed = false, projection, currentSnapshot, selection, selectedOccurrence;
+    const selectedOccurrences = new Set();
+    let spaceHeld = false, announceHoldUntil = 0;
     let viewport = { bounds: { x: 0, y: 0, width: 1280, height: 800 }, zoom: 1 };
     let preview;
     let stale = false, diagnostics = [];
@@ -2214,7 +2301,7 @@ function createViewer(element, options) {
 .ddn-viewer-outline input{min-width:0;width:100%;padding:8px 0;border:0;background:transparent;color:var(--ddn-ui-text);font-size:12px;outline-offset:1px}.ddn-viewer .ddn-viewer-outline .ddn-panel-section>button{display:block;text-align:left;width:100%;margin-top:4px;font-size:12px;overflow-wrap:anywhere;padding:8px 10px;line-height:1.4;color:var(--ddn-ui-muted)}.ddn-viewer-outline button[aria-current=true]{background:color-mix(in srgb,var(--ddn-ui-accent) 13%,var(--ddn-ui-surface));color:var(--ddn-ui-accent);font-weight:650}
 .ddn-viewer-stage{grid-column:2;position:relative;min-width:0;min-height:300px;overflow:hidden;background:#ffffff}.ddn-viewer-stage>svg{display:block;width:100%;height:100%;min-height:300px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}.ddn-viewer-stage>svg.ddn-panning{cursor:grabbing}.ddn-viewer-stage>svg [data-ref]{cursor:pointer}.ddn-viewer:not([data-ddn-editing]) .ddn-viewer-stage>svg [data-view-frame=true]{cursor:grab}.ddn-viewer[data-ddn-editing] .ddn-viewer-stage>svg [data-ref][data-movable=true]{cursor:move}.ddn-viewer-stage [data-selected=true]{filter:drop-shadow(0 0 3px #2563eb)}.ddn-viewer-stage>svg .ddn-hit{fill:none;stroke:transparent;stroke-width:14;pointer-events:stroke}.ddn-viewer-stage>svg[data-expanded] g[data-occurrence]:not([data-in-expanded=true]){display:none}.ddn-viewer-stage>svg[data-lod=mini] g[data-occurrence]:not([data-view-frame=true]){display:none}.ddn-viewer-stage>svg[data-lod=mini] g[data-view-frame=true]>g{display:none}.ddn-mini-card{cursor:pointer}.ddn-mini-card .ddn-mini-paper{fill:#ffffff;stroke:#94a3b8;stroke-width:1}.ddn-mini-card[data-active=true] .ddn-mini-paper{stroke:#2563eb;stroke-width:2}.ddn-mini-card text{fill:#1f2933;font-family:Inter,system-ui,sans-serif;font-weight:600}.ddn-mini-card .ddn-mini-meta{fill:#64748b;font-weight:400}.ddn-toolbar-group[aria-label=Zoom]{flex-wrap:nowrap;flex:none}.ddn-zoom-readout{min-width:48px;font-variant-numeric:tabular-nums;color:var(--ddn-ui-muted);font-size:11px;justify-content:center}.ddn-viewer-hint{width:min(420px,calc(100% - 32px));position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:min(420px,calc(100% - 32px));padding:16px 18px;border-radius:12px;background:color-mix(in srgb,var(--ddn-ui-surface) 94%,transparent);color:var(--ddn-ui-text);border:1px solid var(--ddn-ui-border);box-shadow:0 10px 30px color-mix(in srgb,var(--ddn-ui-shadow) 55%,transparent);font-size:13px;line-height:1.5;text-align:center;pointer-events:none}.ddn-viewer-hint button{pointer-events:auto}.ddn-placing .ddn-viewer-hint{width:min(420px,calc(100% - 32px));display:none}.ddn-viewer-hint p{margin:0 0 10px}.ddn-viewer-hint .ddn-hint-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}.ddn-viewer-hint button{border:1px solid var(--ddn-ui-border);background:var(--ddn-ui-input);color:var(--ddn-ui-text);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}.ddn-viewer-hint button[data-primary]{background:var(--ddn-ui-accent);color:var(--ddn-ui-accent-text);border-color:transparent;font-weight:650}.ddn-viewer-hint small{display:block;margin-top:8px;color:var(--ddn-ui-muted);font-size:11px}
 .ddn-viewer-inspector{overflow-wrap:anywhere}.ddn-viewer-inspector>h3{margin:0 0 6px}.ddn-viewer-inspector details{margin-top:12px}.ddn-viewer-inspector summary{cursor:pointer;font-weight:600}.ddn-viewer-inspector dt{font-weight:600;margin-top:8px}.ddn-viewer-inspector dd{margin:2px 0 8px;font:12px 'JetBrains Mono',ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
-.ddn-viewer-status{grid-column:1/-1;padding:8px 12px;border-top:1px solid var(--ddn-ui-border);white-space:pre-wrap;font-size:11px;color:var(--ddn-ui-muted);background:var(--ddn-ui-surface)}.ddn-viewer-overlays{position:absolute;inset:0;pointer-events:none}.ddn-viewer-overlays>*:not(.ddn-ui-layer):not(.ddn-viewer-hint){pointer-events:auto}
+.ddn-viewer-status{grid-column:1/-1;padding:8px 12px;border-top:1px solid var(--ddn-ui-border);white-space:pre-wrap;font-size:11px;color:var(--ddn-ui-muted);background:var(--ddn-ui-surface)}.ddn-viewer-status[data-tone=error]{color:var(--ddn-ui-danger)}.ddn-viewer-status[data-tone=warning]{color:#d97706}.ddn-viewer-stage>svg.ddn-space-pan{cursor:grab}.ddn-viewer-stage>svg.ddn-space-pan.ddn-panning{cursor:grabbing}.ddn-viewer-overlays{position:absolute;inset:0;pointer-events:none}.ddn-viewer-overlays>*:not(.ddn-ui-layer):not(.ddn-viewer-hint){pointer-events:auto}
 .ddn-viewer[data-controls=host]{grid-template-columns:1fr}.ddn-viewer[data-controls=host] .ddn-viewer-stage{grid-column:1}.ddn-viewer[data-controls=host]>.ddn-viewer-toolbar,.ddn-viewer[data-controls=host]>.ddn-viewer-outline{display:none}
 .ddn-viewer[data-ddn-navigator]:not([data-ddn-navigator=docked]):not([data-ddn-dock-left]){grid-template-columns:minmax(0,1fr)}.ddn-viewer[data-ddn-navigator]:not([data-ddn-navigator=docked]):not([data-ddn-dock-left])>.ddn-viewer-stage{grid-column:1}.ddn-viewer[data-ddn-navigator]:not([data-ddn-navigator=docked]):not([data-ddn-dock-left])[data-ddn-dock-right]{grid-template-columns:minmax(0,1fr) 320px}.ddn-viewer[data-ddn-navigator]:not([data-ddn-navigator=docked]):not([data-ddn-dock-left])[data-ddn-dock-right]>.ddn-designer-dock-right{grid-column:2}
 @media(max-width:760px){.ddn-viewer[data-ddn-navigator]:not([data-ddn-navigator=docked]):not([data-ddn-dock-left])[data-ddn-dock-right]{grid-template-columns:minmax(0,1fr)}.ddn-viewer[data-ddn-navigator]:not([data-ddn-navigator=docked]):not([data-ddn-dock-left])[data-ddn-dock-right]>.ddn-designer-dock-right{grid-column:1}.ddn-viewer{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(340px,1fr) auto;overflow:auto}.ddn-viewer-outline{grid-column:1;grid-row:2;max-height:120px;padding:10px;border-right:0;border-bottom:1px solid var(--ddn-ui-border)}.ddn-outline-heading{display:none}.ddn-viewer-stage{grid-column:1;grid-row:3;min-height:340px}.ddn-viewer-status{grid-row:4}.ddn-viewer-toolbar{padding:6px;gap:3px;min-width:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}.ddn-viewer-toolbar button{white-space:nowrap;flex:none}.ddn-toolbar-group{padding-right:4px;margin-right:0;flex-wrap:nowrap;flex:none}}
@@ -2277,7 +2364,22 @@ function createViewer(element, options) {
             throw new Error('Viewer is destroyed');
     };
     const on = (target, type, listener, settings) => { target.addEventListener(type, listener, settings); cleanups.push(() => target.removeEventListener(type, listener, settings)); };
-    const announce = (message) => { status.textContent = message; };
+    const setStatusText = (message, tone, holdMs = 0) => {
+        status.textContent = message;
+        if (tone)
+            status.dataset.tone = tone;
+        else if (/not authorized|denied|failed|error|invalid|cannot/i.test(message))
+            status.dataset.tone = 'error';
+        else if (/stale|partial|warning|last valid/i.test(message))
+            status.dataset.tone = 'warning';
+        else
+            delete status.dataset.tone;
+        if (holdMs > 0)
+            announceHoldUntil = Date.now() + holdMs;
+    };
+    const announce = (message, tone) => {
+        setStatusText(message, tone, tone === 'error' || tone === 'warning' ? 2000 : 900);
+    };
     function viewBox() { return { x: viewport.bounds.x, y: viewport.bounds.y, width: viewport.bounds.width / viewport.zoom, height: viewport.bounds.height / viewport.zoom }; }
     function screenScale(view = viewport) {
         const rect = svg.getBoundingClientRect();
@@ -2350,7 +2452,7 @@ function createViewer(element, options) {
             const entry = entryOf.get(item.occurrence);
             group.setAttribute('data-ref', JSON.stringify(item.target));
             group.setAttribute('aria-label', item.accessible.label);
-            group.setAttribute('data-selected', String(item.occurrence === selectedOccurrence || !selectedOccurrence && !!selection && (0, native_js_2.refKey)(item.target) === (0, native_js_2.refKey)(selection)));
+            group.setAttribute('data-selected', String(selectedOccurrences.has(item.occurrence) || item.occurrence === selectedOccurrence || !selectedOccurrence && !selectedOccurrences.size && !!selection && (0, native_js_2.refKey)(item.target) === (0, native_js_2.refKey)(selection)));
             group.setAttribute('data-view-frame', String(item.occurrence === `view:${(0, native_js_2.refKey)(item.view)}`));
             group.setAttribute('data-movable', String(!!(entry?.appearance ?? entry?.placement)));
             if (expandedKey)
@@ -2634,27 +2736,55 @@ function createViewer(element, options) {
         section.append(result);
         inspector.append(section);
     }
-    function select(ref, occurrence) {
+    function select(ref, occurrence, additive = false) {
+        if (!ref) {
+            clearSelection();
+            return;
+        }
         if (standalone && !projection?.entries.some(entry => occurrence ? entry.item.occurrence === occurrence && (0, native_js_2.refKey)(entry.definition.ref) === (0, native_js_2.refKey)(ref) : (0, native_js_2.refKey)(entry.definition.ref) === (0, native_js_2.refKey)(ref)))
             return;
-        selection = ref;
-        selectedOccurrence = occurrence;
+        if (additive && occurrence) {
+            if (selectedOccurrences.has(occurrence) && selectedOccurrences.size > 1) {
+                selectedOccurrences.delete(occurrence);
+                if (selectedOccurrence === occurrence) {
+                    const lastOcc = [...selectedOccurrences].at(-1);
+                    const lastEntry = projection?.entries.find(e => e.item.occurrence === lastOcc);
+                    selectedOccurrence = lastOcc;
+                    selection = lastEntry?.definition.ref ?? ref;
+                }
+            }
+            else {
+                if (selectedOccurrence && !selectedOccurrences.size)
+                    selectedOccurrences.add(selectedOccurrence);
+                selectedOccurrences.add(occurrence);
+                selection = ref;
+                selectedOccurrence = occurrence;
+            }
+        }
+        else {
+            selectedOccurrences.clear();
+            if (occurrence)
+                selectedOccurrences.add(occurrence);
+            selection = ref;
+            selectedOccurrence = occurrence;
+        }
         for (const group of Array.from(svg.children)) {
-            const selected = occurrence ? group.getAttribute('data-occurrence') === occurrence : group.getAttribute('data-ref') === JSON.stringify(ref);
-            group.setAttribute('data-selected', String(selected));
+            const occ = group.getAttribute('data-occurrence');
+            const selected = (occ && selectedOccurrences.has(occ)) || (occurrence ? occ === selectedOccurrence : group.getAttribute('data-ref') === JSON.stringify(selection));
+            group.setAttribute('data-selected', String(!!selected));
         }
         for (const button of outlineList.querySelectorAll('button')) {
-            if (button.dataset.ref && (0, native_js_2.refKey)(JSON.parse(button.dataset.ref)) === (0, native_js_2.refKey)(ref))
+            if (button.dataset.ref && selection && (0, native_js_2.refKey)(JSON.parse(button.dataset.ref)) === (0, native_js_2.refKey)(selection))
                 button.setAttribute('aria-current', 'true');
             else
                 button.removeAttribute('aria-current');
         }
         renderInspection();
         for (const listener of [...selectionListeners])
-            listener(ref);
+            listener(selection);
         updateToolbarState();
         renderHint();
-        emit({ kind: 'selection', target: ref, ...(currentSnapshot ? { revision: currentSnapshot.revision } : {}) });
+        emit({ kind: 'selection', ...(selection ? { target: selection } : {}), ...(currentSnapshot ? { revision: currentSnapshot.revision } : {}) });
     }
     function cameraState() { return { viewport, expandedView, restored }; }
     function rememberCamera(state) {
@@ -2690,10 +2820,11 @@ function createViewer(element, options) {
         setCamera({ ...viewport, zoom, bounds: { x, y, width: viewport.bounds.width, height: viewport.bounds.height } }, remember);
     }
     function clearSelection() {
-        if (!selection && !selectedOccurrence)
+        if (!selection && !selectedOccurrence && !selectedOccurrences.size)
             return;
         selection = undefined;
         selectedOccurrence = undefined;
+        selectedOccurrences.clear();
         for (const group of Array.from(svg.children))
             if (group.hasAttribute('data-selected'))
                 group.setAttribute('data-selected', 'false');
@@ -2925,7 +3056,8 @@ function createViewer(element, options) {
         updateToolbarState();
         const messages = [stale ? 'Showing the last valid version; the source has an error.' : '', !projection.coverage.complete ? 'Partial display: ' + projection.coverage.unavailable.join(', ') : '', ...diagnostics.filter(d => d.severity !== 'info').slice(0, 5).map(d => d.message)].filter(Boolean);
         const elements = projection.entries.length - projection.views.length;
-        announce(messages.join('\n') || `${projection.views.length} view${projection.views.length === 1 ? '' : 's'} · ${elements} element${elements === 1 ? '' : 's'}`);
+        if (messages.length || Date.now() >= announceHoldUntil || !status.textContent)
+            setStatusText(messages.join('\n') || `${projection.views.length} view${projection.views.length === 1 ? '' : 's'} · ${elements} element${elements === 1 ? '' : 's'}`);
         emit({ kind: 'diagnostics', revision: snapshot.revision, diagnostics });
         emit({ kind: 'ready', revision: snapshot.revision });
     }
@@ -3130,6 +3262,22 @@ function createViewer(element, options) {
     updateToolbarState();
     on(search, 'input', renderOutline);
     let dragMoved = false;
+    const isEditableTarget = (target) => {
+        const el = target;
+        return !!el?.closest?.('input,textarea,select,[contenteditable="true"],button');
+    };
+    on(win, 'keydown', event => {
+        if ((event.code === 'Space' || event.key === ' ') && !isEditableTarget(event.target)) {
+            spaceHeld = true;
+            svg.classList.add('ddn-space-pan');
+        }
+    });
+    on(win, 'keyup', event => {
+        if (event.code === 'Space' || event.key === ' ') {
+            spaceHeld = false;
+            svg.classList.remove('ddn-space-pan');
+        }
+    });
     on(svg, 'click', event => {
         if (dragMoved) {
             dragMoved = false;
@@ -3138,9 +3286,10 @@ function createViewer(element, options) {
         const group = event.target.closest('[data-ref]');
         if (group) {
             const ref = JSON.parse(group.getAttribute('data-ref') ?? 'null');
-            select(ref, group.getAttribute('data-occurrence') ?? group.getAttribute('data-occurrence-ref') ?? undefined);
+            const occ = group.getAttribute('data-occurrence') ?? group.getAttribute('data-occurrence-ref') ?? undefined;
+            select(ref, occ, event.shiftKey && group.getAttribute('data-view-frame') !== 'true');
         }
-        else
+        else if (!event.shiftKey)
             clearSelection();
     });
     let wheelTimer;
@@ -3203,10 +3352,10 @@ function createViewer(element, options) {
             return;
         const group = event.target.closest('[data-ref]');
         const readingPan = !container.hasAttribute('data-ddn-editing') && (event.pointerType === 'touch' || group?.getAttribute('data-view-frame') === 'true');
-        if (pointers.size > 2 || group && !readingPan && event.button !== 1)
+        if (pointers.size > 2 || group && !readingPan && event.button !== 1 && !spaceHeld)
             return;
         drag = { id: event.pointerId, x: event.clientX, y: event.clientY, view: viewport };
-        if (!group)
+        if (!group || spaceHeld)
             try {
                 svg.setPointerCapture(event.pointerId);
             }
@@ -3270,7 +3419,7 @@ function createViewer(element, options) {
     on(win, 'pointerup', endDrag);
     on(win, 'pointercancel', endDrag);
     on(svg, 'lostpointercapture', endDrag);
-    on(win, 'blur', () => endDrag());
+    on(win, 'blur', () => { spaceHeld = false; svg.classList.remove('ddn-space-pan'); endDrag(); });
     on(svg, 'keydown', event => {
         if (event.key === 'Escape') {
             const wasGesture = !!drag || !!pinch;
@@ -3326,6 +3475,8 @@ function createViewer(element, options) {
             cssCache.clear();
             selection = undefined;
             selectedOccurrence = undefined;
+            selectedOccurrences.clear();
+            announceHoldUntil = 0;
             restored = undefined;
             expandedView = undefined;
             configuredEmptyViews.clear();
@@ -3445,7 +3596,11 @@ function createViewer(element, options) {
                 const target = (0, native_js_2.findRecord)(snapshot, request.scope.target), publication = target ? (0, native_js_2.resolveRecord)((0, native_js_2.records)(snapshot), target.record.publication, target.file) : undefined;
                 if (publication && request.extent === 'content' && ['svg', 'png'].includes(request.format)) {
                     const resolvedPublication = styledResolve(snapshot, publication.ref);
-                    const published = (0, native_js_2.publicationScene)(items, bounds, { ...publication, record: resolvedPublication.values }, (0, native_js_2.titleOf)(target.record), new Date().toISOString().slice(0, 10));
+                    const workareaRecord = (0, native_js_2.records)(snapshot).find(r => r.owner === 'workarea' && r.file === snapshot.rootFile);
+                    const resolvedWorkarea = workareaRecord ? styledResolve(snapshot, workareaRecord.ref) : undefined;
+                    const workareaOrigins = Object.fromEntries((resolvedWorkarea?.properties ?? []).map(p => [p.path, p.origin]));
+                    const pubValues = resolvedWorkarea ? (0, native_js_2.inheritedPresentation)(resolvedPublication.values, resolvedPublication.properties, resolvedWorkarea.values, workareaOrigins, undefined, 'view') : resolvedPublication.values;
+                    const published = (0, native_js_2.publicationScene)(items, bounds, { ...publication, record: pubValues }, (0, native_js_2.titleOf)(target.record), new Date().toISOString().slice(0, 10));
                     if (published.diagnostics.some(d => d.severity === 'error'))
                         return { ok: false, reason: 'invalid', diagnostics: published.diagnostics };
                     items = published.items;
@@ -3547,7 +3702,7 @@ function createViewer(element, options) {
                 runtime.destroy();
         },
     };
-    handles.set(viewer, { runtime, element, surface: svg, container, overlays, ownerDocument: document, scene: () => projection, viewport: () => viewport, selected: () => selection, clearSelection, expanded: () => expandedView, stage, subscribeOpen(listener) { openListeners.add(listener); return () => openListeners.delete(listener); }, selectedEntry: () => projection?.entries.find(e => selectedOccurrence ? e.item.occurrence === selectedOccurrence : !!selection && (0, native_js_2.refKey)(e.definition.ref) === (0, native_js_2.refKey)(selection)), select, subscribeSelection(listener) { selectionListeners.add(listener); return () => selectionListeners.delete(listener); }, refresh: async () => { schedule(); await rendering; }, whenRendered: () => rendering, diagnostics: () => diagnostics, toWorld, announce });
+    handles.set(viewer, { runtime, element, surface: svg, container, overlays, ownerDocument: document, selectedOccurrences, scene: () => projection, viewport: () => viewport, selected: () => selection, clearSelection, expanded: () => expandedView, stage, subscribeOpen(listener) { openListeners.add(listener); return () => openListeners.delete(listener); }, selectedEntry: () => projection?.entries.find(e => selectedOccurrence ? e.item.occurrence === selectedOccurrence : !!selection && (0, native_js_2.refKey)(e.definition.ref) === (0, native_js_2.refKey)(selection)), select, subscribeSelection(listener) { selectionListeners.add(listener); return () => selectionListeners.delete(listener); }, refresh: async () => { schedule(); await rendering; }, whenRendered: () => rendering, diagnostics: () => diagnostics, toWorld, announce });
     if (runtime.snapshot())
         schedule();
     return viewer;

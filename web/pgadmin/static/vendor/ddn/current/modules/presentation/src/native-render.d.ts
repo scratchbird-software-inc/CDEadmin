@@ -6,7 +6,8 @@ export declare function nativeIcon(glyph: string, b: Bounds, color: string): Pri
 export declare function nativeContour(role: string, record: DataRecord, b: Bounds, fill: string, stroke: string, weight: number, look: string, roughness: number, seed: number): Primitive[];
 export declare function nativeBadges(record: DataRecord, appearance: DataRecord | undefined, view: DataRecord): string[];
 export declare function badgePrimitives(values: string[], b: Bounds, size: number, color: string, fill: string): Primitive[];
+export declare function originRank(origin: string | undefined, level: 'workarea' | 'view' | 'element'): number;
 export declare function inheritedPresentation(values: DataRecord, properties: readonly {
     path: string;
     origin: string;
-}[], view: DataRecord): DataRecord;
+}[], view: DataRecord, viewOrigins?: Readonly<Record<string, string>>, targetOrigins?: Record<string, string>, level?: 'view' | 'element'): DataRecord;

@@ -1,4 +1,5 @@
-import { allNodes, decodeSources } from '../../language/src/index.js';
+import { allNodes, createSourceSet, decodeSources } from '../../language/src/index.js';
+export { createSourceSet };
 import { fingerprint, createContext, ComputationStopped, clone, freeze } from '../../execution/src/index.js';
 import { normalizeLocation } from '../../model/src/index.js';
 import { bundleFiles, getProfile, indexRecords, enclosingDefinitions, nativeProfileDiagnostics, normalizedReference, resolveRecord as resolveUnindexedRecord, roleDescriptor, coreTypeDescriptor, coreDescriptor, safeLocation } from '../../profiles/src/core.js';
@@ -12,6 +13,17 @@ export function verifyDecoded(verifier, input, options, diagnostics) {
     if (!run)
         throw new TypeError('Expected an instance created by createVerifier');
     return run(input, options, diagnostics);
+}
+/** Convenience helper to verify a DDN text string, file map, or SourceSet with sensible defaults. */
+export function verifyText(verifier, input, options = {}) {
+    return verifier.verifySources(createSourceSet(input), {
+        scope: options.scope ?? { kind: 'workarea' },
+        purpose: options.purpose ?? 'design',
+        level: options.level ?? 'review',
+        ...(options.measurement ? { measurement: options.measurement } : {}),
+        ...(options.budget ? { budget: options.budget } : {}),
+        ...(options.cancel ? { cancel: options.cancel } : {}),
+    });
 }
 const refKey = (r) => r.file + '\0' + r.id;
 const equal = (a, b) => stableStringify(a) === stableStringify(b);
@@ -629,8 +641,10 @@ export function createVerifier(runtimeOptions) {
                 if (file && !reachable.has(file.location))
                     continue;
                 const owner = file && path ? containingRecord(records, file.location, path[2]) : undefined;
-                if (options.scope.kind === 'workarea' || !owner || selected.has(refKey(owner.ref)))
-                    diagnostics.push(issue('DDN-SCHEMA-' + error.keyword.toUpperCase(), error.path + ': ' + error.message, owner?.ref));
+                if (options.scope.kind === 'workarea' || !owner || selected.has(refKey(owner.ref))) {
+                    const ownerLabel = owner ? `${typeof owner.record.name === 'string' && owner.record.name ? owner.record.name : owner.ref.id} (${typeof owner.record.role === 'string' ? owner.record.role : owner.owner}): ` : '';
+                    diagnostics.push(issue('DDN-SCHEMA-' + error.keyword.toUpperCase(), ownerLabel + error.path + ': ' + error.message, owner?.ref));
+                }
             }
             const scopeRecords = records.filter(r => selected.has(refKey(r.ref)));
             const requiredRules = new Map();
@@ -743,7 +757,8 @@ export function createVerifier(runtimeOptions) {
                         if (checks.length) {
                             incomplete = true;
                             missing.add('complete:' + refKey(record.ref));
-                            diagnostics.push({ code: 'DDN-COMPLETENESS', severity: 'warning', message: checks.map(c => c.message).join('; '), target: record.ref });
+                            const label = `${typeof record.record.name === 'string' && record.record.name ? record.record.name : record.ref.id} (${name})`;
+                            diagnostics.push({ code: 'DDN-COMPLETENESS', severity: 'warning', message: checks.map(c => `${label}: ${c.path ? c.path + ': ' : ''}${c.message}${c.path === '/form' || /\bform\b/.test(c.message) ? ' (e.g. add "with" -> "content.form definition")' : ''}`).join('; '), target: record.ref });
                         }
                     }
                     if (options.purpose === 'physical-schema' && (record.record.role === 'entity' || record.record.role === 'table')) {
@@ -944,6 +959,19 @@ export function createVerifier(runtimeOptions) {
         }
     }
     const verifier = {
+        verifyText(inputArgument, optionsArgument = {}) {
+            const { entry = 'main.ddn', ...rest } = optionsArgument;
+            const sourceSet = createSourceSet(inputArgument, entry);
+            const verifyOptions = {
+                scope: rest.scope ?? { kind: 'workarea' },
+                level: rest.level ?? 'semantic',
+                purpose: rest.purpose ?? 'design',
+                ...(rest.budget ? { budget: rest.budget } : {}),
+                ...(rest.cancel ? { cancel: rest.cancel } : {}),
+                ...(rest.measurement ? { measurement: rest.measurement } : {}),
+            };
+            return verifier.verifySources(sourceSet, verifyOptions);
+        },
         async verifySources(inputArgument, optionsArgument) {
             const started = Date.now();
             let input = { entry: 'unavailable.ddn', files: [] };
@@ -973,7 +1001,7 @@ export function createVerifier(runtimeOptions) {
                 coverage = decoded.coverage;
                 for (const node of allNodes(decoded))
                     if (node.ref && !spans.has(refKey(node.ref)))
-                        spans.set(refKey(node.ref), { file: node.file, revision: input.files.find(file => file.id === node.file).revision, start: node.start, end: node.end });
+                        spans.set(refKey(node.ref), { file: node.file, revision: input.files.find(file => file.id === node.file).revision, start: node.start, end: node.headerEnd ?? node.end });
             }
             catch (error) {
                 stopped = error instanceof ComputationStopped ? error.outcome : 'invalid';

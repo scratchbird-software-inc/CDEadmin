@@ -67,6 +67,18 @@ export function openProperties(viewer, panel, commit) {
         };
         const scope = makeSelect('Apply settings to');
         scopes.forEach((item, index) => scope.add(new Option(item.label, String(index))));
+        const activeChips = document.createElement('div');
+        activeChips.className = 'ddn-active-properties';
+        activeChips.setAttribute('aria-label', 'Configured settings');
+        activeChips.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin:2px 0';
+        body.append(activeChips);
+        const filterWrap = document.createElement('label'), filterInput = document.createElement('input');
+        filterInput.type = 'search';
+        filterInput.placeholder = 'Filter settings…';
+        filterInput.setAttribute('aria-label', 'Filter settings');
+        filterInput.dataset.ddnLiveIgnore = '';
+        filterWrap.append('Filter settings', filterInput);
+        body.append(filterWrap);
         const property = makeSelect('Setting'), editorArea = document.createElement('div');
         body.append(editorArea);
         const resetLabel = document.createElement('label'), reset = document.createElement('input');
@@ -175,14 +187,69 @@ export function openProperties(viewer, panel, commit) {
             dirty = true; });
         reset.addEventListener('change', () => { dirty = true; editorArea.inert = reset.checked; });
         editorArea.addEventListener('ddn-settings-change', () => { dirty = true; });
+        const selectProperty = (nextPath) => {
+            if (!nextPath || nextPath === selectedPath)
+                return;
+            property.disabled = true;
+            editorArea.inert = true;
+            void flushLiveSettings(body).then(() => {
+                if (!body.isConnected)
+                    return;
+                if (![...property.options].some(o => o.value === nextPath)) {
+                    const def = choices.find(c => c.path === nextPath);
+                    if (def)
+                        property.add(new Option(labels[def.path] ?? def.path, def.path));
+                }
+                property.value = nextPath;
+                render();
+                renderActiveChips();
+                message.textContent = '';
+            }).catch(error => { message.textContent = error.message; }).finally(() => { property.disabled = false; editorArea.inert = reset.checked; });
+        };
+        const renderActiveChips = () => {
+            activeChips.replaceChildren();
+            const current = scopes[chosen];
+            if (!current || !handle.runtime.snapshot())
+                return;
+            const authoredRecord = records(handle.runtime.snapshot()).find(record => refKey(record.ref) === refKey(current.record.ref))?.record ?? current.record.record;
+            for (const item of choices) {
+                const authored = Object.hasOwn(changes, item.path) ? changes[item.path] : pathValue(authoredRecord, item.path);
+                if (authored === undefined)
+                    continue;
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'ddn-active-property-chip';
+                chip.dataset.propertyPath = item.path;
+                chip.dataset.ddnLiveIgnore = '';
+                const summaryVal = typeof authored === 'object' ? '…' : String(authored);
+                chip.textContent = `${labels[item.path] ?? item.path}: ${summaryVal.length > 18 ? summaryVal.slice(0, 18) + '…' : summaryVal}`;
+                chip.title = `Jump to ${labels[item.path] ?? item.path} (${item.path})`;
+                chip.style.cssText = `font-size:11px;padding:2px 7px;border-radius:999px;border:1px solid ${item.path === selectedPath ? 'var(--ddn-ui-accent)' : 'var(--ddn-ui-border)'};background:${item.path === selectedPath ? 'color-mix(in srgb,var(--ddn-ui-accent) 14%,var(--ddn-ui-surface))' : 'var(--ddn-ui-surface)'}`;
+                chip.addEventListener('click', event => { event.stopPropagation(); selectProperty(item.path); });
+                activeChips.append(chip);
+            }
+            activeChips.hidden = activeChips.childElementCount === 0;
+        };
+        const populatePropertyOptions = () => {
+            const q = filterInput.value.trim().toLowerCase();
+            const filtered = q ? choices.filter(item => `${labels[item.path] ?? ''} ${item.path}`.toLowerCase().includes(q)) : choices;
+            const list = filtered.length ? filtered : choices;
+            property.replaceChildren();
+            list.forEach(item => property.add(new Option(labels[item.path] ?? item.path, item.path)));
+            property.value = list.some(item => item.path === selectedPath) ? selectedPath : list[0]?.path ?? '';
+        };
+        filterInput.addEventListener('input', event => {
+            event.stopPropagation();
+            const prev = selectedPath;
+            populatePropertyOptions();
+            if (property.value && property.value !== prev)
+                selectProperty(property.value);
+        });
         property.addEventListener('change', event => {
             event.stopPropagation();
             const next = property.value;
             property.value = selectedPath;
-            property.disabled = true;
-            editorArea.inert = true;
-            void flushLiveSettings(body).then(() => { if (!body.isConnected)
-                return; property.value = next; render(); message.textContent = ''; }).catch(error => { message.textContent = error.message; }).finally(() => { property.disabled = false; editorArea.inert = reset.checked; });
+            selectProperty(next);
         });
         for (const input of [advancedValue, advancedReset])
             input.addEventListener('input', () => { advancedDirty = true; });
@@ -206,12 +273,11 @@ export function openProperties(viewer, panel, commit) {
                 const ai = preferred.indexOf(a.path), bi = preferred.indexOf(b.path);
                 return (ai < 0 ? preferred.length : ai) - (bi < 0 ? preferred.length : bi) || a.path.localeCompare(b.path);
             });
-            property.replaceChildren();
-            choices.forEach(item => property.add(new Option(labels[item.path] ?? item.path, item.path)));
-            property.value = choices.some(item => item.path === selectedPath) ? selectedPath : choices[0]?.path ?? '';
+            populatePropertyOptions();
             loading = false;
             property.disabled = reset.disabled = false;
             render();
+            renderActiveChips();
         };
         scope.addEventListener('change', event => {
             event.stopPropagation();
@@ -267,6 +333,7 @@ export function openProperties(viewer, panel, commit) {
                     if (item.effective !== undefined)
                         setPath(values, item.path, clone(item.effective));
                 initialValue = clone(effective(selectedPath));
+                renderActiveChips();
             }
         };
     });

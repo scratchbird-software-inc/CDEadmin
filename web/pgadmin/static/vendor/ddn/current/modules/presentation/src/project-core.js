@@ -12,6 +12,7 @@ import { isMindmapTopic, mindmapKey, mindmapRelationKind } from '../../profiles/
 import { isometricGraph } from './graph-isometric.js';
 import { decoratePaper } from './stationery.js';
 import { nativeCode, nativeIcon, nativeContour, nativeBadges, badgePrimitives, inheritedPresentation } from './native-render.js';
+export { inheritedPresentation } from './native-render.js';
 import { publicationPageSize } from './publication.js';
 import { prepareRelationPresentation, relationPresentation, relationLegendVisible } from './relation-presentation.js';
 import { edgeLabel } from './graph-common.js';
@@ -126,6 +127,11 @@ export function projectSnapshot(snapshot, options) {
     const diagnostics = [];
     const unavailable = [];
     const measure = options.measure ?? ((s, size) => s.length * size * .58);
+    const workarea = all.find(r => r.owner === 'workarea' && r.file === snapshot.rootFile);
+    const wr = workarea ? options.resolve(workarea.ref) : undefined;
+    if (wr)
+        diagnostics.push(...wr.diagnostics);
+    const workareaOrigins = Object.fromEntries((wr?.properties ?? []).map(p => [p.path, p.origin]));
     let nextViewX = 0, nextViewY = 0, rowBottom = 0;
     for (const [viewIndex, view] of views.entries()) {
         const vr = options.resolve(view.ref);
@@ -138,7 +144,9 @@ export function projectSnapshot(snapshot, options) {
         // presentation. Authored/scoped placed-paper settings override it.
         const placedPaper = Object.fromEntries((pr?.properties ?? []).filter(p => (p.path === 'style.paper' || p.path === 'background.color' || p.path === 'background.texture' || p.path.startsWith('background.texture.') || p.path === 'decorations' || p.path === 'shadow' || p.path.startsWith('shadow.')) &&
             (p.origin.startsWith('file:') || p.origin === 'css' || p.origin === 'standard:paper' && !vr.properties.some(v => v.path === 'background.color' && !v.origin.startsWith('standard:')))).map(p => [p.path, p.value]));
-        const effectiveView = withPreview(withPreview(vr.values, placedPaper), options.preview);
+        const viewOrigins = Object.fromEntries(vr.properties.map(p => [p.path, p.origin]));
+        const cascadedView = wr ? inheritedPresentation(vr.values, vr.properties, wr.values, workareaOrigins, viewOrigins, 'view') : vr.values;
+        const effectiveView = withPreview(withPreview(cascadedView, placedPaper), options.preview);
         const surface = fixedViewSurface(effectiveView);
         const vp = object(pv.position);
         const vs = object(pv.size);
@@ -257,7 +265,7 @@ export function projectSnapshot(snapshot, options) {
                 const resolved = options.resolve(definition.ref, { view: view.ref, ...(appearance ? { appearance: appearance.ref } : {}) });
                 diagnostics.push(...resolved.diagnostics);
                 const propertyOrigins = Object.fromEntries(resolved.properties.map(p => [p.path, p.origin]));
-                let effective = withPreview(inheritedPresentation(resolved.values, resolved.properties, effectiveView), options.preview);
+                let effective = withPreview(inheritedPresentation(resolved.values, resolved.properties, effectiveView, viewOrigins, propertyOrigins, 'element'), options.preview);
                 let fontSize = num(pathValue(effective, 'style.font_size'), 16);
                 const font = str(pathValue(effective, 'style.font'), 'sans');
                 const color = str(pathValue(effective, 'text.color'), '#1f2933');
@@ -471,8 +479,10 @@ export function projectSnapshot(snapshot, options) {
                 const d = route === 'straight' ? `M${x1},${y1}L${x2},${y2}` : route === 'curved' ? `M${x1},${y1}C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}` : `M${x1},${y1}H${(x1 + x2) / 2}V${y2}H${x2}`;
                 const bounds = { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.max(1, Math.abs(x2 - x1)), height: Math.max(1, Math.abs(y2 - y1)) };
                 const resolved = options.resolve(definition.ref, { view: view.ref, ...(appearance ? { appearance: appearance.ref } : {}) });
-                const item = { occurrence: appearance?.ref.id ?? `${refKey(view.ref)}:${refKey(definition.ref)}`, target: definition.ref, view: view.ref, layer: 'relations', bounds, transform: identity, primitives: [{ kind: 'path', d, paint: { fill: 'none', stroke: str(pathValue(resolved.values, 'stroke.color'), '#64748b'), 'stroke-width': 1.5 } }, text(str(definition.record.title) || str(definition.record.name), bounds.x + bounds.width / 2, bounds.y - 5, 12, '#334155', { 'text-anchor': 'middle' })], hitTargets: [{ id: definition.ref.id, target: definition.ref, bounds }], accessible: { role: 'graphics-symbol', label: titleOf(definition.record) }, evidence: snapshot.coverage.complete ? 'current' : 'partial' };
-                entries.push({ item, definition, view, ...(appearance ? { appearance } : {}), effective: resolved.values, propertyOrigins: Object.fromEntries(resolved.properties.map(p => [p.path, p.origin])) });
+                const relOrigins = Object.fromEntries(resolved.properties.map(p => [p.path, p.origin]));
+                const relEffective = inheritedPresentation(resolved.values, resolved.properties, effectiveView, viewOrigins, relOrigins, 'element');
+                const item = { occurrence: appearance?.ref.id ?? `${refKey(view.ref)}:${refKey(definition.ref)}`, target: definition.ref, view: view.ref, layer: 'relations', bounds, transform: identity, primitives: [{ kind: 'path', d, paint: { fill: 'none', stroke: str(pathValue(relEffective, 'stroke.color'), '#64748b'), 'stroke-width': 1.5 } }, text(str(definition.record.title) || str(definition.record.name), bounds.x + bounds.width / 2, bounds.y - 5, 12, '#334155', { 'text-anchor': 'middle' })], hitTargets: [{ id: definition.ref.id, target: definition.ref, bounds }], accessible: { role: 'graphics-symbol', label: titleOf(definition.record) }, evidence: snapshot.coverage.complete ? 'current' : 'partial' };
+                entries.push({ item, definition, view, ...(appearance ? { appearance } : {}), effective: relEffective, propertyOrigins: relOrigins });
             }
             const contentBounds = unionBounds(positioned.map(e => e.item.bounds));
             if (positioned.length && pathValue(effectiveView, 'layout.frame_overflow') !== 'confine') {
@@ -603,7 +613,17 @@ export function projectSnapshot(snapshot, options) {
             else
                 diagnostics.push({ code: 'asset-unavailable', severity: 'warning', message: 'View background image does not resolve.', target: view.ref });
         }
-        viewPrimitives.unshift(rect(bounds, str(pathValue(effectiveView, 'background.color'), '#f8fafc'), str(pathValue(effectiveView, 'border.color'), '#cbd5e1')));
+        const viewFill = str(pathValue(effectiveView, 'background.color'), '#f8fafc');
+        const viewBorderStyle = pathValue(effectiveView, 'border.style');
+        const viewStroke = viewBorderStyle === 'none' ? 'none' : str(pathValue(effectiveView, 'border.color'), '#cbd5e1');
+        const viewBorderWidth = num(pathValue(effectiveView, 'border.width')) > 0 ? num(pathValue(effectiveView, 'border.width')) : 1;
+        const viewBorderDash = viewBorderStyle === 'dashed' ? '6 4' : viewBorderStyle === 'dotted' ? '2 3' : undefined;
+        let frameOutline = str(pathValue(effectiveView, 'style.look')) === 'handdrawn'
+            ? sketch(bounds, viewFill, viewStroke, num(pathValue(effectiveView, 'style.seed'), 42) + viewIndex, num(pathValue(effectiveView, 'style.roughness'), 1))
+            : rect(bounds, viewFill, viewStroke, viewBorderWidth);
+        if ('paint' in frameOutline && (viewBorderWidth !== 1 || viewBorderDash))
+            frameOutline = { ...frameOutline, paint: { ...frameOutline.paint, 'stroke-width': viewBorderWidth, ...(viewBorderDash ? { 'stroke-dasharray': viewBorderDash } : {}) } };
+        viewPrimitives.unshift(frameOutline);
         const chromeScale = surface?.scale ?? 1;
         if (banner)
             viewPrimitives.push(text(str(chrome.banner_text) || 'DDN / ' + profile + ' / ddn-next-1', viewX + 20 * chromeScale, viewY + 16 * chromeScale, 10 * chromeScale, chromeColor, { 'font-weight': 600 }));
@@ -613,7 +633,7 @@ export function projectSnapshot(snapshot, options) {
             viewPrimitives.push({ kind: 'path', d: `M${viewX + 20 * chromeScale},${viewY + viewHeight - 30 * chromeScale}H${viewX + viewWidth - 20 * chromeScale}`, paint: { fill: 'none', stroke: chromeColor, 'stroke-width': .5 * chromeScale, opacity: .3 } }, text(str(chrome.footer_text) || profile, viewX + 20 * chromeScale, viewY + viewHeight - 12 * chromeScale, 10 * chromeScale, chromeColor));
         }
         const frame = { occurrence: `view:${refKey(view.ref)}`, target: view.ref, view: view.ref, layer: 'views', bounds, transform: identity, primitives: viewPrimitives, hitTargets: [{ id: view.ref.id, target: view.ref, bounds }], accessible: { role: 'graphics-object', label: `${title}, ${profile || 'document'}` }, evidence: supported || isDocument ? snapshot.coverage.complete ? 'current' : 'partial' : 'invalid' };
-        let decoratedFrame = decoratePaper({ item: frame, definition: view, view, ...(placement ? { placement } : {}), effective: effectiveView });
+        let decoratedFrame = decoratePaper({ item: frame, definition: view, view, ...(placement ? { placement } : {}), effective: effectiveView, propertyOrigins: viewOrigins });
         if (surface)
             decoratedFrame = { ...decoratedFrame, surfaceTransform: surfaceTransform, item: { ...decoratedFrame.item, bounds, clip: bounds, hitTargets: frame.hitTargets } };
         const viewEntries = entries.slice(firstEntry);

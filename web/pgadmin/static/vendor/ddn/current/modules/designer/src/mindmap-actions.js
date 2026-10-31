@@ -1,3 +1,4 @@
+import { uiIcon } from '../../viewer/src/ui-icons.js';
 import { array, object, refKey, records, resolveRecord } from '../../presentation/src/native.js';
 import { isMindmapTopic } from '../../profiles/src/mindmap.js';
 export function mindmapSelection(handle, selected = handle.selectedEntry()) {
@@ -22,7 +23,7 @@ export function mountMindmapActions(viewer, handle, bounds, actions) {
     bar.setAttribute('role', 'toolbar');
     bar.setAttribute('aria-label', 'Mind map topic actions');
     bar.hidden = true;
-    css.textContent = '.ddn-mindmap-actions{position:absolute;z-index:8;display:flex;justify-content:space-evenly;align-items:center;gap:4px;height:30px;pointer-events:none!important}.ddn-mindmap-actions[hidden]{display:none}.ddn-mindmap-actions>button{pointer-events:auto;flex:none;display:grid;place-items:center;min-width:26px;width:26px;height:26px;padding:0;border:1px solid var(--ddn-ui-border);border-radius:50%;background:var(--ddn-ui-surface);color:var(--ddn-ui-text);font-size:15px;line-height:1;box-shadow:0 1px 4px #14243626}.ddn-mindmap-actions>button:hover{border-color:var(--ddn-ui-accent);background:var(--ddn-ui-surface-alt)}.ddn-mindmap-actions>button:focus-visible{outline:2px solid var(--ddn-ui-accent);outline-offset:2px}';
+    css.textContent = '.ddn-mindmap-actions{position:absolute;z-index:8;display:flex;justify-content:space-evenly;align-items:center;gap:4px;height:30px;pointer-events:none!important}.ddn-mindmap-actions[hidden]{display:none}.ddn-mindmap-actions>button{pointer-events:auto;flex:none;display:grid;place-items:center;min-width:26px;width:26px;height:26px;padding:0;border:1px solid var(--ddn-ui-border);border-radius:50%;background:var(--ddn-ui-surface);color:var(--ddn-ui-text);font-size:15px;line-height:1;box-shadow:0 1px 4px #14243626}.ddn-mindmap-actions>button>svg{width:14px;height:14px}.ddn-mindmap-actions>button:hover{border-color:var(--ddn-ui-accent);background:var(--ddn-ui-surface-alt)}.ddn-mindmap-actions>button:focus-visible{outline:2px solid var(--ddn-ui-accent);outline-offset:2px}';
     handle.container.append(css);
     handle.overlays.append(bar);
     let signature = '', disposed = false;
@@ -59,12 +60,13 @@ export function mountMindmapActions(viewer, handle, bounds, actions) {
             return;
         signature = next;
         bar.replaceChildren();
-        const button = (symbol, name, action) => {
+        const button = (icon, actionName, name, action) => {
             const element = document.createElement('button');
             element.type = 'button';
-            element.textContent = symbol;
+            element.dataset.action = actionName;
             element.title = name;
             element.setAttribute('aria-label', name);
+            element.append(uiIcon(document, icon));
             element.addEventListener('click', event => {
                 event.stopPropagation();
                 try {
@@ -77,12 +79,12 @@ export function mountMindmapActions(viewer, handle, bounds, actions) {
             bar.append(element);
         };
         if (selected.left)
-            button('⥆', 'Add linked topic to the left', () => actions.add(handle.selectedEntry(), 'left'));
+            button('branch-left', 'add-left', 'Add linked topic to the left', () => actions.add(handle.selectedEntry(), 'left'));
         if (selected.right)
-            button('⥅', 'Add linked topic to the right', () => actions.add(handle.selectedEntry(), 'right'));
-        button('🗑️', 'Delete topic', () => actions.remove(handle.selectedEntry()));
-        button('📝', 'Edit topic name', () => actions.name(handle.selectedEntry()));
-        button('📓', 'Add, edit or delete topic notes', () => actions.notes(handle.selectedEntry()));
+            button('branch-right', 'add-right', 'Add linked topic to the right', () => actions.add(handle.selectedEntry(), 'right'));
+        button('trash', 'delete', 'Delete topic', () => actions.remove(handle.selectedEntry()));
+        button('pen', 'rename', 'Edit topic name', () => actions.name(handle.selectedEntry()));
+        button('notes', 'notes', 'Add, edit or delete topic notes', () => actions.notes(handle.selectedEntry()));
     };
     const unsubscribe = viewer.subscribe(event => { if (['ready', 'selection', 'viewport'].includes(event.kind))
         update(); });

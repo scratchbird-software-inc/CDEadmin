@@ -12,6 +12,8 @@ export declare function knownProfile(id: string): {
     id: string;
     method: string;
     projection: string;
+    primary_palette: string[];
+    relation_roles: string[];
 } | undefined;
 export declare function roleDescriptor(role: string, category?: string): import("./schema-core.js").RoleDescriptor | undefined;
 export declare function coreDescriptor(id: string): {

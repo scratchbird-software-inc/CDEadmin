@@ -5,7 +5,7 @@
  * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
  * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
  */
-(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-75a64c87e8fc","version":"ddn-next-1","releaseHash":"4f601dab202a346b52c70ff1ec6bfdfb7c17ab3fbd59854e38cda422320d3131","dependencies":["shared-6502a4606789","shared-6cf9d24a4527"],"modules":[{"id":"presentation/src/data-encoding.js","bytes":4907,"sha256":"cb72a934fb5a49c18ccb87bf1ec62cb564cf72799694d93945ffdacfc5a0ed9e","dependencies":["presentation/src/model.js","presentation/src/data-common.js"]}],"hash":"96054e000d6bf1dc8a27443324d0e70ed345ecafb36a0dd987b2b50e99475254"},{"presentation/src/data-encoding.js":function(module,exports,require){
+(()=>{"use strict";const runtime=globalThis["DDN_MODULES"];if(!runtime)throw Error("Missing DDN module runtime");runtime.register({"id":"shared-c065ca5431a3","version":"ddn-next-1","releaseHash":"a013ac52c7b3173ca4a5c5558fb8bac7b899854da330646dcd39702d0d86b778","dependencies":["shared-9019e1da906d","shared-d1e55558fa1a"],"modules":[{"id":"presentation/src/data-encoding.js","bytes":4907,"sha256":"cb72a934fb5a49c18ccb87bf1ec62cb564cf72799694d93945ffdacfc5a0ed9e","dependencies":["presentation/src/model.js","presentation/src/data-common.js"]}],"hash":"0a6c9d528f3f7b1ab526c233549eee974a8218993403606b0fad2ab98d433de3"},{"presentation/src/data-encoding.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.matrixEncoding = matrixEncoding;

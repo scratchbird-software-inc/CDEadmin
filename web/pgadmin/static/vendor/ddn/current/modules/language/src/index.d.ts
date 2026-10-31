@@ -58,6 +58,7 @@ export declare function decodeText(raw: string): string;
 export declare function quoteText(text: string): string;
 export declare function parseTableHeader(text: string): RecordValue[];
 export declare function parseTableRow(text: string, columns: readonly RecordValue[]): Json[];
+export declare function createSourceSet(input: string | Readonly<Record<string, string>> | SourceSet, entry?: string): SourceSet;
 export declare function decodeSources(input: SourceSet, options?: DecodeOptions): DecodeResult;
 export declare function allNodes(result: DecodeResult): SyntaxNode[];
 export declare function findNode(result: DecodeResult, target: Ref): SyntaxNode | undefined;

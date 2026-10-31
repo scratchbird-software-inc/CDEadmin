@@ -71,7 +71,7 @@ export function createDesigner(viewer, options) {
 .ddn-palette-search{display:flex;align-items:center;gap:6px;margin:0 0 8px;padding:0 8px;border:1px solid var(--ddn-ui-border);border-radius:8px;background:var(--ddn-ui-input)}.ddn-palette-search[hidden]{display:none}.ddn-palette-search input{flex:1;min-width:0;border:0;background:transparent;color:var(--ddn-ui-text);padding:7px 0;font-size:12px;outline-offset:1px}.ddn-palette-group{margin:6px 0 2px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ddn-ui-muted)}.ddn-palette-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-bottom:6px}.ddn-viewer .ddn-palette-grid button{min-width:0;display:grid;grid-template-rows:auto auto;justify-items:center;gap:3px;padding:7px 4px 6px;min-height:0;border:1px solid var(--ddn-ui-border);border-radius:9px;background:var(--ddn-ui-surface);color:var(--ddn-ui-text);text-align:center;font-size:11px;line-height:1.25;cursor:grab}.ddn-viewer .ddn-palette-grid button:hover,.ddn-viewer .ddn-palette-grid button:focus-visible{border-color:var(--ddn-ui-accent);color:var(--ddn-ui-text)}.ddn-viewer .ddn-palette-grid button[aria-pressed=true]{border-color:var(--ddn-ui-accent);box-shadow:inset 0 0 0 1px var(--ddn-ui-accent)}.ddn-palette-grid svg{width:54px;height:34px;display:block}.ddn-palette-grid .ddn-palette-id{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9.5px;color:var(--ddn-ui-muted);font-family:ui-monospace,monospace}.ddn-palette-empty{font-size:11px;color:var(--ddn-ui-muted);padding:6px 2px}
 .ddn-port{fill:#ffffff;stroke:#2563eb;stroke-width:1.5;cursor:crosshair}.ddn-port:hover{fill:#2563eb}.ddn-connect-line{fill:none;stroke:#2563eb;stroke-width:2;stroke-dasharray:6 4;pointer-events:none}.ddn-connect-target{filter:drop-shadow(0 0 4px #2563eb)}.ddn-placing .ddn-viewer-stage>svg{cursor:crosshair}
 .ddn-inline-rename{position:absolute;z-index:30;min-width:120px;padding:4px 8px;border:2px solid var(--ddn-ui-accent);border-radius:8px;background:var(--ddn-ui-surface);color:var(--ddn-ui-text);font:600 14px Inter,system-ui,sans-serif;box-shadow:0 8px 24px color-mix(in srgb,var(--ddn-ui-shadow) 60%,transparent)}
-.ddn-verb-list{display:grid;gap:4px;margin:4px 0 8px}.ddn-viewer .ddn-verb-list button,.ddn-ui-dialog .ddn-verb-list button{justify-content:flex-start;text-align:left;font-size:12px;padding:6px 9px}.ddn-verb-list button b{font-weight:650;color:var(--ddn-ui-accent)}.ddn-verb-list small{margin-left:auto;color:var(--ddn-ui-muted);font:10px ui-monospace,monospace}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-outline,.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-stage{grid-row:3}.ddn-viewer:has(.ddn-designer-toolbar){grid-template-rows:auto auto minmax(200px,1fr) auto}.ddn-appearance-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:end}.ddn-appearance-grid>label{min-width:0}.ddn-appearance-grid>.ddn-ui-number-field{grid-column:1/-1}.ddn-appearance-tabs{display:flex;gap:4px;margin:10px 0}.ddn-appearance-tabs [aria-selected=true]{background:var(--ddn-ui-accent);color:var(--ddn-ui-accent-text)}.ddn-appearance-message{font-size:12px;color:var(--ddn-ui-muted)}.ddn-designer-menu{position:absolute;z-index:25;display:grid;gap:3px;padding:6px;background:var(--ddn-ui-surface);color:var(--ddn-ui-text);border:1px solid var(--ddn-ui-border);border-radius:6px;box-shadow:0 6px 20px #14243633}.ddn-designer-menu button{text-align:left}.ddn-designer-preview{fill:#3b82f622;stroke:#2563eb;stroke-width:2;stroke-dasharray:4 3;pointer-events:none}@media(max-width:480px){.ddn-appearance-grid{grid-template-columns:minmax(0,1fr)}}@media(max-width:760px){.ddn-viewer:has(.ddn-designer-toolbar){grid-template-rows:auto auto auto minmax(340px,1fr) auto}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-outline{grid-row:3}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-stage{grid-row:4}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-status{grid-row:5}}`;
+.ddn-verb-list{display:grid;gap:4px;margin:4px 0 8px}.ddn-viewer .ddn-verb-list button,.ddn-ui-dialog .ddn-verb-list button{justify-content:flex-start;text-align:left;font-size:12px;padding:6px 9px}.ddn-verb-list button b{font-weight:650;color:var(--ddn-ui-accent)}.ddn-verb-list small{margin-left:auto;color:var(--ddn-ui-muted);font:10px ui-monospace,monospace}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-outline,.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-stage{grid-row:3}.ddn-viewer:has(.ddn-designer-toolbar){grid-template-rows:auto auto minmax(200px,1fr) auto}.ddn-appearance-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:end}.ddn-appearance-grid>label{min-width:0}.ddn-appearance-grid>.ddn-ui-number-field{grid-column:1/-1}.ddn-appearance-tabs{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0}.ddn-appearance-tabs [aria-selected=true]{background:var(--ddn-ui-accent);color:var(--ddn-ui-accent-text)}.ddn-appearance-message{font-size:12px;color:var(--ddn-ui-muted)}.ddn-designer-menu{position:absolute;z-index:25;display:grid;gap:3px;padding:6px;background:var(--ddn-ui-surface);color:var(--ddn-ui-text);border:1px solid var(--ddn-ui-border);border-radius:6px;box-shadow:0 6px 20px #14243633}.ddn-designer-menu button{text-align:left}.ddn-designer-preview{fill:#3b82f622;stroke:#2563eb;stroke-width:2;stroke-dasharray:4 3;pointer-events:none}@media(max-width:480px){.ddn-appearance-grid{grid-template-columns:minmax(0,1fr)}}@media(max-width:760px){.ddn-viewer:has(.ddn-designer-toolbar){grid-template-rows:auto auto auto minmax(340px,1fr) auto}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-outline{grid-row:3}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-stage{grid-row:4}.ddn-viewer:has(.ddn-designer-toolbar) .ddn-viewer-status{grid-row:5}}`;
     css.textContent += `@media(max-width:760px){.ddn-viewer[data-ddn-dock-left],.ddn-viewer[data-ddn-dock-right],.ddn-viewer[data-ddn-dock-left][data-ddn-dock-right]{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(340px,1fr) auto auto}.ddn-viewer[data-ddn-dock-left] .ddn-designer-dock-left{grid-column:1;grid-row:3;min-height:180px;max-height:240px}.ddn-viewer[data-ddn-dock-right] .ddn-designer-dock-right{grid-column:1;grid-row:5;min-height:200px;max-height:300px}.ddn-viewer[data-ddn-dock-left] .ddn-viewer-stage,.ddn-viewer[data-ddn-dock-right] .ddn-viewer-stage{grid-column:1;grid-row:4}.ddn-viewer[data-ddn-dock-left] .ddn-viewer-status,.ddn-viewer[data-ddn-dock-right] .ddn-viewer-status{grid-row:6}.ddn-designer-toolbar .ddn-toolbar-group{flex-wrap:wrap}}.ddn-designer-menu{max-height:calc(100% - 8px);overflow:auto}.ddn-designer-toolbar .ddn-toolbar-group{border-right:1px solid var(--ddn-ui-border);padding-right:8px}`;
     css.textContent += `@media(min-width:761px){.ddn-designer-dock-left{display:flex;flex-direction:column;overflow:hidden}.ddn-designer-dock-left>.ddn-dock-head{flex:none}.ddn-designer-dock-left>.ddn-dock-body{display:flex;flex-direction:column;flex:1;min-height:0}.ddn-designer-dock-left .ddn-panel-sections{flex:1;min-height:0;overflow:hidden}.ddn-designer-dock-left .ddn-side-tabs{position:static;max-height:100%;overflow:auto;scrollbar-width:thin}.ddn-designer-dock-left .ddn-panel-section{overflow:auto;min-height:0}.ddn-designer-dock-left .ddn-palette-search{flex:none}}`;
     handle.container.append(css);
@@ -136,10 +136,10 @@ export function createDesigner(viewer, options) {
         const element = document.createElement('button');
         element.type = 'button';
         element.textContent = label;
-        const icon = { 'Add view': 'plus', 'Add entity': 'plus', 'Add element': 'grid', 'Connect': 'link', 'Reflow': 'reflow', 'Appearance & presets': 'palette', 'Properties': 'settings', 'Rename': 'type', 'Undo': 'undo', 'Redo': 'redo', 'Delete': 'minus' }[label];
+        const icon = { 'Add view': 'plus', 'Add entity': 'plus', 'Add element': 'grid', 'Connect': 'link', 'Reflow': 'reflow', 'Style': 'pen', 'Font': 'type', 'Border': 'border', 'Shadow': 'shadow', 'Pin': 'pin', 'Paper & attachments': 'shadow', 'Appearance & presets': 'palette', 'Properties': 'settings', 'Rename': 'type', 'Undo': 'undo', 'Redo': 'redo', 'Delete': 'minus' }[label];
         if (icon)
             element.prepend(uiIcon(document, icon));
-        const groupName = ['Add element', 'Add existing element', 'Connect', 'Add view', 'Add entity', 'Workarea', 'Reflow'].includes(label) ? 'Create' : ['Undo', 'Redo'].includes(label) ? 'History' : ['Datasets', 'Source', 'Projection'].includes(label) ? 'Document' : 'Selection';
+        const groupName = ['Add element', 'Add existing element', 'Connect', 'Add view', 'Add entity', 'Workarea', 'Reflow'].includes(label) ? 'Create' : ['Undo', 'Redo'].includes(label) ? 'History' : ['Datasets', 'Source', 'Projection', 'Style', 'Font', 'Border', 'Shadow'].includes(label) ? 'Document' : 'Selection';
         let group = toolbarGroups.get(groupName);
         if (!group) {
             group = document.createElement('div');
@@ -159,9 +159,14 @@ export function createDesigner(viewer, options) {
         let submit;
         const existing = [...panels][0];
         if (existing) {
-            existing.focus();
-            handle.announce('Close the open editor before opening another settings form.');
-            return existing;
+            if (existing.dataset.ddnLiveSettings !== undefined) {
+                panelClosers.get(existing)?.();
+            }
+            else {
+                existing.focus();
+                handle.announce('Close the open editor before opening another settings form.');
+                return existing;
+            }
         }
         const live = ['Edit title', 'Draft body', 'Details shown (this appearance)', 'Details shown (entity default)', 'Edit table data', 'Comments', 'Constraints', 'Properties', 'Paper & attachments', 'Appearance & presets', 'Symbol & label', 'Projection settings', 'Element and relationship details', 'Datasets', 'Workarea settings', 'Edit topic name', 'Topic notes', 'Page setup', 'Header', 'Footer'].includes(title);
         let session;
@@ -390,16 +395,18 @@ export function createDesigner(viewer, options) {
         });
     }
     function properties() { openProperties(viewer, panel, applyProperties); }
-    function paperAttachments(entry = requireSelection()) {
-        if (entry.definition.record.category === 'relation' || !['definition', 'view'].includes(entry.definition.owner))
+    function paperAttachments(entry = selected()) {
+        const viewFallback = !entry ? currentView() : undefined;
+        const targetEntry = entry ?? (viewFallback ? handle.scene()?.entries.find(e => e.definition.owner === 'view' && refKey(e.definition.ref) === refKey(viewFallback.ref)) : undefined);
+        if (!targetEntry || targetEntry.definition.record.category === 'relation' || !['definition', 'view'].includes(targetEntry.definition.owner))
             throw Error('Select an element or view for paper and attachment settings.');
         const state = runtimeState(handle.runtime);
         if (!state.decoded || !state.source)
             throw Error('Editable sources must be open.');
         const explicit = (record) => record && findNode(state.decoded, record.ref) && !findNode(state.decoded, record.ref).implicit;
-        const scopes = entry.definition.owner === 'view'
-            ? [...(explicit(entry.placement) ? [{ record: entry.placement, label: 'This view placement' }] : []), { record: entry.view, label: 'View definition' }]
-            : [...(explicit(entry.appearance) ? [{ record: entry.appearance, label: 'This appearance' }] : []), { record: entry.definition, label: 'Shared definition' }];
+        const scopes = targetEntry.definition.owner === 'view'
+            ? [...(explicit(targetEntry.placement) ? [{ record: targetEntry.placement, label: 'This view placement' }] : []), { record: targetEntry.view, label: 'View definition' }]
+            : [...(explicit(targetEntry.appearance) ? [{ record: targetEntry.appearance, label: 'This appearance' }] : []), { record: targetEntry.definition, label: 'Shared definition' }];
         const defaults = { 'style.paper': 'plain', 'shadow.kind': 'none', 'shadow.color': '#000000', 'shadow.opacity': .24, 'shadow.blur': 4, 'shadow.lift': 10, 'shadow.spread': 0 };
         const attachmentColors = { 'push-pin': '#df4545', 'round-pin': '#45a3da', 'paper-clip': '#5b83b4', 'binder-clip': '#3b414b', tape: '#e4c788' };
         panel('Paper & attachments', body => {
@@ -408,7 +415,7 @@ export function createDesigner(viewer, options) {
             scope.dataset.ddnLiveIgnore = '';
             scopes.forEach(({ label }, index) => { const option = document.createElement('option'); option.value = String(index); option.textContent = label; scope.append(option); });
             const targetLabel = document.createElement('p');
-            targetLabel.textContent = 'Editing: ' + titleOf(entry.definition.record);
+            targetLabel.textContent = 'Editing: ' + titleOf(targetEntry.definition.record);
             body.append(targetLabel);
             const instructions = document.createElement('p');
             instructions.textContent = 'Only changed settings are saved. Inherit removes the setting here so file defaults and CSS can supply it. Attachments are visual decorations; they do not change meaning or review status.';
@@ -737,7 +744,7 @@ export function createDesigner(viewer, options) {
         const editable = resizeSources.get(refKey(target.ref));
         return editable === true || editable === false && entry.view.record.profile === 'mindmap.basic@1';
     };
-    async function resizeElement(entry, width, height) {
+    async function resizeElement(entry, width, height, nextPos) {
         if (!canResize(entry))
             return;
         const target = (entry.appearance ?? entry.placement), size = { width: Math.max(40, snap(width)), height: Math.max(40, snap(height)) };
@@ -746,10 +753,15 @@ export function createDesigner(viewer, options) {
             const draft = mindmapSource(handle.runtime, entry.view.ref);
             draft.materialize();
             draft.set(target.ref, 'size', size);
+            if (nextPos)
+                draft.set(target.ref, 'position', { x: snap(nextPos.x), y: snap(nextPos.y) });
             await commitMindmap(draft);
         }
-        else
+        else {
             await nativeCommand('ddn.set-size', target.ref, size);
+            if (nextPos)
+                await nativeCommand('ddn.set-position', target.ref, { x: snap(nextPos.x), y: snap(nextPos.y) });
+        }
     }
     async function statusChange(next, entry = requireSelection()) {
         const snapshot = handle.runtime.snapshot();
@@ -1175,12 +1187,15 @@ export function createDesigner(viewer, options) {
             return { x: cx, y: cy };
         return { x: fb.x + fb.width / 2, y: fb.y + fb.height / 2 };
     }
+    let placePreview;
     function startPlacing(role, view) {
         placing = { role, view };
         handle.container.classList.add('ddn-placing');
-        handle.announce(`${roleLabel(role)}: click on the view where it should go. Esc cancels.`);
+        handle.announce(`${roleLabel(role)}: click on the view where it should go (hold Shift to place several). Esc cancels.`);
     }
     function cancelPlacing() {
+        placePreview?.remove();
+        placePreview = undefined;
         if (!placing)
             return;
         placing = undefined;
@@ -1354,6 +1369,9 @@ export function createDesigner(viewer, options) {
         handle.announce(isNew ? 'Type a name for the new element, then press Enter.' : 'Type the new name, then press Enter.');
     }
     function sourceEditor() {
+        const toggleEvt = new CustomEvent('ddn:toggle-source', { bubbles: true, cancelable: true });
+        if (!handle.container.dispatchEvent(toggleEvt))
+            return;
         const input = handle.runtime.sources();
         if (!input)
             return;
@@ -1447,6 +1465,17 @@ export function createDesigner(viewer, options) {
             editTopicName(created);
         }
     }
+    async function addSiblingTopic(entry) {
+        const topology = mindmapSelection(handle, entry);
+        if (!topology)
+            return;
+        const parentLink = topology.internal.find(link => refKey(link.to.ref) === refKey(entry.definition.ref));
+        const parentEntry = parentLink ? handle.scene()?.entries.find(item => refKey(item.definition.ref) === refKey(parentLink.from.ref) && refKey(item.view.ref) === refKey(entry.view.ref)) : undefined;
+        const target = parentEntry ?? entry;
+        const targetTopology = mindmapSelection(handle, target);
+        const side = targetTopology?.right ? 'right' : targetTopology?.left ? 'left' : 'right';
+        await addTopic(target, side);
+    }
     function topicNotes(entry) { notes(entry, true); }
     function deleteTopic(entry) {
         const topology = mindmapSelection(handle, entry);
@@ -1525,7 +1554,28 @@ export function createDesigner(viewer, options) {
             notifyError(error);
         }
     };
-    const tooltips = { 'Add element': 'Open the element palette — click a type, then click where it goes (A)', 'Add existing element': 'Show an element that already exists in another view here', 'Connect': 'Connect two elements: click the first, then the second — or drag from a selected element\'s handle (C)', 'Add view': 'Add another view (diagram) to this document', 'Add entity': 'Add an ERD entity to this view (ERD views only)', 'Workarea': 'Workarea settings — background, grid, allowed diagram types', 'Rename': 'Rename the selected element (F2, or double-click it)', 'Properties': 'Open the inspector for the selected element — name, description, colours, lock (P)', 'Draft': 'Free-form text inside the element', 'Columns': 'Turn the draft text into fields', 'Table': 'Edit the element\'s table rows', 'Details': 'Choose which details (columns) are shown', 'Paper & attachments': 'Paper surface, shadow, pins and tape for the selected element', 'Symbol & label': 'How the element is drawn: card, image symbol or bare text, and where its name sits', 'Appearance & presets': 'Colours, fonts, textures and saved presets', 'Profile details': 'Notation-specific details for this element', 'Projection': 'How this data-bound view is projected (chart, matrix, …)', 'Datasets': 'Datasets that feed data-bound views', 'Status': 'Design status: in progress, in review, accepted', 'Source': 'Edit the DDN source of a file in a dialog', 'Delete': 'Delete the selected element (Delete key)', 'Undo': 'Undo (Ctrl+Z)', 'Redo': 'Redo (Ctrl+Shift+Z)' };
+    const isPinned = (entry = selected()) => !!entry && typeof entry.appearance?.record.position === 'object' && entry.appearance?.record.pinned !== false;
+    async function togglePin(entry = requireSelection()) {
+        if (entry.definition.owner === 'view' || entry.definition.record.category === 'relation')
+            return;
+        const name = titleOf(entry.definition.record);
+        if (isPinned(entry) && entry.appearance) {
+            await applyProperties(entry.appearance.ref, { position: undefined, pinned: undefined });
+            handle.announce(`Unpinned "${name}" — it now places dynamically and reroutes connections.`);
+        }
+        else {
+            const frame = handle.scene()?.entries.find(e => e.definition.owner === 'view' && refKey(e.definition.ref) === refKey(entry.view.ref));
+            const origin = frame ? semanticBounds(frame) : { x: 0, y: 0 };
+            const local = logicalPoint(entry, semanticBounds(entry));
+            const pos = { x: Math.max(0, Math.round(local.x - origin.x)), y: Math.max(0, Math.round(local.y - origin.y)) };
+            if (entry.appearance)
+                await nativeCommand('ddn.set-position', entry.appearance.ref, pos);
+            else
+                await apply({ kind: 'create-occurrence', view: entry.view.ref, target: entry.definition.ref, properties: { position: pos } });
+            handle.announce(`Pinned "${name}" at (${pos.x}, ${pos.y}).`);
+        }
+    }
+    const tooltips = { 'Add element': 'Open the element palette — click a type, then click where it goes (A)', 'Add existing element': 'Show an element that already exists in another view here', 'Connect': 'Connect two elements: click the first, then the second — or drag from a selected element\'s handle (C)', 'Add view': 'Add another view (diagram) to this document', 'Add entity': 'Add an ERD entity to this view (ERD views only)', 'Workarea': 'Workarea settings — background, grid, allowed diagram types', 'Style': 'Set drawing style (hand-drawn, classic, clean, neo) and theme for workarea, view or element', 'Font': 'Set font family, size and text colour for workarea, view or element', 'Border': 'Set border style, width and colour for workarea, view or element', 'Shadow': 'Set shadow, paper surface and attachments for view or element', 'Pin': 'Pin or unpin the selected element in this view — unpinned elements place dynamically', 'Rename': 'Rename the selected element (F2, or double-click it)', 'Properties': 'Open the inspector for the selected element — name, description, colours, lock (P)', 'Draft': 'Free-form text inside the element', 'Columns': 'Turn the draft text into fields', 'Table': 'Edit the element\'s table rows', 'Details': 'Choose which details (columns) are shown', 'Paper & attachments': 'Paper surface, shadow, pins and tape for the selected element', 'Symbol & label': 'How the element is drawn: card, image symbol or bare text, and where its name sits', 'Appearance & presets': 'Colours, fonts, textures and saved presets', 'Profile details': 'Notation-specific details for this element', 'Projection': 'How this data-bound view is projected (chart, matrix, …)', 'Datasets': 'Datasets that feed data-bound views', 'Status': 'Design status: in progress, in review, accepted', 'Source': 'Edit the DDN source of a file in a dialog', 'Delete': 'Delete the selected element (Delete key)', 'Undo': 'Undo (Ctrl+Z)', 'Redo': 'Redo (Ctrl+Shift+Z)' };
     const buttons = {};
     tooltips['Add element'] = 'Open the element palette — drag a type onto the view, or click a type then its position (A)';
     tooltips.Reflow = 'Release fixed and pinned element positions in this view, then arrange it using its diagram type and connections (undoable)';
@@ -1558,6 +1608,7 @@ export function createDesigner(viewer, options) {
     add('Reflow', () => run(() => reflowView()));
     add('Rename', guarded(() => inlineRename()));
     add('Properties', guarded(() => openInspectorDock()));
+    add('Pin', () => run(() => togglePin()));
     add('Draft', guarded(() => editDraft()));
     add('Columns', guarded(() => convert()));
     add('Table', guarded(() => editRows()));
@@ -1569,6 +1620,10 @@ export function createDesigner(viewer, options) {
     add('Projection', guarded(() => profileEditor(true)));
     add('Status', guarded(() => statusDialog()));
     add('Delete', guarded(() => deleteItem()));
+    add('Style', guarded(() => openAppearance(viewer, panel, applyProperties, 'Style')));
+    add('Font', guarded(() => openAppearance(viewer, panel, applyProperties, 'Font')));
+    add('Border', guarded(() => openAppearance(viewer, panel, applyProperties, 'Border')));
+    add('Shadow', guarded(() => paperAttachments()));
     add('Datasets', datasets);
     add('Source', sourceEditor);
     add('Undo', () => run(async () => {
@@ -1657,6 +1712,11 @@ export function createDesigner(viewer, options) {
         const elementOnly = ['Draft', 'Columns', 'Table', 'Details', 'Symbol & label', 'Paper & attachments', 'Profile details'];
         for (const label of elementOnly)
             has(label).hidden = !entry || isRelation || isView;
+        has('Pin').hidden = !entry || isRelation || isView || !graphView;
+        has('Pin').disabled = !entry || !writable(entry.view.ref);
+        has('Pin').setAttribute('aria-pressed', String(isPinned(entry)));
+        for (const label of ['Style', 'Font', 'Border', 'Shadow'])
+            has(label).disabled = !!view && !writable(view.ref);
         for (const label of moreLabels)
             has(label).dataset.inMenu = '';
         moreButton.hidden = !entry || isRelation || isView;
@@ -2127,6 +2187,24 @@ export function createDesigner(viewer, options) {
         const point = handle.toWorld(event.clientX, event.clientY);
         run(async () => { requireCurrent(drop.revision); await createElementAt(drop.view, drop.role, point); });
     });
+    on(handle.surface, 'pointermove', event => {
+        if (!placing) {
+            placePreview?.remove();
+            placePreview = undefined;
+            return;
+        }
+        const point = handle.toWorld(event.clientX, event.clientY);
+        if (!placePreview) {
+            placePreview = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            placePreview.setAttribute('class', 'ddn-designer-preview');
+            placePreview.setAttribute('width', '140');
+            placePreview.setAttribute('height', '64');
+            placePreview.setAttribute('rx', '6');
+            handle.surface.append(placePreview);
+        }
+        placePreview.setAttribute('x', String(snap(point.x - 70)));
+        placePreview.setAttribute('y', String(snap(point.y - 32)));
+    });
     on(handle.surface, 'click', event => {
         if (!placing)
             return;
@@ -2134,7 +2212,8 @@ export function createDesigner(viewer, options) {
             return;
         const role = placing.role, view = placing.view;
         const point = handle.toWorld(event.clientX, event.clientY);
-        cancelPlacing();
+        if (!event.shiftKey)
+            cancelPlacing();
         run(() => createElementAt(view, role, point));
     });
     updateToolbar();
@@ -2212,10 +2291,10 @@ export function createDesigner(viewer, options) {
             else
                 await apply({ kind: 'create-occurrence', view: entry.view.ref, target: entry.definition.ref, properties: { [path]: value } });
         })) : [];
-        const items = !entry ? [['Add element…', () => openPaletteDock()], ['Add existing element…', () => reuseItem()], ['Add view…', () => addView()], ['Fit all', () => void viewer.navigate({ kind: 'fit-workarea' })]]
-            : isView ? [['Rename', () => inlineRename()], ['Properties', () => openInspectorDock()], ['Appearance & presets', () => openAppearance(viewer, panel, applyProperties)], ['Expand view', () => void viewer.navigate({ kind: 'expand-view', target: entry.definition.ref })]]
+        const items = !entry ? [['Add element…', () => openPaletteDock()], ['Add existing element…', () => reuseItem()], ['Add view…', () => addView()], ['Appearance & presets', () => openAppearance(viewer, panel, applyProperties)], ['Paper & attachments', () => paperAttachments()], ['Fit all', () => void viewer.navigate({ kind: 'fit-workarea' })]]
+            : isView ? [['Rename', () => inlineRename()], ['Properties', () => openInspectorDock()], ['Appearance & presets', () => openAppearance(viewer, panel, applyProperties)], ['Paper & attachments', () => paperAttachments()], ['Expand view', () => void viewer.navigate({ kind: 'expand-view', target: entry.definition.ref })]]
                 : isRelation ? [...toggles, ['Rename label', () => inlineRename()], ['Properties', () => openInspectorDock()], ['Appearance & presets', () => openAppearance(viewer, panel, applyProperties)], ['Delete', () => deleteItem()]]
-                    : [['Rename', () => inlineRename()], ['Connect from here', () => { connectFrom = entry.definition.ref; updateToolbar(); handle.announce(`Connect from "${titleOf(entry.definition.record)}" — click the target element.`); }], ['Properties', () => openInspectorDock()], ['Appearance & presets', () => openAppearance(viewer, panel, applyProperties)], ['Symbol & label', () => openSymbol(viewer, panel, applyProperties)], ['Paper & attachments', () => paperAttachments()], ['Draft text', () => editDraft()], ['Columns', () => convert()], ['Details shown', () => details()], ['Edit table', () => editRows()], ['Comments', () => notes()], ['Constraints', () => constraints()], ['Status', () => statusDialog()], ['Delete', () => deleteItem()]];
+                    : [['Rename', () => inlineRename()], [isPinned(entry) ? 'Unpin position (auto-place)' : 'Pin position in view', () => run(() => togglePin(entry))], ['Connect from here', () => { connectFrom = entry.definition.ref; updateToolbar(); handle.announce(`Connect from "${titleOf(entry.definition.record)}" — click the target element.`); }], ['Properties', () => openInspectorDock()], ['Appearance & presets', () => openAppearance(viewer, panel, applyProperties)], ['Symbol & label', () => openSymbol(viewer, panel, applyProperties)], ['Paper & attachments', () => paperAttachments()], ['Draft text', () => editDraft()], ['Columns', () => convert()], ['Details shown', () => details()], ['Edit table', () => editRows()], ['Comments', () => notes()], ['Constraints', () => constraints()], ['Status', () => statusDialog()], ['Delete', () => deleteItem()]];
         for (const [label, action, toggle] of items) {
             if (standalone() && ['Add view…', 'Expand view'].includes(label))
                 continue;
@@ -2291,7 +2370,7 @@ export function createDesigner(viewer, options) {
             pinching = false;
     });
     on(handle.surface, 'pointerdown', event => {
-        if (pinching || event.button !== 0 || placing || connectDrag || event.target.closest('.ddn-element-resize') || (event.pointerType !== 'touch' && event.pointerType !== 'pen'))
+        if (pinching || event.button !== 0 || placing || connectDrag || event.target.closest('.ddn-element-resize,.ddn-element-resize-handles') || (event.pointerType !== 'touch' && event.pointerType !== 'pen'))
             return;
         cancelPress();
         const { clientX, clientY } = event, target = event.target.closest('[data-ref]');
@@ -2360,18 +2439,41 @@ export function createDesigner(viewer, options) {
                 guarded(() => openInspectorDock())();
             }
         }
-        if ((key.ctrlKey || key.metaKey) && key.key.toLowerCase() === 'z') {
+        if ((key.ctrlKey || key.metaKey) && (key.key.toLowerCase() === 'z' || key.key.toLowerCase() === 'y')) {
             key.preventDefault();
+            const isRedo = key.key.toLowerCase() === 'y' || key.shiftKey;
             run(async () => {
-                const result = await (key.shiftKey ? commands.redo() : commands.undo());
+                const result = await (isRedo ? commands.redo() : commands.undo());
                 if (!result.ok)
                     throw new Error(result.failure.code);
                 await handle.refresh();
             });
         }
-        if (key.key === 'Delete' && selected() && selected().definition.owner !== 'view') {
+        if ((key.key === 'Tab' || key.key === 'Insert' || key.key === 'Enter') && !key.ctrlKey && !key.metaKey && !key.altKey && selected()) {
+            const mm = mindmapSelection(handle, selected());
+            if (mm) {
+                key.preventDefault();
+                const entry = selected();
+                if (key.key === 'Enter')
+                    run(() => addSiblingTopic(entry));
+                else
+                    run(() => addTopic(entry, mm.right ? 'right' : mm.left ? 'left' : 'right'));
+                return;
+            }
+        }
+        if ((key.key === 'Delete' || key.key === 'Backspace') && selected() && selected().definition.owner !== 'view') {
             key.preventDefault();
-            guarded(() => deleteItem())();
+            const entry = selected();
+            if (key.shiftKey && !mindmapSelection(handle, entry) && writable(entry.definition.ref)) {
+                const name = titleOf(entry.definition.record);
+                run(async () => {
+                    await apply({ kind: 'remove', target: entry.definition.ref, references: 'remove-dependents' });
+                    handle.announce(`Deleted ${name}. Ctrl+Z undoes it.`);
+                });
+            }
+            else {
+                guarded(() => deleteItem())();
+            }
         }
         if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key.key)) {
             const entry = selected();
@@ -2409,21 +2511,23 @@ export function createDesigner(viewer, options) {
         const frameBounds = current.entry.appearance && frame ? semanticBounds(frame) : { x: 0, y: 0 };
         const initial = semanticBounds(current.entry), position = object(movable.record.position);
         const scale = surfaceScale(current.entry), local = current.entry.appearance ? logicalPoint(current.entry, initial) : initial;
+        const nextPos = { x: snap(num(position.x, local.x - frameBounds.x) + (x - initial.x) / scale), y: snap(num(position.y, local.y - frameBounds.y) + (y - initial.y) / scale) };
+        const posChanged = Math.abs(x - initial.x) > 0.5 || Math.abs(y - initial.y) > 0.5;
         // Retain authored coordinates when chrome/paper shifts the displayed
         // content origin. A drag is a delta, not a new page-space coordinate.
-        run(() => current.resizing ? resizeElement(current.entry, width / scale, height / scale) : nativeCommand('ddn.set-position', movable.ref, { x: snap(num(position.x, local.x - frameBounds.x) + (x - initial.x) / scale), y: snap(num(position.y, local.y - frameBounds.y) + (y - initial.y) / scale) }));
+        run(() => current.resizing ? resizeElement(current.entry, width / scale, height / scale, posChanged ? nextPos : undefined) : nativeCommand('ddn.set-position', movable.ref, nextPos));
     };
     /** Snap applies only while the host's View › Snap to grid is on; the step is the workarea grid. */
     function snapStep() { return viewSetting(handle.container, 'snap') === 'on' ? gridStep(handle.runtime.snapshot()) : 0; }
     function snap(value) { const step = snapStep(); return step ? Math.round(value / step) * step : value; }
-    function beginGesture(entry, pointer, resizing) {
+    function beginGesture(entry, pointer, resizing, direction = 'se') {
         handle.select(entry.definition.ref, entry.item.occurrence);
         const position = handle.toWorld(pointer.clientX, pointer.clientY);
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         for (const [key, value] of Object.entries(semanticBounds(entry)))
             rect.setAttribute(key, String(value));
         rect.setAttribute('class', 'ddn-designer-preview');
-        gesture = { id: pointer.pointerId, start: position, entry, rect, resizing, moved: false, revision: revision() };
+        gesture = { id: pointer.pointerId, start: position, entry, rect, resizing, direction, moved: false, revision: revision() };
         if (resizing && pointer.pointerType !== 'mouse')
             try {
                 handle.surface.setPointerCapture(pointer.pointerId);
@@ -2432,7 +2536,7 @@ export function createDesigner(viewer, options) {
     }
     on(handle.surface, 'pointerdown', event => {
         const pointer = event;
-        if (pointer.button !== 0 || pinching || placing || connectDrag || pointer.target.closest('.ddn-ports,.ddn-element-resize'))
+        if (pointer.button !== 0 || pinching || placing || connectDrag || pointer.target.closest('.ddn-ports,.ddn-element-resize,.ddn-element-resize-handles'))
             return;
         const group = pointer.target.closest('[data-occurrence]');
         if (!group)
@@ -2463,12 +2567,32 @@ export function createDesigner(viewer, options) {
         }
         if (gesture.resizing) {
             const minimum = 40 * surfaceScale(gesture.entry);
-            gesture.rect.setAttribute('width', String(Math.max(minimum, bounds.width + dx)));
-            gesture.rect.setAttribute('height', String(Math.max(minimum, bounds.height + dy)));
+            const dir = gesture.direction;
+            let nextX = bounds.x, nextY = bounds.y, nextW = bounds.width, nextH = bounds.height;
+            if (dir.includes('e'))
+                nextW = Math.max(minimum, snap(bounds.width + dx));
+            if (dir.includes('s'))
+                nextH = Math.max(minimum, snap(bounds.height + dy));
+            if (dir.includes('w')) {
+                const maxDx = bounds.width - minimum;
+                const clampedDx = Math.min(maxDx, dx);
+                nextX = snap(bounds.x + clampedDx);
+                nextW = Math.max(minimum, bounds.x + bounds.width - nextX);
+            }
+            if (dir.includes('n')) {
+                const maxDy = bounds.height - minimum;
+                const clampedDy = Math.min(maxDy, dy);
+                nextY = snap(bounds.y + clampedDy);
+                nextH = Math.max(minimum, bounds.y + bounds.height - nextY);
+            }
+            gesture.rect.setAttribute('x', String(nextX));
+            gesture.rect.setAttribute('y', String(nextY));
+            gesture.rect.setAttribute('width', String(nextW));
+            gesture.rect.setAttribute('height', String(nextH));
         }
         else {
-            gesture.rect.setAttribute('x', String(bounds.x + dx));
-            gesture.rect.setAttribute('y', String(bounds.y + dy));
+            gesture.rect.setAttribute('x', String(snap(bounds.x + dx)));
+            gesture.rect.setAttribute('y', String(snap(bounds.y + dy)));
         }
     });
     on(handle.surface, 'pointerup', event => { if (gesture?.id === event.pointerId)
@@ -2488,12 +2612,12 @@ export function createDesigner(viewer, options) {
     if (document.defaultView)
         on(document.defaultView, 'blur', () => { finishGesture(false); finishConnectDrag(undefined, false); cancelPress(); pinching = false; });
     cleanups.push(mountResizeHandles(viewer, handle, { bounds: semanticBounds, allowed: canResize,
-        start(entry, event) {
+        start(entry, event, direction = 'se') {
             if (event.button !== 0 || pinching || placing || connectDrag || gesture || connectArmed || connectFrom)
                 return;
             event.preventDefault();
             cancelPress();
-            beginGesture(entry, event, true);
+            beginGesture(entry, event, true, direction);
             handle.surface.focus({ preventScroll: true });
         },
         step(entry, dx, dy) {
@@ -2509,6 +2633,7 @@ export function createDesigner(viewer, options) {
     const copyable = (entry = selected()) => !!entry && entry.definition.owner === 'definition' && entry.definition.record.category !== 'relation' && !Array.isArray(entry.definition.record.endpoints) && !mindmapSelection(handle, entry);
     const pasteView = () => { const entry = selected(); return entry && entry.definition.owner === 'view' ? entry.view : entry?.view ?? currentView(); };
     const graphView = (view) => !!view && str(view.record.kind) !== 'document' && getProfile(str(view.record.profile))?.projection === 'graph';
+    let pasteSerial = 0;
     function copySelection() {
         const entry = requireSelection();
         if (!copyable(entry))
@@ -2516,6 +2641,7 @@ export function createDesigner(viewer, options) {
         const position = object(entry.appearance?.record.position);
         const item = { record: clipRecord(entry.definition.record), source: entry.definition.ref, ...(typeof position.x === 'number' && typeof position.y === 'number' ? { position: { x: position.x, y: position.y } } : {}) };
         clipboard = [item];
+        pasteSerial = 0;
         clipboardWritten = clipboardText(clipboard);
         void document.defaultView?.navigator.clipboard?.writeText(clipboardWritten).catch(() => { });
         handle.announce(`Copied "${titleOf(entry.definition.record)}".`);
@@ -2549,7 +2675,8 @@ export function createDesigner(viewer, options) {
         if (!decoded)
             throw Error('The document is not ready.');
         const taken = new Set(records(handle.runtime.snapshot()).filter(r => r.file === view.ref.file).map(r => str(r.record.name)).filter(Boolean));
-        const text = pasteRecords(content, taken, inPlace ? { x: 0, y: 0 } : { x: 24, y: 24 });
+        const step = inPlace ? 0 : ++pasteSerial;
+        const text = pasteRecords(content, taken, inPlace ? { x: 0, y: 0 } : { x: 24 * step, y: 24 * step });
         const before = new Set((handle.scene()?.entries ?? []).map(e => e.item.occurrence));
         const receipt = await apply({ kind: 'edit-source', patches: appendDeclaration(decoded, view.ref.file, text, view.ref) });
         const changed = new Set(receipt.changed.map(refKey));
@@ -2590,6 +2717,18 @@ export function createDesigner(viewer, options) {
             const outputLabel = document.createElement('label');
             outputLabel.append('Output', output);
             body.append(outputLabel);
+            const pageLayout = document.createElement('select');
+            pageLayout.setAttribute('aria-label', 'Page layout');
+            for (const [val, text] of [['content', 'Content-sized (default)'], ['letter', 'Letter (8.5 × 11 in)'], ['legal', 'Legal (8.5 × 14 in)'], ['a4', 'A4 (210 × 297 mm)'], ['a3', 'A3 (297 × 420 mm)'], ['tabloid', 'Tabloid (11 × 17 in)']])
+                pageLayout.add(new Option(text, val));
+            for (const text of ['A1 (594 × 841 mm) — ScratchWeaver', 'A2 (420 × 594 mm) — ScratchWeaver', 'A5 (148 × 210 mm) — ScratchWeaver', 'Custom page — ScratchWeaver', 'Widescreen 16:9 Slide — ScratchWeaver', 'Standard 4:3 Slide — ScratchWeaver']) {
+                const option = new Option(text, '');
+                option.disabled = true;
+                pageLayout.add(option);
+            }
+            const pageLayoutLabel = document.createElement('label');
+            pageLayoutLabel.append('Page layout', pageLayout);
+            body.append(pageLayoutLabel);
             const include = document.createElement('input');
             include.type = 'checkbox';
             include.checked = !!source && str(source.record.kind) !== 'document';
@@ -2608,7 +2747,8 @@ export function createDesigner(viewer, options) {
                 if (names.has(label))
                     throw Error('That name is already used in this workarea.');
                 const useName = source && include.checked ? str(source.record.name) : '';
-                const text = `document ${quoteText(label)} as ${output.value}\n` + (useName ? `    use ${source.ref.file === snapshot.rootFile ? '' : quoteText(source.ref.file) + '::'}${quoteText(useName)}\n` : '');
+                const pageBlock = pageLayout.value && pageLayout.value !== 'content' ? `    with\n        page.size ${pageLayout.value}\n` : '';
+                const text = `document ${quoteText(label)} as ${output.value}\n` + (useName ? `    use ${source.ref.file === snapshot.rootFile ? '' : quoteText(source.ref.file) + '::'}${quoteText(useName)}\n` : '') + pageBlock;
                 await apply({ kind: 'edit-source', patches: appendDeclaration(decoded, snapshot.rootFile, text) });
                 const created = handle.scene()?.views.find(v => str(v.record.name) === label);
                 if (created)
@@ -2686,6 +2826,16 @@ export function createDesigner(viewer, options) {
         { id: 'edit.duplicate', label: 'Duplicate', run: () => { const entry = requireSelection(); if (!copyable(entry))
                 throw Error('Duplicate works on elements.'); const position = object(entry.appearance?.record.position); run(() => paste(false, [{ record: clipRecord(entry.definition.record), ...(typeof position.x === 'number' && typeof position.y === 'number' ? { position: { x: position.x, y: position.y } } : {}) }])); }, enabled: () => copyable() && writable(selected().definition.ref) },
         clickCommand('edit.delete', 'Delete'),
+        { id: 'edit.select-all', label: 'Select all in view', run: () => {
+                const view = currentView();
+                const entries = (handle.scene()?.entries ?? []).filter(e => e.definition.owner === 'definition' && (!view || refKey(e.view.ref) === refKey(view.ref)));
+                if (entries.length) {
+                    handle.select(entries[0].definition.ref, entries[0].item.occurrence);
+                    for (let i = 1; i < entries.length; i++)
+                        handle.select(entries[i].definition.ref, entries[i].item.occurrence, true);
+                    handle.announce(`Selected ${entries.length} item${entries.length === 1 ? '' : 's'}.`);
+                }
+            }, enabled: () => !!(handle.scene()?.entries ?? []).some(e => e.definition.owner === 'definition') },
         { id: 'edit.deselect', label: 'Deselect', run: () => handle.clearSelection(), enabled: () => !!selected() },
         clickCommand('edit.rename', 'Rename'),
         clickCommand('edit.properties', 'Properties'),

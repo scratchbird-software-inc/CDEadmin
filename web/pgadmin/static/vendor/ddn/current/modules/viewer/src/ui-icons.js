@@ -26,6 +26,13 @@ const paths = {
     layers: 'm12 3 10 5-10 5L2 8Zm-10 9 10 5 10-5M2 16l10 5 10-5',
     info: 'M12 8h.01M11 11h1v6m-1 0h2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',
     palette: 'M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4 2 2 0 0 1 1-4h3a3 3 0 0 0 3-3c0-4-4-7-9-7ZM7 9h.01M10 6h.01M15 6h.01M6 13h.01',
+    trash: 'M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 11v6m4-6v6',
+    notes: 'M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm3 5h6m-6 4h6m-6 4h4',
+    pin: 'M9 4v6l-2 4v2h10v-2l-2-4V4M12 16v5M8 4h8',
+    border: 'M3 3h18v18H3Zm4 4h10v10H7Z',
+    shadow: 'M4 4h13v13H4Zm3 16h13V7',
+    'branch-left': 'M20 12H9m0 0 4-4m-4 4 4 4M5 6v12',
+    'branch-right': 'M4 12h11m0 0-4-4m4 4-4 4M19 6v12',
 };
 export function uiIcon(document, name) {
     const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg'), path = document.createElementNS(ns, 'path');

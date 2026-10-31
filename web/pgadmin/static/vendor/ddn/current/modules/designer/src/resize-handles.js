@@ -4,7 +4,7 @@ export function mountResizeHandles(viewer, handle, options) {
     const document = handle.ownerDocument, NS = 'http://www.w3.org/2000/svg';
     let focusedOccurrence;
     const css = document.createElement('style');
-    css.textContent = '.ddn-element-resize{cursor:nwse-resize;touch-action:none;opacity:.65;outline:none}.ddn-element-resize:hover,.ddn-element-resize:focus-visible,[data-selected=true]>.ddn-element-resize{opacity:1}.ddn-element-resize .ddn-resize-pad{fill:#fff;fill-opacity:.85;stroke:#5278a1;stroke-opacity:.4}.ddn-element-resize path{fill:none;stroke:#416b98;stroke-width:1.5;stroke-linecap:round;pointer-events:none}.ddn-element-resize:focus-visible .ddn-resize-pad{stroke:#2563eb;stroke-width:2}';
+    css.textContent = '.ddn-element-resize{cursor:nwse-resize;touch-action:none;opacity:.65;outline:none}.ddn-element-resize:hover,.ddn-element-resize:focus-visible,[data-selected=true]>.ddn-element-resize{opacity:1}.ddn-element-resize .ddn-resize-pad,.ddn-element-resize-handles .ddn-resize-handle{fill:#fff;fill-opacity:.85;stroke:#5278a1;stroke-opacity:.55}.ddn-element-resize-handles .ddn-resize-handle{touch-action:none}.ddn-element-resize-handles .ddn-resize-handle:hover{stroke:#2563eb;stroke-width:1.5;fill-opacity:1}.ddn-element-resize path{fill:none;stroke:#416b98;stroke-width:1.5;stroke-linecap:round;pointer-events:none}.ddn-element-resize:focus-visible .ddn-resize-pad{stroke:#2563eb;stroke-width:2}';
     handle.container.append(css);
     const stopClick = (event) => { event.preventDefault(); event.stopPropagation(); };
     const clearFocus = (event) => {
@@ -14,6 +14,15 @@ export function mountResizeHandles(viewer, handle, options) {
     };
     document.addEventListener('focusin', clearFocus);
     document.addEventListener('pointerdown', clearFocus, true);
+    const extraDirs = [
+        { dir: 'nw', cursor: 'nwse-resize' },
+        { dir: 'n', cursor: 'ns-resize' },
+        { dir: 'ne', cursor: 'nesw-resize' },
+        { dir: 'e', cursor: 'ew-resize' },
+        { dir: 's', cursor: 'ns-resize' },
+        { dir: 'sw', cursor: 'nesw-resize' },
+        { dir: 'w', cursor: 'ew-resize' },
+    ];
     function update() {
         const entries = new Map(handle.scene()?.entries.map(entry => [entry.item.occurrence, entry]));
         const matrix = handle.surface.getScreenCTM(), scale = matrix ? Math.hypot(matrix.a, matrix.b) : 1;
@@ -25,15 +34,37 @@ export function mountResizeHandles(viewer, handle, options) {
                 continue;
             const entry = entries.get(occurrence);
             let grip = group.querySelector(':scope > .ddn-element-resize');
+            let extras = group.querySelector(':scope > .ddn-element-resize-handles');
             if (group.getAttribute('data-selected') !== 'true' || !entry || !options.allowed(entry) || handle.surface.dataset.lod === 'mini') {
                 if (focusedOccurrence === occurrence)
                     focusedOccurrence = undefined;
                 grip?.remove();
+                extras?.remove();
                 continue;
+            }
+            const current = () => handle.scene()?.entries.find(item => item.item.occurrence === occurrence);
+            if (!extras) {
+                extras = document.createElementNS(NS, 'g');
+                extras.classList.add('ddn-element-resize-handles');
+                for (const { dir, cursor } of extraDirs) {
+                    const rect = document.createElementNS(NS, 'rect');
+                    rect.setAttribute('class', 'ddn-resize-handle');
+                    rect.dataset.handle = dir;
+                    rect.style.cursor = cursor;
+                    for (const [k, v] of Object.entries({ width: 10, height: 10, rx: 2.5 }))
+                        rect.setAttribute(k, String(v));
+                    rect.addEventListener('pointerdown', event => { const target = current(); if (group.getAttribute('data-selected') === 'true' && target && options.allowed(target))
+                        options.start(target, event, dir); });
+                    rect.addEventListener('click', stopClick);
+                    rect.addEventListener('dblclick', stopClick);
+                    extras.append(rect);
+                }
+                group.append(extras);
             }
             if (!grip) {
                 grip = document.createElementNS(NS, 'g');
-                grip.classList.add('ddn-element-resize');
+                grip.classList.add('ddn-element-resize', 'ddn-resize-handle');
+                grip.dataset.handle = 'se';
                 grip.setAttribute('role', 'button');
                 grip.setAttribute('tabindex', '0');
                 const title = document.createElementNS(NS, 'title');
@@ -46,10 +77,9 @@ export function mountResizeHandles(viewer, handle, options) {
                 lines.setAttribute('d', 'M6 16L16 6M11 16L16 11M16 16L16 16');
                 grip.append(title, pad, lines);
                 // Resolve by occurrence at event time: redraws may replace records.
-                const current = () => handle.scene()?.entries.find(item => item.item.occurrence === occurrence);
                 grip.addEventListener('focus', () => { focusedOccurrence = occurrence; });
                 grip.addEventListener('pointerdown', event => { const target = current(); if (group.getAttribute('data-selected') === 'true' && target && options.allowed(target))
-                    options.start(target, event); });
+                    options.start(target, event, 'se'); });
                 grip.addEventListener('keydown', event => {
                     const target = current();
                     if (group.getAttribute('data-selected') !== 'true' || !target || !options.allowed(target))
@@ -69,6 +99,20 @@ export function mountResizeHandles(viewer, handle, options) {
             }
             grip.setAttribute('aria-label', 'Resize ' + titleOf(entry.definition.record));
             const b = options.bounds(entry);
+            const coords = {
+                nw: [b.x, b.y],
+                n: [b.x + b.width / 2, b.y],
+                ne: [b.x + b.width, b.y],
+                e: [b.x + b.width, b.y + b.height / 2],
+                s: [b.x + b.width / 2, b.y + b.height],
+                sw: [b.x, b.y + b.height],
+                w: [b.x, b.y + b.height / 2],
+            };
+            for (const rect of extras.querySelectorAll('.ddn-resize-handle')) {
+                const dir = rect.dataset.handle;
+                const [hx, hy] = coords[dir];
+                rect.setAttribute('transform', `translate(${hx - 5 / scale} ${hy - 5 / scale}) scale(${1 / scale})`);
+            }
             grip.setAttribute('transform', `translate(${b.x + b.width - 20 / scale} ${b.y + b.height - 20 / scale}) scale(${1 / scale})`);
             // The viewer rebuilds SVG children on zoom, font loads and redraws.
             // Preserve keyboard focus only when it was lost with that DOM node.
@@ -83,6 +127,6 @@ export function mountResizeHandles(viewer, handle, options) {
     const observer = Resize ? new Resize(update) : undefined;
     observer?.observe(handle.surface);
     update();
-    return () => { unsubscribe(); unselect(); unopen(); observer?.disconnect(); document.removeEventListener('focusin', clearFocus); document.removeEventListener('pointerdown', clearFocus, true); css.remove(); handle.surface.querySelectorAll('.ddn-element-resize').forEach(grip => grip.remove()); };
+    return () => { unsubscribe(); unselect(); unopen(); observer?.disconnect(); document.removeEventListener('focusin', clearFocus); document.removeEventListener('pointerdown', clearFocus, true); css.remove(); handle.surface.querySelectorAll('.ddn-element-resize,.ddn-element-resize-handles').forEach(grip => grip.remove()); };
 }
 //# sourceMappingURL=resize-handles.js.map
