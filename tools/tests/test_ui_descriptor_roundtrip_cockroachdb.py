@@ -45,10 +45,10 @@ UNIQUE = uuid.uuid4().hex[:6]
 DATABASE = f'rt_{UNIQUE}'
 
 
-def connect(database='defaultdb'):
+def connect(database='defaultdb', user=None):
     return psycopg.connect(
         host=SETTINGS['host'], port=int(SETTINGS['port']),
-        user=SETTINGS['user'], dbname=database, sslmode='disable',
+        user=user or SETTINGS['user'], dbname=database, sslmode='disable',
         autocommit=True)
 
 
@@ -373,7 +373,8 @@ def test_enum_and_composite_types(live):
     query('CREATE TABLE public.not_a_type (id INT8 PRIMARY KEY)')
     run(client, route, 'type', 'create', backend_draft(form, {
         'name': 'rt_status', 'parent': 'public', 'type_kind': 'ENUM',
-        'values': [{'value': 'new'}, {'value': "it's"}, {'value': 'done'}],
+        'enum_values': [{'value': 'new'}, {'value': "it's"},
+                        {'value': 'done'}],
         'comment': 'status'}))
     run(client, route, 'type', 'create', backend_draft(form, {
         'name': 'rt_point', 'parent': 'public', 'type_kind': 'COMPOSITE',
@@ -384,7 +385,7 @@ def test_enum_and_composite_types(live):
     # Tables' row types are not types (pg_type lists them as 'c').
     assert kinds == {'rt_status', 'rt_point'}
     target, baseline = record(client, route, 'type', 'rt_status', 'type')
-    assert ([row['value'] for row in baseline['values']],
+    assert ([row['value'] for row in baseline['enum_values']],
             baseline['comment'], baseline['parent']) == (
         ['new', "it's", 'done'], 'status', 'public')
     _, point = record(client, route, 'type', 'rt_point', 'type')
@@ -395,15 +396,15 @@ def test_enum_and_composite_types(live):
     alter = backend_draft(form, {
         **baseline, 'name': 'rt_state',
         'rename_values': [{'from': 'done', 'to': 'closed'}],
-        'values': [{'value': 'draft'}, {'value': 'new'}, {'value': 'closed'},
-                   {'value': 'archived'}],
+        'enum_values': [{'value': 'draft'}, {'value': 'new'},
+                        {'value': 'closed'}, {'value': 'archived'}],
         'comment': ''}, mode='alter', baseline=baseline)
     run(client, route, 'type', 'alter', alter, target=target)
     target, after = record(client, route, 'type', 'rt_state', 'type')
-    assert ([row['value'] for row in after['values']], after['comment']) \
+    assert ([row['value'] for row in after['enum_values']], after['comment']) \
         == (['draft', 'new', 'closed', 'archived'], None)
     assert 'reorder' in refused('type', 'alter', {
-        'values': ['closed', 'new', 'draft', 'archived']}, target)
+        'enum_values': ['closed', 'new', 'draft', 'archived']}, target)
     for name in ('rt_state', 'rt_point'):
         run(client, route, 'type', 'drop', {'confirmation': name},
             target=find(client, route, 'type', name)[0])
@@ -568,18 +569,66 @@ def test_functions_and_procedures(live):
     assert not query("SELECT 1 FROM pg_proc WHERE proname LIKE 'rt\\_%'")
 
 
+def test_array_types(live):
+    route, client = live
+    form = resolved_form('cockroachdb', 'table')
+    run(client, route, 'table', 'create', backend_draft(form, {
+        'name': 'rt_arr', 'parent': 'public',
+        'columns': [{'name': 'id', 'type': 'INT8', 'nullable': False},
+                    {'name': 'a', 'type': 'INT8[]'},
+                    {'name': 'b', 'type': 'STRING [3]'}],
+        'primary_key': [{'columns': ['id']}]}))
+    # CockroachDB has one array dimension ("unimplemented: this syntax").
+    assert 'at most 1 dimension' in refused('table', 'create', {
+        'name': 'rt_arr2', 'parent': 'public',
+        'columns': [{'name': 'b', 'type': 'STRING[][]'}]})
+    target, baseline = record(client, route, 'table', 'rt_arr', 'table')
+    columns = by_name(baseline['columns'])
+    print('array column types', columns['a']['type'], columns['b']['type'])
+    assert backend_draft(form, baseline, mode='alter',
+                         baseline=baseline) == {}
+    query('INSERT INTO public.rt_arr VALUES (1, ARRAY[1, 2], '
+          "ARRAY['x'])")
+    assert query('SELECT a, b FROM public.rt_arr') == [([1, 2], ['x'])]
+    run(client, route, 'table', 'drop', {'confirmation': 'rt_arr'},
+        target=target)
+    routine = resolved_form('cockroachdb', 'routine')
+    run(client, route, 'function', 'create', backend_draft(routine, {
+        'variant': 'function', 'name': 'rt_first', 'parent': 'public',
+        'parameters': [{'name': 'a', 'type': 'INT8[]'}],
+        'returns': 'INT8[]', 'body': 'SELECT ARRAY[a[1]]'}))
+    assert query('SELECT public.rt_first(ARRAY[4, 5])') == [([4],)]
+    rtarget, made = record(client, route, 'function', 'rt_first(int8[])',
+                           'routine')
+    print('array routine', made['parameters'], made['returns'])
+    assert backend_draft(routine, {**made, 'variant': 'function'},
+                         mode='alter', baseline={
+                             **made, 'variant': 'function'}) == {}
+    run(client, route, 'function', 'drop',
+        {'confirmation': 'rt_first(int8[])'}, target=rtarget)
+    types = resolved_form('cockroachdb', 'type')
+    run(client, route, 'type', 'create', backend_draft(types, {
+        'name': 'rt_pair', 'parent': 'public', 'type_kind': 'COMPOSITE',
+        'fields': [{'name': 'tags', 'type': 'STRING[]'}]}))
+    ttarget, pair = record(client, route, 'type', 'rt_pair', 'type')
+    print('array field', pair['fields'])
+    run(client, route, 'type', 'drop', {'confirmation': 'rt_pair'},
+        target=ttarget)
+
+
 def test_database_create_reopen_alter_drop(live):
     route, client = live
     name = f'rt_db_{UNIQUE}'
     owner = f'rt_owner_{UNIQUE}'
     with connect() as connection:
-        connection.execute(f'CREATE ROLE {owner}')
+        connection.execute(f'CREATE USER {owner}')
     form = resolved_form('cockroachdb', 'database')
     try:
         run(client, route, 'database', 'create', backend_draft(form, {
             'name': name, 'owner': owner, 'comment': 'rt',
             'settings': [{'name': 'timezone', 'value': 'UTC'},
-                         {'name': 'statement_timeout', 'value': '10s'}]}))
+                         {'name': 'statement_timeout', 'value': '10s'},
+                         {'name': 'search_path', 'value': 'public, x'}]}))
         target, baseline = record(client, route, 'database', name,
                                   'database')
         assert (baseline['owner'], baseline['comment'],
@@ -587,7 +636,13 @@ def test_database_create_reopen_alter_drop(live):
                 sorted((row['name'], row['value'])
                        for row in baseline['settings'])) == (
             owner, 'rt', 'UTF8',
-            [('statement_timeout', '10s'), ('timezone', 'UTC')])
+            [('search_path', 'public, x'), ('statement_timeout', '10s'),
+             ('timezone', 'UTC')])
+        # Two schemas, not one named "public, x". Live, 26.1.3: database
+        # defaults do not reach root's sessions, so a login role checks.
+        with connect(name, owner) as connection:
+            assert connection.execute('SHOW search_path').fetchone() == (
+                'public, x',)
         assert backend_draft(form, baseline, mode='alter',
                              baseline=baseline) == {}
         alter = backend_draft(form, {

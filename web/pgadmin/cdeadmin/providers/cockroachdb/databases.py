@@ -15,6 +15,11 @@ from ...sdk.relational import RelationalClientError
 CREATE_KEYS = {'name', 'owner', 'encoding', 'comment', 'settings'}
 ALTER_KEYS = {'name', 'owner', 'comment', 'settings', 'confirmation'}
 _SETTING = re.compile(r'[a-z_][a-z0-9_.]{0,127}')
+# A comma list of plain words (search_path = public, x) is written bare:
+# quoted, CockroachDB reads it as one element (live, 26.1.3: SHOW
+# search_path gave "public, x").
+_WORD_LIST = re.compile(r'[A-Za-z_][A-Za-z0-9_$]*(?:\s*,\s*'
+                        r'[A-Za-z_][A-Za-z0-9_$]*)+')
 
 
 def _settings(value):
@@ -35,13 +40,19 @@ def _settings(value):
     return out
 
 
+def _value(admin, value):
+    if _WORD_LIST.fullmatch(value.strip()):
+        return value.strip()
+    return admin._literal(value)
+
+
 def _setting_statements(admin, name, wanted, held):
     statements = []
     for key, value in wanted.items():
         if held.get(key) != value:
             statements.append({'source': (
                 f'ALTER DATABASE {name} SET {key} = '
-                f'{admin._literal(value)}'), 'parameters': ()})
+                f'{_value(admin, value)}'), 'parameters': ()})
     for key in held:
         if key not in wanted:
             statements.append({'source': f'ALTER DATABASE {name} RESET '

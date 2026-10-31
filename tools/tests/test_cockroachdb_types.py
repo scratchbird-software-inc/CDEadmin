@@ -19,7 +19,7 @@ from pgadmin.cdeadmin.sdk import RelationalClientError  # noqa: E402
 
 ENUM = {'resource_id': 'type:public:s', 'display_name': 's',
         'display_path': ['public', 's'],
-        'native': {'type_kind': 'ENUM', 'values': ['a', 'b', 'c'],
+        'native': {'type_kind': 'ENUM', 'enum_values': ['a', 'b', 'c'],
                    'comment': None}}
 COMPOSITE = {**ENUM, 'native': {'type_kind': 'COMPOSITE', 'fields': [
     {'name': 'x', 'type': 'bigint'}]}}
@@ -36,7 +36,7 @@ def plan(operation, draft, target=None):
 
 def test_create_enum_and_composite():
     assert plan('create', {'name': 's', 'parent': 'public',
-                           'type_kind': 'ENUM', 'values': ['a', "b'c"],
+                           'type_kind': 'ENUM', 'enum_values': ['a', "b'c"],
                            'comment': 'x'}) == [
         'CREATE TYPE "public"."s" AS ENUM (\'a\', \'b\'\'c\')',
         'COMMENT ON TYPE "public"."s" IS \'x\'']
@@ -48,7 +48,7 @@ def test_create_enum_and_composite():
 def test_enum_alter_renames_first_then_adds_in_place_and_drops():
     assert plan('alter', {
         'rename_values': [{'from': 'c', 'to': 'z'}],
-        'values': ['first', 'a', 'mid', 'z']}, ENUM) == [
+        'enum_values': ['first', 'a', 'mid', 'z']}, ENUM) == [
         'ALTER TYPE "public"."s" RENAME VALUE \'c\' TO \'z\'',
         'ALTER TYPE "public"."s" ADD VALUE \'first\' BEFORE \'a\'',
         'ALTER TYPE "public"."s" ADD VALUE \'mid\' AFTER \'a\'',
@@ -56,13 +56,13 @@ def test_enum_alter_renames_first_then_adds_in_place_and_drops():
 
 
 @pytest.mark.parametrize('target, draft, reason', [
-    (ENUM, {'values': ['c', 'b', 'a']}, 'cannot reorder'),
+    (ENUM, {'enum_values': ['c', 'b', 'a']}, 'cannot reorder'),
     (ENUM, {'rename_values': [{'from': 'q', 'to': 'r'}]}, 'enum holds'),
     (ENUM, {'rename_values': [{'from': 'a', 'to': 'b'}]}, 'already has'),
-    (ENUM, {'values': ['a', 'a']}, 'must not repeat'),
+    (ENUM, {'enum_values': ['a', 'a']}, 'must not repeat'),
     (COMPOSITE, {'fields': [{'name': 'y', 'type': 'INT8'}]},
      'fixed once created'),
-    (COMPOSITE, {'values': ['a']}, 'only an enum'),
+    (COMPOSITE, {'enum_values': ['a']}, 'only an enum'),
 ])
 def test_refusals(target, draft, reason):
     with pytest.raises(RelationalClientError, match=reason):

@@ -57,6 +57,16 @@ def test_alter_diffs_settings_and_renames_last():
         'ALTER DATABASE "d" RENAME TO "e"']
 
 
+def test_a_word_list_setting_is_written_bare():
+    # Quoted, 'public, x' is one schema named "public, x".
+    assert plan('create', {'name': 'd', 'settings': [
+        {'name': 'search_path', 'value': 'public, x'},
+        {'name': 'application_name', 'value': 'a b'}]}) == [
+        'CREATE DATABASE "d"',
+        'ALTER DATABASE "d" SET search_path = public, x',
+        'ALTER DATABASE "d" SET application_name = \'a b\'']
+
+
 @pytest.mark.parametrize('operation, draft, reason', [
     ('create', {'name': 'd', 'encoding': 'LATIN1'}, 'are UTF8'),
     ('create', {'name': 'd', 'connection_limit': 5}, 'unknown database'),

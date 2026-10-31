@@ -14,7 +14,7 @@ if 'pgadmin' not in sys.modules:
 
 from pgadmin.cdeadmin.providers.cockroachdb import routines  # noqa: E402
 from pgadmin.cdeadmin.providers.cockroachdb.provider import (  # noqa: E402
-    ADMINISTRATION,
+    ADMINISTRATION, _array_signature,
 )
 from pgadmin.cdeadmin.sdk import RelationalClientError  # noqa: E402
 
@@ -106,3 +106,13 @@ def test_drop_names_the_signature():
 def test_refusals(kind, operation, draft, reason):
     with pytest.raises(RelationalClientError, match=reason):
         plan(kind, operation, draft, TARGET)
+
+
+def test_array_arguments_read_as_brackets():
+    # Live, 26.1.3: pg_get_function_arguments gives _int8; _odd is a user
+    # type of that name, not an array.
+    assert _array_signature('_int8, _odd, int8, __odd',
+                            [True, False, False, True]) == \
+        'int8[], _odd, int8, _odd[]'
+    assert _array_signature('', None) == ''
+    assert _array_signature('_int8', [True, False]) == '_int8'

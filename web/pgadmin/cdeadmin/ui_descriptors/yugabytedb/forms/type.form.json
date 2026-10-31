@@ -274,5 +274,5 @@
       ]
     }
   ],
-  "notes": "Started from the CockroachDB type form; enum_values and fields as YugabyteDB's and DuckDB's type forms name them (the CockroachDB form says values; to be aligned when its demo next runs). providers/yugabytedb/types.py; records from pg_enum, pg_attribute, pg_range, pg_type and pg_constraint. Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
+  "notes": "Started from the CockroachDB type form; enum_values and fields as YugabyteDB's and DuckDB's type forms name them (the CockroachDB form said values; aligned and checked live 2026-10-31). providers/yugabytedb/types.py; records from pg_enum, pg_attribute, pg_range, pg_type and pg_constraint. Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."
 }

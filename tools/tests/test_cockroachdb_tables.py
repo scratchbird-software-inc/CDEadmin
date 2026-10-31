@@ -175,3 +175,15 @@ def test_unchanged_constraint_rows_send_nothing():
 def test_alter_refuses_by_name(draft, reason):
     with pytest.raises(RelationalClientError, match=reason):
         plan('alter', draft, TARGET)
+
+
+def test_array_column_types():
+    statements, _ = plan('create', {
+        'name': 'a', 'parent': 'public', 'columns': [
+            {'name': 'x', 'type': 'INT8[]'},
+            {'name': 'y', 'type': 'STRING [3]'}]})
+    assert '"x" INT8[]' in statements[0] and '"y" STRING[3]' in \
+        statements[0]
+    with pytest.raises(RelationalClientError, match='at most 1 dimension'):
+        plan('create', {'name': 'a', 'parent': 'public', 'columns': [
+            {'name': 'y', 'type': 'STRING[][]'}]})

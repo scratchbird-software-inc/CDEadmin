@@ -69,7 +69,7 @@
       "label": "Session defaults",
       "tab": "Engine",
       "control": "grid",
-      "help": "ALTER DATABASE ... SET: defaults for every session in this database. Removing a row runs RESET.",
+      "help": "ALTER DATABASE ... SET: defaults for sessions in this database, except root's (CockroachDB does not apply them to root). Removing a row runs RESET.",
       "columns": [
         {
           "field_id": "name",

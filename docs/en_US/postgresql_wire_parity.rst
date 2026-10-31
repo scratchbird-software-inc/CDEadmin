@@ -395,7 +395,9 @@ the default, name and comment change afterwards (``ALTER DOMAIN`` ``NOT
 NULL`` and constraint changes are "not supported yet"). Enum values use
 the field id ``enum_values`` as YugabyteDB's and DuckDB's forms did; the
 CockroachDB form's ``values`` is to be aligned when its demo next runs, so
-the change is re-checked live.
+the change is re-checked live. (Update 2026-10-31: aligned; the CockroachDB
+type form, editor and record now use ``enum_values``, and its enum round
+trip passes live on 26.1.3.)
 
 Catalog speed, measured the same day: YSQL fetches catalog rows over RPC
 and a new connection starts with a cold catalog cache. The column query
@@ -439,6 +441,7 @@ changes one's type (``int[]`` to ``bigint[]``; ``text[3][]`` reads back
 as ``text[]``, as PostgreSQL drops declared sizes). CockroachDB's table
 editor still refuses arrays; it moves to ``_safe_type`` when its demo next
 runs, so its narrower array support (no nested arrays) is checked live.
+(Update 2026-10-31: done; see "CockroachDB alignment, 2026-10-31" below.)
 
 The database form is ``complete`` (``providers/yugabytedb/databases.py``):
 owner, template, encoding, libc or ICU locale, connection limit, allowing
@@ -459,7 +462,8 @@ alone. Two fixes found on the way:
    quoted, which PostgreSQL reads as one schema named ``public, x``. A
    comma list of plain words is now written bare. CockroachDB's database
    editor still quotes it; whether CockroachDB reads it the same way is
-   checked when its demo next runs.
+   checked when its demo next runs. (Update 2026-10-31: it does, and its
+   editor now writes the list bare too; see below.)
 
 YugabyteDB had no row security policy kind; it now has one, registered
 as CockroachDB's is (portfolio catalog, capabilities, navigator Security
@@ -820,6 +824,36 @@ Checked live on 26.1.3 for those forms (not yet in the probe):
    back as visibility 0. The provider admits index ``alter`` from
    2026-10-30. Fixed the same day: the catalog lost a partial predicate
    when visibility was below 1 (rendered after the predicate).
+
+CockroachDB alignment, 2026-10-31
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Items left from the YugabyteDB work, checked live on 26.1.3:
+
+-  Enum values: the type form, editor and record use ``enum_values``, as
+   YugabyteDB's and DuckDB's forms do (was ``values``).
+-  Arrays: tables (create and column type change), routine parameters and
+   return types, and composite type fields use the shared ``_safe_type``,
+   which the editor had refused. CockroachDB has one array dimension:
+   ``STRING[3][]`` is a syntax error ("unimplemented: this syntax") and
+   ``STRING[3]`` is stored as ``STRING[]``, so the editor refuses a second
+   dimension before sending. YugabyteDB's composite fields and domain base
+   types still use the narrower check; they move when its demo next runs.
+-  Array routine arguments: ``pg_get_function_arguments`` gives an array
+   by its internal name (``_int8``), so a function named
+   ``rt_first(_int8)`` could not be found by ``rt_first(int8[])``. The
+   record now writes array positions as ``int8[]``, using ``pg_type`` to
+   tell which positions are arrays, since a user type can itself be named
+   ``_odd``. Array slices (``a[1:1]``) are unimplemented in CockroachDB.
+-  List settings: CockroachDB reads a quoted ``'public, x'`` as one schema
+   named ``public, x``, as PostgreSQL does, so its database editor writes a
+   comma list of plain words bare too. CockroachDB does not apply database
+   session defaults to ``root``'s sessions (a login role received
+   ``public, x`` and the time zone, ``root`` neither); the settings help
+   says so, and the live test checks as a login role.
+-  The policy refusals naming the engine and the shared database listing
+   (every database except a template refusing connections) pass the
+   CockroachDB row-security and database round trips.
 
 Plan
 ----

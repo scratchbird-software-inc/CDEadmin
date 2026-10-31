@@ -9,8 +9,10 @@ values cannot be reordered.
 from ...sdk.relational import RelationalClientError
 
 KINDS = ('ENUM', 'COMPOSITE')
-CREATE_KEYS = {'name', 'parent', 'type_kind', 'values', 'fields', 'comment'}
-ALTER_KEYS = {'name', 'values', 'rename_values', 'comment', 'confirmation'}
+CREATE_KEYS = {'name', 'parent', 'type_kind', 'enum_values', 'fields',
+               'comment'}
+ALTER_KEYS = {'name', 'enum_values', 'rename_values', 'comment',
+              'confirmation'}
 
 
 def _strings(value, label):
@@ -41,14 +43,15 @@ def create(admin, draft):
     if kind == 'ENUM':
         definition = 'ENUM (' + ', '.join(
             admin._literal(item)
-            for item in _strings(draft.get('values'), 'enum values')) + ')'
+            for item in _strings(draft.get('enum_values'),
+                                 'enum values')) + ')'
     elif kind == 'COMPOSITE':
         fields = draft.get('fields')
         if not isinstance(fields, list) or not fields:
             raise RelationalClientError('a composite type needs fields')
         definition = '(' + ', '.join(
-            f'{admin._quote(item.get("name"))} '
-            f'{admin._safe_fragment(item.get("type"), "field type")}'
+            admin._quote(item.get('name')) + ' ' + admin._safe_type(
+                item.get('type'), 'field type', dimensions=1)
             for item in fields) + ')'
     else:
         raise RelationalClientError('type kind is ENUM or COMPOSITE')
@@ -69,9 +72,10 @@ def alter(admin, draft, target):
     path = admin._target_path(target)
     name = admin._qualified(path)
     statements = []
-    current = list(native.get('values') or [])
+    current = list(native.get('enum_values') or [])
     renames = draft.get('rename_values') or []
-    if (renames or 'values' in draft) and native.get('type_kind') != 'ENUM':
+    if (renames or 'enum_values' in draft) and \
+            native.get('type_kind') != 'ENUM':
         raise RelationalClientError('only an enum has values')
     for item in renames:
         if not isinstance(item, dict) or item.get('from') not in current:
@@ -85,9 +89,9 @@ def alter(admin, draft, target):
             f'{admin._literal(item["from"])} TO {admin._literal(new)}'),
             'parameters': ()})
         current[current.index(item['from'])] = new
-    if 'values' in draft:
+    if 'enum_values' in draft:
         statements += _value_changes(admin, name, current, _strings(
-            draft['values'], 'enum values'))
+            draft['enum_values'], 'enum values'))
     if 'comment' in draft and (draft['comment'] or None) != (
             native.get('comment') or None):
         statements.append(_comment(admin, name, draft['comment']))

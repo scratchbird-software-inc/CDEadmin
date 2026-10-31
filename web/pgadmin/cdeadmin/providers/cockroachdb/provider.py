@@ -1545,7 +1545,7 @@ def _extras(cursor, request, generation):
         values.append(resource('type', [schema], name, generation, {
             'parent': str(schema),
             'type_kind': 'ENUM' if enum else 'COMPOSITE',
-            'values': enum_values.get(key, []) if enum else None,
+            'enum_values': enum_values.get(key, []) if enum else None,
             'fields': None if enum else fields.get(key, []),
             'comment': None if comment is None else str(comment),
         }))
@@ -1554,12 +1554,16 @@ def _extras(cursor, request, generation):
     rendered = [str(row[0]) for row in optional_rows(
         cursor, 'SHOW CREATE ALL ROUTINES')]
     for (schema, name, routine_kind, signature, names, modes, language,
-         volatility, strict, security, leakproof, body) in optional_rows(
+         volatility, strict, security, leakproof, body,
+         arrays) in optional_rows(
         cursor,
         'SELECT n.nspname, p.proname, p.prokind, '
         'pg_get_function_arguments(p.oid), p.proargnames, p.proargmodes, '
         'l.lanname, p.provolatile, p.proisstrict, p.prosecdef, '
-        'p.proleakproof, p.prosrc '
+        'p.proleakproof, p.prosrc, '
+        "(SELECT array_agg(t.typcategory = 'A' ORDER BY a.o) "
+        'FROM unnest(p.proargtypes::OID[]) WITH ORDINALITY AS a(oid, o) '
+        'JOIN pg_catalog.pg_type t ON t.oid = a.oid) '
         'FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n '
         'ON n.oid = p.pronamespace '
         'JOIN pg_catalog.pg_language l ON l.oid = p.prolang '
@@ -1567,6 +1571,7 @@ def _extras(cursor, request, generation):
         "'crdb_internal') AND p.prokind IN ('f', 'p') ORDER BY 1, 2, 4",
     ):
         kind = 'procedure' if str(routine_kind) == 'p' else 'function'
+        signature = _array_signature(signature, arrays)
         native = {
             'name': str(name), 'signature': str(signature or ''),
             'parent': str(schema),
@@ -1777,6 +1782,23 @@ def _extras(cursor, request, generation):
             'raw_config_sql': str(row[1]),
         }))
     return values
+
+
+def _array_signature(signature, arrays):
+    """pg_get_function_arguments with array arguments as int8[].
+
+    Live, 26.1.3: it gives an array argument's internal name (_int8), and
+    a user type may itself be named _odd, so pg_type says which positions
+    are arrays. Left as it is when the positions do not line up.
+    """
+    signature = str(signature or '')
+    parts = signature.split(', ') if signature else []
+    flags = list(arrays or [])
+    if len(parts) != len(flags):
+        return signature
+    return ', '.join(
+        part[1:] + '[]' if flag and part.startswith('_') else part
+        for part, flag in zip(parts, flags))
 
 
 def _annotate_catalog(connection, values):

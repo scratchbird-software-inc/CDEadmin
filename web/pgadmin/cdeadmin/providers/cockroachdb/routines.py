@@ -53,7 +53,8 @@ def _parameters(admin, items):
         text = ('' if mode == 'IN' else mode + ' ')
         if not _blank(item.get('name')):
             text += admin._quote(item['name']) + ' '
-        text += admin._safe_fragment(item.get('type'), 'parameter type')
+        text += admin._safe_type(item.get('type'), 'parameter type',
+                                 dimensions=1)
         if not _blank(item.get('default')):
             if mode == 'OUT':
                 raise RelationalClientError(
@@ -99,7 +100,7 @@ def definition(admin, kind, name, values, replace=False):
             returns = 'RECORD'
         source += (' RETURNS ' + ('SETOF ' if values.get('returns_set')
                                   else '') +
-                   admin._safe_fragment(returns, 'return type'))
+                   admin._safe_type(returns, 'return type', dimensions=1))
         volatility = _choice(values.get('volatility'), VOLATILITY,
                              'volatility', 'VOLATILE')
         if values.get('leakproof') and volatility != 'IMMUTABLE':

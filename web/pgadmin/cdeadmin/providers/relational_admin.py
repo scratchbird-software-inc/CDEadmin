@@ -9050,15 +9050,23 @@ class RelationalAdministration:
         return value
 
     @classmethod
-    def _safe_type(cls, value, label):
+    def _safe_type(cls, value, label, dimensions=None):
         """A type, also with PostgreSQL array suffixes (int[], text[3][]).
 
         For engines with array types; the bracket suffixes are split off
         and the base type is checked as _safe_fragment checks it.
+        dimensions caps the suffixes for an engine with fewer array
+        dimensions than PostgreSQL.
         """
         if isinstance(value, str):
             suffix = _ARRAY_SUFFIX.search(value.strip())
             if suffix and suffix.start():
+                if dimensions is not None and \
+                        suffix.group(0).count('[') > dimensions:
+                    raise RelationalClientError(
+                        f'{label}: arrays have at most {dimensions} '
+                        'dimension' + ('' if dimensions == 1 else 's') +
+                        ' on this engine')
                 base = value.strip()[:suffix.start()]
                 return cls._safe_fragment(base, label) + re.sub(
                     r'\s+', '', suffix.group(0))

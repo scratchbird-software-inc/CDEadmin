@@ -72,7 +72,8 @@ def column_definition(admin, item, adding=False):
         raise RelationalClientError(
             'unknown column option: ' + ', '.join(sorted(unknown)))
     parts = [admin._quote(item.get('name')),
-             admin._safe_fragment(item.get('type'), 'column type')]
+             admin._safe_type(item.get('type'), 'column type',
+                              dimensions=1)]
     generated = _choice(item.get('generated_kind'), GENERATED,
                         'generated column')
     identity = _choice(item.get('identity'), IDENTITY, 'identity')
@@ -266,8 +267,9 @@ def _alter_column(admin, table, name, changes):
             out.append(head + 'DROP IDENTITY')
             unlock = True
     if not _blank(changes.get('type')):
-        out.append(head + 'TYPE ' + admin._safe_fragment(
-            changes['type'], 'column type'))
+        out.append(head + 'TYPE ' + admin._safe_type(
+            changes['type'], 'column type',
+            dimensions=1))
     if 'default' in changes:
         out.append(head + ('DROP DEFAULT' if _blank(changes['default'])
                            else 'SET DEFAULT ' + admin._safe_fragment(

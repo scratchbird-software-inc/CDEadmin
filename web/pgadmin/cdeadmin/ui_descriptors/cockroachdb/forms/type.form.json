@@ -63,7 +63,7 @@
       ]
     },
     {
-      "field_id": "values",
+      "field_id": "enum_values",
       "label": "Enum values",
       "tab": "General",
       "control": "grid",
