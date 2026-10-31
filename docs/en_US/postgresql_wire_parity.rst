@@ -604,7 +604,10 @@ published and the masters answer only at the node's advertised address
 -  Not fixed: the navigator shows two cluster records for YugabyteDB, the
    shared PostgreSQL-wire catalog's (``YugabyteDB``) and the control
    plane's (``YugabyteDB cluster``, which the load-balancer operation
-   targets).
+   targets). (Fixed later on 2026-10-31: the control plane names its
+   record ``YugabyteDB`` as the SQL catalog does, so the two merge into one
+   record carrying the ``yb-admin`` state; the load-balancer round trip
+   passed live on it.)
 
 immudb 1.11.0
 ~~~~~~~~~~~~~
@@ -1087,6 +1090,11 @@ Items left from the YugabyteDB work, checked live on 26.1.3:
    ``STRING[3]`` is stored as ``STRING[]``, so the editor refuses a second
    dimension before sending. YugabyteDB's composite fields and domain base
    types still use the narrower check; they move when its demo next runs.
+   (Done later on 2026-10-31, live on 2025.2.2.2: a composite type with
+   ``text[]`` and ``int[][]`` fields reads back as ``text[]`` and
+   ``integer[]``, since YSQL keeps no declared dimensions, and a domain
+   over ``varchar(20)[]`` reads back as ``character varying(20)[]``. No
+   dimension cap, as in PostgreSQL.)
 -  Array routine arguments: ``pg_get_function_arguments`` gives an array
    by its internal name (``_int8``), so a function named
    ``rt_first(_int8)`` could not be found by ``rt_first(int8[])``. The

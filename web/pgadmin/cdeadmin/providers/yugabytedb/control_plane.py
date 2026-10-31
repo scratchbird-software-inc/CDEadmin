@@ -943,8 +943,10 @@ def catalog_resources(route, generation):
         text = response.get('stdout', '')
         document = _json_document(text)
         if kind == 'cluster':
+            # Named as the SQL catalog names its cluster, so the two
+            # records merge into one (provider.py _catalog).
             resources.append(_resource(
-                kind, 'YugabyteDB cluster', generation, {'raw': text},
+                kind, 'YugabyteDB', generation, {'raw': text},
             ))
         elif kind == 'master':
             pattern = re.compile(

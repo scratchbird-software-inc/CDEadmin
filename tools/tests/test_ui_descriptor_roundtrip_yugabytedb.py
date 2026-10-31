@@ -458,7 +458,9 @@ def test_types_and_domains(live):
     run(client, route, 'type', 'create', backend_draft(form, {
         'name': 'rt_point', 'parent': 'public', 'type_kind': 'COMPOSITE',
         'fields': [{'name': 'x', 'type': 'int'},
-                   {'name': 'label', 'type': 'text'}]}))
+                   {'name': 'label', 'type': 'text'},
+                   {'name': 'tags', 'type': 'text[]'},
+                   {'name': 'grid', 'type': 'int[][]'}]}))
     run(client, route, 'type', 'create', backend_draft(form, {
         'name': 'rt_span', 'parent': 'public', 'type_kind': 'RANGE',
         'subtype': 'timestamptz', 'subtype_diff': 'tstzrange_subdiff'}))
@@ -473,8 +475,15 @@ def test_types_and_domains(live):
             baseline['comment'], baseline['type_kind']) == (
         ['new', "it's", 'done'], 'status', 'ENUM')
     _, point = record(client, route, 'type', 'rt_point', 'type')
+    # Array fields; like PostgreSQL, YSQL keeps no declared dimensions.
     assert [(row['name'], row['type']) for row in point['fields']] == [
-        ('x', 'integer'), ('label', 'text')]
+        ('x', 'integer'), ('label', 'text'), ('tags', 'text[]'),
+        ('grid', 'integer[]')]
+    run(client, route, 'domain', 'create', backend_draft(form, {
+        'variant': 'domain', 'name': 'rt_codes', 'parent': 'public',
+        'base_type': 'varchar(20)[]'}))
+    _, codes = record(client, route, 'domain', 'rt_codes', 'type', 'domain')
+    assert codes['base_type'] == 'character varying(20)[]'
     _, span = record(client, route, 'type', 'rt_span', 'type')
     assert (span['type_kind'], span['subtype'], span['subtype_diff']) == (
         'RANGE', 'timestamp with time zone', 'tstzrange_subdiff')
@@ -513,7 +522,8 @@ def test_types_and_domains(live):
     assert 'cannot change' in refused('domain', 'alter', {
         'not_null': False}, find(client, route, 'domain', 'rt_code2')[0])
     for kind, name in (('type', 'rt_state'), ('type', 'rt_point'),
-                       ('type', 'rt_span'), ('domain', 'rt_code2')):
+                       ('type', 'rt_span'), ('domain', 'rt_code2'),
+                       ('domain', 'rt_codes')):
         run(client, route, kind, 'drop', {'confirmation': name},
             target=find(client, route, kind, name)[0])
     assert not query("SELECT 1 FROM pg_type WHERE typname LIKE 'rt\\_%'")
@@ -992,8 +1002,11 @@ def test_control_plane_operations(live):
           'FROM generate_series(1, 50000) g')
     table = find(client, route, 'table', 'ops')[0]
     # Load balancer off and on again.
-    cluster = next(row for row in one('cluster')
-                   if row['resource_id'] == 'cluster:YugabyteDB cluster')
+    # One cluster record: the SQL catalog's and yb-admin's are merged.
+    clusters = one('cluster')
+    assert [row['resource_id'] for row in clusters] == ['cluster:YugabyteDB']
+    cluster = clusters[0]
+    assert 'raw' in cluster['native']
     operate(client, route, 'cluster', 'set_load_balancer',
             {'enabled': False}, cluster)
     assert 'DISABLED' in admin('get_load_balancer_state')

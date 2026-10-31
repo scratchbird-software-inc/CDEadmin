@@ -68,7 +68,7 @@ def create_type(admin, draft):
             raise RelationalClientError('a composite type needs fields')
         definition = '(' + ', '.join(
             f'{admin._quote(item.get("name"))} '
-            f'{admin._safe_fragment(item.get("type"), "field type")}'
+            f'{admin._safe_type(item.get("type"), "field type")}'
             for item in fields) + ')'
     elif kind == 'RANGE':
         options = ['subtype = ' + admin._safe_fragment(
@@ -145,7 +145,7 @@ def create_domain(admin, draft):
     _unknown(draft, DOMAIN_CREATE, 'domain')
     name = admin._new_object_name(admin._identifier(draft.get('name')),
                                   draft)
-    source = f'CREATE DOMAIN {name} AS ' + admin._safe_fragment(
+    source = f'CREATE DOMAIN {name} AS ' + admin._safe_type(
         draft.get('base_type'), 'base type')
     if not _blank(draft.get('collation')):
         source += ' COLLATE ' + admin._quote(draft['collation'])

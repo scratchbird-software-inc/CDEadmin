@@ -76,3 +76,18 @@ def test_alter_enum_and_domain():
 def test_refusals(kind, draft, target, reason):
     with pytest.raises(RelationalClientError, match=reason):
         plan(kind, 'alter', draft, target)
+
+
+def test_composite_fields_and_domain_base_types_take_arrays():
+    # YSQL keeps PostgreSQL's array types, more than one dimension too.
+    assert plan('type', 'create', {
+        'name': 'c', 'type_kind': 'COMPOSITE', 'fields': [
+            {'name': 'tags', 'type': 'text[]'},
+            {'name': 'grid', 'type': 'integer [3] [ ]'}]}) == [
+        'CREATE TYPE "c" AS ("tags" text[], "grid" integer[3][])']
+    assert plan('domain', 'create', {
+        'name': 'd', 'base_type': 'numeric(8,2)[]'}) == [
+        'CREATE DOMAIN "d" AS numeric(8,2)[]']
+    with pytest.raises(RelationalClientError, match='unsafe'):
+        plan('type', 'create', {'name': 'c', 'type_kind': 'COMPOSITE',
+                                'fields': [{'name': 'x', 'type': 'int[];'}]})
