@@ -22,7 +22,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30."
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30.",
+      "description": "Needs the BR tool and backup storage that every TiKV store can reach."
     },
     {
       "operation_id": "restore_full",
@@ -50,7 +51,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30."
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30.",
+      "description": "Needs the BR tool and backup storage that every TiKV store can reach."
     },
     {
       "operation_id": "restore_point",
@@ -90,7 +92,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30."
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30.",
+      "description": "Needs the BR tool and backup storage that every TiKV store can reach."
     },
     {
       "operation_id": "backup_br",
@@ -192,7 +195,8 @@
           "required": false
         }
       ],
-      "notes": "Verified live with one TiFlash server (dev.sh start tidb_tiflash, which needs 12 GiB of Docker memory); a count above the server count is refused first."
+      "notes": "Verified live with one TiFlash server (dev.sh start tidb_tiflash, which needs 12 GiB of Docker memory); a count above the server count is refused first.",
+      "description": "A count above the number of TiFlash servers is refused."
     },
     {
       "operation_id": "backup_br",
@@ -214,7 +218,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30."
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30.",
+      "description": "Needs the BR tool and backup storage that every TiKV store can reach."
     },
     {
       "operation_id": "restore_br",
@@ -236,7 +241,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30."
+      "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30.",
+      "description": "Needs the BR tool and backup storage that every TiKV store can reach."
     },
     {
       "operation_id": "configure_placement",
@@ -294,7 +300,8 @@
           "required": false
         }
       ],
-      "notes": "Verified live with one TiFlash server (dev.sh start tidb_tiflash, which needs 12 GiB of Docker memory); a count above the server count is refused first."
+      "notes": "Verified live with one TiFlash server (dev.sh start tidb_tiflash, which needs 12 GiB of Docker memory); a count above the server count is refused first.",
+      "description": "A count above the number of TiFlash servers is refused."
     },
     {
       "operation_id": "configure_placement",

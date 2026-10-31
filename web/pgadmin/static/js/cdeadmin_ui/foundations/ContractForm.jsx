@@ -19,7 +19,8 @@ import {Banner, EnvironmentIndicator, Skeleton,
 import {EmptyState} from '../feedback/EmptyState';
 import CodeEditor from '../editors/CodeEditor';
 import DataGrid from '../data/PagedDataGrid';
-import {evaluateContractCondition, initialContractFormValues,
+import {enterSubmits} from '../overlays/Dialog';
+import {evaluateContractCondition, fieldsForContractForm, initialContractFormValues,
   isContractFormActionEnabled, redactedContractFormValues,
   transientContractFormSubmission, validateContractFormValues} from
   './ContractFormRuntime';
@@ -309,10 +310,13 @@ export function ContractForm({form: formInput, initialValues=EMPTY_VALUES,
       if(event.key === 'Escape' && ['dialog', 'wizard', 'confirmation'].includes(form.kind)) {
         event.stopPropagation(); onClose?.();
       }
-      if(event.key === 'Enter' && defaultAction &&
-          !['TEXTAREA'].includes(event.target.tagName) &&
-          !event.target.closest?.('[data-code-editor]')) {
-        event.preventDefault(); invoke(defaultAction);
+      if(event.key === 'Enter' && defaultAction) {
+        if(enterSubmits(event)) {
+          event.preventDefault(); invoke(defaultAction);
+        } else if(event.target?.tagName === 'INPUT') {
+          // A picker's input: Enter chooses an option, never the form's native submit.
+          event.preventDefault();
+        }
       }
     }}
     sx={{height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column',
@@ -364,7 +368,8 @@ export function ContractForm({form: formInput, initialValues=EMPTY_VALUES,
         <FormSection title="Review"><Box component="dl" sx={{display: 'grid',
           gridTemplateColumns: 'minmax(140px, 1fr) 2fr', gap: 0.5, m: 0}}>
           {Object.entries(redactedContractFormValues(form, values)).map(([fieldId, value]) => <Box
-            key={fieldId} sx={{display: 'contents'}}><Box component="dt">{fieldId}</Box>
+            key={fieldId} sx={{display: 'contents'}}><Box component="dt" sx={{fontWeight: 600}}>{
+              fieldsForContractForm(form).find((field) => field.id === fieldId)?.label || fieldId}</Box>
             <Box component="dd" sx={{m: 0, overflowWrap: 'anywhere'}}>{
               typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')}</Box></Box>)}
         </Box></FormSection>}

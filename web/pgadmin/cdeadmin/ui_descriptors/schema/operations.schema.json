@@ -113,7 +113,12 @@
             }
           },
           "notes": {
-            "type": "string"
+            "type": "string",
+            "description": "internal record (evidence, status); never shown to users"
+          },
+          "description": {
+            "type": "string",
+            "description": "shown to users at the top of the operation dialog"
           }
         }
       }

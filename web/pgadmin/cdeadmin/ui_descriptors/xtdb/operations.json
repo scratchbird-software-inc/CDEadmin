@@ -27,7 +27,8 @@
           "default": false
         }
       ],
-      "notes": "Erases one document and all its valid-time and system-time history; the row identity comes from the data grid. Read back: no version of the document remains (FOR ALL VALID_TIME FOR ALL SYSTEM_TIME). The table stays listed."
+      "notes": "Erases one document and all its valid-time and system-time history; the row identity comes from the data grid. Read back: no version of the document remains (FOR ALL VALID_TIME FOR ALL SYSTEM_TIME). The table stays listed.",
+      "description": "Erases one document and all of its valid-time and system-time history; this cannot be undone. The table stays listed."
     },
     {
       "operation_id": "erase",
@@ -54,7 +55,8 @@
           "default": false
         }
       ],
-      "notes": "Same provider path as Erase on a table; untested from this kind (draft)."
+      "notes": "Same provider path as Erase on a table; untested from this kind (draft).",
+      "description": "Erases one document and all of its valid-time and system-time history; this cannot be undone."
     },
     {
       "operation_id": "erase",
@@ -81,7 +83,8 @@
           "default": false
         }
       ],
-      "notes": "Same provider path as Erase on a table; untested from this kind (draft)."
+      "notes": "Same provider path as Erase on a table; untested from this kind (draft).",
+      "description": "Erases one document and all of its valid-time and system-time history; this cannot be undone."
     },
     {
       "operation_id": "execute",

@@ -80,6 +80,9 @@ describe('ObjectEditor renders every populated family form', () => {
         for(const field of tab.fields) {
           if(field.modes && !field.modes.includes('create')) continue;
           if(field.visible_when) continue; // conditional fields are covered by descriptor logic tests
+          // A tab with sections (Constraints) shows one at a time: open the field's section.
+          const sections = within(panel).queryByRole('tablist', {name: `${tab.title} sections`});
+          if(sections && field.group) fireEvent.click(within(sections).getByRole('tab', {name: field.group}));
           const control = panel.querySelector(`[data-cdeadmin-qa-key="object-editor.field.${field.field_id}"],` +
             `[data-cdeadmin-qa-key="object-editor.grid.${field.field_id}"],` +
             `[data-cdeadmin-qa-key="object-editor.keyvalue.${field.field_id}"]`);

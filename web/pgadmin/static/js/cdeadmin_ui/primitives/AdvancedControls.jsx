@@ -71,7 +71,7 @@ SplitButton.propTypes = {
 };
 
 export function ComboBox({options=[], value=null, onChange, freeEntry=false,
-  label, validationMessage, ...props}) {
+  label, required=false, helperText, validationMessage, ...props}) {
   return <Autocomplete
     options={options}
     value={value}
@@ -81,8 +81,8 @@ export function ComboBox({options=[], value=null, onChange, freeEntry=false,
     onInputChange={(_event, next, reason) => {
       if(freeEntry && reason === 'input') onChange?.(next);
     }}
-    renderInput={(params) => <MuiTextField {...params} label={label}
-      error={Boolean(validationMessage)} helperText={validationMessage} />}
+    renderInput={(params) => <MuiTextField {...params} label={label} required={required}
+      error={Boolean(validationMessage)} helperText={validationMessage || helperText || undefined} />}
     {...props}
   />;
 }
@@ -93,6 +93,9 @@ ComboBox.propTypes = {
   onChange: PropTypes.func,
   freeEntry: PropTypes.bool,
   label: PropTypes.node,
+  required: PropTypes.bool,
+  // Help shown in the normal colour; validationMessage alone marks an error.
+  helperText: PropTypes.node,
   validationMessage: PropTypes.node,
 };
 
@@ -131,13 +134,13 @@ Slider.propTypes = {
 };
 
 export function MultiSelect({label, options=[], value=[], onChange,
-  validationMessage, ...props}) {
+  required=false, helperText, validationMessage, ...props}) {
   return <Autocomplete multiple disableCloseOnSelect options={options}
     value={value} getOptionLabel={optionLabel}
     onChange={(_event, next) => onChange?.(next)}
     limitTags={2}
-    renderInput={(params) => <MuiTextField {...params} label={label}
-      error={Boolean(validationMessage)} helperText={validationMessage} />}
+    renderInput={(params) => <MuiTextField {...params} label={label} required={required}
+      error={Boolean(validationMessage)} helperText={validationMessage || helperText || undefined} />}
     {...props} />;
 }
 

@@ -268,6 +268,9 @@ def draft_operations(engine, caps, dump_kinds, existing):
                 entry["produces_log"] = True
             if gaps:
                 entry["notes"] = "typed_from_json: " + ", ".join(g["concept"] for g in gaps)
+            if kept.get(key, {}).get("description"):
+                # The user-facing text is written by hand; a redraft keeps it.
+                entry["description"] = kept[key]["description"]
             out.append(entry)
     overrides = {("extension", "execute"): "Install or load extension", ("database", "integrity_check"): "Integrity check",
                  ("database", "quick_check"): "Quick check", ("session", "terminate_query"): "Terminate running query",

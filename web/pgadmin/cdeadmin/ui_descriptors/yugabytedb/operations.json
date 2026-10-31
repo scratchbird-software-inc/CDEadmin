@@ -310,7 +310,8 @@
       "status": "draft",
       "confirmation": "typed_name",
       "fields": [],
-      "notes": "Ran on the demo (clear_placement_info) and left the universe with no live placement until it was configured again; not in a descriptor round trip."
+      "notes": "Ran on the demo (clear_placement_info) and left the universe with no live placement until it was configured again; not in a descriptor round trip.",
+      "description": "Leaves the universe with no live placement until a placement is configured again."
     },
     {
       "operation_id": "create_database",

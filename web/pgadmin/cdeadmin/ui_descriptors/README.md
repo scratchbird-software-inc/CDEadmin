@@ -20,7 +20,9 @@ ui_descriptors/
   families/          canonical skeletons, one per object family (front-end owned)
   <engine>/
     capabilities.json    every kind the engine exposes, its family, tier-1 ops, version gates
-    operations.json      tier 2/3 operations: menu category, fields, confirmation
+    operations.json      tier 2/3 operations: menu category, fields, confirmation;
+                         `description` is shown to users at the top of the dialog,
+                         `notes` is the internal record and is never shown
     navigator.json       tree groups, sort order, icon keys
     omitted_families.json families the engine has no concept for (with reasons)
     options.json         option sources: static dialect lists (types, privileges, auth plugins) and
@@ -90,6 +92,8 @@ optional and all handled identically by the shell and the Python twin:
 | `record_pluck` | grid column: take one key from each item of a list of objects (`backing_index.segments` → `field_name`) |
 | `record_pattern` | regular expression whose first group is the value (strip `DEFAULT `, `CHECK (...)`, outer parentheses) |
 | `ui_only` | never sent to the provider (variant switches) |
+| `hidden` | grid column: kept in the row and sent to the provider, never shown (provider bookkeeping such as PostgreSQL's `inheritedid`) |
+| `detail` | grid column: shown in the row's details drawer; a grid shows at most six columns inline and the rest go there too |
 | `record_children` (form level) | `{field_id: {resource_kind}}` — fill a grid from the object's child resources when the inventory lists columns/constraints separately (MySQL family); each child is `{name, ...native}` |
 
 When a native record lacks a usable shape (catalog type codes instead of a

@@ -57,24 +57,48 @@ function groupFields(fields) {
   return groups;
 }
 
-function FieldsTab({tab, form, draft, errors, mode, context, resourceKind, disabled, onFieldChange}) {
+/** A grid's own cell errors (`field[index].column`), keyed as validateDraft keys them. */
+function cellErrorsFor(fieldId, errors) {
+  const prefix = `${fieldId}[`;
+  return Object.fromEntries(Object.entries(errors).filter(([key]) => key.startsWith(prefix)));
+}
+
+function FieldsTab({tab, form, draft, errors, shownError, mode, context, resourceKind, disabled, onFieldChange}) {
   const fields = activeFields(tab.fields, {mode, draft});
+  const groups = groupFields(fields);
+  // A tab whose family declares sections (Constraints: primary key, unique, ...) shows
+  // one section at a time when the engine fills more than one, instead of stacking grids.
+  const useSubTabs = Array.isArray(tab.nested) && tab.nested.length > 1 && groups.length > 1;
+  const [activeGroup, setActiveGroup] = useState(groups[0]?.name || '');
   if(!fields.length) {
     return <EmptyState message={`Nothing to set on ${tab.title} for this ${form.family_title.toLowerCase()}.`} />;
   }
-  const groups = groupFields(fields);
+  const shownGroup = groups.some((group) => group.name === activeGroup) ? activeGroup : groups[0]?.name;
+  const visibleGroups = useSubTabs ? groups.filter((group) => group.name === shownGroup) : groups;
   return <Stack gap="comfortable">
-    {groups.map((group) => <Box key={group.name || '_'} component="section"
+    {useSubTabs && <Box role="tablist" aria-label={`${tab.title} sections`}
+      sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5, borderBottom: '1px solid', borderColor: 'divider'}}>
+      {groups.map((group) => <Tab key={group.name || '_'} label={group.name || tab.title}
+        active={group.name === shownGroup}
+        attention={group.fields.some((field) => shownError(field.field_id) &&
+          Object.keys(errors).some((key) => key === field.field_id || key.startsWith(`${field.field_id}[`)))}
+        onActivate={() => setActiveGroup(group.name)} />)}
+    </Box>}
+    {visibleGroups.map((group) => <Box key={group.name || '_'} component="section"
       aria-label={group.name || tab.title}>
-      {group.name && <Box component="h4" sx={{m: 0, mb: 1, fontSize: '0.75rem', fontWeight: 600,
+      {group.name && !useSubTabs && <Box component="h4" sx={{m: 0, mb: 1, fontSize: '0.75rem', fontWeight: 600,
         textTransform: 'uppercase', color: 'text.secondary'}}>{group.name}</Box>}
       <Grid columns={group.fields.some((field) => ['grid', 'code', 'privileges', 'keyvalue'].includes(field.control)) ?
         1 : 'repeat(auto-fit, minmax(260px, 1fr))'} gap="standard">
-        {group.fields.map((field) => <FieldControl key={field.field_id} field={field}
-          value={draft[field.field_id]} draft={draft} context={context} resourceKind={resourceKind}
-          error={errors[field.field_id]} mode={mode}
-          disabled={disabled || (mode === 'alter' && field.editable_after_create === false)}
-          onChange={(value) => onFieldChange(field.field_id, value)} />)}
+        {group.fields.map((field) => {
+          const show = shownError(field.field_id);
+          return <FieldControl key={field.field_id} field={field}
+            value={draft[field.field_id]} draft={draft} context={context} resourceKind={resourceKind}
+            error={show ? errors[field.field_id] : undefined}
+            cellErrors={show ? cellErrorsFor(field.field_id, errors) : undefined} mode={mode}
+            disabled={disabled || (mode === 'alter' && field.editable_after_create === false)}
+            onChange={(value) => onFieldChange(field.field_id, value)} />;
+        })}
       </Grid>
     </Box>)}
   </Stack>;
@@ -82,8 +106,9 @@ function FieldsTab({tab, form, draft, errors, mode, context, resourceKind, disab
 
 FieldsTab.propTypes = {
   tab: PropTypes.object.isRequired, form: PropTypes.object.isRequired, draft: PropTypes.object.isRequired,
-  errors: PropTypes.object.isRequired, mode: PropTypes.string.isRequired, context: PropTypes.object,
-  resourceKind: PropTypes.string, disabled: PropTypes.bool, onFieldChange: PropTypes.func.isRequired,
+  errors: PropTypes.object.isRequired, shownError: PropTypes.func.isRequired, mode: PropTypes.string.isRequired,
+  context: PropTypes.object, resourceKind: PropTypes.string, disabled: PropTypes.bool,
+  onFieldChange: PropTypes.func.isRequired,
 };
 
 export default function ObjectEditor({form, mode='create', resourceKind, record={}, context={},
@@ -91,14 +116,20 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
   const [draft, setDraft] = useState(() => initialDraft(form, {mode, record}));
   const [baseline] = useState(() => initialDraft(form, {mode, record}));
   const [activeTab, setActiveTab] = useState(form.tabs[0]?.tab);
-  const [touched, setTouched] = useState(false);
+  // Errors show on a field once it is edited, and on every field once apply is tried.
+  const [touchedFields, setTouchedFields] = useState(() => new Set());
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [planState, setPlanState] = useState({status: 'idle', plan: null, error: null});
   const [applyState, setApplyState] = useState({status: 'idle', result: null, error: null});
   const planRequest = useRef(0);
   const errors = useMemo(() => validateDraft(form, draft, {mode, baseline}), [form, draft, mode, baseline]);
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(baseline), [draft, baseline]);
   const backendDraft = useMemo(() => toBackendDraft(form, draft, {mode, baseline}), [form, draft, mode, baseline]);
-  const canPlan = Object.keys(errors).length === 0 && (mode === 'create' || dirty) && !readOnly;
+  const canSubmit = (mode === 'create' || dirty) && !readOnly;
+  const canPlan = Object.keys(errors).length === 0 && canSubmit;
+  const touched = touchedFields.size > 0;
+  const shownError = useCallback((fieldId) => submitAttempted || touchedFields.has(fieldId),
+    [submitAttempted, touchedFields]);
 
   const refreshPlan = useCallback(async () => {
     if(!plan || !canPlan) return;
@@ -106,11 +137,13 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
     setPlanState({status: 'loading', plan: null, error: null});
     try {
       const result = await plan({draft: backendDraft, mode});
-      if(request !== planRequest.current) return;
+      if(request !== planRequest.current) return null;
       setPlanState({status: 'ready', plan: result, error: null});
+      return result;
     } catch(error) {
-      if(request !== planRequest.current) return;
+      if(request !== planRequest.current) return null;
       setPlanState({status: 'error', plan: null, error: error?.message || String(error)});
+      return null;
     }
   }, [plan, canPlan, backendDraft, mode]);
 
@@ -125,12 +158,20 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
   }, [activeTab, autoPlan, planState.status, refreshPlan]);
 
   const onFieldChange = (fieldId, value) => {
-    setTouched(true);
+    setTouchedFields((current) => current.has(fieldId) ? current : new Set([...current, fieldId]));
     setDraft((current) => ({...current, [fieldId]: value}));
+  };
+
+  const reset = () => {
+    setDraft(baseline);
+    setTouchedFields(new Set());
+    setSubmitAttempted(false);
   };
 
   const doApply = async () => {
     if(!apply) return;
+    setSubmitAttempted(true);
+    if(Object.keys(errors).length > 0) return;
     let current = planState.plan;
     if(directApply) {
       // Not a DDL object (Server family): there is no plan to confirm, the host applies the draft.
@@ -145,8 +186,14 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
       return;
     }
     if(!current) {
-      await refreshPlan();
-      return;
+      // One click: plan, then apply, unless the plan is blocked or asks for confirmation,
+      // which the SQL tab then shows before a second click.
+      current = await refreshPlan();
+      if(!current || current.state === 'blocked' || current.execution_available === false) return;
+      if(current.confirmation_required || (current.warnings || []).length > 0) {
+        setActiveTab('SQL');
+        return;
+      }
     }
     setApplyState({status: 'loading', result: null, error: null});
     try {
@@ -185,7 +232,7 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
     <Box role="tablist" aria-label={`${form.family_title} tabs`}
       sx={{display: 'flex', flexWrap: 'wrap', borderBottom: '1px solid', borderColor: 'divider', px: 1}}>
       {form.tabs.map((tab) => <Tab key={tab.tab} label={tab.title} active={tab.tab === current?.tab}
-        attention={Boolean(tabErrors[tab.tab]) && touched}
+        attention={Boolean(tabErrors[tab.tab]) && (submitAttempted || touched)}
         dirty={tab.tab === 'SQL' && planState.status === 'ready'}
         onActivate={() => setActiveTab(tab.tab)} />)}
     </Box>
@@ -196,7 +243,8 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
         {current.primitive !== 'sql_preview' && (tabRenderers[current.tab] ?
           tabRenderers[current.tab]({tab: current, draft, record, context, mode}) :
           (current.fields.length ?
-            <FieldsTab tab={current} form={form} draft={draft} errors={errors} mode={mode} context={context}
+            <FieldsTab tab={current} form={form} draft={draft} errors={errors} shownError={shownError}
+              mode={mode} context={context}
               resourceKind={resourceKind} disabled={readOnly || applyState.status === 'loading'}
               onFieldChange={onFieldChange} /> :
             <EmptyState message={`${current.title} is shown once the object exists.`} />))}
@@ -207,19 +255,22 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
       <Box sx={{flex: 1, fontSize: '0.75rem', color: 'text.secondary'}}>
         {applyState.status === 'done' && <ValidationMessage status="success">Applied.</ValidationMessage>}
         {applyState.status === 'error' && <ValidationMessage status="error">{applyState.error}</ValidationMessage>}
-        {applyState.status === 'idle' && Object.keys(errors).length > 0 && touched &&
+        {applyState.status === 'idle' && Object.keys(errors).length > 0 && submitAttempted &&
           <ValidationMessage status="error">{Object.keys(errors).length} field(s) need attention.</ValidationMessage>}
         {applyState.status === 'idle' && planBlocked &&
           <ValidationMessage status="warning">Plan blocked: {(planState.plan.blockers || []).join(', ') || 'see SQL tab'}.</ValidationMessage>}
       </Box>
+      {!readOnly && dirty && applyState.status !== 'done' && <Button intent="neutral"
+        disabled={applyState.status === 'loading'} onClick={reset}
+        data-cdeadmin-qa-key="object-editor.reset">Reset</Button>}
       <Button intent="neutral" onClick={onClose}>{applyState.status === 'done' ? 'Close' : 'Cancel'}</Button>
       {!readOnly && !directApply && <Button intent="neutral" disabled={!canPlan || planState.status === 'loading'}
         onClick={() => { setActiveTab('SQL'); refreshPlan(); }}>Preview SQL</Button>}
       {!readOnly && <Button intent="primary" loading={applyState.status === 'loading'}
-        disabled={!canPlan || applyState.status === 'done' || planState.status === 'loading' ||
+        disabled={!canSubmit || applyState.status === 'done' || planState.status === 'loading' ||
           (planState.plan && (planBlocked || planState.plan.execution_available === false))}
         onClick={doApply}>
-        {directApply ? (applyLabel || 'Apply') : (planState.plan ? confirmLabel : 'Preview and apply')}
+        {directApply ? (applyLabel || 'Apply') : (planState.plan ? confirmLabel : 'Apply')}
       </Button>}
     </Box>
   </Box>;

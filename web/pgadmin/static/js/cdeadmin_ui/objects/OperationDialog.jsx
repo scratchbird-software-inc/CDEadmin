@@ -49,16 +49,22 @@ function validate(fields, values) {
 
 export default function OperationDialog({open, operation, targetName, context={}, executionHosts=[],
   plan, apply, onClose, onApplied}) {
-  const fields = operation.fields || [];
+  const needsTypedName = operation.confirmation === 'typed_name';
+  // A typed-name operation's `confirmation` field is the typed box below; the
+  // draft still carries it (see `draft`), so it is not shown twice.
+  const fields = useMemo(() => (operation.fields || []).filter((field) =>
+    !(needsTypedName && field.field_id === 'confirmation')), [operation.fields, needsTypedName]);
   const [values, setValues] = useState(() => initialValues(fields));
   const [host, setHost] = useState(executionHosts[0]?.value ?? 'local');
   const [confirmText, setConfirmText] = useState('');
   const [planState, setPlanState] = useState({status: 'idle', plan: null, error: null});
   const [applyState, setApplyState] = useState({status: 'idle', result: null, error: null});
+  // Errors show on a field once it is edited, and on every field once run is tried.
+  const [touched, setTouched] = useState(() => new Set());
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const errors = useMemo(() => validate(fields, values), [fields, values]);
   const visible = activeFields(fields, {draft: values});
   const groups = operation.groups?.length ? operation.groups : [...new Set(visible.map((field) => field.group || ''))];
-  const needsTypedName = operation.confirmation === 'typed_name';
   const confirmed = !needsTypedName || (targetName && confirmText.trim() === targetName);
   // Providers validate a typed confirmation as the draft's `confirmation`
   // field (the route database for database-level tasks, the object name
@@ -69,6 +75,7 @@ export default function OperationDialog({open, operation, targetName, context={}
     needsTypedName && confirmText.trim() ? {...values, confirmation: confirmText.trim()} : values);
 
   const setValue = (fieldId, value) => {
+    setTouched((current) => current.has(fieldId) ? current : new Set([...current, fieldId]));
     setValues((current) => ({...current, [fieldId]: value}));
     setPlanState({status: 'idle', plan: null, error: null});
   };
@@ -81,15 +88,26 @@ export default function OperationDialog({open, operation, targetName, context={}
     try {
       const result = await plan({draft, execution_host: operation.execution_host ? host : undefined});
       setPlanState({status: 'ready', plan: result, error: null});
+      return result;
     } catch(error) {
       setPlanState({status: 'error', plan: null, error: error?.message || String(error)});
+      return null;
     }
   };
   const doApply = async () => {
-    if(!planState.plan) { await doPlan(); return; }
+    setSubmitAttempted(true);
+    if(Object.keys(errors).length > 0 || !confirmed) return;
+    let activePlan = planState.plan;
+    if(!activePlan) {
+      // One click plans and runs, but stops on a plan to read first: blocked,
+      // asking for confirmation, or carrying the provider's warnings.
+      activePlan = await doPlan();
+      if(!activePlan || activePlan.state === 'blocked' || activePlan.execution_available === false ||
+        activePlan.confirmation_required || (activePlan.warnings || []).length > 0) return;
+    }
     setApplyState({status: 'loading', result: null, error: null});
     try {
-      const result = await apply({plan: planState.plan, draft});
+      const result = await apply({plan: activePlan, draft});
       setApplyState({status: 'done', result, error: null});
       onApplied?.(result);
     } catch(error) {
@@ -108,13 +126,13 @@ export default function OperationDialog({open, operation, targetName, context={}
       <Button intent="neutral" onClick={onClose} disabled={busy}>{applyState.status === 'done' ? 'Close' : 'Cancel'}</Button>
       <Button intent="neutral" disabled={busy || Object.keys(errors).length > 0} onClick={doPlan}>Preview</Button>
       <Button intent={operation.confirmation === 'typed_name' ? 'destructive' : 'primary'} loading={applyState.status === 'loading'}
-        disabled={busy || Object.keys(errors).length > 0 || !confirmed || applyState.status === 'done' || blocked}
+        disabled={busy || !confirmed || applyState.status === 'done' || blocked}
         onClick={doApply}>
         {planState.plan ? 'Run' : 'Preview and run'}
       </Button>
     </>}>
     <Stack gap="comfortable" data-cdeadmin-qa-key={`operation-dialog.${operation.operation_id}`}>
-      {operation.notes && <Banner status="info">{operation.notes}</Banner>}
+      {operation.description && <Banner status="info">{operation.description}</Banner>}
       {operation.tier === 3 && operation.execution_host && <Select label="Execution host" fullWidth size="small"
         options={executionHosts.length ? executionHosts : [{value: 'local', label: 'This CDEadmin server'}]}
         value={host} onChange={(next) => setHost(next)} helperText="Where the native utility runs." />}
@@ -127,7 +145,8 @@ export default function OperationDialog({open, operation, targetName, context={}
           <Grid columns={groupFields.some((field) => ['grid', 'code', 'keyvalue'].includes(field.control)) ?
             1 : 'repeat(auto-fit, minmax(240px, 1fr))'}>
             {groupFields.map((field) => <FieldControl key={field.field_id} field={field} value={values[field.field_id]}
-              draft={values} context={context} resourceKind={operation.resource_kind} error={errors[field.field_id]}
+              draft={values} context={context} resourceKind={operation.resource_kind}
+              error={submitAttempted || touched.has(field.field_id) ? errors[field.field_id] : undefined}
               disabled={busy} dense onChange={(value) => setValue(field.field_id, value)} />)}
           </Grid>
         </Box>;

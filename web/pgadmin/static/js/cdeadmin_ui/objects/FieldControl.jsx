@@ -42,7 +42,7 @@ export function fieldHelpText(field) {
 }
 
 export default function FieldControl({field, value, onChange, draft={}, context={}, resourceKind,
-  error, disabled=false, dense=false, mode='create'}) {
+  error, cellErrors, disabled=false, dense=false, mode='create'}) {
   const helpId = useId();
   const unavailable = field.available === false;
   const isDisabled = disabled || unavailable || Boolean(field.readonly);
@@ -86,8 +86,9 @@ export default function FieldControl({field, value, onChange, draft={}, context=
     </Box>;
   }
   // Autocomplete-based primitives take a narrower prop set than TextField.
-  const picker = {label: field.label, disabled: isDisabled, fullWidth: true, size: dense ? 'small' : 'medium',
-    validationMessage: error || help || undefined};
+  // Help is help: only an error turns a picker red.
+  const picker = {label: field.label, required: Boolean(field.required), disabled: isDisabled, fullWidth: true,
+    size: dense ? 'small' : 'medium', validationMessage: error || undefined, helperText: help || undefined};
   if(control === 'multiselect') {
     const selected = options.filter((option) => (Array.isArray(value) ? value : []).includes(option.value));
     return <Box data-cdeadmin-qa-key={qaKey}>
@@ -121,7 +122,7 @@ export default function FieldControl({field, value, onChange, draft={}, context=
   if(control === 'grid' || control === 'privileges') {
     return <RecordGrid field={field} rows={Array.isArray(value) ? value : []} onChange={onChange}
       draft={draft} context={context} resourceKind={resourceKind} disabled={isDisabled} error={error}
-      help={help} mode={mode} />;
+      cellErrors={cellErrors} help={help} mode={mode} />;
   }
   if(control === 'keyvalue') {
     return <KeyValueEditor field={field} value={value} onChange={onChange} disabled={isDisabled}
@@ -141,6 +142,8 @@ FieldControl.propTypes = {
   mode: PropTypes.string,
   resourceKind: PropTypes.string,
   error: PropTypes.string,
+  // Grid cell errors keyed `field[index].column` (descriptors.validateDraft).
+  cellErrors: PropTypes.object,
   disabled: PropTypes.bool,
   dense: PropTypes.bool,
 };

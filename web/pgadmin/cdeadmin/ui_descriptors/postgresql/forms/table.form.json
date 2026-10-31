@@ -146,7 +146,8 @@
           "field_id": "inheritedid",
           "label": "Inherited id",
           "control": "text",
-          "help": "Hidden; parent table OID sent to the backend."
+          "help": "Hidden; parent table OID sent to the backend.",
+          "hidden": true
         },
         {
           "field_id": "inheritedfrom",
@@ -159,25 +160,29 @@
           "field_id": "inheritedfromtype",
           "label": "Inherited from type",
           "control": "text",
-          "help": "Hidden tracking field (OF TYPE columns)."
+          "help": "Hidden tracking field (OF TYPE columns).",
+          "hidden": true
         },
         {
           "field_id": "inheritedfromtable",
           "label": "Inherited from table",
           "control": "text",
-          "help": "Hidden tracking field (parent tables)."
+          "help": "Hidden tracking field (parent tables).",
+          "hidden": true
         },
         {
           "field_id": "original_defval",
           "label": "Original Default",
           "control": "text",
-          "help": "Hidden; original DEFAULT from the composite type."
+          "help": "Hidden; original DEFAULT from the composite type.",
+          "hidden": true
         },
         {
           "field_id": "original_attnotnull",
           "label": "Original NOT NULL",
           "control": "boolean",
-          "help": "Hidden; original NOT NULL from the composite type."
+          "help": "Hidden; original NOT NULL from the composite type.",
+          "hidden": true
         },
         {
           "field_id": "geometry",

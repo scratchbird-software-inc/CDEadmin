@@ -1001,3 +1001,48 @@ the family suite until now; the suite passes with both (179 tests). No
 shared schema, form or family renderer was edited. Lint before/after:
 JSON 301/301, MUI 244/244, UI engine branches 111/111, panels 113/113,
 context-menu branches 14/14.
+
+Form ergonomics, 2026-10-31
+---------------------------
+
+From the owner's review of a remediation guide (an untracked note; its
+patch did not apply to HEAD and was not used). Each item was checked
+against the code first; the guide's Firebird "crash" (valid on the
+supported Python 3.14) and its server-registration rework (the server
+form already has six tabs) were not taken.
+
+-  Reference and multiselect fields showed their help text as an error,
+   in red, and dropped the required marker (``FieldControl``). Help is
+   now help; only an error turns a picker red.
+-  Errors show on a field once it is edited, and on every field once
+   Apply is tried. A new form no longer opens red. Apply stays clickable
+   so that attempt can show what is missing.
+-  One click on Apply (editor) or "Preview and run" (operation dialog)
+   plans and runs. It stops to show the plan when the plan is blocked,
+   asks for confirmation, or carries the provider's warnings (for
+   example, the immudb unload warning).
+-  The editor has a Reset button once the draft changes. A tab whose
+   family declares sections (Constraints) shows one section at a time.
+-  Grids leave out ``hidden`` columns (new form-schema key; PostgreSQL's
+   five internal table columns use it) and conditional columns that apply
+   to no row. They show at most six columns inline, with the rest in a
+   per-row details drawer, keep the actions column in view, and mark
+   cell errors on the cell.
+-  Operation dialogs: a typed-name operation no longer also shows a
+   ``confirmation`` field (78 MySQL operations asked twice). Operation
+   ``notes`` (internal: test evidence, status) are no longer shown; a new
+   ``description`` key carries user-facing text, written for 28
+   operations whose notes held advice users need. The drafter keeps it.
+-  Enter does not submit a dialog or form from a picker, button or select
+   (one shared rule, ``enterSubmits``), and the connection wizard's review
+   step shows labels instead of field ids.
+
+Tests: ``web/regression/javascript/families/FormErgonomics.spec.jsx``
+(14; 12 of them fail on the previous components); the family render test
+now opens a field's section before checking it. Family suite 193 passed.
+Specs that use the changed component folders: 227 passed, run serially.
+The full ``regression/javascript/cdeadmin`` run had failures that change
+from run to run under load; four suites (Firebird activity and ERD, MySQL
+dashboard editor, PostgreSQL logical stream) fail without these changes
+too. Lint before/after: JSON 301/301, MUI 244/244, UI engine branches
+111/111, panels 113/113, context-menu branches 14/14.

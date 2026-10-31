@@ -22,6 +22,9 @@ import {ValidationMessage} from '../feedback/Indicators';
 import {activeFields} from './descriptors';
 import FieldControl from './FieldControl';
 
+/** Columns shown in the row; the rest open in the row's details drawer. */
+export const MAX_INLINE_COLUMNS = 6;
+
 const CELL_MIN_WIDTH = {text: 160, number: 96, boolean: 72, select: 150, multiselect: 200,
   reference: 180, code: 240, password: 150, keyvalue: 220, grid: 260};
 
@@ -43,10 +46,35 @@ export function lockedCell(column, row, mode) {
   return mode === 'alter' && column.editable_after_create === false && row?._id !== undefined;
 }
 
+/**
+ * The columns a grid shows: not `hidden` (provider bookkeeping the editor
+ * carries but nobody edits), and not conditional columns that apply to no
+ * row. The first MAX_INLINE_COLUMNS not marked `detail` are inline.
+ */
+export function gridColumns(columns, rows, draft={}) {
+  const shown = (columns || []).filter((column) => column.hidden !== true).filter((column) =>
+    !column.visible_when || rows.some((row) => activeFields([column], {draft: {...draft, ...row}}).length > 0));
+  const inline = shown.filter((column) => !column.detail).slice(0, MAX_INLINE_COLUMNS);
+  return {inline, detail: shown.filter((column) => !inline.includes(column))};
+}
+
 export default function RecordGrid({field, rows, onChange, draft={}, context={}, resourceKind,
-  disabled=false, error, help, mode='create'}) {
+  disabled=false, error, cellErrors={}, help, mode='create'}) {
   const [selected, setSelected] = useState(null);
+  const [expanded, setExpanded] = useState(() => new Set());
   const columns = field.columns || [];
+  const {inline, detail} = gridColumns(columns, rows, draft);
+  const toggleDetail = (index) => setExpanded((current) => {
+    const next = new Set(current);
+    if(next.has(index)) next.delete(index); else next.add(index);
+    return next;
+  });
+  const cellError = (index, column) => (cellErrors || {})[`${field.field_id}[${index}].${column.field_id}`];
+  const cell = (row, index, column) => <FieldControl field={{...column, label: `${column.label} (row ${index + 1})`}}
+    value={row[column.field_id]} dense mode={mode} error={cellError(index, column)}
+    disabled={disabled || lockedCell(column, row, mode)}
+    draft={{...draft, ...row}} context={context} resourceKind={resourceKind}
+    onChange={(value) => update(index, column.field_id, value)} />;
   const label = field.label;
   const update = (index, columnId, value) => {
     const next = rows.map((row, position) => position === index ? {...row, [columnId]: value} : row);
@@ -91,31 +119,33 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
         <Box component="thead">
           <Box component="tr">
             {reorderable && <Box component="th" scope="col" sx={headerSx}>#</Box>}
-            {columns.map((column) => <Box key={column.field_id} component="th" scope="col"
+            {inline.map((column) => <Box key={column.field_id} component="th" scope="col"
               sx={{...headerSx, minWidth: CELL_MIN_WIDTH[column.control] || 140}}>
               {column.label}{column.required ? ' *' : ''}
             </Box>)}
-            <Box component="th" scope="col" sx={headerSx}><span className="sr-only">Actions</span></Box>
+            <Box component="th" scope="col" sx={{...headerSx, ...stickySx}}>Actions</Box>
           </Box>
         </Box>
         <Box component="tbody">
           {rows.map((row, index) => {
-            const visible = activeFields(columns, {draft: row});
-            return <Box component="tr" key={index} aria-selected={selected === index || undefined}
+            const visible = activeFields(columns, {draft: {...draft, ...row}});
+            const rowDetail = detail.filter((column) => visible.includes(column));
+            const open = expanded.has(index);
+            const detailErrors = rowDetail.some((column) => cellError(index, column));
+            return [<Box component="tr" key={index} aria-selected={selected === index || undefined}
               onFocus={() => setSelected(index)}
               sx={{bgcolor: selected === index ? 'action.selected' : undefined}}>
               {reorderable && <Box component="td" sx={{...cellSx, textAlign: 'center', fontSize: '0.75rem',
                 color: 'text.secondary'}}>{index + 1}</Box>}
-              {columns.map((column) => <Box key={column.field_id} component="td" sx={cellSx}>
-                {visible.includes(column) ?
-                  <FieldControl field={{...column, label: `${column.label} (row ${index + 1})`}}
-                    value={row[column.field_id]} dense mode={mode}
-                    disabled={disabled || lockedCell(column, row, mode)}
-                    draft={{...draft, ...row}} context={context} resourceKind={resourceKind}
-                    onChange={(value) => update(index, column.field_id, value)} /> :
-                  <Box aria-hidden="true" />}
+              {inline.map((column) => <Box key={column.field_id} component="td" sx={cellSx}>
+                {visible.includes(column) ? cell(row, index, column) : <Box aria-hidden="true" />}
               </Box>)}
-              <Box component="td" sx={{...cellSx, whiteSpace: 'nowrap'}}>
+              <Box component="td" sx={{...cellSx, ...stickySx, whiteSpace: 'nowrap'}}>
+                {rowDetail.length > 0 && <Button size="small" intent={detailErrors ? 'destructive' : 'neutral'}
+                  aria-expanded={open} onClick={() => toggleDetail(index)}
+                  data-cdeadmin-qa-key={`object-editor.grid.${field.field_id}.details.${index}`}>
+                  {open ? 'Hide details' : `Details (${rowDetail.length})`}
+                </Button>}
                 {reorderable && <IconButton label={`Move row ${index + 1} up`} disabled={disabled || index === 0}
                   onClick={() => move(index, -1)}>↑</IconButton>}
                 {reorderable && <IconButton label={`Move row ${index + 1} down`}
@@ -123,7 +153,14 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
                 <IconButton label={`Remove row ${index + 1}`} disabled={disabled}
                   onClick={() => remove(index)}>×</IconButton>
               </Box>
-            </Box>;
+            </Box>, open && rowDetail.length > 0 && <Box component="tr" key={`${index}-detail`}>
+              <Box component="td" colSpan={inline.length + (reorderable ? 2 : 1)}
+                sx={{...cellSx, bgcolor: 'action.hover'}} aria-label={`Row ${index + 1} details`}>
+                <Box sx={{display: 'grid', gap: 1, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))'}}>
+                  {rowDetail.map((column) => <Box key={column.field_id}>{cell(row, index, column)}</Box>)}
+                </Box>
+              </Box>
+            </Box>];
           })}
         </Box>
       </Box>
@@ -136,6 +173,9 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
 const headerSx = {textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, p: 0.5, borderBottom: '1px solid',
   borderColor: 'divider', whiteSpace: 'nowrap'};
 const cellSx = {p: 0.5, verticalAlign: 'top', borderBottom: '1px solid', borderColor: 'divider'};
+// The actions column stays in view while a wide grid scrolls sideways.
+const stickySx = {position: 'sticky', right: 0, bgcolor: 'background.paper', borderLeft: '1px solid',
+  borderColor: 'divider', zIndex: 1};
 
 function singular(label) {
   const lower = String(label || 'row').toLowerCase();
@@ -153,6 +193,7 @@ RecordGrid.propTypes = {
   resourceKind: PropTypes.string,
   disabled: PropTypes.bool,
   error: PropTypes.string,
+  cellErrors: PropTypes.object,
   help: PropTypes.string,
   mode: PropTypes.string,
 };

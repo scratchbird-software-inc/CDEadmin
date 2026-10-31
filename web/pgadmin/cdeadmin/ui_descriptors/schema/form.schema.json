@@ -336,6 +336,14 @@
         "readonly": {
           "type": "boolean"
         },
+        "hidden": {
+          "type": "boolean",
+          "description": "grid column: carried in the row and sent to the provider, never shown (provider bookkeeping)"
+        },
+        "detail": {
+          "type": "boolean",
+          "description": "grid column: shown in the row's details drawer rather than inline"
+        },
         "editable_after_create": {
           "type": "boolean"
         },

@@ -28,9 +28,7 @@ export function Dialog({open, title, children, actions, onClose, size='small',
     aria-labelledby={titleId}
     PaperProps={{'aria-busy': busy || undefined}}
     onKeyDown={(event) => {
-      if(event.key === 'Enter' && defaultAction && !busy &&
-          !['TEXTAREA'].includes(event.target.tagName) &&
-          !event.target.closest?.('[data-code-editor]')) {
+      if(event.key === 'Enter' && defaultAction && !busy && enterSubmits(event)) {
         event.preventDefault();
         defaultAction();
       }
@@ -62,3 +60,17 @@ Dialog.propTypes = {
   defaultAction: PropTypes.func,
   onKeyDown: PropTypes.func,
 };
+
+/**
+ * Whether Enter in a dialog or form runs its default action. Not from a
+ * textarea or code editor (a new line), a button or select (their own
+ * action), or a picker (Enter chooses an option there).
+ */
+export function enterSubmits(event) {
+  const target = event.target;
+  if(['TEXTAREA', 'BUTTON', 'SELECT'].includes(target?.tagName)) return false;
+  if(target?.getAttribute?.('role') === 'combobox' || target?.getAttribute?.('aria-expanded') === 'true') {
+    return false;
+  }
+  return !target?.closest?.('[data-code-editor], [role="listbox"], [role="combobox"]');
+}
