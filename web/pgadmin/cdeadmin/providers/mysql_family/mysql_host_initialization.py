@@ -16,6 +16,11 @@ import subprocess
 import sys
 import time
 
+try:
+    from _cdeadmin_native_fileio import pidfd_open, pidfd_send_signal
+except ModuleNotFoundError:
+    from ...operations.fileio import pidfd_open, pidfd_send_signal
+
 SCOPE='mysql-initialization-host-v1'
 LIMIT=512*1024
 
@@ -234,10 +239,10 @@ def observe(directory,value,host,*,cancel=False,acknowledge=False):
                         if cancel and live and (directory/'initializer-process.json').exists():
                             process=read(directory/'initializer-process.json');pid=process['pid']
                             try:
-                                descriptor=os.pidfd_open(pid)
+                                descriptor=pidfd_open(pid)
                                 try:
                                     if process['start_ticks'] is not None and ticks(pid)==process['start_ticks'] and os.getsid(pid)==marker['session_id']:
-                                        signal.pidfd_send_signal(descriptor,signal.SIGKILL);facts['original_native_cancellation_requested']=True
+                                        pidfd_send_signal(descriptor,signal.SIGKILL);facts['original_native_cancellation_requested']=True
                                 finally:os.close(descriptor)
                             except ProcessLookupError:pass
     if acknowledge:

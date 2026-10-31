@@ -13,7 +13,7 @@ import math
 
 import psutil
 
-from ..operations.fileio import exclusive_file_lock
+from ..operations.fileio import exclusive_file_lock, pidfd_open, pidfd_send_signal
 
 POLICY = 'linux-parent-death-kill-v1'
 LEGACY_CLIENTS={'mysql-instance-backup','mysql-instance-restore','mysql-instance-acceptance','shell-replay-client','raw-replay-decoder','raw-replay-client'}
@@ -37,14 +37,14 @@ def stop_session_client(intent,reference,started,root,live):
     account=pwd.getpwuid(int(users[0])) if users[0].isdigit() else pwd.getpwnam(users[0])
     allowed={os.geteuid()}
     if os.geteuid()==0:allowed.add(account.pw_uid)
-    descriptor=os.pidfd_open(pid)
+    descriptor=pidfd_open(pid)
     try:
         process=psutil.Process(pid);uids=process.uids()
         if (process.create_time()!=observed['process_create_time'] or process.cmdline()!=command or
                 os.getsid(pid)!=started['guardian_pid'] or uids.real not in allowed or uids.effective not in allowed or
                 fingerprint(Path('/proc')/str(pid)/'exe')!=intent['executable_sha256']):
             raise ValueError('Original native Router process changed before cancellation')
-        signal.pidfd_send_signal(descriptor,signal.SIGKILL)
+        pidfd_send_signal(descriptor,signal.SIGKILL)
         return True
     finally:os.close(descriptor)
 
@@ -114,14 +114,14 @@ def legacy_anchor(root,intent,reference,current_host,write):
 def stop_legacy_client(intent,witness,live):
     """Signal only the original sole client, through its current kernel handle."""
     if len(live)!=1 or live[0]['pid']!=witness['pid']:return False
-    descriptor=os.pidfd_open(witness['pid'])
+    descriptor=pidfd_open(witness['pid'])
     try:
         process=psutil.Process(witness['pid'])
         if (process.create_time()!=witness['process_create_time'] or process.cmdline()!=intent['command'] or
                 os.getsid(process.pid)!=witness['guardian_pid'] or process.uids().effective!=os.geteuid() or
                 fingerprint(Path('/proc')/str(process.pid)/'exe')!=intent['executable_sha256']):
             raise ValueError('Original legacy native client changed before stop')
-        signal.pidfd_send_signal(descriptor,signal.SIGKILL)
+        pidfd_send_signal(descriptor,signal.SIGKILL)
         return True
     finally:os.close(descriptor)
 

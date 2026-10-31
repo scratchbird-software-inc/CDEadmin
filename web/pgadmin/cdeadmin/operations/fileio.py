@@ -1,5 +1,7 @@
-"""Native host locking and durable publication of local operation receipts."""
+"""Native host locking, durable publication of local operation receipts and
+process descriptors."""
 from contextlib import contextmanager
+import errno
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -183,3 +185,53 @@ def has_private_file_permissions(path):
         return bool(api.EqualSid(ace.value + ctypes.sizeof(AccessAllowedAce), user_sid))
     finally:
         kernel.LocalFree(user_sid)
+
+
+# Process descriptors bind a signal to the original process even if its PID is
+# reused. Some interpreters (the standalone CPython uv installs, for one) omit
+# os.pidfd_open and signal.pidfd_send_signal although the Linux kernel has
+# both, so they are reached through the syscalls (one table on every
+# architecture since Linux 5.1) instead of falling back to kill().
+_PIDFD_SEND_SIGNAL, _PIDFD_OPEN = 424, 434
+
+
+def _linux_syscall(number, *arguments):
+    import ctypes
+    import sys
+    if not sys.platform.startswith('linux'):
+        raise OSError(errno.ENOSYS, 'Process descriptors require Linux')
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.syscall.restype = ctypes.c_long
+    result = libc.syscall(ctypes.c_long(number), *(ctypes.c_long(value) for value in arguments))
+    if result < 0:
+        code = ctypes.get_errno()
+        raise OSError(code, os.strerror(code))
+    return result
+
+
+def pidfd_open(pid):
+    if hasattr(os, 'pidfd_open'):
+        return os.pidfd_open(pid)
+    return _linux_syscall(_PIDFD_OPEN, pid, 0)
+
+
+def pidfd_send_signal(descriptor, selected_signal):
+    import signal
+    if hasattr(signal, 'pidfd_send_signal'):
+        return signal.pidfd_send_signal(descriptor, selected_signal)
+    _linux_syscall(_PIDFD_SEND_SIGNAL, descriptor, int(selected_signal), 0, 0)
+
+
+def pidfd_available():
+    """True when this host can open and signal process descriptors."""
+    try:
+        descriptor = pidfd_open(os.getpid())
+    except OSError:
+        return False
+    try:
+        pidfd_send_signal(descriptor, 0)
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(descriptor)

@@ -12,6 +12,10 @@ import sys
 import time
 
 try:
+    from _cdeadmin_native_fileio import pidfd_available, pidfd_open, pidfd_send_signal
+except ModuleNotFoundError:
+    from ...operations.fileio import pidfd_available, pidfd_open, pidfd_send_signal
+try:
     import _cdeadmin_physical_worker as physical
 except ModuleNotFoundError:
     from . import mysql_physical_worker as physical
@@ -101,7 +105,7 @@ def tls_files(request):
 
 
 def inspection(request):
-    if not sys.platform.startswith('linux') or not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
+    if not sys.platform.startswith('linux') or not pidfd_available():
         raise Refused('Managed recovery requires a native Linux host with process descriptor control')
     import pwd
     binding = physical.host_scope(request)
@@ -208,11 +212,11 @@ def present(value):
 def stop(value, selected_signal=signal.SIGTERM):
     # A pidfd binds the signal to this original process even if its numeric PID
     # is reused between observation and signal delivery.
-    try: descriptor = os.pidfd_open(value['pid'])
+    try: descriptor = pidfd_open(value['pid'])
     except ProcessLookupError: return False
     try:
         if not present(value): return False
-        signal.pidfd_send_signal(descriptor, selected_signal)
+        pidfd_send_signal(descriptor, selected_signal)
         return True
     finally: os.close(descriptor)
 
