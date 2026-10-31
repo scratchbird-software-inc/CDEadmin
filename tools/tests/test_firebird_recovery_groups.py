@@ -13,6 +13,14 @@ from pgadmin.cdeadmin.providers.firebird.recovery_groups import (
 )
 
 
+class JsonResponse(dict):
+    """make_json_response's payload, with headers the handler can set."""
+
+    def __init__(self, **value):
+        super().__init__(**value)
+        self.headers = {}
+
+
 @pytest.fixture
 def setup(tmp_path):
     store = JsonOperationStore(tmp_path / 'operations.json')
@@ -322,6 +330,7 @@ def test_process_exit_during_dispatch_is_not_replayed(setup):
 import json, os, sys
 from tools.cdeadmin_firebird_recovery_group_gate import JsonOperationStore
 from pgadmin.cdeadmin.providers.firebird.recovery_groups import RecoveryGroups
+
 path, request = json.loads(sys.stdin.read())
 store = JsonOperationStore(path)
 groups = RecoveryGroups(store, clock=lambda: 100)
@@ -389,9 +398,20 @@ def test_workspace_http_dispatch_uses_owned_endpoints(action):
         'current_app': app, 'current_user': SimpleNamespace(id=11),
         'request': request, 'Server': SimpleNamespace(query=query),
         'gettext': lambda value: value,
-        'make_json_response': lambda **value: value,
+        'make_json_response': JsonResponse,
         'bad_request': lambda **value: value,
     }
+    # Module constants the handler reads come from the real source, so a
+    # handler that gains one is tested with its actual value.
+    referenced = {name.id for name in ast.walk(function)
+                  if isinstance(name, ast.Name)}
+    for node in syntax.body:
+        if isinstance(node, ast.Assign) and all(
+                isinstance(target, ast.Name) and target.id.isupper() and
+                target.id in referenced and target.id not in namespace
+                for target in node.targets):
+            exec(compile(ast.Module(body=[node], type_ignores=[]),
+                         str(source), 'exec'), namespace)
     for node in ast.walk(function):
         if isinstance(node, ast.ExceptHandler) and node.type is not None:
             for name in ast.walk(node.type):

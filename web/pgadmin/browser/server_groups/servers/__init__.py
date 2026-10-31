@@ -3557,24 +3557,28 @@ class ServerNode(PGChildNodeView):
             current_app.logger.exception(
                 'CDEadmin provider workspace request failed'
             )
-            return make_json_response(
+            response = make_json_response(
                 status=400,
                 success=0,
                 errormsg=gettext(
                     'The provider workspace request could not be completed.'
                 ),
             )
+            response.headers['Cache-Control'] = 'no-store'
+            return response
         except Exception:
             current_app.logger.exception(
                 'CDEadmin provider workspace adapter failed'
             )
-            return make_json_response(
+            response = make_json_response(
                 status=502,
                 success=0,
                 errormsg=gettext(
                     'The endpoint provider did not complete the request.'
                 ),
             )
+            response.headers['Cache-Control'] = 'no-store'
+            return response
         response = make_json_response(data=payload)
         response.headers['Cache-Control'] = 'no-store'
         return response

@@ -29,6 +29,14 @@ from pgadmin.cdeadmin.visual_admin.execution_errors import (  # noqa: E402
 )
 
 
+class JsonResponse(dict):
+    """make_json_response's payload, with headers the handler can set."""
+
+    def __init__(self, **value):
+        super().__init__(**value)
+        self.headers = {}
+
+
 @pytest.mark.parametrize('codes', [
     None, 'credential-canary', [True], [False], [0], [-1], [2147483648],
     [1.5], [335544788, 'credential-canary'], [1] * 33, {1}, iter([1]),
@@ -110,13 +118,24 @@ def test_actual_workspace_handler_distinguishes_execution_and_validation(
         'provider_workspace_for_app': lambda _: service,
         'current_app': app, 'request': request,
         'gettext': lambda text: text,
-        'make_json_response': lambda **value: value,
+        'make_json_response': JsonResponse,
         'execution_failure_response': execution_failure_response,
         'VisualAdminExecutionError': VisualAdminExecutionError,
         'VisualAdminError': VisualAdminError,
     }
     # Resolve unrelated exception clauses without importing the PostgreSQL
     # server module or replacing the actual handler's control flow.
+    # Module constants the handler reads come from the real source, so a
+    # handler that gains one is tested with its actual value.
+    referenced = {name.id for name in ast.walk(function)
+                  if isinstance(name, ast.Name)}
+    for node in syntax.body:
+        if isinstance(node, ast.Assign) and all(
+                isinstance(target, ast.Name) and target.id.isupper() and
+                target.id in referenced and target.id not in namespace
+                for target in node.targets):
+            exec(compile(ast.Module(body=[node], type_ignores=[]),
+                         str(source), 'exec'), namespace)
     for node in ast.walk(function):
         if isinstance(node, ast.ExceptHandler) and node.type is not None:
             for name in ast.walk(node.type):
@@ -129,6 +148,8 @@ def test_actual_workspace_handler_distinguishes_execution_and_validation(
         response = namespace['cde_workspace'](Mock(), 1, 20)
     service.apply_visual_admin.assert_called_once()
     assert 'credential-canary' not in json.dumps(response)
+    # An error response is never cached.
+    assert response.headers['Cache-Control'] == 'no-store'
     if execution_error:
         assert response['status'] == 502
         assert 'outcome is unknown' in response['errormsg']
