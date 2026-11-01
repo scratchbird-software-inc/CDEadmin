@@ -9,6 +9,9 @@ from pgadmin.cdeadmin.providers.sqlite.provider import _resource_id
 from pgadmin.cdeadmin.workspace import sqlite_retained_schema as retained
 from pgadmin.cdeadmin.workspace import sqlite_retained_alter as alter
 
+# Only SQLite 3.53.0 compares a DROP CONSTRAINT name token without dequoting.
+RAW_CONSTRAINT_TOKEN=sqlite3.sqlite_version_info==(3,53,0)
+
 
 def prepare_owned(client,handle):
     for namespace in ('main','temp','team.雪'):
@@ -122,10 +125,19 @@ def test_pinned_native_quoted_constraint_lookup_refusal_preserves_original_state
     handle.execute('CREATE TABLE main.quoted_constraint(id INTEGER,CONSTRAINT "name with spaces" CHECK(id>0))')
     handle.execute('INSERT INTO main.quoted_constraint VALUES(7)')
     baseline=retained.observe(client,handle,'endpoint','native-session')
-    with pytest.raises(ValueError,match='exact raw name as one identifier token'):
-        review(client,handle,baseline,[{'action':'drop-constraint','resource_id':_resource_id('table',['main'],'quoted_constraint'),'name':'name with spaces'}])
-    assert handle.execute('SELECT * FROM main.quoted_constraint').fetchall()==[(7,)]
-    with pytest.raises(sqlite3.IntegrityError):handle.execute('INSERT INTO main.quoted_constraint VALUES(-1)')
+    changes=[{'action':'drop-constraint','resource_id':_resource_id('table',['main'],'quoted_constraint'),'name':'name with spaces'}]
+    if RAW_CONSTRAINT_TOKEN:
+        with pytest.raises(ValueError,match='exact raw name as one identifier token'):review(client,handle,baseline,changes)
+        assert handle.execute('SELECT * FROM main.quoted_constraint').fetchall()==[(7,)]
+        with pytest.raises(sqlite3.IntegrityError):handle.execute('INSERT INTO main.quoted_constraint VALUES(-1)')
+    else:
+        # A dequoting runtime takes any name as one ordinary quoted identifier.
+        record=review(client,handle,baseline,changes)
+        assert record['plan']['operations'][0]['source'].endswith('DROP CONSTRAINT "name with spaces"')
+        result=retained.apply(client,handle,record,'endpoint','native-session',12)
+        assert result['state']=='applied_pending_caller_transaction',result
+        handle.execute('INSERT INTO main.quoted_constraint VALUES(-1)')
+        assert handle.execute('SELECT * FROM main.quoted_constraint').fetchall()==[(7,),(-1,)]
     assert handle.execute('SELECT * FROM main.owned').fetchall()==[(93,)]
 
 
@@ -136,7 +148,9 @@ def test_native_constraint_quote_characters_select_the_exact_literal_identity(ow
     baseline=retained.observe(client,handle,'endpoint','native-session')
     changes=[{'action':'drop-constraint','resource_id':_resource_id('table',['main'],'literal_constraints'),'name':'"positive"'}]
     record=review(client,handle,baseline,changes)
-    assert record['plan']['operations'][0]['source'].endswith('DROP CONSTRAINT "positive"')
+    # 3.53.0 matches the raw token; later releases dequote it first.
+    token='"positive"' if RAW_CONSTRAINT_TOKEN else '"""positive"""'
+    assert record['plan']['operations'][0]['source'].endswith('DROP CONSTRAINT '+token)
     result=retained.apply(client,handle,record,'endpoint','native-session',12)
     assert result['state']=='applied_pending_caller_transaction',result
     handle.execute('INSERT INTO main.literal_constraints VALUES(20)')

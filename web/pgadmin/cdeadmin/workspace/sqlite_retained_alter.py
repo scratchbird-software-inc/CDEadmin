@@ -1,5 +1,6 @@
 """Property-driven native ALTER TABLE on an original SQLite connection."""
 from copy import deepcopy
+from functools import lru_cache
 import sqlite3
 from types import SimpleNamespace
 
@@ -45,6 +46,26 @@ def _options(changes):
     return result
 
 
+@lru_cache(maxsize=1)
+def _drop_constraint_rule():
+    """Observe how the loaded SQLite matches a DROP CONSTRAINT name token.
+
+    3.53.0 compares the raw token, so "a" selects the constraint literally
+    named "a" (quotes included); 3.53.1 dequotes it and selects a. Only an
+    owned in-memory table is touched.
+    """
+    probe=sqlite3.connect(':memory:')
+    try:
+        probe.execute('CREATE TABLE t(id INTEGER,CONSTRAINT a CHECK(id>0),CONSTRAINT """a""" CHECK(id<10))')
+        try:probe.execute('ALTER TABLE t DROP CONSTRAINT "a"')
+        except sqlite3.Error:return None
+        source=probe.execute("SELECT sql FROM sqlite_schema WHERE name='t'").fetchone()[0]
+    finally:probe.close()
+    if source=='CREATE TABLE t(id INTEGER,CONSTRAINT a CHECK(id>0))':return 'raw-token'
+    if source=='CREATE TABLE t(id INTEGER,CONSTRAINT """a""" CHECK(id<10))':return 'dequoted'
+    return None
+
+
 def _source(row,change):
     prefix='ALTER TABLE '+quote(row['path'][0])+'.'+quote(row['name'])+' '
     action=change['action']
@@ -52,11 +73,14 @@ def _source(row,change):
     if action=='rename-column':return prefix+'RENAME COLUMN '+quote(change['column'])+' TO '+quote(change['name'])
     if action=='drop-column':return prefix+'DROP COLUMN '+quote(change['column'])
     if action=='drop-constraint':
-        # The pinned native DROP implementation compares its raw name token.
-        # Its SQL token must equal the *actual* name, including quote characters
-        # when those characters belong to the name. Wrapping another quote pair
-        # could select a different constraint. Refuse unrepresentable names.
-        name=change['name']
+        name=change['name'];rule=_drop_constraint_rule()
+        if rule=='dequoted':return prefix+'DROP CONSTRAINT '+quote(name)
+        if rule!='raw-token':
+            raise ValueError('This SQLite runtime did not confirm how native DROP CONSTRAINT selects a constraint name')
+        # SQLite 3.53.0 compares its raw name token. Its SQL token must equal
+        # the *actual* name, including quote characters when those characters
+        # belong to the name. Wrapping another quote pair could select a
+        # different constraint. Refuse unrepresentable names.
         try:parts=list(tokens(name))
         except ValueError:parts=[]
         if (len(parts)!=1 or parts[0].start!=0 or parts[0].end!=len(name) or
