@@ -35,7 +35,7 @@ PROFILE = PilotProfile(
         'cluster', 'database', 'table', 'column', 'index', 'constraint',
         'view', 'procedure', 'trigger', 'event', 'branch', 'tag', 'commit',
         'remote', 'working-set', 'merge', 'rebase', 'conflict', 'backup',
-        'user', 'role', 'privilege',
+        'user', 'role', 'privilege', 'session', 'system-variable',
     ),
     ('dolt-sql', 'dolt-log', 'dolt-diff', 'dolt-backup'),
     parameter_shape='object-or-array',
@@ -66,7 +66,7 @@ PROFILE = PilotProfile(
 
 _BASE_ADMINISTRATION = sql_administration('dolt', 'mysql', (
     'branch', 'tag', 'commit', 'remote', 'working-set',
-    'merge', 'rebase', 'conflict', 'backup',
+    'merge', 'rebase', 'conflict', 'backup', 'session', 'system-variable',
 ))
 _DOLT_SUPPORTED = dict(_BASE_ADMINISTRATION.dialect.supported)
 _DOLT_SUPPORTED.pop('schema')
@@ -105,6 +105,10 @@ def _choice(field_id, label, values, **options):
 
 
 _NAME = r'[A-Za-z0-9_./:@+-]+'
+_IDENTIFIER = r'[^`\x00\r\n]{1,64}'
+_COLLATION = r'[A-Za-z0-9_]+'
+_ACCOUNT_PART = r'[^\x00\r\n]*'
+_VARIABLE = r'[A-Za-z_][A-Za-z0-9_]{0,127}'
 CONTROL_OPERATIONS = (
     ControlPlaneOperation(
         'branch', 'create', 'Create branch', 'admin', 'topology_admin', (
@@ -336,6 +340,65 @@ CONTROL_OPERATIONS = (
                      default=False),
         ), impact_scope='resource', long_running=True
     ),
+    # Native MySQL-dialect administration Dolt 1.86.6 executes and reads
+    # back (live, 2026-11-01). Dolt accepts ALTER INDEX ... INVISIBLE,
+    # ALTER CHECK ... NOT ENFORCED and PARTITION BY without applying them,
+    # and refuses SET DEFAULT ROLE, RENAME USER, CHECK/OPTIMIZE TABLE and
+    # RESET PERSIST, so none of those is offered.
+    ControlPlaneOperation(
+        'table', 'set_options', 'Set table options', 'admin', 'administer', (
+            cp_field('comment', 'Comment', 'text', False, max_length=2048),
+            cp_field('auto_increment', 'Next AUTO_INCREMENT value', 'number',
+                     False, minimum=1, maximum=2 ** 63 - 1,
+                     help='Only for a table with an AUTO_INCREMENT column.'),
+            cp_field('collation', 'Default collation', 'text', False,
+                     max_length=64, pattern=_COLLATION),
+        ), impact_scope='resource'
+    ),
+    ControlPlaneOperation(
+        'table', 'analyze', 'Analyze table', 'admin', 'maintenance_admin',
+        confirmation_required=False, impact_scope='resource'
+    ),
+    ControlPlaneOperation(
+        'index', 'rename', 'Rename index', 'admin', 'administer', (
+            cp_field('new_name', 'New name', 'text', True, max_length=64,
+                     pattern=_IDENTIFIER),
+        ), impact_scope='resource'
+    ),
+    ControlPlaneOperation(
+        'role', 'grant', 'Grant role membership', 'admin', 'security_admin', (
+            cp_field('member_user', 'Recipient user', 'text', True,
+                     max_length=32, pattern=_ACCOUNT_PART),
+            cp_field('member_host', 'Recipient host', 'text', True,
+                     max_length=255, pattern=_ACCOUNT_PART, default='%'),
+            cp_field('admin_option', 'Allow delegation', 'boolean', False,
+                     default=False),
+        ), impact_scope='resource'
+    ),
+    ControlPlaneOperation(
+        'role', 'revoke', 'Revoke role membership', 'admin', 'security_admin',
+        (
+            cp_field('member_user', 'Recipient user', 'text', True,
+                     max_length=32, pattern=_ACCOUNT_PART),
+            cp_field('member_host', 'Recipient host', 'text', True,
+                     max_length=255, pattern=_ACCOUNT_PART, default='%'),
+        ), impact_scope='resource'
+    ),
+    ControlPlaneOperation(
+        'session', 'terminate_query', 'Terminate running statement', 'admin',
+        'administer', impact_scope='resource'
+    ),
+    ControlPlaneOperation(
+        'session', 'terminate_connection', 'Terminate connection',
+        'destructive', 'administer', impact_scope='resource'
+    ),
+    ControlPlaneOperation(
+        'system-variable', 'set_global', 'Set global value', 'admin',
+        'administer', (
+            cp_field('value', 'Value', 'text', True, max_length=4096,
+                     help='Applies until the server restarts.'),
+        ), impact_scope='cluster'
+    ),
 )
 
 
@@ -403,9 +466,136 @@ def _table_names(draft, required=False):
     return list(names)
 
 
+_NATIVE_ADMINISTRATION = frozenset({
+    ('table', 'set_options'), ('table', 'analyze'), ('index', 'rename'),
+    ('role', 'grant'), ('role', 'revoke'), ('session', 'terminate_query'),
+    ('session', 'terminate_connection'), ('system-variable', 'set_global'),
+})
+
+
+def _quote(value):
+    return '`' + str(value).replace('`', '``') + '`'
+
+
+def _target_path(request, length):
+    target = request.get('target_resource')
+    path = target.get('display_path') if isinstance(target, dict) else None
+    if not isinstance(path, list) or len(path) != length or not all(
+            isinstance(item, str) and item for item in path):
+        raise RelationalClientError('Dolt control target is invalid')
+    return path
+
+
+def _route_database(request):
+    database = (request.get('_provider_route') or {}).get('database')
+    return database.split('/', 1)[0] if isinstance(database, str) else None
+
+
+def _role_account(request):
+    target = request.get('target_resource') or {}
+    native = target.get('native') if isinstance(target, dict) else None
+    if not isinstance(native, dict) or not all(
+            isinstance(native.get(key), str) for key in ('user', 'host')):
+        raise RelationalClientError('Dolt role identity is unavailable')
+    return native['user'], native['host']
+
+
+def _session_id(request):
+    value = _target_name(request)
+    if not re.fullmatch(r'[1-9][0-9]{0,19}', value):
+        raise RelationalClientError('Dolt session identity is invalid')
+    return int(value)
+
+
+def _native_statements(request):
+    """Compile the MySQL-dialect administration Dolt executes natively."""
+    kind = request['resource_kind']
+    operation = request['operation_id']
+    draft = request.get('draft') or {}
+    if kind == 'table' and operation == 'set_options':
+        database, table = _target_path(request, 2)
+        clauses, parameters = [], []
+        if draft.get('comment') not in (None, ''):
+            clauses.append('COMMENT = %s')
+            parameters.append(draft['comment'])
+        if draft.get('auto_increment') is not None:
+            value = draft['auto_increment']
+            if isinstance(value, bool) or not isinstance(value, int) or (
+                    value < 1):
+                raise RelationalClientError(
+                    'Dolt AUTO_INCREMENT value is invalid')
+            clauses.append('AUTO_INCREMENT = ' + str(value))
+        if draft.get('collation') not in (None, ''):
+            if not re.fullmatch(_COLLATION, draft['collation']):
+                raise RelationalClientError('Dolt collation is invalid')
+            clauses.append('DEFAULT COLLATE ' + _quote(draft['collation']))
+        if not clauses:
+            raise RelationalClientError('Set at least one table option')
+        return [{'source': 'ALTER TABLE ' + _quote(database) + '.' +
+                 _quote(table) + ' ' + ', '.join(clauses),
+                 'parameters': tuple(parameters)}]
+    if kind == 'table' and operation == 'analyze':
+        database, table = _target_path(request, 2)
+        # Live: Dolt 1.86.6 analyzes only tables of the session database; a
+        # qualified name in another database returns an error row instead.
+        if database != _route_database(request):
+            raise RelationalClientError(
+                'Dolt analyzes tables of the connection database only')
+        return [{'source': 'ANALYZE TABLE ' + _quote(table),
+                 'parameters': ()}]
+    if kind == 'index' and operation == 'rename':
+        database, table, index = _target_path(request, 3)
+        new_name = draft.get('new_name')
+        if not isinstance(new_name, str) or not re.fullmatch(
+                _IDENTIFIER, new_name) or new_name == index:
+            raise RelationalClientError('Dolt index name is invalid')
+        return [{'source': 'ALTER TABLE ' + _quote(database) + '.' +
+                 _quote(table) + ' RENAME INDEX ' + _quote(index) + ' TO ' +
+                 _quote(new_name), 'parameters': ()}]
+    if kind == 'role' and operation in {'grant', 'revoke'}:
+        role = _role_account(request)
+        member = (draft.get('member_user'), draft.get('member_host'))
+        if not all(isinstance(item, str) and re.fullmatch(
+                _ACCOUNT_PART, item) for item in member):
+            raise RelationalClientError('Dolt role member is invalid')
+        if operation == 'grant':
+            source = 'GRANT %s@%s TO %s@%s'
+            if draft.get('admin_option'):
+                source += ' WITH ADMIN OPTION'
+        else:
+            source = 'REVOKE %s@%s FROM %s@%s'
+        return [{'source': source, 'parameters': (*role, *member)}]
+    if kind == 'session':
+        prefix = 'KILL QUERY ' if operation == 'terminate_query' else 'KILL '
+        return [{'source': prefix + str(_session_id(request)),
+                 'parameters': ()}]
+    if kind == 'system-variable' and operation == 'set_global':
+        name = _target_name(request)
+        if not re.fullmatch(_VARIABLE, name):
+            raise RelationalClientError('Dolt variable name is invalid')
+        if not isinstance(draft.get('value'), str):
+            raise RelationalClientError('Dolt variable value is required')
+        return [{'source': 'SET @@GLOBAL.' + name + ' = %s',
+                 'parameters': (draft['value'],)}]
+    raise RelationalClientError('Dolt control-plane operation is unavailable')
+
+
 def _compile_control_plane(request):
     kind = request['resource_kind']
     operation = request['operation_id']
+    if (kind, operation) in _NATIVE_ADMINISTRATION:
+        return {
+            'statements': _native_statements(request),
+            'impact': {
+                'scope': 'resource',
+                'target_resource_id': (
+                    request.get('target_resource') or {}
+                ).get('resource_id'),
+                'availability_risk': (
+                    'high' if kind == 'session' else 'medium'),
+                'data_movement_possible': False,
+            },
+        }
     draft = request.get('draft') or {}
     arguments = []
     procedure = None
@@ -692,6 +882,86 @@ def _logical_name(plan):
     return target.get('display_name')
 
 
+def _inspect_native(plan, query):
+    kind = plan['resource_kind']
+    operation = plan['operation_id']
+    draft = plan.get('draft') or {}
+    if kind == 'table' and operation == 'set_options':
+        database, table = _target_path(plan, 2)
+        return query(
+            'SELECT TABLE_COMMENT, AUTO_INCREMENT, TABLE_COLLATION '
+            'FROM information_schema.TABLES '
+            'WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s', (database, table))
+    if kind == 'table' and operation == 'analyze':
+        database, table = _target_path(plan, 2)
+        return query(
+            'SELECT index_name, row_count FROM ' + _quote(database) +
+            '.dolt_statistics WHERE table_name = %s', (table,))
+    if kind == 'index':
+        database, table, index = _target_path(plan, 3)
+        return query(
+            'SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS '
+            'WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s '
+            'AND INDEX_NAME IN (%s, %s)',
+            (database, table, index, draft.get('new_name')))
+    if kind == 'role':
+        return query(
+            'SELECT WITH_ADMIN_OPTION FROM mysql.role_edges '
+            'WHERE FROM_USER = %s AND FROM_HOST = %s '
+            'AND TO_USER = %s AND TO_HOST = %s',
+            (*_role_account(plan), draft.get('member_user'),
+             draft.get('member_host')))
+    if kind == 'session':
+        return query(
+            'SELECT ID, COMMAND, INFO FROM information_schema.PROCESSLIST '
+            'WHERE ID = %s', (_session_id(plan),))
+    name = _target_name(plan)
+    if not re.fullmatch(_VARIABLE, name):
+        raise RelationalClientError('Dolt variable name is invalid')
+    return query('SELECT @@GLOBAL.' + name)
+
+
+def _native_confirmed(plan, rows):
+    kind = plan['resource_kind']
+    operation = plan['operation_id']
+    draft = plan.get('draft') or {}
+    if kind == 'table' and operation == 'set_options':
+        if len(rows) != 1:
+            return False
+        comment, auto_increment, collation = rows[0]
+        return all((
+            draft.get('comment') in (None, '') or
+            str(comment) == draft['comment'],
+            draft.get('auto_increment') is None or (
+                auto_increment is not None and
+                int(auto_increment) == draft['auto_increment']),
+            draft.get('collation') in (None, '') or
+            str(collation).lower() == draft['collation'].lower(),
+        ))
+    if kind == 'table':
+        return bool(rows)
+    if kind == 'index':
+        names = {str(row[0]) for row in rows}
+        return names == {draft.get('new_name')}
+    if kind == 'role':
+        if operation == 'revoke':
+            return not rows
+        return len(rows) == 1 and (str(rows[0][0]).upper() == 'Y') == bool(
+            draft.get('admin_option'))
+    if kind == 'session':
+        if operation == 'terminate_connection':
+            return not rows
+        return not rows or str(rows[0][1]) != 'Query'
+    if len(rows) != 1:
+        return False
+    observed, requested = rows[0][0], draft.get('value')
+    if str(observed) == requested:
+        return True
+    # Dolt reads boolean variables back as 0/1.
+    flags = {'ON': '1', 'TRUE': '1', 'OFF': '0', 'FALSE': '0'}
+    return str(observed) == flags.get(str(requested).upper())
+
+
 def _inspect_control_plane(client, request):
     plan, route = _operation_parts(request)
     kind = plan['resource_kind']
@@ -704,6 +974,8 @@ def _inspect_control_plane(client, request):
             connection=request.get('_provider_session_handle'),
         )
 
+    if (kind, operation) in _NATIVE_ADMINISTRATION:
+        return _inspect_native(plan, query)
     if kind == 'branch':
         if operation == 'set_default':
             return query(
@@ -818,7 +1090,9 @@ def _post_validate_control_plane(client, request):
     kind = plan['resource_kind']
     operation = plan['operation_id']
     confirmed = False
-    if kind in {'branch', 'tag', 'remote', 'backup'}:
+    if (kind, operation) in _NATIVE_ADMINISTRATION:
+        confirmed = _native_confirmed(plan, rows)
+    elif kind in {'branch', 'tag', 'remote', 'backup'}:
         if operation == 'set_default':
             confirmed = bool(rows) and str(rows[0][0]) == _logical_name(plan)
         else:
@@ -1081,6 +1355,23 @@ def _extras(cursor, _request, generation):
             'plan_table_present': plan_present,
         },
     ))
+    for session_id, user, host, database, command, seconds, state, info in \
+            optional_rows(
+                cursor,
+                'SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO '
+                'FROM information_schema.PROCESSLIST ORDER BY ID'):
+        values.append(resource('session', [], session_id, generation, {
+            'user': str(user), 'host': str(host),
+            'database': None if database is None else str(database),
+            'command': str(command), 'seconds': int(seconds or 0),
+            'state': str(state or ''),
+            'statement': None if info is None else str(info),
+        }))
+    for name, value in optional_rows(cursor, 'SHOW GLOBAL VARIABLES'):
+        values.append(resource('system-variable', [], name, generation, {
+            'value': None if value is None else str(value),
+            'scope': 'global',
+        }))
     return values
 
 

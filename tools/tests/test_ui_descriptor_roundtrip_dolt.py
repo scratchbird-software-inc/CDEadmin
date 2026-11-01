@@ -92,7 +92,9 @@ def live():
                 f'DROP DATABASE IF EXISTS `{DATABASE}_child`',
                 f"DROP USER IF EXISTS 'rt_user_{UNIQUE}'@'localhost'",
                 f"DROP ROLE IF EXISTS 'rt_role_{UNIQUE}'",
-                f"DROP USER IF EXISTS 'rt_nopw_{UNIQUE}'@'%'"):
+                f"DROP USER IF EXISTS 'rt_nopw_{UNIQUE}'@'%'",
+                f"DROP USER IF EXISTS 'rt_member_{UNIQUE}'@'%'",
+                f"DROP ROLE IF EXISTS 'rt_grp_{UNIQUE}'"):
             cleanup.cursor().execute(statement)
         cleanup.close()
 
@@ -366,3 +368,140 @@ def test_grant_and_revoke_appear_in_the_inventory(live):
     run(client, route, 'privilege', 'revoke',
         {**grant, 'confirmation': 'REVOKE'})
     assert ('DATABASE', 'SELECT') not in grants()
+
+
+# Native administration added 2026-11-01. Each operation goes through the UI
+# path, must be confirmed by the provider's own read-back, and is then read
+# back again here over a separate connection.
+def control(client, route, kind, operation, draft, target):
+    request = {'resource_kind': kind, 'operation_id': operation,
+               'target_resource': target, '_provider_route': route,
+               'draft': draft}
+    run(client, route, kind, operation, draft, target)
+    planned = ADMINISTRATION.plan(request)
+    state = ADMINISTRATION.validate_operation_post_state(
+        client, executor_request(request, planned))
+    assert state['confirmed'], state
+
+
+def execute(*sources, database=DATABASE):
+    connection = admin(database)
+    try:
+        cursor = connection.cursor()
+        for source in sources:
+            cursor.execute(source)
+    finally:
+        connection.close()
+
+
+def row(client, route, kind, name):
+    return next(item for item in resources(client, route)
+                if item['resource_kind'] == kind and
+                item['display_name'] == name)
+
+
+def test_table_options_and_analyze(live):
+    route, client = live
+    execute('CREATE TABLE rt_options(id INT PRIMARY KEY AUTO_INCREMENT, '
+            'v INT)', 'INSERT INTO rt_options(v) VALUES (1), (2)')
+    target = row(client, route, 'table', 'rt_options')
+    control(client, route, 'table', 'set_options', {
+        'comment': "rt's options", 'auto_increment': 40,
+        'collation': 'utf8mb4_bin'}, target)
+    assert query(
+        'SELECT TABLE_COMMENT, AUTO_INCREMENT, TABLE_COLLATION '
+        'FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() '
+        "AND TABLE_NAME = 'rt_options'") == [
+        ("rt's options", 40, 'utf8mb4_bin')]
+    control(client, route, 'table', 'analyze', {}, target)
+    assert query("SELECT index_name, row_count FROM dolt_statistics "
+                 "WHERE table_name = 'rt_options'") == [('primary', 2)]
+
+
+def test_index_rename(live):
+    route, client = live
+    execute('CREATE TABLE rt_renamed(id INT PRIMARY KEY, v INT, KEY rt_k(v))')
+    target = next(item for item in resources(client, route)
+                  if item['resource_kind'] == 'index' and
+                  item['display_path'] == [DATABASE, 'rt_renamed', 'rt_k'])
+    control(client, route, 'index', 'rename', {'new_name': 'rt k2'}, target)
+    assert query("SELECT DISTINCT INDEX_NAME FROM information_schema."
+                 "STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND "
+                 "TABLE_NAME = 'rt_renamed' ORDER BY 1") == [
+        ('PRIMARY',), ('rt k2',)]
+
+
+def test_role_membership(live):
+    route, client = live
+    execute(f"CREATE ROLE 'rt_grp_{UNIQUE}'",
+            f"CREATE USER 'rt_member_{UNIQUE}'@'%'", database=None)
+    target = row(client, route, 'role', f'rt_grp_{UNIQUE}@%')
+    member = {'member_user': f'rt_member_{UNIQUE}', 'member_host': '%'}
+
+    def edges():
+        return query('SELECT WITH_ADMIN_OPTION FROM mysql.role_edges '
+                     f"WHERE FROM_USER = 'rt_grp_{UNIQUE}' "
+                     f"AND TO_USER = 'rt_member_{UNIQUE}'")
+    control(client, route, 'role', 'grant',
+            {**member, 'admin_option': True}, target)
+    assert edges() == [('Y',)]
+    control(client, route, 'role', 'revoke', member, target)
+    assert edges() == []
+
+
+def test_session_termination(live):
+    import threading
+    import time
+    route, client = live
+    victim = admin(DATABASE)
+    cursor = victim.cursor()
+    cursor.execute('SELECT CONNECTION_ID()')
+    session_id = str(cursor.fetchone()[0])
+    outcome = []
+
+    def sleep():
+        try:
+            cursor.execute('SELECT SLEEP(30)')
+            outcome.append(cursor.fetchall())
+        except Exception as error:
+            outcome.append(error)
+    worker = threading.Thread(target=sleep)
+    worker.start()
+    try:
+        for _attempt in range(50):
+            if row(client, route, 'session', session_id)[
+                    'native']['command'] == 'Query':
+                break
+            time.sleep(0.1)
+        control(client, route, 'session', 'terminate_query', {},
+                row(client, route, 'session', session_id))
+        worker.join(10)
+        assert not worker.is_alive() and isinstance(outcome[0], Exception)
+        control(client, route, 'session', 'terminate_connection', {},
+                row(client, route, 'session', session_id))
+        assert query('SELECT ID FROM information_schema.PROCESSLIST '
+                     f'WHERE ID = {session_id}') == []
+    finally:
+        worker.join(30)
+        try:
+            victim.close()
+        except Exception:
+            pass
+
+
+def test_global_variable(live):
+    route, client = live
+    original = query('SELECT @@GLOBAL.max_connections')[0][0]
+    try:
+        target = row(client, route, 'system-variable', 'max_connections')
+        assert target['native']['value'] == str(original)
+        control(client, route, 'system-variable', 'set_global',
+                {'value': str(original + 7)}, target)
+        assert query('SELECT @@GLOBAL.max_connections') == [
+            (original + 7,)]
+        control(client, route, 'system-variable', 'set_global',
+                {'value': str(original)}, target)
+    finally:
+        execute(f'SET @@GLOBAL.max_connections = {int(original)}',
+                database=None)
+    assert query('SELECT @@GLOBAL.max_connections') == [(original,)]

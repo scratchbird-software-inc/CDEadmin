@@ -517,6 +517,155 @@
       "status": "draft",
       "confirmation": "confirm",
       "fields": []
+    },
+    {
+      "operation_id": "set_options",
+      "resource_kind": "table",
+      "title": "Set table options",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "auto_increment",
+          "label": "Next AUTO_INCREMENT value",
+          "control": "number",
+          "required": false,
+          "help": "Only for a table with an AUTO_INCREMENT column."
+        },
+        {
+          "field_id": "collation",
+          "label": "Default collation",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "operation_id": "analyze",
+      "resource_kind": "table",
+      "title": "Analyze table",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Dolt 1.86.6 analyzes tables of the connection database only."
+    },
+    {
+      "operation_id": "grant",
+      "resource_kind": "role",
+      "title": "Grant role membership",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "member_user",
+          "label": "Recipient user",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "member_host",
+          "label": "Recipient host",
+          "control": "text",
+          "required": true,
+          "default": "%"
+        },
+        {
+          "field_id": "admin_option",
+          "label": "Allow delegation",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "revoke",
+      "resource_kind": "role",
+      "title": "Revoke role membership",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "member_user",
+          "label": "Recipient user",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "member_host",
+          "label": "Recipient host",
+          "control": "text",
+          "required": true,
+          "default": "%"
+        }
+      ]
+    },
+    {
+      "operation_id": "terminate_query",
+      "resource_kind": "session",
+      "title": "Terminate running statement",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "terminate_connection",
+      "resource_kind": "session",
+      "title": "Terminate connection",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "set_global",
+      "resource_kind": "system-variable",
+      "title": "Set global value",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true,
+          "help": "Applies until the server restarts."
+        }
+      ],
+      "notes": "Dolt 1.86.6 has no RESET PERSIST, so a persisted value cannot be removed through SQL; SET PERSIST is not offered."
     }
   ]
 }

@@ -80,6 +80,15 @@
         "backup"
       ],
       "order": 8
+    },
+    {
+      "group_id": "activity",
+      "title": "Activity and configuration",
+      "kinds": [
+        "session",
+        "system-variable"
+      ],
+      "order": 9
     }
   ],
   "resource_children": {
@@ -115,6 +124,8 @@
     "merge": "object.relationship",
     "rebase": "object.relationship",
     "conflict": "object.constraint",
-    "backup": "object.snapshot"
+    "backup": "object.snapshot",
+    "session": "object.session",
+    "system-variable": "object.system-variable"
   }
 }

@@ -139,6 +139,30 @@ Dolt 1.86.6
    interactive rebase and not after it.
 -  Generated-column expressions are not reported in
    ``information_schema.COLUMNS`` (``GENERATION_EXPRESSION`` is empty).
+-  Native administration added 2026-11-01, each read back live before it was
+   offered and confirmed by the provider's own read-back after it runs:
+
+   -  table options: ``COMMENT``, next ``AUTO_INCREMENT`` (only on a table
+      with an ``AUTO_INCREMENT`` column; elsewhere Dolt reports ``NULL`` and
+      the operation is reported unconfirmed) and default collation;
+   -  ``ANALYZE TABLE``, read back from ``dolt_statistics``. Dolt analyzes only
+      tables of the session database; for any other table it returns an
+      error row rather than an error, so the operation is offered only for
+      tables of the connection database;
+   -  ``RENAME INDEX``;
+   -  role membership for an existing account (``GRANT``/``REVOKE`` a role,
+      with or without ``WITH ADMIN OPTION``), read from ``mysql.role_edges``;
+   -  sessions from ``information_schema.PROCESSLIST``, with ``KILL QUERY``
+      and ``KILL``;
+   -  global system variables (``SHOW GLOBAL VARIABLES``) with ``SET
+      @@GLOBAL``. ``SET PERSIST`` is not offered: Dolt has no ``RESET
+      PERSIST``, so a persisted value cannot be removed through SQL (it is
+      written to the server's global configuration file).
+
+   Still not offered because Dolt refuses them: ``SET DEFAULT ROLE``,
+   ``RENAME USER`` ("not yet implemented"), ``ALTER PROCEDURE``. Invisible
+   indexes and ``ALTER CHECK ... NOT ENFORCED`` are accepted without effect
+   (the constraint still rejects rows).
 
 TiDB 8.5.6
 ~~~~~~~~~~
