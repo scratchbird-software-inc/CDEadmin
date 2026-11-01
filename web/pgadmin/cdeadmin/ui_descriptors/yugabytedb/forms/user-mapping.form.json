@@ -1,0 +1,60 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "user-mapping"
+  ],
+  "status": "draft",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "fields": [
+    {
+      "field_id": "user",
+      "label": "User",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "help": "A role name, or PUBLIC."
+    },
+    {
+      "field_id": "server",
+      "label": "Foreign server",
+      "tab": "General",
+      "control": "reference",
+      "required": true,
+      "editable_after_create": false,
+      "reference_kind": "foreign-server",
+      "reference_value": "display_name"
+    },
+    {
+      "field_id": "options",
+      "label": "Options",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text"
+        }
+      ],
+      "help": "For postgres_fdw: user (the remote role). A password is a secret and is not taken here.",
+      "tab": "Definition"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "User mapping passwords",
+      "reason": "A password is a secret: it is refused as a plain option, and a secret-reference path for FDW options is not built yet",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "notes": "Probed live on YugabyteDB 2025.2.2.2 with postgres_fdw (2026-11-01)."
+}

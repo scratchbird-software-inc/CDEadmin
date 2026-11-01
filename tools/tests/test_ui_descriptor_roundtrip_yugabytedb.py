@@ -1601,3 +1601,83 @@ def test_aggregates_operators_and_casts(live):
         target=find(client, route, 'cast', 'rt_mood AS integer')[0])
     assert not query("SELECT 1 FROM pg_cast WHERE castsource = "
                      "'public.rt_mood'::regtype")
+
+
+def test_foreign_servers_mappings_and_tables(live):
+    """2026-11-01: the postgres_fdw chain through its editors."""
+    route, client = live
+    query('CREATE EXTENSION IF NOT EXISTS postgres_fdw')
+    table_form = resolved_form('yugabytedb', 'table')
+    server_form = resolved_form('yugabytedb',
+                                'engine_object:foreign-server')
+    mapping_form = resolved_form('yugabytedb', 'engine_object:user-mapping')
+    try:
+        run(client, route, 'foreign-server', 'create', backend_draft(
+            server_form, {
+                'name': 'rt_srv', 'wrapper': 'postgres_fdw',
+                'options': [{'name': 'host', 'value': 'localhost'},
+                            {'name': 'dbname', 'value': DATABASE}],
+                'comment': 'rt server'}))
+        target, baseline = record(client, route, 'foreign-server', 'rt_srv',
+                                  'engine_object:foreign-server')
+        assert {(row['name'], row['value']) for row in baseline['options']} \
+            == {('host', 'localhost'), ('dbname', DATABASE)}
+        run(client, route, 'foreign-server', 'alter', backend_draft(
+            server_form, {**baseline, 'options': [
+                {'name': 'host', 'value': 'localhost'},
+                {'name': 'port', 'value': '5433'}], 'version': '1'},
+            mode='alter', baseline=baseline), target=target)
+        assert query("SELECT srvoptions, srvversion FROM pg_foreign_server "
+                     "WHERE srvname = 'rt_srv'") == [
+            (['host=localhost', 'port=5433'], '1')]
+        assert 'secret' in refused('user-mapping', 'create', {
+            'user': 'PUBLIC', 'server': 'rt_srv',
+            'options': [{'name': 'password', 'value': 'x'}]})
+        run(client, route, 'user-mapping', 'create', backend_draft(
+            mapping_form, {'user': 'PUBLIC', 'server': 'rt_srv',
+                           'options': [{'name': 'user',
+                                        'value': 'remote'}]}))
+        mapping = next(row for row in resources(client, route)
+                       if row['resource_kind'] == 'user-mapping' and
+                       row['display_path'] == ['rt_srv', 'public'])
+        run(client, route, 'user-mapping', 'alter', {
+            'options': [{'name': 'user', 'value': 'remote2'}]},
+            target=mapping)
+        assert query("SELECT umoptions FROM pg_user_mappings WHERE "
+                     "srvname = 'rt_srv'") == [(['user=remote2'],)]
+        run(client, route, 'foreign-table', 'create', backend_draft(
+            table_form, {
+                'variant': 'foreign', 'name': 'rt_ft', 'parent': 'public',
+                'server': 'rt_srv',
+                'columns': [{'name': 'id', 'type': 'int', 'nullable': False},
+                            {'name': 'v', 'type': 'text'}],
+                'options': [{'name': 'table_name', 'value': 'src'}],
+                'comment': 'rt foreign'}))
+        assert query(
+            "SELECT s.srvname, t.ftoptions FROM pg_foreign_table t JOIN "
+            "pg_foreign_server s ON s.oid = t.ftserver JOIN pg_class c ON "
+            "c.oid = t.ftrelid WHERE c.relname = 'rt_ft'") == [
+            ('rt_srv', ['table_name=src'])]
+        assert not [row for row in resources(client, route)
+                    if row['resource_kind'] == 'table' and
+                    row['display_name'] == 'rt_ft']
+        foreign = find(client, route, 'foreign-table', 'rt_ft')[0]
+        run(client, route, 'foreign-table', 'alter', {
+            'add_columns': [{'name': 'w', 'type': 'int'}],
+            'options': [{'name': 'table_name', 'value': 'src2'}],
+            'comment': 'rt foreign 2'}, target=foreign)
+        assert query("SELECT ftoptions FROM pg_foreign_table t JOIN pg_class "
+                     "c ON c.oid = t.ftrelid WHERE c.relname = 'rt_ft'") == [
+            (['table_name=src2'],)]
+        assert ('w',) in query("SELECT attname FROM pg_attribute WHERE "
+                               "attrelid = 'public.rt_ft'::regclass")
+        run(client, route, 'foreign-table', 'drop', {'confirmation': 'x'},
+            target=find(client, route, 'foreign-table', 'rt_ft')[0])
+        run(client, route, 'user-mapping', 'drop', {'confirmation': 'x'},
+            target=mapping)
+        run(client, route, 'foreign-server', 'drop', {'confirmation': 'x'},
+            target=find(client, route, 'foreign-server', 'rt_srv')[0])
+        assert not query("SELECT 1 FROM pg_foreign_server")
+    finally:
+        query('DROP SERVER IF EXISTS rt_srv CASCADE')
+        query('DROP EXTENSION IF EXISTS postgres_fdw CASCADE')

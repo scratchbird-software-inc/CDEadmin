@@ -2159,6 +2159,94 @@ def _relational_editor_evidence(provider, request, engine):
                             'confirmation': 'drop-live-editor-cast',
                         }, cast,
                     )
+            # The postgres_fdw chain: server, user mapping, foreign table.
+            fdw = None
+            if attempt(
+                'fdw.extension.create', 'extension', 'create', {
+                    'name': 'postgres_fdw', 'schema': '', 'version': '',
+                    'cascade': False,
+                },
+            ):
+                fdw = inspect_created('fdw.extension.inspect', 'extension',
+                                      'postgres_fdw')
+            server = None
+            if fdw is not None and attempt(
+                'foreign-server.create', 'foreign-server', 'create', {
+                    'name': 'cde_editor_server', 'wrapper': 'postgres_fdw',
+                    'options': [{'name': 'host', 'value': 'localhost'}],
+                },
+            ):
+                server = inspect_created(
+                    'foreign-server.inspect', 'foreign-server',
+                    'cde_editor_server',
+                )
+            if server is not None:
+                attempt(
+                    'foreign-server.alter', 'foreign-server', 'alter', {
+                        'options': [{'name': 'host', 'value': 'localhost'},
+                                    {'name': 'port', 'value': '5433'}],
+                        'comment': 'cde editor server',
+                    }, server,
+                )
+                if attempt(
+                    'user-mapping.create', 'user-mapping', 'create', {
+                        'user': 'PUBLIC', 'server': 'cde_editor_server',
+                    },
+                ):
+                    mapping = inspect_created(
+                        'user-mapping.inspect', 'user-mapping', 'public'
+                    )
+                    if mapping is not None:
+                        attempt(
+                            'user-mapping.alter', 'user-mapping', 'alter', {
+                                'options': [{'name': 'user',
+                                             'value': 'remote'}],
+                            }, mapping,
+                        )
+                        attempt(
+                            'user-mapping.drop', 'user-mapping', 'drop', {
+                                'confirmation':
+                                    'drop-live-editor-user-mapping',
+                            }, mapping,
+                        )
+                if attempt(
+                    'foreign-table.create', 'foreign-table', 'create', {
+                        'name': 'cde_editor_foreign_table',
+                        'parent': 'public', 'server': 'cde_editor_server',
+                        'columns': [{'name': 'id', 'type': 'int'}],
+                        'options': [{'name': 'table_name', 'value': 'src'}],
+                    },
+                ):
+                    foreign_table = inspect_created(
+                        'foreign-table.inspect', 'foreign-table',
+                        'cde_editor_foreign_table',
+                    )
+                    if foreign_table is not None:
+                        attempt(
+                            'foreign-table.alter', 'foreign-table', 'alter', {
+                                'comment': 'cde editor foreign table',
+                            }, foreign_table,
+                        )
+                        attempt(
+                            'foreign-table.drop', 'foreign-table', 'drop', {
+                                'cascade': False,
+                                'confirmation':
+                                    'drop-live-editor-foreign-table',
+                            }, foreign_table,
+                        )
+                attempt(
+                    'foreign-server.drop', 'foreign-server', 'drop', {
+                        'cascade': True,
+                        'confirmation': 'drop-live-editor-server',
+                    }, server,
+                )
+            if fdw is not None:
+                attempt(
+                    'fdw.extension.drop', 'extension', 'drop', {
+                        'cascade': True,
+                        'confirmation': 'drop-live-editor-fdw-extension',
+                    }, fdw,
+                )
 
         if provider.client.supports_admin_operation(
                 'row-policy', 'create') and attempt(

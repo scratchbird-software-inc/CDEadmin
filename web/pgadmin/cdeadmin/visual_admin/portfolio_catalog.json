@@ -1431,7 +1431,10 @@
         {"resource_kind": "publication", "title": "Publication", "operation_profile": "definition"},
         {"resource_kind": "aggregate", "title": "Aggregate", "operation_profile": "definition"},
         {"resource_kind": "operator", "title": "Operator", "operation_profile": "definition"},
-        {"resource_kind": "cast", "title": "Cast", "operation_profile": "definition"}
+        {"resource_kind": "cast", "title": "Cast", "operation_profile": "definition"},
+        {"resource_kind": "foreign-server", "title": "Foreign server", "operation_profile": "definition"},
+        {"resource_kind": "user-mapping", "title": "User mapping", "operation_profile": "definition"},
+        {"resource_kind": "foreign-table", "title": "Foreign table", "operation_profile": "definition"}
       ]
     },
     {

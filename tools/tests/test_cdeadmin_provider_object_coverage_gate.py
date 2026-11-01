@@ -69,7 +69,9 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
         # publications (inspect, create, alter, drop each; the dialect
         # contract regenerated from live evidence, 67 -> 79 tasks).
         # 2512 with YugabyteDB aggregates, operators and casts (79 -> 88).
-        self.assertEqual(2512, result['graphical_operation_count'])
+        # 2524 with YugabyteDB foreign servers, user mappings and foreign
+        # tables (88 -> 97).
+        self.assertEqual(2524, result['graphical_operation_count'])
         large_object = next(item for item in self.catalogs['postgresql-native']['descriptor']['objects']
             if item['resource_kind'] == 'large-object')
         self.assertEqual({'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop',

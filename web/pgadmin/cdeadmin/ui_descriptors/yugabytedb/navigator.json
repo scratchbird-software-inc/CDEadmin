@@ -41,7 +41,8 @@
         "partition",
         "view",
         "materialized-view",
-        "sequence"
+        "sequence",
+        "foreign-table"
       ],
       "order": 3
     },
@@ -100,6 +101,15 @@
         "session"
       ],
       "order": 8
+    },
+    {
+      "group_id": "federation",
+      "title": "Foreign data",
+      "kinds": [
+        "foreign-server",
+        "user-mapping"
+      ],
+      "order": 9
     }
   ],
   "resource_children": {
@@ -114,6 +124,12 @@
     ],
     "view": [
       "column"
+    ],
+    "foreign-table": [
+      "column"
+    ],
+    "foreign-server": [
+      "user-mapping"
     ]
   },
   "kind_icons": {
@@ -158,6 +174,9 @@
     "publication": "object.publication",
     "aggregate": "object.function",
     "operator": "object.function",
-    "cast": "object.type"
+    "cast": "object.type",
+    "foreign-table": "object.table",
+    "foreign-server": "object.server-link",
+    "user-mapping": "object.user"
   }
 }

@@ -1,0 +1,89 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "foreign-server"
+  ],
+  "status": "draft",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "Renaming runs ALTER SERVER ... RENAME TO."
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON SERVER"
+    },
+    {
+      "field_id": "owner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "role",
+      "reference_value": "display_name",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "wrapper",
+      "label": "Foreign data wrapper",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "help": "For example postgres_fdw; install its extension first."
+    },
+    {
+      "field_id": "server_type",
+      "label": "Type",
+      "tab": "Definition",
+      "control": "text",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "version",
+      "label": "Version",
+      "tab": "Definition",
+      "control": "text"
+    },
+    {
+      "field_id": "options",
+      "label": "Options",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text"
+        }
+      ],
+      "help": "For postgres_fdw: host, port, dbname. Secrets are not taken here.",
+      "tab": "Definition"
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "User mapping passwords",
+      "reason": "A password is a secret: it is refused as a plain option, and a secret-reference path for FDW options is not built yet",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "notes": "Probed live on YugabyteDB 2025.2.2.2 with postgres_fdw (2026-11-01)."
+}

@@ -21,9 +21,9 @@ from ..distributed_sql import (
     sql_administration,
 )
 from . import (
-    catalog_objects, databases, ddl_mode, extensions, indexes as index_sql,
-    objects, policies, routines, sequences, tables as tables_sql,
-    tablespaces, types, views,
+    catalog_objects, databases, ddl_mode, extensions, foreign_objects,
+    indexes as index_sql, objects, policies, routines, sequences,
+    tables as tables_sql, tablespaces, types, views,
 )
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
@@ -54,6 +54,7 @@ PROFILE = PilotProfile(
         'privilege', 'row-policy', 'changefeed', 'snapshot', 'schedule',
         'xcluster-replication', 'session', 'event-trigger', 'rule',
         'collation', 'publication', 'aggregate', 'operator', 'cast',
+        'foreign-server', 'user-mapping', 'foreign-table',
     ),
     ('ysqlsh', 'yb-admin', 'backup-restore'),
     parameter_shape='object-or-array',
@@ -116,6 +117,11 @@ _YSQL_SUPPORTED.update({
     'aggregate': frozenset({'inspect', 'create', 'alter', 'drop'}),
     'operator': frozenset({'inspect', 'create', 'alter', 'drop'}),
     'cast': frozenset({'inspect', 'create', 'alter', 'drop'}),
+    # postgres_fdw servers, user mappings and foreign tables
+    # (foreign_objects).
+    'foreign-server': frozenset({'inspect', 'create', 'alter', 'drop'}),
+    'user-mapping': frozenset({'inspect', 'create', 'alter', 'drop'}),
+    'foreign-table': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # Row-level security policies (providers/yugabytedb/policies).
     'row-policy': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # Partition bounds are part of CREATE TABLE in YSQL. Until the table form
@@ -159,17 +165,22 @@ class YugabyteDBAdministration(RelationalAdministration):
                      'procedure', 'database', 'row-policy',
                      'tablespace', 'extension', 'event-trigger', 'rule',
                      'collation', 'publication', 'aggregate', 'operator',
-                     'cast'} and
+                     'cast', 'foreign-server', 'user-mapping',
+                     'foreign-table'} and
             operation in {'create', 'alter'}) or (
             # Dropped by signature (overloads share a name) or by table.
             operation == 'drop' and kind in {
                 'function', 'procedure', 'row-policy', 'rule', 'aggregate',
-                'operator', 'cast'})
+                'operator', 'cast', 'foreign-server', 'user-mapping'})
 
     def _native_compile(self, request):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if request['resource_kind'] in foreign_objects.BUILDERS:
+            return {'statements': foreign_objects.compile_request(
+                self, request['resource_kind'], request['operation_id'],
+                draft, request.get('target_resource'))}
         if request['resource_kind'] in catalog_objects.BUILDERS:
             return {'statements': catalog_objects.compile_request(
                 self, request['resource_kind'], request['operation_id'],
@@ -325,6 +336,9 @@ class YugabyteDBAdministration(RelationalAdministration):
         if kind in catalog_objects.BUILDERS and operation in {
                 'create', 'alter'}:
             return catalog_objects.form(self._field, kind, operation)
+        if kind in foreign_objects.BUILDERS and operation in {
+                'create', 'alter'}:
+            return foreign_objects.form(self._field, kind, operation)
         if kind == 'tablespace' and operation in {'create', 'alter'}:
             return tablespaces.form(self._field, operation)
         return super()._form(kind, operation)
@@ -459,14 +473,18 @@ class YugabyteDBAdministration(RelationalAdministration):
             name = draft.get('name')
             if kind in {
                     'database', 'schema', 'role', 'user', 'tablespace',
-                    'extension', 'event-trigger', 'publication'}:
+                    'extension', 'event-trigger', 'publication',
+                    'foreign-server'}:
                 path = [name]
+            elif kind == 'user-mapping':
+                path = [draft.get('server'), draft.get('user')]
             elif kind == 'rule':
                 table = draft.get('table')
                 table = (table if isinstance(table, list)
                          else str(table or '').split('.'))
                 path = [*table, name]
-            elif kind in {'collation', 'aggregate', 'operator'}:
+            elif kind in {'collation', 'aggregate', 'operator',
+                          'foreign-table'}:
                 path = [draft.get('parent') or 'public', name]
             else:
                 parent = draft.get('parent') or route.get('database')
@@ -775,6 +793,8 @@ def _extras(cursor, _request, generation):
             'update_versions': [str(item) for item in targets or ()],
         }))
     values.extend(catalog_objects.resources(
+        cursor, generation, resource, optional_rows, excluded))
+    values.extend(foreign_objects.resources(
         cursor, generation, resource, optional_rows, excluded))
     for schema, parent, child, bound in optional_rows(
         cursor,
@@ -1127,6 +1147,11 @@ def _catalog(connection, request):
         for item in _annotate_catalog(connection, postgresql_catalog(
             connection, request, 'YugabyteDB', _extras
         ))
+        # information_schema lists a foreign table as a table; it is the
+        # foreign-table kind (foreign_objects) instead.
+        if not (item['resource_kind'] == 'table' and str(
+            (item.get('native') or {}).get('table_type', '')).upper() ==
+            'FOREIGN')
     }
     route = request.get('route') or request.get('_provider_route') or {}
     ddl_mode.remember(route, ddl_mode.mode(connection.cursor()))

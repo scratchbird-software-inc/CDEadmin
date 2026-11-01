@@ -3,6 +3,7 @@
   "engine": "yugabytedb",
   "family": "table",
   "resource_kinds": [
+    "foreign-table",
     "table"
   ],
   "status": "complete",
@@ -38,9 +39,34 @@
       "concept": "Deferrable unique constraints",
       "reason": "Refused by YugabyteDB 2025.2.2.2 (\"not supported yet\", live); deferrable foreign keys run",
       "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Foreign table column options and column type changes",
+      "reason": "Column options (column_name) and ALTER COLUMN on a foreign table run (live) but have no editor yet",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "IMPORT FOREIGN SCHEMA",
+      "reason": "Needs a reachable foreign server; not qualified on the demo",
+      "tracking": "postgresql-wire-parity"
     }
   ],
   "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "tab": "General",
+      "control": "select",
+      "ui_only": true,
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "foreign",
+          "label": "Foreign table"
+        }
+      ],
+      "help": "Set for a foreign table (rows live on a foreign server); a table leaves it empty."
+    },
     {
       "field_id": "name",
       "label": "Name",
@@ -74,7 +100,7 @@
       "tab": "Columns",
       "control": "grid",
       "required": true,
-      "help": "YSQL has no hidden engine columns; every column is listed.",
+      "help": "YSQL has no hidden engine columns; every column is listed. A foreign table column takes no primary key, unique or identity.",
       "columns": [
         {
           "field_id": "name",
@@ -227,7 +253,11 @@
             }
           ]
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "unique_constraints",
@@ -255,7 +285,11 @@
             "columns"
           ]
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "foreign_keys",
@@ -366,7 +400,11 @@
           "control": "boolean",
           "default": false
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "check_constraints",
@@ -391,7 +429,11 @@
           "language": "sql",
           "required": true
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "tablespace",
@@ -400,7 +442,11 @@
       "control": "reference",
       "reference_kind": "tablespace",
       "reference_value": "display_name",
-      "help": "Replica placement comes from the tablespace; changing it runs ALTER TABLE ... SET TABLESPACE."
+      "help": "Replica placement comes from the tablespace; changing it runs ALTER TABLE ... SET TABLESPACE.",
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "split_into",
@@ -410,7 +456,11 @@
       "control": "number",
       "min": 1,
       "editable_after_create": false,
-      "help": "SPLIT INTO n TABLETS (hash-sharded tables)."
+      "help": "SPLIT INTO n TABLETS (hash-sharded tables).",
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "split_at",
@@ -428,7 +478,11 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "colocation",
@@ -437,7 +491,11 @@
       "group": "Sharding",
       "control": "boolean",
       "editable_after_create": false,
-      "help": "In a colocated database: off gives the table its own tablets."
+      "help": "In a colocated database: off gives the table its own tablets.",
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "partition_by",
@@ -463,7 +521,11 @@
           "value": "HASH",
           "label": "Hash"
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "partition_key",
@@ -472,7 +534,11 @@
       "group": "Partitioning",
       "control": "text",
       "editable_after_create": false,
-      "help": "Columns or expressions, e.g. created_at."
+      "help": "Columns or expressions, e.g. created_at.",
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "row_level_security",
@@ -481,7 +547,11 @@
       "control": "boolean",
       "default": false,
       "help": "ENABLE ROW LEVEL SECURITY: the table's row security policies apply.",
-      "group": "Row-level security"
+      "group": "Row-level security",
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "force_row_level_security",
@@ -490,7 +560,50 @@
       "control": "boolean",
       "default": false,
       "help": "FORCE ROW LEVEL SECURITY",
-      "group": "Row-level security"
+      "group": "Row-level security",
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
+    },
+    {
+      "field_id": "server",
+      "label": "Foreign server",
+      "tab": "Options",
+      "control": "reference",
+      "required": true,
+      "editable_after_create": false,
+      "reference_kind": "foreign-server",
+      "reference_value": "display_name",
+      "visible_when": {
+        "field": "variant",
+        "equals": "foreign"
+      },
+      "help": "CREATE FOREIGN TABLE ... SERVER. Cannot change in place."
+    },
+    {
+      "field_id": "options",
+      "label": "Options",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text"
+        }
+      ],
+      "help": "For postgres_fdw: schema_name and table_name of the remote table. Afterwards ALTER FOREIGN TABLE ... OPTIONS (ADD / SET / DROP).",
+      "tab": "Options",
+      "visible_when": {
+        "field": "variant",
+        "equals": "foreign"
+      }
     }
   ],
   "notes": "Started from the CockroachDB table form (same field ids); providers/yugabytedb/tables.py. The record reads pg_attribute (format_type, identity, generated, collation, comments), pg_constraint (with deferrability) and the primary key index definition for its HASH shape. Changed cells on existing columns arrive as alter_columns. Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30).",

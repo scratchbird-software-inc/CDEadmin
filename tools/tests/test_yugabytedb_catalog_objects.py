@@ -236,3 +236,70 @@ def test_cast():
         sql('cast', 'alter', {'context': 'IMPLICIT'}, existing)
     assert sql('cast', 'drop', {'confirmation': 'x'}, existing) == [
         'DROP CAST (mood AS integer)']
+
+
+def test_foreign_server_and_user_mapping():
+    assert sql('foreign-server', 'create', {
+        'name': 's', 'wrapper': 'postgres_fdw', 'version': '1',
+        'options': [{'name': 'host', 'value': "h'x"},
+                    {'name': 'port', 'value': '5433'}], 'comment': 'c'}) == [
+        "CREATE SERVER \"s\" VERSION '1' FOREIGN DATA WRAPPER "
+        "\"postgres_fdw\" OPTIONS (host 'h''x', port '5433')",
+        "COMMENT ON SERVER \"s\" IS 'c'"]
+    existing = target('foreign-server', ['s'], {
+        'wrapper': 'postgres_fdw', 'option_values': {
+            'host': 'h', 'port': '5433', 'dbname': 'd'}})
+    assert sql('foreign-server', 'alter', {
+        'options': [{'name': 'host', 'value': 'h'},
+                    {'name': 'port', 'value': '5434'},
+                    {'name': 'fetch_size', 'value': '100'}],
+        'name': 's2'}, existing) == [
+        "ALTER SERVER \"s\" OPTIONS (DROP dbname, SET port '5434', ADD "
+        "fetch_size '100')",
+        'ALTER SERVER "s" RENAME TO "s2"']
+    assert sql('foreign-server', 'drop', {'cascade': True}, existing) == [
+        'DROP SERVER "s" CASCADE']
+    # Secrets never travel as plain options.
+    with pytest.raises(RelationalClientError, match='secret'):
+        sql('user-mapping', 'create', {
+            'user': 'u', 'server': 's',
+            'options': [{'name': 'password', 'value': 'x'}]})
+    assert sql('user-mapping', 'create', {
+        'user': 'PUBLIC', 'server': 's'}) == [
+        'CREATE USER MAPPING FOR PUBLIC SERVER "s"']
+    mapping = target('user-mapping', ['s', 'u'], {
+        'option_values': {'user': 'remote'}})
+    assert sql('user-mapping', 'alter', {
+        'options': [{'name': 'user', 'value': 'remote2'}]}, mapping) == [
+        "ALTER USER MAPPING FOR \"u\" SERVER \"s\" OPTIONS (SET user "
+        "'remote2')"]
+    assert sql('user-mapping', 'drop', {'confirmation': 'x'}, mapping) == [
+        'DROP USER MAPPING FOR "u" SERVER "s"']
+
+
+def test_foreign_table():
+    assert sql('foreign-table', 'create', {
+        'name': 'ft', 'parent': 'public', 'server': 's',
+        'columns': [{'name': 'id', 'type': 'int', 'nullable': False},
+                    {'name': 'v', 'type': 'text'}],
+        'options': [{'name': 'table_name', 'value': 'src'}]}) == [
+        'CREATE FOREIGN TABLE "public"."ft" ("id" int NOT NULL, "v" text) '
+        "SERVER \"s\" OPTIONS (table_name 'src')"]
+    with pytest.raises(RelationalClientError, match='primary key'):
+        sql('foreign-table', 'create', {
+            'name': 'ft', 'server': 's', 'columns': [
+                {'name': 'id', 'type': 'int', 'primary_key': True}]})
+    existing = target('foreign-table', ['public', 'ft'], {
+        'server': 's', 'option_values': {'table_name': 'src'}})
+    assert sql('foreign-table', 'alter', {
+        'add_columns': [{'name': 'w', 'type': 'int'}],
+        'options': [{'name': 'table_name', 'value': 'src2'}],
+        'name': 'ft2'}, existing) == [
+        'ALTER FOREIGN TABLE "public"."ft" ADD COLUMN "w" int',
+        "ALTER FOREIGN TABLE \"public\".\"ft\" OPTIONS (SET table_name "
+        "'src2')",
+        'ALTER FOREIGN TABLE "public"."ft" RENAME TO "ft2"']
+    with pytest.raises(RelationalClientError, match='another server'):
+        sql('foreign-table', 'alter', {'server': 'other'}, existing)
+    assert sql('foreign-table', 'drop', {'confirmation': 'x'}, existing) == [
+        'DROP FOREIGN TABLE "public"."ft"']

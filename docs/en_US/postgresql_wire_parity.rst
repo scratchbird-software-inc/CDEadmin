@@ -1232,6 +1232,27 @@ Later on 2026-11-01, aggregates, operators and casts, each probed live first
 
 The foreign-data-wrapper chain and languages remain.
 
+Later again on 2026-11-01, the postgres_fdw chain (contract 88 -> 97 tasks
+from a live qualification):
+
+-  Foreign servers: wrapper, type, version, options (``ADD``/``SET``/``DROP``
+   afterwards), owner, comment and rename.
+-  User mappings for a role or ``PUBLIC``, with options. A password is a
+   secret: it is refused as a plain option, and a secret-reference path for
+   FDW options is not built yet, so a mapping that needs one cannot be
+   completed from the editor.
+-  Foreign tables are the foreign variant of the table form: columns (no
+   primary key, unique or identity), server and options; afterwards add, drop
+   and rename columns, options, comment, rename and ``SET SCHEMA``. The
+   shared listing showed a foreign table as an ordinary table; it is now only
+   the foreign-table kind. Column options, column type changes and ``IMPORT
+   FOREIGN SCHEMA`` (which needs a reachable server) are not offered yet.
+
+Languages are not offered: ``ALTER LANGUAGE`` is refused by YugabyteDB
+2025.2.2.2 ("not supported yet"), no procedural language beyond ``plpgsql``
+and ``sql`` is available to install, and ``CREATE LANGUAGE`` could only alias
+an existing handler.
+
 Plan
 ----
 
