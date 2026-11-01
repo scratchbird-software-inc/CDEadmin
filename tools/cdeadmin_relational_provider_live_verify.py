@@ -888,7 +888,10 @@ def _relational_editor_evidence(provider, request, engine):
                     qualification['display_name']
                     if engine == 'immudb' else qualified_table
                 ),
-                'columns': [value_column],
+                # The PostgreSQL-family index form sends key rows.
+                **({'keys': [{'expression': value_column}]}
+                   if engine in {'cockroachdb', 'yugabytedb'} else
+                   {'columns': [value_column]}),
                 'unique': False,
             },
         ):
@@ -925,6 +928,8 @@ def _relational_editor_evidence(provider, request, engine):
                 if provider.client.supports_admin_operation('index', 'alter'):
                     attempt(
                         'index.alter', 'index', 'alter', {
+                            'comment': 'cde editor index',
+                        } if engine in {'cockroachdb', 'yugabytedb'} else {
                             'active': False,
                         }, index,
                     )
@@ -1862,7 +1867,9 @@ def _relational_editor_evidence(provider, request, engine):
         if attempt(
             'sequence.create', 'sequence', 'create', {
                 'name': 'cde_editor_sequence', 'parent': 'public',
-                'start': 1, 'increment': 1, 'cycle': False,
+                'start': 1, 'increment': 1,
+                # CockroachDB sequences have no CYCLE option.
+                **({'cycle': False} if engine == 'yugabytedb' else {}),
             },
         ):
             sequence = inspect_created(
@@ -1892,24 +1899,40 @@ def _relational_editor_evidence(provider, request, engine):
                         }, sequence,
                     )
 
+        # The routine form sends the language and the body separately.
         routine_drafts = (
-            ('function', 'INTEGER', "LANGUAGE SQL AS 'SELECT 1'"),
-            ('procedure', '', "LANGUAGE SQL AS 'SELECT 1'"),
+            ('function', {'returns': 'INTEGER'}),
+            ('procedure', {}),
         )
-        for kind, returns, body in routine_drafts:
+        for kind, returns in routine_drafts:
             name = f'cde_editor_{kind}'
             if attempt(
                 f'{kind}.create', kind, 'create', {
                     'name': name, 'parent': 'public', 'parameters': [],
-                    'return_parameters': [], 'returns': returns,
-                    'body': body,
+                    **returns, 'language': 'SQL', 'body': 'SELECT 1',
                 },
             ):
-                routine = inspect_created(f'{kind}.inspect', kind, name)
+                # A routine resource is named by its signature.
+                routine = inspect_created(
+                    f'{kind}.inspect', kind, f'{name}()')
+                if routine is not None and (
+                        provider.client.supports_admin_operation(
+                            kind, 'alter')):
+                    # CockroachDB's routine form has no comment; it
+                    # replaces the body instead.
+                    attempt(
+                        f'{kind}.alter', kind, 'alter', {
+                            'comment': f'cde editor {kind}',
+                        } if engine == 'yugabytedb' else {
+                            'language': 'SQL', 'body': 'SELECT 2',
+                        }, routine,
+                    )
                 if routine is not None:
+                    # CockroachDB's routine drop takes no CASCADE.
                     attempt(
                         f'{kind}.drop', kind, 'drop', {
-                            'cascade': False,
+                            **({'cascade': False}
+                               if engine == 'yugabytedb' else {}),
                             'confirmation': f'drop-live-editor-{kind}',
                         }, routine,
                     )
@@ -1919,29 +1942,32 @@ def _relational_editor_evidence(provider, request, engine):
         if attempt(
             'trigger.helper.create', 'function', 'create', {
                 'name': helper_name, 'parent': 'public', 'parameters': [],
-                'return_parameters': [], 'returns': 'TRIGGER',
-                'body': (
-                    "LANGUAGE PLPGSQL AS 'BEGIN RETURN NEW; END'"
-                ),
+                'returns': 'TRIGGER', 'language': 'PLPGSQL',
+                'body': 'BEGIN RETURN NEW; END',
             },
         ):
             helper = inspect_created(
-                'trigger.helper.inspect', 'function', helper_name
+                'trigger.helper.inspect', 'function', f'{helper_name}()'
             )
         if helper is not None and attempt(
             'trigger.create', 'trigger', 'create', {
-                'name': 'cde_editor_trigger', 'parent': 'public',
-                'table': qualified_table, 'timing': 'AFTER',
-                'events': ['INSERT'], 'active': True, 'position': 0,
-                'body': (
-                    'FOR EACH ROW EXECUTE FUNCTION '
-                    'public.cde_editor_trigger_function()'
-                ),
+                'name': 'cde_editor_trigger', 'table': qualified_table,
+                'timing': 'AFTER', 'events': ['INSERT'],
+                **({'level': 'ROW'} if engine == 'yugabytedb' else {}),
+                'function': 'public.cde_editor_trigger_function()',
             },
         ):
             trigger = inspect_created(
                 'trigger.inspect', 'trigger', 'cde_editor_trigger'
             )
+            if trigger is not None and (
+                    provider.client.supports_admin_operation(
+                        'trigger', 'alter')):
+                attempt(
+                    'trigger.alter', 'trigger', 'alter', {
+                        'comment': 'cde editor trigger',
+                    }, trigger,
+                )
             if trigger is not None:
                 attempt(
                     'trigger.drop', 'trigger', 'drop', {
@@ -1952,10 +1978,36 @@ def _relational_editor_evidence(provider, request, engine):
         if helper is not None:
             attempt(
                 'trigger.helper.drop', 'function', 'drop', {
-                    'cascade': False,
+                    **({'cascade': False} if engine == 'yugabytedb' else {}),
                     'confirmation': 'drop-live-editor-trigger-helper',
                 }, helper,
             )
+
+        if provider.client.supports_admin_operation(
+                'row-policy', 'create') and attempt(
+            'row-policy.create', 'row-policy', 'create', {
+                'name': 'cde_editor_policy', 'table': qualified_table,
+                'policy_type': 'PERMISSIVE', 'command': 'ALL', 'roles': [],
+                'using': f'{id_column} > 0', 'with_check': f'{id_column} > 0',
+                **({'comment': ''} if engine == 'yugabytedb' else {}),
+            },
+        ):
+            policy = inspect_created(
+                'row-policy.inspect', 'row-policy', 'cde_editor_policy'
+            )
+            if policy is not None:
+                attempt(
+                    'row-policy.alter', 'row-policy', 'alter', {
+                        'using': f'{id_column} >= 0',
+                        **({'comment': 'cde editor policy'}
+                           if engine == 'yugabytedb' else {}),
+                    }, policy,
+                )
+                attempt(
+                    'row-policy.drop', 'row-policy', 'drop', {
+                        'confirmation': 'cde_editor_policy',
+                    }, policy,
+                )
 
         role = None
         if attempt(
@@ -1966,9 +2018,7 @@ def _relational_editor_evidence(provider, request, engine):
             )
         if role is not None:
             attempt(
-                'role.alter', 'role', 'alter', {
-                    'properties': {'with': 'LOGIN'},
-                }, role,
+                'role.alter', 'role', 'alter', {'login': True}, role,
             )
             privilege_target = next((
                 item for item in provider.list_resources(request)
@@ -1990,9 +2040,9 @@ def _relational_editor_evidence(provider, request, engine):
                     } | {'confirmation': 'revoke-live-editor-grant'},
                     privilege_target,
                 )
+            # DROP ROLE has no CASCADE.
             attempt(
                 'role.drop', 'role', 'drop', {
-                    'cascade': False,
                     'confirmation': 'drop-live-editor-role',
                 }, role,
             )
@@ -2001,8 +2051,7 @@ def _relational_editor_evidence(provider, request, engine):
         if attempt(
             'user.create', 'user', 'create', {
                 'name': 'cde_editor_user',
-                'password': secrets.token_urlsafe(24), 'active': True,
-                'administrator': False,
+                'password': secrets.token_urlsafe(24), 'login': True,
             },
         ):
             user = inspect_created(
@@ -2011,18 +2060,20 @@ def _relational_editor_evidence(provider, request, engine):
         if user is not None:
             attempt(
                 'user.alter', 'user', 'alter', {
-                    'password': secrets.token_urlsafe(24), 'active': False,
-                    'administrator': False,
+                    'password': secrets.token_urlsafe(24),
+                    'valid_until': '2030-01-01',
                 }, user,
             )
             attempt(
                 'user.drop', 'user', 'drop', {
-                    'cascade': False,
                     'confirmation': 'drop-live-editor-user',
                 }, user,
             )
 
-    if engine == 'yugabytedb' and qualification is not None:
+    # CockroachDB shares the materialized-view and type editors; domains,
+    # extensions and placement tablespaces are YugabyteDB's.
+    if engine in {'cockroachdb', 'yugabytedb'} and (
+            qualification is not None):
         if attempt(
             'materialized-view.create', 'materialized-view', 'create', {
                 'name': 'cde_editor_materialized_view', 'parent': 'public',
@@ -2034,6 +2085,19 @@ def _relational_editor_evidence(provider, request, engine):
                 'materialized-view.inspect', 'materialized-view',
                 'cde_editor_materialized_view',
             )
+            # CockroachDB cannot change a materialized view's query in
+            # place; its editor alters the name.
+            if materialized is not None and attempt(
+                'materialized-view.alter', 'materialized-view', 'alter', {
+                    'comment': 'cde editor materialized view',
+                } if engine == 'yugabytedb' else {
+                    'name': 'cde_editor_materialized_view_altered',
+                }, materialized,
+            ) and engine == 'cockroachdb':
+                materialized = inspect_created(
+                    'materialized-view.inspect-altered', 'materialized-view',
+                    'cde_editor_materialized_view_altered',
+                )
             if materialized is not None and attempt(
                 'materialized-view.rename', 'materialized-view', 'rename', {
                     'new_name': 'cde_editor_materialized_view_renamed',
@@ -2052,32 +2116,42 @@ def _relational_editor_evidence(provider, request, engine):
                     }, materialized,
                 )
 
-        if attempt(
-            'domain.create', 'domain', 'create', {
-                'name': 'cde_editor_domain', 'parent': 'public',
-                'data_type': 'INTEGER', 'default': '1',
-                'not_null': False, 'check': 'VALUE > 0',
-            },
-        ):
-            domain = inspect_created(
-                'domain.inspect', 'domain', 'cde_editor_domain'
-            )
-            if domain is not None and attempt(
-                'domain.rename', 'domain', 'rename', {
-                    'new_name': 'cde_editor_domain_renamed',
-                }, domain,
+        if engine == 'yugabytedb':
+            if attempt(
+                'domain.create', 'domain', 'create', {
+                    'name': 'cde_editor_domain', 'parent': 'public',
+                    'base_type': 'INTEGER', 'default': '1',
+                    'not_null': False, 'checks': [{
+                        'name': 'cde_editor_domain_positive',
+                        'expression': 'VALUE > 0',
+                    }],
+                },
             ):
                 domain = inspect_created(
-                    'domain.inspect-renamed', 'domain',
-                    'cde_editor_domain_renamed',
+                    'domain.inspect', 'domain', 'cde_editor_domain'
                 )
-            if domain is not None:
-                attempt(
-                    'domain.drop', 'domain', 'drop', {
-                        'cascade': False,
-                        'confirmation': 'drop-live-editor-domain',
+                if domain is not None:
+                    attempt(
+                        'domain.alter', 'domain', 'alter', {
+                            'default': '2', 'comment': 'cde editor domain',
+                        }, domain,
+                    )
+                if domain is not None and attempt(
+                    'domain.rename', 'domain', 'rename', {
+                        'new_name': 'cde_editor_domain_renamed',
                     }, domain,
-                )
+                ):
+                    domain = inspect_created(
+                        'domain.inspect-renamed', 'domain',
+                        'cde_editor_domain_renamed',
+                    )
+                if domain is not None:
+                    attempt(
+                        'domain.drop', 'domain', 'drop', {
+                            'cascade': False,
+                            'confirmation': 'drop-live-editor-domain',
+                        }, domain,
+                    )
 
         if attempt(
             'type.create', 'type', 'create', {
@@ -2089,7 +2163,15 @@ def _relational_editor_evidence(provider, request, engine):
             user_type = inspect_created(
                 'type.inspect', 'type', 'cde_editor_type'
             )
-            if user_type is not None and attempt(
+            if user_type is not None:
+                attempt(
+                    'type.alter', 'type', 'alter', {
+                        'enum_values': ['one', 'two', 'three'],
+                        'rename_values': [], 'comment': 'cde editor type',
+                    }, user_type,
+                )
+            if user_type is not None and provider.client.supports_admin_operation(
+                    'type', 'rename') and attempt(
                 'type.rename', 'type', 'rename', {
                     'new_name': 'cde_editor_type_renamed',
                 }, user_type,
@@ -2106,60 +2188,72 @@ def _relational_editor_evidence(provider, request, engine):
                     }, user_type,
                 )
 
-        if attempt(
-            'extension.create', 'extension', 'create', {
-                'name': 'pgcrypto', 'schema': '', 'version': '',
-                'cascade': False,
-            },
-        ):
-            extension = inspect_created(
-                'extension.inspect-created', 'extension', 'pgcrypto'
-            )
-            if extension is not None:
-                attempt(
-                    'extension.drop', 'extension', 'drop', {
-                        'cascade': False,
-                        'confirmation': 'drop-live-editor-extension',
-                    }, extension,
+        if engine == 'yugabytedb':
+            if attempt(
+                'extension.create', 'extension', 'create', {
+                    'name': 'pgcrypto', 'schema': '', 'version': '',
+                    'cascade': False,
+                },
+            ):
+                extension = inspect_created(
+                    'extension.inspect-created', 'extension', 'pgcrypto'
                 )
+                if extension is not None:
+                    attempt(
+                        'extension.alter', 'extension', 'alter', {
+                            'comment': 'cde editor extension',
+                        }, extension,
+                    )
+                    attempt(
+                        'extension.drop', 'extension', 'drop', {
+                            'cascade': False,
+                            'confirmation': 'drop-live-editor-extension',
+                        }, extension,
+                    )
 
-        placement = {
-            'num_replicas': 1,
-            'placement_blocks': [{
-                'cloud': 'cloud1', 'region': 'datacenter1',
-                'zone': 'rack1', 'min_num_replicas': 1,
-            }],
-        }
-        if attempt(
-            'tablespace.create', 'tablespace', 'create', {
-                'name': 'cde_editor_tablespace', **placement,
-            },
-        ):
-            tablespace = inspect_created(
-                'tablespace.inspect', 'tablespace',
-                'cde_editor_tablespace',
-            )
-            if (
-                tablespace is not None and
-                provider.client.supports_admin_operation(
-                    'tablespace', 'rename'
-                ) and attempt(
-                    'tablespace.rename', 'tablespace', 'rename', {
-                        'new_name': 'cde_editor_tablespace_renamed',
-                    }, tablespace,
-                )
+            placement = {
+                'num_replicas': 1,
+                'placement_blocks': [{
+                    'cloud': 'cloud1', 'region': 'datacenter1',
+                    'zone': 'rack1', 'min_num_replicas': 1,
+                }],
+            }
+            if attempt(
+                'tablespace.create', 'tablespace', 'create', {
+                    'name': 'cde_editor_tablespace', **placement,
+                },
             ):
                 tablespace = inspect_created(
-                    'tablespace.inspect-renamed', 'tablespace',
-                    'cde_editor_tablespace_renamed',
+                    'tablespace.inspect', 'tablespace',
+                    'cde_editor_tablespace',
                 )
-            if tablespace is not None:
-                attempt(
-                    'tablespace.drop', 'tablespace', 'drop', {
-                        'cascade': False,
-                        'confirmation': 'drop-live-editor-tablespace',
-                    }, tablespace,
-                )
+                if tablespace is not None:
+                    attempt(
+                        'tablespace.alter', 'tablespace', 'alter', {
+                            'comment': 'cde editor tablespace',
+                        }, tablespace,
+                    )
+                if (
+                    tablespace is not None and
+                    provider.client.supports_admin_operation(
+                        'tablespace', 'rename'
+                    ) and attempt(
+                        'tablespace.rename', 'tablespace', 'rename', {
+                            'new_name': 'cde_editor_tablespace_renamed',
+                        }, tablespace,
+                    )
+                ):
+                    tablespace = inspect_created(
+                        'tablespace.inspect-renamed', 'tablespace',
+                        'cde_editor_tablespace_renamed',
+                    )
+                if tablespace is not None:
+                    attempt(
+                        'tablespace.drop', 'tablespace', 'drop', {
+                            'cascade': False,
+                            'confirmation': 'drop-live-editor-tablespace',
+                        }, tablespace,
+                    )
 
     if engine == 'firebird' and qualification is not None:
         database_resource = next((
@@ -2843,9 +2937,7 @@ def _relational_editor_evidence(provider, request, engine):
                 )
             elif engine in {'cockroachdb', 'yugabytedb'} and attempt(
                 'database.alter', 'database', 'alter', {
-                    'properties': {
-                        'rename_to': 'cde_editor_database_renamed',
-                    },
+                    'name': 'cde_editor_database_renamed',
                 }, database,
             ):
                 database = inspect_created(
@@ -4281,11 +4373,12 @@ class _FirebirdAccount:
             self.password = ''
 
 
-# Results arrive through the native asynchronous contract. Dolt, TiDB and
-# Vitess joined on 2026-10-10 with the shared MySQL-wire driver.
+# Results arrive through the native asynchronous contract. The MySQL-wire
+# (Dolt, TiDB, Vitess) and PostgreSQL-wire (CockroachDB, YugabyteDB, immudb)
+# drivers joined on 2026-10-10.
 ASYNCHRONOUS_RESULT_ENGINES = frozenset({
     'mysql', 'mariadb', 'duckdb', 'sqlite', 'firebird', 'dolt', 'tidb',
-    'vitess',
+    'vitess', 'cockroachdb', 'yugabytedb', 'immudb',
 })
 
 

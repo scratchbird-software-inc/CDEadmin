@@ -52225,7 +52225,7 @@
         "description": "Sets the host name or IP address(es) to listen to.",
         "item_id": "session_settings.0153",
         "native_name": "listen_addresses",
-        "observed_value": "830e3df0b18b",
+        "observed_value": "69c8d53901e6",
         "source": "SHOW ALL"
       },
       {
@@ -53611,7 +53611,7 @@
         "description": "Sets the directories where Unix-domain sockets will be created.",
         "item_id": "session_settings.0351",
         "native_name": "unix_socket_directories",
-        "observed_value": "/tmp/.yb.830e3df0b18b:5433",
+        "observed_value": "/tmp/.yb.69c8d53901e6:5433",
         "source": "SHOW ALL"
       },
       {
@@ -53996,7 +53996,7 @@
         "description": "If true, DDL operations in YSQL will execute within the active transaction block instead of their separate transactions.",
         "item_id": "session_settings.0406",
         "native_name": "yb_ddl_transaction_block_enabled",
-        "observed_value": "off",
+        "observed_value": "on",
         "source": "SHOW ALL"
       },
       {

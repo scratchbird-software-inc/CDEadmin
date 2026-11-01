@@ -16,7 +16,7 @@
     },
     "runtime_catalogs_exhausted": true,
     "runtime_version": "2025.2.2.2",
-    "sha256": "87b468bf4b3049cbd0dfc14b1e500975f41d3a097f789aeb640189924034c28b"
+    "sha256": "0e032f7a4ee1e1cd0ffd5259ad04426aa97c67953222cfd6d84cfce321fb3da9"
   },
   "contract_id": "yugabytedb.ysql-dialect.2025.2.2.2.v1",
   "coverage": {
@@ -30,7 +30,7 @@
       "session_settings": 582,
       "statements": 127
     },
-    "authoritative_task_count": 55,
+    "authoritative_task_count": 67,
     "authoritative_task_ids": [
       "visual_admin.column.alter",
       "visual_admin.column.create",
@@ -41,25 +41,34 @@
       "visual_admin.database.alter",
       "visual_admin.database.create",
       "visual_admin.database.drop",
+      "visual_admin.domain.alter",
       "visual_admin.domain.create",
       "visual_admin.domain.drop",
       "visual_admin.domain.rename",
+      "visual_admin.extension.alter",
       "visual_admin.extension.create",
       "visual_admin.extension.drop",
+      "visual_admin.function.alter",
       "visual_admin.function.create",
       "visual_admin.function.drop",
+      "visual_admin.index.alter",
       "visual_admin.index.create",
       "visual_admin.index.drop",
+      "visual_admin.materialized-view.alter",
       "visual_admin.materialized-view.create",
       "visual_admin.materialized-view.drop",
       "visual_admin.materialized-view.rename",
       "visual_admin.privilege.grant",
       "visual_admin.privilege.revoke",
+      "visual_admin.procedure.alter",
       "visual_admin.procedure.create",
       "visual_admin.procedure.drop",
       "visual_admin.role.alter",
       "visual_admin.role.create",
       "visual_admin.role.drop",
+      "visual_admin.row-policy.alter",
+      "visual_admin.row-policy.create",
+      "visual_admin.row-policy.drop",
       "visual_admin.schema.alter",
       "visual_admin.schema.create",
       "visual_admin.schema.drop",
@@ -74,10 +83,13 @@
       "visual_admin.table.insert",
       "visual_admin.table.rename",
       "visual_admin.table.update",
+      "visual_admin.tablespace.alter",
       "visual_admin.tablespace.create",
       "visual_admin.tablespace.drop",
+      "visual_admin.trigger.alter",
       "visual_admin.trigger.create",
       "visual_admin.trigger.drop",
+      "visual_admin.type.alter",
       "visual_admin.type.create",
       "visual_admin.type.drop",
       "visual_admin.type.rename",
@@ -88,7 +100,7 @@
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 55,
+    "implemented_task_count": 67,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -71087,7 +71099,7 @@
         "description": "Sets the host name or IP address(es) to listen to.",
         "item_id": "session_settings.0153",
         "native_name": "listen_addresses",
-        "observed_value": "830e3df0b18b",
+        "observed_value": "69c8d53901e6",
         "proof_ids": [
           "yugabytedb-2025.2.2.2-ysql-runtime-catalog"
         ],
@@ -73067,7 +73079,7 @@
         "description": "Sets the directories where Unix-domain sockets will be created.",
         "item_id": "session_settings.0351",
         "native_name": "unix_socket_directories",
-        "observed_value": "/tmp/.yb.830e3df0b18b:5433",
+        "observed_value": "/tmp/.yb.69c8d53901e6:5433",
         "proof_ids": [
           "yugabytedb-2025.2.2.2-ysql-runtime-catalog"
         ],
@@ -73617,7 +73629,7 @@
         "description": "If true, DDL operations in YSQL will execute within the active transaction block instead of their separate transactions.",
         "item_id": "session_settings.0406",
         "native_name": "yb_ddl_transaction_block_enabled",
-        "observed_value": "off",
+        "observed_value": "on",
         "proof_ids": [
           "yugabytedb-2025.2.2.2-ysql-runtime-catalog"
         ],
@@ -76554,7 +76566,7 @@
       "evidence_kind": "catalog",
       "format": "cdeadmin.engine-dialect-inventory.v1",
       "license_id": "PostgreSQL",
-      "sha256": "87b468bf4b3049cbd0dfc14b1e500975f41d3a097f789aeb640189924034c28b"
+      "sha256": "0e032f7a4ee1e1cd0ffd5259ad04426aa97c67953222cfd6d84cfce321fb3da9"
     },
     {
       "artifact": "ysql_dialect_qualification_live.json",
@@ -76563,7 +76575,7 @@
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "e96158c14561fde932de39534c309e0ece7233dffa5b34cc72ef7abf5048e5e6"
+      "sha256": "b8ca039b08b4c544c6cf4be749fb31aa6dedc76407d9ff34436ef0827e5daf99"
     },
     {
       "artifact": "ysql_dialect_qualification_live.json",
@@ -76572,7 +76584,7 @@
       "evidence_kind": "live_execution",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "e96158c14561fde932de39534c309e0ece7233dffa5b34cc72ef7abf5048e5e6"
+      "sha256": "b8ca039b08b4c544c6cf4be749fb31aa6dedc76407d9ff34436ef0827e5daf99"
     },
     {
       "artifact": "__init__.py",
@@ -76723,10 +76735,10 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER DATABASE \"cde_editor_database\" RENAME TO cde_editor_database_renamed",
+      "source": "ALTER DATABASE \"cde_editor_database\" RENAME TO \"cde_editor_database_renamed\"",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER DATABASE \"cde_editor_database\" RENAME TO cde_editor_database_renamed"
+        "ALTER DATABASE \"cde_editor_database\" RENAME TO \"cde_editor_database_renamed\""
       ],
       "task_id": "visual_admin.database.alter"
     },
@@ -76765,10 +76777,25 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE DOMAIN \"public\".\"cde_editor_domain\" AS INTEGER DEFAULT 1 CHECK (VALUE > 0)",
+      "source": "ALTER DOMAIN \"public\".\"cde_editor_domain\" SET DEFAULT 2\n;\nCOMMENT ON DOMAIN \"public\".\"cde_editor_domain\" IS 'cde editor domain'",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE DOMAIN \"public\".\"cde_editor_domain\" AS INTEGER DEFAULT 1 CHECK (VALUE > 0)"
+        "ALTER DOMAIN \"public\".\"cde_editor_domain\" SET DEFAULT 2",
+        "COMMENT ON DOMAIN \"public\".\"cde_editor_domain\" IS 'cde editor domain'"
+      ],
+      "task_id": "visual_admin.domain.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE DOMAIN \"public\".\"cde_editor_domain\" AS INTEGER DEFAULT 1 CONSTRAINT \"cde_editor_domain_positive\" CHECK (VALUE > 0)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE DOMAIN \"public\".\"cde_editor_domain\" AS INTEGER DEFAULT 1 CONSTRAINT \"cde_editor_domain_positive\" CHECK (VALUE > 0)"
       ],
       "task_id": "visual_admin.domain.create"
     },
@@ -76807,6 +76834,20 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
+      "source": "COMMENT ON EXTENSION \"pgcrypto\" IS 'cde editor extension'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON EXTENSION \"pgcrypto\" IS 'cde editor extension'"
+      ],
+      "task_id": "visual_admin.extension.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
       "source": "CREATE EXTENSION \"pgcrypto\"",
       "source_format": "ordered_native_statements",
       "statements": [
@@ -76835,10 +76876,24 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE FUNCTION \"public\".\"cde_editor_trigger_function\" () RETURNS TRIGGER LANGUAGE PLPGSQL AS 'BEGIN RETURN NEW; END'",
+      "source": "COMMENT ON FUNCTION \"public\".\"cde_editor_function\"() IS 'cde editor function'",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE FUNCTION \"public\".\"cde_editor_trigger_function\" () RETURNS TRIGGER LANGUAGE PLPGSQL AS 'BEGIN RETURN NEW; END'"
+        "COMMENT ON FUNCTION \"public\".\"cde_editor_function\"() IS 'cde editor function'"
+      ],
+      "task_id": "visual_admin.function.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE FUNCTION \"public\".\"cde_editor_trigger_function\"() RETURNS TRIGGER VOLATILE CALLED ON NULL INPUT PARALLEL UNSAFE LANGUAGE PLPGSQL SECURITY INVOKER AS $cde$\nBEGIN RETURN NEW; END\n$cde$",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE FUNCTION \"public\".\"cde_editor_trigger_function\"() RETURNS TRIGGER VOLATILE CALLED ON NULL INPUT PARALLEL UNSAFE LANGUAGE PLPGSQL SECURITY INVOKER AS $cde$\nBEGIN RETURN NEW; END\n$cde$"
       ],
       "task_id": "visual_admin.function.create"
     },
@@ -76849,12 +76904,26 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP FUNCTION \"public\".\"cde_editor_trigger_function\"",
+      "source": "DROP FUNCTION \"public\".\"cde_editor_trigger_function\"()",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP FUNCTION \"public\".\"cde_editor_trigger_function\""
+        "DROP FUNCTION \"public\".\"cde_editor_trigger_function\"()"
       ],
       "task_id": "visual_admin.function.drop"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "COMMENT ON INDEX \"public\".\"cde_editor_index\" IS 'cde editor index'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON INDEX \"public\".\"cde_editor_index\" IS 'cde editor index'"
+      ],
+      "task_id": "visual_admin.index.alter"
     },
     {
       "binding_style": "psycopg_percent_s",
@@ -76883,6 +76952,20 @@
         "DROP INDEX \"public\".\"cde_editor_index\""
       ],
       "task_id": "visual_admin.index.drop"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "COMMENT ON MATERIALIZED VIEW \"public\".\"cde_editor_materialized_view\" IS 'cde editor materialized view'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON MATERIALIZED VIEW \"public\".\"cde_editor_materialized_view\" IS 'cde editor materialized view'"
+      ],
+      "task_id": "visual_admin.materialized-view.alter"
     },
     {
       "binding_style": "psycopg_percent_s",
@@ -76961,10 +77044,24 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE PROCEDURE \"public\".\"cde_editor_procedure\" () LANGUAGE SQL AS 'SELECT 1'",
+      "source": "COMMENT ON PROCEDURE \"public\".\"cde_editor_procedure\"() IS 'cde editor procedure'",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE PROCEDURE \"public\".\"cde_editor_procedure\" () LANGUAGE SQL AS 'SELECT 1'"
+        "COMMENT ON PROCEDURE \"public\".\"cde_editor_procedure\"() IS 'cde editor procedure'"
+      ],
+      "task_id": "visual_admin.procedure.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE PROCEDURE \"public\".\"cde_editor_procedure\"() LANGUAGE SQL SECURITY INVOKER AS $cde$\nSELECT 1\n$cde$",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE PROCEDURE \"public\".\"cde_editor_procedure\"() LANGUAGE SQL SECURITY INVOKER AS $cde$\nSELECT 1\n$cde$"
       ],
       "task_id": "visual_admin.procedure.create"
     },
@@ -76975,10 +77072,10 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP PROCEDURE \"public\".\"cde_editor_procedure\"",
+      "source": "DROP PROCEDURE \"public\".\"cde_editor_procedure\"()",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP PROCEDURE \"public\".\"cde_editor_procedure\""
+        "DROP PROCEDURE \"public\".\"cde_editor_procedure\"()"
       ],
       "task_id": "visual_admin.procedure.drop"
     },
@@ -77003,10 +77100,10 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE ROLE \"cde_editor_role\"",
+      "source": "CREATE ROLE \"cde_editor_role\" WITH NOLOGIN NOINHERIT",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE ROLE \"cde_editor_role\""
+        "CREATE ROLE \"cde_editor_role\" WITH NOLOGIN NOINHERIT"
       ],
       "task_id": "visual_admin.role.create"
     },
@@ -77023,6 +77120,49 @@
         "DROP ROLE \"cde_editor_role\""
       ],
       "task_id": "visual_admin.role.drop"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "ALTER POLICY \"cde_editor_policy\" ON \"public\".\"qualification\" USING (id >= 0)\n;\nCOMMENT ON POLICY \"cde_editor_policy\" ON \"public\".\"qualification\" IS 'cde editor policy'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER POLICY \"cde_editor_policy\" ON \"public\".\"qualification\" USING (id >= 0)",
+        "COMMENT ON POLICY \"cde_editor_policy\" ON \"public\".\"qualification\" IS 'cde editor policy'"
+      ],
+      "task_id": "visual_admin.row-policy.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE POLICY \"cde_editor_policy\" ON \"public\".\"qualification\" AS PERMISSIVE FOR ALL USING (id > 0) WITH CHECK (id > 0)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE POLICY \"cde_editor_policy\" ON \"public\".\"qualification\" AS PERMISSIVE FOR ALL USING (id > 0) WITH CHECK (id > 0)"
+      ],
+      "task_id": "visual_admin.row-policy.create"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP POLICY \"cde_editor_policy\" ON \"public\".\"qualification\"",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP POLICY \"cde_editor_policy\" ON \"public\".\"qualification\""
+      ],
+      "task_id": "visual_admin.row-policy.drop"
     },
     {
       "binding_style": "psycopg_percent_s",
@@ -77073,10 +77213,10 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER SEQUENCE \"public\".\"cde_editor_sequence\" RESTART WITH 10 INCREMENT BY 2",
+      "source": "ALTER SEQUENCE \"public\".\"cde_editor_sequence\" INCREMENT 2 RESTART WITH 10",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER SEQUENCE \"public\".\"cde_editor_sequence\" RESTART WITH 10 INCREMENT BY 2"
+        "ALTER SEQUENCE \"public\".\"cde_editor_sequence\" INCREMENT 2 RESTART WITH 10"
       ],
       "task_id": "visual_admin.sequence.alter"
     },
@@ -77087,10 +77227,10 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE SEQUENCE \"public\".\"cde_editor_sequence\" START WITH 1 INCREMENT BY 1",
+      "source": "CREATE SEQUENCE \"public\".\"cde_editor_sequence\" START 1 INCREMENT 1",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE SEQUENCE \"public\".\"cde_editor_sequence\" START WITH 1 INCREMENT BY 1"
+        "CREATE SEQUENCE \"public\".\"cde_editor_sequence\" START 1 INCREMENT 1"
       ],
       "task_id": "visual_admin.sequence.create"
     },
@@ -77129,10 +77269,10 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE \"public\".\"cde_editor_probe\" ADD \"note\" INTEGER",
+      "source": "ALTER TABLE \"public\".\"cde_editor_probe\" ADD COLUMN \"note\" INTEGER",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE \"public\".\"cde_editor_probe\" ADD \"note\" INTEGER"
+        "ALTER TABLE \"public\".\"cde_editor_probe\" ADD COLUMN \"note\" INTEGER"
       ],
       "task_id": "visual_admin.table.alter"
     },
@@ -77237,10 +77377,24 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE TABLESPACE \"cde_editor_tablespace\" WITH (replica_placement='{\"num_replicas\":1,\"placement_blocks\":[{\"cloud\":\"cloud1\",\"min_num_replicas\":1,\"region\":\"datacenter1\",\"zone\":\"rack1\"}]}')",
+      "source": "COMMENT ON TABLESPACE \"cde_editor_tablespace\" IS 'cde editor tablespace'",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE TABLESPACE \"cde_editor_tablespace\" WITH (replica_placement='{\"num_replicas\":1,\"placement_blocks\":[{\"cloud\":\"cloud1\",\"min_num_replicas\":1,\"region\":\"datacenter1\",\"zone\":\"rack1\"}]}')"
+        "COMMENT ON TABLESPACE \"cde_editor_tablespace\" IS 'cde editor tablespace'"
+      ],
+      "task_id": "visual_admin.tablespace.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE TABLESPACE \"cde_editor_tablespace\" WITH (replica_placement='{\"num_replicas\":1,\"placement_blocks\":[{\"cloud\":\"cloud1\",\"region\":\"datacenter1\",\"zone\":\"rack1\",\"min_num_replicas\":1}]}')",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE TABLESPACE \"cde_editor_tablespace\" WITH (replica_placement='{\"num_replicas\":1,\"placement_blocks\":[{\"cloud\":\"cloud1\",\"region\":\"datacenter1\",\"zone\":\"rack1\",\"min_num_replicas\":1}]}')"
       ],
       "task_id": "visual_admin.tablespace.create"
     },
@@ -77265,10 +77419,24 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE TRIGGER \"cde_editor_trigger\" AFTER INSERT ON \"public\".\"qualification\" FOR EACH ROW EXECUTE FUNCTION public.cde_editor_trigger_function()",
+      "source": "COMMENT ON TRIGGER \"cde_editor_trigger\" ON \"public\".\"qualification\" IS 'cde editor trigger'",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE TRIGGER \"cde_editor_trigger\" AFTER INSERT ON \"public\".\"qualification\" FOR EACH ROW EXECUTE FUNCTION public.cde_editor_trigger_function()"
+        "COMMENT ON TRIGGER \"cde_editor_trigger\" ON \"public\".\"qualification\" IS 'cde editor trigger'"
+      ],
+      "task_id": "visual_admin.trigger.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE TRIGGER \"cde_editor_trigger\" AFTER INSERT ON \"public\".\"qualification\" FOR EACH ROW EXECUTE FUNCTION \"public\".\"cde_editor_trigger_function\"()",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE TRIGGER \"cde_editor_trigger\" AFTER INSERT ON \"public\".\"qualification\" FOR EACH ROW EXECUTE FUNCTION \"public\".\"cde_editor_trigger_function\"()"
       ],
       "task_id": "visual_admin.trigger.create"
     },
@@ -77285,6 +77453,21 @@
         "DROP TRIGGER \"cde_editor_trigger\" ON \"public\".\"qualification\""
       ],
       "task_id": "visual_admin.trigger.drop"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "ALTER TYPE \"public\".\"cde_editor_type\" ADD VALUE 'three' AFTER 'two'\n;\nCOMMENT ON TYPE \"public\".\"cde_editor_type\" IS 'cde editor type'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TYPE \"public\".\"cde_editor_type\" ADD VALUE 'three' AFTER 'two'",
+        "COMMENT ON TYPE \"public\".\"cde_editor_type\" IS 'cde editor type'"
+      ],
+      "task_id": "visual_admin.type.alter"
     },
     {
       "binding_style": "psycopg_percent_s",
@@ -77335,10 +77518,10 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER USER \"cde_editor_user\" PASSWORD <redacted> NOSUPERUSER NOLOGIN",
+      "source": "ALTER ROLE \"cde_editor_user\" WITH VALID UNTIL '2030-01-01' PASSWORD <redacted>",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER USER \"cde_editor_user\" PASSWORD <redacted> NOSUPERUSER NOLOGIN"
+        "ALTER ROLE \"cde_editor_user\" WITH VALID UNTIL '2030-01-01' PASSWORD <redacted>"
       ],
       "task_id": "visual_admin.user.alter"
     },
@@ -77349,10 +77532,10 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE USER \"cde_editor_user\" PASSWORD <redacted>",
+      "source": "CREATE USER \"cde_editor_user\" WITH LOGIN NOINHERIT PASSWORD <redacted>",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE USER \"cde_editor_user\" PASSWORD <redacted>"
+        "CREATE USER \"cde_editor_user\" WITH LOGIN NOINHERIT PASSWORD <redacted>"
       ],
       "task_id": "visual_admin.user.create"
     },
@@ -77363,10 +77546,10 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP USER \"cde_editor_user\"",
+      "source": "DROP ROLE \"cde_editor_user\"",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP USER \"cde_editor_user\""
+        "DROP ROLE \"cde_editor_user\""
       ],
       "task_id": "visual_admin.user.drop"
     },
@@ -77377,10 +77560,10 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE OR REPLACE VIEW \"public\".\"cde_editor_view\" AS SELECT id, value + 0 AS value FROM qualification",
+      "source": "CREATE OR REPLACE VIEW \"public\".\"cde_editor_view\" (\"id\", \"value\") AS SELECT id, value + 0 AS value FROM qualification",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE OR REPLACE VIEW \"public\".\"cde_editor_view\" AS SELECT id, value + 0 AS value FROM qualification"
+        "CREATE OR REPLACE VIEW \"public\".\"cde_editor_view\" (\"id\", \"value\") AS SELECT id, value + 0 AS value FROM qualification"
       ],
       "task_id": "visual_admin.view.alter"
     },

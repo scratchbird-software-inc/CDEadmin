@@ -16,7 +16,7 @@
     },
     "runtime_catalogs_exhausted": true,
     "runtime_version": "26.1.3",
-    "sha256": "9cd1b6a130ae998829b3b766218055660a926627a8d94dde2f5ff79c38eae2bf"
+    "sha256": "78c3040af7e44ad75341391c8bf08726fb99457fbcb20c17d8c75b819c7fb832"
   },
   "contract_id": "cockroachdb.dialect.26.1.3.v1",
   "coverage": {
@@ -30,7 +30,7 @@
       "session_settings": 239,
       "statements": 26
     },
-    "authoritative_task_count": 45,
+    "authoritative_task_count": 56,
     "authoritative_task_ids": [
       "visual_admin.column.alter",
       "visual_admin.column.create",
@@ -41,20 +41,28 @@
       "visual_admin.database.alter",
       "visual_admin.database.create",
       "visual_admin.database.drop",
+      "visual_admin.function.alter",
       "visual_admin.function.create",
       "visual_admin.function.drop",
+      "visual_admin.index.alter",
       "visual_admin.index.create",
       "visual_admin.index.drop",
+      "visual_admin.index.scatter",
+      "visual_admin.materialized-view.alter",
       "visual_admin.materialized-view.create",
       "visual_admin.materialized-view.drop",
       "visual_admin.materialized-view.rename",
       "visual_admin.privilege.grant",
       "visual_admin.privilege.revoke",
+      "visual_admin.procedure.alter",
       "visual_admin.procedure.create",
       "visual_admin.procedure.drop",
       "visual_admin.role.alter",
       "visual_admin.role.create",
       "visual_admin.role.drop",
+      "visual_admin.row-policy.alter",
+      "visual_admin.row-policy.create",
+      "visual_admin.row-policy.drop",
       "visual_admin.schema.alter",
       "visual_admin.schema.create",
       "visual_admin.schema.drop",
@@ -71,6 +79,9 @@
       "visual_admin.table.update",
       "visual_admin.trigger.create",
       "visual_admin.trigger.drop",
+      "visual_admin.type.alter",
+      "visual_admin.type.create",
+      "visual_admin.type.drop",
       "visual_admin.user.alter",
       "visual_admin.user.create",
       "visual_admin.user.drop",
@@ -78,7 +89,7 @@
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 45,
+    "implemented_task_count": 56,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -59168,7 +59179,7 @@
       {
         "item_id": "session_settings.0191",
         "native_name": "session_id",
-        "observed_value": "18d3da137f75c0ea0000000000000001",
+        "observed_value": "18e3cb2635ff989e0000000000000001",
         "proof_ids": [
           "cockroachdb-26.1.3-runtime-catalog"
         ],
@@ -59869,25 +59880,25 @@
       "evidence_kind": "catalog",
       "format": "cdeadmin.engine-dialect-inventory.v1",
       "license_id": "PostgreSQL",
-      "sha256": "9cd1b6a130ae998829b3b766218055660a926627a8d94dde2f5ff79c38eae2bf"
+      "sha256": "78c3040af7e44ad75341391c8bf08726fb99457fbcb20c17d8c75b819c7fb832"
     },
     {
-      "artifact": "secure_dialect_live.json",
+      "artifact": "secure_dialect_qualification_live.json",
       "authority": "CockroachDB 26.1.3 secure runtime",
       "evidence_id": "cockroachdb-26.1.3-secure-task-parser-acceptance",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "3510b4077c24d2c384698c6595e82bcbaf976aa2767512a984d8107fc987425a"
+      "sha256": "739a3c97150e0132600dda51c242b20920658f117c526032e59bce413495b17f"
     },
     {
-      "artifact": "secure_dialect_live.json",
+      "artifact": "secure_dialect_qualification_live.json",
       "authority": "CockroachDB 26.1.3 secure runtime",
       "evidence_id": "cockroachdb-26.1.3-secure-task-live-execution",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "3510b4077c24d2c384698c6595e82bcbaf976aa2767512a984d8107fc987425a"
+      "sha256": "739a3c97150e0132600dda51c242b20920658f117c526032e59bce413495b17f"
     },
     {
       "artifact": "full_provider_object_semantic_live.json",
@@ -60056,10 +60067,10 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER DATABASE \"cde_editor_database\" RENAME TO cde_editor_database_renamed",
+      "source": "ALTER DATABASE \"cde_editor_database\" RENAME TO \"cde_editor_database_renamed\"",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER DATABASE \"cde_editor_database\" RENAME TO cde_editor_database_renamed"
+        "ALTER DATABASE \"cde_editor_database\" RENAME TO \"cde_editor_database_renamed\""
       ],
       "task_id": "visual_admin.database.alter"
     },
@@ -60098,10 +60109,24 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE FUNCTION \"public\".\"cde_editor_trigger_function\" () RETURNS TRIGGER LANGUAGE PLPGSQL AS 'BEGIN RETURN NEW; END'",
+      "source": "CREATE OR REPLACE FUNCTION \"public\".\"cde_editor_function\"() RETURNS INT8 VOLATILE CALLED ON NULL INPUT LANGUAGE SQL SECURITY INVOKER AS $cde$\nSELECT 2\n$cde$",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE FUNCTION \"public\".\"cde_editor_trigger_function\" () RETURNS TRIGGER LANGUAGE PLPGSQL AS 'BEGIN RETURN NEW; END'"
+        "CREATE OR REPLACE FUNCTION \"public\".\"cde_editor_function\"() RETURNS INT8 VOLATILE CALLED ON NULL INPUT LANGUAGE SQL SECURITY INVOKER AS $cde$\nSELECT 2\n$cde$"
+      ],
+      "task_id": "visual_admin.function.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE FUNCTION \"public\".\"cde_editor_trigger_function\"() RETURNS TRIGGER VOLATILE CALLED ON NULL INPUT LANGUAGE PLPGSQL SECURITY INVOKER AS $cde$\nBEGIN RETURN NEW; END\n$cde$",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE FUNCTION \"public\".\"cde_editor_trigger_function\"() RETURNS TRIGGER VOLATILE CALLED ON NULL INPUT LANGUAGE PLPGSQL SECURITY INVOKER AS $cde$\nBEGIN RETURN NEW; END\n$cde$"
       ],
       "task_id": "visual_admin.function.create"
     },
@@ -60112,12 +60137,26 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP FUNCTION \"public\".\"cde_editor_trigger_function\"",
+      "source": "DROP FUNCTION \"public\".\"cde_editor_trigger_function\"()",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP FUNCTION \"public\".\"cde_editor_trigger_function\""
+        "DROP FUNCTION \"public\".\"cde_editor_trigger_function\"()"
       ],
       "task_id": "visual_admin.function.drop"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "COMMENT ON INDEX \"public\".\"qualification\"@\"cde_editor_index\" IS 'cde editor index'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON INDEX \"public\".\"qualification\"@\"cde_editor_index\" IS 'cde editor index'"
+      ],
+      "task_id": "visual_admin.index.alter"
     },
     {
       "binding_style": "psycopg_percent_s",
@@ -60154,38 +60193,66 @@
         "cockroachdb-26.1.3-full-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE MATERIALIZED VIEW \"public\".\"item_totals\" AS SELECT count(*) AS total FROM items",
+      "source": "ALTER INDEX \"public\".\"items\"@\"items_value_idx\" SCATTER",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE MATERIALIZED VIEW \"public\".\"item_totals\" AS SELECT count(*) AS total FROM items"
+        "ALTER INDEX \"public\".\"items\"@\"items_value_idx\" SCATTER"
+      ],
+      "task_id": "visual_admin.index.scatter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "ALTER MATERIALIZED VIEW \"public\".\"cde_editor_materialized_view\" RENAME TO \"cde_editor_materialized_view_altered\"",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER MATERIALIZED VIEW \"public\".\"cde_editor_materialized_view\" RENAME TO \"cde_editor_materialized_view_altered\""
+      ],
+      "task_id": "visual_admin.materialized-view.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE MATERIALIZED VIEW \"public\".\"cde_editor_materialized_view\" AS SELECT id, value FROM public.qualification",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE MATERIALIZED VIEW \"public\".\"cde_editor_materialized_view\" AS SELECT id, value FROM public.qualification"
       ],
       "task_id": "visual_admin.materialized-view.create"
     },
     {
       "binding_style": "psycopg_percent_s",
       "proof_ids": [
-        "cockroachdb-26.1.3-full-task-parser-acceptance",
-        "cockroachdb-26.1.3-full-task-live-execution"
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP MATERIALIZED VIEW \"public\".\"item_totals_current\"",
+      "source": "DROP MATERIALIZED VIEW \"public\".\"cde_editor_materialized_view_renamed\"",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP MATERIALIZED VIEW \"public\".\"item_totals_current\""
+        "DROP MATERIALIZED VIEW \"public\".\"cde_editor_materialized_view_renamed\""
       ],
       "task_id": "visual_admin.materialized-view.drop"
     },
     {
       "binding_style": "psycopg_percent_s",
       "proof_ids": [
-        "cockroachdb-26.1.3-full-task-parser-acceptance",
-        "cockroachdb-26.1.3-full-task-live-execution"
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER MATERIALIZED VIEW \"public\".\"item_totals\" RENAME TO \"item_totals_current\"",
+      "source": "ALTER MATERIALIZED VIEW \"public\".\"cde_editor_materialized_view_altered\" RENAME TO \"cde_editor_materialized_view_renamed\"",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER MATERIALIZED VIEW \"public\".\"item_totals\" RENAME TO \"item_totals_current\""
+        "ALTER MATERIALIZED VIEW \"public\".\"cde_editor_materialized_view_altered\" RENAME TO \"cde_editor_materialized_view_renamed\""
       ],
       "task_id": "visual_admin.materialized-view.rename"
     },
@@ -60224,10 +60291,24 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE PROCEDURE \"public\".\"cde_editor_procedure\" () LANGUAGE SQL AS 'SELECT 1'",
+      "source": "CREATE OR REPLACE PROCEDURE \"public\".\"cde_editor_procedure\"() LANGUAGE SQL SECURITY INVOKER AS $cde$\nSELECT 2\n$cde$",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE PROCEDURE \"public\".\"cde_editor_procedure\" () LANGUAGE SQL AS 'SELECT 1'"
+        "CREATE OR REPLACE PROCEDURE \"public\".\"cde_editor_procedure\"() LANGUAGE SQL SECURITY INVOKER AS $cde$\nSELECT 2\n$cde$"
+      ],
+      "task_id": "visual_admin.procedure.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE PROCEDURE \"public\".\"cde_editor_procedure\"() LANGUAGE SQL SECURITY INVOKER AS $cde$\nSELECT 1\n$cde$",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE PROCEDURE \"public\".\"cde_editor_procedure\"() LANGUAGE SQL SECURITY INVOKER AS $cde$\nSELECT 1\n$cde$"
       ],
       "task_id": "visual_admin.procedure.create"
     },
@@ -60238,10 +60319,10 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP PROCEDURE \"public\".\"cde_editor_procedure\"",
+      "source": "DROP PROCEDURE \"public\".\"cde_editor_procedure\"()",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP PROCEDURE \"public\".\"cde_editor_procedure\""
+        "DROP PROCEDURE \"public\".\"cde_editor_procedure\"()"
       ],
       "task_id": "visual_admin.procedure.drop"
     },
@@ -60266,10 +60347,10 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE ROLE \"cde_editor_role\"",
+      "source": "CREATE ROLE \"cde_editor_role\" WITH NOLOGIN",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE ROLE \"cde_editor_role\""
+        "CREATE ROLE \"cde_editor_role\" WITH NOLOGIN"
       ],
       "task_id": "visual_admin.role.create"
     },
@@ -60286,6 +60367,48 @@
         "DROP ROLE \"cde_editor_role\""
       ],
       "task_id": "visual_admin.role.drop"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "ALTER POLICY \"cde_editor_policy\" ON \"public\".\"qualification\" USING (id >= 0)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER POLICY \"cde_editor_policy\" ON \"public\".\"qualification\" USING (id >= 0)"
+      ],
+      "task_id": "visual_admin.row-policy.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE POLICY \"cde_editor_policy\" ON \"public\".\"qualification\" AS PERMISSIVE FOR ALL USING (id > 0) WITH CHECK (id > 0)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE POLICY \"cde_editor_policy\" ON \"public\".\"qualification\" AS PERMISSIVE FOR ALL USING (id > 0) WITH CHECK (id > 0)"
+      ],
+      "task_id": "visual_admin.row-policy.create"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP POLICY \"cde_editor_policy\" ON \"public\".\"qualification\"",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP POLICY \"cde_editor_policy\" ON \"public\".\"qualification\""
+      ],
+      "task_id": "visual_admin.row-policy.drop"
     },
     {
       "binding_style": "psycopg_percent_s",
@@ -60336,10 +60459,10 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER SEQUENCE \"public\".\"cde_editor_sequence\" RESTART WITH 10 INCREMENT BY 2",
+      "source": "ALTER SEQUENCE \"public\".\"cde_editor_sequence\" INCREMENT 2 RESTART WITH 10",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER SEQUENCE \"public\".\"cde_editor_sequence\" RESTART WITH 10 INCREMENT BY 2"
+        "ALTER SEQUENCE \"public\".\"cde_editor_sequence\" INCREMENT 2 RESTART WITH 10"
       ],
       "task_id": "visual_admin.sequence.alter"
     },
@@ -60350,10 +60473,10 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE SEQUENCE \"public\".\"cde_editor_sequence\" START WITH 1 INCREMENT BY 1",
+      "source": "CREATE SEQUENCE \"public\".\"cde_editor_sequence\" START 1 INCREMENT 1",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE SEQUENCE \"public\".\"cde_editor_sequence\" START WITH 1 INCREMENT BY 1"
+        "CREATE SEQUENCE \"public\".\"cde_editor_sequence\" START 1 INCREMENT 1"
       ],
       "task_id": "visual_admin.sequence.create"
     },
@@ -60392,10 +60515,10 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE \"public\".\"cde_editor_probe\" ADD \"note\" INTEGER",
+      "source": "ALTER TABLE \"public\".\"cde_editor_probe\" ADD COLUMN \"note\" INTEGER",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE \"public\".\"cde_editor_probe\" ADD \"note\" INTEGER"
+        "ALTER TABLE \"public\".\"cde_editor_probe\" ADD COLUMN \"note\" INTEGER"
       ],
       "task_id": "visual_admin.table.alter"
     },
@@ -60500,10 +60623,10 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE TRIGGER \"cde_editor_trigger\" AFTER INSERT ON \"public\".\"qualification\" FOR EACH ROW EXECUTE FUNCTION public.cde_editor_trigger_function()",
+      "source": "CREATE TRIGGER \"cde_editor_trigger\" AFTER INSERT ON \"public\".\"qualification\" FOR EACH ROW EXECUTE FUNCTION \"public\".\"cde_editor_trigger_function\"()",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE TRIGGER \"cde_editor_trigger\" AFTER INSERT ON \"public\".\"qualification\" FOR EACH ROW EXECUTE FUNCTION public.cde_editor_trigger_function()"
+        "CREATE TRIGGER \"cde_editor_trigger\" AFTER INSERT ON \"public\".\"qualification\" FOR EACH ROW EXECUTE FUNCTION \"public\".\"cde_editor_trigger_function\"()"
       ],
       "task_id": "visual_admin.trigger.create"
     },
@@ -60528,11 +60651,53 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER USER \"cde_editor_user\" PASSWORD <redacted> NOLOGIN\n;\nREVOKE admin FROM \"cde_editor_user\"",
+      "source": "ALTER TYPE \"public\".\"cde_editor_type\" ADD VALUE 'three' AFTER 'two'\n;\nCOMMENT ON TYPE \"public\".\"cde_editor_type\" IS 'cde editor type'",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER USER \"cde_editor_user\" PASSWORD <redacted> NOLOGIN",
-        "REVOKE admin FROM \"cde_editor_user\""
+        "ALTER TYPE \"public\".\"cde_editor_type\" ADD VALUE 'three' AFTER 'two'",
+        "COMMENT ON TYPE \"public\".\"cde_editor_type\" IS 'cde editor type'"
+      ],
+      "task_id": "visual_admin.type.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE TYPE \"public\".\"cde_editor_type\" AS ENUM ('one', 'two')",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE TYPE \"public\".\"cde_editor_type\" AS ENUM ('one', 'two')"
+      ],
+      "task_id": "visual_admin.type.create"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP TYPE \"public\".\"cde_editor_type\"",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP TYPE \"public\".\"cde_editor_type\""
+      ],
+      "task_id": "visual_admin.type.drop"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "cockroachdb-26.1.3-secure-task-parser-acceptance",
+        "cockroachdb-26.1.3-secure-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "ALTER ROLE \"cde_editor_user\" WITH PASSWORD <redacted> VALID UNTIL '2030-01-01'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER ROLE \"cde_editor_user\" WITH PASSWORD <redacted> VALID UNTIL '2030-01-01'"
       ],
       "task_id": "visual_admin.user.alter"
     },
@@ -60543,10 +60708,10 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE USER \"cde_editor_user\" PASSWORD <redacted>",
+      "source": "CREATE USER \"cde_editor_user\" WITH LOGIN PASSWORD <redacted>",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE USER \"cde_editor_user\" PASSWORD <redacted>"
+        "CREATE USER \"cde_editor_user\" WITH LOGIN PASSWORD <redacted>"
       ],
       "task_id": "visual_admin.user.create"
     },
@@ -60557,10 +60722,10 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP USER \"cde_editor_user\"",
+      "source": "DROP ROLE \"cde_editor_user\"",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP USER \"cde_editor_user\""
+        "DROP ROLE \"cde_editor_user\""
       ],
       "task_id": "visual_admin.user.drop"
     },
@@ -60571,10 +60736,10 @@
         "cockroachdb-26.1.3-secure-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE OR REPLACE VIEW \"public\".\"cde_editor_view\" AS SELECT id, value + 0 AS value FROM qualification",
+      "source": "CREATE OR REPLACE VIEW \"public\".\"cde_editor_view\" (\"id\", \"value\") AS SELECT id, value + 0 AS value FROM qualification",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE OR REPLACE VIEW \"public\".\"cde_editor_view\" AS SELECT id, value + 0 AS value FROM qualification"
+        "CREATE OR REPLACE VIEW \"public\".\"cde_editor_view\" (\"id\", \"value\") AS SELECT id, value + 0 AS value FROM qualification"
       ],
       "task_id": "visual_admin.view.alter"
     },
