@@ -1557,6 +1557,639 @@
           ]
         }
       ]
+    },
+    {
+      "operation_id": "set_value",
+      "resource_kind": "cluster-setting",
+      "title": "Set cluster setting",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true,
+          "help": "Cluster-wide and persistent."
+        }
+      ]
+    },
+    {
+      "operation_id": "reset",
+      "resource_kind": "cluster-setting",
+      "title": "Reset to default",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "grant_system",
+      "resource_kind": "role",
+      "title": "Grant system privileges",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "privileges",
+          "label": "System privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "BACKUP",
+              "label": "BACKUP"
+            },
+            {
+              "value": "CANCELQUERY",
+              "label": "CANCELQUERY"
+            },
+            {
+              "value": "CONTROLJOB",
+              "label": "CONTROLJOB"
+            },
+            {
+              "value": "CREATEDB",
+              "label": "CREATEDB"
+            },
+            {
+              "value": "CREATELOGIN",
+              "label": "CREATELOGIN"
+            },
+            {
+              "value": "CREATEROLE",
+              "label": "CREATEROLE"
+            },
+            {
+              "value": "EXTERNALCONNECTION",
+              "label": "EXTERNALCONNECTION"
+            },
+            {
+              "value": "EXTERNALIOIMPLICITACCESS",
+              "label": "EXTERNALIOIMPLICITACCESS"
+            },
+            {
+              "value": "INSPECT",
+              "label": "INSPECT"
+            },
+            {
+              "value": "MODIFYCLUSTERSETTING",
+              "label": "MODIFYCLUSTERSETTING"
+            },
+            {
+              "value": "MODIFYSQLCLUSTERSETTING",
+              "label": "MODIFYSQLCLUSTERSETTING"
+            },
+            {
+              "value": "NOSQLLOGIN",
+              "label": "NOSQLLOGIN"
+            },
+            {
+              "value": "REPAIRCLUSTER",
+              "label": "REPAIRCLUSTER"
+            },
+            {
+              "value": "REPLICATION",
+              "label": "REPLICATION"
+            },
+            {
+              "value": "RESTORE",
+              "label": "RESTORE"
+            },
+            {
+              "value": "VIEWACTIVITY",
+              "label": "VIEWACTIVITY"
+            },
+            {
+              "value": "VIEWACTIVITYREDACTED",
+              "label": "VIEWACTIVITYREDACTED"
+            },
+            {
+              "value": "VIEWCLUSTERMETADATA",
+              "label": "VIEWCLUSTERMETADATA"
+            },
+            {
+              "value": "VIEWCLUSTERSETTING",
+              "label": "VIEWCLUSTERSETTING"
+            },
+            {
+              "value": "VIEWDEBUG",
+              "label": "VIEWDEBUG"
+            },
+            {
+              "value": "VIEWJOB",
+              "label": "VIEWJOB"
+            },
+            {
+              "value": "VIEWSYSTEMTABLE",
+              "label": "VIEWSYSTEMTABLE"
+            }
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "revoke_system",
+      "resource_kind": "role",
+      "title": "Revoke system privileges",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "privileges",
+          "label": "System privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "BACKUP",
+              "label": "BACKUP"
+            },
+            {
+              "value": "CANCELQUERY",
+              "label": "CANCELQUERY"
+            },
+            {
+              "value": "CONTROLJOB",
+              "label": "CONTROLJOB"
+            },
+            {
+              "value": "CREATEDB",
+              "label": "CREATEDB"
+            },
+            {
+              "value": "CREATELOGIN",
+              "label": "CREATELOGIN"
+            },
+            {
+              "value": "CREATEROLE",
+              "label": "CREATEROLE"
+            },
+            {
+              "value": "EXTERNALCONNECTION",
+              "label": "EXTERNALCONNECTION"
+            },
+            {
+              "value": "EXTERNALIOIMPLICITACCESS",
+              "label": "EXTERNALIOIMPLICITACCESS"
+            },
+            {
+              "value": "INSPECT",
+              "label": "INSPECT"
+            },
+            {
+              "value": "MODIFYCLUSTERSETTING",
+              "label": "MODIFYCLUSTERSETTING"
+            },
+            {
+              "value": "MODIFYSQLCLUSTERSETTING",
+              "label": "MODIFYSQLCLUSTERSETTING"
+            },
+            {
+              "value": "NOSQLLOGIN",
+              "label": "NOSQLLOGIN"
+            },
+            {
+              "value": "REPAIRCLUSTER",
+              "label": "REPAIRCLUSTER"
+            },
+            {
+              "value": "REPLICATION",
+              "label": "REPLICATION"
+            },
+            {
+              "value": "RESTORE",
+              "label": "RESTORE"
+            },
+            {
+              "value": "VIEWACTIVITY",
+              "label": "VIEWACTIVITY"
+            },
+            {
+              "value": "VIEWACTIVITYREDACTED",
+              "label": "VIEWACTIVITYREDACTED"
+            },
+            {
+              "value": "VIEWCLUSTERMETADATA",
+              "label": "VIEWCLUSTERMETADATA"
+            },
+            {
+              "value": "VIEWCLUSTERSETTING",
+              "label": "VIEWCLUSTERSETTING"
+            },
+            {
+              "value": "VIEWDEBUG",
+              "label": "VIEWDEBUG"
+            },
+            {
+              "value": "VIEWJOB",
+              "label": "VIEWJOB"
+            },
+            {
+              "value": "VIEWSYSTEMTABLE",
+              "label": "VIEWSYSTEMTABLE"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "grant_system",
+      "resource_kind": "user",
+      "title": "Grant system privileges",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "privileges",
+          "label": "System privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "BACKUP",
+              "label": "BACKUP"
+            },
+            {
+              "value": "CANCELQUERY",
+              "label": "CANCELQUERY"
+            },
+            {
+              "value": "CONTROLJOB",
+              "label": "CONTROLJOB"
+            },
+            {
+              "value": "CREATEDB",
+              "label": "CREATEDB"
+            },
+            {
+              "value": "CREATELOGIN",
+              "label": "CREATELOGIN"
+            },
+            {
+              "value": "CREATEROLE",
+              "label": "CREATEROLE"
+            },
+            {
+              "value": "EXTERNALCONNECTION",
+              "label": "EXTERNALCONNECTION"
+            },
+            {
+              "value": "EXTERNALIOIMPLICITACCESS",
+              "label": "EXTERNALIOIMPLICITACCESS"
+            },
+            {
+              "value": "INSPECT",
+              "label": "INSPECT"
+            },
+            {
+              "value": "MODIFYCLUSTERSETTING",
+              "label": "MODIFYCLUSTERSETTING"
+            },
+            {
+              "value": "MODIFYSQLCLUSTERSETTING",
+              "label": "MODIFYSQLCLUSTERSETTING"
+            },
+            {
+              "value": "NOSQLLOGIN",
+              "label": "NOSQLLOGIN"
+            },
+            {
+              "value": "REPAIRCLUSTER",
+              "label": "REPAIRCLUSTER"
+            },
+            {
+              "value": "REPLICATION",
+              "label": "REPLICATION"
+            },
+            {
+              "value": "RESTORE",
+              "label": "RESTORE"
+            },
+            {
+              "value": "VIEWACTIVITY",
+              "label": "VIEWACTIVITY"
+            },
+            {
+              "value": "VIEWACTIVITYREDACTED",
+              "label": "VIEWACTIVITYREDACTED"
+            },
+            {
+              "value": "VIEWCLUSTERMETADATA",
+              "label": "VIEWCLUSTERMETADATA"
+            },
+            {
+              "value": "VIEWCLUSTERSETTING",
+              "label": "VIEWCLUSTERSETTING"
+            },
+            {
+              "value": "VIEWDEBUG",
+              "label": "VIEWDEBUG"
+            },
+            {
+              "value": "VIEWJOB",
+              "label": "VIEWJOB"
+            },
+            {
+              "value": "VIEWSYSTEMTABLE",
+              "label": "VIEWSYSTEMTABLE"
+            }
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "revoke_system",
+      "resource_kind": "user",
+      "title": "Revoke system privileges",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "privileges",
+          "label": "System privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "BACKUP",
+              "label": "BACKUP"
+            },
+            {
+              "value": "CANCELQUERY",
+              "label": "CANCELQUERY"
+            },
+            {
+              "value": "CONTROLJOB",
+              "label": "CONTROLJOB"
+            },
+            {
+              "value": "CREATEDB",
+              "label": "CREATEDB"
+            },
+            {
+              "value": "CREATELOGIN",
+              "label": "CREATELOGIN"
+            },
+            {
+              "value": "CREATEROLE",
+              "label": "CREATEROLE"
+            },
+            {
+              "value": "EXTERNALCONNECTION",
+              "label": "EXTERNALCONNECTION"
+            },
+            {
+              "value": "EXTERNALIOIMPLICITACCESS",
+              "label": "EXTERNALIOIMPLICITACCESS"
+            },
+            {
+              "value": "INSPECT",
+              "label": "INSPECT"
+            },
+            {
+              "value": "MODIFYCLUSTERSETTING",
+              "label": "MODIFYCLUSTERSETTING"
+            },
+            {
+              "value": "MODIFYSQLCLUSTERSETTING",
+              "label": "MODIFYSQLCLUSTERSETTING"
+            },
+            {
+              "value": "NOSQLLOGIN",
+              "label": "NOSQLLOGIN"
+            },
+            {
+              "value": "REPAIRCLUSTER",
+              "label": "REPAIRCLUSTER"
+            },
+            {
+              "value": "REPLICATION",
+              "label": "REPLICATION"
+            },
+            {
+              "value": "RESTORE",
+              "label": "RESTORE"
+            },
+            {
+              "value": "VIEWACTIVITY",
+              "label": "VIEWACTIVITY"
+            },
+            {
+              "value": "VIEWACTIVITYREDACTED",
+              "label": "VIEWACTIVITYREDACTED"
+            },
+            {
+              "value": "VIEWCLUSTERMETADATA",
+              "label": "VIEWCLUSTERMETADATA"
+            },
+            {
+              "value": "VIEWCLUSTERSETTING",
+              "label": "VIEWCLUSTERSETTING"
+            },
+            {
+              "value": "VIEWDEBUG",
+              "label": "VIEWDEBUG"
+            },
+            {
+              "value": "VIEWJOB",
+              "label": "VIEWJOB"
+            },
+            {
+              "value": "VIEWSYSTEMTABLE",
+              "label": "VIEWSYSTEMTABLE"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "split_at",
+      "resource_kind": "table",
+      "title": "Split ranges at",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "split_values",
+          "label": "Split points",
+          "control": "grid",
+          "required": true,
+          "help": "One primary key value per split; the key is one column.",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "set_storage_parameter",
+      "resource_kind": "table",
+      "title": "Set storage parameter",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "parameter",
+          "label": "Parameter",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "exclude_data_from_backup",
+              "label": "exclude_data_from_backup"
+            },
+            {
+              "value": "schema_locked",
+              "label": "schema_locked"
+            },
+            {
+              "value": "sql_stats_automatic_collection_enabled",
+              "label": "sql_stats_automatic_collection_enabled"
+            },
+            {
+              "value": "sql_stats_automatic_partial_collection_enabled",
+              "label": "sql_stats_automatic_partial_collection_enabled"
+            },
+            {
+              "value": "sql_stats_forecasts_enabled",
+              "label": "sql_stats_forecasts_enabled"
+            },
+            {
+              "value": "sql_stats_automatic_collection_min_stale_rows",
+              "label": "sql_stats_automatic_collection_min_stale_rows"
+            },
+            {
+              "value": "sql_stats_automatic_collection_fraction_stale_rows",
+              "label": "sql_stats_automatic_collection_fraction_stale_rows"
+            },
+            {
+              "value": "sql_stats_histogram_samples_count",
+              "label": "sql_stats_histogram_samples_count"
+            },
+            {
+              "value": "sql_stats_histogram_buckets_count",
+              "label": "sql_stats_histogram_buckets_count"
+            }
+          ],
+          "help": "schema_locked is changed on its own."
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true,
+          "help": "true/false, or a number."
+        }
+      ]
+    },
+    {
+      "operation_id": "reset_storage_parameter",
+      "resource_kind": "table",
+      "title": "Reset storage parameter",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "parameter",
+          "label": "Parameter",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "exclude_data_from_backup",
+              "label": "exclude_data_from_backup"
+            },
+            {
+              "value": "schema_locked",
+              "label": "schema_locked"
+            },
+            {
+              "value": "sql_stats_automatic_collection_enabled",
+              "label": "sql_stats_automatic_collection_enabled"
+            },
+            {
+              "value": "sql_stats_automatic_partial_collection_enabled",
+              "label": "sql_stats_automatic_partial_collection_enabled"
+            },
+            {
+              "value": "sql_stats_forecasts_enabled",
+              "label": "sql_stats_forecasts_enabled"
+            },
+            {
+              "value": "sql_stats_automatic_collection_min_stale_rows",
+              "label": "sql_stats_automatic_collection_min_stale_rows"
+            },
+            {
+              "value": "sql_stats_automatic_collection_fraction_stale_rows",
+              "label": "sql_stats_automatic_collection_fraction_stale_rows"
+            },
+            {
+              "value": "sql_stats_histogram_samples_count",
+              "label": "sql_stats_histogram_samples_count"
+            },
+            {
+              "value": "sql_stats_histogram_buckets_count",
+              "label": "sql_stats_histogram_buckets_count"
+            }
+          ],
+          "help": "schema_locked is changed on its own."
+        }
+      ]
     }
   ]
 }

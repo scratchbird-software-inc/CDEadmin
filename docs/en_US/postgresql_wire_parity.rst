@@ -1156,11 +1156,38 @@ CockroachDB: Repartition the primary index by list (one row per value, or
 Default) or range, or remove partitioning, confirmed from ``SHOW PARTITIONS``
 value by value; CockroachDB refuses a column that is not the first primary key
 column and the refusal is passed on. Multi-column keys, subpartitions and
-CockroachDB index partitioning remain open. CockroachDB cluster settings,
-system privileges, ``SPLIT AT`` and storage parameters, and the YugabyteDB
-object kinds its catalog lacks (collation, event trigger, publication, foreign
-data wrapper, aggregate, operator, cast, rule, language) are recorded in the
-probe notes and are separate work.
+CockroachDB index partitioning remain open.
+
+CockroachDB's own administration, also added on 2026-11-01, each read back
+live first:
+
+-  cluster settings, listed from ``SHOW CLUSTER SETTINGS``: Set and Reset
+   to default. ``SET CLUSTER SETTING`` cannot run in a transaction, so these
+   run on their own autocommit connection. A set is confirmed by origin
+   ``override`` and the value; CockroachDB normalizes some values (``40MiB``
+   reads back ``40 MiB``), so spacing and case are ignored and any other
+   difference is reported unconfirmed. A reset is confirmed by origin
+   ``default``;
+-  system privileges on a role or user, ``GRANT``/``REVOKE SYSTEM`` with or
+   without grant option, read from ``SHOW SYSTEM GRANTS``. 22 privileges read
+   back under their own names; ``REPAIRCLUSTERMETADATA`` is accepted but
+   shown as ``REPAIRCLUSTER``, so it is not offered;
+-  ``SPLIT AT`` on a single-column primary key, read from ``SHOW RANGES``
+   (numbers render bare, strings quoted with ``\\`` and ``"`` escaped).
+   ``UNSPLIT AT`` is not offered (see above);
+-  table storage parameters, one per change, read from
+   ``pg_class.reloptions``: ``exclude_data_from_backup``, ``schema_locked``
+   and the ``sql_stats_*`` collection, forecast and histogram parameters.
+   ``fillfactor`` and ``autovacuum_enabled`` are accepted and discarded, so
+   they are not offered. Tables start with ``schema_locked = true``;
+   CockroachDB records false by removing the option, and ``schema_locked``
+   must change on its own.
+
+The CockroachDB cluster settings,
+system privileges, ``SPLIT AT`` and storage parameters (now offered, above),
+and the YugabyteDB object kinds its catalog lacks (collation, event trigger,
+publication, foreign data wrapper, aggregate, operator, cast, rule, language)
+are recorded in the probe notes and are separate work.
 
 Plan
 ----

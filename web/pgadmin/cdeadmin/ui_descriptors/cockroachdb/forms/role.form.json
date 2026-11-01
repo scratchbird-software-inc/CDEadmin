@@ -28,7 +28,7 @@
     },
     {
       "concept": "System privileges",
-      "reason": "GRANT SYSTEM <privilege> runs on 26.1.3 (live) but has no editor yet",
+      "reason": "GRANT SYSTEM <privilege> runs on 26.1.3 (live) but has no editor yet. 2026-11-01: provided as the role and user Grant/Revoke system privileges operations (22 privileges that read back from SHOW SYSTEM GRANTS)",
       "tracking": "postgresql-wire-parity"
     },
     {

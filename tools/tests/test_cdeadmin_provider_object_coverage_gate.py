@@ -62,7 +62,10 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
         # on their sessions.
         # 2474 with partitions after create: YugabyteDB create, attach and
         # detach, CockroachDB repartition.
-        self.assertEqual(2474, result['graphical_operation_count'])
+        # 2484 with CockroachDB's cluster settings (set, reset, inspect),
+        # role and user system privileges, range splits and storage
+        # parameters.
+        self.assertEqual(2484, result['graphical_operation_count'])
         large_object = next(item for item in self.catalogs['postgresql-native']['descriptor']['objects']
             if item['resource_kind'] == 'large-object')
         self.assertEqual({'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop',

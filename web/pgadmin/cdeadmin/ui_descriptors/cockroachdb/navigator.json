@@ -80,9 +80,10 @@
     },
     {
       "group_id": "activity",
-      "title": "Activity",
+      "title": "Activity and configuration",
       "kinds": [
-        "session"
+        "session",
+        "cluster-setting"
       ],
       "order": 8
     }
@@ -127,6 +128,7 @@
     "job": "object.job",
     "schedule": "object.job",
     "row-policy": "object.privilege",
-    "session": "object.session"
+    "session": "object.session",
+    "cluster-setting": "object.system-variable"
   }
 }

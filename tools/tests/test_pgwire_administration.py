@@ -261,3 +261,93 @@ def test_partition_inspection_reads_partitions_not_table_facts():
     COCKROACH.inspect(plan('table', 'repartition', {
         'strategy': 'NOTHING'}, PARENT), query)
     assert 'relpartbound' in issued[0] and 'SHOW PARTITIONS' in issued[1]
+
+
+# CockroachDB's own administration (live, 2026-11-01).
+SETTING = {'display_name': 'sql.log.slow_query.latency_threshold',
+           'display_path': ['sql.log.slow_query.latency_threshold']}
+
+
+def test_cockroachdb_cluster_settings():
+    assert sql(COCKROACH, 'cluster-setting', 'set_value', {'value': '7s'},
+               SETTING) == ["SET CLUSTER SETTING "
+                            "sql.log.slow_query.latency_threshold = '7s'"]
+    assert sql(COCKROACH, 'cluster-setting', 'reset', {}, SETTING) == [
+        'RESET CLUSTER SETTING sql.log.slow_query.latency_threshold']
+    with pytest.raises(RelationalClientError, match='setting name'):
+        sql(COCKROACH, 'cluster-setting', 'reset', {},
+            {'display_path': ['a; DROP TABLE x']})
+    set_value = plan('cluster-setting', 'set_value', {'value': '40MiB'},
+                     SETTING)
+    assert COCKROACH.confirmed(set_value, [('40 MiB', 'override')])
+    assert not COCKROACH.confirmed(set_value, [('32 MiB', 'override')])
+    assert not COCKROACH.confirmed(set_value, [('40 MiB', 'default')])
+    reset = plan('cluster-setting', 'reset', {}, SETTING)
+    assert COCKROACH.confirmed(reset, [('0s', 'default')])
+    assert not COCKROACH.confirmed(reset, [('7s', 'override')])
+    assert not YUGABYTE.supports('cluster-setting', 'set_value')
+
+
+def test_cockroachdb_system_privileges():
+    assert sql(COCKROACH, 'user', 'grant_system', {
+        'privileges': ['VIEWJOB', 'VIEWACTIVITY'], 'grant_option': True},
+        ROLE) == ['GRANT SYSTEM VIEWACTIVITY, VIEWJOB TO "r" WITH GRANT '
+                  'OPTION']
+    assert sql(COCKROACH, 'role', 'revoke_system', {
+        'privileges': ['BACKUP']}, ROLE) == ['REVOKE SYSTEM BACKUP FROM "r"']
+    # Accepted by GRANT but shown only as REPAIRCLUSTER.
+    with pytest.raises(RelationalClientError, match='privilege'):
+        sql(COCKROACH, 'role', 'grant_system', {
+            'privileges': ['REPAIRCLUSTERMETADATA']}, ROLE)
+    grant = plan('role', 'grant_system', {'privileges': ['VIEWJOB'],
+                                          'grant_option': True}, ROLE)
+    assert COCKROACH.confirmed(grant, [('VIEWJOB', True)])
+    assert not COCKROACH.confirmed(grant, [('VIEWJOB', False)])
+    revoke = plan('role', 'revoke_system', {'privileges': ['VIEWJOB']}, ROLE)
+    assert COCKROACH.confirmed(revoke, [])
+    assert not COCKROACH.confirmed(revoke, [('VIEWJOB', False)])
+
+
+def test_cockroachdb_splits_and_storage_parameters():
+    assert sql(COCKROACH, 'table', 'split_at', {
+        'split_values': [{'value': '5'}, {'value': "m'x"}]}, TABLE) == [
+        "ALTER TABLE \"s\".\"t\" SPLIT AT VALUES ('5'), ('m''x')"]
+    split = plan('table', 'split_at', {'split_values': ['5', "m'x"]}, TABLE)
+    assert COCKROACH.confirmed(split, [('<before:/Table/1>',), ('…/1/5',),
+                                       ('…/1/"m\'x"',)])
+    assert not COCKROACH.confirmed(split, [('…/1/15',), ('…/1/"m\'x"',)])
+    # Only backslash and double quote are escaped (live).
+    quoted = plan('table', 'split_at', {'split_values': ['a"b\\c']}, TABLE)
+    assert COCKROACH.confirmed(quoted, [('…/1/"a\\"b\\\\c"',)])
+    assert sql(COCKROACH, 'table', 'set_storage_parameter', {
+        'parameter': 'exclude_data_from_backup', 'value': 'TRUE'}, TABLE) == [
+        'ALTER TABLE "s"."t" SET (exclude_data_from_backup = true)']
+    assert sql(COCKROACH, 'table', 'reset_storage_parameter', {
+        'parameter': 'schema_locked'}, TABLE) == [
+        'ALTER TABLE "s"."t" RESET (schema_locked)']
+    for parameter, value in (('fillfactor', '70'),
+                             ('sql_stats_histogram_buckets_count', '1.5'),
+                             ('exclude_data_from_backup', 'yes')):
+        with pytest.raises(RelationalClientError):
+            sql(COCKROACH, 'table', 'set_storage_parameter', {
+                'parameter': parameter, 'value': value}, TABLE)
+    stored = plan('table', 'set_storage_parameter', {
+        'parameter': 'sql_stats_automatic_collection_fraction_stale_rows',
+        'value': '0.5'}, TABLE)
+    assert COCKROACH.confirmed(stored, [(
+        ['sql_stats_automatic_collection_fraction_stale_rows=0.5'],)])
+    assert not COCKROACH.confirmed(stored, [(['schema_locked=true'],)])
+
+
+def test_schema_locked_false_is_recorded_by_removal():
+    unlocked = plan('table', 'set_storage_parameter', {
+        'parameter': 'schema_locked', 'value': 'false'}, TABLE)
+    assert COCKROACH.confirmed(unlocked, [(None,)])
+    assert not COCKROACH.confirmed(unlocked, [(['schema_locked=true'],)])
+    locked = plan('table', 'set_storage_parameter', {
+        'parameter': 'schema_locked', 'value': 'true'}, TABLE)
+    assert not COCKROACH.confirmed(locked, [(None,)])
+    # Only schema_locked: another false is stored explicitly.
+    stats = plan('table', 'set_storage_parameter', {
+        'parameter': 'sql_stats_forecasts_enabled', 'value': 'false'}, TABLE)
+    assert not COCKROACH.confirmed(stats, [(None,)])

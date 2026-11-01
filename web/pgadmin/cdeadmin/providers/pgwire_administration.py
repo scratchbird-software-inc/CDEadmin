@@ -16,6 +16,23 @@ from pgadmin.cdeadmin.visual_admin import (
 
 
 NAME = r'[^\x00-\x1f\x7f]{1,63}'
+CLUSTER_SETTING = r'[a-z0-9_]+(\.[a-z0-9_]+)+'
+
+# CockroachDB 26.1.3 table storage parameters that read back from
+# pg_class.reloptions (live, 2026-11-01); fillfactor and autovacuum_enabled
+# are accepted and discarded, so they are not offered.
+STORAGE_PARAMETERS = {
+    'exclude_data_from_backup': 'boolean',
+    'schema_locked': 'boolean',
+    'sql_stats_automatic_collection_enabled': 'boolean',
+    'sql_stats_automatic_partial_collection_enabled': 'boolean',
+    'sql_stats_forecasts_enabled': 'boolean',
+    'sql_stats_automatic_collection_min_stale_rows': 'integer',
+    'sql_stats_automatic_collection_fraction_stale_rows': 'number',
+    'sql_stats_histogram_samples_count': 'integer',
+    'sql_stats_histogram_buckets_count': 'integer',
+}
+ABSENT_VALUES = {'schema_locked': 'false'}
 SETTING = r'[a-z_][a-z0-9_.]{0,127}'
 VALUE = r'[^\x00-\x1f\x7f]{0,4096}'
 
@@ -88,6 +105,11 @@ class PGWireAdministration:
 
     def supports(self, kind, operation):
         return (kind, operation) in self.features
+
+    @staticmethod
+    def outside_transaction(kind, _operation):
+        """CockroachDB refuses SET CLUSTER SETTING in a transaction."""
+        return kind == 'cluster-setting'
 
     def _error(self, message):
         return RelationalClientError(f'{self.engine_name} {message}')
@@ -206,6 +228,54 @@ class PGWireAdministration:
                              help='One row per partition: from and to, '
                              'each a value or the open end.'),
                 ), impact_scope='resource')
+        if (kind, operation) == ('cluster-setting', 'set_value'):
+            return ControlPlaneOperation(
+                'cluster-setting', 'set_value', 'Set cluster setting',
+                'admin', 'administer', (
+                    cp_field('value', 'Value', 'text', True, max_length=4096,
+                             pattern=VALUE,
+                             help='Cluster-wide and persistent.'),
+                ), impact_scope='cluster')
+        if (kind, operation) == ('cluster-setting', 'reset'):
+            return ControlPlaneOperation(
+                'cluster-setting', 'reset', 'Reset to default', 'admin',
+                'administer', impact_scope='cluster')
+        if operation in {'grant_system', 'revoke_system'}:
+            fields = [cp_field('privileges', 'System privileges',
+                               'multiselect', True, options=[
+                                   {'value': name, 'label': name}
+                                   for name in option])]
+            if operation == 'grant_system':
+                fields.append(cp_field('grant_option', 'With grant option',
+                                       'boolean', False, default=False))
+            title = ('Grant system privileges' if operation == 'grant_system'
+                     else 'Revoke system privileges')
+            return ControlPlaneOperation(
+                kind, operation, title, 'admin', 'security_admin',
+                tuple(fields), impact_scope='cluster')
+        if (kind, operation) == ('table', 'split_at'):
+            return ControlPlaneOperation(
+                'table', 'split_at', 'Split ranges at', 'admin',
+                'topology_admin', (
+                    cp_field('split_values', 'Split points', 'json', True,
+                             json_type='array',
+                             help='One primary key value per split; the '
+                             'key is one column.'),
+                ), impact_scope='resource')
+        if operation in {'set_storage_parameter', 'reset_storage_parameter'}:
+            fields = [_choice('parameter', 'Parameter', tuple(
+                (name, name) for name in STORAGE_PARAMETERS), required=True,
+                help='schema_locked is changed on its own.')]
+            if operation == 'set_storage_parameter':
+                fields.append(cp_field('value', 'Value', 'text', True,
+                                       max_length=64, pattern=VALUE,
+                                       help='true/false, or a number.'))
+            title = ('Set storage parameter'
+                     if operation == 'set_storage_parameter'
+                     else 'Reset storage parameter')
+            return ControlPlaneOperation(
+                'table', operation, title, 'admin', 'administer',
+                tuple(fields), impact_scope='resource')
         if (kind, operation) == ('session', 'terminate_query'):
             return ControlPlaneOperation(
                 'session', 'terminate_query', 'Cancel running statement',
@@ -265,6 +335,43 @@ class PGWireAdministration:
         if not self.supports(kind, operation):
             raise self._error('control-plane operation is unavailable')
         draft = request.get('draft') or {}
+        if kind == 'cluster-setting':
+            name = self._path(request, 1)[0]
+            if re.fullmatch(CLUSTER_SETTING, name) is None:
+                raise self._error('cluster setting name is invalid')
+            if operation == 'reset':
+                return [_statement('RESET CLUSTER SETTING ' + name)]
+            value = self._text(draft, 'value', VALUE, 'setting value')
+            return [_statement('SET CLUSTER SETTING ' + name + ' = ' +
+                               literal(value))]
+        if operation in {'grant_system', 'revoke_system'}:
+            principal = quote(self._path(request, 1)[0])
+            privileges = ', '.join(self._privileges(kind, operation, draft))
+            if operation == 'grant_system':
+                return [_statement(
+                    'GRANT SYSTEM ' + privileges + ' TO ' + principal + (
+                        ' WITH GRANT OPTION' if draft.get('grant_option')
+                        else ''))]
+            return [_statement('REVOKE SYSTEM ' + privileges + ' FROM ' +
+                               principal)]
+        if operation == 'split_at':
+            schema, table = self._path(request, 2)
+            values = self._values(draft.get('split_values'))
+            return [_statement(
+                'ALTER TABLE ' + quote(schema) + '.' + quote(table) +
+                ' SPLIT AT VALUES ' + ', '.join(
+                    '(' + literal(value) + ')' for value in values))]
+        if operation in {'set_storage_parameter', 'reset_storage_parameter'}:
+            schema, table = self._path(request, 2)
+            parameter = draft.get('parameter')
+            if parameter not in STORAGE_PARAMETERS:
+                raise self._error('storage parameter is invalid')
+            prefix = 'ALTER TABLE ' + quote(schema) + '.' + quote(table)
+            if operation == 'reset_storage_parameter':
+                return [_statement(prefix + ' RESET (' + parameter + ')')]
+            return [_statement(prefix + ' SET (' + parameter + ' = ' +
+                               _storage_value(parameter, draft.get('value'),
+                                              self._error) + ')')]
         if kind == 'partition':
             schema, parent, child = self._path(request, 3)
             return [_statement('ALTER TABLE ' + quote(schema) + '.' +
@@ -442,6 +549,23 @@ class PGWireAdministration:
         operation = plan['operation_id']
         draft = plan.get('draft') or {}
         option = self.features[(kind, operation)]
+        if kind == 'cluster-setting':
+            return query('SELECT value, origin FROM [SHOW CLUSTER SETTINGS] '
+                         'WHERE variable = %s', (self._path(plan, 1)[0],))
+        if operation in {'grant_system', 'revoke_system'}:
+            return query('SELECT privilege_type, is_grantable FROM '
+                         '[SHOW SYSTEM GRANTS FOR ' +
+                         quote(self._path(plan, 1)[0]) + ']')
+        if operation == 'split_at':
+            schema, table = self._path(plan, 2)
+            return query('SELECT start_key FROM [SHOW RANGES FROM TABLE ' +
+                         quote(schema) + '.' + quote(table) + ']')
+        if operation in {'set_storage_parameter', 'reset_storage_parameter'}:
+            schema, table = self._path(plan, 2)
+            return query(
+                'SELECT c.reloptions FROM pg_catalog.pg_class c '
+                'JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace '
+                'WHERE n.nspname = %s AND c.relname = %s', (schema, table))
         if kind == 'partition' or operation in {'create_partition',
                                                 'attach_partition'}:
             if kind == 'partition':
@@ -556,6 +680,39 @@ class PGWireAdministration:
         kind = plan['resource_kind']
         operation = plan['operation_id']
         draft = plan.get('draft') or {}
+        if kind == 'cluster-setting':
+            if len(rows) != 1:
+                return False
+            value, origin = (str(item) for item in rows[0])
+            if operation == 'reset':
+                return origin == 'default'
+            # CockroachDB normalizes some values (40MiB reads back 40 MiB);
+            # anything beyond spacing and case is reported unconfirmed.
+            return origin == 'override' and _plain(value) == _plain(
+                draft.get('value'))
+        if operation in {'grant_system', 'revoke_system'}:
+            operation = operation.split('_', 1)[0]
+        if operation == 'split_at':
+            starts = [str(row[0]) for row in rows]
+            return all(any(start.endswith(suffix) for start in starts
+                           for suffix in _split_suffixes(value))
+                       for value in self._values(draft.get('split_values')))
+        if operation in {'set_storage_parameter', 'reset_storage_parameter'}:
+            if len(rows) != 1:
+                return False
+            entries = [str(entry) for entry in rows[0][0] or []]
+            prefix = f'{draft.get("parameter")}='
+            absent = not any(entry.startswith(prefix) for entry in entries)
+            if operation == 'reset_storage_parameter':
+                return absent
+            value = _storage_value(draft.get('parameter'), draft.get('value'),
+                                   RelationalClientError)
+            # CockroachDB records schema_locked = false by removing it.
+            if absent and ABSENT_VALUES.get(draft.get('parameter')) == value:
+                return True
+            return prefix + _storage_value(
+                draft.get('parameter'), draft.get('value'),
+                RelationalClientError) in entries
         if kind == 'partition':
             # Still a table, no longer anyone's partition.
             return len(rows) == 1 and rows[0][0] is None
@@ -602,6 +759,29 @@ class PGWireAdministration:
         if self.features[(kind, operation)] == 'cluster_sessions':
             return not rows or not str(rows[0][1] or '')
         return not rows or str(rows[0][1]) != 'active'
+
+
+def _plain(value):
+    return ''.join(str(value).split()).lower()
+
+
+def _split_suffixes(value):
+    """How SHOW RANGES renders a split at ``value``: bare, or quoted."""
+    quoted = value.replace('\\', '\\\\').replace('"', '\\"')
+    return ('/' + value, '/"' + quoted + '"')
+
+
+def _storage_value(parameter, value, error):
+    kind = STORAGE_PARAMETERS.get(parameter)
+    text = str(value or '').strip().lower()
+    if kind == 'boolean' and text in {'true', 'false'}:
+        return text
+    if kind == 'integer' and re.fullmatch(r'[0-9]{1,18}', text):
+        return text
+    if kind == 'number' and re.fullmatch(r'[0-9]{1,18}(\.[0-9]{1,18})?',
+                                         text):
+        return text
+    raise error(f'{parameter} value is invalid')
 
 
 def _expected_side(row, side):

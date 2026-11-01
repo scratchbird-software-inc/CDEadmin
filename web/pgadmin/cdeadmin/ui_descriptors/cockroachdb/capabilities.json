@@ -635,6 +635,18 @@
           "mutation_class": "read"
         }
       ]
+    },
+    {
+      "resource_kind": "cluster-setting",
+      "family": "engine_object",
+      "title": "Cluster setting",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
     }
   ]
 }

@@ -46,6 +46,7 @@ PROFILE = PilotProfile(
         'materialized-view', 'type', 'function', 'procedure', 'trigger',
         'partition', 'user', 'role', 'privilege', 'row-policy', 'range',
         'zone-config', 'job', 'schedule', 'changefeed', 'session',
+        'cluster-setting',
     ),
     ('cockroach-sql', 'node-status', 'debug-zip', 'backup-restore'),
     parameter_shape='object-or-array',
@@ -77,7 +78,7 @@ PROFILE = PilotProfile(
 _BASE_ADMINISTRATION = sql_administration('cockroachdb', 'postgresql', (
     'node', 'locality', 'range', 'zone-config', 'job', 'schedule',
     'changefeed', 'materialized-view', 'type', 'partition', 'row-policy',
-    'session',
+    'session', 'cluster-setting',
 ))
 _COCKROACH_SUPPORTED = dict(_BASE_ADMINISTRATION.dialect.supported)
 for _kind in ('function', 'procedure', 'trigger'):
@@ -152,6 +153,14 @@ _ZONE_FIELDS = (
 # reads back (live, 2026-11-01). Database DROP, RESTORE and ZONECONFIG are
 # accepted by GRANT but never appear in SHOW GRANTS, so they are not offered.
 # Sessions are listed and cancelled cluster-wide.
+SYSTEM_PRIVILEGES = (
+    'BACKUP', 'CANCELQUERY', 'CONTROLJOB', 'CREATEDB', 'CREATELOGIN',
+    'CREATEROLE', 'EXTERNALCONNECTION', 'EXTERNALIOIMPLICITACCESS', 'INSPECT',
+    'MODIFYCLUSTERSETTING', 'MODIFYSQLCLUSTERSETTING', 'NOSQLLOGIN',
+    'REPAIRCLUSTER', 'REPLICATION', 'RESTORE', 'VIEWACTIVITY',
+    'VIEWACTIVITYREDACTED', 'VIEWCLUSTERMETADATA', 'VIEWCLUSTERSETTING',
+    'VIEWDEBUG', 'VIEWJOB', 'VIEWSYSTEMTABLE',
+)
 NATIVE_ADMINISTRATION = PGWireAdministration('CockroachDB', {
     ('table', 'truncate'): True,
     ('table', 'analyze'): 'show_statistics',
@@ -173,6 +182,19 @@ NATIVE_ADMINISTRATION = PGWireAdministration('CockroachDB', {
     # Repartition the primary index on its first column (live, 2026-11-01):
     # list or range, or remove partitioning.
     ('table', 'repartition'): True,
+    # CockroachDB's own (live, 2026-11-01): cluster settings (values may be
+    # normalized, e.g. 40MiB reads back 40 MiB), system privileges
+    # (REPAIRCLUSTERMETADATA reads back as REPAIRCLUSTER, so it is not
+    # offered), range splits and stored table storage parameters.
+    ('cluster-setting', 'set_value'): True,
+    ('cluster-setting', 'reset'): True,
+    ('role', 'grant_system'): SYSTEM_PRIVILEGES,
+    ('role', 'revoke_system'): SYSTEM_PRIVILEGES,
+    ('user', 'grant_system'): SYSTEM_PRIVILEGES,
+    ('user', 'revoke_system'): SYSTEM_PRIVILEGES,
+    ('table', 'split_at'): True,
+    ('table', 'set_storage_parameter'): True,
+    ('table', 'reset_storage_parameter'): True,
     ('session', 'terminate_query'): 'cluster_sessions',
     ('session', 'terminate_connection'): 'cluster_sessions',
 }, grant_reader='show_grants')
@@ -607,8 +629,11 @@ def _compile_control_plane(request):
     statements = []
     impact = _impact(request)
     if NATIVE_ADMINISTRATION.supports(kind, operation):
-        return {'statements': NATIVE_ADMINISTRATION.statements(request),
-                'impact': impact}
+        compiled = {'statements': NATIVE_ADMINISTRATION.statements(request),
+                    'impact': impact}
+        if NATIVE_ADMINISTRATION.outside_transaction(kind, operation):
+            compiled['statements_outside_transaction'] = True
+        return compiled
     if kind == 'node' and operation in {'decommission', 'recommission'}:
         return _node_action(request)
     if operation in {'configure_zone', 'reset_zone'}:
@@ -1825,6 +1850,18 @@ def _extras(cursor, request, generation):
         }))
     values.extend(session_resources(
         cursor, generation, resource, optional_rows, 'cluster_sessions'))
+    for name, value, setting_type, description, default, origin in \
+            optional_rows(
+                cursor,
+                'SELECT variable, value, setting_type, description, '
+                'default_value, origin FROM [SHOW CLUSTER SETTINGS] '
+                'ORDER BY variable'):
+        values.append(resource('cluster-setting', [], name, generation, {
+            'value': str(value), 'setting_type': str(setting_type),
+            'description': str(description or ''),
+            'default_value': None if default is None else str(default),
+            'origin': str(origin),
+        }))
     return values
 
 

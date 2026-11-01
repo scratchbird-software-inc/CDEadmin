@@ -1133,3 +1133,83 @@ def test_native_repartition(live):
     control(client, route, 'table', 'repartition', {'strategy': 'NOTHING'},
             target)
     assert partitions() == []
+
+
+def test_native_cluster_setting(live):
+    route, client = live
+    name = 'sql.log.slow_query.latency_threshold'
+    original = query(f'SELECT value, origin FROM [SHOW CLUSTER SETTINGS] '
+                     f"WHERE variable = '{name}'")
+    assert original == [('0s', 'default')], original
+    try:
+        target = native_row(client, route, 'cluster-setting', [name])
+        control(client, route, 'cluster-setting', 'set_value',
+                {'value': '7s'}, target)
+        assert query(f'SELECT value, origin FROM [SHOW CLUSTER SETTINGS] '
+                     f"WHERE variable = '{name}'") == [('7s', 'override')]
+        control(client, route, 'cluster-setting', 'reset', {}, target)
+    finally:
+        query(f'RESET CLUSTER SETTING {name}')
+    assert query(f'SELECT value, origin FROM [SHOW CLUSTER SETTINGS] '
+                 f"WHERE variable = '{name}'") == original
+
+
+def test_native_system_privileges(live):
+    route, client = live
+    ensure_role(NATIVE_USER, login=True)
+    target = native_row(client, route, 'user', [NATIVE_USER])
+
+    def held():
+        return sorted(query(
+            'SELECT privilege_type, is_grantable FROM [SHOW SYSTEM GRANTS '
+            f'FOR {NATIVE_USER}]'))
+    control(client, route, 'user', 'grant_system', {
+        'privileges': ['VIEWACTIVITY', 'VIEWJOB'], 'grant_option': True},
+        target)
+    assert held() == [('VIEWACTIVITY', True), ('VIEWJOB', True)]
+    control(client, route, 'user', 'revoke_system',
+            {'privileges': ['VIEWACTIVITY', 'VIEWJOB']}, target)
+    assert held() == []
+
+
+def test_native_split_and_storage_parameters(live):
+    route, client = live
+    query('CREATE TABLE public.rt_split (id INT PRIMARY KEY)')
+    query('CREATE TABLE public.rt_ssplit (s STRING PRIMARY KEY)')
+    control(client, route, 'table', 'split_at', {
+        'split_values': [{'value': '5'}, {'value': '50'}]},
+        native_row(client, route, 'table', ['public', 'rt_split']))
+    starts = [row[0] for row in query(
+        'SELECT start_key FROM [SHOW RANGES FROM TABLE public.rt_split]')]
+    assert any(start.endswith('/5') for start in starts) and any(
+        start.endswith('/50') for start in starts), starts
+    control(client, route, 'table', 'split_at', {
+        'split_values': [{'value': 'm\'x"y'}]},
+        native_row(client, route, 'table', ['public', 'rt_ssplit']))
+    assert any(row[0].endswith('/"m\'x\\"y"') for row in query(
+        'SELECT start_key FROM [SHOW RANGES FROM TABLE public.rt_ssplit]'))
+    target = native_row(client, route, 'table', ['public', 'rt_split'])
+
+    def options():
+        return query("SELECT reloptions FROM pg_catalog.pg_class "
+                     "WHERE relname = 'rt_split'")[0][0] or []
+    control(client, route, 'table', 'set_storage_parameter', {
+        'parameter': 'sql_stats_automatic_collection_fraction_stale_rows',
+        'value': '0.5'}, target)
+    assert ('sql_stats_automatic_collection_fraction_stale_rows=0.5'
+            in options())
+    control(client, route, 'table', 'reset_storage_parameter', {
+        'parameter': 'sql_stats_automatic_collection_fraction_stale_rows'},
+        target)
+    assert not any(entry.startswith(
+        'sql_stats_automatic_collection_fraction_stale_rows=')
+        for entry in options())
+    control(client, route, 'table', 'set_storage_parameter', {
+        'parameter': 'schema_locked', 'value': 'false'}, target)
+    # CockroachDB records false by removing the option (tables start
+    # locked).
+    assert not any(entry.startswith('schema_locked=')
+                   for entry in options())
+    control(client, route, 'table', 'set_storage_parameter', {
+        'parameter': 'schema_locked', 'value': 'true'}, target)
+    assert 'schema_locked=true' in options()

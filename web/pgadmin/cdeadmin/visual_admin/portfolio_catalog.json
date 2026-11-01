@@ -831,7 +831,8 @@
         {"resource_kind": "job", "title": "Job", "operation_profile": "operational"},
         {"resource_kind": "schedule", "title": "Schedule", "operation_profile": "operational"},
         {"resource_kind": "changefeed", "title": "Changefeed", "operation_profile": "operational"},
-        {"resource_kind": "session", "title": "Session", "operation_profile": "read_only"}
+        {"resource_kind": "session", "title": "Session", "operation_profile": "read_only"},
+        {"resource_kind": "cluster-setting", "title": "Cluster setting", "operation_profile": "read_only"}
       ]
     },
     {
