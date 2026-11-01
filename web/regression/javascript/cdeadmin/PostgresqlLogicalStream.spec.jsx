@@ -26,7 +26,15 @@ it('preserves exact LSNs and ordered native options and confirms consumption sep
   fireEvent.click(screen.getByLabelText('Stop this native logical receiver'));post.mockResolvedValue({...reviewed,state:'cancelled'});
   fireEvent.click(screen.getByRole('button',{name:'Stop logical replication stream'}));
   await screen.findByRole('button',{name:'Seal retained logical stream bytes'});
-  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_cancel',request:{job_id:'stream'}});
+  // The active receipt is polled every two seconds, so a status read may
+  // interleave on a slow run. After start, the only actions are one cancel
+  // and status reads of this job.
+  const actions=post.mock.calls.map(([body]) => body);
+  const started=actions.findIndex(body => body.action==='postgresql_continuity_start');
+  const status={action:'postgresql_continuity_status',request:{job_id:'stream'}};
+  const cancel={action:'postgresql_continuity_cancel',request:{job_id:'stream'}};
+  const after=actions.slice(started+1).filter(body => JSON.stringify(body)!==JSON.stringify(status));
+  expect(after).toEqual([cancel]);
 });
 
 it('opens interrupted bytes offline and uses streamed downloads without retrying the receiver',async () => {
