@@ -43,7 +43,7 @@ PROFILE = PilotProfile(
         'cluster', 'node', 'database', 'table', 'column', 'index',
         'constraint', 'view', 'sequence', 'partition', 'placement-policy',
         'resource-group', 'tiflash-replica', 'job', 'changefeed', 'backup',
-        'user', 'role', 'privilege', 'session', 'system-variable',
+        'user', 'role', 'privilege', 'session', 'system-variable', 'binding',
     ),
     ('mysql-client', 'tiup', 'br', 'ticdc'),
     parameter_shape='object-or-array',
@@ -76,7 +76,7 @@ PROFILE = PilotProfile(
 _BASE_ADMINISTRATION = sql_administration('tidb', 'mysql', (
     'node', 'partition', 'placement-policy', 'resource-group',
     'tiflash-replica', 'job', 'changefeed', 'backup', 'session',
-    'system-variable',
+    'system-variable', 'binding',
 ))
 _TIDB_SUPPORTED = dict(_BASE_ADMINISTRATION.dialect.supported)
 _TIDB_SUPPORTED.pop('schema')
@@ -119,6 +119,15 @@ NATIVE_ADMINISTRATION = MySQLWireAdministration('TiDB', {
     ('session', 'terminate_query'): 'CLUSTER_PROCESSLIST',
     ('session', 'terminate_connection'): 'CLUSTER_PROCESSLIST',
     ('system-variable', 'set_global'): True,
+    # Row expiry, SQL plan bindings and recovering a dropped table (live,
+    # 2026-11-01). A new binding is confirmed by EXPLAIN of its statement
+    # and @@last_plan_from_binding on the same session.
+    ('table', 'set_ttl'): True,
+    ('table', 'remove_ttl'): True,
+    ('binding', 'create'): True,
+    ('binding', 'set_status'): True,
+    ('binding', 'drop'): True,
+    ('database', 'flashback_table'): True,
 })
 
 
@@ -1203,6 +1212,29 @@ def _query_once(client, route, source, parameters=()):
         client._forget_and_close(connection)
 
 
+def _query_sequence(client, route, statements):
+    """Run statements on one session; return the last one's rows."""
+    connection = client._connect({'route': route})
+    cursor = None
+    try:
+        cursor = connection.cursor()
+        description = None
+        for source, parameters in statements:
+            cursor.execute(source, parameters)
+            description = getattr(cursor, 'description', None)
+            rows = list(cursor.fetchall()) if description else []
+        return {
+            'columns': [str(item[0]) for item in description or []],
+            'rows': rows,
+            'provider_observation_only': True,
+            'finality_interpreted_by_common_code': False,
+        }
+    finally:
+        if cursor is not None:
+            client._safe_close(cursor)
+        client._forget_and_close(connection)
+
+
 def _inspect_control_plane(client, request):
     plan, route = _private_parts(request)
     kind = plan['resource_kind']
@@ -1210,7 +1242,9 @@ def _inspect_control_plane(client, request):
     if NATIVE_ADMINISTRATION.supports(kind, operation):
         return NATIVE_ADMINISTRATION.inspect(
             plan, lambda source, parameters=(): _query_once(
-                client, route, source, parameters))
+                client, route, source, parameters),
+            sequence=lambda statements: _query_sequence(
+                client, route, statements))
     draft = plan.get('draft') or {}
     target = plan.get('target_resource') or {}
     path = target.get('display_path') or [target.get('display_name')]
@@ -1657,6 +1691,16 @@ def _extras(cursor, _request, generation):
         source='CLUSTER_PROCESSLIST'))
     values.extend(variable_resources(
         cursor, generation, resource, optional_rows))
+    for row in optional_rows(cursor, 'SHOW GLOBAL BINDINGS'):
+        original, bind, database, status = row[:4]
+        source, digest = row[8], row[9]
+        if str(status).lower() == 'deleted' or str(source) == 'builtin':
+            continue
+        values.append(resource('binding', [], digest, generation, {
+            'original_sql': str(original), 'bind_sql': str(bind),
+            'default_database': None if database is None else str(database),
+            'status': str(status).upper(), 'source': str(source),
+        }))
     for component, instance, status_address, version in optional_rows(
         cursor,
         'SELECT TYPE, INSTANCE, STATUS_ADDRESS, VERSION '

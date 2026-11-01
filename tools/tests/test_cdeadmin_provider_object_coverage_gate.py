@@ -71,7 +71,9 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
         # 2512 with YugabyteDB aggregates, operators and casts (79 -> 88).
         # 2524 with YugabyteDB foreign servers, user mappings and foreign
         # tables (88 -> 97).
-        self.assertEqual(2524, result['graphical_operation_count'])
+        # 2531 with TiDB row expiry (set, remove), SQL plan bindings
+        # (create, enable or disable, drop, inspect) and FLASHBACK TABLE.
+        self.assertEqual(2531, result['graphical_operation_count'])
         large_object = next(item for item in self.catalogs['postgresql-native']['descriptor']['objects']
             if item['resource_kind'] == 'large-object')
         self.assertEqual({'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop',

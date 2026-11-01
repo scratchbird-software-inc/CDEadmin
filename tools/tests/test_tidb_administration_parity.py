@@ -261,3 +261,86 @@ def test_tidb_confirmation_reads_the_engine_state():
     assert not tidb.confirmed(variable, [('20m0s',)])
     assert tidb.confirmed({**variable, 'draft': {'value': '20m0s'}},
                           [('20m0s',)])
+
+
+# Row expiry, plan bindings and table recovery (live, 2026-11-01).
+DIGEST = '6e494bcc6c58bcb2e11bbb388064f5437c33bde60dc23619c8a47378b0cecd3f'
+BINDING = {'resource_id': 'binding:' + DIGEST, 'resource_kind': 'binding',
+           'display_name': DIGEST, 'display_path': [DIGEST]}
+DATABASE = {'resource_id': 'database:d1', 'resource_kind': 'database',
+            'display_name': 'd1', 'display_path': ['d1']}
+
+
+def test_tidb_ttl():
+    assert native('table', 'set_ttl', {
+        'column': 'created', 'interval': 3, 'unit': 'DAY', 'enabled': False,
+        'job_interval': '2h'}, TABLE) == [(
+            "ALTER TABLE `d1`.`t` TTL = `created` + INTERVAL 3 DAY "
+            "TTL_ENABLE = 'OFF' TTL_JOB_INTERVAL = '2h'", ())]
+    assert native('table', 'remove_ttl', {}, TABLE) == [
+        ('ALTER TABLE `d1`.`t` REMOVE TTL', ())]
+    for bad in ({'unit': 'FORTNIGHT'}, {'interval': 0},
+                {'job_interval': '1 hour'}):
+        with pytest.raises(RelationalClientError):
+            native('table', 'set_ttl', {
+                'column': 'created', 'interval': 3, **bad}, TABLE)
+    from pgadmin.cdeadmin.providers.tidb.provider import (
+        NATIVE_ADMINISTRATION as tidb)
+    created = ('CREATE TABLE `t` (\n  `created` datetime\n) ENGINE=InnoDB '
+               "/*T![ttl] TTL=`created` + INTERVAL 3 DAY */ /*T![ttl] "
+               "TTL_ENABLE='OFF' */ /*T![ttl] TTL_JOB_INTERVAL='2h' */")
+    ttl = {'resource_kind': 'table', 'operation_id': 'set_ttl',
+           'target_resource': TABLE, 'draft': {
+               'column': 'created', 'interval': 3, 'unit': 'DAY',
+               'enabled': False, 'job_interval': '2h'}}
+    assert tidb.confirmed(ttl, [('t', created)])
+    assert not tidb.confirmed(ttl, [('t', created.replace("'OFF'",
+                                                          "'ON'"))])
+    removed = {'resource_kind': 'table', 'operation_id': 'remove_ttl',
+               'target_resource': TABLE, 'draft': {}}
+    assert not tidb.confirmed(removed, [('t', created)])
+    assert tidb.confirmed(removed, [('t', 'CREATE TABLE `t` (x int)')])
+
+
+def test_tidb_plan_bindings():
+    assert native('binding', 'create', {
+        'original_sql': 'SELECT * FROM t WHERE v = 1;',
+        'bind_sql': 'SELECT /*+ USE_INDEX(t, kv) */ * FROM t WHERE v = 1'},
+        None) == [(
+            'CREATE GLOBAL BINDING FOR SELECT * FROM t WHERE v = 1 USING '
+            'SELECT /*+ USE_INDEX(t, kv) */ * FROM t WHERE v = 1', ())]
+    for original in ('SELECT 1; DROP TABLE t', 'DROP TABLE t'):
+        with pytest.raises(RelationalClientError, match='binding'):
+            native('binding', 'create', {'original_sql': original,
+                                         'bind_sql': 'SELECT 1'}, None)
+    with pytest.raises(RelationalClientError):  # required field
+        native('binding', 'create', {'original_sql': '',
+                                     'bind_sql': 'SELECT 1'}, None)
+    assert native('binding', 'set_status', {'status': 'DISABLED'},
+                  BINDING) == [
+        (f"SET BINDING DISABLED FOR SQL DIGEST '{DIGEST}'", ())]
+    assert native('binding', 'drop', {}, BINDING) == [
+        (f"DROP GLOBAL BINDING FOR SQL DIGEST '{DIGEST}'", ())]
+    with pytest.raises(RelationalClientError, match='digest'):
+        native('binding', 'drop', {}, {**BINDING,
+                                       'display_name': "x' OR 1"})
+    from pgadmin.cdeadmin.providers.tidb.provider import (
+        NATIVE_ADMINISTRATION as tidb)
+    create = {'resource_kind': 'binding', 'operation_id': 'create',
+              'target_resource': None, 'draft': {
+                  'original_sql': 'SELECT 1', 'bind_sql': 'SELECT 1'}}
+    assert tidb.confirmed(create, [(1,)]) and not tidb.confirmed(
+        create, [(0,)])
+    statements = []
+    tidb.inspect(create, None, sequence=lambda items: statements.extend(
+        items) or {'rows': []})
+    assert [source for source, _ in statements] == [
+        'EXPLAIN SELECT 1', 'SELECT @@last_plan_from_binding']
+
+
+def test_tidb_flashback_table():
+    assert native('database', 'flashback_table', {
+        'table': 't', 'new_name': 't_back'}, DATABASE) == [
+        ('FLASHBACK TABLE `d1`.`t` TO `t_back`', ())]
+    assert native('database', 'flashback_table', {'table': 't'},
+                  DATABASE) == [('FLASHBACK TABLE `d1`.`t`', ())]

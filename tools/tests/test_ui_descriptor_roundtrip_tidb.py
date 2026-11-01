@@ -739,3 +739,49 @@ def test_tidb_global_variable(live):
                 database=None)
     assert query('SELECT @@GLOBAL.tidb_slow_log_threshold') == [
         (str(original),)]
+
+
+def test_tidb_ttl_bindings_and_flashback(live):
+    route, client = live
+    execute('CREATE TABLE rt_ttl(id INT PRIMARY KEY, v INT, created '
+            'DATETIME, KEY rt_v(v))')
+    table = row(client, route, 'table', 'rt_ttl', [DATABASE, 'rt_ttl'])
+
+    def created():
+        return query('SHOW CREATE TABLE rt_ttl')[0][1]
+    control(client, route, 'table', 'set_ttl', {
+        'column': 'created', 'interval': 3, 'unit': 'DAY', 'enabled': False,
+        'job_interval': '2h'}, table)
+    assert "/*T![ttl] TTL=`created` + INTERVAL 3 DAY */" in created()
+    assert "TTL_ENABLE='OFF'" in created()
+    control(client, route, 'table', 'remove_ttl', {}, table)
+    assert '/*T![ttl]' not in created()
+
+    statement = 'SELECT * FROM rt_ttl WHERE v = 1'
+    try:
+        control(client, route, 'binding', 'create', {
+            'original_sql': statement,
+            'bind_sql': 'SELECT /*+ USE_INDEX(rt_ttl, rt_v) */ * FROM rt_ttl '
+                        'WHERE v = 1'}, None)
+        binding = next(item for item in resources(client, route)
+                       if item['resource_kind'] == 'binding' and
+                       item['native'].get('default_database') == DATABASE)
+        control(client, route, 'binding', 'set_status',
+                {'status': 'DISABLED'}, binding)
+        assert [entry[3] for entry in query('SHOW GLOBAL BINDINGS')
+                if entry[9] == binding['display_name']] == ['disabled']
+        control(client, route, 'binding', 'drop', {}, binding)
+        assert not [entry for entry in query('SHOW GLOBAL BINDINGS')
+                    if entry[9] == binding['display_name']]
+    finally:
+        # A global binding outlives the test database.
+        for entry in query('SHOW GLOBAL BINDINGS'):
+            if entry[2] == DATABASE:
+                execute(f"DROP GLOBAL BINDING FOR SQL DIGEST '{entry[9]}'")
+
+    execute('CREATE TABLE rt_gone(id INT PRIMARY KEY)',
+            'INSERT INTO rt_gone VALUES (7)', 'DROP TABLE rt_gone')
+    control(client, route, 'database', 'flashback_table', {
+        'table': 'rt_gone', 'new_name': 'rt_back'},
+        row(client, route, 'database', DATABASE))
+    assert query('SELECT id FROM rt_back') == [(7,)]

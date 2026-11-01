@@ -19,6 +19,11 @@ IDENTIFIER = r'[^`\x00\r\n]{1,64}'
 COLLATION = r'[A-Za-z0-9_]+'
 ACCOUNT_PART = r'[^\x00\r\n]*'
 VARIABLE = r'[A-Za-z_][A-Za-z0-9_]{0,127}'
+TTL_UNITS = ('SECOND', 'MINUTE', 'HOUR', 'DAY', 'WEEK', 'MONTH', 'YEAR')
+_JOB_INTERVAL = r'[1-9][0-9]{0,5}[smhd]'
+_DIGEST = r'[0-9a-f]{64}'
+_BINDABLE = re.compile(r'\s*(SELECT|INSERT|UPDATE|DELETE|REPLACE|WITH)\b',
+                       re.IGNORECASE)
 
 _TABLE_OPTIONS = {
     'comment': lambda: cp_field(
@@ -144,6 +149,63 @@ class MySQLWireAdministration:
                     cp_field('new_host', 'New host', 'text', True,
                              max_length=255, pattern=ACCOUNT_PART),
                 ), impact_scope='resource')
+        if (kind, operation) == ('table', 'set_ttl'):
+            return ControlPlaneOperation(
+                'table', 'set_ttl', 'Set row expiry (TTL)', 'admin',
+                'administer', (
+                    cp_field('column', 'Time column', 'text', True,
+                             max_length=64, pattern=IDENTIFIER,
+                             help='A DATE, DATETIME or TIMESTAMP column.'),
+                    cp_field('interval', 'Expire after', 'number', True,
+                             minimum=1, maximum=1000000),
+                    cp_field('unit', 'Unit', 'select', True, default='DAY',
+                             options=[{'value': unit, 'label': unit.title()}
+                                      for unit in TTL_UNITS]),
+                    cp_field('enabled', 'Delete expired rows', 'boolean',
+                             False, default=True),
+                    cp_field('job_interval', 'Job interval', 'text', False,
+                             max_length=8, pattern=_JOB_INTERVAL,
+                             help='How often the TTL job runs, e.g. 1h.'),
+                ), impact_scope='resource')
+        if (kind, operation) == ('table', 'remove_ttl'):
+            return ControlPlaneOperation(
+                'table', 'remove_ttl', 'Remove row expiry (TTL)', 'admin',
+                'administer', impact_scope='resource')
+        if (kind, operation) == ('binding', 'create'):
+            return ControlPlaneOperation(
+                'binding', 'create', 'Create SQL plan binding', 'admin',
+                'administer', (
+                    cp_field('original_sql', 'Statement', 'multiline', True,
+                             max_length=65536,
+                             help='The statement to bind, as the '
+                             'application sends it.'),
+                    cp_field('bind_sql', 'Statement with hints',
+                             'multiline', True, max_length=65536,
+                             help='The same statement with optimizer hints, '
+                             'e.g. /*+ USE_INDEX(t, k) */.'),
+                ), target_required=False, impact_scope='database')
+        if (kind, operation) == ('binding', 'set_status'):
+            return ControlPlaneOperation(
+                'binding', 'set_status', 'Enable or disable binding',
+                'admin', 'administer', (cp_field(
+                    'status', 'Status', 'select', True, options=[
+                        {'value': 'ENABLED', 'label': 'Enabled'},
+                        {'value': 'DISABLED', 'label': 'Disabled'}]),),
+                impact_scope='database')
+        if (kind, operation) == ('binding', 'drop'):
+            return ControlPlaneOperation(
+                'binding', 'drop', 'Drop binding', 'destructive',
+                'administer', impact_scope='database')
+        if (kind, operation) == ('database', 'flashback_table'):
+            return ControlPlaneOperation(
+                'database', 'flashback_table', 'Recover dropped table',
+                'admin', 'administer', (
+                    cp_field('table', 'Dropped table', 'text', True,
+                             max_length=64, pattern=IDENTIFIER),
+                    cp_field('new_name', 'Recover as', 'text', False,
+                             max_length=64, pattern=IDENTIFIER,
+                             help='Empty: the original name.'),
+                ), impact_scope='database')
         if (kind, operation) == ('session', 'terminate_query'):
             return ControlPlaneOperation(
                 'session', 'terminate_query', 'Terminate running statement',
@@ -214,9 +276,42 @@ class MySQLWireAdministration:
             raise self._error('control-plane operation is unavailable')
         draft = request.get('draft') or {}
         option = self.features[(kind, operation)]
+        if kind == 'binding':
+            if operation == 'create':
+                return [_statement(
+                    'CREATE GLOBAL BINDING FOR ' +
+                    self._bindable(draft.get('original_sql')) + ' USING ' +
+                    self._bindable(draft.get('bind_sql')))]
+            digest = self._digest(request)
+            if operation == 'drop':
+                return [_statement('DROP GLOBAL BINDING FOR SQL DIGEST ' +
+                                   _literal(digest))]
+            if draft.get('status') not in {'ENABLED', 'DISABLED'}:
+                raise self._error('binding status is invalid')
+            return [_statement('SET BINDING ' + draft['status'] +
+                               ' FOR SQL DIGEST ' + _literal(digest))]
+        if kind == 'database' and operation == 'flashback_table':
+            database = self._name(request)
+            table = draft.get('table')
+            if not isinstance(table, str) or not re.fullmatch(
+                    IDENTIFIER, table):
+                raise self._error('dropped table name is invalid')
+            source = ('FLASHBACK TABLE ' + quote(database) + '.' +
+                      quote(table))
+            if draft.get('new_name') not in (None, ''):
+                if not re.fullmatch(IDENTIFIER, draft['new_name']):
+                    raise self._error('recovered table name is invalid')
+                source += ' TO ' + quote(draft['new_name'])
+            return [_statement(source)]
         if kind == 'table':
             database, table = self._path(request, 2)
             qualified = quote(database) + '.' + quote(table)
+            if operation == 'set_ttl':
+                return [_statement('ALTER TABLE ' + qualified + ' ' +
+                                   ' '.join(self._ttl_clauses(draft)))]
+            if operation == 'remove_ttl':
+                return [_statement('ALTER TABLE ' + qualified +
+                                   ' REMOVE TTL')]
             if operation == 'set_options':
                 return self._table_options(qualified, draft, option)
             if operation == 'analyze':
@@ -286,6 +381,41 @@ class MySQLWireAdministration:
         return [{'source': 'SET @@GLOBAL.' + name + ' = %s',
                  'parameters': (draft['value'],)}]
 
+    def _bindable(self, value):
+        if not isinstance(value, str):
+            raise self._error('binding statement is required')
+        text = value.strip().rstrip(';').strip()
+        # One statement only; EXPLAIN of it is the read-back.
+        if not text or ';' in text or not _BINDABLE.match(text) or (
+                '\x00' in text):
+            raise self._error(
+                'a binding is one SELECT, INSERT, UPDATE, DELETE or REPLACE')
+        return text
+
+    def _digest(self, request):
+        value = self._name(request)
+        if not re.fullmatch(_DIGEST, value):
+            raise self._error('binding digest is invalid')
+        return value
+
+    @staticmethod
+    def _ttl_clauses(draft):
+        column, interval = draft.get('column'), draft.get('interval')
+        unit = draft.get('unit') or 'DAY'
+        if not isinstance(column, str) or not re.fullmatch(IDENTIFIER, column):
+            raise RelationalClientError('TTL column is invalid')
+        if isinstance(interval, bool) or not isinstance(interval, int) or (
+                interval < 1) or unit not in TTL_UNITS:
+            raise RelationalClientError('TTL interval is invalid')
+        clauses = [f'TTL = {quote(column)} + INTERVAL {interval} {unit}',
+                   "TTL_ENABLE = '" + ('OFF' if draft.get('enabled') is False
+                                       else 'ON') + "'"]
+        if draft.get('job_interval') not in (None, ''):
+            if not re.fullmatch(_JOB_INTERVAL, str(draft['job_interval'])):
+                raise RelationalClientError('TTL job interval is invalid')
+            clauses.append(f"TTL_JOB_INTERVAL = '{draft['job_interval']}'")
+        return clauses
+
     def _table_options(self, qualified, draft, admitted):
         clauses, parameters, separate = [], [], []
         for name in draft:
@@ -325,11 +455,32 @@ class MySQLWireAdministration:
 
     # Read-back --------------------------------------------------------
 
-    def inspect(self, plan, query):
+    def inspect(self, plan, query, sequence=None):
         kind = plan['resource_kind']
         operation = plan['operation_id']
         draft = plan.get('draft') or {}
         option = self.features[(kind, operation)]
+        if kind == 'binding' and operation == 'create':
+            # EXPLAIN plans without executing, DML included; the session
+            # flag says whether a binding chose the plan (live, TiDB 8.5.6).
+            if not callable(sequence):
+                raise self._error('binding read-back needs one session')
+            return sequence([
+                ('EXPLAIN ' + self._bindable(draft.get('original_sql')), ()),
+                ('SELECT @@last_plan_from_binding', ())])
+        if kind == 'binding':
+            return query('SHOW GLOBAL BINDINGS WHERE Sql_digest = %s',
+                         (self._digest(plan),))
+        if kind == 'database' and operation == 'flashback_table':
+            return query(
+                'SELECT TABLE_NAME FROM information_schema.TABLES '
+                'WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s',
+                (self._name(plan), draft.get('new_name') or draft.get(
+                    'table')))
+        if kind == 'table' and operation in {'set_ttl', 'remove_ttl'}:
+            database, table = self._path(plan, 2)
+            return query('SHOW CREATE TABLE ' + quote(database) + '.' +
+                         quote(table))
         if kind == 'table':
             database, table = self._path(plan, 2)
             if operation == 'analyze' and option == 'dolt_statistics':
@@ -403,6 +554,24 @@ class MySQLWireAdministration:
         operation = plan['operation_id']
         draft = plan.get('draft') or {}
         option = self.features[(kind, operation)]
+        if kind == 'binding':
+            if operation == 'create':
+                return len(rows) == 1 and str(rows[0][0]) == '1'
+            if operation == 'drop':
+                return not rows
+            return len(rows) == 1 and str(rows[0][3]).upper() == draft.get(
+                'status')
+        if kind == 'database' and operation == 'flashback_table':
+            return len(rows) == 1
+        if kind == 'table' and operation in {'set_ttl', 'remove_ttl'}:
+            source = str(rows[0][1]) if len(rows) == 1 else ''
+            if operation == 'remove_ttl':
+                return bool(source) and '/*T![ttl]' not in source
+            # SHOW CREATE TABLE renders each clause as /*T![ttl] K=V */.
+            expected = [clause.replace(' = ', '=', 1)
+                        for clause in self._ttl_clauses(draft)]
+            return all(f'/*T![ttl] {clause} */' in source
+                       for clause in expected)
         if kind == 'table':
             if operation == 'analyze':
                 if option == 'dolt_statistics':
@@ -465,6 +634,10 @@ class MySQLWireAdministration:
 
 def quote(value):
     return '`' + str(value).replace('`', '``') + '`'
+
+
+def _literal(value):
+    return "'" + str(value).replace("'", "''") + "'"
 
 
 def _statement(source):

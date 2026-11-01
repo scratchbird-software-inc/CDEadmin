@@ -728,6 +728,191 @@
         }
       ],
       "notes": "TiDB stores some values in a canonical form (20m reads back as 20m0s); a value read back in another form is reported unconfirmed with the stored value."
+    },
+    {
+      "operation_id": "set_ttl",
+      "resource_kind": "table",
+      "title": "Set row expiry (TTL)",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "column",
+          "label": "Time column",
+          "control": "text",
+          "required": true,
+          "help": "A DATE, DATETIME or TIMESTAMP column."
+        },
+        {
+          "field_id": "interval",
+          "label": "Expire after",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "unit",
+          "label": "Unit",
+          "control": "select",
+          "required": true,
+          "default": "DAY",
+          "options": [
+            {
+              "value": "SECOND",
+              "label": "Second"
+            },
+            {
+              "value": "MINUTE",
+              "label": "Minute"
+            },
+            {
+              "value": "HOUR",
+              "label": "Hour"
+            },
+            {
+              "value": "DAY",
+              "label": "Day"
+            },
+            {
+              "value": "WEEK",
+              "label": "Week"
+            },
+            {
+              "value": "MONTH",
+              "label": "Month"
+            },
+            {
+              "value": "YEAR",
+              "label": "Year"
+            }
+          ]
+        },
+        {
+          "field_id": "enabled",
+          "label": "Delete expired rows",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "job_interval",
+          "label": "Job interval",
+          "control": "text",
+          "required": false,
+          "help": "How often the TTL job runs, e.g. 1h."
+        }
+      ],
+      "notes": "Read back from SHOW CREATE TABLE (/*T![ttl] ... */ clauses)."
+    },
+    {
+      "operation_id": "remove_ttl",
+      "resource_kind": "table",
+      "title": "Remove row expiry (TTL)",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "create",
+      "resource_kind": "binding",
+      "title": "Create SQL plan binding",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "original_sql",
+          "label": "Statement",
+          "control": "code",
+          "required": true,
+          "help": "The statement to bind, as the application sends it."
+        },
+        {
+          "field_id": "bind_sql",
+          "label": "Statement with hints",
+          "control": "code",
+          "required": true,
+          "help": "The same statement with optimizer hints, e.g. /*+ USE_INDEX(t, k) */."
+        }
+      ],
+      "notes": "Confirmed by EXPLAIN of the statement and @@last_plan_from_binding on one session; nothing is executed."
+    },
+    {
+      "operation_id": "set_status",
+      "resource_kind": "binding",
+      "title": "Enable or disable binding",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "status",
+          "label": "Status",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "ENABLED",
+              "label": "Enabled"
+            },
+            {
+              "value": "DISABLED",
+              "label": "Disabled"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "drop",
+      "resource_kind": "binding",
+      "title": "Drop binding",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "flashback_table",
+      "resource_kind": "database",
+      "title": "Recover dropped table",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "table",
+          "label": "Dropped table",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "new_name",
+          "label": "Recover as",
+          "control": "text",
+          "required": false,
+          "help": "Empty: the original name. Only within the GC life time (tidb_gc_life_time)."
+        }
+      ]
     }
   ]
 }

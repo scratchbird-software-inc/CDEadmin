@@ -275,6 +275,22 @@ TiDB 8.5.6
    -  global system variables with ``SET @@GLOBAL``. TiDB stores some values
       in a canonical form (``20m`` reads back as ``20m0s``); a value read back
       in another form is reported unconfirmed, with the stored value.
+   -  row expiry (TTL), set and removed, read from the ``/*T![ttl] ... */``
+      clauses of ``SHOW CREATE TABLE``;
+   -  SQL plan bindings, listed from ``SHOW GLOBAL BINDINGS`` (built-in
+      bindings left out) and addressed by SQL digest. A new binding is
+      confirmed by ``EXPLAIN`` of its statement followed by
+      ``@@last_plan_from_binding`` on the same session, so the statement is
+      planned but not run. Enable, disable and drop are read back from
+      ``SHOW GLOBAL BINDINGS``. A binding outlives its database, and TiDB
+      has no ``STATEMENT_DIGEST()``;
+   -  ``FLASHBACK TABLE`` of a dropped table, optionally under a new name,
+      read back from ``information_schema.TABLES``. It works only within the
+      GC life time (``tidb_gc_life_time``).
+
+   Still not exposed: ``AUTO_RANDOM`` and ``PRE_SPLIT_REGIONS`` (create-time
+   column and table attributes, which belong in the table form), ``SPLIT
+   TABLE`` regions, global indexes, and ``ADMIN CHECK TABLE``.
 
 Vitess 23.0.3 (through vtgate, sharded keyspace)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

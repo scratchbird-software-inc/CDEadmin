@@ -1313,7 +1313,8 @@
         {"resource_kind": "role", "title": "Role", "operation_profile": "security"},
         {"resource_kind": "privilege", "title": "Privilege", "operation_profile": "security"},
         {"resource_kind": "session", "title": "Session", "operation_profile": "read_only"},
-        {"resource_kind": "system-variable", "title": "System variable", "operation_profile": "read_only"}
+        {"resource_kind": "system-variable", "title": "System variable", "operation_profile": "read_only"},
+        {"resource_kind": "binding", "title": "SQL plan binding", "operation_profile": "read_only"}
       ]
     },
     {

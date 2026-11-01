@@ -76,7 +76,8 @@
       "title": "Activity and configuration",
       "kinds": [
         "session",
-        "system-variable"
+        "system-variable",
+        "binding"
       ],
       "order": 8
     }
@@ -113,6 +114,7 @@
     "role": "object.role",
     "privilege": "object.privilege",
     "session": "object.session",
-    "system-variable": "object.system-variable"
+    "system-variable": "object.system-variable",
+    "binding": "object.statistics"
   }
 }
