@@ -23,7 +23,7 @@
     },
     {
       "concept": "Per-role session defaults",
-      "reason": "ALTER ROLE ... [IN DATABASE] SET runs on 26.1.3 (live) but has no editor yet",
+      "reason": "ALTER ROLE ... [IN DATABASE] SET runs on 26.1.3 (live) but has no editor yet. 2026-11-01: provided as the role and user Set/Reset default setting operations (optionally in one database), read back from pg_db_role_setting; this form still has no settings grid",
       "tracking": "postgresql-wire-parity"
     },
     {

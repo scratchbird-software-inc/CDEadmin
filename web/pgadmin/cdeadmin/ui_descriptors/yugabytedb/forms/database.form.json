@@ -21,7 +21,7 @@
     },
     {
       "concept": "Per-role settings in a database (ALTER ROLE ... IN DATABASE ... SET)",
-      "reason": "Runs but has no editor yet",
+      "reason": "Runs but has no editor yet. 2026-11-01: provided as the role and user Set default setting operation with \"Only in database\"",
       "tracking": "postgresql-wire-parity"
     },
     {

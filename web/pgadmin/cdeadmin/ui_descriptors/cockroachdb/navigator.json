@@ -77,6 +77,14 @@
         "schedule"
       ],
       "order": 7
+    },
+    {
+      "group_id": "activity",
+      "title": "Activity",
+      "kinds": [
+        "session"
+      ],
+      "order": 8
     }
   ],
   "resource_children": {
@@ -118,6 +126,7 @@
     "privilege": "object.privilege",
     "job": "object.job",
     "schedule": "object.job",
-    "row-policy": "object.privilege"
+    "row-policy": "object.privilege",
+    "session": "object.session"
   }
 }

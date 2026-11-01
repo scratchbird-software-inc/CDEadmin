@@ -815,6 +815,18 @@
           "mutation_class": "destructive"
         }
       ]
+    },
+    {
+      "resource_kind": "session",
+      "family": "engine_object",
+      "title": "Session",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
     }
   ]
 }

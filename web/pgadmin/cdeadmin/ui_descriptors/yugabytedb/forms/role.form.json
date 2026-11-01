@@ -13,7 +13,7 @@
   "gaps": [
     {
       "concept": "Per-role session defaults (ALTER ROLE ... SET)",
-      "reason": "Run on 2025.2.2.2 but have no editor yet",
+      "reason": "Run on 2025.2.2.2 but have no editor yet. 2026-11-01: provided as the role and user Set/Reset default setting operations (optionally in one database), read back from pg_db_role_setting; this form still has no settings grid",
       "tracking": "postgresql-wire-parity"
     },
     {

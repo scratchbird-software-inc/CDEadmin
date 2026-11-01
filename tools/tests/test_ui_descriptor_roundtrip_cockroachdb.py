@@ -92,7 +92,9 @@ def live():
     finally:
         with connect() as connection:
             connection.execute(f'DROP DATABASE IF EXISTS {DATABASE} CASCADE')
-            for role in (f'rt_user_{UNIQUE}', f'rt_role_{UNIQUE}'):
+            for role in (f'rt_user_{UNIQUE}', f'rt_role_{UNIQUE}',
+                         f'rt_native_user_{UNIQUE}',
+                         f'rt_native_role_{UNIQUE}'):
                 connection.execute(f'DROP ROLE IF EXISTS {role}')
 
 
@@ -909,3 +911,197 @@ def test_backup_restore_and_schedule_operations(live):
             connection.execute(
                 f"DROP SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM "
                 f"x WHERE label = 'rt_sched_{UNIQUE}'")
+
+
+# Native administration added 2026-11-01 (providers/pgwire_administration).
+# Each operation goes through the UI path, must be confirmed by the
+# provider's own read-back, and is then read back again here.
+
+ADMIN = 'root'
+ADMIN_DATABASE = 'defaultdb'
+DATABASE_PRIVILEGES = ['CONNECT', 'CREATE', 'BACKUP', 'CHANGEFEED']
+ANALYZED = ("SELECT count(*) FILTER (WHERE created >= now() - INTERVAL "
+            "'10 minutes') > 0 FROM [SHOW STATISTICS FOR TABLE "
+            "{schema}.{table}]")
+
+
+def held(kind, path, role):
+    target = ('TYPE ' + '.'.join(path) if kind == 'type'
+              else f'{kind.upper()} {path[0]}')
+    return {(name, bool(grantable)) for name, grantable in query(
+        f'SELECT privilege_type, is_grantable FROM [SHOW GRANTS ON {target}] '
+        f"WHERE grantee = '{role}'")}
+
+
+def SESSION_ID(connection):
+    return connection.execute('SHOW session_id').fetchone()[0]
+
+
+def SESSION_BUSY(session):
+    return any('pg_sleep' in str(row[0]) for row in query(
+        'SELECT active_queries FROM [SHOW CLUSTER SESSIONS] '
+        f"WHERE session_id = '{session}'"))
+
+
+def control(client, route, kind, operation, draft, target):
+    request = {'resource_kind': kind, 'operation_id': operation,
+               'target_resource': target, '_provider_route': route,
+               'draft': draft}
+    run(client, route, kind, operation, draft, target)
+    planned = ADMINISTRATION.plan(request)
+    state = ADMINISTRATION.validate_operation_post_state(
+        client, executor_request(request, planned))
+    assert state['confirmed'], state
+
+
+NATIVE_ROLE = f'rt_native_role_{UNIQUE}'
+NATIVE_USER = f'rt_native_user_{UNIQUE}'
+
+
+def ensure_role(name, login=False):
+    if not query(f"SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = "
+                 f"'{name}'", database=ADMIN_DATABASE):
+        query(f'CREATE ROLE {name}{" LOGIN" if login else ""}',
+              database=ADMIN_DATABASE)
+
+
+def native_row(client, route, kind, path):
+    found = [row for row in resources(client, route)
+             if row['resource_kind'] == kind and row['display_path'] == path]
+    assert len(found) == 1, (kind, path, len(found))
+    return found[0]
+
+
+def test_native_table_maintenance_schema_and_owner(live):
+    route, client = live
+    query('CREATE TABLE public.rt_m (id INT PRIMARY KEY, v INT)')
+    query('INSERT INTO public.rt_m VALUES (1, 1), (2, 2)')
+    target = native_row(client, route, 'table', ['public', 'rt_m'])
+    control(client, route, 'table', 'truncate', {'cascade': False}, target)
+    assert query('SELECT count(*) FROM public.rt_m') == [(0,)]
+    query('INSERT INTO public.rt_m VALUES (1, 1), (2, 2)')
+    control(client, route, 'table', 'analyze', {}, target)
+    assert query(ANALYZED.format(schema='public', table='rt_m')) == [(True,)]
+    query('CREATE SCHEMA rt_s')
+    control(client, route, 'table', 'set_schema', {'schema': 'rt_s'},
+            target)
+    assert query("SELECT table_schema FROM information_schema.tables "
+                 "WHERE table_name = 'rt_m'") == [('rt_s',)]
+    moved = native_row(client, route, 'table', ['rt_s', 'rt_m'])
+    ensure_role(NATIVE_ROLE)
+    # The new owner needs CREATE on the table's schema (CockroachDB refuses
+    # otherwise; a superuser in YugabyteDB is not checked).
+    query(f'GRANT CREATE ON SCHEMA rt_s TO {NATIVE_ROLE}')
+    control(client, route, 'table', 'set_owner', {'owner': NATIVE_ROLE},
+            moved)
+    assert query("SELECT tableowner FROM pg_catalog.pg_tables WHERE "
+                 "schemaname = 'rt_s' AND tablename = 'rt_m'") == [
+        (NATIVE_ROLE,)]
+    control(client, route, 'table', 'set_owner', {'owner': ADMIN}, moved)
+
+
+def test_native_constraint_validation(live):
+    route, client = live
+    query('CREATE TABLE public.rt_c (id INT PRIMARY KEY, v INT)')
+    query('ALTER TABLE public.rt_c ADD CONSTRAINT rt_ck CHECK (v > 0) '
+          'NOT VALID')
+    validated = ("SELECT c.convalidated FROM pg_catalog.pg_constraint c "
+                 "JOIN pg_catalog.pg_class t ON t.oid = c.conrelid "
+                 "WHERE t.relname = 'rt_c' AND c.conname = 'rt_ck'")
+    assert query(validated) == [(False,)]
+    control(client, route, 'constraint', 'validate', {}, native_row(
+        client, route, 'constraint', ['public', 'rt_c', 'rt_ck']))
+    assert query(validated) == [(True,)]
+
+
+def test_native_default_settings(live):
+    route, client = live
+    role = NATIVE_USER
+    ensure_role(role, login=True)
+
+    def settings(role_name, database):
+        return [entry for row in query(
+            'SELECT s.setconfig FROM pg_catalog.pg_db_role_setting s '
+            'LEFT JOIN pg_catalog.pg_roles r ON r.oid = s.setrole '
+            'LEFT JOIN pg_catalog.pg_database d ON d.oid = s.setdatabase '
+            f"WHERE coalesce(r.rolname, '') = '{role_name}' "
+            f"AND coalesce(d.datname, '') = '{database}'") for entry in row[0]]
+    principal = native_row(client, route, 'user', [role])
+    control(client, route, 'user', 'set_setting',
+            {'setting': 'statement_timeout', 'value': '9s'}, principal)
+    assert settings(role, '') == ['statement_timeout=9s']
+    control(client, route, 'user', 'set_setting', {
+        'setting': 'search_path', 'value': 'public', 'database': DATABASE},
+        principal)
+    assert settings(role, DATABASE) == ['search_path=public']
+    control(client, route, 'user', 'reset_setting',
+            {'setting': 'statement_timeout'}, principal)
+    assert settings(role, '') == []
+    control(client, route, 'user', 'reset_setting', {
+        'setting': 'search_path', 'database': DATABASE}, principal)
+    assert settings(role, DATABASE) == []
+
+
+def test_native_database_schema_and_type_grants(live):
+    route, client = live
+    role = NATIVE_ROLE
+    ensure_role(role)
+    query('CREATE SCHEMA IF NOT EXISTS rt_g')
+    query("CREATE TYPE rt_g.rt_ty AS ENUM ('x')")
+    for kind, path, privileges in (
+            ('database', [DATABASE], DATABASE_PRIVILEGES),
+            ('schema', ['rt_g'], ['CREATE', 'USAGE']),
+            ('type', ['rt_g', 'rt_ty'], ['USAGE'])):
+        target = native_row(client, route, kind, path)
+        control(client, route, kind, 'grant', {
+            'principal': role, 'privileges': privileges,
+            'grant_option': True}, target)
+        assert held(kind, path, role) == {
+            (privilege, True) for privilege in privileges}, kind
+        control(client, route, kind, 'revoke', {
+            'principal': role, 'privileges': privileges}, target)
+        assert not {name for name, _ in held(kind, path, role)} & set(
+            privileges), kind
+
+
+def test_native_session_cancel_and_terminate(live):
+    import threading
+    route, client = live
+    victim = connect(DATABASE)
+    session = SESSION_ID(victim)
+    outcome = []
+
+    def sleep():
+        try:
+            # Long enough that the cancel, not the sleep, ends it even
+            # where listing the catalog is slow (YugabyteDB).
+            victim.execute('SELECT pg_sleep(600)')
+            outcome.append('finished')
+        except Exception as error:
+            outcome.append(type(error).__name__)
+    worker = threading.Thread(target=sleep)
+    worker.start()
+    try:
+        # Poll the session directly: a full catalog listing per poll is
+        # slow on YugabyteDB.
+        for _attempt in range(100):
+            if SESSION_BUSY(session):
+                break
+            time.sleep(0.1)
+        control(client, route, 'session', 'terminate_query', {},
+                native_row(client, route, 'session', [session]))
+        worker.join(10)
+        assert not worker.is_alive() and outcome == ['QueryCanceled'], \
+            outcome
+        control(client, route, 'session', 'terminate_connection', {},
+                native_row(client, route, 'session', [session]))
+        assert not [row for row in resources(client, route)
+                    if row['resource_kind'] == 'session' and
+                    row['display_path'] == [session]]
+    finally:
+        worker.join(30)
+        try:
+            victim.cancel()
+            victim.close()
+        except Exception:
+            pass

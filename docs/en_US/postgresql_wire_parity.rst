@@ -1111,6 +1111,47 @@ Items left from the YugabyteDB work, checked live on 26.1.3:
    (every database except a template refusing connections) pass the
    CockroachDB row-security and database round trips.
 
+Shared native administration, 2026-11-01
+----------------------------------------
+
+Probed live on CockroachDB 26.1.3 and YugabyteDB 2025.2.2.2, each feature
+executed and read back before it was offered
+(``providers/pgwire_administration.py``; each engine declares only what it
+reads back). Every operation is confirmed by the provider's own read-back
+after it runs, and the live round trips read it back again:
+
+-  ``TRUNCATE TABLE`` (optionally ``CASCADE``), read back as an empty table;
+-  ``ANALYZE``: CockroachDB, a ``SHOW STATISTICS`` row created within ten
+   minutes (a fresh table has none); YugabyteDB,
+   ``pg_stat_user_tables.last_analyze`` within ten minutes;
+-  ``ALTER TABLE ... SET SCHEMA`` and ``OWNER TO``. CockroachDB refuses a new
+   owner without ``CREATE`` on the table's schema; the refusal is passed on;
+-  ``VALIDATE CONSTRAINT`` for a ``NOT VALID`` constraint
+   (``pg_constraint.convalidated``);
+-  role and user session defaults, ``ALTER ROLE ... [IN DATABASE ...]
+   SET``/``RESET`` (``pg_db_role_setting``). Database defaults are already
+   the database editor's settings grid and are not duplicated;
+-  ``GRANT``/``REVOKE`` on a database, schema or type, read for the exact
+   grantee (CockroachDB ``SHOW GRANTS`` also lists ``public``'s grants;
+   YugabyteDB ``aclexplode``). CockroachDB accepts ``DROP``, ``RESTORE`` and
+   ``ZONECONFIG`` on a database but never shows them in ``SHOW GRANTS``, so
+   they are not offered; YugabyteDB offers ``TEMPORARY`` instead;
+-  sessions: CockroachDB cluster-wide (``SHOW CLUSTER SESSIONS``, ``CANCEL
+   QUERIES`` for the session's statements, ``CANCEL SESSION``;
+   ``pg_stat_activity`` is empty there); YugabyteDB ``pg_stat_activity``
+   with ``pg_cancel_backend`` and ``pg_terminate_backend``.
+
+Not offered: YugabyteDB ``REINDEX`` and ``ALTER SYSTEM`` ("not supported
+yet"), ``VACUUM`` (accepted with no observable effect), large objects; and
+CockroachDB ``UNSPLIT AT`` (ranges merge asynchronously, so it cannot be read
+back). Partition changes after create (CockroachDB repartitioning,
+YugabyteDB attach and detach) read back but need a structured partition-bound
+editor first, so they are not yet offered. CockroachDB cluster settings,
+system privileges, ``SPLIT AT`` and storage parameters, and the YugabyteDB
+object kinds its catalog lacks (collation, event trigger, publication, foreign
+data wrapper, aggregate, operator, cast, rule, language) are recorded in the
+probe notes and are separate work.
+
 Plan
 ----
 

@@ -27,6 +27,7 @@ from . import (
 )
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
+from ..pgwire_administration import session_resources
 from ..cockroachdb.policies import form as shared_policy_form
 from .control_plane import (
     OPERATIONS as CONTROL_OPERATIONS,
@@ -51,7 +52,7 @@ PROFILE = PilotProfile(
         'procedure', 'trigger', 'extension', 'partition', 'tablespace',
         'tablet', 'tserver', 'master', 'placement-policy', 'user', 'role',
         'privilege', 'row-policy', 'changefeed', 'snapshot', 'schedule',
-        'xcluster-replication',
+        'xcluster-replication', 'session',
     ),
     ('ysqlsh', 'yb-admin', 'backup-restore'),
     parameter_shape='object-or-array',
@@ -84,7 +85,7 @@ PROFILE = PilotProfile(
 _BASE_ADMINISTRATION = sql_administration('yugabytedb', 'postgresql', (
     'universe', 'node', 'region', 'zone', 'tablet', 'tserver', 'master',
     'placement-policy', 'changefeed', 'snapshot', 'schedule',
-    'xcluster-replication', 'row-policy',
+    'xcluster-replication', 'row-policy', 'session',
 ))
 _YSQL_SUPPORTED = dict(_BASE_ADMINISTRATION.dialect.supported)
 _YSQL_SUPPORTED.update({
@@ -812,6 +813,8 @@ def _extras(cursor, _request, generation):
             values.append(resource('region', [], region, generation))
         if zone:
             values.append(resource('zone', [str(region)], zone, generation))
+    values.extend(session_resources(
+        cursor, generation, resource, optional_rows, 'pg_stat_activity'))
     return values
 
 

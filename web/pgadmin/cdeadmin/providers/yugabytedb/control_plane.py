@@ -17,6 +17,33 @@ from pgadmin.cdeadmin.visual_admin import (
     control_plane_field as cp_field,
 )
 
+from ..pgwire_administration import PGWireAdministration
+
+# Native PostgreSQL-dialect administration YugabyteDB 2025.2.2.2 executes and
+# reads back (live, 2026-11-01). Not offered: REINDEX and ALTER SYSTEM
+# ("not supported yet"), and VACUUM (accepted with no observable effect).
+NATIVE_ADMINISTRATION = PGWireAdministration('YugabyteDB', {
+    ('table', 'truncate'): True,
+    ('table', 'analyze'): 'pg_stat',
+    ('table', 'set_schema'): True,
+    ('table', 'set_owner'): True,
+    ('constraint', 'validate'): True,
+    ('role', 'set_setting'): True,
+    ('role', 'reset_setting'): True,
+    ('user', 'set_setting'): True,
+    ('user', 'reset_setting'): True,
+    # Database session defaults are already the database editor's settings
+    # grid; only roles and users gain them here.
+    ('database', 'grant'): ('CONNECT', 'CREATE', 'TEMPORARY'),
+    ('database', 'revoke'): ('CONNECT', 'CREATE', 'TEMPORARY'),
+    ('schema', 'grant'): ('CREATE', 'USAGE'),
+    ('schema', 'revoke'): ('CREATE', 'USAGE'),
+    ('type', 'grant'): ('USAGE',),
+    ('type', 'revoke'): ('USAGE',),
+    ('session', 'terminate_query'): 'pg_stat_activity',
+    ('session', 'terminate_connection'): 'pg_stat_activity',
+}, grant_reader='aclexplode')
+
 
 _ID_PATTERN = r'[A-Za-z0-9_.:@+-]+'
 _UUID_PATTERN = r'[A-Fa-f0-9-]+'
@@ -271,6 +298,7 @@ OPERATIONS = (
                      False, default=False),
         ), impact_scope='cluster', long_running=True
     ),
+    *NATIVE_ADMINISTRATION.operations(),
 )
 
 
@@ -423,6 +451,20 @@ def compile_action(request):
     operation = request['operation_id']
     draft = request.get('draft') or {}
     arguments = []
+    if NATIVE_ADMINISTRATION.supports(kind, operation):
+        return {
+            'statements': NATIVE_ADMINISTRATION.statements(request),
+            'impact': {
+                'scope': 'resource',
+                'target_resource_id': (
+                    request.get('target_resource') or {}).get('resource_id'),
+                'availability_risk': (
+                    'high' if operation in {'truncate',
+                                            'terminate_connection'}
+                    else 'medium'),
+                'data_movement_possible': False,
+            },
+        }
     if kind == 'table' and operation == 'configure_placement':
         # YugabyteDB rejects modify_table_placement_info for YSQL tables and
         # explicitly requires placement through YSQL tablespaces.  Compile
@@ -1071,10 +1113,34 @@ def _parts(request):
     return plan, payload
 
 
+def _sql_query(client, route):
+    def query(source, parameters=()):
+        connection = client._connect({'route': route})
+        cursor = None
+        try:
+            cursor = connection.cursor()
+            cursor.execute(source, parameters)
+            description = getattr(cursor, 'description', None)
+            return {
+                'columns': [str(item[0]) for item in description or []],
+                'rows': list(cursor.fetchall()) if description else [],
+                'provider_observation_only': True,
+                'finality_interpreted_by_common_code': False,
+            }
+        finally:
+            if cursor is not None:
+                client._safe_close(cursor)
+            client._forget_and_close(connection)
+    return query
+
+
 def inspect_action(_client, request):
     plan, _payload = _parts(request)
     kind = plan['resource_kind']
     operation = plan['operation_id']
+    if NATIVE_ADMINISTRATION.supports(kind, operation):
+        return NATIVE_ADMINISTRATION.inspect(
+            plan, _sql_query(_client, _route(request)))
     if kind in {'placement-policy', 'node'}:
         arguments = ['get_universe_config']
     elif kind == 'cluster':
@@ -1152,6 +1218,20 @@ def cancel_action(_client, request):
 
 
 def _post_validate_action_once(client, request):
+    plan = request.get('plan') or {}
+    if NATIVE_ADMINISTRATION.supports(
+            plan.get('resource_kind'), plan.get('operation_id')):
+        observation = inspect_action(client, request)
+        confirmed = NATIVE_ADMINISTRATION.confirmed(
+            plan, observation.get('rows') or [])
+        return {
+            'confirmed': confirmed,
+            'reason': ('yugabytedb_catalog_shows_requested_state'
+                       if confirmed else
+                       'yugabytedb_catalog_does_not_show_requested_state'),
+            'observation': observation,
+            'provider_finality_authority': True,
+        }
     observation = inspect_action(client, request)
     text = observation['provider_observation'].get('stdout', '')
     document = _json_document(text)

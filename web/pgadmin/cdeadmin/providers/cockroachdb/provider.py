@@ -28,6 +28,7 @@ from . import (
 )
 from .driver import CockroachDBClient
 from ..distributed_control_plane import DistributedSQLControlPlane
+from ..pgwire_administration import PGWireAdministration, session_resources
 from pgadmin.cdeadmin.visual_admin import (
     ControlPlaneOperation,
     control_plane_field as cp_field,
@@ -44,7 +45,7 @@ PROFILE = PilotProfile(
         'column', 'index', 'constraint', 'sequence', 'view',
         'materialized-view', 'type', 'function', 'procedure', 'trigger',
         'partition', 'user', 'role', 'privilege', 'row-policy', 'range',
-        'zone-config', 'job', 'schedule', 'changefeed',
+        'zone-config', 'job', 'schedule', 'changefeed', 'session',
     ),
     ('cockroach-sql', 'node-status', 'debug-zip', 'backup-restore'),
     parameter_shape='object-or-array',
@@ -76,6 +77,7 @@ PROFILE = PilotProfile(
 _BASE_ADMINISTRATION = sql_administration('cockroachdb', 'postgresql', (
     'node', 'locality', 'range', 'zone-config', 'job', 'schedule',
     'changefeed', 'materialized-view', 'type', 'partition', 'row-policy',
+    'session',
 ))
 _COCKROACH_SUPPORTED = dict(_BASE_ADMINISTRATION.dialect.supported)
 for _kind in ('function', 'procedure', 'trigger'):
@@ -145,6 +147,33 @@ _ZONE_FIELDS = (
     cp_field('lease_preferences', 'Lease preferences', 'json', False,
              default=[], json_type='array'),
 )
+
+# Native PostgreSQL-dialect administration CockroachDB 26.1.3 executes and
+# reads back (live, 2026-11-01). Database DROP, RESTORE and ZONECONFIG are
+# accepted by GRANT but never appear in SHOW GRANTS, so they are not offered.
+# Sessions are listed and cancelled cluster-wide.
+NATIVE_ADMINISTRATION = PGWireAdministration('CockroachDB', {
+    ('table', 'truncate'): True,
+    ('table', 'analyze'): 'show_statistics',
+    ('table', 'set_schema'): True,
+    ('table', 'set_owner'): True,
+    ('constraint', 'validate'): True,
+    ('role', 'set_setting'): True,
+    ('role', 'reset_setting'): True,
+    ('user', 'set_setting'): True,
+    ('user', 'reset_setting'): True,
+    # Database session defaults are already the database editor's settings
+    # grid; only roles and users gain them here.
+    ('database', 'grant'): ('CONNECT', 'CREATE', 'BACKUP', 'CHANGEFEED'),
+    ('database', 'revoke'): ('CONNECT', 'CREATE', 'BACKUP', 'CHANGEFEED'),
+    ('schema', 'grant'): ('CREATE', 'USAGE', 'CHANGEFEED'),
+    ('schema', 'revoke'): ('CREATE', 'USAGE', 'CHANGEFEED'),
+    ('type', 'grant'): ('USAGE',),
+    ('type', 'revoke'): ('USAGE',),
+    ('session', 'terminate_query'): 'cluster_sessions',
+    ('session', 'terminate_connection'): 'cluster_sessions',
+}, grant_reader='show_grants')
+
 
 CONTROL_OPERATIONS = (
     ControlPlaneOperation(
@@ -396,6 +425,7 @@ CONTROL_OPERATIONS = (
                      max_length=8192, sensitive=True),
         ), impact_scope='cluster', long_running=True
     ),
+    *NATIVE_ADMINISTRATION.operations(),
 )
 
 
@@ -573,6 +603,9 @@ def _compile_control_plane(request):
     parameters = ()
     statements = []
     impact = _impact(request)
+    if NATIVE_ADMINISTRATION.supports(kind, operation):
+        return {'statements': NATIVE_ADMINISTRATION.statements(request),
+                'impact': impact}
     if kind == 'node' and operation in {'decommission', 'recommission'}:
         return _node_action(request)
     if operation in {'configure_zone', 'reset_zone'}:
@@ -1065,6 +1098,10 @@ def _inspect_control_plane(client, request):
     plan, route = _private_parts(request)
     kind = plan['resource_kind']
     operation = plan['operation_id']
+    if NATIVE_ADMINISTRATION.supports(kind, operation):
+        return NATIVE_ADMINISTRATION.inspect(
+            plan, lambda source, parameters=(): _query_once(
+                client, route, source, parameters))
     if kind == 'node':
         return _node_observation(route, _result_job_id(request))
     if kind == 'changefeed' or operation == 'create_changefeed':
@@ -1192,7 +1229,9 @@ def _post_validate_control_plane(client, request):
     rows = observation.get('rows') or []
     draft = plan.get('draft') or {}
     confirmed = False
-    if kind == 'node':
+    if NATIVE_ADMINISTRATION.supports(kind, operation):
+        confirmed = NATIVE_ADMINISTRATION.confirmed(plan, rows)
+    elif kind == 'node':
         membership = _node_membership(
             observation.get('document'), _result_job_id(request))
         expected = (
@@ -1781,6 +1820,8 @@ def _extras(cursor, request, generation):
         values.append(resource('zone-config', [], row[0], generation, {
             'raw_config_sql': str(row[1]),
         }))
+    values.extend(session_resources(
+        cursor, generation, resource, optional_rows, 'cluster_sessions'))
     return values
 
 

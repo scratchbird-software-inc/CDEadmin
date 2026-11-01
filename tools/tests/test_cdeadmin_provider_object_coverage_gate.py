@@ -55,7 +55,12 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
         # role, account rename, sessions, global variables) plus two inspect.
         # 2434 with Vitess's table comment, index rename and visibility,
         # each confirmed on every shard's primary.
-        self.assertEqual(2434, result['graphical_operation_count'])
+        # 2470 with the PG-wire administration shared by CockroachDB and
+        # YugabyteDB: seventeen operations each (truncate, analyze, schema and
+        # owner moves, constraint validation, role and user default
+        # settings, database, schema and type grants, sessions) plus inspect
+        # on their sessions.
+        self.assertEqual(2470, result['graphical_operation_count'])
         large_object = next(item for item in self.catalogs['postgresql-native']['descriptor']['objects']
             if item['resource_kind'] == 'large-object')
         self.assertEqual({'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop',

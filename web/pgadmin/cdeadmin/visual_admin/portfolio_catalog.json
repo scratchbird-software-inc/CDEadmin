@@ -830,7 +830,8 @@
         {"resource_kind": "zone-config", "title": "Zone configuration", "operation_profile": "topology"},
         {"resource_kind": "job", "title": "Job", "operation_profile": "operational"},
         {"resource_kind": "schedule", "title": "Schedule", "operation_profile": "operational"},
-        {"resource_kind": "changefeed", "title": "Changefeed", "operation_profile": "operational"}
+        {"resource_kind": "changefeed", "title": "Changefeed", "operation_profile": "operational"},
+        {"resource_kind": "session", "title": "Session", "operation_profile": "read_only"}
       ]
     },
     {
@@ -1421,7 +1422,8 @@
         {"resource_kind": "changefeed", "title": "CDC stream", "operation_profile": "operational"},
         {"resource_kind": "snapshot", "title": "Snapshot", "operation_profile": "operational"},
         {"resource_kind": "schedule", "title": "Snapshot schedule", "operation_profile": "operational"},
-        {"resource_kind": "xcluster-replication", "title": "xCluster replication", "operation_profile": "topology"}
+        {"resource_kind": "xcluster-replication", "title": "xCluster replication", "operation_profile": "topology"},
+        {"resource_kind": "session", "title": "Session", "operation_profile": "read_only"}
       ]
     },
     {

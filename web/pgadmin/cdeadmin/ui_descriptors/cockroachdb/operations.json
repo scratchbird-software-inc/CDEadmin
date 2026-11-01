@@ -950,6 +950,475 @@
         }
       ],
       "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Pause the changefeed first; the sink keeps its type."
+    },
+    {
+      "operation_id": "truncate",
+      "resource_kind": "table",
+      "title": "Truncate table",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "cascade",
+          "label": "Also truncate referencing tables",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "analyze",
+      "resource_kind": "table",
+      "title": "Analyze table",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": []
+    },
+    {
+      "operation_id": "set_schema",
+      "resource_kind": "table",
+      "title": "Move to schema",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "schema",
+          "label": "Schema",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "set_owner",
+      "resource_kind": "table",
+      "title": "Change owner",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "owner",
+          "label": "Owner",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "operation_id": "validate",
+      "resource_kind": "constraint",
+      "title": "Validate constraint",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "set_setting",
+      "resource_kind": "role",
+      "title": "Set default setting",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "setting",
+          "label": "Setting",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "database",
+          "label": "Only in database",
+          "control": "text",
+          "required": false,
+          "help": "Leave empty for every database."
+        }
+      ]
+    },
+    {
+      "operation_id": "reset_setting",
+      "resource_kind": "role",
+      "title": "Reset default setting",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "setting",
+          "label": "Setting",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "database",
+          "label": "Only in database",
+          "control": "text",
+          "required": false,
+          "help": "Leave empty for every database."
+        }
+      ]
+    },
+    {
+      "operation_id": "set_setting",
+      "resource_kind": "user",
+      "title": "Set default setting",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "setting",
+          "label": "Setting",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "database",
+          "label": "Only in database",
+          "control": "text",
+          "required": false,
+          "help": "Leave empty for every database."
+        }
+      ]
+    },
+    {
+      "operation_id": "reset_setting",
+      "resource_kind": "user",
+      "title": "Reset default setting",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "setting",
+          "label": "Setting",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "database",
+          "label": "Only in database",
+          "control": "text",
+          "required": false,
+          "help": "Leave empty for every database."
+        }
+      ]
+    },
+    {
+      "operation_id": "grant",
+      "resource_kind": "database",
+      "title": "Grant database privileges",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "principal",
+          "label": "Role",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "CONNECT",
+              "label": "CONNECT"
+            },
+            {
+              "value": "CREATE",
+              "label": "CREATE"
+            },
+            {
+              "value": "BACKUP",
+              "label": "BACKUP"
+            },
+            {
+              "value": "CHANGEFEED",
+              "label": "CHANGEFEED"
+            }
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "revoke",
+      "resource_kind": "database",
+      "title": "Revoke database privileges",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "principal",
+          "label": "Role",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "CONNECT",
+              "label": "CONNECT"
+            },
+            {
+              "value": "CREATE",
+              "label": "CREATE"
+            },
+            {
+              "value": "BACKUP",
+              "label": "BACKUP"
+            },
+            {
+              "value": "CHANGEFEED",
+              "label": "CHANGEFEED"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "grant",
+      "resource_kind": "schema",
+      "title": "Grant schema privileges",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "principal",
+          "label": "Role",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "CREATE",
+              "label": "CREATE"
+            },
+            {
+              "value": "USAGE",
+              "label": "USAGE"
+            },
+            {
+              "value": "CHANGEFEED",
+              "label": "CHANGEFEED"
+            }
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "revoke",
+      "resource_kind": "schema",
+      "title": "Revoke schema privileges",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "principal",
+          "label": "Role",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "CREATE",
+              "label": "CREATE"
+            },
+            {
+              "value": "USAGE",
+              "label": "USAGE"
+            },
+            {
+              "value": "CHANGEFEED",
+              "label": "CHANGEFEED"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "grant",
+      "resource_kind": "type",
+      "title": "Grant type privileges",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "principal",
+          "label": "Role",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "USAGE",
+              "label": "USAGE"
+            }
+          ]
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "operation_id": "revoke",
+      "resource_kind": "type",
+      "title": "Revoke type privileges",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "principal",
+          "label": "Role",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "USAGE",
+              "label": "USAGE"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "terminate_query",
+      "resource_kind": "session",
+      "title": "Cancel running statement",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "terminate_connection",
+      "resource_kind": "session",
+      "title": "Terminate session",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
     }
   ]
 }
