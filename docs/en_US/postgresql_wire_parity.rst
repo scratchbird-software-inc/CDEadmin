@@ -752,6 +752,30 @@ by any engine method.
    ``pg_database`` lists only the connected database. immudb's databases
    come from the native list (``/db/list/v2``), which the provider already
    used.
+-  2026-11-01 gap probe against the beta engines' administration:
+
+   -  **Defect, fixed:** ``/db/scan`` returns a key reference
+      (``/db/setreference``) as its target's entry, with the reference's
+      own key in ``referencedBy``. The navigator listed it under the
+      target's key, so it replaced the target and the reference was never
+      shown. A reference is now listed under its own key, with the key it
+      points to (live round trip; the old code fails it).
+   -  Not offered yet, all readable: creating key references, and sorted
+      sets (``/db/zadd``, read with ``/db/zscan``). immudb has no call that
+      lists sorted sets, so one can be read only by naming it, and a member
+      cannot be removed.
+   -  Sessions: immudb has no session list and no way to end another
+      session; only a count (``immudb_active_sessions`` metric).
+      ``UpdateAuthConfig`` and ``UpdateMTLSConfig`` return "not supported"
+      (``pkg/server/server.go``). Users are covered, deactivate and
+      reactivate included.
+   -  Left on the demo: the probe's sorted set ``gp:z`` in ``defaultdb``
+      (two additions of ``gp:k1``); its keys ``gp:k1`` and ``gp:ref1`` were
+      logically deleted. The databases ``rt_db_0d2cd4`` and
+      ``rt_side_0d2cd4`` were already there and are left alone.
+   -  The round trip needs ``metrics_port`` in its settings when the
+      metrics port is mapped (the demo maps 9497 to 59497). Without it, the
+      unload tests could not list databases, failed, and left one unloaded.
 
 XTDB 2.1.0
 ~~~~~~~~~~

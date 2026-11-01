@@ -2429,26 +2429,37 @@ class ImmudbDBAPIClient(DescriptorFieldContract, ImmudbNativeMixin, PsycopgPoolD
         for entry in scan.get('entries', []):
             if not isinstance(entry, Mapping):
                 continue
-            name = self._byte_label(entry.get('key'))
+            # A reference comes back as its target's entry, carrying the
+            # reference's own key in referencedBy (live, 1.11.0); listed by
+            # the target's key, it replaced the target and hid itself.
+            reference = entry.get('referencedBy')
+            if not isinstance(reference, Mapping):
+                reference = None
+            own = entry if reference is None else reference
+            name = self._byte_label(own.get('key'))
             native = {
                 'database': database,
-                'key_base64': entry.get('key'),
+                'key_base64': own.get('key'),
                 'value_base64': entry.get('value'),
-                'transaction_id': entry.get('tx'),
-                'revision': entry.get('revision'),
+                'transaction_id': own.get('tx'),
+                'revision': own.get('revision'),
                 'expired': bool(entry.get('expired', False)),
-                'metadata': copy.deepcopy(entry.get('metadata') or {}),
+                'metadata': copy.deepcopy(own.get('metadata') or {}),
             }
+            if reference is not None:
+                native['referenced_key'] = self._byte_label(entry.get('key'))
+                native['referenced_key_base64'] = entry.get('key')
+                native['referenced_transaction_id'] = entry.get('tx')
             item = resource('key', [database], name, generation, native)
             values[item['resource_id']] = item
-            revision = entry.get('revision')
+            revision = own.get('revision')
             if revision is not None:
                 item = resource(
                     'revision', [database, name], revision, generation,
                     native,
                 )
                 values[item['resource_id']] = item
-            transaction = entry.get('tx')
+            transaction = own.get('tx')
             if transaction is not None:
                 item = resource(
                     'transaction', [database], transaction, generation,
@@ -2467,7 +2478,7 @@ class ImmudbDBAPIClient(DescriptorFieldContract, ImmudbNativeMixin, PsycopgPoolD
                     },
                 )
                 values[item['resource_id']] = item
-            expiration = (entry.get('metadata') or {}).get('expiration')
+            expiration = (own.get('metadata') or {}).get('expiration')
             if isinstance(expiration, Mapping):
                 item = resource(
                     'ttl', [database, name], 'expiration', generation, {

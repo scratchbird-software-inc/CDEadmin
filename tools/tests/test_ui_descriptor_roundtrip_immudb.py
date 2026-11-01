@@ -10,6 +10,7 @@ demo server (`dev.sh start immudb`). The test creates its own databases
 and removes them (native unload and delete). immudb keeps every user, so
 each run leaves one deactivated rt_user_* user. Skipped otherwise.
 """
+import base64
 import json
 import os
 import sys
@@ -408,3 +409,25 @@ def test_unload_and_load_the_connected_database(live):
                 find(client, route, 'database', DATABASE)[0])
     assert find(client, route, 'database', DATABASE)[0]['native'][
         'loaded'] is True
+
+
+def test_reference_is_listed_under_its_own_key(live):
+    """2026-11-01: /db/scan returns a reference as its target's entry with
+    the reference key in referencedBy; it was listed as the target."""
+    route, client = live
+
+    def encode(text):
+        return base64.b64encode(text.encode()).decode()
+    native(client, route, '/db/set', {'KVs': [
+        {'key': encode('rt:target'), 'value': encode('payload')}]}, DATABASE)
+    native(client, route, '/db/setreference', {
+        'key': encode('rt:alias'), 'referencedKey': encode('rt:target')},
+        DATABASE)
+    target, _rows = find(client, route, 'key', 'rt:target')
+    alias, _rows = find(client, route, 'key', 'rt:alias')
+    assert 'referenced_key' not in target['native']
+    assert target['native']['value_base64'] == encode('payload')
+    assert alias['native']['referenced_key'] == 'rt:target'
+    assert alias['native']['key_base64'] == encode('rt:alias')
+    assert int(alias['native']['transaction_id']) > int(
+        alias['native']['referenced_transaction_id'])
