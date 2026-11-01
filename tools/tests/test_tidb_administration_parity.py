@@ -329,13 +329,28 @@ def test_tidb_plan_bindings():
     create = {'resource_kind': 'binding', 'operation_id': 'create',
               'target_resource': None, 'draft': {
                   'original_sql': 'SELECT 1', 'bind_sql': 'SELECT 1'}}
-    assert tidb.confirmed(create, [(1,)]) and not tidb.confirmed(
-        create, [(0,)])
+    assert tidb.confirmed(create, [(1, True)])
+    assert not tidb.confirmed(create, [(0, True)])
+    assert not tidb.confirmed(create, [(1, False)])  # older binding's plan
     statements = []
-    tidb.inspect(create, None, sequence=lambda items: statements.extend(
-        items) or {'rows': []})
+
+    def sequence(plans):
+        def run(items):
+            statements.extend(items)
+            return {'rows': [], 'results': plans}
+        return run
+    plan_a, plan_b = [('IndexReader', 'index:kv')], [('TableReader', '')]
+    observed = tidb.inspect(create, None, sequence=sequence(
+        [[], plan_a, [], plan_a, [(1,)]]))
+    assert observed['rows'] == [(1, True)]
     assert [source for source, _ in statements] == [
-        'EXPLAIN SELECT 1', 'SELECT @@last_plan_from_binding']
+        'SET SESSION tidb_use_plan_baselines = OFF',
+        "EXPLAIN FORMAT='brief' SELECT 1",
+        'SET SESSION tidb_use_plan_baselines = ON',
+        "EXPLAIN FORMAT='brief' SELECT 1",
+        'SELECT @@last_plan_from_binding']
+    assert tidb.inspect(create, None, sequence=sequence(
+        [[], plan_a, [], plan_b, [(1,)]]))['rows'] == [(1, False)]
 
 
 def test_tidb_flashback_table():

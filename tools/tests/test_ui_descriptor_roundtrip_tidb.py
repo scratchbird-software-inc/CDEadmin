@@ -35,7 +35,8 @@ from pgadmin.cdeadmin.providers.tidb.provider import (  # noqa: E402
 )
 from pgadmin.cdeadmin.security.secrets import SecretLease  # noqa: E402
 from ui_descriptor_roundtrip import (  # noqa: E402
-    backend_draft, provider_target, record_draft, record_from_resource,
+    backend_draft, engine_operations, operation_backend_draft,
+    operation_draft, provider_target, record_draft, record_from_resource,
     resolved_form,
 )
 
@@ -756,9 +757,22 @@ def test_tidb_ttl_bindings_and_flashback(live):
     assert "TTL_ENABLE='OFF'" in created()
     control(client, route, 'table', 'remove_ttl', {}, table)
     assert '/*T![ttl]' not in created()
+    # The dialog's defaults: unit DAY, expiry on, no job interval.
+    declared = engine_operations('tidb')['set_ttl@table']
+    control(client, route, 'table', 'set_ttl', operation_backend_draft(
+        declared, operation_draft(declared, {'column': 'created',
+                                             'interval': 7})), table)
+    assert "/*T![ttl] TTL=`created` + INTERVAL 7 DAY */" in created()
+    assert "/*T![ttl] TTL_ENABLE='ON' */" in created()
+    control(client, route, 'table', 'remove_ttl', {}, table)
 
     statement = 'SELECT * FROM rt_ttl WHERE v = 1'
+    execute('CREATE INDEX rt_v2 ON rt_ttl(v, id)')
     try:
+        # An older binding for the same statement, with other hints: the
+        # create below replaces it, and its read-back must tell them apart.
+        execute(f'CREATE GLOBAL BINDING FOR {statement} USING SELECT '
+                '/*+ USE_INDEX(rt_ttl, rt_v2) */ * FROM rt_ttl WHERE v = 1')
         control(client, route, 'binding', 'create', {
             'original_sql': statement,
             'bind_sql': 'SELECT /*+ USE_INDEX(rt_ttl, rt_v) */ * FROM rt_ttl '

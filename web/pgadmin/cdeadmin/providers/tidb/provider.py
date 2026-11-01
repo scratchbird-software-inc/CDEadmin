@@ -1218,14 +1218,15 @@ def _query_sequence(client, route, statements):
     cursor = None
     try:
         cursor = connection.cursor()
-        description = None
+        description, results = None, []
         for source, parameters in statements:
             cursor.execute(source, parameters)
             description = getattr(cursor, 'description', None)
-            rows = list(cursor.fetchall()) if description else []
+            results.append([tuple(item) for item in cursor.fetchall()]
+                           if description else [])
         return {
             'columns': [str(item[0]) for item in description or []],
-            'rows': rows,
+            'rows': results[-1] if results else [], 'results': results,
             'provider_observation_only': True,
             'finality_interpreted_by_common_code': False,
         }

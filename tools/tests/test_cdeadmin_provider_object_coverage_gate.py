@@ -210,7 +210,7 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
             'redis-native', 'tikv-native', 'xtdb-native',
         }, absent)
 
-    def test_mysql_family_metrics_are_graphically_reachable(self):
+    def test_metric_tables_are_graphically_reachable(self):
         # XTDB lists its xt.metrics_* tables as metric resources; the
         # portfolio catalog had no metric object for it (2026-11-01).
         for profile_id in ('mysql-native', 'mariadb-native', 'xtdb-native'):

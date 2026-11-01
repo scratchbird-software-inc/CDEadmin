@@ -759,7 +759,11 @@ by any engine method.
       own key in ``referencedBy``. The navigator listed it under the
       target's key, so it replaced the target and the reference was never
       shown. A reference is now listed under its own key, with the key it
-      points to (live round trip; the old code fails it).
+      points to (live round trip; the old code fails it). The key form does
+      not yet show that a record is a reference; its value is the
+      target's. Untested: replacing its value should write a plain key
+      over the reference (``/db/set`` on the reference's key), and logical
+      delete should remove the reference, not the target.
    -  Not offered yet, all readable: creating key references, and sorted
       sets (``/db/zadd``, read with ``/db/zscan``). immudb has no call that
       lists sorted sets, so one can be read only by naming it, and a member

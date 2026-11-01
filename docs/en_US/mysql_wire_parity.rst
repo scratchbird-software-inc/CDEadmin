@@ -279,9 +279,15 @@ TiDB 8.5.6
       clauses of ``SHOW CREATE TABLE``;
    -  SQL plan bindings, listed from ``SHOW GLOBAL BINDINGS`` (built-in
       bindings left out) and addressed by SQL digest. A new binding is
-      confirmed by ``EXPLAIN`` of its statement followed by
-      ``@@last_plan_from_binding`` on the same session, so the statement is
-      planned but not run. Enable, disable and drop are read back from
+      confirmed on one session, planning but never running either
+      statement: ``EXPLAIN`` of the hinted statement with
+      ``tidb_use_plan_baselines`` off, then ``EXPLAIN`` of the statement
+      with it on, which must give the same plan with
+      ``@@last_plan_from_binding`` 1. The flag alone is not enough: a create
+      that did nothing leaves an older binding with other hints in force.
+      A binding is matched with hints stripped, so it plans the hinted
+      statement too unless bindings are off. Enable, disable and drop are
+      read back from
       ``SHOW GLOBAL BINDINGS``. A binding outlives its database, and TiDB
       has no ``STATEMENT_DIGEST()``;
    -  ``FLASHBACK TABLE`` of a dropped table, optionally under a new name,

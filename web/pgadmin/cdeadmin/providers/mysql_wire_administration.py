@@ -461,13 +461,28 @@ class MySQLWireAdministration:
         draft = plan.get('draft') or {}
         option = self.features[(kind, operation)]
         if kind == 'binding' and operation == 'create':
-            # EXPLAIN plans without executing, DML included; the session
-            # flag says whether a binding chose the plan (live, TiDB 8.5.6).
+            # EXPLAIN plans without executing, DML included. The session
+            # flag says a binding chose the statement's plan, and that plan
+            # must be the hinted statement's own: a create that did nothing
+            # leaves an older binding with other hints, and the flag set
+            # (live, TiDB 8.5.6: a replaced binding is marked deleted). A
+            # binding matches its statement with hints stripped, so it
+            # plans the hinted statement too; that one is explained with
+            # bindings off for the session.
             if not callable(sequence):
                 raise self._error('binding read-back needs one session')
-            return sequence([
-                ('EXPLAIN ' + self._bindable(draft.get('original_sql')), ()),
+            result = sequence([
+                ('SET SESSION tidb_use_plan_baselines = OFF', ()),
+                ("EXPLAIN FORMAT='brief' " + self._bindable(
+                    draft.get('bind_sql')), ()),
+                ('SET SESSION tidb_use_plan_baselines = ON', ()),
+                ("EXPLAIN FORMAT='brief' " + self._bindable(
+                    draft.get('original_sql')), ()),
                 ('SELECT @@last_plan_from_binding', ())])
+            _off, hinted, _on, bound, flag = result['results']
+            return {**result, 'columns': ['from_binding', 'hinted_plan'],
+                    'rows': [(flag[0][0] if flag else None,
+                              bool(hinted) and hinted == bound)]}
         if kind == 'binding':
             return query('SHOW GLOBAL BINDINGS WHERE Sql_digest = %s',
                          (self._digest(plan),))
@@ -556,7 +571,8 @@ class MySQLWireAdministration:
         option = self.features[(kind, operation)]
         if kind == 'binding':
             if operation == 'create':
-                return len(rows) == 1 and str(rows[0][0]) == '1'
+                return len(rows) == 1 and str(rows[0][0]) == '1' and (
+                    rows[0][1] is True)
             if operation == 'drop':
                 return not rows
             return len(rows) == 1 and str(rows[0][3]).upper() == draft.get(
