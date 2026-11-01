@@ -50,7 +50,10 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
         # 2026-11-01: 2415 with Dolt's table options, analyze, index rename,
         # role membership, session termination and global variables (eight
         # operations plus inspect on the session and system-variable kinds).
-        self.assertEqual(2415, result['graphical_operation_count'])
+        # 2431 with TiDB's fourteen (table options, analyze, caching, stats
+        # locks, index rename and visibility, role membership and default
+        # role, account rename, sessions, global variables) plus two inspect.
+        self.assertEqual(2431, result['graphical_operation_count'])
         large_object = next(item for item in self.catalogs['postgresql-native']['descriptor']['objects']
             if item['resource_kind'] == 'large-object')
         self.assertEqual({'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop',

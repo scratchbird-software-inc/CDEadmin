@@ -169,3 +169,95 @@ def test_location_labels_accept_text_or_list():
         'target_resource': target, '_provider_route': {'database': 'd1'},
         'draft': {'replica_count': 2, 'location_labels': 'zone, rack'}}))
     assert tuple(statement['parameters']) == (2, 'zone', 'rack')
+
+
+# Native administration verified live on TiDB 8.5.6 (2026-11-01).
+TABLE = {'resource_id': 'table:d1:t', 'resource_kind': 'table',
+         'display_name': 't', 'display_path': ['d1', 't']}
+INDEX = {'resource_id': 'index:d1:t:k', 'resource_kind': 'index',
+         'display_name': 'k', 'display_path': ['d1', 't', 'k']}
+ROLE = {'resource_id': 'role:r@%', 'resource_kind': 'role',
+        'display_name': 'r@%', 'display_path': ['r@%'],
+        'native': {'user': 'r', 'host': '%'}}
+USER = {'resource_id': 'user:u@%', 'resource_kind': 'user',
+        'display_name': 'u@%', 'display_path': ['u@%'],
+        'native': {'user': 'u', 'host': '%'}}
+MEMBER = {'member_user': 'u', 'member_host': '%'}
+
+
+def native(kind, operation, draft, target):
+    planned = ADMINISTRATION.plan({**request(kind, operation, draft),
+                                   'target_resource': target})
+    return [(item['source'], tuple(item['parameters'])) for item in
+            planned['provider_payload']['compiled']['statements']]
+
+
+def test_tidb_table_options_caching_and_statistics():
+    assert native('table', 'set_options', {
+        'comment': 'c', 'collation': 'utf8mb4_bin',
+        'shard_row_id_bits': 4}, TABLE) == [
+        ('ALTER TABLE `d1`.`t` COMMENT = %s, DEFAULT COLLATE `utf8mb4_bin`',
+         ('c',)),
+        # TiDB refuses shard bits combined with any other change.
+        ('ALTER TABLE `d1`.`t` SHARD_ROW_ID_BITS = 4', ())]
+    assert native('table', 'set_options', {'shard_row_id_bits': 0},
+                  TABLE) == [('ALTER TABLE `d1`.`t` SHARD_ROW_ID_BITS = 0',
+                              ())]
+    # TiDB reports AUTO_INCREMENT 0 in information_schema: not offered.
+    with pytest.raises(RelationalClientError, match='auto_increment'):
+        native('table', 'set_options', {'auto_increment': 9}, TABLE)
+    assert native('table', 'analyze', {}, TABLE) == [
+        ('ANALYZE TABLE `d1`.`t`', ())]
+    assert native('table', 'set_cache', {'cached': 'ON'}, TABLE) == [
+        ('ALTER TABLE `d1`.`t` CACHE', ())]
+    assert native('table', 'set_cache', {'cached': 'OFF'}, TABLE) == [
+        ('ALTER TABLE `d1`.`t` NOCACHE', ())]
+    assert native('table', 'lock_stats', {}, TABLE) == [
+        ('LOCK STATS `d1`.`t`', ())]
+    assert native('table', 'unlock_stats', {}, TABLE) == [
+        ('UNLOCK STATS `d1`.`t`', ())]
+
+
+def test_tidb_index_rename_and_visibility():
+    assert native('index', 'rename', {'new_name': 'k2'}, INDEX) == [
+        ('ALTER TABLE `d1`.`t` RENAME INDEX `k` TO `k2`', ())]
+    assert native('index', 'visibility', {'visibility': 'INVISIBLE'},
+                  INDEX) == [
+        ('ALTER TABLE `d1`.`t` ALTER INDEX `k` INVISIBLE', ())]
+
+
+def test_tidb_accounts():
+    assert native('role', 'grant', MEMBER, ROLE) == [
+        ('GRANT %s@%s TO %s@%s', ('r', '%', 'u', '%'))]
+    # TiDB refuses WITH ADMIN OPTION (syntax error, live): not declared,
+    # and refused by the planner if sent anyway.
+    assert [item['field_id'] for item in ADMINISTRATION.control_plane.
+            operation('role', 'grant').fields] == [
+        'member_user', 'member_host']
+    with pytest.raises(RelationalClientError, match='delegated'):
+        native('role', 'grant', {**MEMBER, 'admin_option': True}, ROLE)
+    assert native('role', 'set_default', MEMBER, ROLE) == [
+        ('SET DEFAULT ROLE %s@%s TO %s@%s', ('r', '%', 'u', '%'))]
+    assert native('user', 'rename', {'new_user': 'v', 'new_host': '%'},
+                  USER) == [
+        ('RENAME USER %s@%s TO %s@%s', ('u', '%', 'v', '%'))]
+    with pytest.raises(RelationalClientError, match='new account'):
+        native('user', 'rename', {'new_user': 'u', 'new_host': '%'}, USER)
+
+
+def test_tidb_confirmation_reads_the_engine_state():
+    from pgadmin.cdeadmin.providers.tidb.provider import (
+        NATIVE_ADMINISTRATION as tidb)
+    analyze = {'resource_kind': 'table', 'operation_id': 'analyze',
+               'target_resource': TABLE, 'draft': {}}
+    assert tidb.confirmed(analyze, [('finished', 1)])
+    assert not tidb.confirmed(analyze, [('finished', 0)])  # an older job
+    assert not tidb.confirmed(analyze, [('failed', 1)])
+    variable = {'resource_kind': 'system-variable',
+                'operation_id': 'set_global',
+                'target_resource': {'display_name': 'tidb_gc_life_time'},
+                'draft': {'value': '20m'}}
+    # TiDB stores 20m0s; another spelling is not claimed as confirmed.
+    assert not tidb.confirmed(variable, [('20m0s',)])
+    assert tidb.confirmed({**variable, 'draft': {'value': '20m0s'}},
+                          [('20m0s',)])

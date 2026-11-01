@@ -477,6 +477,257 @@
         }
       ],
       "status": "draft"
+    },
+    {
+      "operation_id": "set_options",
+      "resource_kind": "table",
+      "title": "Set table options",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "collation",
+          "label": "Default collation",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "shard_row_id_bits",
+          "label": "Row ID shard bits",
+          "control": "number",
+          "required": false,
+          "help": "Only for a table without a clustered primary key."
+        }
+      ],
+      "notes": "AUTO_INCREMENT is not offered: TiDB 8.5.6 reports it as 0 in information_schema, so a change cannot be read back."
+    },
+    {
+      "operation_id": "analyze",
+      "resource_kind": "table",
+      "title": "Analyze table",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": []
+    },
+    {
+      "operation_id": "set_cache",
+      "resource_kind": "table",
+      "title": "Set table caching",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "cached",
+          "label": "Cache the table in memory",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "ON",
+              "label": "Cached"
+            },
+            {
+              "value": "OFF",
+              "label": "Not cached"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "lock_stats",
+      "resource_kind": "table",
+      "title": "Lock statistics",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "unlock_stats",
+      "resource_kind": "table",
+      "title": "Unlock statistics",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "visibility",
+      "resource_kind": "index",
+      "title": "Set index visibility",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "visibility",
+          "label": "Visibility",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "VISIBLE",
+              "label": "Visible"
+            },
+            {
+              "value": "INVISIBLE",
+              "label": "Invisible"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "grant",
+      "resource_kind": "role",
+      "title": "Grant role membership",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "member_user",
+          "label": "Recipient user",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "member_host",
+          "label": "Recipient host",
+          "control": "text",
+          "required": true,
+          "default": "%"
+        }
+      ],
+      "notes": "TiDB 8.5.6 refuses WITH ADMIN OPTION, so delegation is not offered."
+    },
+    {
+      "operation_id": "revoke",
+      "resource_kind": "role",
+      "title": "Revoke role membership",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "member_user",
+          "label": "Recipient user",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "member_host",
+          "label": "Recipient host",
+          "control": "text",
+          "required": true,
+          "default": "%"
+        }
+      ]
+    },
+    {
+      "operation_id": "set_default",
+      "resource_kind": "role",
+      "title": "Make default role of member",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "member_user",
+          "label": "Recipient user",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "member_host",
+          "label": "Recipient host",
+          "control": "text",
+          "required": true,
+          "default": "%"
+        }
+      ]
+    },
+    {
+      "operation_id": "terminate_query",
+      "resource_kind": "session",
+      "title": "Terminate running statement",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": []
+    },
+    {
+      "operation_id": "terminate_connection",
+      "resource_kind": "session",
+      "title": "Terminate connection",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
+    },
+    {
+      "operation_id": "set_global",
+      "resource_kind": "system-variable",
+      "title": "Set global value",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true,
+          "help": "Applies until the server restarts."
+        }
+      ],
+      "notes": "TiDB stores some values in a canonical form (20m reads back as 20m0s); a value read back in another form is reported unconfirmed with the stored value."
     }
   ]
 }

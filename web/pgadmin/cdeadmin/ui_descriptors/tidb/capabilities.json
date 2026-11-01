@@ -201,6 +201,11 @@
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -454,6 +459,11 @@
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -500,6 +510,30 @@
           "operation_id": "revoke",
           "tier": 1,
           "mutation_class": "admin"
+        }
+      ]
+    },
+    {
+      "resource_kind": "session",
+      "family": "engine_object",
+      "title": "Session",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "system-variable",
+      "family": "engine_object",
+      "title": "System variable",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
         }
       ]
     }

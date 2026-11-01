@@ -94,6 +94,9 @@ def live():
                 f"DROP USER IF EXISTS 'rt_user_{UNIQUE}'@'localhost'",
                 f"DROP ROLE IF EXISTS 'rt_role_{UNIQUE}'",
                 f"DROP USER IF EXISTS 'rt_nopw_{UNIQUE}'@'%'",
+                f"DROP USER IF EXISTS 'rt_member_{UNIQUE}'@'%'",
+                f"DROP USER IF EXISTS 'rt_renamed_{UNIQUE}'@'%'",
+                f"DROP ROLE IF EXISTS 'rt_grp_{UNIQUE}'",
                 "SET GLOBAL tidb_enable_check_constraint = OFF",
                 f'DROP PLACEMENT POLICY IF EXISTS rt_pol_{UNIQUE}x',
                 f'DROP RESOURCE GROUP IF EXISTS rt_rg_{UNIQUE}'):
@@ -570,3 +573,169 @@ def test_tiflash_replica_becomes_available(live):
     assert replicas and replicas[0]['native']['available']
     native_run(client, route, 'table', 'set_tiflash_replica',
                {'replica_count': 0}, table)
+
+
+# Native administration added 2026-11-01. Each operation goes through the UI
+# path, must be confirmed by the provider's own read-back, and is then read
+# back again here over a separate connection.
+def control(client, route, kind, operation, draft, target):
+    request = {'resource_kind': kind, 'operation_id': operation,
+               'target_resource': target, '_provider_route': route,
+               'draft': draft}
+    run(client, route, kind, operation, draft, target)
+    planned = ADMINISTRATION.plan(request)
+    state = ADMINISTRATION.validate_operation_post_state(
+        client, executor_request(request, planned))
+    assert state['confirmed'], state
+
+
+def execute(*sources, database=DATABASE):
+    connection = admin(database)
+    try:
+        cursor = connection.cursor()
+        for source in sources:
+            cursor.execute(source)
+    finally:
+        connection.close()
+
+
+def row(client, route, kind, name, path=None):
+    return next(item for item in resources(client, route)
+                if item['resource_kind'] == kind and
+                item['display_name'] == name and
+                (path is None or item['display_path'] == path))
+
+
+def test_tidb_table_options_cache_and_statistics(live):
+    route, client = live
+    execute('CREATE TABLE rt_opts(id INT PRIMARY KEY NONCLUSTERED, v INT)',
+            'INSERT INTO rt_opts VALUES (1, 1), (2, 2)')
+    target = row(client, route, 'table', 'rt_opts', [DATABASE, 'rt_opts'])
+
+    def table():
+        return query(
+            'SELECT TABLE_COMMENT, TABLE_COLLATION, '
+            'TIDB_ROW_ID_SHARDING_INFO, CREATE_OPTIONS FROM '
+            'information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() '
+            "AND TABLE_NAME = 'rt_opts'")[0]
+    control(client, route, 'table', 'set_options', {
+        'comment': "rt's", 'collation': 'utf8mb4_bin',
+        'shard_row_id_bits': 3}, target)
+    assert table()[:3] == ("rt's", 'utf8mb4_bin', 'SHARD_BITS=3')
+    control(client, route, 'table', 'set_cache', {'cached': 'ON'}, target)
+    assert table()[3] == 'cached=on'
+    control(client, route, 'table', 'set_cache', {'cached': 'OFF'}, target)
+    assert table()[3] == ''
+    control(client, route, 'table', 'analyze', {}, target)
+    assert query("SELECT state FROM mysql.analyze_jobs WHERE table_schema = "
+                 "DATABASE() AND table_name = 'rt_opts' ORDER BY id DESC "
+                 "LIMIT 1") == [('finished',)]
+    control(client, route, 'table', 'lock_stats', {}, target)
+    assert query('SHOW STATS_LOCKED WHERE Db_name = DATABASE() '
+                 "AND Table_name = 'rt_opts'")
+    control(client, route, 'table', 'unlock_stats', {}, target)
+    assert not query('SHOW STATS_LOCKED WHERE Db_name = DATABASE() '
+                     "AND Table_name = 'rt_opts'")
+
+
+def test_tidb_index_rename_and_visibility(live):
+    route, client = live
+    execute('CREATE TABLE rt_idx(id INT PRIMARY KEY, v INT, KEY rt_k(v))')
+    control(client, route, 'index', 'rename', {'new_name': 'rt_k2'},
+            row(client, route, 'index', 'rt_k', [DATABASE, 'rt_idx', 'rt_k']))
+    target = row(client, route, 'index', 'rt_k2',
+                 [DATABASE, 'rt_idx', 'rt_k2'])
+
+    def visible():
+        return query('SELECT DISTINCT IS_VISIBLE FROM information_schema.'
+                     'STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND '
+                     "TABLE_NAME = 'rt_idx' AND INDEX_NAME = 'rt_k2'")
+    control(client, route, 'index', 'visibility',
+            {'visibility': 'INVISIBLE'}, target)
+    assert visible() == [('NO',)]
+    control(client, route, 'index', 'visibility',
+            {'visibility': 'VISIBLE'}, target)
+    assert visible() == [('YES',)]
+
+
+def test_tidb_role_membership_default_role_and_rename(live):
+    route, client = live
+    execute(f"CREATE ROLE 'rt_grp_{UNIQUE}'",
+            f"CREATE USER 'rt_member_{UNIQUE}'@'%'", database=None)
+    role = row(client, route, 'role', f'rt_grp_{UNIQUE}@%')
+    member = {'member_user': f'rt_member_{UNIQUE}', 'member_host': '%'}
+    control(client, route, 'role', 'grant', member, role)
+    assert query("SELECT WITH_ADMIN_OPTION FROM mysql.role_edges WHERE "
+                 f"FROM_USER = 'rt_grp_{UNIQUE}' AND "
+                 f"TO_USER = 'rt_member_{UNIQUE}'") == [('N',)]
+    control(client, route, 'role', 'set_default', member, role)
+    assert query("SELECT DEFAULT_ROLE_USER FROM mysql.default_roles WHERE "
+                 f"USER = 'rt_member_{UNIQUE}'") == [(f'rt_grp_{UNIQUE}',)]
+    control(client, route, 'role', 'revoke', member, role)
+    assert query("SELECT 1 FROM mysql.role_edges WHERE "
+                 f"TO_USER = 'rt_member_{UNIQUE}'") == []
+    control(client, route, 'user', 'rename',
+            {'new_user': f'rt_renamed_{UNIQUE}', 'new_host': '%'},
+            row(client, route, 'user', f'rt_member_{UNIQUE}@%'))
+    assert query("SELECT User FROM mysql.user WHERE User IN "
+                 f"('rt_member_{UNIQUE}', 'rt_renamed_{UNIQUE}')") == [
+        (f'rt_renamed_{UNIQUE}',)]
+
+
+def test_tidb_session_termination(live):
+    import threading
+    import time
+    route, client = live
+    victim = admin(DATABASE)
+    cursor = victim.cursor()
+    cursor.execute('SELECT CONNECTION_ID()')
+    session_id = str(cursor.fetchone()[0])
+    outcome = []
+
+    def sleep():
+        try:
+            cursor.execute('SELECT SLEEP(30)')
+            outcome.append(cursor.fetchall())
+        except Exception as error:
+            outcome.append(error)
+    worker = threading.Thread(target=sleep)
+    worker.start()
+    try:
+        for _attempt in range(50):
+            if row(client, route, 'session', session_id)[
+                    'native']['command'] == 'Query':
+                break
+            time.sleep(0.1)
+        control(client, route, 'session', 'terminate_query', {},
+                row(client, route, 'session', session_id))
+        worker.join(10)
+        # MySQL semantics: an interrupted SLEEP returns 1 early.
+        assert not worker.is_alive() and outcome == [[(1,)]], outcome
+        control(client, route, 'session', 'terminate_connection', {},
+                row(client, route, 'session', session_id))
+        assert query('SELECT ID FROM information_schema.CLUSTER_PROCESSLIST '
+                     f'WHERE ID = {session_id}') == []
+    finally:
+        worker.join(30)
+        try:
+            victim.close()
+        except Exception:
+            pass
+
+
+def test_tidb_global_variable(live):
+    route, client = live
+    original = query('SELECT @@GLOBAL.tidb_slow_log_threshold')[0][0]
+    try:
+        target = row(client, route, 'system-variable',
+                     'tidb_slow_log_threshold')
+        assert target['native']['value'] == str(original)
+        control(client, route, 'system-variable', 'set_global',
+                {'value': str(int(original) + 7)}, target)
+        assert query('SELECT @@GLOBAL.tidb_slow_log_threshold') == [
+            (str(int(original) + 7),)]
+    finally:
+        execute(f'SET @@GLOBAL.tidb_slow_log_threshold = {int(original)}',
+                database=None)
+    assert query('SELECT @@GLOBAL.tidb_slow_log_threshold') == [
+        (str(original),)]

@@ -26,6 +26,9 @@ from ..distributed_sql import (
     sql_administration,
 )
 from ..distributed_control_plane import DistributedSQLControlPlane
+from ..mysql_wire_administration import (
+    MySQLWireAdministration, session_resources, variable_resources,
+)
 from pgadmin.cdeadmin.visual_admin import (
     ControlPlaneOperation,
     control_plane_field as cp_field,
@@ -40,7 +43,7 @@ PROFILE = PilotProfile(
         'cluster', 'node', 'database', 'table', 'column', 'index',
         'constraint', 'view', 'sequence', 'partition', 'placement-policy',
         'resource-group', 'tiflash-replica', 'job', 'changefeed', 'backup',
-        'user', 'role', 'privilege',
+        'user', 'role', 'privilege', 'session', 'system-variable',
     ),
     ('mysql-client', 'tiup', 'br', 'ticdc'),
     parameter_shape='object-or-array',
@@ -72,7 +75,8 @@ PROFILE = PilotProfile(
 
 _BASE_ADMINISTRATION = sql_administration('tidb', 'mysql', (
     'node', 'partition', 'placement-policy', 'resource-group',
-    'tiflash-replica', 'job', 'changefeed', 'backup',
+    'tiflash-replica', 'job', 'changefeed', 'backup', 'session',
+    'system-variable',
 ))
 _TIDB_SUPPORTED = dict(_BASE_ADMINISTRATION.dialect.supported)
 _TIDB_SUPPORTED.pop('schema')
@@ -93,6 +97,29 @@ _TIDB_DIALECT = replace(
         'schemas': ('database',),
     },
 )
+
+
+# Native MySQL-dialect administration TiDB 8.5.6 executes and reads back
+# (live, 2026-11-01). Not offered: ALTER TABLE ... AUTO_INCREMENT (TiDB
+# reports AUTO_INCREMENT 0 in information_schema, so it cannot be read back)
+# and GRANT ... WITH ADMIN OPTION (a syntax error in TiDB). Sessions are
+# listed cluster-wide; KILL reaches any TiDB server of the cluster.
+NATIVE_ADMINISTRATION = MySQLWireAdministration('TiDB', {
+    ('table', 'set_options'): ('comment', 'collation', 'shard_row_id_bits'),
+    ('table', 'analyze'): 'analyze_jobs',
+    ('table', 'set_cache'): True,
+    ('table', 'lock_stats'): True,
+    ('table', 'unlock_stats'): True,
+    ('index', 'rename'): True,
+    ('index', 'visibility'): True,
+    ('role', 'grant'): False,
+    ('role', 'revoke'): True,
+    ('role', 'set_default'): True,
+    ('user', 'rename'): True,
+    ('session', 'terminate_query'): 'CLUSTER_PROCESSLIST',
+    ('session', 'terminate_connection'): 'CLUSTER_PROCESSLIST',
+    ('system-variable', 'set_global'): True,
+})
 
 
 def _choice(field_id, label, values, **options):
@@ -395,6 +422,7 @@ CONTROL_OPERATIONS = (
         'changefeed', 'remove', 'Remove TiCDC changefeed', 'destructive',
         'replication_admin', impact_scope='cluster', long_running=True
     ),
+    *NATIVE_ADMINISTRATION.operations(),
 )
 
 
@@ -757,6 +785,12 @@ def _compile_control_plane(request):
     draft = request.get('draft') or {}
     source = None
     parameters = ()
+    if NATIVE_ADMINISTRATION.supports(kind, operation):
+        return {
+            'statements': NATIVE_ADMINISTRATION.statements(request),
+            'impact': _impact(request, availability_risk=(
+                'high' if kind == 'session' else 'medium')),
+        }
     if operation in {
             'backup_full', 'backup_br', 'restore_full', 'restore_br',
             'restore_point'}:
@@ -1173,6 +1207,10 @@ def _inspect_control_plane(client, request):
     plan, route = _private_parts(request)
     kind = plan['resource_kind']
     operation = plan['operation_id']
+    if NATIVE_ADMINISTRATION.supports(kind, operation):
+        return NATIVE_ADMINISTRATION.inspect(
+            plan, lambda source, parameters=(): _query_once(
+                client, route, source, parameters))
     draft = plan.get('draft') or {}
     target = plan.get('target_resource') or {}
     path = target.get('display_path') or [target.get('display_name')]
@@ -1311,7 +1349,9 @@ def _post_validate_control_plane(client, request):
     rows = observation.get('rows') or []
     operation = plan['operation_id']
     confirmed = bool(rows)
-    if operation in {'backup_full', 'backup_br'}:
+    if NATIVE_ADMINISTRATION.supports(plan['resource_kind'], operation):
+        confirmed = NATIVE_ADMINISTRATION.confirmed(plan, rows)
+    elif operation in {'backup_full', 'backup_br'}:
         confirmed = bool(observation.get('provider_observation'))
     elif operation in {'restore_full', 'restore_point'}:
         confirmed = bool(rows)
@@ -1612,6 +1652,11 @@ def _extras(cursor, _request, generation):
             'job_state': str(row[11]) if len(row) > 11 else '',
         }))
     values.extend(mysql_account_resources(cursor, generation))
+    values.extend(session_resources(
+        cursor, generation, resource, optional_rows,
+        source='CLUSTER_PROCESSLIST'))
+    values.extend(variable_resources(
+        cursor, generation, resource, optional_rows))
     for component, instance, status_address, version in optional_rows(
         cursor,
         'SELECT TYPE, INSTANCE, STATUS_ADDRESS, VERSION '

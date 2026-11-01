@@ -251,6 +251,30 @@ TiDB 8.5.6
    indexes on partitioned tables, ``ADMIN CHECK TABLE``. Stale reads and
    table attributes need a re-probe (the probe table had been cached); SQL
    ``BACKUP`` needs storage every TiKV store can reach.
+-  Native administration added 2026-11-01, each read back live before it was
+   offered and confirmed by the provider's own read-back after it runs:
+
+   -  table options: ``COMMENT``, default collation and
+      ``SHARD_ROW_ID_BITS``. TiDB refuses ``SHARD_ROW_ID_BITS`` combined with
+      any other change ("Unsupported multi schema change for shard row ID"),
+      so it runs as its own statement; TiDB refuses any ``ALTER TABLE`` on a
+      cached table. ``AUTO_INCREMENT`` is not offered: TiDB reports 0 in
+      ``information_schema.TABLES``, so a change cannot be read back;
+   -  cached tables (``ALTER TABLE ... CACHE``/``NOCACHE``, read from
+      ``CREATE_OPTIONS``);
+   -  ``ANALYZE TABLE``, read from the newest ``mysql.analyze_jobs`` row for
+      the table (finished, within ten minutes by the server clock), and
+      ``LOCK STATS``/``UNLOCK STATS`` (``SHOW STATS_LOCKED``);
+   -  ``RENAME INDEX`` and index visibility (``information_schema.STATISTICS``
+      ``IS_VISIBLE``);
+   -  role membership (``GRANT``/``REVOKE`` a role; TiDB refuses ``WITH ADMIN
+      OPTION``), ``SET DEFAULT ROLE`` (``mysql.default_roles``) and ``RENAME
+      USER``;
+   -  sessions listed cluster-wide from ``CLUSTER_PROCESSLIST``, with ``KILL
+      QUERY`` (an interrupted ``SLEEP`` returns 1) and ``KILL``;
+   -  global system variables with ``SET @@GLOBAL``. TiDB stores some values
+      in a canonical form (``20m`` reads back as ``20m0s``); a value read back
+      in another form is reported unconfirmed, with the stored value.
 
 Vitess 23.0.3 (through vtgate, sharded keyspace)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

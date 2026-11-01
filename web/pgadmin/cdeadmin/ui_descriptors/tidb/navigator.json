@@ -70,6 +70,15 @@
         "backup"
       ],
       "order": 7
+    },
+    {
+      "group_id": "activity",
+      "title": "Activity and configuration",
+      "kinds": [
+        "session",
+        "system-variable"
+      ],
+      "order": 8
     }
   ],
   "resource_children": {
@@ -102,6 +111,8 @@
     "backup": "object.snapshot",
     "user": "object.user",
     "role": "object.role",
-    "privilege": "object.privilege"
+    "privilege": "object.privilege",
+    "session": "object.session",
+    "system-variable": "object.system-variable"
   }
 }

@@ -127,7 +127,7 @@ def test_role_membership_binds_both_accounts():
         'member_user': 'u', 'member_host': 'h'}, ROLE_TARGET) == [
         ('REVOKE %s@%s FROM %s@%s', ('r', '%', 'u', 'h'))]
     unnamed = {**ROLE_TARGET, 'native': {}}
-    with pytest.raises(RelationalClientError, match='role identity'):
+    with pytest.raises(RelationalClientError, match='account identity'):
         statements('role', 'grant', {
             'member_user': 'u', 'member_host': 'h'}, unnamed)
 
