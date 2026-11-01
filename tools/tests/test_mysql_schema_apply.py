@@ -90,8 +90,10 @@ def test_native_dispatch_interruption_is_unknown_and_cleaned_up(tmp_path):
 
 def test_separate_process_claim_and_exit_preserves_unknown_receipt(tmp_path):
     import os
+    from pathlib import Path
     import subprocess
     import sys
+    from pgadmin.cdeadmin.workspace import mysql_schema_apply as schema_apply
     applications,receipt,_,_=reviewed(tmp_path)
     script='''
 import config, json, os, sys
@@ -102,7 +104,8 @@ def execute(record):
 applications.apply(json.loads(sys.argv[2]),'owner','binding',execute)
 '''
     process=subprocess.run([sys.executable,'-c',script,str(applications.path),__import__('json').dumps(request(receipt))],
-        env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'},capture_output=True)
+        env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'},capture_output=True,
+        cwd=Path(schema_apply.__file__).resolve().parents[3])
     assert process.returncode==37,process.stderr.decode()
     restarted=MySQLSchemaApplications(applications.path)
     execute=Mock()
