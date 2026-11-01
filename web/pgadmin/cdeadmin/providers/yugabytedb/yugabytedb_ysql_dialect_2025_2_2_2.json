@@ -30,8 +30,11 @@
       "session_settings": 582,
       "statements": 127
     },
-    "authoritative_task_count": 67,
+    "authoritative_task_count": 79,
     "authoritative_task_ids": [
+      "visual_admin.collation.alter",
+      "visual_admin.collation.create",
+      "visual_admin.collation.drop",
       "visual_admin.column.alter",
       "visual_admin.column.create",
       "visual_admin.column.drop",
@@ -45,6 +48,9 @@
       "visual_admin.domain.create",
       "visual_admin.domain.drop",
       "visual_admin.domain.rename",
+      "visual_admin.event-trigger.alter",
+      "visual_admin.event-trigger.create",
+      "visual_admin.event-trigger.drop",
       "visual_admin.extension.alter",
       "visual_admin.extension.create",
       "visual_admin.extension.drop",
@@ -63,12 +69,18 @@
       "visual_admin.procedure.alter",
       "visual_admin.procedure.create",
       "visual_admin.procedure.drop",
+      "visual_admin.publication.alter",
+      "visual_admin.publication.create",
+      "visual_admin.publication.drop",
       "visual_admin.role.alter",
       "visual_admin.role.create",
       "visual_admin.role.drop",
       "visual_admin.row-policy.alter",
       "visual_admin.row-policy.create",
       "visual_admin.row-policy.drop",
+      "visual_admin.rule.alter",
+      "visual_admin.rule.create",
+      "visual_admin.rule.drop",
       "visual_admin.schema.alter",
       "visual_admin.schema.create",
       "visual_admin.schema.drop",
@@ -100,7 +112,7 @@
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 67,
+    "implemented_task_count": 79,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -76575,7 +76587,7 @@
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "b8ca039b08b4c544c6cf4be749fb31aa6dedc76407d9ff34436ef0827e5daf99"
+      "sha256": "dc3dfb4e59d4fd85429bd9dca5211809f90a362f022517c898b700b10a26076c"
     },
     {
       "artifact": "ysql_dialect_qualification_live.json",
@@ -76584,7 +76596,7 @@
       "evidence_kind": "live_execution",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "b8ca039b08b4c544c6cf4be749fb31aa6dedc76407d9ff34436ef0827e5daf99"
+      "sha256": "dc3dfb4e59d4fd85429bd9dca5211809f90a362f022517c898b700b10a26076c"
     },
     {
       "artifact": "__init__.py",
@@ -76644,6 +76656,48 @@
     }
   },
   "task_templates": [
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "COMMENT ON COLLATION \"public\".\"cde_editor_collation\" IS 'cde editor collation'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON COLLATION \"public\".\"cde_editor_collation\" IS 'cde editor collation'"
+      ],
+      "task_id": "visual_admin.collation.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE COLLATION \"public\".\"cde_editor_collation\" (provider = icu, locale = 'de-DE')",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE COLLATION \"public\".\"cde_editor_collation\" (provider = icu, locale = 'de-DE')"
+      ],
+      "task_id": "visual_admin.collation.create"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP COLLATION \"public\".\"cde_editor_collation\"",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP COLLATION \"public\".\"cde_editor_collation\""
+      ],
+      "task_id": "visual_admin.collation.drop"
+    },
     {
       "binding_style": "psycopg_percent_s",
       "proof_ids": [
@@ -76834,6 +76888,49 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
+      "source": "ALTER EVENT TRIGGER \"cde_editor_event_trigger\" DISABLE\n;\nCOMMENT ON EVENT TRIGGER \"cde_editor_event_trigger\" IS 'cde editor event trigger'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER EVENT TRIGGER \"cde_editor_event_trigger\" DISABLE",
+        "COMMENT ON EVENT TRIGGER \"cde_editor_event_trigger\" IS 'cde editor event trigger'"
+      ],
+      "task_id": "visual_admin.event-trigger.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE EVENT TRIGGER \"cde_editor_event_trigger\" ON ddl_command_end WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION \"public\".\"cde_editor_event_function\"()",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE EVENT TRIGGER \"cde_editor_event_trigger\" ON ddl_command_end WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION \"public\".\"cde_editor_event_function\"()"
+      ],
+      "task_id": "visual_admin.event-trigger.create"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP EVENT TRIGGER \"cde_editor_event_trigger\"",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP EVENT TRIGGER \"cde_editor_event_trigger\""
+      ],
+      "task_id": "visual_admin.event-trigger.drop"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
       "source": "COMMENT ON EXTENSION \"pgcrypto\" IS 'cde editor extension'",
       "source_format": "ordered_native_statements",
       "statements": [
@@ -76890,10 +76987,10 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE FUNCTION \"public\".\"cde_editor_trigger_function\"() RETURNS TRIGGER VOLATILE CALLED ON NULL INPUT PARALLEL UNSAFE LANGUAGE PLPGSQL SECURITY INVOKER AS $cde$\nBEGIN RETURN NEW; END\n$cde$",
+      "source": "CREATE FUNCTION \"public\".\"cde_editor_event_function\"() RETURNS EVENT_TRIGGER VOLATILE CALLED ON NULL INPUT PARALLEL UNSAFE LANGUAGE PLPGSQL SECURITY INVOKER AS $cde$\nBEGIN END\n$cde$",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE FUNCTION \"public\".\"cde_editor_trigger_function\"() RETURNS TRIGGER VOLATILE CALLED ON NULL INPUT PARALLEL UNSAFE LANGUAGE PLPGSQL SECURITY INVOKER AS $cde$\nBEGIN RETURN NEW; END\n$cde$"
+        "CREATE FUNCTION \"public\".\"cde_editor_event_function\"() RETURNS EVENT_TRIGGER VOLATILE CALLED ON NULL INPUT PARALLEL UNSAFE LANGUAGE PLPGSQL SECURITY INVOKER AS $cde$\nBEGIN END\n$cde$"
       ],
       "task_id": "visual_admin.function.create"
     },
@@ -76904,10 +77001,10 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP FUNCTION \"public\".\"cde_editor_trigger_function\"()",
+      "source": "DROP FUNCTION \"public\".\"cde_editor_event_function\"()",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP FUNCTION \"public\".\"cde_editor_trigger_function\"()"
+        "DROP FUNCTION \"public\".\"cde_editor_event_function\"()"
       ],
       "task_id": "visual_admin.function.drop"
     },
@@ -77086,6 +77183,48 @@
         "yugabytedb-2025.2.2.2-ysql-task-live-execution"
       ],
       "required_bindings": [],
+      "source": "COMMENT ON PUBLICATION \"cde_editor_publication\" IS 'cde editor publication'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON PUBLICATION \"cde_editor_publication\" IS 'cde editor publication'"
+      ],
+      "task_id": "visual_admin.publication.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE PUBLICATION \"cde_editor_publication\" FOR TABLE \"public\".\"qualification\"",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE PUBLICATION \"cde_editor_publication\" FOR TABLE \"public\".\"qualification\""
+      ],
+      "task_id": "visual_admin.publication.create"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP PUBLICATION \"cde_editor_publication\"",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP PUBLICATION \"cde_editor_publication\""
+      ],
+      "task_id": "visual_admin.publication.drop"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
       "source": "ALTER ROLE \"cde_editor_role\" WITH LOGIN",
       "source_format": "ordered_native_statements",
       "statements": [
@@ -77163,6 +77302,49 @@
         "DROP POLICY \"cde_editor_policy\" ON \"public\".\"qualification\""
       ],
       "task_id": "visual_admin.row-policy.drop"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE OR REPLACE RULE \"cde_editor_rule\" AS ON DELETE TO \"public\".\"qualification\" DO ALSO NOTHING\n;\nCOMMENT ON RULE \"cde_editor_rule\" ON \"public\".\"qualification\" IS 'cde editor rule'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE OR REPLACE RULE \"cde_editor_rule\" AS ON DELETE TO \"public\".\"qualification\" DO ALSO NOTHING",
+        "COMMENT ON RULE \"cde_editor_rule\" ON \"public\".\"qualification\" IS 'cde editor rule'"
+      ],
+      "task_id": "visual_admin.rule.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE RULE \"cde_editor_rule\" AS ON DELETE TO \"public\".\"qualification\" DO INSTEAD NOTHING",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE RULE \"cde_editor_rule\" AS ON DELETE TO \"public\".\"qualification\" DO INSTEAD NOTHING"
+      ],
+      "task_id": "visual_admin.rule.create"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP RULE \"cde_editor_rule\" ON \"public\".\"qualification\"",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP RULE \"cde_editor_rule\" ON \"public\".\"qualification\""
+      ],
+      "task_id": "visual_admin.rule.drop"
     },
     {
       "binding_style": "psycopg_percent_s",

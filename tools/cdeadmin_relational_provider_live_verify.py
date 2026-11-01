@@ -1983,6 +1983,117 @@ def _relational_editor_evidence(provider, request, engine):
                 }, helper,
             )
 
+        if engine == 'yugabytedb':
+            # Event triggers, rules, collations and publications
+            # (providers/yugabytedb/catalog_objects, 2026-11-01).
+            event_helper = None
+            if attempt(
+                'event-trigger.helper.create', 'function', 'create', {
+                    'name': 'cde_editor_event_function', 'parent': 'public',
+                    'parameters': [], 'returns': 'EVENT_TRIGGER',
+                    'language': 'PLPGSQL', 'body': 'BEGIN END',
+                },
+            ):
+                event_helper = inspect_created(
+                    'event-trigger.helper.inspect', 'function',
+                    'cde_editor_event_function()',
+                )
+            if event_helper is not None and attempt(
+                'event-trigger.create', 'event-trigger', 'create', {
+                    'name': 'cde_editor_event_trigger',
+                    'event': 'ddl_command_end',
+                    'function': 'public.cde_editor_event_function()',
+                    'tags': ['CREATE TABLE'],
+                },
+            ):
+                event_trigger = inspect_created(
+                    'event-trigger.inspect', 'event-trigger',
+                    'cde_editor_event_trigger',
+                )
+                if event_trigger is not None:
+                    attempt(
+                        'event-trigger.alter', 'event-trigger', 'alter', {
+                            'enabled': 'DISABLED',
+                            'comment': 'cde editor event trigger',
+                        }, event_trigger,
+                    )
+                    attempt(
+                        'event-trigger.drop', 'event-trigger', 'drop', {
+                            'cascade': False,
+                            'confirmation': 'drop-live-editor-event-trigger',
+                        }, event_trigger,
+                    )
+            if event_helper is not None:
+                attempt(
+                    'event-trigger.helper.drop', 'function', 'drop', {
+                        'cascade': False,
+                        'confirmation': 'drop-live-editor-event-helper',
+                    }, event_helper,
+                )
+            if attempt(
+                'rule.create', 'rule', 'create', {
+                    'name': 'cde_editor_rule', 'table': qualified_table,
+                    'event': 'DELETE', 'instead': True, 'actions': '',
+                },
+            ):
+                rule = inspect_created('rule.inspect', 'rule',
+                                       'cde_editor_rule')
+                if rule is not None:
+                    attempt(
+                        'rule.alter', 'rule', 'alter', {
+                            'instead': False,
+                            'comment': 'cde editor rule',
+                        }, rule,
+                    )
+                    attempt(
+                        'rule.drop', 'rule', 'drop', {
+                            'confirmation': 'drop-live-editor-rule',
+                        }, rule,
+                    )
+            if attempt(
+                'collation.create', 'collation', 'create', {
+                    'name': 'cde_editor_collation', 'parent': 'public',
+                    'provider': 'icu', 'locale': 'de-DE',
+                },
+            ):
+                collation = inspect_created(
+                    'collation.inspect', 'collation', 'cde_editor_collation'
+                )
+                if collation is not None:
+                    attempt(
+                        'collation.alter', 'collation', 'alter', {
+                            'comment': 'cde editor collation',
+                        }, collation,
+                    )
+                    attempt(
+                        'collation.drop', 'collation', 'drop', {
+                            'cascade': False,
+                            'confirmation': 'drop-live-editor-collation',
+                        }, collation,
+                    )
+            if attempt(
+                'publication.create', 'publication', 'create', {
+                    'name': 'cde_editor_publication',
+                    'tables': [qualified_table],
+                },
+            ):
+                publication = inspect_created(
+                    'publication.inspect', 'publication',
+                    'cde_editor_publication',
+                )
+                if publication is not None:
+                    attempt(
+                        'publication.alter', 'publication', 'alter', {
+                            'comment': 'cde editor publication',
+                        }, publication,
+                    )
+                    attempt(
+                        'publication.drop', 'publication', 'drop', {
+                            'cascade': False,
+                            'confirmation': 'drop-live-editor-publication',
+                        }, publication,
+                    )
+
         if provider.client.supports_admin_operation(
                 'row-policy', 'create') and attempt(
             'row-policy.create', 'row-policy', 'create', {

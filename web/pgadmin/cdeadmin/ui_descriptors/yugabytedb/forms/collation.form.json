@@ -1,0 +1,78 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "collation"
+  ],
+  "status": "draft",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "Renaming runs ALTER COLLATION ... RENAME TO."
+    },
+    {
+      "field_id": "parent",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "required": true,
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "help": "Afterwards ALTER COLLATION ... SET SCHEMA."
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON COLLATION"
+    },
+    {
+      "field_id": "provider",
+      "label": "Provider",
+      "tab": "Definition",
+      "control": "select",
+      "default": "icu",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "icu",
+          "label": "ICU"
+        },
+        {
+          "value": "libc",
+          "label": "libc"
+        }
+      ]
+    },
+    {
+      "field_id": "locale",
+      "label": "Locale",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "help": "ICU: a language tag such as de-DE; libc: a locale such as C."
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Nondeterministic collations",
+      "reason": "Refused by YugabyteDB 2025.2.2.2 (\"nondeterministic collation is not supported\", live)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "CREATE COLLATION ... FROM an existing collation",
+      "reason": "Runs (live) but has no editor yet",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "notes": "Probed live on YugabyteDB 2025.2.2.2 (2026-11-01)."
+}

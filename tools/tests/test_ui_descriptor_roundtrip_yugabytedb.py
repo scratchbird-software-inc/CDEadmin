@@ -1407,3 +1407,118 @@ def test_native_partitions_create_attach_detach(live):
         row['display_path'] == ['public', 'rt_pr', 'rt_loose'])
     control(client, route, 'partition', 'detach', {}, partition)
     assert bound('rt_loose') == [(None, None)]
+
+
+def test_event_triggers_rules_collations_publications(live):
+    """2026-11-01: four kinds YugabyteDB YSQL runs that had no editor."""
+    route, client = live
+    trigger_form = resolved_form('yugabytedb', 'trigger')
+    query('CREATE FUNCTION public.rt_evt() RETURNS event_trigger '
+          'LANGUAGE plpgsql AS $$ BEGIN END $$')
+    query('CREATE TABLE public.rt_ruled (id INT PRIMARY KEY, v INT)')
+    query('CREATE TABLE public.rt_log (id INT)')
+    # Publications need a primary key ("cannot be replicated" otherwise).
+    query('CREATE TABLE public.rt_pubbed (id INT PRIMARY KEY)')
+    try:
+        run(client, route, 'event-trigger', 'create', backend_draft(
+            trigger_form, {
+                'variant': 'event', 'name': 'rt_et',
+                'event': 'ddl_command_end',
+                'function': ['public', 'rt_evt()'],
+                'tags': ['CREATE TABLE'], 'enabled': 'REPLICA',
+                'comment': 'rt event'}))
+        assert query(
+            "SELECT evtevent, evtenabled, evttags, obj_description(oid, "
+            "'pg_event_trigger') FROM pg_event_trigger WHERE evtname = "
+            "'rt_et'") == [('ddl_command_end', 'R', ['CREATE TABLE'],
+                            'rt event')]
+        target, baseline = record(client, route, 'event-trigger', 'rt_et',
+                                  'trigger', variant='event')
+        # The editor shows a string grid as rows.
+        assert (baseline['event'], [row['value'] for row in baseline['tags']],
+                baseline['enabled']) == (
+            'ddl_command_end', ['CREATE TABLE'], 'REPLICA')
+        run(client, route, 'event-trigger', 'alter', backend_draft(
+            trigger_form, {**baseline, 'name': 'rt_et2',
+                           'enabled': 'DISABLED'}, mode='alter',
+            baseline=baseline), target=target)
+        assert query("SELECT evtenabled FROM pg_event_trigger WHERE "
+                     "evtname = 'rt_et2'") == [('D',)]
+        run(client, route, 'event-trigger', 'drop', {'confirmation': 'x'},
+            target=find(client, route, 'event-trigger', 'rt_et2')[0])
+        assert not query("SELECT 1 FROM pg_event_trigger")
+
+        rule_form = resolved_form('yugabytedb', 'engine_object:rule')
+        run(client, route, 'rule', 'create', backend_draft(rule_form, {
+            'name': 'rt_rule', 'table': ['public', 'rt_ruled'],
+            'event': 'INSERT', 'condition': 'NEW.v > 10', 'instead': False,
+            'actions': 'INSERT INTO public.rt_log VALUES (NEW.id)',
+            'comment': 'rt rule'}))
+        query('INSERT INTO public.rt_ruled VALUES (1, 5), (2, 50)')
+        assert query('SELECT id FROM public.rt_log') == [(2,)]
+        target, baseline = record(client, route, 'rule', 'rt_rule',
+                                  'engine_object:rule')
+        assert (baseline['event'], baseline['condition'],
+                baseline['instead'], baseline['comment']) == (
+            'INSERT', 'new.v > 10', False, 'rt rule')
+        assert backend_draft(rule_form, baseline, mode='alter',
+                             baseline=baseline) == {}
+        run(client, route, 'rule', 'alter', backend_draft(rule_form, {
+            **baseline, 'instead': True, 'actions': ''}, mode='alter',
+            baseline=baseline), target=target)
+        query('INSERT INTO public.rt_ruled VALUES (3, 99)')
+        assert query('SELECT count(*) FROM public.rt_ruled') == [(2,)]
+        assert 'rename' in refused('rule', 'alter', {'name': 'rt_rule2'},
+                                   target).lower()
+        run(client, route, 'rule', 'drop', {'confirmation': 'rt_rule'},
+            target=find(client, route, 'rule', 'rt_rule')[0])
+        assert not query("SELECT 1 FROM pg_rules WHERE rulename = "
+                         "'rt_rule'")
+
+        collation_form = resolved_form('yugabytedb',
+                                       'engine_object:collation')
+        run(client, route, 'collation', 'create', backend_draft(
+            collation_form, {'name': 'rt_coll', 'parent': 'public',
+                             'provider': 'icu', 'locale': 'de-DE'}))
+        target, baseline = record(client, route, 'collation', 'rt_coll',
+                                  'engine_object:collation')
+        assert (baseline['provider'], baseline['locale']) == ('icu',
+                                                              'de-DE')
+        query('CREATE SCHEMA rt_cs')
+        run(client, route, 'collation', 'alter', backend_draft(
+            collation_form, {**baseline, 'name': 'rt_coll2',
+                             'parent': 'rt_cs', 'comment': 'rt coll'},
+            mode='alter', baseline=baseline), target=target)
+        assert query(
+            "SELECT n.nspname, obj_description(c.oid, 'pg_collation') FROM "
+            "pg_collation c JOIN pg_namespace n ON n.oid = c.collnamespace "
+            "WHERE c.collname = 'rt_coll2'") == [('rt_cs', 'rt coll')]
+        run(client, route, 'collation', 'drop', {'confirmation': 'x'},
+            target=find(client, route, 'collation', 'rt_coll2')[0])
+
+        publication_form = resolved_form('yugabytedb',
+                                         'engine_object:publication')
+        run(client, route, 'publication', 'create', backend_draft(
+            publication_form, {'name': 'rt_pub',
+                               'tables': ['public.rt_ruled']}))
+        target, baseline = record(client, route, 'publication', 'rt_pub',
+                                  'engine_object:publication')
+        assert [row['value'] for row in baseline['tables']] == [
+            'public.rt_ruled']
+        run(client, route, 'publication', 'alter', backend_draft(
+            publication_form, {**baseline, 'name': 'rt_pub2',
+                               'tables': ['public.rt_ruled',
+                                          'public.rt_pubbed']},
+            mode='alter', baseline=baseline), target=target)
+        assert sorted(query(
+            "SELECT tablename FROM pg_publication_tables WHERE pubname = "
+            "'rt_pub2'")) == [('rt_pubbed',), ('rt_ruled',)]
+        run(client, route, 'publication', 'drop', {'confirmation': 'x'},
+            target=find(client, route, 'publication', 'rt_pub2')[0])
+        assert not query("SELECT 1 FROM pg_publication")
+    finally:
+        for statement in ('DROP EVENT TRIGGER IF EXISTS rt_et',
+                          'DROP EVENT TRIGGER IF EXISTS rt_et2',
+                          'DROP PUBLICATION IF EXISTS rt_pub',
+                          'DROP PUBLICATION IF EXISTS rt_pub2'):
+            query(statement)

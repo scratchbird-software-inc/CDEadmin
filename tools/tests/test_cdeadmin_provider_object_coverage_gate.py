@@ -65,7 +65,10 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
         # 2484 with CockroachDB's cluster settings (set, reset, inspect),
         # role and user system privileges, range splits and storage
         # parameters.
-        self.assertEqual(2484, result['graphical_operation_count'])
+        # 2500 with YugabyteDB event triggers, rules, collations and
+        # publications (inspect, create, alter, drop each; the dialect
+        # contract regenerated from live evidence, 67 -> 79 tasks).
+        self.assertEqual(2500, result['graphical_operation_count'])
         large_object = next(item for item in self.catalogs['postgresql-native']['descriptor']['objects']
             if item['resource_kind'] == 'large-object')
         self.assertEqual({'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop',

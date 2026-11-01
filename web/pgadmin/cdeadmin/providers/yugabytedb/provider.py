@@ -21,9 +21,9 @@ from ..distributed_sql import (
     sql_administration,
 )
 from . import (
-    databases, ddl_mode, extensions, indexes as index_sql, objects,
-    policies, routines, sequences, tables as tables_sql, tablespaces, types,
-    views,
+    catalog_objects, databases, ddl_mode, extensions, indexes as index_sql,
+    objects, policies, routines, sequences, tables as tables_sql,
+    tablespaces, types, views,
 )
 from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
@@ -52,7 +52,8 @@ PROFILE = PilotProfile(
         'procedure', 'trigger', 'extension', 'partition', 'tablespace',
         'tablet', 'tserver', 'master', 'placement-policy', 'user', 'role',
         'privilege', 'row-policy', 'changefeed', 'snapshot', 'schedule',
-        'xcluster-replication', 'session',
+        'xcluster-replication', 'session', 'event-trigger', 'rule',
+        'collation', 'publication',
     ),
     ('ysqlsh', 'yb-admin', 'backup-restore'),
     parameter_shape='object-or-array',
@@ -105,6 +106,12 @@ _YSQL_SUPPORTED.update({
     'trigger': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # alter: UPDATE TO, SET SCHEMA, comment (providers/yugabytedb/extensions).
     'extension': frozenset({'inspect', 'create', 'alter', 'drop'}),
+    # Event triggers, rules, collations and publications
+    # (providers/yugabytedb/catalog_objects).
+    'event-trigger': frozenset({'inspect', 'create', 'alter', 'drop'}),
+    'rule': frozenset({'inspect', 'create', 'alter', 'drop'}),
+    'collation': frozenset({'inspect', 'create', 'alter', 'drop'}),
+    'publication': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # Row-level security policies (providers/yugabytedb/policies).
     'row-policy': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # Partition bounds are part of CREATE TABLE in YSQL. Until the table form
@@ -146,16 +153,21 @@ class YugabyteDBAdministration(RelationalAdministration):
             kind in {'table', 'index', 'type', 'domain', 'view',
                      'materialized-view', 'sequence', 'function',
                      'procedure', 'database', 'row-policy',
-                     'tablespace', 'extension'} and
+                     'tablespace', 'extension', 'event-trigger', 'rule',
+                     'collation', 'publication'} and
             operation in {'create', 'alter'}) or (
             # Dropped by signature (overloads share a name) or by table.
             operation == 'drop' and kind in {'function', 'procedure',
-                                             'row-policy'})
+                                             'row-policy', 'rule'})
 
     def _native_compile(self, request):
         draft = request.get('draft')
         if not isinstance(draft, dict):
             raise RelationalClientError('administration draft is invalid')
+        if request['resource_kind'] in catalog_objects.BUILDERS:
+            return {'statements': catalog_objects.compile_request(
+                self, request['resource_kind'], request['operation_id'],
+                draft, request.get('target_resource'))}
         if request['resource_kind'] == 'extension':
             if request['operation_id'] == 'create':
                 return {'statements': extensions.create(self, draft)}
@@ -304,6 +316,9 @@ class YugabyteDBAdministration(RelationalAdministration):
             }
         if kind == 'extension' and operation in {'create', 'alter'}:
             return extensions.form(self._field, operation)
+        if kind in catalog_objects.BUILDERS and operation in {
+                'create', 'alter'}:
+            return catalog_objects.form(self._field, kind, operation)
         if kind == 'tablespace' and operation in {'create', 'alter'}:
             return tablespaces.form(self._field, operation)
         return super()._form(kind, operation)
@@ -438,8 +453,15 @@ class YugabyteDBAdministration(RelationalAdministration):
             name = draft.get('name')
             if kind in {
                     'database', 'schema', 'role', 'user', 'tablespace',
-                    'extension'}:
+                    'extension', 'event-trigger', 'publication'}:
                 path = [name]
+            elif kind == 'rule':
+                table = draft.get('table')
+                table = (table if isinstance(table, list)
+                         else str(table or '').split('.'))
+                path = [*table, name]
+            elif kind == 'collation':
+                path = [draft.get('parent') or 'public', name]
             else:
                 parent = draft.get('parent') or route.get('database')
                 path = [parent, name] if parent else [name]
@@ -736,6 +758,8 @@ def _extras(cursor, _request, generation):
             'comment': None if comment is None else str(comment),
             'update_versions': [str(item) for item in targets or ()],
         }))
+    values.extend(catalog_objects.resources(
+        cursor, generation, resource, optional_rows, excluded))
     for schema, parent, child, bound in optional_rows(
         cursor,
         'SELECT pn.nspname, pc.relname, cc.relname, '

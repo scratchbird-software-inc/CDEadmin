@@ -3,7 +3,8 @@
   "engine": "yugabytedb",
   "family": "trigger",
   "resource_kinds": [
-    "trigger"
+    "trigger",
+    "event-trigger"
   ],
   "status": "complete",
   "engine_tab_title": "YugabyteDB",
@@ -21,18 +22,33 @@
     },
     {
       "concept": "Event triggers",
-      "reason": "Run on 2025.2.2.2 (probe) but have no editor yet",
+      "reason": "Run on 2025.2.2.2 (probe) but have no editor yet. 2026-11-01: provided as the event variant of this form (event, command tags, function, enable mode, comment, rename), read back from pg_event_trigger",
       "tracking": "postgresql-wire-parity"
     }
   ],
   "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "tab": "General",
+      "control": "select",
+      "ui_only": true,
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "event",
+          "label": "Event trigger"
+        }
+      ],
+      "help": "Set for an event trigger (fires on DDL in this database); a table trigger leaves it empty."
+    },
     {
       "field_id": "name",
       "label": "Name",
       "tab": "General",
       "control": "text",
       "required": true,
-      "help": "Renaming runs ALTER TRIGGER ... RENAME TO."
+      "help": "Renaming runs ALTER TRIGGER ... RENAME TO (ALTER EVENT TRIGGER for an event trigger)."
     },
     {
       "field_id": "table",
@@ -42,7 +58,11 @@
       "required": true,
       "help": "A table, or a view for INSTEAD OF triggers.",
       "reference_kind": "table",
-      "reference_value": "display_path"
+      "reference_value": "display_path",
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "timing",
@@ -64,7 +84,11 @@
           "value": "INSTEAD OF",
           "label": "Instead Of"
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "level",
@@ -82,7 +106,11 @@
           "label": "For each statement"
         }
       ],
-      "help": "INSTEAD OF is row-level; TRUNCATE is statement-level."
+      "help": "INSTEAD OF is row-level; TRUNCATE is statement-level.",
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "events",
@@ -110,7 +138,11 @@
           "value": "TRUNCATE",
           "label": "Truncate"
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "update_columns",
@@ -127,7 +159,11 @@
           "required": true,
           "reference_kind": "column"
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "when",
@@ -136,7 +172,11 @@
       "control": "code",
       "language": "sql",
       "required": false,
-      "help": "Row fields as NEW.column / OLD.column."
+      "help": "Row fields as NEW.column / OLD.column.",
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "comment",
@@ -146,12 +186,64 @@
       "help": "COMMENT ON TRIGGER"
     },
     {
+      "field_id": "event",
+      "label": "Event",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "editable_after_create": false,
+      "visible_when": {
+        "field": "variant",
+        "equals": "event"
+      },
+      "options": [
+        {
+          "value": "ddl_command_start",
+          "label": "ddl_command_start"
+        },
+        {
+          "value": "ddl_command_end",
+          "label": "ddl_command_end"
+        },
+        {
+          "value": "sql_drop",
+          "label": "sql_drop"
+        },
+        {
+          "value": "table_rewrite",
+          "label": "table_rewrite"
+        }
+      ],
+      "help": "CREATE EVENT TRIGGER ... ON event. Cannot change in place."
+    },
+    {
+      "field_id": "tags",
+      "label": "Command tags",
+      "tab": "General",
+      "control": "grid",
+      "item_kind": "string",
+      "editable_after_create": false,
+      "visible_when": {
+        "field": "variant",
+        "equals": "event"
+      },
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "help": "WHEN TAG IN: only these commands, for example CREATE TABLE. Empty: every command. Cannot change in place."
+    },
+    {
       "field_id": "function",
       "label": "Trigger function",
       "tab": "Definition",
       "control": "reference",
       "required": true,
-      "help": "A function that returns TRIGGER.",
+      "help": "A function that returns TRIGGER, or EVENT_TRIGGER for an event trigger.",
       "reference_kind": "function",
       "reference_value": "display_path"
     },
@@ -171,7 +263,11 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "truthy": false
+      }
     },
     {
       "field_id": "enabled",

@@ -1,0 +1,75 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "publication"
+  ],
+  "status": "draft",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "Renaming runs ALTER PUBLICATION ... RENAME TO."
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON PUBLICATION"
+    },
+    {
+      "field_id": "all_tables",
+      "label": "All tables",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": false,
+      "editable_after_create": false,
+      "help": "FOR ALL TABLES, including tables created later. Cannot change in place."
+    },
+    {
+      "field_id": "tables",
+      "label": "Tables",
+      "tab": "Definition",
+      "control": "grid",
+      "item_kind": "string",
+      "visible_when": {
+        "field": "all_tables",
+        "truthy": false
+      },
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Table (schema.table)",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "help": "FOR TABLE; afterwards ALTER PUBLICATION ... SET TABLE (or DROP TABLE for none). Each table needs a primary key: YugabyteDB refuses others (\"cannot be replicated\")."
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Publishing a subset of INSERT/UPDATE/DELETE/TRUNCATE",
+      "reason": "Refused by YugabyteDB 2025.2.2.2 (\"not yet supported\", live)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "FOR TABLES IN SCHEMA",
+      "reason": "Refused by YugabyteDB 2025.2.2.2 (\"not supported yet\", live)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Column lists and row filters",
+      "reason": "Accepted by YugabyteDB 2025.2.2.2 but not yet read back or edited",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "notes": "Probed live on YugabyteDB 2025.2.2.2 (2026-11-01). Publications feed YugabyteDB's logical replication (CDC)."
+}

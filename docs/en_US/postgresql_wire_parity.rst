@@ -1189,6 +1189,30 @@ and the YugabyteDB object kinds its catalog lacks (collation, event trigger,
 publication, foreign data wrapper, aggregate, operator, cast, rule, language)
 are recorded in the probe notes and are separate work.
 
+YugabyteDB event triggers, rules, collations and publications, 2026-11-01
+(``providers/yugabytedb/catalog_objects.py``), each probed live first and
+edited from the object tree like every other kind. The dialect contract was
+regenerated from a live qualification that executed every task (67 -> 79
+tasks); the metrics contract is unchanged because the new snapshot lacked 33
+lazily registered metrics.
+
+-  Event triggers are the event variant of the trigger form (event, command
+   tags, function, enable mode, comment, rename). Event, function and tags
+   cannot change in place.
+-  Rules (``CREATE [OR REPLACE] RULE``) on a table: event, ``INSTEAD`` or
+   ``ALSO``, condition and commands; the record is read back from
+   ``pg_get_ruledef``. ``ALTER RULE ... RENAME`` is refused by YugabyteDB, so a
+   rule keeps its name.
+-  Collations with the ICU or libc provider; rename, ``SET SCHEMA`` and
+   comment. Nondeterministic collations are refused by YugabyteDB.
+-  Publications for all tables or for listed tables (``SET``/``DROP TABLE``
+   afterwards), rename and comment. YugabyteDB refuses publishing a subset of
+   DML commands and schema-level publications; column lists and row filters
+   are accepted but not yet read back or edited.
+
+Aggregates, operators, casts, the foreign-data-wrapper chain and languages
+remain.
+
 Plan
 ----
 

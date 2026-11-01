@@ -1,0 +1,95 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "rule"
+  ],
+  "status": "draft",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "help": "YugabyteDB 2025.2.2.2 refuses ALTER RULE ... RENAME, so a rule keeps its name."
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "reference",
+      "required": true,
+      "editable_after_create": false,
+      "reference_kind": "table",
+      "reference_value": "display_path"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON RULE"
+    },
+    {
+      "field_id": "event",
+      "label": "Event",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "options": [
+        {
+          "value": "INSERT",
+          "label": "INSERT"
+        },
+        {
+          "value": "UPDATE",
+          "label": "UPDATE"
+        },
+        {
+          "value": "DELETE",
+          "label": "DELETE"
+        }
+      ]
+    },
+    {
+      "field_id": "instead",
+      "label": "Instead of the command",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": false,
+      "help": "DO INSTEAD replaces the original command; off: DO ALSO runs both."
+    },
+    {
+      "field_id": "condition",
+      "label": "Condition",
+      "tab": "Definition",
+      "control": "code",
+      "help": "WHERE: a boolean expression over NEW and OLD. Empty: always."
+    },
+    {
+      "field_id": "actions",
+      "label": "Commands",
+      "tab": "Definition",
+      "control": "code",
+      "help": "The commands to run, separated by semicolons. Empty: NOTHING. A change replaces the rule (CREATE OR REPLACE RULE)."
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "Rule rename",
+      "reason": "ALTER RULE ... RENAME is refused by YugabyteDB 2025.2.2.2 (live)",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "SELECT rules",
+      "reason": "A view's _RETURN rule is the view itself; other SELECT rules are not offered",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "notes": "Probed live on YugabyteDB 2025.2.2.2 (2026-11-01). The record is read back from pg_get_ruledef."
+}

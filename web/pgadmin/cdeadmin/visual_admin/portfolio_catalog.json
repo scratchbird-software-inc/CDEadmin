@@ -1424,7 +1424,11 @@
         {"resource_kind": "snapshot", "title": "Snapshot", "operation_profile": "operational"},
         {"resource_kind": "schedule", "title": "Snapshot schedule", "operation_profile": "operational"},
         {"resource_kind": "xcluster-replication", "title": "xCluster replication", "operation_profile": "topology"},
-        {"resource_kind": "session", "title": "Session", "operation_profile": "read_only"}
+        {"resource_kind": "session", "title": "Session", "operation_profile": "read_only"},
+        {"resource_kind": "event-trigger", "title": "Event trigger", "operation_profile": "definition"},
+        {"resource_kind": "rule", "title": "Rule", "operation_profile": "definition"},
+        {"resource_kind": "collation", "title": "Collation", "operation_profile": "definition"},
+        {"resource_kind": "publication", "title": "Publication", "operation_profile": "definition"}
       ]
     },
     {

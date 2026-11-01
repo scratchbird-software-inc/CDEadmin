@@ -53,7 +53,10 @@
         "domain",
         "function",
         "procedure",
-        "trigger"
+        "trigger",
+        "event-trigger",
+        "rule",
+        "collation"
       ],
       "order": 4
     },
@@ -62,7 +65,8 @@
       "title": "Replication",
       "kinds": [
         "changefeed",
-        "xcluster-replication"
+        "xcluster-replication",
+        "publication"
       ],
       "order": 5
     },
@@ -102,7 +106,8 @@
       "constraint",
       "partition",
       "trigger",
-      "row-policy"
+      "row-policy",
+      "rule"
     ],
     "view": [
       "column"
@@ -143,6 +148,10 @@
     "snapshot": "object.snapshot",
     "schedule": "object.job",
     "row-policy": "object.privilege",
-    "session": "object.session"
+    "session": "object.session",
+    "event-trigger": "object.trigger",
+    "rule": "object.relationship",
+    "collation": "object.collation",
+    "publication": "object.publication"
   }
 }
