@@ -37,7 +37,8 @@ from pgadmin.cdeadmin.providers.yugabytedb.provider import (  # noqa: E402
 )
 from ui_descriptor_roundtrip import (  # noqa: E402
     backend_draft, engine_operations, operation_backend_draft,
-    operation_draft, record_draft, record_from_resource, resolved_form,
+    operation_draft, provider_target, record_draft, record_from_resource,
+    resolved_form,
 )
 
 SETTINGS = json.loads(SETTINGS)
@@ -76,9 +77,14 @@ def live():
         endpoint_id=str(uuid.uuid4()), session_namespace=f'rt{UNIQUE}',
         pool_namespace=f'rt{UNIQUE}', cache_namespace=f'rt{UNIQUE}',
         provider_id=PROFILE.provider_id, profile_id=PROFILE.profile_id,
-        profile_version=PROFILE.exact_version, provider_version='0.2.0')
-    client = create_provider(context, SimpleNamespace(
-        acquire_secret=None, require=lambda *_args: None)).client
+        profile_version=PROFILE.exact_version, provider_version='0.2.0',
+        mode='legacy_native', runtime_verification_state='unverified',
+        verified_runtime_family=None, declared_runtime_family=None,
+        target_adapter_id=None, effective_permissions=frozenset())
+    provider = create_provider(context, SimpleNamespace(
+        acquire_secret=None, require=lambda *_args: None))
+    PROVIDERS[:] = [provider]
+    client = provider.client
     try:
         with connect() as connection:
             connection.execute(f'CREATE DATABASE {DATABASE}')
@@ -116,10 +122,20 @@ def executor_request(request, planned):
     return {'plan': plan, 'provider_payload': planned['provider_payload']}
 
 
+# The provider the fixture built; run() also validates through it.
+PROVIDERS = []
+
+
 def run(client, route, kind, operation, draft, target=None):
     request = {'resource_kind': kind, 'operation_id': operation,
                'target_resource': target, '_provider_route': route,
                'draft': draft}
+    # The UI submits through visual administration, whose field contract
+    # and catalog must admit the form's draft too (2026-10-31: several did
+    # not, while this direct path accepted them).
+    ui = PROVIDERS[0].validate_visual_admin({
+        **request, 'target_resource': provider_target(target, 'yugabytedb')})
+    assert ui['errors'] == [], ui['errors']
     assert ADMINISTRATION.validate(request)['errors'] == []
     planned = ADMINISTRATION.plan(request)
     result = ADMINISTRATION.apply(client, executor_request(request, planned))
@@ -960,6 +976,18 @@ def operate(client, route, kind, operation, values, target,
         target=target)
 
 
+def confirmed_drop(client, route, kind, target):
+    """A control-plane delete has no form fields: the UI sends an empty
+    draft and visual administration refuses to apply it unconfirmed."""
+    operation = next(
+        item for resource in PROVIDERS[0].visual_admin_descriptor()['objects']
+        if resource['resource_kind'] == kind
+        for item in resource['operations'] if item['operation_id'] == 'drop')
+    assert (operation['mutation_class'], operation['confirmation_required'],
+            operation['form']['fields']) == ('destructive', True, [])
+    return run(client, route, kind, 'drop', {}, target=target)
+
+
 def until(check, timeout=120, interval=2):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -1043,18 +1071,21 @@ def test_control_plane_operations(live):
         'replication_factor': 1}, policy)
     assert one('placement-policy')[0]['native']['liveReplicas'][
         'placementBlocks'] == held['placementBlocks']
-    # A database snapshot, restored after a delete, then removed.
+    # A database snapshot, restored after a delete, then removed. Only the
+    # snapshot made here is restored: one a failed earlier run left behind
+    # predates this run's tables and cannot restore them.
+    earlier = {row['resource_id'] for row in one('snapshot')}
     operate(client, route, 'snapshot', 'create_database', {
         'database': DATABASE, 'retention_hours': 1}, None)
     snapshot = until(lambda: next((
         row for row in one('snapshot')
-        if (row.get('native') or {}).get('state') == 'COMPLETE'), None))
+        if row['resource_id'] not in earlier and
+        (row.get('native') or {}).get('state') == 'COMPLETE'), None))
     query('DELETE FROM public.ops WHERE id > 100')
     operate(client, route, 'snapshot', 'restore', {}, snapshot,
             confirmation=snapshot['display_name'])
     until(lambda: query('SELECT count(*) FROM public.ops') == [(50000,)])
-    run(client, route, 'snapshot', 'drop',
-        {'confirmation': snapshot['display_name']}, target=snapshot)
+    confirmed_drop(client, route, 'snapshot', snapshot)
     assert not [row for row in one('snapshot')
                 if row['display_name'] == snapshot['display_name']]
     # A snapshot schedule through its form: create, alter, drop.
@@ -1091,8 +1122,7 @@ def test_control_plane_operations(live):
             {'restore_timestamp': moment}, schedule,
             confirmation=schedule['display_name'])
     until(lambda: query('SELECT count(*) FROM public.ops') == [(50000,)])
-    run(client, route, 'schedule', 'drop',
-        {'confirmation': schedule['display_name']}, target=schedule)
+    confirmed_drop(client, route, 'schedule', schedule)
     # A CDCSDK stream through its form: create, drop.
     form = resolved_form('yugabytedb', 'engine_object:changefeed')
     before = {row['resource_id'] for row in one('changefeed')}
@@ -1111,8 +1141,7 @@ def test_control_plane_operations(live):
     assert 'IMPLICIT checkpointing is disabled' in str(pytest.raises(
         Exception, run, client, route, 'changefeed', 'create', {
             'namespace': DATABASE, 'checkpoint_type': 'IMPLICIT'}).value)
-    run(client, route, 'changefeed', 'drop',
-        {'confirmation': stream['display_name']}, target=stream)
+    confirmed_drop(client, route, 'changefeed', stream)
     # A dropped stream can stay listed while its metadata is deleted.
     assert all((row.get('native') or {}).get('state', '').startswith(
         'DELETING') for row in one('changefeed')

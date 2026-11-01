@@ -38,7 +38,8 @@ from pgadmin.cdeadmin.providers.xtdb.provider import (  # noqa: E402
 )
 from ui_descriptor_roundtrip import (  # noqa: E402
     backend_draft, engine_operations, operation_backend_draft,
-    operation_draft, record_draft, record_from_resource, resolved_form,
+    operation_draft, provider_target, record_draft, record_from_resource,
+    resolved_form,
 )
 
 SETTINGS = json.loads(SETTINGS)
@@ -84,20 +85,35 @@ def live():
         endpoint_id=str(uuid.uuid4()), session_namespace='rt-xtdb',
         pool_namespace='rt-xtdb', cache_namespace='rt-xtdb',
         provider_id=PROFILE.provider_id, profile_id=PROFILE.profile_id,
-        profile_version=PROFILE.exact_version, provider_version='0.2.0')
-    client = create_provider(context, SimpleNamespace(
+        profile_version=PROFILE.exact_version, provider_version='0.2.0',
+        mode='legacy_native', runtime_verification_state='unverified',
+        verified_runtime_family=None, declared_runtime_family=None,
+        target_adapter_id=None, effective_permissions=frozenset())
+    provider = create_provider(context, SimpleNamespace(
         acquire_secret=acquire, require=lambda *_args: None,
-        allows=lambda *_args: True)).client
+        allows=lambda *_args: True))
+    PROVIDERS[:] = [provider]
+    client = provider.client
     try:
         yield route, client
     finally:
         client.close()
 
 
+# The provider the fixture built; run() also validates through it.
+PROVIDERS = []
+
+
 def run(client, route, kind, operation, draft, target=None):
     request = {'resource_kind': kind, 'operation_id': operation,
                'target_resource': target, '_provider_route': route,
                'draft': draft}
+    # The UI submits through visual administration, whose field contract
+    # and catalog must admit the form's draft too (2026-10-31: several did
+    # not, while this direct path accepted them).
+    ui = PROVIDERS[0].validate_visual_admin({
+        **request, 'target_resource': provider_target(target, 'xtdb')})
+    assert ui['errors'] == [], ui['errors']
     assert client.validate_admin_operation(request)['errors'] == []
     planned = client.plan_admin_operation(request)
     handle = {'plan': request,

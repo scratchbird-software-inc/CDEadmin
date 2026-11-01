@@ -95,8 +95,39 @@ def diff_columns(before, after, fields=None):
     return {"add_columns": add, "drop_columns": drop, "rename_columns": rename, "alter_columns": alter}
 
 
+def provider_target(target, engine: str):
+    """A client resource row as the UI holds it: a provider resource, whose
+    native record sits under extensions[engine] (ActualEnginePilotProvider)."""
+    if not isinstance(target, dict) or "native" not in target:
+        return target
+    value = {key: item for key, item in target.items() if key != "native"}
+    value["extensions"] = {engine: {"provider_owned": True, "native": target["native"]}}
+    return value
+
+
+def initial_draft(form: dict, mode: str = "create") -> dict:
+    """A new object's draft before the user types (twin of initialDraft):
+    field defaults, empty grids and unchecked booleans for the mode."""
+    draft: dict = {}
+    for tab in form.get("tabs", []):
+        for field in tab.get("fields", []):
+            if field.get("modes") and mode not in field["modes"]:
+                continue
+            if "default" in field:
+                draft[field["field_id"]] = field["default"]
+            elif field.get("control") == "grid":
+                draft[field["field_id"]] = []
+            elif field.get("control") == "boolean":
+                draft[field["field_id"]] = False
+    return draft
+
+
 def backend_draft(form: dict, draft: dict, mode: str = "create", baseline: dict | None = None) -> dict:
     out: dict = {}
+    if mode == "create" and baseline is None:
+        # The editor opens a create on initialDraft; the user's values
+        # replace it, and only the visible fields are sent.
+        draft = {**initial_draft(form, mode), **draft}
     for tab in form.get("tabs", []):
         for field in active_fields(tab.get("fields", []), mode, draft):
             fid = field["field_id"]

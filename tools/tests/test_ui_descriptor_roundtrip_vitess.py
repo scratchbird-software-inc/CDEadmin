@@ -37,7 +37,8 @@ from pgadmin.cdeadmin.providers.vitess.provider import (  # noqa: E402
 )
 from ui_descriptor_roundtrip import (  # noqa: E402
     backend_draft, engine_operations, operation_backend_draft,
-    operation_draft, record_draft, record_from_resource, resolved_form,
+    operation_draft, provider_target, record_draft, record_from_resource,
+    resolved_form,
 )
 
 SETTINGS = json.loads(SETTINGS)
@@ -76,9 +77,14 @@ def live():
         endpoint_id=str(uuid.uuid4()), session_namespace=f'rt{UNIQUE}',
         pool_namespace=f'rt{UNIQUE}', cache_namespace=f'rt{UNIQUE}',
         provider_id=PROFILE.provider_id, profile_id=PROFILE.profile_id,
-        profile_version=PROFILE.exact_version, provider_version='0.2.0')
-    client = create_provider(context, SimpleNamespace(
-        acquire_secret=None, require=lambda *_args: None)).client
+        profile_version=PROFILE.exact_version, provider_version='0.2.0',
+        mode='legacy_native', runtime_verification_state='unverified',
+        verified_runtime_family=None, declared_runtime_family=None,
+        target_adapter_id=None, effective_permissions=frozenset())
+    provider = create_provider(context, SimpleNamespace(
+        acquire_secret=None, require=lambda *_args: None))
+    PROVIDERS[:] = [provider]
+    client = provider.client
     try:
         yield route, client
     finally:
@@ -101,11 +107,21 @@ def executor_request(request, planned):
     return {'plan': plan, 'provider_payload': planned['provider_payload']}
 
 
+# The provider the fixture built; run() also validates through it.
+PROVIDERS = []
+
+
 def run(client, route, kind, operation, draft, target=None,
         post_state=False):
     request = {'resource_kind': kind, 'operation_id': operation,
                'target_resource': target, '_provider_route': route,
                'draft': draft}
+    # The UI submits through visual administration, whose field contract
+    # and catalog must admit the form's draft too (2026-10-31: several did
+    # not, while this direct path accepted them).
+    ui = PROVIDERS[0].validate_visual_admin({
+        **request, 'target_resource': provider_target(target, 'vitess')})
+    assert ui['errors'] == [], ui['errors']
     assert ADMINISTRATION.validate(request)['errors'] == []
     planned = ADMINISTRATION.plan(request)
     executed = executor_request(request, planned)
@@ -527,8 +543,9 @@ def test_tablet_backup_restore_and_backup_delete(live):
                    row['native'].get('tablet_type') == 'REPLICA')
     alias = replica['display_name']
     operations = engine_operations('vitess')
-    before = {row['resource_id'] for row in resources(client, route)
-              if row['resource_kind'] == 'backup'}
+    earlier = [row for row in resources(client, route)
+               if row['resource_kind'] == 'backup']
+    before = {row['resource_id'] for row in earlier}
     run(client, route, 'tablet', 'backup', operation_backend_draft(
         operations['backup@tablet'], operation_draft(
             operations['backup@tablet'])), target=replica, post_state=True)
@@ -549,10 +566,17 @@ def test_tablet_backup_restore_and_backup_delete(live):
                    if row['resource_kind'] == field['reference_kind'] and
                    row['display_path'][:size] ==
                    replica['display_path'][:size]]
-        assert offered == [backup['display_name']]
+        # Every backup of this shard is offered, one an earlier run left
+        # included; the one made here is restored.
+        assert sorted(offered) == sorted(
+            [backup['display_name']] + [
+                row['display_name'] for row in earlier
+                if row['display_path'][:size] ==
+                replica['display_path'][:size]])
         run(client, route, 'tablet', 'restore', operation_backend_draft(
-            restore, operation_draft(restore, {'backup': offered[0]},
-                                     alias)), target=replica)
+            restore, operation_draft(
+                restore, {'backup': backup['display_name']}, alias)),
+            target=replica)
         for _attempt in range(60):
             tablet = next(row for row in resources(client, route)
                           if row['display_name'] == alias and
@@ -563,8 +587,16 @@ def test_tablet_backup_restore_and_backup_delete(live):
         assert tablet['native']['serving_state'] == 'SERVING'
         assert tablet['native']['tablet_type'] == 'REPLICA'
     finally:
-        run(client, route, 'backup', 'drop',
-            {'confirmation': backup['display_name']}, target=backup,
+        # A backup delete has no form fields: the UI sends an empty draft
+        # and visual administration refuses to apply it unconfirmed.
+        drop = next(
+            item for resource in PROVIDERS[0].visual_admin_descriptor()[
+                'objects'] if resource['resource_kind'] == 'backup'
+            for item in resource['operations']
+            if item['operation_id'] == 'drop')
+        assert (drop['mutation_class'], drop['confirmation_required'],
+                drop['form']['fields']) == ('destructive', True, [])
+        run(client, route, 'backup', 'drop', {}, target=backup,
             post_state=True)
     assert backup['resource_id'] not in {
         row['resource_id'] for row in resources(client, route)}

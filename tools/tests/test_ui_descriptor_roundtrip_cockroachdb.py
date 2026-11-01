@@ -37,7 +37,8 @@ from pgadmin.cdeadmin.providers.cockroachdb.provider import (  # noqa: E402
 from pgadmin.cdeadmin.sdk import RelationalClientError  # noqa: E402
 from ui_descriptor_roundtrip import (  # noqa: E402
     backend_draft, engine_operations, operation_backend_draft,
-    operation_draft, record_draft, record_from_resource, resolved_form,
+    operation_draft, provider_target, record_draft, record_from_resource,
+    resolved_form,
 )
 
 SETTINGS = json.loads(SETTINGS)
@@ -72,9 +73,14 @@ def live():
         endpoint_id=str(uuid.uuid4()), session_namespace=f'rt{UNIQUE}',
         pool_namespace=f'rt{UNIQUE}', cache_namespace=f'rt{UNIQUE}',
         provider_id=PROFILE.provider_id, profile_id=PROFILE.profile_id,
-        profile_version=PROFILE.exact_version, provider_version='0.2.0')
-    client = create_provider(context, SimpleNamespace(
-        acquire_secret=None, require=lambda *_args: None)).client
+        profile_version=PROFILE.exact_version, provider_version='0.2.0',
+        mode='legacy_native', runtime_verification_state='unverified',
+        verified_runtime_family=None, declared_runtime_family=None,
+        target_adapter_id=None, effective_permissions=frozenset())
+    provider = create_provider(context, SimpleNamespace(
+        acquire_secret=None, require=lambda *_args: None))
+    PROVIDERS[:] = [provider]
+    client = provider.client
     try:
         with connect() as connection:
             connection.execute(f'CREATE DATABASE {DATABASE}')
@@ -102,10 +108,20 @@ def executor_request(request, planned):
     return {'plan': plan, 'provider_payload': planned['provider_payload']}
 
 
+# The provider the fixture built; run() also validates through it.
+PROVIDERS = []
+
+
 def run(client, route, kind, operation, draft, target=None):
     request = {'resource_kind': kind, 'operation_id': operation,
                'target_resource': target, '_provider_route': route,
                'draft': draft}
+    # The UI submits through visual administration, whose field contract
+    # and catalog must admit the form's draft too (2026-10-31: several did
+    # not, while this direct path accepted them).
+    ui = PROVIDERS[0].validate_visual_admin({
+        **request, 'target_resource': provider_target(target, 'cockroachdb')})
+    assert ui['errors'] == [], ui['errors']
     assert ADMINISTRATION.validate(request)['errors'] == []
     planned = ADMINISTRATION.plan(request)
     result = ADMINISTRATION.apply(client, executor_request(request, planned))

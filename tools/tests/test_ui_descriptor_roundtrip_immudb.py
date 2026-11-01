@@ -37,7 +37,8 @@ from pgadmin.cdeadmin.providers.immudb.provider import (  # noqa: E402
 )
 from ui_descriptor_roundtrip import (  # noqa: E402
     backend_draft, engine_operations, operation_backend_draft,
-    operation_draft, record_draft, record_from_resource, resolved_form,
+    operation_draft, provider_target, record_draft, record_from_resource,
+    resolved_form,
 )
 
 SETTINGS = json.loads(SETTINGS)
@@ -64,11 +65,16 @@ def _client():
         endpoint_id=str(uuid.uuid4()), session_namespace=f'rt{UNIQUE}',
         pool_namespace=f'rt{UNIQUE}', cache_namespace=f'rt{UNIQUE}',
         provider_id=PROFILE.provider_id, profile_id=PROFILE.profile_id,
-        profile_version=PROFILE.exact_version, provider_version='0.2.0')
-    return create_provider(context, SimpleNamespace(
+        profile_version=PROFILE.exact_version, provider_version='0.2.0',
+        mode='legacy_native', runtime_verification_state='unverified',
+        verified_runtime_family=None, declared_runtime_family=None,
+        target_adapter_id=None, effective_permissions=frozenset())
+    provider = create_provider(context, SimpleNamespace(
         acquire_secret=lambda *_args: _Lease(SETTINGS['password']),
         require=lambda *_args: None,
-        allows=lambda *_args: True)).client
+        allows=lambda *_args: True))
+    PROVIDERS[:] = [provider]
+    return provider.client
 
 
 def native(client, route, path, body, database=None):
@@ -99,10 +105,20 @@ def live():
             native(client, route, path, {'database': DATABASE})
 
 
+# The provider the fixture built; run() also validates through it.
+PROVIDERS = []
+
+
 def run(client, route, kind, operation, draft, target=None):
     request = {'resource_kind': kind, 'operation_id': operation,
                'target_resource': target, '_provider_route': route,
                'draft': draft}
+    # The UI submits through visual administration, whose field contract
+    # and catalog must admit the form's draft too (2026-10-31: several did
+    # not, while this direct path accepted them).
+    ui = PROVIDERS[0].validate_visual_admin({
+        **request, 'target_resource': provider_target(target, 'immudb')})
+    assert ui['errors'] == [], ui['errors']
     assert client.validate_admin_operation(request)['errors'] == []
     planned = client.plan_admin_operation(request)
     handle = {'plan': request, 'provider_payload': planned['provider_payload']}
@@ -126,6 +142,18 @@ def refused(client, route, kind, operation, draft, target=None):
                'draft': draft}
     return ' '.join(error['message'] for error in
                     client.validate_admin_operation(request)['errors'])
+
+
+def confirmed_drop(client, route, kind, target):
+    """An immudb drop has no form fields: the UI sends an empty draft and
+    visual administration refuses to apply it unconfirmed."""
+    operation = next(
+        item for resource in PROVIDERS[0].visual_admin_descriptor()['objects']
+        if resource['resource_kind'] == kind
+        for item in resource['operations'] if item['operation_id'] == 'drop')
+    assert (operation['mutation_class'], operation['confirmation_required'],
+            operation['form']['fields']) == ('destructive', True, [])
+    return run(client, route, kind, 'drop', {}, target)
 
 
 def find(client, route, kind, name):
@@ -218,8 +246,7 @@ def test_table_create_reopen_alter_drop(live):
         client, route, 'table', 'alter', {'check_constraints': [
             *after['check_constraints'],
             {'name': 'more', 'expression': 'id > 0'}]}, target)
-    run(client, route, 'table', 'drop', {'confirmation': 'rt_orders2'},
-        target)
+    confirmed_drop(client, route, 'table', target)
     assert not [row for row in client.list_resources({'route': dict(route)})
                 if row['resource_kind'] == 'table']
 
@@ -244,8 +271,7 @@ def test_index_create_reopen_drop(live):
             form_record['unique']) == ('rt_ix', ['b', 'a'], True)
     assert backend_draft(form, form_record, mode='alter',
                          baseline=form_record) == {}
-    run(client, route, 'index', 'drop',
-        {'confirmation': indexes[0]['display_name']}, indexes[0])
+    confirmed_drop(client, route, 'index', indexes[0])
     sql(client, route, 'DROP TABLE "rt_ix"')
 
 
@@ -294,7 +320,7 @@ def test_user_create_reopen_operations_drop(live):
     assert record(client, route, 'user', name, 'role')[1]['active'] is False
     operate(client, route, 'user', 'set_active', {'active': True}, target)
     # immudb keeps every user: drop deactivates it.
-    run(client, route, 'user', 'drop', {'confirmation': name}, target)
+    confirmed_drop(client, route, 'user', target)
     assert record(client, route, 'user', name, 'role')[1]['active'] is False
 
 
@@ -354,8 +380,8 @@ def test_database_create_reopen_settings_drop(live):
         names = [row['display_name'] for row in client.list_resources(
             {'route': dict(route)}) if row['resource_kind'] == 'database']
         if name in names:
-            run(client, route, 'database', 'drop', {'confirmation': name},
-                find(client, route, 'database', name)[0])
+            confirmed_drop(client, route, 'database',
+                           find(client, route, 'database', name)[0])
     assert name not in [row['display_name'] for row in client.list_resources(
         {'route': dict(route)}) if row['resource_kind'] == 'database']
 
@@ -375,8 +401,8 @@ def test_unload_and_load_the_connected_database(live):
         form = resolved_form('immudb', 'database')
         run(client, route, 'database', 'create', backend_draft(
             form, {'name': side, 'autoload': True}))
-        run(client, route, 'database', 'drop', {'confirmation': side},
-            find(client, route, 'database', side)[0])
+        confirmed_drop(client, route, 'database',
+                       find(client, route, 'database', side)[0])
     finally:
         operate(client, route, 'database', 'load', {},
                 find(client, route, 'database', DATABASE)[0])
