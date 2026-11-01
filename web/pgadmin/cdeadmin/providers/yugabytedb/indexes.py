@@ -26,7 +26,8 @@ _PLAIN = re.compile(r'[A-Za-z_][A-Za-z0-9_$]*')
 
 
 def _blank(value):
-    return value is None or value == ''
+    # The editor sends every visible grid, so an empty one is unset.
+    return value is None or value == '' or value == []
 
 
 def _key_text(admin, expression):

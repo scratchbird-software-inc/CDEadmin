@@ -73,13 +73,10 @@
       "tab": "General",
       "control": "boolean",
       "required": false,
-      "help": "LOGIN / NOLOGIN. A user is a role that can log in.",
+      "help": "LOGIN / NOLOGIN for a role. A user is a role that can log in, so a user always logs in.",
       "visible_when": {
         "field": "variant",
-        "in": [
-          "user",
-          "role"
-        ]
+        "equals": "role"
       }
     },
     {

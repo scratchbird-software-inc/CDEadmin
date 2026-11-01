@@ -42,7 +42,8 @@ _LOCKED = {'unique': 'use the Unique grid',
 
 
 def _blank(value):
-    return value is None or value == ''
+    # The editor sends every visible grid, so an empty one is unset.
+    return value is None or value == '' or value == []
 
 
 def _choice(value, allowed, label):

@@ -47,7 +47,10 @@ def _comment(admin, keyword, name, value):
 
 
 def _unknown(draft, allowed, what):
-    unknown = set(draft) - allowed
+    # One editor serves types and domains, and it sends the other variant's
+    # visible but empty grids; only a value is an option.
+    unknown = {key for key in set(draft) - allowed
+               if draft[key] not in (None, '', [])}
     if unknown:
         raise RelationalClientError(
             ', '.join(sorted(unknown)) + f' is not a {what} option here')
