@@ -30,8 +30,14 @@
       "session_settings": 582,
       "statements": 127
     },
-    "authoritative_task_count": 79,
+    "authoritative_task_count": 88,
     "authoritative_task_ids": [
+      "visual_admin.aggregate.alter",
+      "visual_admin.aggregate.create",
+      "visual_admin.aggregate.drop",
+      "visual_admin.cast.alter",
+      "visual_admin.cast.create",
+      "visual_admin.cast.drop",
       "visual_admin.collation.alter",
       "visual_admin.collation.create",
       "visual_admin.collation.drop",
@@ -64,6 +70,9 @@
       "visual_admin.materialized-view.create",
       "visual_admin.materialized-view.drop",
       "visual_admin.materialized-view.rename",
+      "visual_admin.operator.alter",
+      "visual_admin.operator.create",
+      "visual_admin.operator.drop",
       "visual_admin.privilege.grant",
       "visual_admin.privilege.revoke",
       "visual_admin.procedure.alter",
@@ -112,7 +121,7 @@
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 79,
+    "implemented_task_count": 88,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -76581,22 +76590,22 @@
       "sha256": "0e032f7a4ee1e1cd0ffd5259ad04426aa97c67953222cfd6d84cfce321fb3da9"
     },
     {
-      "artifact": "ysql_dialect_qualification_live.json",
+      "artifact": "ysql_dialect_qualification_live_b.json",
       "authority": "YugabyteDB 2025.2.2.2 YSQL runtime",
       "evidence_id": "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "dc3dfb4e59d4fd85429bd9dca5211809f90a362f022517c898b700b10a26076c"
+      "sha256": "2e3e836673def56e24796df48c6e64660d98a1fbe41ff94e870bd1a217e3965f"
     },
     {
-      "artifact": "ysql_dialect_qualification_live.json",
+      "artifact": "ysql_dialect_qualification_live_b.json",
       "authority": "YugabyteDB 2025.2.2.2 YSQL runtime",
       "evidence_id": "yugabytedb-2025.2.2.2-ysql-task-live-execution",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "dc3dfb4e59d4fd85429bd9dca5211809f90a362f022517c898b700b10a26076c"
+      "sha256": "2e3e836673def56e24796df48c6e64660d98a1fbe41ff94e870bd1a217e3965f"
     },
     {
       "artifact": "__init__.py",
@@ -76656,6 +76665,91 @@
     }
   },
   "task_templates": [
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE OR REPLACE AGGREGATE \"public\".\"cde_editor_aggregate\"(integer) (SFUNC = \"int4pl\", STYPE = integer, INITCOND = '5', PARALLEL = UNSAFE)\n;\nCOMMENT ON AGGREGATE \"public\".\"cde_editor_aggregate\"(integer) IS 'cde editor aggregate'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE OR REPLACE AGGREGATE \"public\".\"cde_editor_aggregate\"(integer) (SFUNC = \"int4pl\", STYPE = integer, INITCOND = '5', PARALLEL = UNSAFE)",
+        "COMMENT ON AGGREGATE \"public\".\"cde_editor_aggregate\"(integer) IS 'cde editor aggregate'"
+      ],
+      "task_id": "visual_admin.aggregate.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE AGGREGATE \"public\".\"cde_editor_aggregate\"(int) (SFUNC = \"int4pl\", STYPE = int, INITCOND = '0')",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE AGGREGATE \"public\".\"cde_editor_aggregate\"(int) (SFUNC = \"int4pl\", STYPE = int, INITCOND = '0')"
+      ],
+      "task_id": "visual_admin.aggregate.create"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP AGGREGATE \"public\".\"cde_editor_aggregate\"(integer)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP AGGREGATE \"public\".\"cde_editor_aggregate\"(integer)"
+      ],
+      "task_id": "visual_admin.aggregate.drop"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "COMMENT ON CAST (boolean AS money) IS 'cde editor cast'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON CAST (boolean AS money) IS 'cde editor cast'"
+      ],
+      "task_id": "visual_admin.cast.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE CAST (boolean AS money) WITH INOUT",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE CAST (boolean AS money) WITH INOUT"
+      ],
+      "task_id": "visual_admin.cast.create"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP CAST (boolean AS money)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP CAST (boolean AS money)"
+      ],
+      "task_id": "visual_admin.cast.drop"
+    },
     {
       "binding_style": "psycopg_percent_s",
       "proof_ids": [
@@ -77105,6 +77199,49 @@
         "ALTER MATERIALIZED VIEW \"public\".\"cde_editor_materialized_view\" RENAME TO \"cde_editor_materialized_view_renamed\""
       ],
       "task_id": "visual_admin.materialized-view.rename"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "ALTER OPERATOR \"public\".===(integer, integer) SET (RESTRICT = eqsel)\n;\nCOMMENT ON OPERATOR \"public\".===(integer, integer) IS 'cde editor operator'",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER OPERATOR \"public\".===(integer, integer) SET (RESTRICT = eqsel)",
+        "COMMENT ON OPERATOR \"public\".===(integer, integer) IS 'cde editor operator'"
+      ],
+      "task_id": "visual_admin.operator.alter"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "CREATE OPERATOR \"public\".=== (LEFTARG = int, RIGHTARG = int, FUNCTION = \"int4eq\")",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE OPERATOR \"public\".=== (LEFTARG = int, RIGHTARG = int, FUNCTION = \"int4eq\")"
+      ],
+      "task_id": "visual_admin.operator.create"
+    },
+    {
+      "binding_style": "psycopg_percent_s",
+      "proof_ids": [
+        "yugabytedb-2025.2.2.2-ysql-task-parser-acceptance",
+        "yugabytedb-2025.2.2.2-ysql-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP OPERATOR \"public\".===(integer, integer)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP OPERATOR \"public\".===(integer, integer)"
+      ],
+      "task_id": "visual_admin.operator.drop"
     },
     {
       "binding_style": "psycopg_percent_s",

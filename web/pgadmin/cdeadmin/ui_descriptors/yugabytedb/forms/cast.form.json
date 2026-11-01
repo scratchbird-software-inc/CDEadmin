@@ -1,0 +1,102 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "cast"
+  ],
+  "status": "draft",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "fields": [
+    {
+      "field_id": "source_type",
+      "label": "Source type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "target_type",
+      "label": "Target type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON CAST. The only change a cast takes in place."
+    },
+    {
+      "field_id": "method",
+      "label": "Conversion",
+      "tab": "Definition",
+      "control": "select",
+      "default": "FUNCTION",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "FUNCTION",
+          "label": "With a function"
+        },
+        {
+          "value": "INOUT",
+          "label": "Through text (WITH INOUT)"
+        },
+        {
+          "value": "BINARY",
+          "label": "Binary-compatible (WITHOUT FUNCTION)"
+        }
+      ]
+    },
+    {
+      "field_id": "function",
+      "label": "Function",
+      "tab": "Definition",
+      "control": "reference",
+      "editable_after_create": false,
+      "reference_kind": "function",
+      "reference_value": "display_path",
+      "visible_when": {
+        "field": "method",
+        "equals": "FUNCTION"
+      },
+      "help": "Takes the source type."
+    },
+    {
+      "field_id": "context",
+      "label": "Applies",
+      "tab": "Definition",
+      "control": "select",
+      "default": "EXPLICIT",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "EXPLICIT",
+          "label": "Explicitly only"
+        },
+        {
+          "value": "ASSIGNMENT",
+          "label": "On assignment"
+        },
+        {
+          "value": "IMPLICIT",
+          "label": "Implicitly"
+        }
+      ]
+    }
+  ],
+  "gaps": [
+    {
+      "concept": "WITHOUT FUNCTION between enum types",
+      "reason": "Refused by YugabyteDB 2025.2.2.2 (\"enum data types are not binary-compatible\", live)",
+      "tracking": "postgresql-wire-parity"
+    }
+  ],
+  "notes": "Probed live on YugabyteDB 2025.2.2.2 (2026-11-01). Only casts created in this database are listed."
+}

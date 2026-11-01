@@ -1213,6 +1213,25 @@ lazily registered metrics.
 Aggregates, operators, casts, the foreign-data-wrapper chain and languages
 remain.
 
+Later on 2026-11-01, aggregates, operators and casts, each probed live first
+(contract 79 -> 88 tasks from a live qualification):
+
+-  Aggregates are the aggregate variant of the routine form: inputs, state
+   function and type, final and combine functions, initial condition,
+   parallel safety and sort operator; a definition change runs ``CREATE OR
+   REPLACE AGGREGATE``; owner, comment and rename. ``ALTER AGGREGATE ... SET
+   SCHEMA`` is refused by YugabyteDB; ordered-set aggregates are accepted but
+   not offered yet.
+-  Operators (prefix or binary): function, commutator, negator, estimators
+   and hash/merge support; afterwards ``SET (RESTRICT, JOIN)``, ``SET
+   SCHEMA``, owner and comment.
+-  Casts with a function, through text (``WITH INOUT``) or binary-compatible,
+   explicit, on assignment or implicit; only the comment changes in place.
+   Only casts created in the database are listed. ``WITHOUT FUNCTION``
+   between enum types is refused by YugabyteDB.
+
+The foreign-data-wrapper chain and languages remain.
+
 Plan
 ----
 

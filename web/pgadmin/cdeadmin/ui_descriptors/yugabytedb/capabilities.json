@@ -939,6 +939,90 @@
           "mutation_class": "destructive"
         }
       ]
+    },
+    {
+      "resource_kind": "aggregate",
+      "family": "routine",
+      "variant": "aggregate",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "operator",
+      "family": "engine_object",
+      "title": "Operator",
+      "form": "forms/operator.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
+    },
+    {
+      "resource_kind": "cast",
+      "family": "engine_object",
+      "title": "Cast",
+      "form": "forms/cast.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive"
+        }
+      ]
     }
   ]
 }

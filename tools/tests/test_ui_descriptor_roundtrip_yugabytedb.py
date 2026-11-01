@@ -1522,3 +1522,82 @@ def test_event_triggers_rules_collations_publications(live):
                           'DROP PUBLICATION IF EXISTS rt_pub',
                           'DROP PUBLICATION IF EXISTS rt_pub2'):
             query(statement)
+
+
+def test_aggregates_operators_and_casts(live):
+    """2026-11-01: aggregates (routine family), operators and casts."""
+    route, client = live
+    routine_form = resolved_form('yugabytedb', 'routine')
+    query('CREATE FUNCTION public.rt_double(int) RETURNS int LANGUAGE sql '
+          'IMMUTABLE AS $$ SELECT $1 * 2 $$')
+    query("CREATE TYPE public.rt_mood AS ENUM ('calm', 'busy')")
+    query('CREATE FUNCTION public.rt_mood_int(public.rt_mood) RETURNS int '
+          'LANGUAGE sql IMMUTABLE AS $$ SELECT 1 $$')
+    run(client, route, 'aggregate', 'create', backend_draft(routine_form, {
+        'variant': 'aggregate', 'name': 'rt_agg', 'parent': 'public',
+        'parameters': [{'name': '', 'type': 'int'}],
+        'state_function': ['pg_catalog', 'int4pl(integer, integer)'],
+        'state_type': 'int',
+        'final_function': ['public', 'rt_double(integer)'],
+        'initial_condition': '0', 'parallel': 'SAFE',
+        'comment': 'rt aggregate'}))
+    assert query('SELECT public.rt_agg(x) FROM generate_series(1, 3) x') == [
+        (12,)]
+    target, baseline = record(client, route, 'aggregate', 'rt_agg(integer)',
+                              'routine', variant='aggregate')
+    assert (baseline['state_function'], baseline['initial_condition'],
+            baseline['comment']) == ('int4pl', '0', 'rt aggregate')
+    run(client, route, 'aggregate', 'alter', backend_draft(routine_form, {
+        **baseline, 'initial_condition': '5', 'final_function': None},
+        mode='alter', baseline=baseline), target=target)
+    assert query('SELECT public.rt_agg(x) FROM generate_series(1, 3) x') == [
+        (11,)]
+    run(client, route, 'aggregate', 'drop', {'confirmation': 'x'},
+        target=find(client, route, 'aggregate', 'rt_agg(integer)')[0])
+    assert not query("SELECT 1 FROM pg_proc WHERE proname = 'rt_agg'")
+
+    operator_form = resolved_form('yugabytedb', 'engine_object:operator')
+    run(client, route, 'operator', 'create', backend_draft(operator_form, {
+        'name': '===', 'parent': 'public', 'left_type': 'int',
+        'right_type': 'int', 'function': ['pg_catalog', 'int4eq'],
+        'commutator': '===', 'restrict': 'eqsel', 'join': 'eqjoinsel',
+        'hashes': False, 'merges': False}))
+    assert query('SELECT 2 OPERATOR(public.===) 2') == [(True,)]
+    target, baseline = record(client, route, 'operator',
+                              '===(integer, integer)',
+                              'engine_object:operator')
+    assert (baseline['function'], baseline['restrict'],
+            baseline['commutator']) == ('int4eq', 'eqsel', '===')
+    query('CREATE SCHEMA rt_ops')
+    run(client, route, 'operator', 'alter', backend_draft(operator_form, {
+        **baseline, 'restrict': '', 'join': '', 'parent': 'rt_ops',
+        'comment': 'rt op'}, mode='alter', baseline=baseline), target=target)
+    assert query(
+        "SELECT n.nspname, o.oprrest::regproc::text, obj_description(o.oid, "
+        "'pg_operator') FROM pg_operator o JOIN pg_namespace n ON n.oid = "
+        "o.oprnamespace WHERE o.oprname = '==='") == [('rt_ops', '-',
+                                                      'rt op')]
+    run(client, route, 'operator', 'drop', {'confirmation': 'x'},
+        target=find(client, route, 'operator', '===(integer, integer)')[0])
+
+    cast_form = resolved_form('yugabytedb', 'engine_object:cast')
+    run(client, route, 'cast', 'create', backend_draft(cast_form, {
+        'source_type': 'public.rt_mood', 'target_type': 'int',
+        'method': 'FUNCTION', 'function': ['public', 'rt_mood_int(rt_mood)'],
+        'context': 'ASSIGNMENT'}))
+    assert query("SELECT 'busy'::public.rt_mood::int") == [(1,)]
+    target, baseline = record(client, route, 'cast', 'rt_mood AS integer',
+                              'engine_object:cast')
+    assert (baseline['method'], baseline['context']) == ('FUNCTION',
+                                                         'ASSIGNMENT')
+    run(client, route, 'cast', 'alter', backend_draft(cast_form, {
+        **baseline, 'comment': 'rt cast'}, mode='alter', baseline=baseline),
+        target=target)
+    assert query("SELECT obj_description(oid, 'pg_cast') FROM pg_cast WHERE "
+                 "castsource = 'public.rt_mood'::regtype") == [('rt cast',)]
+    assert 'only its comment' in refused('cast', 'alter', {
+        'context': 'IMPLICIT'}, target)
+    run(client, route, 'cast', 'drop', {'confirmation': 'x'},
+        target=find(client, route, 'cast', 'rt_mood AS integer')[0])
+    assert not query("SELECT 1 FROM pg_cast WHERE castsource = "
+                     "'public.rt_mood'::regtype")

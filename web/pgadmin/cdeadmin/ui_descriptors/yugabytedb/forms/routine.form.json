@@ -3,6 +3,7 @@
   "engine": "yugabytedb",
   "family": "routine",
   "resource_kinds": [
+    "aggregate",
     "function",
     "procedure"
   ],
@@ -24,6 +25,16 @@
       "concept": "Other languages (C, internal, PL/Python)",
       "reason": "Not offered; only SQL and PL/pgSQL are available on the demo",
       "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Ordered-set and hypothetical-set aggregates",
+      "reason": "Accepted by YugabyteDB 2025.2.2.2 (live) but not offered yet",
+      "tracking": "postgresql-wire-parity"
+    },
+    {
+      "concept": "Aggregate SET SCHEMA",
+      "reason": "Refused by YugabyteDB 2025.2.2.2 (\"not supported yet\", live)",
+      "tracking": "postgresql-wire-parity"
     }
   ],
   "fields": [
@@ -42,6 +53,10 @@
         {
           "value": "procedure",
           "label": "Procedure"
+        },
+        {
+          "value": "aggregate",
+          "label": "Aggregate"
         }
       ]
     },
@@ -102,7 +117,14 @@
           "value": "PLPGSQL",
           "label": "PL/pgSQL"
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
     },
     {
       "field_id": "comment",
@@ -118,7 +140,7 @@
       "control": "grid",
       "reorderable": true,
       "editable_after_create": false,
-      "help": "Part of the routine's identity; fixed once created. Table-column rows make a RETURNS TABLE function.",
+      "help": "Part of the routine's identity; fixed once created. Table-column rows make a RETURNS TABLE function. For an aggregate: its input types (names optional; modes and defaults do not apply).",
       "columns": [
         {
           "field_id": "mode",
@@ -167,13 +189,110 @@
       ]
     },
     {
+      "field_id": "state_function",
+      "label": "State function",
+      "tab": "Definition",
+      "control": "reference",
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "required": true,
+      "reference_kind": "function",
+      "reference_value": "display_path",
+      "help": "SFUNC: called with the state and each input row."
+    },
+    {
+      "field_id": "state_type",
+      "label": "State type",
+      "tab": "Definition",
+      "control": "text",
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "required": true,
+      "help": "STYPE"
+    },
+    {
+      "field_id": "final_function",
+      "label": "Final function",
+      "tab": "Definition",
+      "control": "reference",
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "reference_kind": "function",
+      "reference_value": "display_path",
+      "help": "FINALFUNC: turns the state into the result. Empty: the state is the result."
+    },
+    {
+      "field_id": "combine_function",
+      "label": "Combine function",
+      "tab": "Definition",
+      "control": "reference",
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "reference_kind": "function",
+      "reference_value": "display_path",
+      "help": "COMBINEFUNC: merges partial states for parallel aggregation."
+    },
+    {
+      "field_id": "initial_condition",
+      "label": "Initial condition",
+      "tab": "Definition",
+      "control": "text",
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "help": "INITCOND: the starting state as text. Empty: NULL."
+    },
+    {
+      "field_id": "sort_operator",
+      "label": "Sort operator",
+      "tab": "Definition",
+      "control": "text",
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "help": "SORTOP: for MIN/MAX-like aggregates, the operator that orders the input."
+    },
+    {
+      "field_id": "owner",
+      "label": "Owner",
+      "tab": "Definition",
+      "control": "reference",
+      "visible_when": {
+        "field": "variant",
+        "equals": "aggregate"
+      },
+      "reference_kind": "role",
+      "reference_value": "display_name",
+      "modes": [
+        "alter"
+      ],
+      "help": "ALTER AGGREGATE ... OWNER TO"
+    },
+    {
       "field_id": "body",
       "label": "Body",
       "tab": "Definition",
       "control": "code",
       "language": "sql",
       "required": true,
-      "help": "The body only. Changing it runs CREATE OR REPLACE."
+      "help": "The body only. Changing it runs CREATE OR REPLACE.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
     },
     {
       "field_id": "security",
@@ -190,7 +309,14 @@
           "value": "DEFINER",
           "label": "Definer"
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
     },
     {
       "field_id": "volatility",
@@ -249,7 +375,10 @@
       "default": "UNSAFE",
       "visible_when": {
         "field": "variant",
-        "equals": "function"
+        "in": [
+          "function",
+          "aggregate"
+        ]
       },
       "options": [
         {
@@ -307,7 +436,14 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "function",
+          "procedure"
+        ]
+      }
     }
   ],
   "notes": "Started from the CockroachDB routine form (same field ids); providers/yugabytedb/routines.py. A routine resource is named name(argument types); parameters come from pg_get_function_arguments (names, modes, defaults) and RETURNS TABLE columns from pg_get_function_result. Round trip verified live on YugabyteDB 2025.2.2.2 by tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py (2026-10-30)."

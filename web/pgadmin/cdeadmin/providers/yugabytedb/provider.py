@@ -53,7 +53,7 @@ PROFILE = PilotProfile(
         'tablet', 'tserver', 'master', 'placement-policy', 'user', 'role',
         'privilege', 'row-policy', 'changefeed', 'snapshot', 'schedule',
         'xcluster-replication', 'session', 'event-trigger', 'rule',
-        'collation', 'publication',
+        'collation', 'publication', 'aggregate', 'operator', 'cast',
     ),
     ('ysqlsh', 'yb-admin', 'backup-restore'),
     parameter_shape='object-or-array',
@@ -112,6 +112,10 @@ _YSQL_SUPPORTED.update({
     'rule': frozenset({'inspect', 'create', 'alter', 'drop'}),
     'collation': frozenset({'inspect', 'create', 'alter', 'drop'}),
     'publication': frozenset({'inspect', 'create', 'alter', 'drop'}),
+    # Aggregates, operators and casts (catalog_objects).
+    'aggregate': frozenset({'inspect', 'create', 'alter', 'drop'}),
+    'operator': frozenset({'inspect', 'create', 'alter', 'drop'}),
+    'cast': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # Row-level security policies (providers/yugabytedb/policies).
     'row-policy': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # Partition bounds are part of CREATE TABLE in YSQL. Until the table form
@@ -154,11 +158,13 @@ class YugabyteDBAdministration(RelationalAdministration):
                      'materialized-view', 'sequence', 'function',
                      'procedure', 'database', 'row-policy',
                      'tablespace', 'extension', 'event-trigger', 'rule',
-                     'collation', 'publication'} and
+                     'collation', 'publication', 'aggregate', 'operator',
+                     'cast'} and
             operation in {'create', 'alter'}) or (
             # Dropped by signature (overloads share a name) or by table.
-            operation == 'drop' and kind in {'function', 'procedure',
-                                             'row-policy', 'rule'})
+            operation == 'drop' and kind in {
+                'function', 'procedure', 'row-policy', 'rule', 'aggregate',
+                'operator', 'cast'})
 
     def _native_compile(self, request):
         draft = request.get('draft')
@@ -460,7 +466,7 @@ class YugabyteDBAdministration(RelationalAdministration):
                 table = (table if isinstance(table, list)
                          else str(table or '').split('.'))
                 path = [*table, name]
-            elif kind == 'collation':
+            elif kind in {'collation', 'aggregate', 'operator'}:
                 path = [draft.get('parent') or 'public', name]
             else:
                 parent = draft.get('parent') or route.get('database')
@@ -476,6 +482,16 @@ class YugabyteDBAdministration(RelationalAdministration):
             if value.get('resource_kind') == kind and
             value.get('display_path') == path
         ), None)
+        if item is None and operation == 'create' and kind in {
+                'aggregate', 'operator'}:
+            # Their resource names carry the engine's own spelling of the
+            # argument types (integer, not int), so match the native name.
+            item = next((
+                value for value in resources
+                if value.get('resource_kind') == kind and
+                (value.get('display_path') or [None])[0] == path[0] and
+                (value.get('native') or {}).get('name') == draft.get('name')
+            ), None)
         return {
             'resource_kind': kind, 'display_path': copy.deepcopy(path),
             'present': item is not None, 'resource': copy.deepcopy(item),

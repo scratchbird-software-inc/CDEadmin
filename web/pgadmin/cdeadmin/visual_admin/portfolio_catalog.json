@@ -1428,7 +1428,10 @@
         {"resource_kind": "event-trigger", "title": "Event trigger", "operation_profile": "definition"},
         {"resource_kind": "rule", "title": "Rule", "operation_profile": "definition"},
         {"resource_kind": "collation", "title": "Collation", "operation_profile": "definition"},
-        {"resource_kind": "publication", "title": "Publication", "operation_profile": "definition"}
+        {"resource_kind": "publication", "title": "Publication", "operation_profile": "definition"},
+        {"resource_kind": "aggregate", "title": "Aggregate", "operation_profile": "definition"},
+        {"resource_kind": "operator", "title": "Operator", "operation_profile": "definition"},
+        {"resource_kind": "cast", "title": "Cast", "operation_profile": "definition"}
       ]
     },
     {

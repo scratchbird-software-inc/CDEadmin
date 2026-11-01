@@ -153,3 +153,86 @@ def test_event_trigger_alter_form_carries_no_create_defaults():
     assert sql('event-trigger', 'alter', {
         'enabled': 'DISABLED', 'tags': [{'value': 'CREATE TABLE'}]},
         existing) == ['ALTER EVENT TRIGGER "et" DISABLE']
+
+
+def test_aggregate():
+    assert sql('aggregate', 'create', {
+        'name': 'agg', 'parent': 'public', 'parameters': [{'type': 'int'}],
+        'state_function': 'int4pl', 'state_type': 'int',
+        'final_function': ['public', 'fin(integer)'],
+        'combine_function': 'int4pl', 'initial_condition': '0',
+        'parallel': 'SAFE', 'sort_operator': '<', 'comment': 'c'}) == [
+        'CREATE AGGREGATE "public"."agg"(int) (SFUNC = "int4pl", STYPE = '
+        'int, FINALFUNC = "public"."fin", COMBINEFUNC = "int4pl", INITCOND '
+        "= '0', PARALLEL = SAFE, SORTOP = <)",
+        "COMMENT ON AGGREGATE \"public\".\"agg\"(int) IS 'c'"]
+    native = {'name': 'agg', 'argument_types': ['integer'],
+              'state_function': 'int4pl', 'state_type': 'integer',
+              'initial_condition': '0', 'owner': 'yugabyte'}
+    existing = target('aggregate', ['public', 'agg(integer)'], native)
+    assert sql('aggregate', 'alter', {
+        'initial_condition': '5', 'owner': 'o', 'name': 'agg2'},
+        existing) == [
+        'CREATE OR REPLACE AGGREGATE "public"."agg"(integer) (SFUNC = '
+        "\"int4pl\", STYPE = integer, INITCOND = '5')",
+        'ALTER AGGREGATE "public"."agg"(integer) OWNER TO "o"',
+        'ALTER AGGREGATE "public"."agg"(integer) RENAME TO "agg2"']
+    with pytest.raises(RelationalClientError, match='SET SCHEMA'):
+        sql('aggregate', 'alter', {'parent': 's2'}, existing)
+    with pytest.raises(RelationalClientError, match='inputs'):
+        sql('aggregate', 'alter', {'parameters': [{'type': 'bigint'}]},
+            existing)
+    assert sql('aggregate', 'drop', {'confirmation': 'x'}, existing) == [
+        'DROP AGGREGATE "public"."agg"(integer)']
+
+
+def test_operator():
+    assert sql('operator', 'create', {
+        'name': '===', 'parent': 'public', 'left_type': 'int',
+        'right_type': 'int', 'function': 'public.eqf',
+        'commutator': '===', 'restrict': 'eqsel', 'join': 'eqjoinsel',
+        'hashes': True, 'merges': False}) == [
+        'CREATE OPERATOR "public".=== (LEFTARG = int, RIGHTARG = int, '
+        'FUNCTION = "public"."eqf", COMMUTATOR = ===, RESTRICT = eqsel, '
+        'JOIN = eqjoinsel, HASHES)']
+    with pytest.raises(RelationalClientError, match='symbols'):
+        sql('operator', 'create', {'name': 'eq; DROP', 'right_type': 'int',
+                                   'function': 'f'})
+    native = {'name': '===', 'left_type': 'integer',
+              'right_type': 'integer', 'function': 'eqf',
+              'restrict': 'eqsel', 'join': 'eqjoinsel', 'owner': 'yugabyte'}
+    existing = target('operator', ['public', '===(integer, integer)'],
+                      native)
+    assert sql('operator', 'alter', {
+        'restrict': '', 'join': '', 'parent': 's2'}, existing) == [
+        'ALTER OPERATOR "public".===(integer, integer) SET (RESTRICT = '
+        'NONE, JOIN = NONE)',
+        'ALTER OPERATOR "public".===(integer, integer) SET SCHEMA "s2"']
+    with pytest.raises(RelationalClientError, match='in place'):
+        sql('operator', 'alter', {'function': 'other'}, existing)
+    prefix = target('operator', ['public', '!!!(NONE, integer)'], {
+        'name': '!!!', 'left_type': None, 'right_type': 'integer'})
+    assert sql('operator', 'drop', {'confirmation': 'x'}, prefix) == [
+        'DROP OPERATOR "public".!!!(NONE, integer)']
+
+
+def test_cast():
+    assert sql('cast', 'create', {
+        'source_type': 'public.mood', 'target_type': 'int',
+        'method': 'FUNCTION', 'function': 'public.mood_int',
+        'context': 'ASSIGNMENT'}) == [
+        'CREATE CAST (public.mood AS int) WITH FUNCTION '
+        '"public"."mood_int"(public.mood) AS ASSIGNMENT']
+    assert sql('cast', 'create', {
+        'source_type': 'int', 'target_type': 'public.mood',
+        'method': 'INOUT', 'context': 'IMPLICIT'}) == [
+        'CREATE CAST (int AS public.mood) WITH INOUT AS IMPLICIT']
+    existing = target('cast', ['mood AS integer'], {
+        'source_type': 'mood', 'target_type': 'integer',
+        'method': 'FUNCTION', 'context': 'ASSIGNMENT'})
+    assert sql('cast', 'alter', {'comment': 'c'}, existing) == [
+        "COMMENT ON CAST (mood AS integer) IS 'c'"]
+    with pytest.raises(RelationalClientError, match='only its comment'):
+        sql('cast', 'alter', {'context': 'IMPLICIT'}, existing)
+    assert sql('cast', 'drop', {'confirmation': 'x'}, existing) == [
+        'DROP CAST (mood AS integer)']

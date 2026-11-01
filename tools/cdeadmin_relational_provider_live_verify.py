@@ -2093,6 +2093,72 @@ def _relational_editor_evidence(provider, request, engine):
                             'confirmation': 'drop-live-editor-publication',
                         }, publication,
                     )
+            # Aggregates, operators and casts over built-in functions and
+            # types, so no helper objects are needed.
+            if attempt(
+                'aggregate.create', 'aggregate', 'create', {
+                    'name': 'cde_editor_aggregate', 'parent': 'public',
+                    'parameters': [{'type': 'int'}],
+                    'state_function': 'int4pl', 'state_type': 'int',
+                    'initial_condition': '0',
+                },
+            ):
+                aggregate = inspect_created(
+                    'aggregate.inspect', 'aggregate',
+                    'cde_editor_aggregate(integer)',
+                )
+                if aggregate is not None:
+                    attempt(
+                        'aggregate.alter', 'aggregate', 'alter', {
+                            'initial_condition': '5',
+                            'comment': 'cde editor aggregate',
+                        }, aggregate,
+                    )
+                    attempt(
+                        'aggregate.drop', 'aggregate', 'drop', {
+                            'confirmation': 'drop-live-editor-aggregate',
+                        }, aggregate,
+                    )
+            if attempt(
+                'operator.create', 'operator', 'create', {
+                    'name': '===', 'parent': 'public', 'left_type': 'int',
+                    'right_type': 'int', 'function': 'int4eq',
+                },
+            ):
+                operator = inspect_created(
+                    'operator.inspect', 'operator', '===(integer, integer)'
+                )
+                if operator is not None:
+                    attempt(
+                        'operator.alter', 'operator', 'alter', {
+                            'restrict': 'eqsel',
+                            'comment': 'cde editor operator',
+                        }, operator,
+                    )
+                    attempt(
+                        'operator.drop', 'operator', 'drop', {
+                            'confirmation': 'drop-live-editor-operator',
+                        }, operator,
+                    )
+            if attempt(
+                'cast.create', 'cast', 'create', {
+                    'source_type': 'boolean', 'target_type': 'money',
+                    'method': 'INOUT', 'context': 'EXPLICIT',
+                },
+            ):
+                cast = inspect_created('cast.inspect', 'cast',
+                                       'boolean AS money')
+                if cast is not None:
+                    attempt(
+                        'cast.alter', 'cast', 'alter', {
+                            'comment': 'cde editor cast',
+                        }, cast,
+                    )
+                    attempt(
+                        'cast.drop', 'cast', 'drop', {
+                            'confirmation': 'drop-live-editor-cast',
+                        }, cast,
+                    )
 
         if provider.client.supports_admin_operation(
                 'row-policy', 'create') and attempt(

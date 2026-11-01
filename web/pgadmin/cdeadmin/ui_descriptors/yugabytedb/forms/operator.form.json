@@ -1,0 +1,121 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "yugabytedb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "operator"
+  ],
+  "status": "draft",
+  "engine_tab_title": "YugabyteDB",
+  "omitted_tabs": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Operator",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "help": "Symbols, for example ===."
+    },
+    {
+      "field_id": "parent",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "help": "Afterwards ALTER OPERATOR ... SET SCHEMA."
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "help": "COMMENT ON OPERATOR"
+    },
+    {
+      "field_id": "owner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "role",
+      "reference_value": "display_name",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "left_type",
+      "label": "Left type",
+      "tab": "Definition",
+      "control": "text",
+      "editable_after_create": false,
+      "help": "Empty: a prefix operator."
+    },
+    {
+      "field_id": "right_type",
+      "label": "Right type",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "function",
+      "label": "Function",
+      "tab": "Definition",
+      "control": "reference",
+      "required": true,
+      "editable_after_create": false,
+      "reference_kind": "function",
+      "reference_value": "display_path"
+    },
+    {
+      "field_id": "commutator",
+      "label": "Commutator",
+      "tab": "Definition",
+      "control": "text",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "negator",
+      "label": "Negator",
+      "tab": "Definition",
+      "control": "text",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "restrict",
+      "label": "Restriction estimator",
+      "tab": "Definition",
+      "control": "text",
+      "help": "For example eqsel. Afterwards ALTER OPERATOR ... SET (RESTRICT); empty removes it."
+    },
+    {
+      "field_id": "join",
+      "label": "Join estimator",
+      "tab": "Definition",
+      "control": "text",
+      "help": "For example eqjoinsel. Afterwards ALTER OPERATOR ... SET (JOIN); empty removes it."
+    },
+    {
+      "field_id": "hashes",
+      "label": "Supports hash joins",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": false,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "merges",
+      "label": "Supports merge joins",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": false,
+      "editable_after_create": false
+    }
+  ],
+  "gaps": [],
+  "notes": "Probed live on YugabyteDB 2025.2.2.2 (2026-11-01)."
+}
