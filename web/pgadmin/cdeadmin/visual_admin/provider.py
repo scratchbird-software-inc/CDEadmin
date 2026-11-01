@@ -92,6 +92,26 @@ class _StoredAdminOperation:
     plan: dict[str, Any]
 
 
+def _client_target(target: object, engine_id: str) -> object:
+    """The target as the engine's client reads it.
+
+    A provider resource carries the client's native record under
+    ``extensions[engine_id]['native']``; clients read ``native``. Without
+    this, an edit from the UI reached the compiler with an empty record
+    (live, 2026-10-31: altering a YugabyteDB enum was refused as "only an
+    enum has values").
+    """
+    if not isinstance(target, Mapping) or isinstance(
+            target.get('native'), Mapping):
+        return copy.deepcopy(target)
+    extension = (target.get('extensions') or {}).get(engine_id)
+    native = extension.get('native') if isinstance(extension, Mapping) else None
+    value = copy.deepcopy(dict(target))
+    if isinstance(native, Mapping):
+        value['native'] = copy.deepcopy(dict(native))
+    return value
+
+
 def _mapping(value: object, label: str) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         raise VisualAdminValidationError(f'{label} must be an object')
@@ -301,7 +321,7 @@ class ProviderVisualAdministration:
                 'profile_version': self.profile_version,
                 'resource_kind': resource['resource_kind'],
                 'operation_id': operation['operation_id'],
-                'target_resource': copy.deepcopy(target),
+                'target_resource': _client_target(target, self.engine_id),
                 'draft': copy.deepcopy(admitted),
             }
             route = payload.get('_provider_route')
@@ -370,7 +390,8 @@ class ProviderVisualAdministration:
             'required_permissions': copy.deepcopy(
                 operation.get('required_permissions', [])
             ),
-            'target_resource': copy.deepcopy(payload.get('target_resource')),
+            'target_resource': _client_target(
+                payload.get('target_resource'), self.engine_id),
             'draft': self._redact_sensitive(
                 self._operation_fields(resource, operation, admitted_draft), admitted_draft
             ),

@@ -7,6 +7,7 @@ from mysql.connector.conversion import MySQLConverter
 from pgadmin.cdeadmin.sdk import RelationalClientError
 from ..mysql_family.mysql_connections import Lease
 from ..mysql_wire_driver import RetainedMySQLWireClient
+from ...ui_descriptors.field_contract import DescriptorFieldContract
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,8 @@ class DoltConverter(MySQLConverter):
         return MySQLConverter.quote(value)
 
 
-class DoltNativeClient(RetainedMySQLWireClient):
+class DoltNativeClient(DescriptorFieldContract, RetainedMySQLWireClient):
+    descriptor_engine = 'dolt'
     def _connect(self, request):
         handle = super()._connect(request)
         try:

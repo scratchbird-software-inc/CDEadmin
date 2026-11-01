@@ -4,9 +4,11 @@ import socket
 from pgadmin.cdeadmin.sdk import RelationalClientError
 from ..mysql_family.mysql_connections import Lease
 from ..mysql_wire_driver import RetainedMySQLWireClient
+from ...ui_descriptors.field_contract import DescriptorFieldContract
 
 
-class VitessNativeClient(RetainedMySQLWireClient):
+class VitessNativeClient(DescriptorFieldContract, RetainedMySQLWireClient):
+    descriptor_engine = 'vitess'
     def error_outcome_known(self, exc):
         # A VTGate ERR can represent a tablet/RPC failure after a dispatch.
         return (super().error_outcome_known(exc) and

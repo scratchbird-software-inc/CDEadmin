@@ -1,9 +1,11 @@
 """TiDB transaction and cancellation admission over MySQL-wire mechanics."""
 from pgadmin.cdeadmin.sdk import RelationalClientError
 from ..mysql_wire_driver import RetainedMySQLWireClient
+from ...ui_descriptors.field_contract import DescriptorFieldContract
 
 
-class TiDBNativeClient(RetainedMySQLWireClient):
+class TiDBNativeClient(DescriptorFieldContract, RetainedMySQLWireClient):
+    descriptor_engine = 'tidb'
     retry_errors = frozenset({1213, 9007, 8028})
     _IDENTITY = (
         'SELECT s.DDL_ID, p.ID FROM information_schema.CLUSTER_PROCESSLIST p '

@@ -26,6 +26,7 @@ from pgadmin.cdeadmin.visual_admin import (
 from . import catalog_log, tables
 from .driver import ImmudbNativeMixin
 from ..distributed_control_plane import DistributedSQLControlPlane
+from ...ui_descriptors.field_contract import DescriptorFieldContract
 from ..distributed_sql import (
     PsycopgPoolDBAPIClient,
     create_sql_client,
@@ -1948,8 +1949,9 @@ ADMINISTRATION = ImmudbAdministration(
 )
 
 
-class ImmudbDBAPIClient(ImmudbNativeMixin, PsycopgPoolDBAPIClient):
+class ImmudbDBAPIClient(DescriptorFieldContract, ImmudbNativeMixin, PsycopgPoolDBAPIClient):
     """Join PostgreSQL-wire SQL with exact native REST identity/admin."""
+    descriptor_engine = 'immudb'
 
     MAX_REST_BYTES = 16 * 1024 * 1024
 

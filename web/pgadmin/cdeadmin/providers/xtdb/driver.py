@@ -6,9 +6,11 @@ from collections.abc import Mapping
 from .client import XTDBClient, XTDBClientError, MAX_SOURCE_BYTES
 from ..pgwire_driver import PoolConnector, native, uncertain
 from ..temporal_wire import TemporalOwnership
+from ...ui_descriptors.field_contract import DescriptorFieldContract
 
 
-class XTDBNativeClient(TemporalOwnership, XTDBClient):
+class XTDBNativeClient(DescriptorFieldContract, TemporalOwnership, XTDBClient):
+    descriptor_engine = 'xtdb'
     error_class = XTDBClientError
     result_kind = 'document'
 
