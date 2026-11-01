@@ -222,7 +222,9 @@ def test_view_alter_and_drop_reach_every_shard(live):
             'SELECT VIEW_DEFINITION FROM information_schema.VIEWS '
             f"WHERE TABLE_NAME='{view}'", keyspace=f'{KEYSPACE}:{shard}'
         ) == [('select 2 AS `y`',)], shard
-    run(client, route, 'view', 'drop', {}, target=target)
+    # The provider's own check reads every shard's primary; it must not
+    # re-run the drop to observe it.
+    run(client, route, 'view', 'drop', {}, target=target, post_state=True)
     for shard in shards:
         names = [row[0] for row in query(
             'SHOW FULL TABLES', keyspace=f'{KEYSPACE}:{shard}')]
@@ -341,6 +343,48 @@ def test_index_create_and_drop_reach_every_shard(live):
             assert not query(
                 f"SHOW INDEX FROM `{table}` WHERE Key_name = '{index}'",
                 keyspace=f'{KEYSPACE}:{shard}'), shard
+    finally:
+        query(f'ALTER VSCHEMA DROP TABLE `{table}`')
+        query(f'DROP TABLE IF EXISTS `{table}`')
+
+
+def test_comment_index_rename_and_visibility_reach_every_shard(live):
+    # 2026-11-01: applied by vtctld ApplySchema and confirmed only when every
+    # shard's primary shows the change; read again here per shard.
+    route, client = live
+    table = f'rt_sc_{UNIQUE}'
+    query(f'CREATE TABLE `{table}` (id BIGINT NOT NULL PRIMARY KEY, '
+          'v INT, KEY rt_k (v))')
+    try:
+        query(f'ALTER VSCHEMA ON `{table}` ADD VINDEX xxhash (id)')
+        shards = shards_of(KEYSPACE)
+        assert len(shards) > 1
+        comment = "rt's \\ comment"
+        run(client, route, 'table', 'set_options', {'comment': comment},
+            target=find(client, route, 'table', table), post_state=True)
+        for shard in shards:
+            assert query(
+                'SELECT TABLE_COMMENT FROM information_schema.TABLES '
+                f"WHERE TABLE_NAME = '{table}'",
+                keyspace=f'{KEYSPACE}:{shard}') == [(comment,)], shard
+
+        def index(name):
+            return next(row for row in resources(client, route)
+                        if row['resource_kind'] == 'index' and
+                        row['display_path'][-2:] == [table, name])
+        run(client, route, 'index', 'rename', {'new_name': 'rt_k2'},
+            target=index('rt_k'), post_state=True)
+        for visibility, expected in (('INVISIBLE', 'NO'), ('VISIBLE', 'YES')):
+            run(client, route, 'index', 'visibility',
+                {'visibility': visibility}, target=index('rt_k2'),
+                post_state=True)
+            for shard in shards:
+                assert query(
+                    'SELECT DISTINCT INDEX_NAME, IS_VISIBLE FROM '
+                    'information_schema.STATISTICS WHERE TABLE_NAME = '
+                    f"'{table}' AND INDEX_NAME <> 'PRIMARY'",
+                    keyspace=f'{KEYSPACE}:{shard}') == [
+                    ('rt_k2', expected)], shard
     finally:
         query(f'ALTER VSCHEMA DROP TABLE `{table}`')
         query(f'DROP TABLE IF EXISTS `{table}`')

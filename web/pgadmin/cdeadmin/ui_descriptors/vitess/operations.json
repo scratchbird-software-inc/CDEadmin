@@ -895,6 +895,56 @@
       "status": "draft",
       "confirmation": "typed_name",
       "fields": []
+    },
+    {
+      "operation_id": "set_options",
+      "resource_kind": "table",
+      "title": "Set table options",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "notes": "Applied by vtctld ApplySchema on every shard; confirmed only when every shard's primary shows it."
+    },
+    {
+      "operation_id": "visibility",
+      "resource_kind": "index",
+      "title": "Set index visibility",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "visibility",
+          "label": "Visibility",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "VISIBLE",
+              "label": "Visible"
+            },
+            {
+              "value": "INVISIBLE",
+              "label": "Invisible"
+            }
+          ]
+        }
+      ],
+      "notes": "Applied by vtctld ApplySchema on every shard; confirmed only when every shard's primary shows it."
     }
   ]
 }

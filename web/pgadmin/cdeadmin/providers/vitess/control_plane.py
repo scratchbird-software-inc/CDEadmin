@@ -27,6 +27,10 @@ def _choice(field_id, label, values, **options):
 
 
 _NAME_PATTERN = r'[A-Za-z0-9_.:@+-]+'
+# Native identifiers and comments; control characters are refused so the
+# text MySQL renders back in CREATE TABLE is exactly predictable.
+_IDENTIFIER_PATTERN = r'[^`\x00-\x1f\x7f]{1,64}'
+_COMMENT_PATTERN = r'[^\x00-\x1f\x7f]*'
 # <date>.<time>.<cell>-<uid>, e.g. 2026-10-30.125734.test-0000000301.
 _BACKUP_NAME = r'[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]{6}\.[A-Za-z0-9_]+-[0-9]+'
 OPERATIONS = (
@@ -444,7 +448,36 @@ OPERATIONS = (
         'backup', 'drop', 'Delete stored backup', 'destructive',
         'backup_admin', impact_scope='shard', long_running=True
     ),
+    # Schema changes applied by vtctld ApplySchema on every shard and
+    # confirmed only when every shard's primary tablet shows them (live,
+    # 2026-11-01). vtgate's own read-back sees one shard.
+    ControlPlaneOperation(
+        'table', 'set_options', 'Set table options', 'admin',
+        'maintenance_admin', (
+            cp_field('comment', 'Comment', 'text', True, max_length=2048,
+                     pattern=_COMMENT_PATTERN),
+        ), impact_scope='database'
+    ),
+    ControlPlaneOperation(
+        'index', 'rename', 'Rename index', 'admin', 'maintenance_admin', (
+            cp_field('new_name', 'New name', 'text', True, max_length=64,
+                     pattern=_IDENTIFIER_PATTERN),
+        ), impact_scope='database'
+    ),
+    ControlPlaneOperation(
+        'index', 'visibility', 'Set index visibility', 'admin',
+        'maintenance_admin', (
+            _choice('visibility', 'Visibility', (
+                ('VISIBLE', 'Visible'), ('INVISIBLE', 'Invisible'),
+            ), required=True),
+        ), impact_scope='database'
+    ),
 )
+
+_SCHEMA_CHANGES = frozenset({
+    ('table', 'set_options'), ('index', 'rename'), ('index', 'visibility'),
+    ('view', 'drop'),
+})
 
 
 def _safe_name(value, label, pattern=_NAME_PATTERN):
@@ -1063,6 +1096,9 @@ def compile_action(request):
             arguments.extend(['--backup-timestamp', timestamp])
         if operation in {'backup', 'restore'}:
             arguments.append(tablet)
+    elif (kind, operation) in _SCHEMA_CHANGES - {('view', 'drop')}:
+        arguments = ['ApplySchema', '--sql', _schema_change(request),
+                     _schema_keyspace(request)]
     elif kind == 'view' and operation == 'drop':
         path = _target(request)
         if len(path) < 2:
@@ -1356,6 +1392,132 @@ def execute_action(_client, request):
     return result
 
 
+def _quote_identifier(value):
+    return '`' + str(value).replace('`', '``') + '`'
+
+
+def _mysql_text(value):
+    """A MySQL string literal as SHOW CREATE TABLE renders it."""
+    return "'" + value.replace('\\', '\\\\').replace("'", "''") + "'"
+
+
+def _schema_keyspace(request):
+    path = _target(request)
+    if len(path) < 2:
+        raise RelationalClientError('Vitess keyspace is unavailable')
+    return _safe_name(path[0], 'keyspace')
+
+
+def _schema_change(request):
+    kind = request['resource_kind']
+    operation = request['operation_id']
+    draft = request.get('draft') or {}
+    path = _target(request)
+    if kind == 'table':
+        if len(path) != 2:
+            raise RelationalClientError('Vitess table target is invalid')
+        comment = draft.get('comment')
+        if not isinstance(comment, str) or re.fullmatch(
+                _COMMENT_PATTERN, comment) is None:
+            raise RelationalClientError('Vitess table comment is invalid')
+        return (f'ALTER TABLE {_quote_identifier(path[1])} COMMENT = ' +
+                _mysql_text(comment))
+    if len(path) != 3:
+        raise RelationalClientError('Vitess index target is invalid')
+    prefix = (f'ALTER TABLE {_quote_identifier(path[1])} ')
+    if operation == 'rename':
+        new_name = draft.get('new_name')
+        if not isinstance(new_name, str) or re.fullmatch(
+                _IDENTIFIER_PATTERN, new_name) is None or (
+                new_name == path[2]):
+            raise RelationalClientError('Vitess index name is invalid')
+        return (prefix + 'RENAME INDEX ' + _quote_identifier(path[2]) +
+                ' TO ' + _quote_identifier(new_name))
+    if draft.get('visibility') not in {'VISIBLE', 'INVISIBLE'}:
+        raise RelationalClientError('Vitess index visibility is invalid')
+    return (prefix + 'ALTER INDEX ' + _quote_identifier(path[2]) + ' ' +
+            draft['visibility'])
+
+
+def _shard_schemas(route, keyspace, table, include_views=False):
+    """{shard: CREATE text or None} from every shard's primary tablet.
+
+    A shard without exactly one primary maps to the reason it cannot be
+    read, so the caller never confirms a change it could not see.
+    """
+    shards = json.loads(_run(
+        route, ['FindAllShardsInKeyspace', keyspace],
+        timeout=30)['stdout'] or 'null')
+    shards = shards.get('shards') if isinstance(shards, dict) else None
+    if not isinstance(shards, dict) or not shards:
+        raise RelationalClientError(
+            f'Vitess keyspace {keyspace} has no readable shards')
+    tablets = json.loads(_run(
+        route, ['GetTablets', '--keyspace', keyspace, '--tablet-type',
+                'primary', '--format', 'json'], timeout=30)['stdout'] or '[]')
+    primaries = {}
+    for tablet in tablets if isinstance(tablets, list) else []:
+        alias = tablet.get('alias') if isinstance(tablet, dict) else None
+        if isinstance(alias, dict) and isinstance(alias.get('cell'), str):
+            primaries.setdefault(str(tablet.get('shard')), []).append(
+                f"{alias['cell']}-{int(alias['uid']):010d}")
+    observed = {}
+    for shard in sorted(shards):
+        aliases = primaries.get(shard, [])
+        if len(aliases) != 1:
+            observed[shard] = {'error': f'{len(aliases)} primary tablets'}
+            continue
+        arguments = ['GetSchema', '--tables', table, '--table-schema-only']
+        if include_views:
+            arguments.append('--include-views')
+        document = json.loads(_run(
+            route, [*arguments, aliases[0]], timeout=30)['stdout'] or 'null')
+        definitions = document.get('table_definitions') if isinstance(
+            document, dict) else None
+        definition = next((
+            item.get('schema') for item in definitions or []
+            if isinstance(item, dict) and item.get('name') == table), None)
+        observed[shard] = {'tablet': aliases[0], 'schema': definition}
+    return observed
+
+
+def _schema_applied(plan, observed):
+    kind = plan['resource_kind']
+    operation = plan['operation_id']
+    draft = plan.get('draft') or {}
+    path = (plan.get('target_resource') or {}).get('display_path') or []
+    if not observed or any('error' in item for item in observed.values()):
+        return False
+    for item in observed.values():
+        schema = item.get('schema')
+        if kind == 'view':
+            if schema is not None:
+                return False
+            continue
+        if not isinstance(schema, str):
+            return False
+        lines = [line.strip().rstrip(',') for line in schema.splitlines()]
+        if kind == 'table':
+            # The table options line; partition clauses may follow it.
+            options = [line for line in lines if line.startswith(') ENGINE=')]
+            if len(options) != 1 or not options[0].endswith(
+                    ' COMMENT=' + _mysql_text(draft['comment'])):
+                return False
+            continue
+        old = 'KEY ' + _quote_identifier(path[2]) + ' '
+        if operation == 'rename':
+            new = 'KEY ' + _quote_identifier(draft['new_name']) + ' '
+            if not any(new in line for line in lines) or any(
+                    old in line for line in lines):
+                return False
+            continue
+        index = [line for line in lines if old in line]
+        if len(index) != 1 or ('INVISIBLE' in index[0]) != (
+                draft['visibility'] == 'INVISIBLE'):
+            return False
+    return True
+
+
 def _parts(request):
     plan = request.get('plan')
     payload = request.get('provider_payload')
@@ -1369,6 +1531,20 @@ def inspect_action(_client, request):
     original = payload.get('compiled', {}).get('provider_action', {})
     arguments = original.get('arguments') or []
     kind = plan['resource_kind']
+    if (kind, plan['operation_id']) in _SCHEMA_CHANGES:
+        # Read-only: never re-run the change itself to observe it.
+        path = _target({'target_resource': plan.get('target_resource')})
+        observed = _shard_schemas(
+            _route(request), _safe_name(path[0], 'keyspace'), path[1],
+            include_views=kind == 'view')
+        return {
+            'provider_observation': {
+                'stdout': json.dumps(observed, sort_keys=True),
+                'provider_response_observed': True,
+            },
+            'provider_observation_only': True,
+            'provider_finality_authority': True,
+        }
     if kind == 'keyspace':
         inspect_arguments = ['GetKeyspaces']
     elif kind == 'shard':
@@ -1491,6 +1667,17 @@ def post_validate_action(client, request):
     draft = plan.get('draft') or {}
     expected = None
     present = None
+    if (kind, operation) in _SCHEMA_CHANGES:
+        confirmed = _schema_applied(plan, document)
+        return {
+            'confirmed': confirmed,
+            'reason': (
+                'vitess_change_visible_on_every_shard_primary' if confirmed
+                else 'vitess_change_not_visible_on_every_shard_primary'),
+            'provider_document': document,
+            'observation': observation,
+            'provider_finality_authority': True,
+        }
     if kind == 'keyspace':
         expected = (
             draft.get('name') if operation == 'create' else path[-1]

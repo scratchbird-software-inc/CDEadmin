@@ -287,6 +287,22 @@ Vitess 23.0.3 (through vtgate, sharded keyspace)
    provider already has a typed vtctld control plane. Reproduced twice.
    Fixed 2026-10-30: the view drop runs ``ApplySchema`` through vtctld;
    verified live that the view is gone from both shards.
+   **Defect, fixed 2026-11-01:** the provider's after-check for that drop
+   observed it by running the same ``ApplySchema`` again, so a read re-ran
+   the change. It now reads every shard's primary schema instead.
+-  Native schema administration added 2026-11-01: table ``COMMENT``,
+   ``RENAME INDEX`` and index visibility. vtgate reads ``information_schema``
+   from one shard, so a vtgate read-back cannot show that a sharded change
+   reached every shard. These changes run through ``vtctldclient
+   ApplySchema`` on the keyspace, and the provider confirms one only when
+   every shard has exactly one primary and every primary's ``GetSchema``
+   shows it (live: one shard unchanged leaves the change unconfirmed).
+   Comments refuse control characters, so the text MySQL renders back is
+   exact. ``OPTIMIZE TABLE`` is not offered: ``ApplySchema`` refuses it on a
+   sharded keyspace ("non-ddl statements can only be executed for single
+   shard keyspaces"). Through vtgate, ``SET GLOBAL`` is accepted without
+   effect (every tablet kept its value) and ``ANALYZE TABLE`` is refused, so
+   neither is offered.
 -  Refuses ``CREATE DATABASE`` through vtgate. Keyspaces are a control-plane
    concept.
 -  Refuses users, roles and grants through vtgate. Authentication is
