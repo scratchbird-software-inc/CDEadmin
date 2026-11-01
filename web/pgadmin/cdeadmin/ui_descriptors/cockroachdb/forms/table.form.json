@@ -16,7 +16,7 @@
     },
     {
       "concept": "PARTITION BY LIST/RANGE",
-      "reason": "Runs on 26.1.3 (probe) but has no editor yet",
+      "reason": "Runs on 26.1.3 (probe) but has no editor yet. 2026-11-01: provided as the table Repartition operation (list, range or nothing) on the first primary key column; multi-column keys, subpartitions and index partitioning remain open",
       "tracking": "postgresql-wire-parity"
     },
     {

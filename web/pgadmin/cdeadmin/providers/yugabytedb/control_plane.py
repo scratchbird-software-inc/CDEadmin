@@ -40,6 +40,12 @@ NATIVE_ADMINISTRATION = PGWireAdministration('YugabyteDB', {
     ('schema', 'revoke'): ('CREATE', 'USAGE'),
     ('type', 'grant'): ('USAGE',),
     ('type', 'revoke'): ('USAGE',),
+    # Partitions after create: a single-column key, bounds typed by value
+    # (live, 2026-11-01); multi-column keys and subpartitions are not yet
+    # offered.
+    ('table', 'create_partition'): True,
+    ('table', 'attach_partition'): True,
+    ('partition', 'detach'): True,
     ('session', 'terminate_query'): 'pg_stat_activity',
     ('session', 'terminate_connection'): 'pg_stat_activity',
 }, grant_reader='aclexplode')

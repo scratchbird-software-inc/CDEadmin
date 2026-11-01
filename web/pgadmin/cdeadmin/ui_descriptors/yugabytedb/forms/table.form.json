@@ -11,7 +11,7 @@
   "gaps": [
     {
       "concept": "Partitions (CREATE TABLE ... PARTITION OF)",
-      "reason": "Partitions are inspect-only; a structured bound editor is not built yet",
+      "reason": "Partitions are inspect-only; a structured bound editor is not built yet. 2026-11-01: provided as the table Create partition and Attach partition operations and the partition Detach operation, with typed bounds (range, list, hash, default) on a single-column key; multi-column keys and subpartitions remain open",
       "tracking": "postgresql-wire-parity"
     },
     {

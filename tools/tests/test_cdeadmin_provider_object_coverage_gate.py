@@ -60,7 +60,9 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
         # owner moves, constraint validation, role and user default
         # settings, database, schema and type grants, sessions) plus inspect
         # on their sessions.
-        self.assertEqual(2470, result['graphical_operation_count'])
+        # 2474 with partitions after create: YugabyteDB create, attach and
+        # detach, CockroachDB repartition.
+        self.assertEqual(2474, result['graphical_operation_count'])
         large_object = next(item for item in self.catalogs['postgresql-native']['descriptor']['objects']
             if item['resource_kind'] == 'large-object')
         self.assertEqual({'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop',

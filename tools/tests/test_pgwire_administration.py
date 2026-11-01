@@ -149,3 +149,115 @@ def test_confirmation_reads_the_exact_state():
                    {'display_name': session, 'display_path': [session]})
     assert COCKROACH.confirmed(cluster, [(session, '')])
     assert not COCKROACH.confirmed(cluster, [(session, 'SELECT 1')])
+
+
+# Partitions after create, single-column keys (live, 2026-11-01).
+PARENT = {'display_name': 'p', 'display_path': ['s', 'p']}
+
+
+def test_yugabytedb_partition_bounds_are_typed_values():
+    assert sql(YUGABYTE, 'table', 'create_partition', {
+        'name': 'p1', 'bound': 'RANGE', 'from_mode': 'MINVALUE',
+        'to_mode': 'VALUE', 'to_value': "1'0"}, PARENT) == [
+        'CREATE TABLE "s"."p1" PARTITION OF "s"."p" FOR VALUES FROM '
+        "(MINVALUE) TO ('1''0')"]
+    assert sql(YUGABYTE, 'table', 'attach_partition', {
+        'table': 'q', 'bound': 'LIST',
+        'in_values': [{'value': 'a'}, {'value': 'b'}]}, PARENT) == [
+        'ALTER TABLE "s"."p" ATTACH PARTITION "s"."q" FOR VALUES IN '
+        "('a', 'b')"]
+    assert sql(YUGABYTE, 'table', 'create_partition', {
+        'name': 'h', 'bound': 'HASH', 'modulus': 4, 'remainder': 3},
+        PARENT) == ['CREATE TABLE "s"."h" PARTITION OF "s"."p" FOR VALUES '
+                    'WITH (MODULUS 4, REMAINDER 3)']
+    assert sql(YUGABYTE, 'table', 'create_partition', {
+        'name': 'd', 'bound': 'DEFAULT'}, PARENT) == [
+        'CREATE TABLE "s"."d" PARTITION OF "s"."p" DEFAULT']
+    assert sql(YUGABYTE, 'partition', 'detach', {}, {
+        'display_name': 'q', 'display_path': ['s', 'p', 'q']}) == [
+        'ALTER TABLE "s"."p" DETACH PARTITION "s"."q"']
+    for draft in ({'bound': 'HASH', 'modulus': 4, 'remainder': 4},
+                  {'bound': 'LIST', 'in_values': []},
+                  {'bound': 'LIST', 'in_values': ['a', 'a']},
+                  {'bound': 'RANGE', 'from_mode': 'VALUE',
+                   'from_value': 'a\nb', 'to_mode': 'MAXVALUE'},
+                  {'bound': 'SOMETIMES'}):
+        with pytest.raises(RelationalClientError):
+            sql(YUGABYTE, 'table', 'create_partition',
+                {'name': 'x', **draft}, PARENT)
+    assert not COCKROACH.supports('table', 'create_partition')
+
+
+def test_cockroachdb_repartition():
+    assert sql(COCKROACH, 'table', 'repartition', {
+        'strategy': 'LIST', 'column': 'k', 'list_partitions': [
+            {'partition': 'p1', 'value': '1'},
+            {'partition': 'p1', 'value': '2'},
+            {'partition': 'pd', 'default': True}]}, PARENT) == [
+        'ALTER TABLE "s"."p" PARTITION BY LIST ("k") (PARTITION "p1" '
+        "VALUES IN ('1', '2'), PARTITION \"pd\" VALUES IN (DEFAULT))"]
+    assert sql(COCKROACH, 'table', 'repartition', {
+        'strategy': 'RANGE', 'column': 'k', 'range_partitions': [
+            {'partition': 'lo', 'from_mode': 'MINVALUE', 'to_value': '10'},
+            {'partition': 'hi', 'from_value': '10',
+             'to_mode': 'MAXVALUE'}]}, PARENT) == [
+        'ALTER TABLE "s"."p" PARTITION BY RANGE ("k") (PARTITION "lo" '
+        "VALUES FROM (MINVALUE) TO ('10'), PARTITION \"hi\" VALUES FROM "
+        "('10') TO (MAXVALUE))"]
+    assert sql(COCKROACH, 'table', 'repartition', {
+        'strategy': 'NOTHING'}, PARENT) == [
+        'ALTER TABLE "s"."p" PARTITION BY NOTHING']
+    with pytest.raises(RelationalClientError, match='column'):
+        sql(COCKROACH, 'table', 'repartition', {
+            'strategy': 'LIST', 'list_partitions': [
+                {'partition': 'a', 'value': '1'}]}, PARENT)
+    with pytest.raises(RelationalClientError, match='repeats'):
+        sql(COCKROACH, 'table', 'repartition', {
+            'strategy': 'RANGE', 'column': 'k', 'range_partitions': [
+                {'partition': 'a', 'from_mode': 'MINVALUE',
+                 'to_mode': 'MAXVALUE'}] * 2}, PARENT)
+
+
+def test_partition_confirmation_reads_the_stored_bound():
+    attach = plan('table', 'attach_partition', {
+        'table': 'q', 'bound': 'LIST', 'in_values': ['b', "a'x"]}, PARENT)
+    assert YUGABYTE.confirmed(attach, [('p', "FOR VALUES IN ('a''x', 'b')")])
+    assert not YUGABYTE.confirmed(attach, [('p', "FOR VALUES IN ('b')")])
+    assert not YUGABYTE.confirmed(attach, [('other', "FOR VALUES IN "
+                                            "('a''x', 'b')")])
+    ranged = plan('table', 'create_partition', {
+        'name': 'r', 'bound': 'RANGE', 'from_value': '0', 'to_value': '10'},
+        PARENT)
+    assert YUGABYTE.confirmed(ranged, [('p', 'FOR VALUES FROM (0) TO (10)')])
+    assert not YUGABYTE.confirmed(ranged, [('p', 'FOR VALUES FROM (10) '
+                                                 'TO (0)')])
+    detach = plan('partition', 'detach', {}, {
+        'display_name': 'q', 'display_path': ['s', 'p', 'q']})
+    assert YUGABYTE.confirmed(detach, [(None, None)])
+    assert not YUGABYTE.confirmed(detach, [('p', 'DEFAULT')])
+    assert not YUGABYTE.confirmed(detach, [])  # the table itself is gone
+    listed = plan('table', 'repartition', {
+        'strategy': 'LIST', 'column': 'k', 'list_partitions': [
+            {'partition': 'p1', 'value': '2'},
+            {'partition': 'p1', 'value': '1'},
+            {'partition': 'pd', 'default': True}]}, PARENT)
+    assert COCKROACH.confirmed(listed, [('p1', 'k', '(1), (2)'),
+                                        ('pd', 'k', '(DEFAULT)')])
+    assert not COCKROACH.confirmed(listed, [('p1', 'k', '(1)'),
+                                            ('pd', 'k', '(DEFAULT)')])
+    removed = plan('table', 'repartition', {'strategy': 'NOTHING'}, PARENT)
+    assert COCKROACH.confirmed(removed, [])
+    assert not COCKROACH.confirmed(removed, [('p1', 'k', '(1)')])
+
+
+def test_partition_inspection_reads_partitions_not_table_facts():
+    issued = []
+
+    def query(source, parameters=()):
+        issued.append(source)
+        return {'rows': []}
+    YUGABYTE.inspect(plan('table', 'attach_partition', {
+        'table': 'q', 'bound': 'DEFAULT'}, PARENT), query)
+    COCKROACH.inspect(plan('table', 'repartition', {
+        'strategy': 'NOTHING'}, PARENT), query)
+    assert 'relpartbound' in issued[0] and 'SHOW PARTITIONS' in issued[1]

@@ -937,6 +937,307 @@
       "status": "draft",
       "confirmation": "typed_name",
       "fields": []
+    },
+    {
+      "operation_id": "create_partition",
+      "resource_kind": "table",
+      "title": "Create partition",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Partition name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "bound",
+          "label": "Bound",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "RANGE",
+              "label": "Range"
+            },
+            {
+              "value": "LIST",
+              "label": "List"
+            },
+            {
+              "value": "HASH",
+              "label": "Hash"
+            },
+            {
+              "value": "DEFAULT",
+              "label": "Default (rows matching no other partition)"
+            }
+          ],
+          "help": "Must match how the table is partitioned; the key is one column."
+        },
+        {
+          "field_id": "from_mode",
+          "label": "From end",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "VALUE",
+              "label": "Value"
+            },
+            {
+              "value": "MINVALUE",
+              "label": "Minvalue"
+            }
+          ],
+          "default": "VALUE",
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "RANGE"
+          }
+        },
+        {
+          "field_id": "from_value",
+          "label": "From value",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "RANGE"
+          }
+        },
+        {
+          "field_id": "to_mode",
+          "label": "To end",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "VALUE",
+              "label": "Value"
+            },
+            {
+              "value": "MAXVALUE",
+              "label": "Maxvalue"
+            }
+          ],
+          "default": "VALUE",
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "RANGE"
+          }
+        },
+        {
+          "field_id": "to_value",
+          "label": "To value",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "RANGE"
+          }
+        },
+        {
+          "field_id": "in_values",
+          "label": "Values",
+          "control": "grid",
+          "required": true,
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "LIST"
+          },
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "modulus",
+          "label": "Modulus",
+          "control": "number",
+          "required": true,
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "HASH"
+          }
+        },
+        {
+          "field_id": "remainder",
+          "label": "Remainder",
+          "control": "number",
+          "required": true,
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "HASH"
+          }
+        }
+      ]
+    },
+    {
+      "operation_id": "attach_partition",
+      "resource_kind": "table",
+      "title": "Attach partition",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "table",
+          "label": "Table to attach",
+          "control": "text",
+          "required": true,
+          "help": "An existing table in the same schema."
+        },
+        {
+          "field_id": "bound",
+          "label": "Bound",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "RANGE",
+              "label": "Range"
+            },
+            {
+              "value": "LIST",
+              "label": "List"
+            },
+            {
+              "value": "HASH",
+              "label": "Hash"
+            },
+            {
+              "value": "DEFAULT",
+              "label": "Default (rows matching no other partition)"
+            }
+          ],
+          "help": "Must match how the table is partitioned; the key is one column."
+        },
+        {
+          "field_id": "from_mode",
+          "label": "From end",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "VALUE",
+              "label": "Value"
+            },
+            {
+              "value": "MINVALUE",
+              "label": "Minvalue"
+            }
+          ],
+          "default": "VALUE",
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "RANGE"
+          }
+        },
+        {
+          "field_id": "from_value",
+          "label": "From value",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "RANGE"
+          }
+        },
+        {
+          "field_id": "to_mode",
+          "label": "To end",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "VALUE",
+              "label": "Value"
+            },
+            {
+              "value": "MAXVALUE",
+              "label": "Maxvalue"
+            }
+          ],
+          "default": "VALUE",
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "RANGE"
+          }
+        },
+        {
+          "field_id": "to_value",
+          "label": "To value",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "RANGE"
+          }
+        },
+        {
+          "field_id": "in_values",
+          "label": "Values",
+          "control": "grid",
+          "required": true,
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "LIST"
+          },
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "modulus",
+          "label": "Modulus",
+          "control": "number",
+          "required": true,
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "HASH"
+          }
+        },
+        {
+          "field_id": "remainder",
+          "label": "Remainder",
+          "control": "number",
+          "required": true,
+          "visible_when": {
+            "field_id": "bound",
+            "equals": "HASH"
+          }
+        }
+      ]
+    },
+    {
+      "operation_id": "detach",
+      "resource_kind": "partition",
+      "title": "Detach partition",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": []
     }
   ]
 }

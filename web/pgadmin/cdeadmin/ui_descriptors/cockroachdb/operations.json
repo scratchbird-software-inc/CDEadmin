@@ -1419,6 +1419,144 @@
       "status": "draft",
       "confirmation": "typed_name",
       "fields": []
+    },
+    {
+      "operation_id": "repartition",
+      "resource_kind": "table",
+      "title": "Repartition",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "strategy",
+          "label": "Partition by",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "LIST",
+              "label": "List"
+            },
+            {
+              "value": "RANGE",
+              "label": "Range"
+            },
+            {
+              "value": "NOTHING",
+              "label": "Nothing (remove partitioning)"
+            }
+          ]
+        },
+        {
+          "field_id": "column",
+          "label": "Partition column",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field_id": "strategy",
+            "in": [
+              "LIST",
+              "RANGE"
+            ]
+          },
+          "help": "The first primary key column; required unless removing partitioning."
+        },
+        {
+          "field_id": "list_partitions",
+          "label": "List partitions",
+          "control": "grid",
+          "required": true,
+          "visible_when": {
+            "field_id": "strategy",
+            "equals": "LIST"
+          },
+          "help": "One row per value: partition, value, or Default for rows matching no other.",
+          "columns": [
+            {
+              "field_id": "partition",
+              "label": "Partition",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text"
+            },
+            {
+              "field_id": "default",
+              "label": "Default",
+              "control": "boolean",
+              "default": false
+            }
+          ]
+        },
+        {
+          "field_id": "range_partitions",
+          "label": "Range partitions",
+          "control": "grid",
+          "required": true,
+          "visible_when": {
+            "field_id": "strategy",
+            "equals": "RANGE"
+          },
+          "help": "One row per partition: from and to, each a value or the open end.",
+          "columns": [
+            {
+              "field_id": "partition",
+              "label": "Partition",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "from_mode",
+              "label": "From end",
+              "control": "select",
+              "default": "VALUE",
+              "options": [
+                {
+                  "value": "VALUE",
+                  "label": "Value"
+                },
+                {
+                  "value": "MINVALUE",
+                  "label": "Minvalue"
+                }
+              ]
+            },
+            {
+              "field_id": "from_value",
+              "label": "From value",
+              "control": "text"
+            },
+            {
+              "field_id": "to_mode",
+              "label": "To end",
+              "control": "select",
+              "default": "VALUE",
+              "options": [
+                {
+                  "value": "VALUE",
+                  "label": "Value"
+                },
+                {
+                  "value": "MAXVALUE",
+                  "label": "Maxvalue"
+                }
+              ]
+            },
+            {
+              "field_id": "to_value",
+              "label": "To value",
+              "control": "text"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

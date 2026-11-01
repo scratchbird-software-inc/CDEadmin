@@ -1105,3 +1105,31 @@ def test_native_session_cancel_and_terminate(live):
             victim.close()
         except Exception:
             pass
+
+
+def test_native_repartition(live):
+    route, client = live
+    query('CREATE TABLE public.rt_parts (k INT, id INT, PRIMARY KEY (k, id))')
+    target = native_row(client, route, 'table', ['public', 'rt_parts'])
+
+    def partitions():
+        return sorted(query(
+            'SELECT partition_name, partition_value FROM [SHOW PARTITIONS '
+            'FROM TABLE public.rt_parts]'))
+    control(client, route, 'table', 'repartition', {
+        'strategy': 'LIST', 'column': 'k', 'list_partitions': [
+            {'partition': 'rt_a', 'value': '1'},
+            {'partition': 'rt_a', 'value': '2'},
+            {'partition': 'rt_rest', 'default': True}]}, target)
+    assert partitions() == [('rt_a', '(1), (2)'), ('rt_rest', '(DEFAULT)')]
+    control(client, route, 'table', 'repartition', {
+        'strategy': 'RANGE', 'column': 'k', 'range_partitions': [
+            {'partition': 'rt_lo', 'from_mode': 'MINVALUE',
+             'to_value': '10'},
+            {'partition': 'rt_hi', 'from_value': '10',
+             'to_mode': 'MAXVALUE'}]}, target)
+    assert partitions() == [('rt_hi', '(10) TO (MAXVALUE)'),
+                            ('rt_lo', '(MINVALUE) TO (10)')]
+    control(client, route, 'table', 'repartition', {'strategy': 'NOTHING'},
+            target)
+    assert partitions() == []

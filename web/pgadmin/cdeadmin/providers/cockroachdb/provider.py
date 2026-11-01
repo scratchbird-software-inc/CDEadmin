@@ -170,6 +170,9 @@ NATIVE_ADMINISTRATION = PGWireAdministration('CockroachDB', {
     ('schema', 'revoke'): ('CREATE', 'USAGE', 'CHANGEFEED'),
     ('type', 'grant'): ('USAGE',),
     ('type', 'revoke'): ('USAGE',),
+    # Repartition the primary index on its first column (live, 2026-11-01):
+    # list or range, or remove partitioning.
+    ('table', 'repartition'): True,
     ('session', 'terminate_query'): 'cluster_sessions',
     ('session', 'terminate_connection'): 'cluster_sessions',
 }, grant_reader='show_grants')

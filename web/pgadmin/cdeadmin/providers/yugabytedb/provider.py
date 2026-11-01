@@ -109,6 +109,8 @@ _YSQL_SUPPORTED.update({
     'row-policy': frozenset({'inspect', 'create', 'alter', 'drop'}),
     # Partition bounds are part of CREATE TABLE in YSQL. Until the table form
     # has a complete structured bound editor, partitions remain inspect-only.
+    # 2026-11-01: create, attach and detach are the table and partition
+    # operations of control_plane.NATIVE_ADMINISTRATION, with typed bounds.
     'partition': frozenset({'inspect'}),
     # YugabyteDB 2025.2.2.2 rejects ALTER TABLESPACE ... RENAME TO and SET
     # as not supported; alter is owner and comment (yugabytedb/tablespaces).

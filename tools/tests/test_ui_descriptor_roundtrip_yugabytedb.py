@@ -1356,3 +1356,54 @@ def test_native_session_cancel_and_terminate(live):
             victim.close()
         except Exception:
             pass
+
+
+def test_native_partitions_create_attach_detach(live):
+    route, client = live
+    query('CREATE TABLE public.rt_pr (id INT, k INT, PRIMARY KEY (id, k)) '
+          'PARTITION BY RANGE (k)')
+    query('CREATE TABLE public.rt_pl (id INT, c TEXT, PRIMARY KEY (id, c)) '
+          'PARTITION BY LIST (c)')
+    query('CREATE TABLE public.rt_ph (id INT PRIMARY KEY) '
+          'PARTITION BY HASH (id)')
+    query('CREATE TABLE public.rt_loose (id INT, k INT, PRIMARY KEY (id, k))')
+    rows = resources(client, route)
+
+    def table(name):
+        return next(row for row in rows if row['resource_kind'] == 'table'
+                    and row['display_path'] == ['public', name])
+
+    def bound(child):
+        return query(
+            'SELECT pc.relname, pg_catalog.pg_get_expr(cc.relpartbound, '
+            'cc.oid) FROM pg_catalog.pg_class cc LEFT JOIN '
+            'pg_catalog.pg_inherits i ON i.inhrelid = cc.oid LEFT JOIN '
+            'pg_catalog.pg_class pc ON pc.oid = i.inhparent '
+            f"WHERE cc.relname = '{child}'")
+    control(client, route, 'table', 'create_partition', {
+        'name': 'rt_pr_lo', 'bound': 'RANGE', 'from_mode': 'MINVALUE',
+        'to_mode': 'VALUE', 'to_value': '10'}, table('rt_pr'))
+    assert bound('rt_pr_lo') == [
+        ('rt_pr', 'FOR VALUES FROM (MINVALUE) TO (10)')]
+    control(client, route, 'table', 'create_partition', {
+        'name': 'rt_pr_rest', 'bound': 'DEFAULT'}, table('rt_pr'))
+    assert bound('rt_pr_rest') == [('rt_pr', 'DEFAULT')]
+    control(client, route, 'table', 'attach_partition', {
+        'table': 'rt_loose', 'bound': 'RANGE', 'from_value': '10',
+        'to_value': '20'}, table('rt_pr'))
+    assert bound('rt_loose') == [('rt_pr', 'FOR VALUES FROM (10) TO (20)')]
+    control(client, route, 'table', 'create_partition', {
+        'name': 'rt_pl_ab', 'bound': 'LIST',
+        'in_values': [{'value': 'a'}, {'value': "b'c"}]}, table('rt_pl'))
+    assert bound('rt_pl_ab') == [('rt_pl', "FOR VALUES IN ('a', 'b''c')")]
+    control(client, route, 'table', 'create_partition', {
+        'name': 'rt_ph_0', 'bound': 'HASH', 'modulus': 2, 'remainder': 0},
+        table('rt_ph'))
+    assert bound('rt_ph_0') == [
+        ('rt_ph', 'FOR VALUES WITH (modulus 2, remainder 0)')]
+    partition = next(
+        row for row in resources(client, route)
+        if row['resource_kind'] == 'partition' and
+        row['display_path'] == ['public', 'rt_pr', 'rt_loose'])
+    control(client, route, 'partition', 'detach', {}, partition)
+    assert bound('rt_loose') == [(None, None)]

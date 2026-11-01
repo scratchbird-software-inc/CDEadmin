@@ -1146,7 +1146,17 @@ yet"), ``VACUUM`` (accepted with no observable effect), large objects; and
 CockroachDB ``UNSPLIT AT`` (ranges merge asynchronously, so it cannot be read
 back). Partition changes after create (CockroachDB repartitioning,
 YugabyteDB attach and detach) read back but need a structured partition-bound
-editor first, so they are not yet offered. CockroachDB cluster settings,
+editor first, so they are not yet offered. Update, later on 2026-11-01: they
+are offered with typed bounds on a single-column key. Each value is entered as
+text and quoted by the provider; a range end is a value, ``MINVALUE`` or
+``MAXVALUE``. YugabyteDB: Create partition and Attach partition (range, list,
+hash or default) on a partitioned table, Detach on a partition, confirmed from
+``pg_inherits`` and the bound ``pg_get_expr`` returns, compared value by value.
+CockroachDB: Repartition the primary index by list (one row per value, or
+Default) or range, or remove partitioning, confirmed from ``SHOW PARTITIONS``
+value by value; CockroachDB refuses a column that is not the first primary key
+column and the refusal is passed on. Multi-column keys, subpartitions and
+CockroachDB index partitioning remain open. CockroachDB cluster settings,
 system privileges, ``SPLIT AT`` and storage parameters, and the YugabyteDB
 object kinds its catalog lacks (collation, event trigger, publication, foreign
 data wrapper, aggregate, operator, cast, rule, language) are recorded in the

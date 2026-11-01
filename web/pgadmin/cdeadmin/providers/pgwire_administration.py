@@ -31,6 +31,44 @@ def literal(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
+def _choice(field_id, label, values, **options):
+    return cp_field(field_id, label, 'select', options=[
+        {'value': value, 'label': title} for value, title in values],
+        **options)
+
+
+def _bound_fields():
+    range_bound = {'field_id': 'bound', 'equals': 'RANGE'}
+    ends = []
+    for side, label, open_end in (('from', 'From', 'MINVALUE'),
+                                  ('to', 'To', 'MAXVALUE')):
+        ends += [
+            _choice(f'{side}_mode', f'{label} end', (
+                ('VALUE', 'Value'), (open_end, open_end.title())),
+                default='VALUE', visible_when=range_bound),
+            cp_field(f'{side}_value', f'{label} value', 'text', False,
+                     max_length=4096, pattern=VALUE,
+                     visible_when=range_bound),
+        ]
+    return (
+        _choice('bound', 'Bound', (
+            ('RANGE', 'Range'), ('LIST', 'List'), ('HASH', 'Hash'),
+            ('DEFAULT', 'Default (rows matching no other partition)'),
+        ), required=True,
+            help='Must match how the table is partitioned; the key is one '
+            'column.'),
+        *ends,
+        cp_field('in_values', 'Values', 'json', True, json_type='array',
+                 visible_when={'field_id': 'bound', 'equals': 'LIST'}),
+        cp_field('modulus', 'Modulus', 'number', True, minimum=1,
+                 maximum=1024, visible_when={'field_id': 'bound',
+                                             'equals': 'HASH'}),
+        cp_field('remainder', 'Remainder', 'number', True, minimum=0,
+                 maximum=1023, visible_when={'field_id': 'bound',
+                                             'equals': 'HASH'}),
+    )
+
+
 class PGWireAdministration:
     """The native administration one PG-wire engine declares.
 
@@ -124,6 +162,50 @@ class PGWireAdministration:
             return ControlPlaneOperation(
                 kind, operation, title, 'admin', 'security_admin',
                 tuple(fields), impact_scope='resource')
+        if (kind, operation) in {('table', 'create_partition'),
+                                 ('table', 'attach_partition')}:
+            first = (cp_field('name', 'Partition name', 'text', True,
+                              max_length=63, pattern=NAME)
+                     if operation == 'create_partition' else
+                     cp_field('table', 'Table to attach', 'text', True,
+                              max_length=63, pattern=NAME,
+                              help='An existing table in the same schema.'))
+            title = ('Create partition' if operation == 'create_partition'
+                     else 'Attach partition')
+            return ControlPlaneOperation(
+                'table', operation, title, 'admin', 'administer',
+                (first, *_bound_fields()), impact_scope='resource')
+        if (kind, operation) == ('partition', 'detach'):
+            return ControlPlaneOperation(
+                'partition', 'detach', 'Detach partition', 'admin',
+                'administer', impact_scope='resource')
+        if (kind, operation) == ('table', 'repartition'):
+            return ControlPlaneOperation(
+                'table', 'repartition', 'Repartition', 'admin',
+                'administer', (
+                    _choice('strategy', 'Partition by', (
+                        ('LIST', 'List'), ('RANGE', 'Range'),
+                        ('NOTHING', 'Nothing (remove partitioning)'),
+                    ), required=True),
+                    cp_field('column', 'Partition column', 'text', False,
+                             max_length=63, pattern=NAME,
+                             visible_when={'field_id': 'strategy',
+                                           'in': ['LIST', 'RANGE']},
+                             help='The first primary key column; required '
+                             'unless removing partitioning.'),
+                    cp_field('list_partitions', 'List partitions', 'json',
+                             True, json_type='array',
+                             visible_when={'field_id': 'strategy',
+                                           'equals': 'LIST'},
+                             help='One row per value: partition, value, '
+                             'or Default for rows matching no other.'),
+                    cp_field('range_partitions', 'Range partitions', 'json',
+                             True, json_type='array',
+                             visible_when={'field_id': 'strategy',
+                                           'equals': 'RANGE'},
+                             help='One row per partition: from and to, '
+                             'each a value or the open end.'),
+                ), impact_scope='resource')
         if (kind, operation) == ('session', 'terminate_query'):
             return ControlPlaneOperation(
                 'session', 'terminate_query', 'Cancel running statement',
@@ -183,6 +265,29 @@ class PGWireAdministration:
         if not self.supports(kind, operation):
             raise self._error('control-plane operation is unavailable')
         draft = request.get('draft') or {}
+        if kind == 'partition':
+            schema, parent, child = self._path(request, 3)
+            return [_statement('ALTER TABLE ' + quote(schema) + '.' +
+                               quote(parent) + ' DETACH PARTITION ' +
+                               quote(schema) + '.' + quote(child))]
+        if kind == 'table' and operation in {'create_partition',
+                                             'attach_partition',
+                                             'repartition'}:
+            schema, table = self._path(request, 2)
+            qualified = quote(schema) + '.' + quote(table)
+            if operation == 'repartition':
+                return [_statement('ALTER TABLE ' + qualified + ' ' +
+                                   self._repartition(draft))]
+            bound = self._bound(draft)
+            if operation == 'create_partition':
+                name = self._text(draft, 'name', NAME, 'partition name')
+                return [_statement(
+                    'CREATE TABLE ' + quote(schema) + '.' + quote(name) +
+                    ' PARTITION OF ' + qualified + ' ' + bound)]
+            child = self._text(draft, 'table', NAME, 'table to attach')
+            return [_statement('ALTER TABLE ' + qualified +
+                               ' ATTACH PARTITION ' + quote(schema) + '.' +
+                               quote(child) + ' ' + bound)]
         if kind == 'table':
             schema, table = self._path(request, 2)
             qualified = quote(schema) + '.' + quote(table)
@@ -248,6 +353,88 @@ class PGWireAdministration:
                     else 'pg_terminate_backend')
         return [_statement(f'SELECT {function}({int(session)})')]
 
+    def _bound_value(self, draft, side):
+        mode = draft.get(f'{side}_mode') or 'VALUE'
+        if mode in {'MINVALUE', 'MAXVALUE'}:
+            return mode
+        if mode != 'VALUE':
+            raise self._error(f'{side} bound is invalid')
+        value = draft.get(f'{side}_value')
+        if not isinstance(value, str) or re.fullmatch(VALUE, value) is None:
+            raise self._error(f'{side} value is invalid')
+        return literal(value)
+
+    def _bound(self, draft):
+        kind = draft.get('bound')
+        if kind == 'RANGE':
+            return ('FOR VALUES FROM (' + self._bound_value(draft, 'from') +
+                    ') TO (' + self._bound_value(draft, 'to') + ')')
+        if kind == 'LIST':
+            return 'FOR VALUES IN (' + ', '.join(
+                literal(value) for value in self._values(
+                    draft.get('in_values'))) + ')'
+        if kind == 'HASH':
+            modulus, remainder = draft.get('modulus'), draft.get('remainder')
+            if not all(isinstance(value, int) and not isinstance(value, bool)
+                       for value in (modulus, remainder)) or not (
+                    0 <= remainder < modulus):
+                raise self._error('hash modulus and remainder are invalid')
+            return (f'FOR VALUES WITH (MODULUS {modulus}, '
+                    f'REMAINDER {remainder})')
+        if kind == 'DEFAULT':
+            return 'DEFAULT'
+        raise self._error('partition bound is invalid')
+
+    def _values(self, values):
+        if not isinstance(values, list) or not values or len(values) > 1024:
+            raise self._error('partition values are invalid')
+        result = []
+        for item in values:
+            value = item.get('value') if isinstance(item, dict) else item
+            if not isinstance(value, str) or re.fullmatch(
+                    VALUE, value) is None:
+                raise self._error('partition value is invalid')
+            result.append(value)
+        if len(set(result)) != len(result):
+            raise self._error('partition values repeat')
+        return result
+
+    def _repartition(self, draft):
+        strategy = draft.get('strategy')
+        if strategy == 'NOTHING':
+            return 'PARTITION BY NOTHING'
+        column = self._text(draft, 'column', NAME, 'partition column')
+        rows = draft.get('list_partitions' if strategy == 'LIST'
+                         else 'range_partitions')
+        if strategy not in {'LIST', 'RANGE'} or not isinstance(
+                rows, list) or not rows:
+            raise self._error('partitions are invalid')
+        partitions = {}
+        for row in rows:
+            if not isinstance(row, dict):
+                raise self._error('partition row is invalid')
+            name = self._text(row, 'partition', NAME, 'partition name')
+            if strategy == 'RANGE':
+                if name in partitions:
+                    raise self._error(f'partition {name} repeats')
+                partitions[name] = (
+                    'VALUES FROM (' + self._bound_value(row, 'from') +
+                    ') TO (' + self._bound_value(row, 'to') + ')')
+                continue
+            value = ('DEFAULT' if row.get('default') else
+                     literal(self._values([row.get('value')])[0]))
+            values = partitions.setdefault(name, [])
+            if value in values:
+                raise self._error(f'partition {name} repeats a value')
+            values.append(value)
+        clauses = [
+            'PARTITION ' + quote(name) + ' ' + (
+                definition if strategy == 'RANGE'
+                else 'VALUES IN (' + ', '.join(definition) + ')')
+            for name, definition in partitions.items()]
+        return ('PARTITION BY ' + strategy + ' (' + quote(column) + ') (' +
+                ', '.join(clauses) + ')')
+
     # Read-back --------------------------------------------------------
 
     def inspect(self, plan, query):
@@ -255,6 +442,32 @@ class PGWireAdministration:
         operation = plan['operation_id']
         draft = plan.get('draft') or {}
         option = self.features[(kind, operation)]
+        if kind == 'partition' or operation in {'create_partition',
+                                                'attach_partition'}:
+            if kind == 'partition':
+                schema, _parent, child = self._path(plan, 3)
+            else:
+                schema = self._path(plan, 2)[0]
+                child = draft.get('name' if operation == 'create_partition'
+                                  else 'table')
+            return query(
+                'SELECT pc.relname, pg_catalog.pg_get_expr(cc.relpartbound, '
+                'cc.oid) FROM pg_catalog.pg_class cc '
+                'JOIN pg_catalog.pg_namespace cn ON cn.oid = cc.relnamespace '
+                'LEFT JOIN pg_catalog.pg_inherits i ON i.inhrelid = cc.oid '
+                'LEFT JOIN pg_catalog.pg_class pc ON pc.oid = i.inhparent '
+                'WHERE cn.nspname = %s AND cc.relname = %s', (schema, child))
+        if operation == 'repartition':
+            schema, table = self._path(plan, 2)
+            # The primary index's partitions only; secondary indexes keep
+            # their own.
+            return query(
+                'SELECT partition_name, column_names, partition_value FROM '
+                '[SHOW PARTITIONS FROM TABLE ' + quote(schema) + '.' +
+                quote(table) + "] WHERE index_name = %s || '@' || "
+                '(SELECT constraint_name FROM [SHOW CONSTRAINTS FROM ' +
+                quote(schema) + '.' + quote(table) + "] WHERE "
+                "constraint_type = 'PRIMARY KEY')", (table,))
         if kind == 'table':
             schema, table = self._path(plan, 2)
             if operation == 'truncate':
@@ -343,6 +556,22 @@ class PGWireAdministration:
         kind = plan['resource_kind']
         operation = plan['operation_id']
         draft = plan.get('draft') or {}
+        if kind == 'partition':
+            # Still a table, no longer anyone's partition.
+            return len(rows) == 1 and rows[0][0] is None
+        if operation in {'create_partition', 'attach_partition'}:
+            parent = self._path(plan, 2)[1]
+            return len(rows) == 1 and str(rows[0][0]) == parent and (
+                bound_tokens(str(rows[0][1] or '')) ==
+                _expected_bound(draft))
+        if operation == 'repartition':
+            if draft.get('strategy') == 'NOTHING':
+                return not rows
+            observed = {str(name): bound_tokens(str(value))
+                        for name, _columns, value in rows}
+            columns = {str(columns) for _name, columns, _value in rows}
+            return columns == {draft.get('column')} and (
+                observed == _expected_partitions(draft))
         if kind == 'table':
             if operation in {'truncate', 'analyze'}:
                 return len(rows) == 1 and rows[0][0] is True
@@ -373,6 +602,109 @@ class PGWireAdministration:
         if self.features[(kind, operation)] == 'cluster_sessions':
             return not rows or not str(rows[0][1] or '')
         return not rows or str(rows[0][1]) != 'active'
+
+
+def _expected_side(row, side):
+    mode = row.get(f'{side}_mode') or 'VALUE'
+    if mode in {'MINVALUE', 'MAXVALUE'}:
+        return ('k', mode)
+    return ('v', row.get(f'{side}_value'))
+
+
+def _expected_values(values):
+    return sorted(('v', item.get('value') if isinstance(item, dict)
+                   else item) for item in values)
+
+
+def _expected_bound(draft):
+    kind = draft.get('bound')
+    if kind == 'RANGE':
+        return [_expected_side(draft, 'from'), ('k', 'TO'),
+                _expected_side(draft, 'to')]
+    if kind == 'LIST':
+        return _expected_values(draft.get('in_values') or [])
+    if kind == 'HASH':
+        return [('k', 'MODULUS'), ('v', str(draft.get('modulus'))),
+                ('k', 'REMAINDER'), ('v', str(draft.get('remainder')))]
+    return [('k', 'DEFAULT')]
+
+
+def _expected_partitions(draft):
+    expected = {}
+    if draft.get('strategy') == 'RANGE':
+        for row in draft.get('range_partitions') or []:
+            expected[row['partition']] = [
+                _expected_side(row, 'from'), ('k', 'TO'),
+                _expected_side(row, 'to')]
+        return expected
+    for row in draft.get('list_partitions') or []:
+        expected.setdefault(row['partition'], []).append(
+            ('k', 'DEFAULT') if row.get('default')
+            else ('v', row.get('value')))
+    return {name: sorted(values) for name, values in expected.items()}
+
+
+_KEYWORDS = {'TO', 'MINVALUE', 'MAXVALUE', 'DEFAULT', 'MODULUS', 'REMAINDER'}
+_SKIPPED = {'FOR', 'VALUES', 'IN', 'FROM', 'WITH'}
+
+
+def bound_tokens(text):
+    """Values and keywords of a partition bound as the engine renders it.
+
+    Handles PostgreSQL ``pg_get_expr`` (``FOR VALUES IN ('a', 1)``,
+    ``FOR VALUES WITH (modulus 4, remainder 0)``, casts) and CockroachDB
+    ``SHOW PARTITIONS`` (``(1), (2)``, ``(MINVALUE) TO (10)``,
+    ``e'x\\'y'``). List values are returned sorted, since an engine may
+    reorder them; ranges keep their order.
+    """
+    tokens, position = [], 0
+    while position < len(text):
+        char = text[position]
+        if char in " \t\n(),":
+            position += 1
+            continue
+        if text.startswith('::', position):
+            position += 2
+            while position < len(text) and (
+                    text[position].isalnum() or text[position] in '_ "[]'):
+                if text[position] == ' ' and not text[position + 1:
+                                                      position + 2].isalpha():
+                    break
+                position += 1
+            continue
+        escaped = char in 'eE' and text[position + 1:position + 2] == "'"
+        if char == "'" or escaped:
+            position += 2 if escaped else 1
+            value = []
+            while position < len(text):
+                if escaped and text[position] == '\\':
+                    value.append(text[position + 1:position + 2])
+                    position += 2
+                    continue
+                if text[position] == "'":
+                    if text[position + 1:position + 2] == "'":
+                        value.append("'")
+                        position += 2
+                        continue
+                    position += 1
+                    break
+                value.append(text[position])
+                position += 1
+            tokens.append(('v', ''.join(value)))
+            continue
+        end = position
+        while end < len(text) and text[end] not in " \t\n(),:":
+            end += 1
+        word = text[position:end]
+        position = end
+        if word.upper() in _SKIPPED:
+            continue
+        tokens.append(('k', word.upper()) if word.upper() in _KEYWORDS
+                      else ('v', word))
+    if tokens and all(kind == 'v' or value == 'DEFAULT'
+                      for kind, value in tokens) and ('k', 'TO') not in tokens:
+        return sorted(tokens)
+    return tokens
 
 
 def _statement(source):
