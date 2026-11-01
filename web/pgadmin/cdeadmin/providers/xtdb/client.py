@@ -1960,6 +1960,13 @@ class XTDBClient:
                 'FROM pg_catalog.pg_database',
                 (),
             )
+        if kind == 'metric' and operation == 'inspect':
+            # Only the three metric tables the catalog lists (2026-11-01).
+            table = native.get('table')
+            if table not in {'metrics_timers', 'metrics_gauges',
+                             'metrics_counters'}:
+                raise XTDBClientError('XTDB metric table is unavailable')
+            return (f'SELECT * FROM xt.{table} LIMIT %s', (MAX_PAGE_SIZE,))
         if operation == 'inspect':
             return 'SELECT xt.version() AS xtdb_version', ()
         raise XTDBClientError('XTDB administration operation is unavailable')

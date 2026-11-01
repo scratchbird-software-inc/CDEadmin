@@ -848,6 +848,12 @@ back, by any engine method.
    category it ran passed), writes a new table per run and added
    ``cdeadmin_xtdb_50fc76ab4c77``. The probe database's files were removed
    from the container after detach.
+-  2026-11-01 gap probe: the provider listed the three ``xt.metrics_*``
+   tables as metric resources, but the portfolio catalog had no metric
+   object for XTDB, and inspecting one ran the generic ``xt.version()``
+   query. The catalog now has the metric object, and inspect reads that
+   metric table (live: 68 gauge rows). Sessions are not offered:
+   ``pg_stat_activity`` returns no rows, and there is no ``SHOW ALL``.
 
 Untested on CockroachDB
 ~~~~~~~~~~~~~~~~~~~~~~~

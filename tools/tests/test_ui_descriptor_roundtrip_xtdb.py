@@ -235,3 +235,23 @@ def test_database_attach_list_detach(live):
     assert observed == {**observed, 'confirmed': True,
                         'reason': 'xtdb_database_not_attached'}
     assert find(client, route, 'database', DATABASE)[0] is None
+
+
+def test_metric_tables_inspect_their_own_rows(live):
+    """2026-11-01: inspect read xt.version() for a metric table; it now
+    reads that table."""
+    route, client = live
+    for table in ('metrics_gauges', 'metrics_counters', 'metrics_timers'):
+        target, _rows = find(client, route, 'metric', f'xt.{table}')
+        assert target is not None, table
+        planned, _state = run(client, route, 'metric', 'inspect', {},
+                              target)
+        result = client.apply_admin_operation({
+            'plan': {'resource_kind': 'metric', 'operation_id': 'inspect',
+                     'target_resource': target, '_provider_route': route,
+                     'draft': {}},
+            'provider_payload': planned['provider_payload']})
+        rows = result['rows']
+        # Metric rows, not the xt.version() row the fallback returned.
+        assert rows and all({'name', 'tags'} <= set(row) for row in rows), (
+            table, rows[:2])

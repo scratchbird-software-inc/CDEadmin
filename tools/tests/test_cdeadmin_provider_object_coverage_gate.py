@@ -209,7 +209,9 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
         }, absent)
 
     def test_mysql_family_metrics_are_graphically_reachable(self):
-        for profile_id in ('mysql-native', 'mariadb-native'):
+        # XTDB lists its xt.metrics_* tables as metric resources; the
+        # portfolio catalog had no metric object for it (2026-11-01).
+        for profile_id in ('mysql-native', 'mariadb-native', 'xtdb-native'):
             objects = {
                 item['resource_kind']: item
                 for item in self.catalogs[profile_id]['descriptor']['objects']
