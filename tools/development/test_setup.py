@@ -122,17 +122,140 @@ class SetupTests(unittest.TestCase):
             run.assert_not_called()
 
     def test_python_combines_requirements_and_checks_conflicts(self):
-        with patch.object(manage, 'run') as run:
+        order = []
+        with patch.object(manage, 'run', side_effect=lambda args, *rest: order.append(args)) as run, \
+                patch.object(manage, 'mariadb_driver', side_effect=lambda: order.append('mariadb')):
             manage.main(['python'])
-        self.assertEqual(run.call_args_list[0].args[0], [
-            self.python, '-m', 'pip', 'install', '-r',
-            self.root / 'requirements.txt', '-r',
-            manage.DEMO / 'requirements.txt'])
-        self.assertEqual(run.call_args_list[1].args[0],
-                         [self.python, '-B', '-m', 'tools.cdeadmin_install_mysql_driver',
-                          '--receipt', self.root / '.devstate/mysql-driver.json'])
-        self.assertEqual(run.call_args_list[2].args[0],
-                         [self.python, '-m', 'pip', 'check'])
+        self.assertEqual(order, [
+            [self.python, '-m', 'pip', 'install', '-r',
+             self.root / 'requirements.txt', '-r',
+             manage.DEMO / 'requirements.txt', '-r',
+             self.root / 'web/regression/requirements.txt', manage.TEST_PYTEST],
+            [self.python, '-B', '-m', 'tools.cdeadmin_install_mysql_driver',
+             '--receipt', self.root / '.devstate/mysql-driver.json'],
+            # The patched wheel replaces the stock pin before conflicts are checked.
+            'mariadb',
+            [self.python, '-m', 'pip', 'check']])
+        self.assertEqual(run.call_count, 3)
+
+    def test_patched_mariadb_wheel_is_built_outside_the_repository_and_installed(self):
+        import native_assets
+        archive = self.root / 'mariadb-1.1.14.tar.gz'
+        commands = []
+        def build(args, *rest):
+            commands.append(args)
+            if '--output' in args:
+                output = Path(args[args.index('--output') + 1])
+                self.assertFalse(output.exists())
+                self.assertNotIn(Path(manage.__file__).resolve().parents[2], output.parents)
+                (output / 'wheels').mkdir(parents=True)
+                (output / 'wheels/mariadb-1.1.14-cp314-cp314-linux_x86_64.whl').touch()
+        with patch.object(native_assets, 'download', return_value=archive) as download, \
+                patch.object(manage, 'run', side_effect=build):
+            manage.mariadb_driver()
+        download.assert_called_once_with('mariadb-python')
+        self.assertEqual(commands[0][:6], [self.python, '-B', '-m', 'tools.cdeadmin_build_mariadb_driver',
+                                           '--archive', archive])
+        self.assertEqual(commands[1][:5], [self.python, '-m', 'pip', 'install', '--no-deps'])
+        self.assertEqual(commands[1][5:6], ['--force-reinstall'])
+        self.assertEqual(Path(commands[1][6]).name, 'mariadb-1.1.14-cp314-cp314-linux_x86_64.whl')
+
+    def test_missing_patched_mariadb_wheel_is_refused(self):
+        import native_assets
+        with patch.object(native_assets, 'download', return_value=self.root / 'archive'), \
+                patch.object(manage, 'run') as run:
+            with self.assertRaises(RuntimeError):
+                manage.mariadb_driver()
+        self.assertEqual(run.call_count, 1)
+
+    def interpreter_paths(self):
+        tracked = self.root / 'tracked'
+        (tracked / 'lib').mkdir(parents=True)
+        (tracked / 'lib/libsqlite3.so.3.53.0').write_bytes(b'tracked library')
+        (tracked / 'lib/libsqlite3.so.0').symlink_to('libsqlite3.so.3.53.0')
+        native = self.root / '.native'
+        self.enterContext(patch.object(manage, 'TRACKED_SQLITE', tracked))
+        self.enterContext(patch.object(manage, 'NATIVE', native))
+        return tracked, native
+
+    def test_interpreter_links_the_tracked_sqlite_and_reads_it_back(self):
+        import native_assets
+        tracked, native = self.interpreter_paths()
+        source = native / 'python-source/Python-3.14.8'
+        source.mkdir(parents=True)
+        (source / 'configure').touch()
+        self.enterContext(patch.dict(manage.os.environ, {'LD_LIBRARY_PATH': '/elsewhere'}))
+        def installed(args, *rest):
+            if args == ['make', 'install']: (native / 'python').mkdir()
+        with patch.object(manage, 'run', side_effect=installed) as run, \
+                patch.object(native_assets, 'download') as download:
+            manage.interpreter()
+        download.assert_not_called()
+        configure, make, install, check = [call.args for call in run.call_args_list]
+        self.assertEqual(configure[0], [source / 'configure', f'--prefix={native / "python"}',
+                                        '--with-ensurepip=install', '--enable-loadable-sqlite-extensions'])
+        environment = configure[2]
+        self.assertNotIn('LD_LIBRARY_PATH', environment)
+        self.assertEqual(environment['LIBSQLITE3_LIBS'], f'-L{tracked}/lib -lsqlite3')
+        self.assertEqual(environment['LDFLAGS'], f'-Wl,-rpath,{tracked}/lib')
+        self.assertEqual(install[0], ['make', 'install'])
+        # The build is accepted only after the new interpreter reports the
+        # tracked file, its version and every option the helpers require.
+        self.assertEqual(check[0][0], native / 'python/bin/python3.14')
+        self.assertEqual(check[0][4:], [tracked / 'lib/libsqlite3.so.0', *manage.SQLITE_OPTIONS])
+        self.assertIn('"3.53.0"', check[0][3])
+        import hashlib, json
+        marker = json.loads((native / 'python/.cdeadmin-complete').read_text())
+        self.assertEqual(marker['sqlite_sha256'], hashlib.sha256(b'tracked library').hexdigest())
+        with patch.object(manage, 'run') as again:
+            manage.interpreter()
+        again.assert_not_called()
+
+    def test_interpreter_is_not_rebuilt_or_replaced(self):
+        tracked, native = self.interpreter_paths()
+        (native / 'python').mkdir(parents=True)
+        with patch.object(manage, 'run') as run:
+            with self.assertRaises(RuntimeError):
+                manage.interpreter()
+        run.assert_not_called()
+        marker = native / 'python/.cdeadmin-complete'
+        marker.write_text('other inputs')
+        with patch.object(manage, 'run') as run:
+            with self.assertRaises(RuntimeError):
+                manage.interpreter()
+        run.assert_not_called()
+
+    def test_setup_stages_do_not_inherit_the_engine_library_path(self):
+        # Setup stages use the interpreter's own libraries. MySQL Shell's
+        # private OpenSSL, whose CA path is another host's, is on no path.
+        probe = self.root / 'python'
+        probe.write_text('#!/bin/sh\nprintf "%s" "${LD_LIBRARY_PATH:-}"\n')
+        probe.chmod(0o700)
+        launcher = Path(__file__).with_name('dev.sh')
+        environment = {key: value for key, value in manage.os.environ.items()
+                       if key not in ('LD_LIBRARY_PATH', 'VIRTUAL_ENV')}
+        environment['SCRATCHROBIN_PYTHON'] = str(probe)
+        def library_path(action):
+            # setUp replaces subprocess.run, which check_output would use.
+            with subprocess.Popen(['bash', str(launcher), action], env=environment,
+                                  stdout=subprocess.PIPE, text=True) as process:
+                output = process.communicate(timeout=60)[0]
+            self.assertEqual(process.returncode, 0)
+            return output
+        for action in ('interpreter', 'python'):
+            self.assertNotIn('reference_engine_demos/runtime', library_path(action), action)
+        engine = library_path('status')
+        self.assertIn('runtime/foundationdb/lib', engine)
+        self.assertNotIn('runtime/mysql', engine)
+
+    def test_interpreter_builds_the_tracked_sqlite_when_absent(self):
+        tracked, native = self.interpreter_paths()
+        (tracked / 'lib/libsqlite3.so.0').unlink()
+        with patch.object(manage, 'run') as run:
+            with self.assertRaises(FileNotFoundError):
+                manage.interpreter()
+        run.assert_called_once_with([sys.executable, manage.DEMO / 'sqlite_tracked.py',
+                                     '--version', '3.53.0'])
 
     def test_frontend_refreshes_ddn_and_preserves_lockfile(self):
         with patch.object(manage, 'run') as run:

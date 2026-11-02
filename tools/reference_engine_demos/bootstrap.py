@@ -317,22 +317,57 @@ def extract_mariadb_clients():
         )
 
 
-def extract_mysql_shell():
-    """Extract the exact MySQL Shell and its private OpenSSL runtime."""
-    require_program("docker")
-    prefix = RUNTIME / "mysql"
-    executable = prefix / "bin/mysqlsh"
-    openssl = prefix / "lib64/libssl.so.3.5.1"
-    crypto = prefix / "lib64/libcrypto.so.3.5.1"
-    environment = dict(os.environ)
-    environment["LD_LIBRARY_PATH"] = str(prefix / "lib64")
-    if executable.is_file() and openssl.is_file() and crypto.is_file():
+def mysql_shell_openssl(executable):
+    """Read back the OpenSSL MySQL Shell maps with no library path set."""
+    environment = {
+        key: value for key, value in os.environ.items()
+        if key != "LD_LIBRARY_PATH"
+    }
+    probe = (
+        "import ssl\n"
+        "print(ssl.OPENSSL_VERSION)\n"
+        "print('\\n'.join(sorted({line.split()[-1] for line in"
+        " open('/proc/self/maps') if '/libssl.' in line"
+        " or '/libcrypto.' in line})))\n"
+    )
+    with tempfile.TemporaryDirectory(prefix="cdeadmin-mysqlsh-") as home:
+        environment["HOME"] = home
         identity = subprocess.run(
             [str(executable), "--version"], check=False, text=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             env=environment,
         ).stdout
-        if "Ver 9.7.0" in identity:
+        loaded = subprocess.run(
+            [str(executable), "--py", "-e", probe], check=False, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            env=environment,
+        ).stdout.splitlines()
+    return identity, loaded
+
+
+def extract_mysql_shell():
+    """Extract the exact MySQL Shell and its private OpenSSL runtime.
+
+    The OpenSSL files sit in lib/mysqlsh, which MySQL Shell's own RPATH
+    ($ORIGIN/../lib/mysqlsh) searches, so no process needs LD_LIBRARY_PATH
+    for it and the application's interpreter never loads this OpenSSL.
+    """
+    require_program("docker")
+    prefix = RUNTIME / "mysql"
+    executable = prefix / "bin/mysqlsh"
+    private = prefix / "lib/mysqlsh"
+    openssl = private / "libssl.so.3.5.1"
+    crypto = private / "libcrypto.so.3.5.1"
+
+    def verified():
+        identity, loaded = mysql_shell_openssl(executable)
+        expected = [str(crypto.resolve()), str(openssl.resolve())]
+        return ("Ver 9.7.0" in identity and loaded[:1] and
+                loaded[0].startswith("OpenSSL 3.5.1 ") and
+                loaded[1:] == expected)
+
+    if executable.is_file() and openssl.is_file() and crypto.is_file():
+        if verified():
             print(f"MySQL Shell already bootstrapped: {executable}")
             return
     name = f"cdeadmin-demo-mysql-shell-{os.getpid()}"
@@ -340,11 +375,11 @@ def extract_mysql_shell():
     try:
         if prefix.exists():
             shutil.rmtree(prefix)
-        for directory in ("bin", "lib", "libexec", "share", "lib64"):
+        for directory in ("bin", "lib", "libexec", "share"):
             (prefix / directory).mkdir(parents=True, exist_ok=True)
         for source, destination in (
             ("/usr/bin/mysqlsh", prefix / "bin/mysqlsh"),
-            ("/usr/lib/mysqlsh", prefix / "lib/mysqlsh"),
+            ("/usr/lib/mysqlsh", private),
             ("/usr/libexec/mysqlsh", prefix / "libexec/mysqlsh"),
             ("/usr/share/mysqlsh", prefix / "share/mysqlsh"),
             ("/usr/lib64/libssl.so.3.5.1", openssl),
@@ -352,16 +387,12 @@ def extract_mysql_shell():
         ):
             run(["docker", "cp", f"{name}:{source}", destination])
         executable.chmod(0o755)
-        (prefix / "lib64/libssl.so.3").symlink_to(openssl.name)
-        (prefix / "lib64/libcrypto.so.3").symlink_to(crypto.name)
-        identity = subprocess.run(
-            [str(executable), "--version"], check=False, text=True,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            env=environment,
-        ).stdout
-        if "Ver 9.7.0" not in identity:
+        (private / "libssl.so.3").symlink_to(openssl.name)
+        (private / "libcrypto.so.3").symlink_to(crypto.name)
+        if not verified():
             raise RuntimeError(
-                "extracted MySQL Shell is not the required 9.7.0 runtime"
+                "extracted MySQL Shell is not the required 9.7.0 runtime "
+                "with its own OpenSSL 3.5.1"
             )
     finally:
         subprocess.run(

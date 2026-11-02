@@ -1590,11 +1590,11 @@ def main():
     DATA.mkdir(exist_ok=True)
     RUNTIME.mkdir(exist_ok=True)
     EVIDENCE.mkdir(exist_ok=True)
-    mysql_lib = RUNTIME / "mysql/lib64"
+    # MySQL Shell's private OpenSSL is found through its own RPATH.
     client_lib = RUNTIME / "foundationdb/lib"
     sqlite_lib = RUNTIME / "sqlite-3.53.0/lib"
     private_libraries = [
-        path for path in (mysql_lib, sqlite_lib, client_lib) if path.exists()
+        path for path in (sqlite_lib, client_lib) if path.exists()
     ]
     if private_libraries and not os.environ.get("CDEADMIN_DEMO_CLIENT_ENV"):
         environment = dict(os.environ)

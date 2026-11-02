@@ -372,6 +372,113 @@ class ReferenceEngineDemoTestCase(unittest.TestCase):
             "database", json.loads(endpoint.routes[0].configuration)
         )
 
+    def test_environment_keeps_mysql_shell_openssl_off_the_library_path(self):
+        # The application's interpreter must not load MySQL Shell's OpenSSL,
+        # whose CA path is another host's; MySQL Shell finds it by RPATH.
+        environment = {
+            key: value for key, value in os.environ.items()
+            if key != "LD_LIBRARY_PATH"
+        }
+        library_path = subprocess.run(
+            ["bash", "-c", 'source "$1" && printf "%s" "$LD_LIBRARY_PATH"',
+             "environment", str(DEMO / "environment.sh")],
+            env=environment, check=True, text=True, stdout=subprocess.PIPE,
+        ).stdout
+        self.assertIn("runtime/foundationdb/lib", library_path)
+        self.assertNotIn("runtime/mysql", library_path)
+        self.assertNotIn("mysql/lib64", (DEMO / "demo_estate.py").read_text(
+            encoding="utf-8"
+        ))
+
+
+class MySQLShellBootstrapTestCase(unittest.TestCase):
+
+    def setUp(self):
+        self.bootstrap = load_module("bootstrap", DEMO / "bootstrap.py")
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.runtime = Path(directory.name)
+        self.prefix = self.runtime / "mysql"
+        patches = (
+            mock.patch.object(self.bootstrap, "RUNTIME", self.runtime),
+            mock.patch.object(self.bootstrap, "require_program"),
+        )
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def install(self, *paths):
+        for relative in paths:
+            path = self.prefix / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(relative.encode())
+
+    def loaded(self, directory):
+        private = (self.prefix / directory).resolve()
+        return ["OpenSSL 3.5.1 1 Jul 2025",
+                str(private / "libcrypto.so.3.5.1"),
+                str(private / "libssl.so.3.5.1")]
+
+    def docker(self, command):
+        if command[:2] == ["docker", "cp"]:
+            destination = Path(command[3])
+            if command[2].endswith(("/lib/mysqlsh", "/libexec/mysqlsh",
+                                    "/share/mysqlsh")):
+                destination.mkdir(parents=True)
+            else:
+                self.install(str(destination.relative_to(self.prefix)))
+
+    def test_verified_private_openssl_is_kept(self):
+        self.install("bin/mysqlsh", "lib/mysqlsh/libssl.so.3.5.1",
+                     "lib/mysqlsh/libcrypto.so.3.5.1")
+        with mock.patch.object(self.bootstrap, "mysql_shell_openssl",
+                               return_value=("mysqlsh   Ver 9.7.0",
+                                             self.loaded("lib/mysqlsh"))), \
+                mock.patch.object(self.bootstrap, "run") as run:
+            self.bootstrap.extract_mysql_shell()
+        run.assert_not_called()
+
+    def test_library_path_layout_is_re_extracted_beside_mysql_shell(self):
+        self.install("bin/mysqlsh", "lib64/libssl.so.3.5.1",
+                     "lib64/libcrypto.so.3.5.1")
+        observed = []
+
+        def read_back(executable):
+            observed.append(sorted(
+                str(path.relative_to(self.prefix))
+                for path in self.prefix.rglob("*")
+                if path.is_file() or path.is_symlink()
+            ))
+            return "mysqlsh   Ver 9.7.0", self.loaded("lib/mysqlsh")
+        with mock.patch.object(self.bootstrap, "mysql_shell_openssl",
+                               side_effect=read_back), \
+                mock.patch.object(self.bootstrap, "run",
+                                  side_effect=self.docker) as run, \
+                mock.patch.object(self.bootstrap.subprocess, "run"):
+            self.bootstrap.extract_mysql_shell()
+        self.assertEqual(["docker", "create"], run.call_args_list[0].args[0][:2])
+        self.assertEqual(1, len(observed))
+        self.assertIn("lib/mysqlsh/libssl.so.3", observed[0])
+        self.assertIn("lib/mysqlsh/libcrypto.so.3", observed[0])
+        self.assertFalse((self.prefix / "lib64").exists())
+
+    def test_mysql_shell_loading_another_openssl_is_refused(self):
+        self.install("bin/mysqlsh", "lib/mysqlsh/libssl.so.3.5.1",
+                     "lib/mysqlsh/libcrypto.so.3.5.1")
+        system = ["OpenSSL 3.0.13 30 Jan 2024",
+                  "/usr/lib/x86_64-linux-gnu/libcrypto.so.3",
+                  "/usr/lib/x86_64-linux-gnu/libssl.so.3"]
+        for loaded in (system, [], self.loaded("lib64")):
+            with self.subTest(loaded=loaded), \
+                    mock.patch.object(self.bootstrap, "mysql_shell_openssl",
+                                      return_value=("mysqlsh   Ver 9.7.0",
+                                                    loaded)), \
+                    mock.patch.object(self.bootstrap, "run",
+                                      side_effect=self.docker), \
+                    mock.patch.object(self.bootstrap.subprocess, "run"):
+                with self.assertRaises(RuntimeError):
+                    self.bootstrap.extract_mysql_shell()
+
 
 if __name__ == "__main__":
     unittest.main()

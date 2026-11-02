@@ -66,6 +66,17 @@ Bootstrap performs these reproducible client-side steps:
 6. extracts the exact Cassandra 5.0.8 `cqlsh`, `nodetool`, and
    `sstableloader` distribution used by provider-owned administration forms.
 
+> Added 2026-11-02: the bootstrap also extracts the exact MySQL Shell 9.7.0
+> with its private OpenSSL 3.5.1. That OpenSSL now sits in
+> `runtime/mysql/lib/mysqlsh`, which MySQL Shell's own RPATH searches, instead
+> of `runtime/mysql/lib64` on `LD_LIBRARY_PATH`. The application, which
+> launches MySQL Shell with a minimal environment, previously ran it without
+> that OpenSSL, so its embedded Python could not import `ssl` and its plugins
+> failed to load. Meanwhile `environment.sh` made the application's own
+> interpreter load that OpenSSL, whose CA path is another host's. The
+> bootstrap reads back the mapped OpenSSL files with no library path set, and
+> re-extracts an install that still uses the `lib64` layout.
+
 It also renders `runtime/connection_profiles.json` from the portable template.
 Source `environment.sh` before starting CDEadmin when FoundationDB, Firebird,
 MariaDB, or Cassandra administration tools are being tested so the extracted
@@ -307,6 +318,17 @@ helpers. The interpreter's `_sqlite3` must link libsqlite3 dynamically; a
 version it does not actually load is reported as not run, never as passed.
 Managed interpreters that embed SQLite (for example uv's CPython) cannot run
 the matrix.
+
+Added 2026-11-02: `tools/tests/conftest.py` selects the tracked build for the
+interpreter's SQLite version when the corresponding variable is unset:
+`CDEADMIN_SQLITE_HEADERS` from `runtime/sqlite-tracked/<v>/include`, and
+each of `CDEADMIN_SQLITE_{SESSION,ARRAY,PREUPDATE,RECOVERY}_LIBRARY` from
+`runtime/sqlite-tracked/<v>/helpers` only if a child process shows that the
+interpreter's `sqlite3` already maps exactly one libsqlite3 file and loading
+the helper maps no other. An interpreter that embeds SQLite therefore keeps
+skipping the helper suites with their stated reasons. Explicit settings win.
+The Linux reference interpreter is built by `dev.sh interpreter`; see
+`tools/development/README.md`.
 
 The `tools/cdeadmin_sqlite_*` qualification gates qualify the 3.53.0
 reference profile only. Other versions are qualified by the live task proof in

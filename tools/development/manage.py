@@ -1,5 +1,7 @@
 """Explicit, non-destructive development setup stages for a Linux workspace."""
 import argparse
+import hashlib
+import json
 import os
 from pathlib import Path
 import platform
@@ -7,11 +9,18 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 DEMO = ROOT / 'tools/reference_engine_demos'
 PYTHON = ROOT / '.venv/bin/python'
-ACTIONS = ('doctor', 'python', 'configure', 'frontend', 'ddn', 'clients',
+NATIVE = ROOT / '.native'
+TRACKED_SQLITE = DEMO / 'runtime/sqlite-tracked/3.53.0'
+TEST_PYTEST = 'pytest==9.2.0'
+SQLITE_OPTIONS = ('ENABLE_SESSION', 'ENABLE_PREUPDATE_HOOK', 'ENABLE_CARRAY',
+                  'ENABLE_DBPAGE_VTAB', 'ENABLE_DBSTAT_VTAB')
+ACTIONS = ('doctor', 'interpreter', 'python', 'configure', 'frontend', 'ddn', 'clients',
            'init', 'run', 'register', 'list', 'status', 'start', 'stop',
            'seed', 'verify', 'prepare')
 
@@ -88,6 +97,80 @@ def ddn():
     run([sys.executable, ROOT / 'tools/refresh_ddn.py'])
 
 
+def interpreter():
+    """Build CPython whose _sqlite3 links the tracked SQLite 3.53.0 library.
+
+    Managed interpreters embed their own SQLite, which the native helpers
+    cannot share. The library is found by RUNPATH, so LD_LIBRARY_PATH can
+    still select another tracked version for the version matrix.
+    """
+    from native_assets import ASSETS, download
+    library = TRACKED_SQLITE / 'lib/libsqlite3.so.0'
+    if not library.is_file():
+        run([sys.executable, DEMO / 'sqlite_tracked.py', '--version', '3.53.0'])
+    with library.resolve(strict=True).open('rb') as source:
+        sqlite_sha256 = hashlib.file_digest(source, 'sha256').hexdigest()
+    prefix = NATIVE / 'python'
+    marker = prefix / '.cdeadmin-complete'
+    fingerprint = json.dumps({'python': ASSETS['python'][1], 'sqlite_sha256': sqlite_sha256,
+                              'machine': platform.machine(), 'loadable_sqlite_extensions': True,
+                              'runpath': str(library.parent)}, sort_keys=True)
+    if marker.is_file():
+        if marker.read_text(encoding='utf-8') == fingerprint:
+            print(f'Interpreter is current: {prefix / "bin/python3.14"}')
+            return
+        raise RuntimeError('Interpreter inputs changed; stop apps and rebuild into a fresh .native/python and .venv')
+    if prefix.exists():
+        raise RuntimeError(f'{prefix} has no completion marker; inspect it manually')
+    source = NATIVE / 'python-source'
+    if not (source / 'Python-3.14.8/configure').is_file():
+        source.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(download('python')) as archive:
+            archive.extractall(source, filter='data')
+    build = NATIVE / 'python-build'
+    build.mkdir(exist_ok=True)
+    tracked = str(TRACKED_SQLITE)
+    environment = {key: value for key, value in os.environ.items() if key != 'LD_LIBRARY_PATH'}
+    environment.update(LIBSQLITE3_CFLAGS=f'-I{tracked}/include',
+                       LIBSQLITE3_LIBS=f'-L{tracked}/lib -lsqlite3',
+                       LDFLAGS=f'-Wl,-rpath,{tracked}/lib')
+    run([source / 'Python-3.14.8/configure', f'--prefix={prefix}',
+         '--with-ensurepip=install', '--enable-loadable-sqlite-extensions'], build, environment)
+    run(['make', f'-j{os.cpu_count() or 1}'], build, environment)
+    run(['make', 'install'], build, environment)
+    # Read the result back without LD_LIBRARY_PATH: exactly the tracked file
+    # is mapped, at its version, with the options the helpers require.
+    run([prefix / 'bin/python3.14', '-I', '-c',
+         'import os, sqlite3, ssl, sys\n'
+         'c = sqlite3.connect(":memory:")\n'
+         'options = {row[0] for row in c.execute("PRAGMA compile_options")}\n'
+         'missing = [name for name in sys.argv[2:] if name not in options]\n'
+         'assert not missing, missing\n'
+         'c.enable_load_extension(True); c.enable_load_extension(False); c.close()\n'
+         'with open("/proc/self/maps") as maps:\n'
+         '    loaded = {line.split()[-1] for line in maps if "/libsqlite3." in line}\n'
+         'assert loaded == {os.path.realpath(sys.argv[1])}, loaded\n'
+         'assert sqlite3.sqlite_version == "3.53.0", sqlite3.sqlite_version\n'
+         'print(sqlite3.sqlite_version, ssl.OPENSSL_VERSION)\n',
+         library, *SQLITE_OPTIONS], build, environment)
+    marker.write_text(fingerprint, encoding='utf-8')
+    print(f'Built {prefix / "bin/python3.14"}; set SCRATCHROBIN_PYTHON to it, then run the python stage.')
+
+
+def mariadb_driver():
+    """Replace the stock reference pin with the patched same-version wheel."""
+    from native_assets import download
+    # The build tool requires a fresh output directory outside the repository.
+    with tempfile.TemporaryDirectory(prefix='scratchrobin-mariadb-driver-') as temporary:
+        output = Path(temporary) / 'build'
+        run([PYTHON, '-B', '-m', 'tools.cdeadmin_build_mariadb_driver',
+             '--archive', download('mariadb-python'), '--output', output])
+        wheels = list((output / 'wheels').glob('*.whl'))
+        if len(wheels) != 1:
+            raise RuntimeError('Expected one patched MariaDB native wheel')
+        run([PYTHON, '-m', 'pip', 'install', '--no-deps', '--force-reinstall', wheels[0]])
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=ACTIONS)
@@ -112,15 +195,20 @@ def main(argv=None):
         parser.error('Use x86_64 Linux (WSL2/VM/remote). See README.md.')
     if args.action == 'configure':
         configure()
+    elif args.action == 'interpreter':
+        interpreter()
     elif args.action == 'python':
         if not PYTHON.exists():
             if (ROOT / '.venv').exists():
                 parser.error('Existing .venv is incomplete; inspect manually.')
             run([sys.executable, '-m', 'venv', ROOT / '.venv'])
+        # Resolve application, demo and test dependencies together.
         run([PYTHON, '-m', 'pip', 'install', '-r', ROOT / 'requirements.txt',
-             '-r', DEMO / 'requirements.txt'])
+             '-r', DEMO / 'requirements.txt',
+             '-r', ROOT / 'web/regression/requirements.txt', TEST_PYTEST])
         run([PYTHON, '-B', '-m', 'tools.cdeadmin_install_mysql_driver',
              '--receipt', ROOT / '.devstate/mysql-driver.json'])
+        mariadb_driver()
         run([PYTHON, '-m', 'pip', 'check'])
     elif args.action == 'frontend':
         ddn()
@@ -153,6 +241,9 @@ def main(argv=None):
 if __name__ == '__main__':
     try:
         raise SystemExit(main())
+    except RuntimeError as error:
+        print(error, file=sys.stderr)
+        raise SystemExit(1)
     except FileExistsError:
         print('Configuration already exists: preserved. Review it manually.',
               file=sys.stderr)

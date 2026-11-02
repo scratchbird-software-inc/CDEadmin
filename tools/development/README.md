@@ -203,6 +203,17 @@ different SQLite version; see the
 > 3.53.0 reference interpreter and the exact-3.53.0 qualification gates refuse
 > it. `tools/reference_engine_demos/bootstrap.py` builds a matching 3.53.1 CLI
 > beside the reference build so its native schema-binding tests can run.
+>
+> Added 2026-11-02: on Linux, build the reference interpreter with
+> `bash tools/development/dev.sh interpreter`. It builds CPython 3.14.8
+> (hash-checked source) into `.native/python` with `_sqlite3` linked to the
+> tracked SQLite 3.53.0 library (`runtime/sqlite-tracked/3.53.0`, built
+> first if absent) through RUNPATH. It accepts the build only after the new
+> interpreter maps exactly that library file at 3.53.0 with the session,
+> preupdate, carray, dbpage and dbstat options, and it refuses to replace an
+> existing `.native/python`. Then set
+> `SCRATCHROBIN_PYTHON=$PWD/.native/python/bin/python3.14` and run the
+> `python` stage into a fresh `.venv`. OpenSSL is the host's system library.
 
 Use the team's release/branch/commit if different. Record the commit for QA.
 `doctor` checks tools, versions, CPU/OS and Docker access without installing
@@ -240,6 +251,21 @@ bash tools/development/dev.sh ddn
   records the current installed extension and input hashes; one bounded failure
   log is retained if compilation fails. Repeated setup reuses a matching receipt
   only after checking the installed extension bytes and native version/ABI.
+  Added 2026-11-02: it also installs `web/regression/requirements.txt` and
+  `pytest==9.2.0` in the same resolution, then replaces the stock MariaDB
+  pin with the patched same-version wheel built by
+  `tools/cdeadmin_build_mariadb_driver.py` (hash-checked archive, temporary
+  build outside the repository) before `pip check`. `dev.sh` runs the
+  `interpreter` and `python` stages without sourcing
+  `tools/reference_engine_demos/environment.sh`: that file puts MySQL Shell's
+  private OpenSSL 3.5.1 on `LD_LIBRARY_PATH`, whose CA path
+  (`/etc/pki/tls/cert.pem`) is absent on Debian/Ubuntu hosts, so HTTPS
+  downloads failed certificate verification. Run setup from a shell that has
+  not sourced that file.
+  Updated 2026-11-02: `environment.sh` no longer carries MySQL Shell's
+  OpenSSL (it sits beside MySQL Shell's other private libraries; see
+  `tools/reference_engine_demos/README.md`). The split remains so setup
+  stages load none of the engine runtime's private libraries.
 - `frontend` refreshes the consumed DDN snapshot (the `ddn` action), then uses
   `corepack yarn install --immutable`, compiles the theme, and
   builds production assets. Peer warnings must be assessed separately from a

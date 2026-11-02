@@ -64,6 +64,23 @@ not replace each provider's live or platform qualification. Existing Python
    the live task proof and the version matrix, which needs a Python whose
    ``_sqlite3`` links libsqlite3 dynamically.
 
+.. note::
+
+   Added 2026-11-02: the Linux development setup builds that interpreter.
+   ``dev.sh interpreter`` builds CPython 3.14.8 with ``_sqlite3`` linked
+   through RUNPATH to the tracked SQLite 3.53.0 library, which the native
+   helpers are also built against, and reads the result back (library file,
+   version and required compile options) before accepting it. The uv CPython
+   3.14.6 build embeds SQLite 3.53.1 without the session, preupdate, carray
+   or dbpage options, so the native helper suites and the 3.53.0 keyword
+   observation cannot run under it. On this interpreter, with the helpers
+   and headers selected automatically, the offline selection of 2026-11-02
+   passed 12,698 tests with no failures. Of the 35 skipped, 34 need live
+   engines or the preserved Firebird source and one applies only to runtimes
+   without STRICT tables. OpenSSL is the
+   host's system library (3.0.13 on the qualifying host); the macOS build
+   uses Homebrew's ``openssl@3`` instead.
+
 The root requirement set did **not** install under Linux CPython 3.14.6t.
 ``pymilvus==2.6.5`` depends on ``orjson``; the selected ``orjson==3.13.0``
 source build rejects free-threaded Python explicitly. ``psycopg[c]`` is also
