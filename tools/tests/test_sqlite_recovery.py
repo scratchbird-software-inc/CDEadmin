@@ -175,6 +175,20 @@ def test_native_lost_publication_acknowledgement_is_reconciled_without_replay(na
     assert current['state'] == 'artifact_verified' and current['publication_acknowledgement_unknown']
 
 
+def test_record_read_before_the_worker_finished_reports_its_stored_outcome(native):
+    # A poll can read 'publishing', then see the worker gone because it stored
+    # 'completed' and exited in between. That is not an abandoned job.
+    connection = create(native['source']); connection.close()
+    receipt, request = review(native); start(native, request)
+    assert finish(native, receipt)['state'] == 'completed'
+    jobs = native['jobs']
+    jobs.workers[receipt['job_id']][0].join(timeout=5)
+    stale = jobs.load(receipt['job_id'], 1, native['endpoint'], native['target_id'])
+    stale = {**stale, 'state': 'publishing'}
+    current = jobs.public(stale)
+    assert current['state'] == 'completed' and current['output_published'] is True, current
+
+
 def test_native_cancellation_prevents_publication(native):
     connection = sqlite3.connect(native['source'])
     connection.execute('CREATE TABLE large(id INTEGER PRIMARY KEY,v BLOB)')

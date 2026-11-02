@@ -112,6 +112,15 @@ def test_dead_native_worker_remains_unknown_and_cannot_be_replayed(jobs):
     assert result['state']=='unknown' and result['automatic_retry'] is False
 
 
+def test_record_read_before_the_worker_finished_reports_its_stored_outcome(jobs):
+    # A poll can read 'active', then see the worker gone because it stored
+    # its terminal state and exited in between. That is not an unknown job.
+    record=sealed(jobs);private=jobs.load(*scope(record))
+    jobs.update(private,state='completed',worker_identity=jobs.worker_identity)
+    stale={**jobs.load(*scope(record)),'state':'active'}
+    assert jobs.public(stale)['state']=='completed'
+
+
 def test_application_artifact_removal_requires_confirmation_and_retains_the_receipt(jobs):
     record=sealed(jobs)
     with pytest.raises(Error,match='Confirm'):jobs.remove_artifact(*scope(record),'other-job')

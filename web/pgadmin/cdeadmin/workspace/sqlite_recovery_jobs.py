@@ -117,6 +117,12 @@ class SQLiteRecoveryJobs:
             try: alive = pid is not None and psutil.Process(pid).create_time() == created
             except psutil.Error: alive = False
             if not alive or record.get('worker_identity') == self.worker_identity and not (worker and worker[0].is_alive()):
+                # A worker stores its terminal receipt before it exits, so a
+                # snapshot read before that write is stale, not abandoned.
+                with self.store(record['job_id']) as store:
+                    latest = self.record(store.read(), record['job_id'], record['owner'],
+                        record['endpoint_id'], record['database_target_id'])
+                if latest['state'] not in ACTIVE: return self.public(latest)
                 result.update(state='unknown_outcome', publication_acknowledgement_unknown=True)
         return result
 
