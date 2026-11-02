@@ -3945,7 +3945,9 @@ class RelationalAdministration:
         if (self.dialect.engine_id == 'mariadb' and operation in mariadb_partitions.OPERATIONS.get(request['resource_kind'], ())):
             return {'statements': [mariadb_partitions.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
                     'warnings': ['Native partition DDL commits independently and can delete or exchange data.',
-                                 'Native engine, method, privileges and row-placement validation remain authoritative.']}
+                                 'Native engine, method, privileges and row-placement validation remain authoritative.'],
+                    **({'statements_outside_transaction': True} if mariadb_partitions.validates_incoming_rows(
+                        request['resource_kind'], operation, request['draft']) else {})}
         if (self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'tablespace' and operation in mysql_tablespaces.OPERATIONS):
             return {'statements': [mysql_tablespaces.compile_operation(operation, request['draft'], request.get('target_resource'))],
                     'warnings': ['Tablespace DDL commits independently; DROP can remove native datafiles.',

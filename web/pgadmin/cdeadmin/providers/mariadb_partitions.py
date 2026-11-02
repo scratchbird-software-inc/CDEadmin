@@ -38,6 +38,14 @@ def compile_operation(kind, operation, draft, target):
     return {'source':source,'parameters':()}
 
 
+def validates_incoming_rows(kind, operation, draft):
+    """MariaDB 12.2.2 waits on its own validation read of the standalone
+    table when these run with autocommit off (observed 2026-11-02, every
+    isolation level), so they are dispatched outside a transaction."""
+    return ((kind, operation) in {('partition', 'exchange'), ('table', 'convert_from_table')} and
+            isinstance(draft, dict) and draft.get('validation', 'WITH VALIDATION') == 'WITH VALIDATION')
+
+
 def form(kind,operation,field):
     if operation in common.OPERATIONS.get(kind, ()):
         value=deepcopy(common.form(kind,operation,field))

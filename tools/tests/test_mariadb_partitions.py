@@ -19,6 +19,24 @@ def test_native_conversion_is_not_mysql_partition_grammar():
     assert not MYSQL_ADMINISTRATION.supports('partition','repair')
 
 
+def test_validating_incoming_rows_runs_outside_a_transaction():
+    # Live 12.2.2: with autocommit off these wait on their own validation
+    # read of the standalone table until the lock wait timeout.
+    other={'exchange_database':'db','exchange_table':'standalone'}
+    definitions={'definitions':'PARTITION p2 VALUES LESS THAN (30)'}
+    def compiled(kind,operation,draft,target):
+        return MARIADB_ADMINISTRATION._compile({'resource_kind':kind,'operation_id':operation,
+                                                'draft':draft,'target_resource':target})
+    for validation in ({}, {'validation':'WITH VALIDATION'}):
+        assert compiled('partition','exchange',{**other,**validation},TARGET)['statements_outside_transaction'] is True
+        assert compiled('table','convert_from_table',{**other,**definitions,**validation},TABLE)['statements_outside_transaction'] is True
+    for kind,operation,draft,target in (
+            ('partition','exchange',{**other,'validation':'WITHOUT VALIDATION'},TARGET),
+            ('table','convert_from_table',{**other,**definitions,'validation':'WITHOUT VALIDATION'},TABLE),
+            ('partition','convert_to_table',{**other,'validation':'WITH VALIDATION'},TARGET)):
+        assert 'statements_outside_transaction' not in compiled(kind,operation,draft,target), (operation, draft)
+
+
 def test_all_native_forms_are_context_bound_confirmed_and_maria_named():
     catalog={row['resource_kind']:row for row in MARIADB_ADMINISTRATION.catalog(catalog_for_engine('mariadb'))['objects']}
     for kind,operations in partitions.OPERATIONS.items():
