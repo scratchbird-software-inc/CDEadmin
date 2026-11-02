@@ -46,6 +46,21 @@ def test_native_ast_preserves_unbound_names_and_aliases(source,expected):
             connection.execute("SELECT sqlite_rename_column(NULL,NULL,NULL,NULL,NULL,0,NULL,1,0)")
 
 
+def test_rewriter_runtime_does_not_depend_on_name_resolution(monkeypatch):
+    # Reviewed plans compare this runtime for equality. A DNS answer that
+    # changed between preview and apply refused them (seen on Wi-Fi, 2026-11-02).
+    import itertools, socket
+    names=itertools.cycle(['host.example.test','host'])
+    monkeypatch.setattr(socket,'getfqdn',lambda name='':next(names))
+    source="CREATE VIEW projection AS SELECT s.body FROM search('native') AS s"
+    with closing(sqlite3.connect(':memory:')) as connection:
+        rows=fixture(connection,source)
+        renames=([{'kind':'column','table':'owner','from':'body','to':'text'}],
+                 [{'source_name':'search','column_renames':[{'from':'body','to':'text'}]}])
+        first=rewrite(connection,rows,*renames);second=rewrite(connection,rows,*renames)
+    assert first==second and first[1]['execution_host']==socket.gethostname()
+
+
 def test_native_schema_comments_and_quoted_newlines_cannot_become_shell_commands(tmp_path):
     marker=tmp_path/'must-not-exist'
     source=("CREATE VIEW projection AS SELECT s.body, 'quoted\n.system touch "+str(marker)+

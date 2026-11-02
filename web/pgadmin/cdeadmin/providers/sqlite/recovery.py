@@ -49,7 +49,7 @@ def options(value):
 
 
 def host():
-    return {'name': socket.getfqdn(), 'scope': 'application-host-filesystem', 'platform': sys.platform}
+    return {'name': socket.gethostname(), 'scope': 'application-host-filesystem', 'platform': sys.platform}
 
 
 def installed_library():

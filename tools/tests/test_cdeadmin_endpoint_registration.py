@@ -31,6 +31,9 @@ if 'pgadmin' not in sys.modules:
     package = ModuleType('pgadmin')
     package.__path__ = [str(WEB / 'pgadmin')]
     sys.modules['pgadmin'] = package
+# config and pgadmin.utils import each other; the application loads config
+# first. Route checks import the PostgreSQL provider, which needs utils.
+import config  # noqa: E402,F401
 
 from pgadmin.cdeadmin.endpoints import (  # noqa: E402
     EndpointRegistrationError,

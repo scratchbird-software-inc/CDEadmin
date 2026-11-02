@@ -232,6 +232,6 @@ def rewrite(connection, declarations, selected, rebindings, *, view_columns=(),
         definitions.append((row, source))
     build = _runtime_build()
     runtime = {'authority': 'sqlite-' + build['version'] + '-native-rename-ast', 'path': str(executable),
-               'sha256': before, **build, 'execution_host': socket.getfqdn(),
+               'sha256': before, **build, 'execution_host': socket.gethostname(),
                'scope': 'isolated-empty-schema; no registered file or user connection'}
     return definitions, runtime

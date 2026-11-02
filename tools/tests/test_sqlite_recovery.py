@@ -217,3 +217,13 @@ def test_native_corrupt_schema_cannot_attach_or_modify_another_file(native, atta
     assert digest_file(marker) == checksum
     with closing(sqlite3.connect(marker)) as observer:
         assert observer.execute('SELECT value FROM marker').fetchone() == ('original',)
+
+
+def test_recovery_host_does_not_depend_on_name_resolution(monkeypatch):
+    # A job is refused when its recorded host differs at run time; a DNS
+    # answer that changed in between must not count as another host.
+    import itertools, socket
+    from pgadmin.cdeadmin.providers.sqlite.recovery import host
+    names = itertools.cycle(['host.example.test', 'host'])
+    monkeypatch.setattr(socket, 'getfqdn', lambda name='': next(names))
+    assert host() == host() and host()['name'] == socket.gethostname()

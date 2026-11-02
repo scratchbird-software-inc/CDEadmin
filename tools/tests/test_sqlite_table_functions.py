@@ -32,10 +32,21 @@ def test_lazy_native_modules_include_hidden_arguments_without_running_wrapped_pr
         connection.set_authorizer(policy)
         resources = _resources(connection, {})
         functions = {row['native']['name']: row for row in resources if row['native'].get('function_type') == 'table'}
-        for name in ('json_each', 'json_tree', 'jsonb_each', 'jsonb_tree', 'carray', 'dbstat', 'sqlite_dbpage', 'pragma_table_info', 'pragma_table_xinfo'):
+        for name in ('json_each', 'json_tree', 'jsonb_each', 'jsonb_tree', 'pragma_table_info', 'pragma_table_xinfo'):
             assert name in functions, name
             observation = functions[name]['native']['table_function_observation']
             assert observation['available'] and observation['observation_complete'], observation
+        # carray, dbstat and sqlite_dbpage exist only when the build enables
+        # them. Read that from the compile options, independently of the
+        # provider: an enabled module must be discovered, a missing one not.
+        with closing(sqlite3.connect(':memory:')) as probe:
+            options = {row[0] for row in probe.execute('PRAGMA compile_options')}
+        for name, option in (('carray', 'ENABLE_CARRAY'), ('dbstat', 'ENABLE_DBSTAT_VTAB'),
+                             ('sqlite_dbpage', 'ENABLE_DBPAGE_VTAB')):
+            assert (name in functions) == (option in options), (name, option)
+            if name in functions:
+                observation = functions[name]['native']['table_function_observation']
+                assert observation['available'] and observation['observation_complete'], observation
         columns = functions['json_each']['native']['table_function_observation']['scopes'][0]['columns']
         assert [row['name'] for row in columns if row['hidden']] == ['json', 'root']
         assert not any(name in {'wal_checkpoint', 'optimize', 'incremental_vacuum', 'integrity_check'} for name, _value in pragmas)
