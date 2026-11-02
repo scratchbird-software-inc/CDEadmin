@@ -913,6 +913,105 @@
           "help": "Empty: the original name. Only within the GC life time (tidb_gc_life_time)."
         }
       ]
+    },
+    {
+      "operation_id": "split_regions",
+      "resource_kind": "table",
+      "title": "Split row regions",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "method",
+          "label": "Split",
+          "control": "select",
+          "required": true,
+          "default": "even",
+          "options": [
+            {
+              "value": "even",
+              "label": "Evenly between two handles"
+            },
+            {
+              "value": "points",
+              "label": "At given handles"
+            }
+          ]
+        },
+        {
+          "field_id": "lower",
+          "label": "From handle",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "method",
+            "equals": "even"
+          }
+        },
+        {
+          "field_id": "upper",
+          "label": "To handle",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "method",
+            "equals": "even"
+          }
+        },
+        {
+          "field_id": "regions",
+          "label": "Regions",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "method",
+            "equals": "even"
+          },
+          "help": "2 to 1000; each region must span at least 1000 handles."
+        },
+        {
+          "field_id": "points",
+          "label": "Split at handles",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "method",
+            "equals": "points"
+          },
+          "help": "Comma-separated integer row handles."
+        }
+      ],
+      "notes": "Integer row handles only (an integer primary key, an AUTO_RANDOM key or _tidb_rowid); partitioned tables and clustered non-integer keys are refused. Confirmed from the region start keys in SHOW TABLE ... REGIONS. PD may later merge empty regions."
+    },
+    {
+      "operation_id": "admin_check",
+      "resource_kind": "table",
+      "title": "Check data and index consistency",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "ADMIN CHECK TABLE. Reads only; the check succeeds, or fails naming the inconsistency. There is no post-state to confirm."
+    },
+    {
+      "operation_id": "admin_check",
+      "resource_kind": "index",
+      "title": "Check data and index consistency",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "ADMIN CHECK INDEX. Reads only; the check succeeds, or fails naming the inconsistency. There is no post-state to confirm."
     }
   ]
 }

@@ -22,6 +22,11 @@ VARIABLE = r'[A-Za-z_][A-Za-z0-9_]{0,127}'
 TTL_UNITS = ('SECOND', 'MINUTE', 'HOUR', 'DAY', 'WEEK', 'MONTH', 'YEAR')
 _JOB_INTERVAL = r'[1-9][0-9]{0,5}[smhd]'
 _DIGEST = r'[0-9a-f]{64}'
+_SPLIT_POINTS = r'-?[0-9]{1,19}(\s*,\s*-?[0-9]{1,19}){0,999}'
+# TiDB refuses a BETWEEN split whose regions would span fewer than 1000
+# handles, and splits at most 1000 regions at once (live, 8.5.6).
+SPLIT_MIN_SPAN = 1000
+SPLIT_MAX_REGIONS = 1000
 _BINDABLE = re.compile(r'\s*(SELECT|INSERT|UPDATE|DELETE|REPLACE|WITH)\b',
                        re.IGNORECASE)
 
@@ -167,6 +172,31 @@ class MySQLWireAdministration:
                              max_length=8, pattern=_JOB_INTERVAL,
                              help='How often the TTL job runs, e.g. 1h.'),
                 ), impact_scope='resource')
+        if operation == 'admin_check' and kind in {'table', 'index'}:
+            # The check is the result: it succeeds, or fails naming the
+            # inconsistency. Nothing changes, so there is no post-state.
+            return ControlPlaneOperation(
+                kind, 'admin_check', 'Check data and index consistency',
+                'read', 'administer', impact_scope='resource',
+                confirmation_required=False, post_state_required=False)
+        if (kind, operation) == ('table', 'split_regions'):
+            return ControlPlaneOperation(
+                'table', 'split_regions', 'Split row regions', 'admin',
+                'administer', (
+                    cp_field('method', 'Split', 'select', True,
+                             default='even', options=[
+                                 {'value': 'even',
+                                  'label': 'Evenly between two handles'},
+                                 {'value': 'points',
+                                  'label': 'At given handles'}]),
+                    cp_field('lower', 'From handle', 'number', False),
+                    cp_field('upper', 'To handle', 'number', False),
+                    cp_field('regions', 'Regions', 'number', False,
+                             minimum=2, maximum=SPLIT_MAX_REGIONS),
+                    cp_field('points', 'Split at handles', 'text', False,
+                             max_length=20000, pattern=_SPLIT_POINTS,
+                             help='Comma-separated integer row handles.'),
+                ), impact_scope='resource')
         if (kind, operation) == ('table', 'remove_ttl'):
             return ControlPlaneOperation(
                 'table', 'remove_ttl', 'Remove row expiry (TTL)', 'admin',
@@ -276,6 +306,14 @@ class MySQLWireAdministration:
             raise self._error('control-plane operation is unavailable')
         draft = request.get('draft') or {}
         option = self.features[(kind, operation)]
+        if operation == 'admin_check' and kind == 'table':
+            database, table = self._path(request, 2)
+            return [_statement('ADMIN CHECK TABLE ' + quote(database) + '.' +
+                               quote(table))]
+        if operation == 'admin_check' and kind == 'index':
+            database, table, index = self._path(request, 3)
+            return [_statement('ADMIN CHECK INDEX ' + quote(database) + '.' +
+                               quote(table) + ' ' + quote(index))]
         if kind == 'binding':
             if operation == 'create':
                 return [_statement(
@@ -312,6 +350,15 @@ class MySQLWireAdministration:
             if operation == 'remove_ttl':
                 return [_statement('ALTER TABLE ' + qualified +
                                    ' REMOVE TTL')]
+            if operation == 'split_regions':
+                method, values = split_points(draft)
+                if method == 'even':
+                    lower, upper, regions = values
+                    return [_statement(
+                        f'SPLIT TABLE {qualified} BETWEEN ({lower}) AND '
+                        f'({upper}) REGIONS {regions}')]
+                return [_statement(f'SPLIT TABLE {qualified} BY ' + ', '.join(
+                    f'({value})' for value in values))]
             if operation == 'set_options':
                 return self._table_options(qualified, draft, option)
             if operation == 'analyze':
@@ -460,6 +507,11 @@ class MySQLWireAdministration:
         operation = plan['operation_id']
         draft = plan.get('draft') or {}
         option = self.features[(kind, operation)]
+        if operation == 'admin_check':
+            # No post-state: the check's own success or error is the result.
+            return {'columns': [], 'rows': [],
+                    'provider_observation_only': True,
+                    'finality_interpreted_by_common_code': False}
         if kind == 'binding' and operation == 'create':
             # EXPLAIN plans without executing, DML included. The session
             # flag says a binding chose the statement's plan, and that plan
@@ -496,6 +548,20 @@ class MySQLWireAdministration:
             database, table = self._path(plan, 2)
             return query('SHOW CREATE TABLE ' + quote(database) + '.' +
                          quote(table))
+        if kind == 'table' and operation == 'split_regions':
+            # Region start keys read t_<table id>_r_<handle> for an integer
+            # row handle (live, 8.5.6).
+            database, table = self._path(plan, 2)
+            identity = query(
+                'SELECT TIDB_TABLE_ID FROM information_schema.TABLES '
+                'WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s',
+                (database, table))
+            regions = query('SHOW TABLE ' + quote(database) + '.' +
+                            quote(table) + ' REGIONS')
+            identifier = (identity.get('rows') or [[None]])[0][0]
+            return {**regions, 'columns': ['table_id', 'start_key'],
+                    'rows': [(identifier, str(row[1]))
+                             for row in regions.get('rows') or []]}
         if kind == 'table':
             database, table = self._path(plan, 2)
             if operation == 'analyze' and option == 'dolt_statistics':
@@ -569,6 +635,8 @@ class MySQLWireAdministration:
         operation = plan['operation_id']
         draft = plan.get('draft') or {}
         option = self.features[(kind, operation)]
+        if operation == 'admin_check':
+            return False  # reported by the check itself, never confirmed
         if kind == 'binding':
             if operation == 'create':
                 return len(rows) == 1 and str(rows[0][0]) == '1' and (
@@ -579,6 +647,8 @@ class MySQLWireAdministration:
                 'status')
         if kind == 'database' and operation == 'flashback_table':
             return len(rows) == 1
+        if kind == 'table' and operation == 'split_regions':
+            return split_confirmed(draft, rows)
         if kind == 'table' and operation in {'set_ttl', 'remove_ttl'}:
             source = str(rows[0][1]) if len(rows) == 1 else ''
             if operation == 'remove_ttl':
@@ -646,6 +716,55 @@ class MySQLWireAdministration:
         # Boolean variables read back as 0/1.
         flags = {'ON': '1', 'TRUE': '1', 'OFF': '0', 'FALSE': '0'}
         return str(observed) == flags.get(str(requested).upper())
+
+
+def split_points(draft):
+    """The split as ('even', (lower, upper, regions)) or ('points', ...)."""
+    def integer(value, label):
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise RelationalClientError(f'{label} must be an integer')
+        if not -2 ** 63 <= value < 2 ** 63:
+            raise RelationalClientError(f'{label} is out of range')
+        return value
+    if draft.get('method') == 'even':
+        lower = integer(draft.get('lower'), 'from handle')
+        upper = integer(draft.get('upper'), 'to handle')
+        regions = integer(draft.get('regions'), 'region count')
+        if not 2 <= regions <= SPLIT_MAX_REGIONS:
+            raise RelationalClientError(
+                f'region count must be 2 to {SPLIT_MAX_REGIONS}')
+        if (upper - lower) // regions < SPLIT_MIN_SPAN:
+            raise RelationalClientError(
+                f'each region must span at least {SPLIT_MIN_SPAN} handles')
+        return 'even', (lower, upper, regions)
+    if draft.get('method') == 'points':
+        text = draft.get('points')
+        if not isinstance(text, str) or not re.fullmatch(
+                _SPLIT_POINTS, text.strip()):
+            raise RelationalClientError(
+                'split handles must be comma-separated integers')
+        values = sorted({integer(int(item), 'split handle')
+                         for item in text.split(',')})
+        return 'points', tuple(values)
+    raise RelationalClientError('split method is invalid')
+
+
+def split_boundaries(draft):
+    method, values = split_points(draft)
+    if method == 'points':
+        return values
+    lower, upper, regions = values
+    step = (upper - lower) // regions
+    return tuple(lower + step * index for index in range(1, regions))
+
+
+def split_confirmed(draft, rows):
+    table_id = rows[0][0] if rows else None
+    if table_id in (None, ''):
+        return False
+    starts = {str(row[1]) for row in rows}
+    return all(f't_{table_id}_r_{value}' in starts
+               for value in split_boundaries(draft))
 
 
 def quote(value):

@@ -27,6 +27,26 @@
       "reference_kind": "database"
     },
     {
+      "field_id": "shard_row_id_bits",
+      "label": "Shard row ID bits",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "editable_after_create": false,
+      "native_keyword": "SHARD_ROW_ID_BITS",
+      "help": "1 to 15. Scatters the hidden row ID of a table without an integer primary key. Change it later with Table options."
+    },
+    {
+      "field_id": "pre_split_regions",
+      "label": "Pre-split regions (bits)",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "editable_after_create": false,
+      "native_keyword": "PRE_SPLIT_REGIONS",
+      "help": "Split into 2^n regions at create. Needs shard row ID bits or an AUTO_RANDOM key, and at most their bits; TiDB would drop or cut it otherwise."
+    },
+    {
       "field_id": "columns",
       "label": "Columns",
       "tab": "Columns",
@@ -102,10 +122,27 @@
             ],
             "default": false
           }
+        },
+        {
+          "field_id": "auto_random",
+          "label": "AUTO_RANDOM shard bits",
+          "control": "number",
+          "required": false,
+          "editable_after_create": false,
+          "native_keyword": "AUTO_RANDOM",
+          "help": "1 to 15. A clustered BIGINT primary key only; TiDB fills it with random-prefixed values. Fixed at creation here."
+        },
+        {
+          "field_id": "auto_random_range",
+          "label": "AUTO_RANDOM range bits",
+          "control": "number",
+          "required": false,
+          "editable_after_create": false,
+          "help": "32 to 64; empty for TiDB's default (64). Needs the shard bits."
         }
       ],
       "required": true,
-      "help": "Array of name, type, nullable, default, unique and primary_key properties."
+      "help": "Array of name, type, nullable, default, unique and primary_key properties, with auto_random and auto_random_range for a TiDB AUTO_RANDOM key."
     },
     {
       "field_id": "primary_key",

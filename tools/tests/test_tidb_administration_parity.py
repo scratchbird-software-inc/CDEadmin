@@ -359,3 +359,116 @@ def test_tidb_flashback_table():
         ('FLASHBACK TABLE `d1`.`t` TO `t_back`', ())]
     assert native('database', 'flashback_table', {'table': 't'},
                   DATABASE) == [('FLASHBACK TABLE `d1`.`t`', ())]
+
+
+def test_tidb_split_regions():
+    assert native('table', 'split_regions', {
+        'method': 'even', 'lower': -5000, 'upper': 5000, 'regions': 3},
+        TABLE) == [('SPLIT TABLE `d1`.`t` BETWEEN (-5000) AND (5000) '
+                    'REGIONS 3', ())]
+    assert native('table', 'split_regions', {
+        'method': 'points', 'points': '250, -7,100,100'}, TABLE) == [
+        ('SPLIT TABLE `d1`.`t` BY (-7), (100), (250)', ())]
+    for bad in ({'method': 'even', 'lower': 0, 'upper': 1000,
+                 'regions': 3},  # regions under 1000 handles
+                {'method': 'even', 'lower': 0, 'upper': 10 ** 7,
+                 'regions': 1001},
+                {'method': 'even', 'lower': 0, 'upper': True, 'regions': 2},
+                {'method': 'points', 'points': '1; DROP TABLE t'},
+                {'method': 'points', 'points': str(2 ** 63)}):
+        with pytest.raises(RelationalClientError):
+            native('table', 'split_regions', bad, TABLE)
+    from pgadmin.cdeadmin.providers.mysql_wire_administration import (
+        split_boundaries, split_confirmed)
+    # TiDB's spacing, read live: -5000..5000 in 3 split at -1667 and 1666.
+    assert split_boundaries({'method': 'even', 'lower': -5000,
+                             'upper': 5000, 'regions': 3}) == (-1667, 1666)
+    draft = {'method': 'points', 'points': '5, 9'}
+    assert split_confirmed(draft, [(42, 't_42_'), (42, 't_42_r_5'),
+                                   (42, 't_42_r_9')])
+    assert not split_confirmed(draft, [(42, 't_42_'), (42, 't_42_r_5')])
+    assert not split_confirmed(draft, [(None, 't_42_r_5')])
+
+
+def _create_sql(**values):
+    from pgadmin.cdeadmin.providers.tidb.provider import ADMINISTRATION
+    request = {'resource_kind': 'table', 'operation_id': 'create',
+               'target_resource': None, 'draft': {
+                   'name': 't', 'options': {'parent': 'd1', **values}}}
+    errors = ADMINISTRATION.validate(request)['errors']
+    if errors:
+        raise RelationalClientError('; '.join(
+            str(error['message']) for error in errors))
+    return [item['source'] if isinstance(item, dict) else item
+            for item in ADMINISTRATION._compile_create(request)]
+
+
+def test_tidb_row_id_sharding_create_sql():
+    assert _create_sql(columns=[
+        {'name': 'id', 'type': 'BIGINT', 'nullable': False,
+         'primary_key': True, 'auto_random': 5, 'auto_random_range': 54}],
+        pre_split_regions=3) == [
+        'CREATE TABLE `d1`.`t` (`id` BIGINT NOT NULL PRIMARY KEY '
+        'AUTO_RANDOM(5, 54)) PRE_SPLIT_REGIONS = 3']
+    assert _create_sql(columns=[{'name': 'v', 'type': 'INT'}],
+                       shard_row_id_bits=4, pre_split_regions=2) == [
+        'CREATE TABLE `d1`.`t` (`v` INT) SHARD_ROW_ID_BITS = 4, '
+        'PRE_SPLIT_REGIONS = 2']
+    for values, reason in (
+            ({'shard_row_id_bits': 16}, '1 to 15'),
+            ({'shard_row_id_bits': True}, 'integer'),
+            ({'columns': [{'name': 'id', 'type': 'BIGINT',
+                           'auto_random_range': 54}]}, 'needs the options'),
+            ({'columns': [{'name': 'id', 'type': 'BIGINT',
+                           'auto_random': 5, 'auto_random_range': 31}]},
+             '32 to 64'),
+            ({'pre_split_regions': 2}, 'drops PRE_SPLIT_REGIONS'),
+            ({'shard_row_id_bits': 2, 'pre_split_regions': 5},
+             'cuts PRE_SPLIT_REGIONS')):
+        with pytest.raises(RelationalClientError, match=reason):
+            _create_sql(**{'columns': [{'name': 'v', 'type': 'INT'}],
+                           **values})
+
+
+class _Rows:
+    def __init__(self, source):
+        self.source = source
+
+    def cursor(self):
+        return self
+
+    def execute(self, _statement):
+        pass
+
+    def fetchall(self):
+        return [('t', self.source)]
+
+    def close(self):
+        pass
+
+
+def test_tidb_sharding_facts_parse_and_unread():
+    from pgadmin.cdeadmin.providers.tidb.provider import _sharding_facts
+    source = ('CREATE TABLE `t` (\n  `id` bigint NOT NULL /*T![auto_rand] '
+              'AUTO_RANDOM(5, 54) */,\n  `v` int DEFAULT NULL\n) ENGINE=InnoDB'
+              ' /*T! PRE_SPLIT_REGIONS=3 */')
+    table = {'display_path': ['d1', 't'], 'native': {
+        'row_id_sharding': 'PK_AUTO_RANDOM_BITS=5, RANGE BITS=54'}}
+    column = {'display_path': ['d1', 't', 'id'], 'native': {}}
+    _sharding_facts(_Rows(source), table, {('d1', 't', 'id'): column})
+    assert (table['native']['sharding_options_read'],
+            table['native']['pre_split_regions']) == (True, 3)
+    assert (column['native']['auto_random'],
+            column['native']['auto_random_range']) == (5, 54)
+    # A rendering that does not match TIDB_ROW_ID_SHARDING_INFO is unread,
+    # never zero or empty.
+    table = {'display_path': ['d1', 't'], 'native': {
+        'row_id_sharding': 'SHARD_BITS=4'}}
+    _sharding_facts(_Rows('CREATE TABLE `t` (x int) SHARD_ROW_ID_BITS=4'),
+                    table, {})
+    assert table['native']['sharding_options_read'] is False
+    assert 'shard_row_id_bits' not in table['native']
+    table = {'display_path': ['d1', 't'], 'native': {
+        'row_id_sharding': 'NOT_SHARDED'}}
+    _sharding_facts(None, table, {})  # not sharded: nothing to read
+    assert 'sharding_options_read' not in table['native']

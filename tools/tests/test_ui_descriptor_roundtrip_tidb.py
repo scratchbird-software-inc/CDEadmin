@@ -33,6 +33,7 @@ mysql_connector = pytest.importorskip('mysql.connector')
 from pgadmin.cdeadmin.providers.tidb.provider import (  # noqa: E402
     ADMINISTRATION, PROFILE, create_provider,
 )
+from pgadmin.cdeadmin.sdk.relational import RelationalClientError  # noqa: E402
 from pgadmin.cdeadmin.security.secrets import SecretLease  # noqa: E402
 from ui_descriptor_roundtrip import (  # noqa: E402
     backend_draft, engine_operations, operation_backend_draft,
@@ -799,3 +800,152 @@ def test_tidb_ttl_bindings_and_flashback(live):
         'table': 'rt_gone', 'new_name': 'rt_back'},
         row(client, route, 'database', DATABASE))
     assert query('SELECT id FROM rt_back') == [(7,)]
+
+
+def test_tidb_global_index(live):
+    """2026-11-01: a global index on a partitioned table, read back from
+    TIDB_INDEXES and shown again when the index is reopened."""
+    route, client = live
+    execute('CREATE TABLE rt_gparts (id INT NOT NULL, k INT, PRIMARY KEY (id) '
+            'NONCLUSTERED) PARTITION BY HASH(id) PARTITIONS 4')
+    form = resolved_form('tidb', 'index')
+    for name, is_global in (('rt_gk', True), ('rt_lk', False)):
+        sql = run(client, route, 'index', 'create', backend_draft(form, {
+            'name': name, 'parent': DATABASE, 'table': 'rt_gparts',
+            'columns': [{'value': 'k' if is_global else 'id'}],
+            'unique': True, 'global': is_global}))
+        assert sql.endswith(' GLOBAL') is is_global, sql
+        _index, reopened = record(client, route, 'index', name, 'index')
+        assert reopened['global'] is is_global
+    assert query("SELECT KEY_NAME, IS_GLOBAL FROM information_schema."
+                 f"TIDB_INDEXES WHERE TABLE_SCHEMA = '{DATABASE}' AND "
+                 "TABLE_NAME = 'rt_gparts' AND KEY_NAME LIKE 'rt_%' "
+                 "ORDER BY 1") == [('rt_gk', 1), ('rt_lk', 0)]
+
+
+def test_tidb_split_row_regions(live):
+    """2026-11-01: SPLIT TABLE, confirmed from SHOW TABLE ... REGIONS."""
+    route, client = live
+    execute('CREATE TABLE rt_split (id BIGINT PRIMARY KEY, v INT)',
+            'CREATE TABLE rt_split_rows (id INT, v INT)',
+            'CREATE TABLE rt_split_text (id VARCHAR(10) PRIMARY KEY '
+            'CLUSTERED, v INT)',
+            'CREATE TABLE rt_split_parts (id INT NOT NULL, PRIMARY KEY (id) '
+            'NONCLUSTERED) PARTITION BY HASH(id) PARTITIONS 2')
+
+    def starts(table):
+        return {entry[1] for entry in query(f'SHOW TABLE {table} REGIONS')}
+
+    def table_id(table):
+        return query('SELECT TIDB_TABLE_ID FROM information_schema.TABLES '
+                     f"WHERE TABLE_SCHEMA = '{DATABASE}' AND "
+                     f"TABLE_NAME = '{table}'")[0][0]
+    declared = engine_operations('tidb')['split_regions@table']
+    target = row(client, route, 'table', 'rt_split', [DATABASE, 'rt_split'])
+    control(client, route, 'table', 'split_regions', operation_backend_draft(
+        declared, operation_draft(declared, {
+            'lower': -5000, 'upper': 5000, 'regions': 3})), target)
+    identifier = table_id('rt_split')
+    assert {f't_{identifier}_r_-1667', f't_{identifier}_r_1666'} <= starts(
+        'rt_split')
+    rows = row(client, route, 'table', 'rt_split_rows',
+               [DATABASE, 'rt_split_rows'])
+    control(client, route, 'table', 'split_regions', operation_backend_draft(
+        declared, operation_draft(declared, {
+            'method': 'points', 'points': '250, -7, 100'})), rows)
+    identifier = table_id('rt_split_rows')
+    assert {f't_{identifier}_r_{value}' for value in (-7, 100, 250)} <= (
+        starts('rt_split_rows'))
+    for table, reason in (('rt_split_text', 'non-integer key'),
+                          ('rt_split_parts', 'per partition')):
+        target = row(client, route, 'table', table, [DATABASE, table])
+        with pytest.raises(RelationalClientError, match=reason):
+            control(client, route, 'table', 'split_regions', {
+                'method': 'points', 'points': '5'}, target)
+
+
+def test_tidb_admin_check(live):
+    """2026-11-01: ADMIN CHECK TABLE / INDEX. Its success or error is the
+    result; a check of an index dropped since listing must fail."""
+    route, client = live
+    execute('CREATE TABLE rt_chk (id INT PRIMARY KEY, v INT, KEY rt_chk_v(v))',
+            'INSERT INTO rt_chk VALUES (1, 10), (2, 20)')
+    table = row(client, route, 'table', 'rt_chk', [DATABASE, 'rt_chk'])
+    index = row(client, route, 'index', 'rt_chk_v',
+                [DATABASE, 'rt_chk', 'rt_chk_v'])
+    assert run(client, route, 'table', 'admin_check', {}, table) == (
+        f'ADMIN CHECK TABLE `{DATABASE}`.`rt_chk`')
+    assert run(client, route, 'index', 'admin_check', {}, index) == (
+        f'ADMIN CHECK INDEX `{DATABASE}`.`rt_chk` `rt_chk_v`')
+    execute('DROP INDEX rt_chk_v ON rt_chk')
+    # The failure carries TiDB's error code, never its message text.
+    with pytest.raises(RelationalClientError,
+                       match=r'native error code \d+') as failure:
+        run(client, route, 'index', 'admin_check', {}, index)
+    print('ADMIN CHECK of a dropped index:', failure.value)
+
+
+def test_tidb_row_id_sharding_at_create(live):
+    """2026-11-01: AUTO_RANDOM, SHARD_ROW_ID_BITS and PRE_SPLIT_REGIONS from
+    the table form, read back from SHOW CREATE TABLE and shown on reopen;
+    a reopened table saved unchanged sends nothing for them."""
+    route, client = live
+    form = resolved_form('tidb', 'table')
+    run(client, route, 'table', 'create', backend_draft(form, {
+        'name': 'rt_random', 'parent': DATABASE, 'pre_split_regions': 3,
+        'columns': [{'name': 'id', 'type': 'BIGINT', 'nullable': False,
+                     'primary_key': True, 'auto_random': 5,
+                     'auto_random_range': 54},
+                    {'name': 'v', 'type': 'INT'}]}))
+    run(client, route, 'table', 'create', backend_draft(form, {
+        'name': 'rt_sharded', 'parent': DATABASE, 'shard_row_id_bits': 4,
+        'pre_split_regions': 2, 'columns': [{'name': 'v', 'type': 'INT'}]}))
+    assert query('SELECT TABLE_NAME, TIDB_ROW_ID_SHARDING_INFO FROM '
+                 'information_schema.TABLES WHERE TABLE_SCHEMA = '
+                 f"'{DATABASE}' AND TABLE_NAME IN ('rt_random', "
+                 "'rt_sharded') ORDER BY 1") == [
+        ('rt_random', 'PK_AUTO_RANDOM_BITS=5, RANGE BITS=54'),
+        ('rt_sharded', 'SHARD_BITS=4')]
+    random_table, random = record(client, route, 'table', 'rt_random',
+                                  'table')
+    assert random['pre_split_regions'] == 3
+    assert random.get('shard_row_id_bits') in (None, '')
+    assert [(column['name'], column.get('auto_random'),
+             column.get('auto_random_range'))
+            for column in random['columns']] == [
+        ('id', 5, 54), ('v', None, None)]
+    sharded_table, sharded = record(client, route, 'table', 'rt_sharded',
+                                    'table')
+    assert (sharded['shard_row_id_bits'], sharded['pre_split_regions']) == (
+        4, 2)
+    for table, baseline in ((random_table, random),
+                            (sharded_table, sharded)):
+        alter = backend_draft(form, baseline, mode='alter',
+                              baseline=baseline)
+        for key in ('shard_row_id_bits', 'pre_split_regions', 'add_columns',
+                    'drop_columns', 'alter_columns'):
+            assert alter.get(key) in (None, [], {}), (key, alter)
+    # TiDB would drop or cut these silently; the form refuses them.
+    for values, reason in (
+            ({'pre_split_regions': 2, 'columns': [
+                {'name': 'v', 'type': 'INT'}]}, 'drops PRE_SPLIT_REGIONS'),
+            ({'shard_row_id_bits': 2, 'pre_split_regions': 5, 'columns': [
+                {'name': 'v', 'type': 'INT'}]}, 'cuts PRE_SPLIT_REGIONS'),
+            ({'shard_row_id_bits': 16, 'columns': [
+                {'name': 'v', 'type': 'INT'}]}, '1 to 15')):
+        draft = backend_draft(form, {'name': 'rt_refused',
+                                     'parent': DATABASE, **values})
+        request = {'resource_kind': 'table', 'operation_id': 'create',
+                   'target_resource': None, '_provider_route': route,
+                   'draft': draft}
+        # Refused at validation, or at the plan when the statement is
+        # compiled (declared ranges); either way before anything runs.
+        messages = [str(error.get('message')) for error in
+                    ADMINISTRATION.validate(request)['errors']]
+        if not messages:
+            with pytest.raises(RelationalClientError) as refused:
+                ADMINISTRATION.plan(request)
+            messages = [str(refused.value)]
+        assert any(reason in message for message in messages), (
+            reason, messages)
+    assert not query("SHOW TABLES LIKE 'rt_refused'")

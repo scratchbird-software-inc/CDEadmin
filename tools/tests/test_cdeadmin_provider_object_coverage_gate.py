@@ -73,7 +73,9 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
         # tables (88 -> 97).
         # 2531 with TiDB row expiry (set, remove), SQL plan bindings
         # (create, enable or disable, drop, inspect) and FLASHBACK TABLE.
-        self.assertEqual(2531, result['graphical_operation_count'])
+        # 2534 with TiDB row-region splits and ADMIN CHECK on tables and
+        # indexes (the global index is a field of index create).
+        self.assertEqual(2534, result['graphical_operation_count'])
         large_object = next(item for item in self.catalogs['postgresql-native']['descriptor']['objects']
             if item['resource_kind'] == 'large-object')
         self.assertEqual({'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop',

@@ -296,7 +296,51 @@ TiDB 8.5.6
 
    Still not exposed: ``AUTO_RANDOM`` and ``PRE_SPLIT_REGIONS`` (create-time
    column and table attributes, which belong in the table form), ``SPLIT
-   TABLE`` regions, global indexes, and ``ADMIN CHECK TABLE``.
+   TABLE`` regions, global indexes, and ``ADMIN CHECK TABLE``. (Later on
+   2026-11-01: the last three are now offered, below.)
+   -  global indexes: a Global flag on the index form, sent as ``GLOBAL``
+      and read back from ``information_schema.TIDB_INDEXES`` ``IS_GLOBAL``,
+      so a reopened index shows it. TiDB refuses one on a table that is not
+      partitioned;
+   -  ``SPLIT TABLE`` row regions, evenly between two handles or at given
+      handles, confirmed from the region start keys of ``SHOW TABLE ...
+      REGIONS`` (``t_<table id>_r_<handle>``; TiDB spaces an even split at
+      lower + i * floor((upper - lower) / regions)). Integer row handles
+      only. A partitioned table splits per partition, and a clustered
+      non-integer key's boundaries are encoded, so both are refused, from
+      the server's own table facts when the split runs. TiDB refuses a
+      region spanning fewer than 1000 handles; the editor says so first.
+      PD may later merge empty regions, so the boundaries are confirmed
+      right after the split, not kept. Index-region splits are not offered:
+      their keys are encoded;
+   -  ``ADMIN CHECK TABLE`` and ``ADMIN CHECK INDEX``. They change nothing
+      and have no post-state; the check succeeds or fails. A failure now
+      carries TiDB's numeric error code (never its message text): checking
+      an index dropped after listing failed with code 1105. A real
+      data/index inconsistency could not be produced here, so its code is
+      untested.
+
+   -  row-ID sharding at create, on the table form: ``SHARD_ROW_ID_BITS``,
+      ``PRE_SPLIT_REGIONS``, and ``AUTO_RANDOM(shard bits[, range bits])``
+      on a column of the Columns grid. They are read back for sharded
+      tables only (``TIDB_ROW_ID_SHARDING_INFO`` not ``NOT_SHARDED``), from
+      ``SHOW CREATE TABLE``: no catalog table has ``PRE_SPLIT_REGIONS``. The
+      parse is checked against ``TIDB_ROW_ID_SHARDING_INFO``. A rendering
+      that does not match leaves the options unread
+      (``sharding_options_read`` false), never 0. A reopened table shows
+      them read-only, and saving it unchanged sends nothing for them.
+      TiDB changes some values without an error (live): a
+      ``SHARD_ROW_ID_BITS`` above 15 is stored as 15, and
+      ``PRE_SPLIT_REGIONS`` is cut to the shard or AUTO_RANDOM bits, or
+      dropped from a table without either. The editor refuses those
+      instead. TiDB itself refuses AUTO_RANDOM on anything but a clustered
+      ``BIGINT`` primary key, and range bits outside 32 to 64. Not offered
+      yet: raising the AUTO_RANDOM bits after create (TiDB allows it), and
+      ``AUTO_RANDOM_BASE``.
+
+   Execution failures on TiDB now carry TiDB's numeric error code. The
+   shared executor reports a code from any engine that declares where its
+   exceptions keep one (``error_code_attribute``).
 
 Vitess 23.0.3 (through vtgate, sharded keyspace)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

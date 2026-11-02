@@ -96,6 +96,26 @@ _TIDB_DIALECT = replace(
         'servers': ('cluster',),
         'schemas': ('database',),
     },
+    # A global index spans every partition; TiDB refuses it on a table that
+    # is not partitioned (live, 8.5.6). Read back from TIDB_INDEXES.
+    index_options={'global': 'GLOBAL'},
+    # mysql-connector's numeric error code, e.g. an ADMIN CHECK failure.
+    error_code_attribute='errno',
+    # Row-ID sharding at create (live, 8.5.6). TiDB clamps silently: a
+    # SHARD_ROW_ID_BITS above 15 is stored as 15, and PRE_SPLIT_REGIONS is
+    # cut to the shard or AUTO_RANDOM bits, or dropped without either, so
+    # the ranges are declared and TiDBAdministration refuses the rest.
+    table_options={
+        'shard_row_id_bits': {'keyword': 'SHARD_ROW_ID_BITS',
+                              'minimum': 1, 'maximum': 15},
+        'pre_split_regions': {'keyword': 'PRE_SPLIT_REGIONS',
+                              'minimum': 1, 'maximum': 15},
+    },
+    # AUTO_RANDOM(shard bits[, range bits]) on a clustered BIGINT primary
+    # key; TiDB refuses it anywhere else, and refuses either value outside
+    # these ranges.
+    column_options={'auto_random': {'keyword': 'AUTO_RANDOM', 'arguments': (
+        ('auto_random', 1, 15), ('auto_random_range', 32, 64))}},
 )
 
 
@@ -123,6 +143,12 @@ NATIVE_ADMINISTRATION = MySQLWireAdministration('TiDB', {
     # 2026-11-01). A new binding is confirmed by EXPLAIN of its statement
     # and @@last_plan_from_binding on the same session.
     ('table', 'set_ttl'): True,
+    # Row regions, evenly or at given handles, confirmed from the region
+    # start keys (SHOW TABLE ... REGIONS); integer row handles only.
+    ('table', 'split_regions'): True,
+    # ADMIN CHECK TABLE / INDEX: the check's success or error is the result.
+    ('table', 'admin_check'): True,
+    ('index', 'admin_check'): True,
     ('table', 'remove_ttl'): True,
     ('binding', 'create'): True,
     ('binding', 'set_status'): True,
@@ -1452,6 +1478,32 @@ def _post_validate_control_plane(client, request):
 _CHECK_CLAUSE = re.compile(r'\bCHECK\s*\(', re.IGNORECASE)
 
 
+def _pre_split_refusal(draft):
+    """Why TiDB would silently change PRE_SPLIT_REGIONS, or None."""
+    options = draft.get('options') if isinstance(
+        draft.get('options'), Mapping) else {}
+
+    def value(key, source):
+        found = source.get(key, options.get(key))
+        return found if isinstance(found, int) and not isinstance(
+            found, bool) else None
+    regions = value('pre_split_regions', draft)
+    if regions is None:
+        return None
+    columns = draft.get('columns', options.get('columns')) or []
+    bits = [value('shard_row_id_bits', draft)] + [
+        value('auto_random', item) if isinstance(item, Mapping) else None
+        for item in columns]
+    bits = [item for item in bits if item]
+    if not bits:
+        return ('TiDB drops PRE_SPLIT_REGIONS from a table without '
+                'SHARD_ROW_ID_BITS or an AUTO_RANDOM key')
+    if regions > max(bits):
+        return (f'TiDB cuts PRE_SPLIT_REGIONS to the table\'s {max(bits)} '
+                'shard bits; set it to at most that')
+    return None
+
+
 class TiDBAdministration(DistributedSQLControlPlane):
     """Refuse changes TiDB would silently discard or cannot place.
 
@@ -1465,19 +1517,72 @@ class TiDBAdministration(DistributedSQLControlPlane):
     """
 
     @staticmethod
-    def _scalar(client, request, connection, source):
+    def _scalar(client, request, connection, source, parameters=None):
         route = (request.get('provider_payload') or {}).get('route')
         native = connection or client._connect({'route': dict(route)})
         try:
             cursor = native.cursor()
             try:
-                cursor.execute(source)
-                return cursor.fetchone()[0]
+                if parameters:
+                    cursor.execute(source, parameters)
+                else:
+                    cursor.execute(source)
+                row = cursor.fetchone()
+                return None if row is None else (
+                    row[0] if len(row) == 1 else tuple(row))
             finally:
                 cursor.close()
         finally:
             if connection is None:
                 client._forget_and_close(native)
+
+    def validate(self, request):
+        result = super().validate(request)
+        if result.get('errors') or (
+                request.get('resource_kind'),
+                request.get('operation_id')) != ('table', 'create'):
+            return result
+        message = _pre_split_refusal(request.get('draft') or {})
+        if message:
+            return {**result, 'errors': [{
+                'field_id': 'pre_split_regions',
+                'code': 'tidb_pre_split_discarded', 'message': message}]}
+        return result
+
+    def plan(self, request):
+        if (request.get('resource_kind'), request.get('operation_id')) == (
+                'table', 'create'):
+            message = _pre_split_refusal(request.get('draft') or {})
+            if message:
+                raise RelationalClientError(message)
+        return super().plan(request)
+
+    def _refuse_unsplittable(self, client, request, connection, plan):
+        """Row splits are offered for integer row handles only: the split
+        boundaries of a clustered non-integer key are encoded, and a
+        partitioned table splits per partition (live, 8.5.6), so neither
+        could be read back."""
+        path = list((plan.get('target_resource') or {}).get(
+            'display_path') or [])
+        facts = self._scalar(
+            client, request, connection,
+            'SELECT TIDB_PK_TYPE, TIDB_ROW_ID_SHARDING_INFO, CREATE_OPTIONS '
+            'FROM information_schema.TABLES WHERE TABLE_SCHEMA = %s AND '
+            'TABLE_NAME = %s', tuple(path[-2:])) if len(path) >= 2 else None
+        if not isinstance(facts, tuple):
+            raise RelationalClientError('the table to split was not found')
+        key_type, sharding, options = (str(item or '') for item in facts)
+        if 'partitioned' in options.lower():
+            raise RelationalClientError(
+                'TiDB splits a partitioned table per partition; split the '
+                'partitions instead')
+        if key_type.upper() == 'CLUSTERED' and not (
+                'PK_IS_HANDLE' in sharding or
+                sharding.startswith('PK_AUTO_RANDOM_BITS')):
+            raise RelationalClientError(
+                'this table is clustered on a non-integer key, whose region '
+                'boundaries cannot be read back; only integer row handles '
+                'are split here')
 
     def apply(self, client, request, connection=None):
         # The visual-admin executor passes {'plan': presentation,
@@ -1499,6 +1604,9 @@ class TiDBAdministration(DistributedSQLControlPlane):
                     'TiDB discards CHECK constraints while the global '
                     'tidb_enable_check_constraint is OFF; enable it on the '
                     'server or remove the CHECK constraint')
+        if (plan.get('resource_kind'), plan.get('operation_id')) == (
+                'table', 'split_regions'):
+            self._refuse_unsplittable(client, request, connection, plan)
         if operation == 'set_tiflash_replica':
             compiled = (request.get('provider_payload') or {}).get(
                 'compiled') or {}
@@ -1948,6 +2056,91 @@ class TiDBDBAPIClient(TiDBNativeClient):
             request, super().validate_admin_post_state)
 
 
+def _catalog(connection, request):
+    values = mysql_catalog(connection, request, 'TiDB', _extras)
+    cursor = connection.cursor()
+    try:
+        global_indexes = {
+            (str(database), str(table), str(name))
+            for database, table, name in optional_rows(
+                cursor,
+                'SELECT TABLE_SCHEMA, TABLE_NAME, KEY_NAME FROM '
+                'information_schema.TIDB_INDEXES WHERE IS_GLOBAL = 1')}
+    finally:
+        cursor.close()
+    columns = {tuple(item.get('display_path') or ()): item for item in values
+               if item.get('resource_kind') == 'column'}
+    for item in values:
+        if item.get('resource_kind') == 'index':
+            native = item.setdefault('native', {})
+            value = tuple(item.get('display_path') or ()) in global_indexes
+            _set_fact(native, 'is_global', value)
+        if item.get('resource_kind') == 'table':
+            _sharding_facts(connection, item, columns)
+    return values
+
+
+def _set_fact(native, key, value):
+    native[key] = value
+    if isinstance(native.get('definition'), dict):
+        native['definition'][key] = value
+
+
+_TABLE_SHARDING = re.compile(r'/\*T! ((?:[A-Z_]+=[0-9]+ ?)+)\*/')
+_AUTO_RANDOM = re.compile(
+    r'^  `((?:[^`]|``)+)` .*/\*T!\[auto_rand\] AUTO_RANDOM\(([0-9]+)'
+    r'(?:, ([0-9]+))?\) \*/')
+
+
+def _sharding_facts(connection, item, columns):
+    """Row-ID sharding options, read for sharded tables only from SHOW
+    CREATE TABLE (TiDB 8.5.6 renders them in /*T! ... */ comments; no
+    catalog table has PRE_SPLIT_REGIONS). The parse is checked against
+    TIDB_ROW_ID_SHARDING_INFO; a mismatch leaves the options unread."""
+    native = item.setdefault('native', {})
+    sharding = str(native.get('row_id_sharding') or '')
+    shard = re.fullmatch(r'SHARD_BITS=([0-9]+)', sharding)
+    auto = re.match(r'PK_AUTO_RANDOM_BITS=([0-9]+)(?:, RANGE BITS=([0-9]+))?$',
+                    sharding)
+    if not (shard or auto):
+        return
+    path = list(item.get('display_path') or [])
+    cursor = connection.cursor()
+    try:
+        cursor.execute('SHOW CREATE TABLE ' + '.'.join(
+            '`' + str(part).replace('`', '``') + '`' for part in path))
+        rows = cursor.fetchall()
+        source = str(rows[0][1]) if rows else ''
+    except Exception:
+        source = ''
+    finally:
+        cursor.close()
+    options = {}
+    for match in _TABLE_SHARDING.finditer(source):
+        for pair in match.group(1).split():
+            key, _, number = pair.partition('=')
+            options[key] = int(number)
+    found = [match for match in map(_AUTO_RANDOM.match, source.split('\n'))
+             if match]
+    if shard:
+        read = options.get('SHARD_ROW_ID_BITS') == int(shard.group(1))
+    else:
+        read = len(found) == 1 and found[0].group(2) == auto.group(1) and (
+            found[0].group(3) == auto.group(2))
+    _set_fact(native, 'sharding_options_read', read)
+    if not read:
+        return
+    _set_fact(native, 'shard_row_id_bits', options.get('SHARD_ROW_ID_BITS'))
+    _set_fact(native, 'pre_split_regions', options.get('PRE_SPLIT_REGIONS'))
+    if auto:
+        column = columns.get((*path, found[0].group(1).replace('``', '`')))
+        if column is not None:
+            column_native = column.setdefault('native', {})
+            _set_fact(column_native, 'auto_random', int(found[0].group(2)))
+            _set_fact(column_native, 'auto_random_range', None if (
+                found[0].group(3) is None) else int(found[0].group(3)))
+
+
 def create_provider(context, permissions, client=None):
     return TiDBProvider(
         context,
@@ -1958,9 +2151,7 @@ def create_provider(context, permissions, client=None):
             wire='mysql',
             version_query='SELECT TIDB_VERSION()',
             version_parser=_version,
-            metadata_reader=lambda connection, request: mysql_catalog(
-                connection, request, 'TiDB', _extras
-            ),
+            metadata_reader=_catalog,
             administration=ADMINISTRATION,
             client_class=TiDBDBAPIClient,
             tool_credential_kinds={'tidb_ticdc_password'},

@@ -181,8 +181,22 @@ class RelationalAdminDialect:
         default_factory=dict
     )
     # Table-level options an engine declares, as draft key -> native clause
-    # appended to CREATE TABLE when the draft sets the key to true.
-    table_options: Mapping[str, str] = field(default_factory=dict)
+    # appended to CREATE TABLE when the draft sets the key to true, or
+    # draft key -> {'keyword', 'minimum', 'maximum'} for an integer option
+    # rendered as KEYWORD = value.
+    table_options: Mapping[str, object] = field(default_factory=dict)
+    # Column-level options, as name -> {'keyword', 'arguments'}: arguments
+    # are (column key, minimum, maximum) triples rendered as
+    # KEYWORD(value[, value ...]) after the column's other clauses. Later
+    # arguments are optional, in order; an absent first one omits it.
+    column_options: Mapping[str, Mapping[str, object]] = field(
+        default_factory=dict)
+    # Index-level flags, as draft key -> native clause appended to CREATE
+    # INDEX when the draft sets the key to true.
+    index_options: Mapping[str, str] = field(default_factory=dict)
+    # Exception attribute holding the engine's numeric error code, reported
+    # with an execution failure (a number only; the engine's text is not).
+    error_code_attribute: str = ''
 
     @property
     def sql_family(self):
@@ -3448,6 +3462,12 @@ class RelationalAdministration:
                 self.dialect.engine_id == 'firebird') else ()
             detail = ('; Firebird status codes: ' + ', '.join(map(str, codes))
                       if codes else '')
+            native_code = getattr(exc, self.dialect.error_code_attribute,
+                                  None) if (
+                self.dialect.error_code_attribute) else None
+            if isinstance(native_code, int) and not isinstance(
+                    native_code, bool):
+                detail += f'; native error code {native_code}'
             if task_rollback_failed:
                 detail += ('; Firebird task rollback could not be verified; '
                            'the transaction remains caller-owned')
@@ -3456,7 +3476,9 @@ class RelationalAdministration:
                 f'({type(exc).__name__}){detail}'
             )
             failure.gds_codes = codes
-            failure.native_status_codes = codes
+            failure.native_status_codes = codes or (
+                (native_code,) if isinstance(native_code, int) and
+                not isinstance(native_code, bool) else ())
             failure.task_rollback_unconfirmed = task_rollback_failed
             raise failure from None
         finally:
@@ -5274,6 +5296,10 @@ class RelationalAdministration:
                 for key in self.dialect.table_options:
                     if key in value:
                         options[key] = value.pop(key)
+            if kind == 'index':
+                for key in self.dialect.index_options:
+                    if key in value:
+                        options[key] = value.pop(key)
             for key in (
                 'parent', 'table', 'columns', 'constraints', 'unique',
                 'start', 'increment', 'minimum', 'maximum', 'cycle',
@@ -6720,16 +6746,64 @@ class RelationalAdministration:
             'fields': fields,
         }
 
+    @staticmethod
+    def _declared_integer(value, key, minimum, maximum):
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise RelationalClientError(f'{key} must be an integer')
+        if not minimum <= value <= maximum:
+            raise RelationalClientError(
+                f'{key} must be {minimum} to {maximum}')
+        return value
+
     def _table_option_clauses(self, options):
         clauses = []
         for key, clause in self.dialect.table_options.items():
             value = options.get(key)
+            if isinstance(clause, Mapping):
+                if value in (None, ''):
+                    continue
+                value = self._declared_integer(
+                    value, key, clause['minimum'], clause['maximum'])
+                clauses.append(f"{clause['keyword']} = {value}")
+                continue
             if value in (None, False):
                 continue
             if value is not True:
                 raise RelationalClientError(f'{key} must be true or false')
             clauses.append(clause)
         return ' ' + ', '.join(clauses) if clauses else ''
+
+    def _column_option_clauses(self, item):
+        clauses = []
+        for declaration in self.dialect.column_options.values():
+            values = []
+            for key, minimum, maximum in declaration['arguments']:
+                value = item.get(key)
+                if value in (None, ''):
+                    break
+                values.append(self._declared_integer(
+                    value, key, minimum, maximum))
+            later = [key for key, _low, _high in
+                     declaration['arguments'][len(values) + 1:]
+                     if item.get(key) not in (None, '')]
+            if later:
+                raise RelationalClientError(
+                    f'{later[0]} needs the options before it')
+            if values:
+                clauses.append(f"{declaration['keyword']}(" + ', '.join(
+                    str(value) for value in values) + ')')
+        return clauses
+
+    def _index_option_clauses(self, options):
+        clauses = []
+        for key, clause in self.dialect.index_options.items():
+            value = options.get(key)
+            if value in (None, False):
+                continue
+            if value is not True:
+                raise RelationalClientError(f'{key} must be true or false')
+            clauses.append(clause)
+        return ''.join(' ' + clause for clause in clauses)
 
     def _compile_create(self, request):
         kind = request['resource_kind']
@@ -6799,7 +6873,7 @@ class RelationalAdministration:
             source = (
                 f'CREATE {unique}{direction + " " if direction else ""}'
                 f'INDEX {index_name} ON {table_name} {definition}'
-            )
+            ) + self._index_option_clauses(options)
         elif kind == 'sequence':
             source = f'CREATE SEQUENCE {qualified}'
             for key, phrase in (
@@ -8929,6 +9003,7 @@ class RelationalAdministration:
             parts.append('UNIQUE')
         if item.get('primary_key'):
             parts.append('PRIMARY KEY')
+        parts.extend(self._column_option_clauses(item))
         return ' '.join(parts)
 
     def _constraint_definition(self, item):
