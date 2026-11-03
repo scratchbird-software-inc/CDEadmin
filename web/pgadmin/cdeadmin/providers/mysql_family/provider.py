@@ -297,6 +297,14 @@ def _administration(profile):
             ),
         }),
         concept_resource_kinds={'schemas': ('database',)},
+        # MySQL routines compile in mysql_routines; with binary logging on,
+        # MariaDB refuses a function that declares none of DETERMINISTIC,
+        # NO SQL or READS SQL DATA (error 1418).
+        routine_characteristics={
+            'deterministic': ('Determinism', '', ('NOT DETERMINISTIC', 'DETERMINISTIC')),
+            'data_access': ('SQL data access', '', ('CONTAINS SQL', 'NO SQL', 'READS SQL DATA', 'MODIFIES SQL DATA')),
+            'sql_security': ('SQL security', 'SQL SECURITY ', ('DEFINER', 'INVOKER')),
+        } if profile is MARIADB_PROFILE else {},
         database_forms=provider_form_contract({
             'profile_id': profile.profile_id,
             'engine_id': profile.engine_id,

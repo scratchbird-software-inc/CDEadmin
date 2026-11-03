@@ -13,8 +13,8 @@
   "omitted_tabs": [],
   "gaps": [
     {
-      "concept": "Routine options (SQL SECURITY, DETERMINISTIC, data access, COMMENT, DEFINER)",
-      "reason": "procedure/function expose create/drop only; MySQL has an alter form with these"
+      "concept": "Routine options COMMENT and DEFINER (SQL SECURITY, DETERMINISTIC and data access were added for create on 2026-11-02)",
+      "reason": "procedure/function expose create/drop only; MySQL has an alter form with these; COMMENT and DEFINER need bound or mode-aware literals the shared compiler does not provide"
     },
     {
       "concept": "OUT / INOUT parameter modes",
@@ -133,6 +133,89 @@
         }
       ],
       "required": false,
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "deterministic",
+      "label": "Determinism",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "options": [
+        {
+          "value": "NOT DETERMINISTIC",
+          "label": "Not Deterministic"
+        },
+        {
+          "value": "DETERMINISTIC",
+          "label": "Deterministic"
+        }
+      ],
+      "help": "With binary logging on, MariaDB refuses a function that declares none of DETERMINISTIC, NO SQL or READS SQL DATA unless log_bin_trust_function_creators is set.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "data_access",
+      "label": "SQL data access",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "options": [
+        {
+          "value": "CONTAINS SQL",
+          "label": "Contains Sql"
+        },
+        {
+          "value": "NO SQL",
+          "label": "No Sql"
+        },
+        {
+          "value": "READS SQL DATA",
+          "label": "Reads Sql Data"
+        },
+        {
+          "value": "MODIFIES SQL DATA",
+          "label": "Modifies Sql Data"
+        }
+      ],
+      "help": "Left empty, MariaDB records CONTAINS SQL.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "sql_security",
+      "label": "SQL security",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "options": [
+        {
+          "value": "DEFINER",
+          "label": "Definer"
+        },
+        {
+          "value": "INVOKER",
+          "label": "Invoker"
+        }
+      ],
+      "help": "Left empty, MariaDB uses DEFINER.",
       "visible_when": {
         "field": "variant",
         "in": [

@@ -436,10 +436,16 @@ def test_binary_log_rotate_and_purge(binlog_live):
     assert planned['command_preview']['statements'][0]['source'].startswith('PURGE BINARY LOGS TO')
 
 
+TOOL_SETTINGS = {'mariadb-dump': 'CDEADMIN_MARIADB_DUMP_BINARY', 'mariadb': 'CDEADMIN_MARIADB_CLIENT_BINARY',
+                 'mariadb-upgrade': 'CDEADMIN_MARIADB_UPGRADE_BINARY'}
+
+
 def require_release_tools(*programs):
-    """The provider runs only the exact 12.2.2 tool release; skip where the host has another."""
+    """The provider runs only the exact 12.2.2 tool release; skip where the host has another.
+    Check the executable the provider will run: its setting, else the name on PATH."""
     for program in programs:
-        found = subprocess.run([program, '--version'], capture_output=True, text=True).stdout
+        found = subprocess.run([os.environ.get(TOOL_SETTINGS[program], program), '--version'],
+                               capture_output=True, text=True).stdout
         if '12.2.2-MariaDB' not in found:
             pytest.skip(f'{program} is not the 12.2.2-MariaDB release the provider requires: {found.strip()}')
 

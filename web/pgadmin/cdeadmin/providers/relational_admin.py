@@ -194,6 +194,11 @@ class RelationalAdminDialect:
     # Index-level flags, as draft key -> native clause appended to CREATE
     # INDEX when the draft sets the key to true.
     index_options: Mapping[str, str] = field(default_factory=dict)
+    # Procedure/function characteristics, as draft key -> (label, native
+    # prefix, admitted values): the selected value follows the prefix after
+    # RETURNS, in declaration order. Only admitted values are rendered.
+    routine_characteristics: Mapping[str, tuple] = field(
+        default_factory=dict)
     # Exception attribute holding the engine's numeric error code, reported
     # with an execution failure (a number only; the engine's text is not).
     error_code_attribute: str = ''
@@ -5309,6 +5314,10 @@ class RelationalAdministration:
                 for key in self.dialect.index_options:
                     if key in value:
                         options[key] = value.pop(key)
+            if kind in {'procedure', 'function'}:
+                for key in self.dialect.routine_characteristics:
+                    if key in value:
+                        options[key] = value.pop(key)
             for key in (
                 'parent', 'table', 'columns', 'constraints', 'unique',
                 'start', 'increment', 'minimum', 'maximum', 'cycle',
@@ -5986,6 +5995,12 @@ class RelationalAdministration:
                             'command.',
                         ),
                     ))
+                    if kind != 'package':
+                        fields.extend(
+                            self._field(key, label, 'select', False,
+                                        options=values)
+                            for key, (label, _prefix, values) in
+                            self.dialect.routine_characteristics.items())
             elif kind == 'exception' and (
                 self.dialect.engine_id == 'firebird'
             ):
@@ -8559,6 +8574,16 @@ class RelationalAdministration:
             f' RETURNS {self._safe_fragment(returns, "return type")}'
             if returns else ''
         )
+        for key, (_label, prefix, values) in (
+                self.dialect.routine_characteristics.items()
+                if kind in {'procedure', 'function'} else ()):
+            selected = options.get(key)
+            if selected in (None, ''):
+                continue
+            if selected not in values:
+                raise RelationalClientError(
+                    'Select a native routine characteristic')
+            return_sql += f' {prefix}{selected}'
         return (
             f'CREATE {self._keyword(kind)} {name} ({parameters})'
             f'{return_sql} {body}'

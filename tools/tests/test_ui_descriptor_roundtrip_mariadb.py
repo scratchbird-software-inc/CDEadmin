@@ -169,7 +169,10 @@ def test_sequence_and_routine_forms(live):
         'body': 'BEGIN SELECT a * 2; END'}))
     run(client, route, 'function', 'create', backend_draft(routine_form, {
         'variant': 'function', 'name': 'rt_fn', 'parent': DATABASE, 'parameters': [{'name': 'a', 'type': 'INT'}], 'returns': 'INT',
-        'body': 'RETURN a + 1'}))
+        'deterministic': 'DETERMINISTIC', 'data_access': 'NO SQL', 'body': 'RETURN a + 1'}))
+    # With binary logging on, MariaDB refuses a function declaring none of these (error 1418).
+    assert query('SELECT IS_DETERMINISTIC, SQL_DATA_ACCESS, SECURITY_TYPE FROM information_schema.ROUTINES '
+                 f"WHERE ROUTINE_SCHEMA = '{DATABASE}' AND ROUTINE_NAME = 'rt_fn'") == [('YES', 'NO SQL', 'DEFINER')]
     _function, function_record = record(client, route, 'function', 'rt_fn', 'routine')
     assert function_record['returns'].lower().startswith('int')
     assert function_record['body'] == 'RETURN a + 1'
