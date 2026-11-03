@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import secrets
 from pathlib import Path
 from types import SimpleNamespace
 import sys
@@ -10,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT/'web'), str(ROOT/'tools')]
 
 
-def qualify(output):
+def qualify(output, application=False):
     import config  # noqa: F401
     from mysql_qualification_support import server, _root_connection
     from pgadmin.cdeadmin.providers.mysql_family.provider import (
@@ -21,6 +22,9 @@ def qualify(output):
     if output == ROOT or ROOT in output.parents:
         raise ValueError('Evidence belongs outside the repository')
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
+    if application:
+        from cdeadmin_mysql_dump_verification_qualification import setup_application
+        app = setup_application(output)
     proof = {'complete': False, 'history_testing': 'not run', 'full_product_complete': False,
              'checks': [], 'source_sha256': {}}
     for name in ['tools/cdeadmin_mysql_spatial_reference_qualification.py',
@@ -41,6 +45,7 @@ def qualify(output):
                 proof['independent_native_srs_count'] = count
                 proof['native_definition_bytes'] = str(bytes)
                 cursor.execute('CREATE DATABASE sr_spatial')
+                cursor.execute('CREATE DATABASE sr_osc')
                 for pure in (True, False):
                     for mode in ('', 'NO_BACKSLASH_ESCAPES,ANSI_QUOTES'):
                         selected = {**route, 'use_pure': pure, 'sql_mode': mode}
@@ -149,6 +154,10 @@ def qualify(output):
                 finally:
                     restricted.close()
                     cursor.execute("DROP USER 'sr_srs_reader'@'%'")
+                if application:
+                    password = secrets.token_urlsafe(24)
+                    cursor.execute('ALTER USER CURRENT_USER() IDENTIFIED BY %s', (password,))
+                    proof['application'] = workspace(app, route, password, definition, connection, cursor)
                 proof['native_engine'] = owned
                 proof['complete'] = True
             finally:
@@ -160,11 +169,51 @@ def qualify(output):
             'native_acknowledged': getattr(error, 'native_acknowledged', None)}
         raise
     finally:
+        proof['owned_server_stopped'] = proof.get('native_engine', {}).get('owned_server_stopped') is True
         (output/'proof.json').write_text(json.dumps(proof, ensure_ascii=False, indent=2)+'\n')
     return proof
+
+
+def workspace(app, route, password, definition, connection, cursor):
+    """Create, alter and drop through the authenticated visual-administration API."""
+    from cdeadmin_mysql_online_ddl_qualification import registration
+    from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_PROFILE, _resources
+    from pgadmin.cdeadmin.providers.mysql_family import spatial_reference_systems as srs
+    operations = []
+    for pure in (True, False):
+        _sid, _target, post = registration(app, route, password, not pure)
+        srid = str(4294967010 + int(pure))
+        def observed():
+            cursor.execute(srs.SELECT + ' WHERE SRS_ID=%s', (int(srid),))
+            row = cursor.fetchone()
+            return srs.normalized(row) if row else None
+        def resource():
+            rows = _resources(connection, {'route': {}}, MYSQL_PROFILE)
+            return next(row for row in rows if row['resource_kind'] == srs.KIND and row['display_name'] == srid)
+        def apply(operation, draft, target=None):
+            request = {'resource_kind': srs.KIND, 'operation_id': operation, 'target_resource': target, 'draft': draft}
+            checked = post('visual_admin_validate', request); assert checked['valid'], checked['errors']
+            plan = post('visual_admin_plan', request); assert plan['state'] == 'ready' and plan['execution_available'], plan
+            body = {key: plan[key] for key in ('plan_id', 'plan_digest')} | {'confirmed': True}
+            post('visual_admin_apply', body)
+            replay = post.raw('visual_admin_apply', body)
+            assert replay.status_code != 200 or not replay.get_json().get('success')
+        # Each receipt is written only after the native catalog shows the effect.
+        apply('create', {'srs_id': srid, 'name': 'API SRS ' + srid, 'definition': definition})
+        assert observed()['srs_name'] == 'API SRS ' + srid
+        operations.append({'use_pure': pure, 'resource_kind': srs.KIND, 'operation': 'create', 'native_acknowledged': True, 'replay_refused': True})
+        apply('alter', {'name': 'API SRS altered', 'definition': definition, 'confirmation': srid}, resource())
+        assert observed()['srs_name'] == 'API SRS altered'
+        operations.append({'use_pure': pure, 'resource_kind': srs.KIND, 'operation': 'alter', 'native_acknowledged': True, 'replay_refused': True})
+        apply('drop', {'confirmation': srid}, resource())
+        assert observed() is None
+        operations.append({'use_pure': pure, 'resource_kind': srs.KIND, 'operation': 'drop', 'native_acknowledged': True, 'replay_refused': True})
+    return {'complete': True, 'operations': operations}
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--evidence', required=True, type=Path)
-    qualify(parser.parse_args().evidence)
+    parser.add_argument('--application', action='store_true')
+    arguments = parser.parse_args()
+    qualify(arguments.evidence, arguments.application)

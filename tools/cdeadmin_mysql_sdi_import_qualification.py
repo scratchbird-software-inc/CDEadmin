@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import secrets
 from pathlib import Path
 import shlex
 import subprocess
@@ -12,12 +13,52 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output):
+def stage(cursor,container,name,saved):
+    """Export a MyISAM table's SDI and data files, drop it, and restore only the data files."""
+    qualified='sr_sdi.'+name;pattern=saved+"/quoted ' 雪.sdi"
+    cursor.execute('CREATE TABLE '+qualified+'(id BIGINT UNSIGNED PRIMARY KEY,note TEXT,payload LONGBLOB) ENGINE=MyISAM')
+    cursor.execute('INSERT INTO '+qualified+' VALUES(%s,%s,%s)',(18446744073709551615,'native SDI 雪',b'\x00\xff'))
+    cursor.execute('FLUSH TABLES '+qualified+' WITH READ LOCK')
+    def host(source):return subprocess.check_output(['docker','exec','--user=mysql',container,'/bin/sh','-c',source],text=True).strip()
+    try:
+        host('mkdir -p '+shlex.quote(saved)+'\ncp /var/lib/mysql/sr_sdi/'+name+'*.sdi '+shlex.quote(pattern)+'\ncp /var/lib/mysql/sr_sdi/'+name+'.MYD /var/lib/mysql/sr_sdi/'+name+'.MYI '+shlex.quote(saved)+'/')
+    finally:cursor.execute('UNLOCK TABLES')
+    cursor.execute('DROP TABLE '+qualified)
+    host('cp '+shlex.quote(saved)+'/'+name+'.MYD '+shlex.quote(saved)+'/'+name+'.MYI /var/lib/mysql/sr_sdi/')
+    return qualified,pattern
+
+
+def workspace(app,route,password,target,cursor,container):
+    """Import staged SDI files through the authenticated API on both interfaces."""
+    from cdeadmin_mysql_online_ddl_qualification import registration
+    operations=[]
+    for pure in (True,False):
+        _sid,_target,post=registration(app,route,password,not pure)
+        qualified,pattern=stage(cursor,container,'api_table_'+str(int(pure)),'/var/lib/mysql-files/sr-api-sdi-'+str(int(pure)))
+        request={'resource_kind':'server','operation_id':'import_table_sdi','target_resource':target,
+                 'draft':{'confirmation':'MySQL','files':[pattern],'trusted_host_files':True,'database':'sr_sdi'}}
+        checked=post('visual_admin_validate',request);assert checked['valid'],checked['errors']
+        plan=post('visual_admin_plan',request);assert plan['state']=='ready' and plan['execution_available'],plan
+        body={key:plan[key] for key in ('plan_id','plan_digest')}|{'confirmed':True}
+        post('visual_admin_apply',body)
+        replay=post.raw('visual_admin_apply',body);assert replay.status_code!=200 or not replay.get_json().get('success')
+        # The receipt is written only after the imported rows read back.
+        cursor.execute('SELECT CAST(id AS CHAR),note,HEX(payload) FROM '+qualified)
+        assert cursor.fetchall()==[('18446744073709551615','native SDI 雪','00FF')]
+        cursor.execute('DROP TABLE '+qualified)
+        operations.append({'use_pure':pure,'resource_kind':'server','operation':'import_table_sdi','native_acknowledged':True,'replay_refused':True})
+    return {'complete':True,'operations':operations}
+
+
+def qualify(output,application=False):
     import config  # noqa: F401
     from mysql_qualification_support import server,_root_connection
     from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_PROFILE,MYSQL_ADMINISTRATION,_create_client
     from pgadmin.cdeadmin.sdk import RelationalClientError
     output=Path(output).resolve();output.mkdir(parents=True,exist_ok=False)
+    if application:
+        from cdeadmin_mysql_dump_verification_qualification import setup_application
+        app=setup_application(output)
     paths=['web/pgadmin/cdeadmin/providers/mysql_family/'+name for name in ('mysql_instance.py','administration.py','provider.py')]
     proof={'complete':False,'interfaces':[],'history_testing':'ScratchBird history not run',
         'source_sha256':{p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in paths}}
@@ -74,6 +115,10 @@ def qualify(output):
                             'missing_file_native_error_preserved':True,'server_host_filename_unicode_and_apostrophe_preserved':True})
                     finally:client.close()
                     cursor.execute('DROP TABLE '+qualified)
+                if application:
+                    cursor.execute('CREATE DATABASE sr_osc')
+                    password=secrets.token_urlsafe(24);cursor.execute('ALTER USER CURRENT_USER() IDENTIFIED BY %s',(password,))
+                    proof['application']=workspace(app,route,password,target,cursor,container)
                 cursor.execute('DROP DATABASE sr_sdi');proof['complete']=True
             finally:cursor.close();oracle.close()
         proof['owned_server_stopped']=owned['owned_server_stopped']
@@ -83,4 +128,5 @@ def qualify(output):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',required=True)
-    args=parser.parse_args();result=qualify(args.output);print(json.dumps({'complete':result['complete'],'interfaces':len(result['interfaces'])}))
+    parser.add_argument('--application',action='store_true')
+    args=parser.parse_args();result=qualify(args.output,args.application);print(json.dumps({'complete':result['complete'],'interfaces':len(result['interfaces'])}))

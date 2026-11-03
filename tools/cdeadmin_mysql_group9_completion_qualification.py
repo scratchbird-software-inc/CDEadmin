@@ -191,7 +191,7 @@ def application(app, output, proof):
     owned = []
     app.config.update(CDEADMIN_GENERATED_PASSWORD_KEYS={'native': base64.b64encode(secrets.token_bytes(32)).decode('ascii')},
         CDEADMIN_GENERATED_PASSWORD_ACTIVE_KEY_ID='native', CDEADMIN_GENERATED_PASSWORD_PATH=str(output/'protected-results'))
-    proof['application'] = []
+    proof['application'] = {'complete': False, 'interfaces': [], 'operations': []}
     try:
         with server(output/'fixture') as (route, _name, fixture):
             owned.append(fixture)
@@ -240,15 +240,35 @@ def application(app, output, proof):
                     # Retained-session IDs travel through the real authenticated API.
                     opened = post.body('open_session', language_profile='mysql-sql').get_json()['data']
                     session_id = opened['session_id']
+                    def temporary_count():
+                        # Independent of the product: InnoDB lists every live user temporary table.
+                        q.execute('SELECT COUNT(*) FROM information_schema.INNODB_TEMP_TABLE_INFO'); return q.fetchone()[0]
+                    def receipt(kind, operation):
+                        proof['application']['operations'].append({'use_pure': pure, 'resource_kind': kind, 'operation': operation,
+                            'native_acknowledged': True, 'replay_refused': True})
+                    def refused(body):
+                        replay = post.raw('visual_admin_apply', body); assert replay.status_code != 200 or not replay.get_json().get('success')
+                    baseline = temporary_count()
                     try:
                         table = post('visual_admin_plan', {'resource_kind': 'table', 'operation_id': 'create', 'session_id': session_id,
                             'draft': {'name': 'api_temporary', 'parent': 'sr_osc', 'temporary': True, 'columns': [{'name': 'id', 'type': 'INT'}]}})
                         post('visual_admin_apply', {'plan_id': table['plan_id'], 'plan_digest': table['plan_digest'], 'confirmed': True, 'session_id': session_id})
+                        assert temporary_count() == baseline + 1
                         target_resource = {'resource_kind': 'server', 'display_name': 'Owned server'}
                         refresh = post('visual_admin_plan', {'resource_kind': 'server', 'operation_id': 'refresh_session_metadata', 'session_id': session_id,
                             'target_resource': target_resource, 'draft': {'confirmation': 'Owned server', 'replace_diagnostics': True,
                                 'temporary_tables': [{'database': 'sr_osc', 'name': 'api_temporary'}]}})
-                        post('visual_admin_apply', {'plan_id': refresh['plan_id'], 'plan_digest': refresh['plan_digest'], 'confirmed': True, 'session_id': session_id})
+                        body = {'plan_id': refresh['plan_id'], 'plan_digest': refresh['plan_digest'], 'confirmed': True, 'session_id': session_id}
+                        snapshot = post('visual_admin_apply', body)['provider_result']['session_catalog']
+                        assert snapshot['selected_temporary_tables'] == [['sr_osc', 'api_temporary']]
+                        refused(body); receipt('server', 'refresh_session_metadata')
+                        drop = post('visual_admin_plan', {'resource_kind': 'table', 'operation_id': 'drop_temporary', 'session_id': session_id,
+                            'target_resource': {'resource_kind': 'table', 'display_name': 'api_temporary', 'display_path': ['sr_osc', 'api_temporary']},
+                            'draft': {'confirmation': 'api_temporary'}})
+                        body = {'plan_id': drop['plan_id'], 'plan_digest': drop['plan_digest'], 'confirmed': True, 'session_id': session_id}
+                        post('visual_admin_apply', body)
+                        assert temporary_count() == baseline
+                        refused(body); receipt('table', 'drop_temporary')
                     finally:
                         response = post.body('close_session', session_id=session_id)
                         assert response.status_code == 200 and response.get_json()['success']
@@ -256,16 +276,20 @@ def application(app, output, proof):
                     text += (output/'app/application.log').read_text(errors='replace')
                     assert generated not in text and new_password not in text
                     q.execute('DROP USER %s@%s', (username, '%'))
-                    proof['application'].append({'connector': 'pure' if pure else 'c', 'generated_password_authenticated': True,
+                    proof['application']['interfaces'].append({'connector': 'pure' if pure else 'c', 'generated_password_authenticated': True,
                         'encrypted_recovery_after_ack_loss': True, 'invalid_draft_422_and_stale_plan_409': True,
                         'no_store': True, 'retained_temporary_and_refresh_roundtrip': True, 'passwords_absent_from_storage_and_logs': True})
+                proof['application']['complete'] = True
             finally:
                 q.close(); oracle.close()
     finally:
         proof['owned_servers_stopped'] = bool(owned) and all(value['owned_server_stopped'] for value in owned)
 
 
-def qualify(output, application_only=False):
+def qualify(output, application_only=False, **options):
+    # The tasks gate runs the authenticated API pass (application=True).
+    application_only = application_only or options.pop('application', False) is True
+    if options: raise TypeError('Unknown qualification options')
     output = Path(output).resolve()
     if output == ROOT or ROOT in output.parents:
         raise ValueError('Keep native evidence outside source')

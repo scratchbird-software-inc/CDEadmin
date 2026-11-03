@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import secrets
 from pathlib import Path
 from types import SimpleNamespace
 import sys
@@ -10,7 +11,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output):
+def qualify(output,application=False):
     import config  # noqa: F401
     from mysql_qualification_support import server,_root_connection
     from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_ADMINISTRATION as adapter,MYSQL_PROFILE,_create_client,_resources
@@ -19,6 +20,9 @@ def qualify(output):
     output=Path(output).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Evidence belongs outside source')
     output.mkdir(mode=0o700,parents=True,exist_ok=False)
+    if application:
+        from cdeadmin_mysql_dump_verification_qualification import setup_application
+        app=setup_application(output)
     proof={'complete':False,'history_testing':'not run','full_product_complete':False,'checks':[],'source_sha256':{}}
     for name in ['tools/cdeadmin_mysql_column_masking_qualification.py',
             'web/pgadmin/cdeadmin/providers/mysql_family/column_masking.py',
@@ -32,7 +36,7 @@ def qualify(output):
             from pgadmin.cdeadmin.providers.mysql_family.mysql_catalog import identifier
             qualified=identifier(schema)+'.'+identifier(table);column_sql=identifier(column)
             try:
-                cursor.execute('CREATE DATABASE '+identifier(schema))
+                cursor.execute('CREATE DATABASE '+identifier(schema));cursor.execute('CREATE DATABASE sr_osc')
                 cursor.execute('CREATE TABLE '+qualified+' (id BIGINT AUTO_INCREMENT PRIMARY KEY,'+column_sql+
                     " VARCHAR(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'catalog default' COMMENT 'MASKING POLICY literal')")
                 cursor.execute('INSERT INTO '+qualified+' ('+column_sql+') VALUES (%s)',('native value',))
@@ -107,12 +111,40 @@ def qualify(output):
                         assert client._connections==[]
                     finally:client.close()
                 proof['native_alter_privilege_and_restricted_principal_verified']=True
+                if application:
+                    password=secrets.token_urlsafe(24);cursor.execute('ALTER USER CURRENT_USER() IDENTIFIED BY %s',(password,))
+                    proof['application']=workspace(app,route,password,target,cursor,qualified,column,policy)
                 proof['native_engine']=owned;proof['complete']=True
             finally:cursor.close();observer.close()
-    finally:(output/'proof.json').write_text(json.dumps(proof,indent=2)+'\n')
+    finally:
+        proof['owned_server_stopped']=proof.get('native_engine',{}).get('owned_server_stopped') is True
+        (output/'proof.json').write_text(json.dumps(proof,indent=2)+'\n')
     return proof
+
+
+def workspace(app,route,password,target,cursor,qualified,column,policy):
+    """Set and drop the policy reference through the authenticated API."""
+    from cdeadmin_mysql_online_ddl_qualification import registration
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_catalog import identifier
+    operations=[]
+    def ddl():
+        cursor.execute('SHOW CREATE TABLE '+qualified);return cursor.fetchone()[1]
+    for pure in (True,False):
+        _sid,_target,post=registration(app,route,password,not pure)
+        for operation,draft in (('set_masking_policy',{'confirmation':column,'policy_name':policy}),('drop_masking_policy',{'confirmation':column})):
+            request={'resource_kind':'column','operation_id':operation,'target_resource':target(),'draft':draft}
+            checked=post('visual_admin_validate',request);assert checked['valid'],checked['errors']
+            plan=post('visual_admin_plan',request);assert plan['state']=='ready' and plan['execution_available'],plan
+            body={key:plan[key] for key in ('plan_id','plan_digest')}|{'confirmed':True}
+            post('visual_admin_apply',body)
+            replay=post.raw('visual_admin_apply',body);assert replay.status_code!=200 or not replay.get_json().get('success')
+            # The receipt is written only after the native DDL shows the effect.
+            assert ('MASKING POLICY '+identifier(policy) in ddl())==(operation=='set_masking_policy')
+            operations.append({'use_pure':pure,'resource_kind':'column','operation':operation,'native_acknowledged':True,'replay_refused':True})
+    return {'complete':True,'operations':operations}
 
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',required=True,type=Path)
-    qualify(parser.parse_args().evidence)
+    parser.add_argument('--application',action='store_true');arguments=parser.parse_args()
+    qualify(arguments.evidence,arguments.application)

@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import secrets
 from pathlib import Path
 from types import SimpleNamespace
 import sys
@@ -10,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT/'web'), str(ROOT/'tools')]
 
 
-def qualify(output):
+def qualify(output, application=False):
     import config  # noqa: F401
     from mysql_qualification_support import server, _root_connection
     from pgadmin.cdeadmin.providers.mysql_family.provider import (
@@ -22,6 +23,9 @@ def qualify(output):
     if output == ROOT or ROOT in output.parents:
         raise ValueError('Evidence belongs outside the repository')
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
+    if application:
+        from cdeadmin_mysql_dump_verification_qualification import setup_application
+        app = setup_application(output)
     proof = {'complete': False, 'history_testing': 'not run', 'full_product_complete': False,
         'checks': [], 'source_sha256': {}}
     for name in ['tools/cdeadmin_mysql_foreign_server_qualification.py',
@@ -36,6 +40,7 @@ def qualify(output):
             cursor = connection.cursor()
             try:
                 cursor.execute('CREATE DATABASE sr_foreign')
+                cursor.execute('CREATE DATABASE sr_osc')
                 name = 'remote : . ` ü'
                 for pure in (True, False):
                     for mode in ('', 'NO_BACKSLASH_ESCAPES,ANSI_QUOTES'):
@@ -91,9 +96,13 @@ def qualify(output):
                             assert len(links) == 1 and links[0]['native']['catalog_row']['server_name'] == name
                             cursor.execute('SELECT VARIABLE_NAME,VARIABLE_VALUE FROM performance_schema.global_variables ORDER BY VARIABLE_NAME')
                             variables = dict(cursor.fetchall())
-                            actual = {row['native']['catalog_row']['variable_name']: row['native']['catalog_row']['global_value']
-                                for row in inventory['resources'] if row['resource_kind'] == 'system-variable'}
+                            # The inventory also lists session-only variables (since
+                            # 2026-10-21) as present without a global value.
+                            rows = [row['native']['catalog_row'] for row in inventory['resources']
+                                    if row['resource_kind'] == 'system-variable']
+                            actual = {row['variable_name']: row['global_value'] for row in rows if row['global_present']}
                             assert actual == variables and len(actual) > 10
+                            assert all(row['global_value'] is None for row in rows if not row['global_present'])
                             assert all('variable_source' in row['native']['catalog_row'] for row in inventory['resources'] if row['resource_kind'] == 'system-variable')
                             drop = planned('drop', {'confirmation': name, 'if_exists': True}, target())
                             dropped = adapter.apply(client, drop)
@@ -126,6 +135,10 @@ def qualify(output):
                     assert cursor.fetchone() == (0,)
                 finally:
                     restricted.close();cursor.execute("DROP USER 'sr_foreign_reader'@'%'")
+                if application:
+                    password = secrets.token_urlsafe(24)
+                    cursor.execute('ALTER USER CURRENT_USER() IDENTIFIED BY %s', (password,))
+                    proof['application'] = workspace(app, route, password, connection, cursor)
                 proof['native_engine'] = owned;proof['complete'] = True
             finally:
                 cursor.close();connection.close()
@@ -135,11 +148,47 @@ def qualify(output):
             'native_acknowledged': getattr(error, 'native_acknowledged', None)}
         raise
     finally:
+        proof['owned_server_stopped'] = proof.get('native_engine', {}).get('owned_server_stopped') is True
         (output/'proof.json').write_text(json.dumps(proof, ensure_ascii=False, indent=2)+'\n')
     return proof
+
+
+def workspace(app, route, password, connection, cursor):
+    """Create, alter and drop a server link through the authenticated API."""
+    from cdeadmin_mysql_online_ddl_qualification import registration
+    from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_PROFILE, _resources
+    from pgadmin.cdeadmin.providers.mysql_family import foreign_servers as foreign
+    operations = []
+    for pure in (True, False):
+        _sid, _target, post = registration(app, route, password, not pure)
+        name = 'api link ' + str(int(pure))
+        def resource():
+            return next(row for row in _resources(connection, {'route': {}}, MYSQL_PROFILE)
+                        if row['resource_kind'] == foreign.KIND and row['display_name'] == name)
+        def apply(operation, draft, target=None):
+            request = {'resource_kind': foreign.KIND, 'operation_id': operation, 'target_resource': target, 'draft': draft}
+            checked = post('visual_admin_validate', request); assert checked['valid'], checked['errors']
+            plan = post('visual_admin_plan', request); assert plan['state'] == 'ready' and plan['execution_available'], plan
+            body = {key: plan[key] for key in ('plan_id', 'plan_digest')} | {'confirmed': True}
+            post('visual_admin_apply', body)
+            replay = post.raw('visual_admin_apply', body)
+            assert replay.status_code != 200 or not replay.get_json().get('success')
+        def receipt(operation):
+            operations.append({'use_pure': pure, 'resource_kind': foreign.KIND, 'operation': operation,
+                               'native_acknowledged': True, 'replay_refused': True})
+        # Each receipt is written only after mysql.servers shows the effect.
+        apply('create', {'name': name, 'wrapper': 'mysql', 'include_host': True, 'host': 'api.example'})
+        assert foreign.current(cursor, name)['host'] == 'api.example'; receipt('create')
+        apply('alter', {'include_host': True, 'host': 'api.reviewed', 'confirmation': name}, resource())
+        assert foreign.current(cursor, name)['host'] == 'api.reviewed'; receipt('alter')
+        apply('drop', {'confirmation': name, 'if_exists': True}, resource())
+        assert foreign.current(cursor, name) is None; receipt('drop')
+    return {'complete': True, 'operations': operations}
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--evidence', required=True, type=Path)
-    qualify(parser.parse_args().evidence)
+    parser.add_argument('--application', action='store_true')
+    arguments = parser.parse_args()
+    qualify(arguments.evidence, arguments.application)

@@ -118,7 +118,7 @@ def qualify(output,application=True):
 
 def workspace(app,route,password,target,oracle):
     from cdeadmin_mysql_online_ddl_qualification import registration
-    records=[]
+    records=[];operations=[]
     for pure in (True,False):
         _sid,_target,post=registration(app,route,password,not pure)
         key='api-key-'+str(int(pure));material='private-api-'+secrets.token_urlsafe(12)
@@ -131,6 +131,7 @@ def workspace(app,route,password,target,oracle):
             replay=post.raw('visual_admin_apply',request)
             assert replay.status_code!=200 or not replay.get_json().get('success')
             assert material not in json.dumps(result)
+            operations.append({'use_pure':pure,'operation':operation,'native_acknowledged':result['provider_result'].get('accepted') is True,'replay_refused':True})
             return result['provider_result']
         configured=apply('install_user_key_functions',library='keyring_udf.so',trusted_library=True)
         assert configured['accepted'] and configured['keyring_observation']['already_configured']
@@ -142,10 +143,11 @@ def workspace(app,route,password,target,oracle):
         assert apply('inspect_user_key',key_id=key)['keyring_observation']['after']['key_length']==len(material)
         assert apply('remove_user_key',key_id=key)['accepted']
         records.append({'use_pure':pure,'complete':True,'operations_verified':5,'typed_plan_apply_and_no_replay':True,'secret_not_in_public_plan_or_receipt':True})
-    return {'complete':True,'interfaces':records}
+    # The tool fails before returning unless every native effect was read back.
+    return {'complete':True,'interfaces':records,'operations':operations}
 
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',required=True)
     parser.add_argument('--core-only',action='store_true')
-    args=parser.parse_args();value=qualify(args.output,not args.core_only);print(json.dumps({'complete':value['complete'],'interfaces':len(value['interfaces'])}))
+    args=parser.parse_args();value=qualify(args.output,application=not args.core_only);print(json.dumps({'complete':value['complete'],'interfaces':len(value['interfaces'])}))

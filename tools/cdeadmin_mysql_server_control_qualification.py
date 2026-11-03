@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import secrets
 from pathlib import Path
 import sys
 import time
@@ -22,7 +23,45 @@ def wait_state(name,predicate):
     raise TimeoutError('Owned native server-control fixture did not reach the required process state')
 
 
-def qualify(output):
+def workspace(app,route,name,uuid,target):
+    """Restart and shut down through the authenticated API, observed outside the product."""
+    from cdeadmin_mysql_online_ddl_qualification import registration
+    from mysql_qualification_support import _root_connection,_run,_wait_until_ready
+    # The fixture's readiness probe logs in as password-less root, so the
+    # application signs in as a separate administrator instead.
+    password=secrets.token_urlsafe(24);oracle=_root_connection('mysql',route['port']);oracle.autocommit=True;q=oracle.cursor()
+    try:
+        q.execute('CREATE DATABASE IF NOT EXISTS sr_osc');q.execute("CREATE USER sr_api IDENTIFIED BY %s",(password,))
+        q.execute('GRANT ALL PRIVILEGES ON *.* TO sr_api WITH GRANT OPTION')
+    finally:q.close();oracle.close()
+    operations=[]
+    for pure in (True,False):
+        _sid,_target,post=registration(app,route,password,not pure,username='sr_api')
+        for operation in ('restart_server','shutdown_server'):
+            before=wait_state(name,lambda row:row['State']['Running'])
+            request={'resource_kind':'server','operation_id':operation,'target_resource':target,
+                     'draft':{'confirmation':'MySQL','disconnect_all_clients':True}}
+            checked=post('visual_admin_validate',request);assert checked['valid'],checked['errors']
+            plan=post('visual_admin_plan',request);assert plan['state']=='ready' and plan['execution_available'],plan
+            body={key:plan[key] for key in ('plan_id','plan_digest')}|{'confirmed':True}
+            observed=post('visual_admin_apply',body)['provider_result']['server_control_observation']
+            assert observed['native_acknowledged'] and observed['acknowledgement_scope']=='request_only'
+            replay=post.raw('visual_admin_apply',body);assert replay.status_code!=200 or not replay.get_json().get('success')
+            # The receipt is written only after the process change is observed outside the product.
+            if operation=='restart_server':
+                wait_state(name,lambda row:row['RestartCount']>before['RestartCount'] and row['State']['Running'] and not row['State']['Restarting'] and row['State']['StartedAt']!=before['State']['StartedAt'])
+            else:
+                assert wait_state(name,lambda row:not row['State']['Running'])['State']['ExitCode']==0
+                _run(['docker','start',name])  # Fixture recovery only, not product host-start qualification.
+            _wait_until_ready('mysql',name,90)
+            observer=_root_connection('mysql',route['port']);query=observer.cursor()
+            try:query.execute('SELECT @@server_uuid');assert query.fetchone()==(uuid,)
+            finally:query.close();observer.close()
+            operations.append({'use_pure':pure,'resource_kind':'server','operation':operation,'native_acknowledged':True,'replay_refused':True})
+    return {'complete':True,'operations':operations}
+
+
+def qualify(output,application=False):
     import config  # noqa: F401
     from mysql_qualification_support import server,_root_connection,_run,_wait_until_ready
     from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_PROFILE,MYSQL_ADMINISTRATION,_create_client
@@ -30,6 +69,9 @@ def qualify(output):
     output=Path(output).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Keep native evidence outside source')
     output.mkdir(parents=True,exist_ok=False)
+    if application:
+        from cdeadmin_mysql_dump_verification_qualification import setup_application
+        app=setup_application(output)
     paths=['web/pgadmin/cdeadmin/providers/mysql_family/'+name for name in ('mysql_server_control.py','administration.py','provider.py')]
     paths+=['tools/cdeadmin_mysql_server_control_qualification.py','tools/mysql_qualification_support.py']
     proof={'complete':False,'interfaces':[],'history_testing':'not run','full_mysql_product_complete':False,
@@ -98,6 +140,7 @@ def qualify(output):
                     expected='CharsetMySQLConnection' if pure else 'CharsetCMySQLConnection';assert classes and set(classes)=={expected}
                     proof['interfaces'].append({'use_pure':pure,'native_connection_class':expected,'templates':templates,'checks':checks})
                 finally:client.close()
+            if application:proof['application']=workspace(app,route,name,uuid,target)
         proof['owned_server_stopped']=owned['owned_server_stopped'];proof['owned_container_removed']=owned['owned_container_removed'];proof['complete']=True
     finally:(output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n')
     return proof
@@ -105,4 +148,5 @@ def qualify(output):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',required=True)
-    args=parser.parse_args();value=qualify(args.output);print(json.dumps({'complete':value['complete'],'interfaces':len(value['interfaces'])}))
+    parser.add_argument('--application',action='store_true')
+    args=parser.parse_args();value=qualify(args.output,args.application);print(json.dumps({'complete':value['complete'],'interfaces':len(value['interfaces'])}))

@@ -15,7 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / 'web')]
 # Owned-server tools whose application run sends each operation through the
 # authenticated visual-administration API on both the pure and C interfaces.
-APPLICATION_TOOLS = ('xa', 'page_tracking', 'rewriter', 'key_cache', 'key_cache_lifecycle', 'instance')
+APPLICATION_TOOLS = ('xa', 'page_tracking', 'rewriter', 'key_cache', 'key_cache_lifecycle', 'instance',
+                     'failover', 'user_keys', 'spatial_reference', 'foreign_server',
+                     'column_masking', 'sdi_import', 'server_control',
+                     'group9_completion')
 JOBS = ('generic', 'constraints', 'object_changes', 'partition', 'role',
         'resource_group', 'tablespace', 'server_operations', 'replication', 'group_replication',
         *APPLICATION_TOOLS)
@@ -50,27 +53,33 @@ def reconcile(name, receipt, exit_code):
             if key.startswith('visual_admin.') and value.get('live_execution') == 'passed'}
 
 
-def application_evidence(proof, fixture, expected):
+def application_evidence(proof, fixtures, expected):
     """Translate an application tool's receipts into task evidence.
 
     A task passes only when its operation was acknowledged through the API on
-    both interfaces and names exactly one declared task."""
+    both interfaces and names exactly one declared task (by resource kind
+    and operation when the receipt gives the kind)."""
     application = proof.get('application') if isinstance(proof.get('application'), dict) else {}
     receipts = application.get('operations') or application.get('receipts') or []
     interfaces = {}
     for receipt in receipts:
         if any(key.endswith('acknowledged') and value is True for key, value in receipt.items()):
-            interfaces.setdefault(receipt.get('operation'), set()).add(receipt.get('use_pure'))
+            interfaces.setdefault((receipt.get('resource_kind'), receipt.get('operation')), set()).add(receipt.get('use_pure'))
     evidence = {}
-    for operation, selected in interfaces.items():
-        tasks = [task for task in expected if task.split('.', 2)[-1] == operation]
+    for (kind, operation), selected in interfaces.items():
+        # A receipt naming its resource kind closes that exact task.
+        tasks = ([task for task in expected if task == f'visual_admin.{kind}.{operation}'] if kind else
+                 [task for task in expected if task.split('.', 2)[-1] == operation])
         if selected == {True, False} and len(tasks) == 1:
             evidence[tasks[0]] = {'live_execution': 'passed', 'interfaces': ['pure', 'c'],
                                   'operation': operation}
+    # Every owned fixture the tool started must be the checked version and stopped.
+    versions = {fixture.get('engine_version') for fixture in fixtures}
     return {'passed': proof.get('complete') is True and application.get('complete') is True and bool(evidence),
-            'failures': [], 'engine_version': fixture.get('engine_version'),
-            'owned_cleanup_confirmed': proof.get('owned_server_stopped') is True and
-                                       fixture.get('owned_server_stopped') is True,
+            'failures': [], 'engine_version': versions.pop() if len(versions) == 1 else None,
+            'owned_cleanup_confirmed': bool(fixtures) and
+                                       (proof.get('owned_server_stopped') is True or proof.get('owned_servers_stopped') is True) and
+                                       all(fixture.get('owned_server_stopped') is True for fixture in fixtures),
             'task_evidence': evidence, 'receipt_count': len(receipts)}
 
 
@@ -82,10 +91,10 @@ def worker(name, output):
         try:
             module.qualify(tool, application=True)
         finally:
-            proof = json.loads((tool / 'summary.json').read_text()) if (tool / 'summary.json').is_file() else {}
-            fixture = tool / 'fixture/fixture.json'
-            fixture = json.loads(fixture.read_text()) if fixture.is_file() else {}
-            receipt = application_evidence(proof, fixture, declared())
+            found = next((tool / name for name in ('summary.json', 'proof.json') if (tool / name).is_file()), None)
+            proof = json.loads(found.read_text()) if found else {}
+            fixtures = [json.loads(path.read_text()) for path in sorted(tool.rglob('fixture.json'))]
+            receipt = application_evidence(proof, fixtures, declared())
             (output / 'summary.json').write_text(json.dumps(receipt, indent=2) + '\n')
         return
     from tools.mysql_qualification_support import server

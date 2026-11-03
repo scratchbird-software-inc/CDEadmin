@@ -32,7 +32,7 @@ def test_task_inventory_and_failed_specialized_receipts_cannot_close_coverage():
 def test_application_tool_receipts_close_only_tasks_acknowledged_on_both_interfaces():
     from tools.cdeadmin_mysql_tasks_gate import application_evidence
     expected = declared()
-    fixture = {'engine_version': '9.7.0', 'owned_server_stopped': True}
+    fixtures = [{'engine_version': '9.7.0', 'owned_server_stopped': True}]
     def receipts(*rows):
         return {'complete': True, 'owned_server_stopped': True,
                 'application': {'complete': True, 'operations': [
@@ -42,13 +42,28 @@ def test_application_tool_receipts_close_only_tasks_acknowledged_on_both_interfa
                      ('rollback_prepared_xa', True, True),                      # one interface only
                      ('inspect_prepared_xa', True, True), ('inspect_prepared_xa', False, False),
                      ('not_a_declared_operation', True, True), ('not_a_declared_operation', False, True))
-    receipt = application_evidence(proof, fixture, expected)
+    receipt = application_evidence(proof, fixtures, expected)
     assert set(receipt['task_evidence']) == {'visual_admin.server.commit_prepared_xa'}
     assert reconcile('xa', receipt, 0) == {'visual_admin.server.commit_prepared_xa'}
     # Incomplete tools, unstopped servers or another version close nothing.
     for change, version in (({'complete': False}, '9.7.0'), ({'owned_server_stopped': False}, '9.7.0'), ({}, '9.6.0')):
-        failed = application_evidence({**proof, **change}, {**fixture, 'engine_version': version}, expected)
+        failed = application_evidence({**proof, **change}, [{**fixtures[0], 'engine_version': version}], expected)
         assert reconcile('xa', failed, 0) is None
+    # Several owned fixtures: all must be the checked version and stopped.
+    several = {**proof, 'owned_server_stopped': None, 'owned_servers_stopped': True}
+    assert reconcile('xa', application_evidence(several, fixtures * 2, expected), 0) == {'visual_admin.server.commit_prepared_xa'}
+    for other in ({'engine_version': '9.6.0', 'owned_server_stopped': True}, {'engine_version': '9.7.0', 'owned_server_stopped': False}):
+        assert reconcile('xa', application_evidence(several, [*fixtures, other], expected), 0) is None
+    assert reconcile('xa', application_evidence(proof, [], expected), 0) is None
     assert reconcile('xa', application_evidence({**proof, 'application': {'complete': False, 'operations':
-                     proof['application']['operations']}}, fixture, expected), 0) is None
+                     proof['application']['operations']}}, fixtures, expected), 0) is None
     assert reconcile('xa', receipt, 1) is None
+    # An operation shared by many kinds closes only the kind its receipt names.
+    shared = {'complete': True, 'owned_server_stopped': True, 'application': {'complete': True, 'operations': [
+        {'use_pure': pure, 'resource_kind': kind, 'operation': 'create', 'native_acknowledged': True}
+        for pure in (True, False) for kind in ('spatial-reference-system', 'not-a-kind')]}}
+    assert reconcile('spatial_reference', application_evidence(shared, fixtures, expected), 0) == {
+        'visual_admin.spatial-reference-system.create'}
+    unnamed = {**shared, 'application': {'complete': True, 'operations': [
+        {key: value for key, value in row.items() if key != 'resource_kind'} for row in shared['application']['operations']]}}
+    assert reconcile('spatial_reference', application_evidence(unnamed, fixtures, expected), 0) is None

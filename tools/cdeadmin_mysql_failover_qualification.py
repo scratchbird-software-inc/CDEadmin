@@ -34,7 +34,7 @@ def qualify(output,application=False):
     paths=['web/pgadmin/cdeadmin/providers/mysql_family/'+name for name in
         ['mysql_failover.py','administration.py','provider.py','installed_catalog.py','mysql_server_catalog.py']]
     paths+=['web/pgadmin/cdeadmin/workspace/mysql_server_plan.py','web/pgadmin/cdeadmin/providers/mysql_server_application.py',str(Path(__file__).relative_to(ROOT))]
-    proof={'complete':False,'interfaces':[],'disabled':[],'application':[],'native_denials':[],
+    proof={'complete':False,'interfaces':[],'disabled':[],'application':{'complete':False,'operations':[]},'native_denials':[],
         'full_product_inventory_complete':False,'source_sha256':{p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in paths}}
     owned=[]
     def oracle(cursor):
@@ -224,7 +224,8 @@ def qualify(output,application=False):
                             apply={key:reviewed[key] for key in ['plan_id','plan_digest']}|{'confirmed':True}
                             result=post('visual_admin_apply',apply);assert result['provider_result']['native_acknowledged']
                             replay=post.raw('visual_admin_apply',apply);assert replay.status_code!=200 or not replay.get_json().get('success')
-                        proof['application'].append({'use_pure':pure,'authenticated_typed_plan_apply':True,'single_use_plans':True})
+                            proof['application']['operations'].append({'use_pure':pure,'operation':op,'native_acknowledged':True,'replay_refused':True})
+                    proof['application']['complete']=True
             finally:
                 try:q.close()
                 except Exception:pass
