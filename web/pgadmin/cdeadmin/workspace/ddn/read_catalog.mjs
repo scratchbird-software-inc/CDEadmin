@@ -12,7 +12,10 @@ try {
   check(['firebird', 'postgresql', 'mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine));
   const snapshot = JSON.parse(input), rows = [], identities = new Set(), uids = new Set();
   let provenance;
-  const documents = await admitWorkspace(snapshot, `scratchrobin.${engine}.catalog`);
+  // 'own-export': this process exported the workspace itself, so it is decoded
+  // and read without verification (see read_own_export).
+  check([undefined, 'own-export'].includes(process.argv[3]));
+  const documents = await admitWorkspace(snapshot, `scratchrobin.${engine}.catalog`, {verify: process.argv[3] !== 'own-export'});
   for(const [filename, document] of documents) {
     for(const row of document.records) {
       if(row.kind !== 'definition') continue;

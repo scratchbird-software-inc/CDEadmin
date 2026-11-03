@@ -36,7 +36,10 @@ function failure(message, diagnostics=[]) {
   }));
   return error;
 }
-export async function admitWorkspace(snapshot, modulePrefix=null) {
+// verify=false is only for a workspace this process has just exported itself:
+// DDN's verifier checks what users edit (owner direction 2026-11-03). Every
+// supplied or user-edited workspace is verified.
+export async function admitWorkspace(snapshot, modulePrefix=null, {verify=true}={}) {
   if(snapshot?.format !== WORKSPACE_FORMAT || !snapshot.files || Array.isArray(snapshot.files) ||
      !Object.hasOwn(snapshot.files, snapshot.entry) || !snapshot.view ||
      Object.keys(snapshot.files).length > 64) throw failure('Invalid source-workspace envelope');
@@ -61,12 +64,14 @@ export async function admitWorkspace(snapshot, modulePrefix=null) {
     const native = new Set(['ddn@1','mindmap.basic@1','concept.map@1','table.records@1']);
     const options = listRecords(decoded.normalized).every(row => row.kind !== 'view' || native.has(row.record.profile)) ?
       createNativeRuntimeOptions() : createCompleteRuntimeOptions();
-    const verifier = createVerifier(options);
+    const verifier = verify ? createVerifier(options) : undefined;
     try {
-      // Reuses this decode instead of decoding the same sources again.
-      const report = await verifyDecodedSources(verifier, source, decoded,
-        {scope: {kind: 'workarea'}, purpose: 'view', level: 'semantic'});
-      if(report.outcome !== 'valid' || !report.coverage.complete) throw failure('Incomplete DDN model', report.diagnostics);
+      if(verifier) {
+        // Reuses this decode instead of decoding the same sources again.
+        const report = await verifyDecodedSources(verifier, source, decoded,
+          {scope: {kind: 'workarea'}, purpose: 'view', level: 'semantic'});
+        if(report.outcome !== 'valid' || !report.coverage.complete) throw failure('Incomplete DDN model', report.diagnostics);
+      }
       for(const file of normalizedFiles(decoded.normalized)) {
         if(documents.has(file.location)) continue;
         const records = listRecords(decoded.normalized).filter(row => row.file === file.location);
@@ -84,7 +89,7 @@ export async function admitWorkspace(snapshot, modulePrefix=null) {
         }
         documents.set(file.location, {document: file.document, records, nodes});
       }
-    } finally {verifier.destroy();}
+    } finally {verifier?.destroy();}
   }
   if(!selected) throw failure('Missing selected workspace view');
   return documents;

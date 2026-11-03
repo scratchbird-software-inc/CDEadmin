@@ -146,3 +146,30 @@ def test_invalid_source_retains_coded_file_offset_without_source_text():
     assert 'catalog.ddn' in str(failure.value)
     assert 'offset' in str(failure.value)
     assert 'invalid_secret_source' not in str(failure.value)
+
+
+def test_own_export_reads_the_same_rows_and_only_it_skips_verification():
+    # DDN's verifier checks what users edit; this process's own export is read back unverified.
+    from pgadmin.cdeadmin.workspace import firebird_catalog_import as module
+    from pgadmin.cdeadmin.workspace.firebird_catalog_import import read_own_export
+    snapshot = export([resource('"quoted ü', number=2**100), resource('plain')])['snapshot']
+    calls, run = [], module.subprocess.run
+    def recorded(command, *args, **kwargs):
+        calls.append(command[3:]); return run(command, *args, **kwargs)
+    with patch.object(module.subprocess, 'run', recorded):
+        verified = read_catalog(json.dumps(snapshot, ensure_ascii=False))
+        own = read_own_export(snapshot, engine='firebird')
+    assert calls == [['firebird'], ['firebird', 'own-export']]
+    assert own['rows'] == verified['rows'] and own['provenance'] == verified['provenance']
+    for supplied in (json.dumps(snapshot), None, [snapshot]):
+        with pytest.raises(ValueError, match='in-memory catalog export'):
+            read_own_export(supplied, engine='firebird')
+
+
+def test_catalog_runner_refuses_an_unknown_reading_mode():
+    import subprocess
+    from pgadmin.cdeadmin.workspace import firebird_catalog_import as module
+    snapshot = export([resource('plain')])['snapshot']
+    result = subprocess.run([ddn.node_executable('node'), ddn.NODE_HEAP_OPTION, str(module._RUNNER), 'firebird', 'trusted'],
+                            input=json.dumps(snapshot), text=True, capture_output=True, env=ddn.runner_environment(), timeout=60)
+    assert result.returncode == 1 and json.loads(result.stdout) == {'diagnostics': []}

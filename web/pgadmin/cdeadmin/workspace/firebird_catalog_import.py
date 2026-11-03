@@ -33,6 +33,24 @@ def _decode(value):
 
 
 def read_catalog(source, node='node', *, engine='firebird'):
+    """Read a supplied catalog document, verifying it with DDN's verifier."""
+    return _read_catalog(source, node, engine=engine, verify=True)
+
+
+def read_own_export(snapshot, node='node', *, engine):
+    """Read back a catalog export this process has just built, without DDN verification.
+
+    DDN's verifier checks DDN that users edit (owner direction 2026-11-03).
+    Pass only the in-memory ``snapshot`` from ``build_export`` in the same
+    request, never a request field or stored document: those can be edited and
+    go through read_catalog. Decoding and every reader check still apply.
+    """
+    if not isinstance(snapshot, dict):
+        raise ValueError('Expected the in-memory catalog export snapshot')
+    return _read_catalog(json.dumps(snapshot, ensure_ascii=False), node, engine=engine, verify=False)
+
+
+def _read_catalog(source, node, *, engine, verify):
     if engine not in {'firebird', 'postgresql', 'mysql', 'mariadb', 'duckdb', 'sqlite'}:
         raise ValueError('Unsupported native catalog engine')
     if not isinstance(source, str) or not source or len(source.encode('utf-8')) > MAX_BYTES:
@@ -49,7 +67,8 @@ def read_catalog(source, node='node', *, engine='firebird'):
         raise ValueError('Catalog reader is busy; retry shortly')
     try:
         env = ddn.runner_environment()
-        result = subprocess.run([ddn.node_executable(node), ddn.NODE_HEAP_OPTION, str(_RUNNER), engine],
+        result = subprocess.run([ddn.node_executable(node), ddn.NODE_HEAP_OPTION, str(_RUNNER), engine,
+                                 *(() if verify else ('own-export',))],
                                 input=json.dumps(snapshot, ensure_ascii=False), text=True, encoding='utf-8',
                                 capture_output=True, timeout=15, env=env, check=False)
         if result.returncode:

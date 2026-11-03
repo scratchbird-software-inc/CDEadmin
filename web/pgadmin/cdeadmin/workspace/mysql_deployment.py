@@ -5,7 +5,7 @@ import json
 import re
 import time
 
-from .firebird_catalog_import import read_catalog
+from .firebird_catalog_import import read_catalog, read_own_export
 from .mysql_schema_plan import root,plan as native_plan
 from .mysql_monitoring_host import MySQLMonitoringHost
 from .mysql_online_policy import policy
@@ -118,7 +118,8 @@ class Deployment:
     def capture(self,environment):
         label(environment);identity=self.current_binding()
         result=self.service.mysql_catalog(self.server,{'database_target_id':self.target})
-        model=read_catalog(encode(result['snapshot']),engine='mysql');database,native=root(model)
+        # This request just exported it; it was not user edited.
+        model=read_own_export(result['snapshot'],engine='mysql');database,native=root(model)
         if native['server_uuid']!=identity['server_uuid'] or database!=identity['database']:
             raise DeploymentError('Native identity changed during capture')
         return sealed({'format':CAPTURE,'environment':environment,'binding':identity,'snapshot':result['snapshot']})
