@@ -1,5 +1,5 @@
 // Use only the adopted public source/model/runtime APIs. No source-controlled IO.
-import {createVerifier, createNativeRuntimeOptions, createCompleteRuntimeOptions} from '../../../static/vendor/ddn/current/complete/ddn-verifier.js';
+import {createVerifier, createNativeRuntimeOptions, createCompleteRuntimeOptions, verifyDecodedSources} from '../../../static/vendor/ddn/current/complete/ddn-verifier.js';
 import {decodeSources, allNodes} from '../../../static/vendor/ddn/current/modules/language/src/index.js';
 import {listRecords, normalizedFiles} from '../../../static/vendor/ddn/current/modules/model/src/index.js';
 
@@ -63,7 +63,8 @@ export async function admitWorkspace(snapshot, modulePrefix=null) {
       createNativeRuntimeOptions() : createCompleteRuntimeOptions();
     const verifier = createVerifier(options);
     try {
-      const report = await verifier.verifySources(source,
+      // Reuses this decode instead of decoding the same sources again.
+      const report = await verifyDecodedSources(verifier, source, decoded,
         {scope: {kind: 'workarea'}, purpose: 'view', level: 'semantic'});
       if(report.outcome !== 'valid' || !report.coverage.complete) throw failure('Incomplete DDN model', report.diagnostics);
       for(const file of normalizedFiles(decoded.normalized)) {
