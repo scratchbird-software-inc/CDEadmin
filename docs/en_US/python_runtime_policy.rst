@@ -81,6 +81,15 @@ not replace each provider's live or platform qualification. Existing Python
    host's system library (3.0.13 on the qualifying host); the macOS build
    uses Homebrew's ``openssl@3`` instead.
 
+   Updated 2026-11-02: the stage now builds with profile-guided and
+   link-time optimisation (``--enable-optimizations --with-lto``). The first
+   build lacked them; a CPU-bound loop ran about 40% slower on it than on
+   the uv release build, and about 15% faster once they were added. The
+   offline result above was recorded on that unoptimised build. The
+   application's startup budget is missed on the qualifying host with every
+   interpreter tried, the uv release build included, so that is not an
+   interpreter-build effect.
+
 The root requirement set did **not** install under Linux CPython 3.14.6t.
 ``pymilvus==2.6.5`` depends on ``orjson``; the selected ``orjson==3.13.0``
 source build rejects free-threaded Python explicitly. ``psycopg[c]`` is also

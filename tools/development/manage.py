@@ -18,6 +18,8 @@ PYTHON = ROOT / '.venv/bin/python'
 NATIVE = ROOT / '.native'
 TRACKED_SQLITE = DEMO / 'runtime/sqlite-tracked/3.53.0'
 TEST_PYTEST = 'pytest==9.2.0'
+# Profile-guided and link-time optimisation, as release CPython builds use.
+PYTHON_OPTIMIZATIONS = ('--enable-optimizations', '--with-lto')
 SQLITE_OPTIONS = ('ENABLE_SESSION', 'ENABLE_PREUPDATE_HOOK', 'ENABLE_CARRAY',
                   'ENABLE_DBPAGE_VTAB', 'ENABLE_DBSTAT_VTAB')
 ACTIONS = ('doctor', 'interpreter', 'python', 'configure', 'frontend', 'ddn', 'clients',
@@ -114,7 +116,8 @@ def interpreter():
     marker = prefix / '.cdeadmin-complete'
     fingerprint = json.dumps({'python': ASSETS['python'][1], 'sqlite_sha256': sqlite_sha256,
                               'machine': platform.machine(), 'loadable_sqlite_extensions': True,
-                              'runpath': str(library.parent)}, sort_keys=True)
+                              'runpath': str(library.parent),
+                              'optimizations': list(PYTHON_OPTIMIZATIONS)}, sort_keys=True)
     if marker.is_file():
         if marker.read_text(encoding='utf-8') == fingerprint:
             print(f'Interpreter is current: {prefix / "bin/python3.14"}')
@@ -135,16 +138,19 @@ def interpreter():
                        LIBSQLITE3_LIBS=f'-L{tracked}/lib -lsqlite3',
                        LDFLAGS=f'-Wl,-rpath,{tracked}/lib')
     run([source / 'Python-3.14.8/configure', f'--prefix={prefix}',
-         '--with-ensurepip=install', '--enable-loadable-sqlite-extensions'], build, environment)
+         '--with-ensurepip=install', '--enable-loadable-sqlite-extensions', *PYTHON_OPTIMIZATIONS],
+        build, environment)
     run(['make', f'-j{os.cpu_count() or 1}'], build, environment)
     run(['make', 'install'], build, environment)
     # Read the result back without LD_LIBRARY_PATH: exactly the tracked file
     # is mapped, at its version, with the options the helpers require.
     run([prefix / 'bin/python3.14', '-I', '-c',
-         'import os, sqlite3, ssl, sys\n'
+         'import os, sqlite3, ssl, sys, sysconfig\n'
+         'configured = sysconfig.get_config_var("CONFIG_ARGS")\n'
+         'assert all(flag in configured for flag in sys.argv[2:4]), configured\n'
          'c = sqlite3.connect(":memory:")\n'
          'options = {row[0] for row in c.execute("PRAGMA compile_options")}\n'
-         'missing = [name for name in sys.argv[2:] if name not in options]\n'
+         'missing = [name for name in sys.argv[4:] if name not in options]\n'
          'assert not missing, missing\n'
          'c.enable_load_extension(True); c.enable_load_extension(False); c.close()\n'
          'with open("/proc/self/maps") as maps:\n'
@@ -152,7 +158,7 @@ def interpreter():
          'assert loaded == {os.path.realpath(sys.argv[1])}, loaded\n'
          'assert sqlite3.sqlite_version == "3.53.0", sqlite3.sqlite_version\n'
          'print(sqlite3.sqlite_version, ssl.OPENSSL_VERSION)\n',
-         library, *SQLITE_OPTIONS], build, environment)
+         library, *PYTHON_OPTIMIZATIONS, *SQLITE_OPTIONS], build, environment)
     marker.write_text(fingerprint, encoding='utf-8')
     print(f'Built {prefix / "bin/python3.14"}; set SCRATCHROBIN_PYTHON to it, then run the python stage.')
 

@@ -214,6 +214,21 @@ different SQLite version; see the
 > existing `.native/python`. Then set
 > `SCRATCHROBIN_PYTHON=$PWD/.native/python/bin/python3.14` and run the
 > `python` stage into a fresh `.venv`. OpenSSL is the host's system library.
+>
+> Updated 2026-11-02: the build now uses `--enable-optimizations --with-lto`
+> (profile-guided and link-time optimisation, as release CPython builds do),
+> and the read-back checks that the built interpreter was configured with
+> both. Without them a CPU-bound loop ran about 40% slower than on uv's
+> release build (1.8 s against 1.3 s); with them it takes about 1.5 s. An
+> interpreter built without them no longer matches the stage's inputs and is
+> refused rather than reused. The profiling run makes the build take longer.
+> The application's 8-second startup budget
+> (`test_live_quality_gate_meets_startup_and_performance_budgets`) is missed
+> on this host with every interpreter tried, uv's included (about 9.1 to
+> 9.6 seconds), so that failure is not caused by the interpreter build.
+> `manage.py` itself needs Python 3.14, so on a host without one run the
+> stage with `SCRATCHROBIN_PYTHON` set to any CPython 3.14 (for example one
+> installed by uv); the interpreter it builds is still the tracked 3.14.8.
 
 Use the team's release/branch/commit if different. Record the commit for QA.
 `doctor` checks tools, versions, CPU/OS and Docker access without installing

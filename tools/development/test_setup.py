@@ -193,7 +193,8 @@ class SetupTests(unittest.TestCase):
         download.assert_not_called()
         configure, make, install, check = [call.args for call in run.call_args_list]
         self.assertEqual(configure[0], [source / 'configure', f'--prefix={native / "python"}',
-                                        '--with-ensurepip=install', '--enable-loadable-sqlite-extensions'])
+                                        '--with-ensurepip=install', '--enable-loadable-sqlite-extensions',
+                                        '--enable-optimizations', '--with-lto'])
         environment = configure[2]
         self.assertNotIn('LD_LIBRARY_PATH', environment)
         self.assertEqual(environment['LIBSQLITE3_LIBS'], f'-L{tracked}/lib -lsqlite3')
@@ -202,11 +203,14 @@ class SetupTests(unittest.TestCase):
         # The build is accepted only after the new interpreter reports the
         # tracked file, its version and every option the helpers require.
         self.assertEqual(check[0][0], native / 'python/bin/python3.14')
-        self.assertEqual(check[0][4:], [tracked / 'lib/libsqlite3.so.0', *manage.SQLITE_OPTIONS])
+        self.assertEqual(check[0][4:], [tracked / 'lib/libsqlite3.so.0', '--enable-optimizations', '--with-lto',
+                                        *manage.SQLITE_OPTIONS])
+        self.assertIn('CONFIG_ARGS', check[0][3])
         self.assertIn('"3.53.0"', check[0][3])
         import hashlib, json
         marker = json.loads((native / 'python/.cdeadmin-complete').read_text())
         self.assertEqual(marker['sqlite_sha256'], hashlib.sha256(b'tracked library').hexdigest())
+        self.assertEqual(marker['optimizations'], ['--enable-optimizations', '--with-lto'])
         with patch.object(manage, 'run') as again:
             manage.interpreter()
         again.assert_not_called()
