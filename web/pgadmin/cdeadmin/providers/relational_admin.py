@@ -4221,13 +4221,20 @@ class RelationalAdministration:
             and operation == 'purge_before'
         ):
             target = request.get('target_resource') or {}
-            return {'statements': [{
-                'source': (
-                    'PURGE BINARY LOGS TO ' +
-                    self._literal(target.get('display_name'))
-                ),
-                'parameters': (),
-            }]}
+            # The provider dispatches it and reads the native index back;
+            # the statement is the preview of what it runs.
+            return {
+                'driver_operation': 'mariadb-tools',
+                'operation_id': 'purge_binary_logs',
+                'options': {'to_file': target.get('display_name')},
+                'statements': [{
+                    'source': (
+                        'PURGE BINARY LOGS TO ' +
+                        self._literal(target.get('display_name'))
+                    ),
+                    'parameters': (),
+                }],
+            }
         if (
             self.dialect.engine_id == 'mariadb' and
             request['resource_kind'] == 'binary-log-status' and

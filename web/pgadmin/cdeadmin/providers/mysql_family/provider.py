@@ -808,6 +808,15 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
 
     def run_database_operation(
             self, connection, route, operation_id, options):
+        if operation_id == 'purge_binary_logs':
+            from .mariadb_binary_log_purge import purge
+            owns_connection = connection is None
+            purge_connection = connection or self._connect({'route': route})
+            try:
+                return purge(purge_connection, options)
+            finally:
+                if owns_connection:
+                    self._forget_and_close(purge_connection)
         if operation_id == 'check_upgrade_required':
             if not isinstance(options, dict) or options:
                 raise RelationalClientError(
