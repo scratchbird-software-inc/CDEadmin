@@ -97,6 +97,9 @@ describe('PostgreSQL native DDN dashboard', () => {
     await expect(bindPublication(libraries, clean, scope, files, 'postgresql')).resolves.toBeDefined();
     await expect(validatePublication(libraries, draft, scope, 'firebird')).rejects.toThrow();
   });
+  // Builds a 30-endpoint DDN workspace and renders all three pages: about
+  // 8 s on an idle host (2026-11-03) and 15-18 s under load, against the
+  // 18 s suite default. The limit covers that, not slower behaviour.
   it('retains every server observation across bounded dashboard pages', async () => {
     const files = postgresqlFleetFiles({
       registered_endpoints: 30,
@@ -129,7 +132,7 @@ describe('PostgreSQL native DDN dashboard', () => {
     } finally {
       workspace.destroy();
     }
-  });
+  }, 45000);
   it('binds by database identity rather than catalog row position and removes renamed observations', async () => {
     const one = {
       datid: '42',
