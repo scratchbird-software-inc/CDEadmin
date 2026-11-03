@@ -67,3 +67,38 @@ def test_application_tool_receipts_close_only_tasks_acknowledged_on_both_interfa
     unnamed = {**shared, 'application': {'complete': True, 'operations': [
         {key: value for key, value in row.items() if key != 'resource_kind'} for row in shared['application']['operations']]}}
     assert reconcile('spatial_reference', application_evidence(unnamed, fixtures, expected), 0) is None
+
+
+def test_ddn_revision_alone_does_not_void_a_run_but_any_vendored_change_does(tmp_path, monkeypatch):
+    import copy
+    import tools.cdeadmin_mysql_tasks_gate as gate
+    manifest = json.loads((ROOT / gate.DDN_MANIFEST).read_text())
+    copied = tmp_path / gate.DDN_MANIFEST
+    copied.parent.mkdir(parents=True)
+    # Only the manifest is relocated; every other bound file is the real one.
+    real = gate.ROOT
+    monkeypatch.setattr(gate, 'ROOT', tmp_path)
+    for relative in ('web/pgadmin/cdeadmin', 'tools'):
+        (tmp_path / relative).parent.mkdir(parents=True, exist_ok=True)
+        if not (tmp_path / relative).exists():
+            (tmp_path / relative).symlink_to(real / relative)
+    def bound(document):
+        copied.write_text(json.dumps(document))
+        return gate.bindings()[gate.DDN_MANIFEST]
+    original = bound(manifest)
+    moved = copy.deepcopy(manifest); moved['source']['revision'] = '0' * 40
+    assert bound(moved) == original
+    assert gate.ddn_revision() == '0' * 40
+    changes = []
+    for path, value in ((('source', 'files'), 'changed'), (('release_hash',), 'changed'), (('source', 'subtree'), 'changed')):
+        document = copy.deepcopy(manifest)
+        holder = document
+        for key in path[:-1]:
+            holder = holder[key]
+        if path[-1] == 'files':
+            name = next(iter(holder['files']))
+            holder['files'][name] = 'f' * 64
+        else:
+            holder[path[-1]] = value
+        changes.append(bound(document))
+    assert original not in changes and len(set(changes)) == 3

@@ -24,13 +24,27 @@ JOBS = ('generic', 'constraints', 'object_changes', 'partition', 'role',
         *APPLICATION_TOOLS)
 
 
+DDN_MANIFEST = 'web/pgadmin/static/vendor/ddn/current/resource-manifest.json'
+
+
+def ddn_revision():
+    return json.loads((ROOT / DDN_MANIFEST).read_text())['source']['revision']
+
+
 def bindings():
     files = set((ROOT / 'web/pgadmin/cdeadmin').rglob('*.py'))
     files.update((ROOT / 'web/pgadmin/cdeadmin/providers/mysql_family').glob('mysql*.json'))
     files.update((ROOT / 'tools').glob('*mysql*.py'))
     files.add(ROOT / 'tools/cdeadmin_relational_provider_live_verify.py')
-    files.add(ROOT / 'web/pgadmin/static/vendor/ddn/current/resource-manifest.json')
-    return {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
+    values = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
+    # The DDN refresh before each job can consume a newer upstream revision
+    # whose vendored files are identical. Bind every manifest field (file and
+    # artifact hashes, release hash) except that revision; run() records each
+    # revision consumed.
+    manifest = json.loads((ROOT / DDN_MANIFEST).read_text())
+    manifest['source'].pop('revision')
+    values[DDN_MANIFEST] = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
+    return values
 
 
 def declared():
@@ -150,7 +164,8 @@ def run(output, ddn_work, mysqlsh=None):
     result = {'schema': 'scratchrobin.mysql.tasks-proof@1', 'complete': False,
               'engine_version': '9.7.0', 'python': sys.version,
               'source_revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
-              'source_bindings': before, 'gates': [], 'missing_task_ids': sorted(expected)}
+              'source_bindings': before, 'gates': [], 'missing_task_ids': sorted(expected),
+              'ddn_revisions_consumed': [ddn_revision()]}
     env = {**os.environ, 'PYTHONPATH': os.pathsep.join([str(ROOT), str(ROOT / 'web'), str(ROOT / 'tools')])}
     if mysqlsh is not None:
         if not mysqlsh.is_file():
@@ -174,6 +189,8 @@ def run(output, ddn_work, mysqlsh=None):
             refreshed = subprocess.run([sys.executable, str(ROOT / 'tools/refresh_ddn.py'), '--work', str(ddn_work)],
                                        cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
             gate['ddn_refresh_exit_code'] = refreshed.returncode
+            if ddn_revision() != result['ddn_revisions_consumed'][-1]:
+                result['ddn_revisions_consumed'].append(ddn_revision())
             if refreshed.returncode == 0:
                 completed = subprocess.run(command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
                 gate['exit_code'] = completed.returncode
