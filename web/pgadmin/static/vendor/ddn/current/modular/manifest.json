@@ -1,7 +1,7 @@
 {
   "format": "ddn-modular-1",
   "version": "ddn-next-1",
-  "releaseHash": "259db2b22c702c00c876b71cd7e1eb9a1c9900ed1b59941a1b41710b212c1f2e",
+  "releaseHash": "4e1aab61a2d1cab85f220d794fc95c55dfe4952f798483f38d1340d821294e77",
   "license": "GPL-2.0-or-later",
   "licenseFile": "LICENSE",
   "notices": "NOTICE.md",
@@ -12,7 +12,7 @@
     "api:designer": {
       "kind": "api",
       "moduleId": "api-designer.js",
-      "chunkId": "chunk-24edb2300037fb3f5114",
+      "chunkId": "chunk-4cccd0df2c91899e5468",
       "chunks": [
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-01af8b7d4facf4fa5e13",
@@ -30,23 +30,23 @@
         "chunk-bba66106914a2f99ba8f",
         "chunk-fa291def36369b75ebb4",
         "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-07389564f8ce279dc6cb",
-        "chunk-4c7d215a22dc7b3b4f7e",
+        "chunk-0f931f5298b9d454618b",
         "chunk-5467f091eae9a4469bcd",
         "chunk-57325b59a6f120a5be1c",
         "chunk-5ee6bed5173eaefa4371",
-        "chunk-c815afb5823b25f6f661",
-        "chunk-7353e395c4659a623554",
+        "chunk-edea6b4854ab438c6045",
+        "chunk-73c4e3ffbc034a4c7b9b",
+        "chunk-7db7e5d28c1d9f204721",
         "chunk-84b71bfba0c4e50d7b65",
         "chunk-97a44dc18bb30aeddf31",
         "chunk-cf5589a771120f1a4a94",
-        "chunk-9a7122586ca8445e1bec",
+        "chunk-7e02fc06d38cab8586e0",
         "chunk-a090ee7aba8345faf8f7",
-        "chunk-24edb2300037fb3f5114"
+        "chunk-4cccd0df2c91899e5468"
       ],
       "moduleCount": 29,
-      "rawBytes": 767229,
-      "gzipBytes": 258467
+      "rawBytes": 767347,
+      "gzipBytes": 258536
     },
     "api:verifier": {
       "kind": "api",
@@ -74,7 +74,7 @@
     "api:viewer": {
       "kind": "api",
       "moduleId": "api-viewer.js",
-      "chunkId": "chunk-a49153b7bbd658d898b5",
+      "chunkId": "chunk-3d8e3cf7c0c526b9adb3",
       "chunks": [
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-01af8b7d4facf4fa5e13",
@@ -92,20 +92,20 @@
         "chunk-bba66106914a2f99ba8f",
         "chunk-fa291def36369b75ebb4",
         "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-07389564f8ce279dc6cb",
-        "chunk-4c7d215a22dc7b3b4f7e",
+        "chunk-0f931f5298b9d454618b",
+        "chunk-7db7e5d28c1d9f204721",
         "chunk-84b71bfba0c4e50d7b65",
-        "chunk-06170fe5d3898c3593c6",
-        "chunk-a49153b7bbd658d898b5"
+        "chunk-bef3bc01f3867f57857b",
+        "chunk-3d8e3cf7c0c526b9adb3"
       ],
       "moduleCount": 21,
-      "rawBytes": 576907,
-      "gzipBytes": 191518
+      "rawBytes": 576964,
+      "gzipBytes": 191571
     },
     "designer": {
       "kind": "utility",
       "moduleId": "designer.js",
-      "chunkId": "chunk-68771d8c6e759132aa2b",
+      "chunkId": "chunk-d3d5a7285e4aadb9f592",
       "chunks": [
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-01af8b7d4facf4fa5e13",
@@ -123,29 +123,29 @@
         "chunk-bba66106914a2f99ba8f",
         "chunk-fa291def36369b75ebb4",
         "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-07389564f8ce279dc6cb",
-        "chunk-4c7d215a22dc7b3b4f7e",
+        "chunk-0f931f5298b9d454618b",
         "chunk-5467f091eae9a4469bcd",
         "chunk-57325b59a6f120a5be1c",
         "chunk-5ee6bed5173eaefa4371",
-        "chunk-c815afb5823b25f6f661",
-        "chunk-7353e395c4659a623554",
-        "chunk-8473507c6eb8949234b7",
+        "chunk-edea6b4854ab438c6045",
+        "chunk-73c4e3ffbc034a4c7b9b",
+        "chunk-7db7e5d28c1d9f204721",
         "chunk-84b71bfba0c4e50d7b65",
         "chunk-97a44dc18bb30aeddf31",
         "chunk-cf5589a771120f1a4a94",
-        "chunk-9a7122586ca8445e1bec",
+        "chunk-7e02fc06d38cab8586e0",
+        "chunk-8473507c6eb8949234b7",
         "chunk-a090ee7aba8345faf8f7",
-        "chunk-68771d8c6e759132aa2b"
+        "chunk-d3d5a7285e4aadb9f592"
       ],
       "moduleCount": 30,
-      "rawBytes": 863397,
-      "gzipBytes": 290483
+      "rawBytes": 863515,
+      "gzipBytes": 290548
     },
-    "module:shared/appearance-F5OVEIOP.js": {
+    "module:shared/appearance-XDXT4BG5.js": {
       "kind": "utility",
-      "moduleId": "shared/appearance-F5OVEIOP.js",
-      "chunkId": "chunk-38fa50e3aacba078a776",
+      "moduleId": "shared/appearance-XDXT4BG5.js",
+      "chunkId": "chunk-108ca1dce83b52888b0a",
       "chunks": [
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-01af8b7d4facf4fa5e13",
@@ -159,24 +159,24 @@
         "chunk-bba66106914a2f99ba8f",
         "chunk-fa291def36369b75ebb4",
         "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-57325b59a6f120a5be1c",
         "chunk-5ee6bed5173eaefa4371",
         "chunk-84b71bfba0c4e50d7b65",
         "chunk-a090ee7aba8345faf8f7",
         "chunk-b6ff0d5975340753b2e9",
-        "chunk-c815afb5823b25f6f661",
+        "chunk-edea6b4854ab438c6045",
         "chunk-f44c80f8ed164dd6addb",
-        "chunk-38fa50e3aacba078a776"
+        "chunk-108ca1dce83b52888b0a"
       ],
       "moduleCount": 21,
-      "rawBytes": 613778,
-      "gzipBytes": 204756
+      "rawBytes": 613835,
+      "gzipBytes": 204806
     },
-    "module:shared/new-diagram-CIJX3AQQ.js": {
+    "module:shared/new-diagram-MJXTNHGL.js": {
       "kind": "utility",
-      "moduleId": "shared/new-diagram-CIJX3AQQ.js",
-      "chunkId": "chunk-ddc63c3e7ab717b6e404",
+      "moduleId": "shared/new-diagram-MJXTNHGL.js",
+      "chunkId": "chunk-f579f1981de3d5edbbaa",
       "chunks": [
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-01af8b7d4facf4fa5e13",
@@ -190,7 +190,7 @@
         "chunk-bba66106914a2f99ba8f",
         "chunk-fa291def36369b75ebb4",
         "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-cf5589a771120f1a4a94",
         "chunk-1d8a790b6972cfc90a08",
         "chunk-5ee6bed5173eaefa4371",
@@ -199,16 +199,16 @@
         "chunk-b6ff0d5975340753b2e9",
         "chunk-f44c80f8ed164dd6addb",
         "chunk-f82dcdd35b6640cd05d8",
-        "chunk-ddc63c3e7ab717b6e404"
+        "chunk-f579f1981de3d5edbbaa"
       ],
       "moduleCount": 22,
-      "rawBytes": 614036,
-      "gzipBytes": 206246
+      "rawBytes": 614093,
+      "gzipBytes": 206293
     },
-    "module:shared/properties-BDIGZWI3.js": {
+    "module:shared/properties-ZVW535MS.js": {
       "kind": "utility",
-      "moduleId": "shared/properties-BDIGZWI3.js",
-      "chunkId": "chunk-1591043eae1a57800d05",
+      "moduleId": "shared/properties-ZVW535MS.js",
+      "chunkId": "chunk-a0f4f5239cf6a8a14a66",
       "chunks": [
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-01af8b7d4facf4fa5e13",
@@ -222,24 +222,24 @@
         "chunk-bba66106914a2f99ba8f",
         "chunk-fa291def36369b75ebb4",
         "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-57325b59a6f120a5be1c",
         "chunk-5ee6bed5173eaefa4371",
-        "chunk-c815afb5823b25f6f661",
-        "chunk-7353e395c4659a623554",
+        "chunk-edea6b4854ab438c6045",
+        "chunk-73c4e3ffbc034a4c7b9b",
         "chunk-84b71bfba0c4e50d7b65",
         "chunk-b6ff0d5975340753b2e9",
         "chunk-f44c80f8ed164dd6addb",
-        "chunk-1591043eae1a57800d05"
+        "chunk-a0f4f5239cf6a8a14a66"
       ],
       "moduleCount": 21,
-      "rawBytes": 612741,
-      "gzipBytes": 204573
+      "rawBytes": 612798,
+      "gzipBytes": 204623
     },
-    "module:shared/symbol-XHATWLCQ.js": {
+    "module:shared/symbol-WUCFKEJW.js": {
       "kind": "utility",
-      "moduleId": "shared/symbol-XHATWLCQ.js",
-      "chunkId": "chunk-d1048656b4d261936401",
+      "moduleId": "shared/symbol-WUCFKEJW.js",
+      "chunkId": "chunk-78f205dee4be20483aea",
       "chunks": [
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-01af8b7d4facf4fa5e13",
@@ -253,18 +253,18 @@
         "chunk-bba66106914a2f99ba8f",
         "chunk-fa291def36369b75ebb4",
         "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-57325b59a6f120a5be1c",
         "chunk-5ee6bed5173eaefa4371",
         "chunk-84b71bfba0c4e50d7b65",
         "chunk-b6ff0d5975340753b2e9",
-        "chunk-c815afb5823b25f6f661",
+        "chunk-edea6b4854ab438c6045",
         "chunk-f44c80f8ed164dd6addb",
-        "chunk-d1048656b4d261936401"
+        "chunk-78f205dee4be20483aea"
       ],
       "moduleCount": 20,
-      "rawBytes": 602488,
-      "gzipBytes": 200381
+      "rawBytes": 602545,
+      "gzipBytes": 200429
     },
     "module:shared/view-layout-picker-WBPA3BA4.js": {
       "kind": "utility",
@@ -1343,7 +1343,7 @@
     "viewer": {
       "kind": "utility",
       "moduleId": "viewer.js",
-      "chunkId": "chunk-5f1f71065dd4ad4e086c",
+      "chunkId": "chunk-31fa2c62ee0ec5f7da33",
       "chunks": [
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-01af8b7d4facf4fa5e13",
@@ -1361,17 +1361,17 @@
         "chunk-bba66106914a2f99ba8f",
         "chunk-fa291def36369b75ebb4",
         "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-07389564f8ce279dc6cb",
-        "chunk-4c7d215a22dc7b3b4f7e",
-        "chunk-84b71bfba0c4e50d7b65",
-        "chunk-06170fe5d3898c3593c6",
+        "chunk-0f931f5298b9d454618b",
         "chunk-57325b59a6f120a5be1c",
+        "chunk-7db7e5d28c1d9f204721",
         "chunk-8473507c6eb8949234b7",
-        "chunk-5f1f71065dd4ad4e086c"
+        "chunk-84b71bfba0c4e50d7b65",
+        "chunk-bef3bc01f3867f57857b",
+        "chunk-31fa2c62ee0ec5f7da33"
       ],
       "moduleCount": 23,
-      "rawBytes": 682291,
-      "gzipBytes": 227264
+      "rawBytes": 682348,
+      "gzipBytes": 227311
     },
     "worker": {
       "kind": "worker",
@@ -1410,10 +1410,10 @@
         "api:verifier",
         "api:viewer",
         "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
         "module:shared/view-layout-picker-WBPA3BA4.js",
         "module:shared/view-picker-UB2THBHB.js",
         "module:shared/zip-4RHTSAA3.js",
@@ -1472,120 +1472,6 @@
       "gzipBytes": 670
     },
     {
-      "id": "chunk-fa291def36369b75ebb4",
-      "file": "chunks/chunk-fa291def36369b75ebb4.js",
-      "hash": "bf17f723164a3863ac5777ab3e4a69f4e560f2a9c13551b5f1082e0afc5aadb8",
-      "dependencies": [],
-      "moduleIds": [
-        "shared/chunk-J5VTG52I.js"
-      ],
-      "entries": [
-        "api:designer",
-        "api:viewer",
-        "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
-        "module:shared/view-layout-picker-WBPA3BA4.js",
-        "verifier",
-        "viewer"
-      ],
-      "rawBytes": 41768,
-      "gzipBytes": 13775
-    },
-    {
-      "id": "chunk-e3b4b9257fd7288fc6a9",
-      "file": "chunks/chunk-e3b4b9257fd7288fc6a9.js",
-      "hash": "03322e75784d18d92d77bdd246de75f11c5f9978308a8360dfcc45640761da8f",
-      "dependencies": [
-        "chunk-fa291def36369b75ebb4"
-      ],
-      "moduleIds": [
-        "shared/chunk-BJWSWPYM.js"
-      ],
-      "entries": [
-        "api:designer",
-        "api:viewer",
-        "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
-        "verifier",
-        "viewer"
-      ],
-      "rawBytes": 10430,
-      "gzipBytes": 4989
-    },
-    {
-      "id": "chunk-57325b59a6f120a5be1c",
-      "file": "chunks/chunk-57325b59a6f120a5be1c.js",
-      "hash": "0e45af9393d09173d374ebd6c07bec4928e683369ee612e5dc794c606c649b7b",
-      "dependencies": [
-        "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-fa291def36369b75ebb4"
-      ],
-      "moduleIds": [
-        "shared/chunk-SNS3IFSG.js"
-      ],
-      "entries": [
-        "api:designer",
-        "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
-        "verifier",
-        "viewer"
-      ],
-      "rawBytes": 9690,
-      "gzipBytes": 4020
-    },
-    {
-      "id": "chunk-146a8399618bed41d59f",
-      "file": "chunks/chunk-146a8399618bed41d59f.js",
-      "hash": "5951f93386ba46293072a542c1c4216814dfc03ca649970f51bd29fa2b8e2eb6",
-      "dependencies": [],
-      "moduleIds": [
-        "shared/chunk-ISRE6U3Z.js"
-      ],
-      "entries": [
-        "api:designer",
-        "api:verifier",
-        "api:viewer",
-        "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
-        "module:shared/view-layout-picker-WBPA3BA4.js",
-        "verifier",
-        "viewer",
-        "worker"
-      ],
-      "rawBytes": 1979,
-      "gzipBytes": 999
-    },
-    {
-      "id": "chunk-97a44dc18bb30aeddf31",
-      "file": "chunks/chunk-97a44dc18bb30aeddf31.js",
-      "hash": "a68183e2946a0ebcc3491eb7795505e372f873234a9ae1299c41b5f2ab71d179",
-      "dependencies": [
-        "chunk-146a8399618bed41d59f"
-      ],
-      "moduleIds": [
-        "shared/chunk-UUKJBJFV.js"
-      ],
-      "entries": [
-        "api:designer",
-        "designer",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/view-layout-picker-WBPA3BA4.js"
-      ],
-      "rawBytes": 1123,
-      "gzipBytes": 745
-    },
-    {
       "id": "chunk-1fd35a3e06ff096d1c6e",
       "file": "chunks/chunk-1fd35a3e06ff096d1c6e.js",
       "hash": "7a770b748809ff41f73b11b5166b278129280c195644f2d7304e2f5628b8eefb",
@@ -1598,10 +1484,10 @@
         "api:verifier",
         "api:viewer",
         "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
         "module:shared/view-picker-UB2THBHB.js",
         "render:charts",
         "render:charts-density-calendar",
@@ -1672,10 +1558,10 @@
         "api:verifier",
         "api:viewer",
         "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
         "module:shared/view-picker-UB2THBHB.js",
         "render:charts",
         "render:charts-density-calendar",
@@ -1742,10 +1628,10 @@
         "api:verifier",
         "api:viewer",
         "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
         "module:shared/view-picker-UB2THBHB.js",
         "render:charts",
         "render:charts-density-calendar",
@@ -1811,10 +1697,10 @@
         "api:verifier",
         "api:viewer",
         "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
         "module:shared/view-picker-UB2THBHB.js",
         "verifier",
         "viewer",
@@ -1822,86 +1708,6 @@
       ],
       "rawBytes": 65951,
       "gzipBytes": 21808
-    },
-    {
-      "id": "chunk-4216949ef77d180da015",
-      "file": "chunks/chunk-4216949ef77d180da015.js",
-      "hash": "206b78177ce6e7d0efa3a91140cae2b0759fd43b032fa8d3d4e333ecfd6138e1",
-      "dependencies": [
-        "chunk-146a8399618bed41d59f",
-        "chunk-3b4ad78bb688aec7e29d",
-        "chunk-51dfa1c4e262cf881484"
-      ],
-      "moduleIds": [
-        "shared/chunk-V2RKFVNY.js"
-      ],
-      "entries": [
-        "api:designer",
-        "api:verifier",
-        "api:viewer",
-        "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
-        "verifier",
-        "viewer",
-        "worker"
-      ],
-      "rawBytes": 60384,
-      "gzipBytes": 21405
-    },
-    {
-      "id": "chunk-a090ee7aba8345faf8f7",
-      "file": "chunks/chunk-a090ee7aba8345faf8f7.js",
-      "hash": "db5355cabc9cf461e2709d15f97fa5afe0bbe5e3deba41ddff8252264c145da0",
-      "dependencies": [
-        "chunk-4216949ef77d180da015"
-      ],
-      "moduleIds": [
-        "shared/chunk-DTKE5C4J.js"
-      ],
-      "entries": [
-        "api:designer",
-        "designer",
-        "module:shared/appearance-F5OVEIOP.js"
-      ],
-      "rawBytes": 3989,
-      "gzipBytes": 1996
-    },
-    {
-      "id": "chunk-8db2bf665aa9a4111008",
-      "file": "chunks/chunk-8db2bf665aa9a4111008.js",
-      "hash": "4f78f1c0863c9bbab77a479ff104cac0b9f9d9d03cb0341f605ca7dc036948f6",
-      "dependencies": [],
-      "moduleIds": [
-        "shared/chunk-ZHQOQ4T7.js"
-      ],
-      "entries": [
-        "api:designer",
-        "api:viewer",
-        "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
-        "render:graphs",
-        "render:graphs-architecture",
-        "render:graphs-erd",
-        "render:graphs-process",
-        "render:graphs-specialist",
-        "render:graphs-systems",
-        "render:graphs-uml",
-        "render:surfaces",
-        "render:surfaces-canvases",
-        "render:surfaces-decisions",
-        "render:surfaces-matrices",
-        "render:surfaces-panels",
-        "render:surfaces-timeline",
-        "viewer"
-      ],
-      "rawBytes": 2572,
-      "gzipBytes": 1494
     },
     {
       "id": "chunk-3bae5445a9724b75ede9",
@@ -1917,10 +1723,10 @@
         "api:designer",
         "api:viewer",
         "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
         "render:charts",
         "render:charts-density-calendar",
         "render:charts-hierarchy",
@@ -1950,6 +1756,72 @@
       "gzipBytes": 2249
     },
     {
+      "id": "chunk-8db2bf665aa9a4111008",
+      "file": "chunks/chunk-8db2bf665aa9a4111008.js",
+      "hash": "4f78f1c0863c9bbab77a479ff104cac0b9f9d9d03cb0341f605ca7dc036948f6",
+      "dependencies": [],
+      "moduleIds": [
+        "shared/chunk-ZHQOQ4T7.js"
+      ],
+      "entries": [
+        "api:designer",
+        "api:viewer",
+        "designer",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
+        "render:graphs",
+        "render:graphs-architecture",
+        "render:graphs-erd",
+        "render:graphs-process",
+        "render:graphs-specialist",
+        "render:graphs-systems",
+        "render:graphs-uml",
+        "render:surfaces",
+        "render:surfaces-canvases",
+        "render:surfaces-decisions",
+        "render:surfaces-matrices",
+        "render:surfaces-panels",
+        "render:surfaces-timeline",
+        "viewer"
+      ],
+      "rawBytes": 2572,
+      "gzipBytes": 1494
+    },
+    {
+      "id": "chunk-bba66106914a2f99ba8f",
+      "file": "chunks/chunk-bba66106914a2f99ba8f.js",
+      "hash": "46a42bb60c1329549d1588196f4c296360be4000095ce6549c7af877b775a868",
+      "dependencies": [
+        "chunk-3bae5445a9724b75ede9",
+        "chunk-51dfa1c4e262cf881484",
+        "chunk-8db2bf665aa9a4111008"
+      ],
+      "moduleIds": [
+        "shared/chunk-6HZW7MGS.js"
+      ],
+      "entries": [
+        "api:designer",
+        "api:viewer",
+        "designer",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
+        "render:graphs",
+        "render:graphs-architecture",
+        "render:graphs-erd",
+        "render:graphs-process",
+        "render:graphs-specialist",
+        "render:graphs-systems",
+        "render:graphs-uml",
+        "viewer"
+      ],
+      "rawBytes": 88670,
+      "gzipBytes": 32442
+    },
+    {
       "id": "chunk-556c479c1c72b37f81f1",
       "file": "chunks/chunk-556c479c1c72b37f81f1.js",
       "hash": "7aa996bc9ede59cca109d52468d8ace85a31e0880bca688e527f9f3bf9689be2",
@@ -1963,10 +1835,10 @@
         "api:designer",
         "api:viewer",
         "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
         "render:charts",
         "render:charts-density-calendar",
         "render:charts-hierarchy",
@@ -1989,41 +1861,109 @@
       "gzipBytes": 4390
     },
     {
-      "id": "chunk-bba66106914a2f99ba8f",
-      "file": "chunks/chunk-bba66106914a2f99ba8f.js",
-      "hash": "46a42bb60c1329549d1588196f4c296360be4000095ce6549c7af877b775a868",
+      "id": "chunk-146a8399618bed41d59f",
+      "file": "chunks/chunk-146a8399618bed41d59f.js",
+      "hash": "5951f93386ba46293072a542c1c4216814dfc03ca649970f51bd29fa2b8e2eb6",
+      "dependencies": [],
+      "moduleIds": [
+        "shared/chunk-ISRE6U3Z.js"
+      ],
+      "entries": [
+        "api:designer",
+        "api:verifier",
+        "api:viewer",
+        "designer",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
+        "module:shared/view-layout-picker-WBPA3BA4.js",
+        "verifier",
+        "viewer",
+        "worker"
+      ],
+      "rawBytes": 1979,
+      "gzipBytes": 999
+    },
+    {
+      "id": "chunk-4216949ef77d180da015",
+      "file": "chunks/chunk-4216949ef77d180da015.js",
+      "hash": "206b78177ce6e7d0efa3a91140cae2b0759fd43b032fa8d3d4e333ecfd6138e1",
       "dependencies": [
-        "chunk-3bae5445a9724b75ede9",
-        "chunk-51dfa1c4e262cf881484",
-        "chunk-8db2bf665aa9a4111008"
+        "chunk-146a8399618bed41d59f",
+        "chunk-3b4ad78bb688aec7e29d",
+        "chunk-51dfa1c4e262cf881484"
       ],
       "moduleIds": [
-        "shared/chunk-6HZW7MGS.js"
+        "shared/chunk-V2RKFVNY.js"
+      ],
+      "entries": [
+        "api:designer",
+        "api:verifier",
+        "api:viewer",
+        "designer",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
+        "verifier",
+        "viewer",
+        "worker"
+      ],
+      "rawBytes": 60384,
+      "gzipBytes": 21405
+    },
+    {
+      "id": "chunk-fa291def36369b75ebb4",
+      "file": "chunks/chunk-fa291def36369b75ebb4.js",
+      "hash": "bf17f723164a3863ac5777ab3e4a69f4e560f2a9c13551b5f1082e0afc5aadb8",
+      "dependencies": [],
+      "moduleIds": [
+        "shared/chunk-J5VTG52I.js"
       ],
       "entries": [
         "api:designer",
         "api:viewer",
         "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
-        "render:graphs",
-        "render:graphs-architecture",
-        "render:graphs-erd",
-        "render:graphs-process",
-        "render:graphs-specialist",
-        "render:graphs-systems",
-        "render:graphs-uml",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
+        "module:shared/view-layout-picker-WBPA3BA4.js",
+        "verifier",
         "viewer"
       ],
-      "rawBytes": 88670,
-      "gzipBytes": 32442
+      "rawBytes": 41768,
+      "gzipBytes": 13775
     },
     {
-      "id": "chunk-07389564f8ce279dc6cb",
-      "file": "chunks/chunk-07389564f8ce279dc6cb.js",
-      "hash": "6dd32be68b6b045f022e1f66db77f9debb987db6494ae3948688f86b80de70ac",
+      "id": "chunk-e3b4b9257fd7288fc6a9",
+      "file": "chunks/chunk-e3b4b9257fd7288fc6a9.js",
+      "hash": "03322e75784d18d92d77bdd246de75f11c5f9978308a8360dfcc45640761da8f",
+      "dependencies": [
+        "chunk-fa291def36369b75ebb4"
+      ],
+      "moduleIds": [
+        "shared/chunk-BJWSWPYM.js"
+      ],
+      "entries": [
+        "api:designer",
+        "api:viewer",
+        "designer",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
+        "verifier",
+        "viewer"
+      ],
+      "rawBytes": 10430,
+      "gzipBytes": 4989
+    },
+    {
+      "id": "chunk-0f931f5298b9d454618b",
+      "file": "chunks/chunk-0f931f5298b9d454618b.js",
+      "hash": "efd35ba3f4fe7600ee206ddc1826dcc2fe2ceb0eb431e6afc509d3c790006c78",
       "dependencies": [
         "chunk-3b4ad78bb688aec7e29d",
         "chunk-3bae5445a9724b75ede9",
@@ -2036,63 +1976,20 @@
         "chunk-fa291def36369b75ebb4"
       ],
       "moduleIds": [
-        "shared/chunk-WZLCMPCO.js"
+        "shared/chunk-KHGPBHYD.js"
       ],
       "entries": [
         "api:designer",
         "api:viewer",
         "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
         "viewer"
       ],
-      "rawBytes": 136851,
-      "gzipBytes": 47364
-    },
-    {
-      "id": "chunk-c815afb5823b25f6f661",
-      "file": "chunks/chunk-c815afb5823b25f6f661.js",
-      "hash": "b9201cdb4b6422aafc5f7876899672f04e1155828391410bfff16500801f931b",
-      "dependencies": [
-        "chunk-07389564f8ce279dc6cb",
-        "chunk-3b4ad78bb688aec7e29d",
-        "chunk-4216949ef77d180da015",
-        "chunk-51dfa1c4e262cf881484"
-      ],
-      "moduleIds": [
-        "shared/chunk-QUBKPITX.js"
-      ],
-      "entries": [
-        "api:designer",
-        "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js"
-      ],
-      "rawBytes": 31902,
-      "gzipBytes": 11640
-    },
-    {
-      "id": "chunk-5ee6bed5173eaefa4371",
-      "file": "chunks/chunk-5ee6bed5173eaefa4371.js",
-      "hash": "11e1891ae4e77b9b129ca4be944834f61eeb8a0a6d7fba7709d0a17e304a1acf",
-      "dependencies": [],
-      "moduleIds": [
-        "shared/chunk-7WBER65N.js"
-      ],
-      "entries": [
-        "api:designer",
-        "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
-        "module:shared/view-layout-picker-WBPA3BA4.js"
-      ],
-      "rawBytes": 820,
-      "gzipBytes": 572
+      "rawBytes": 136908,
+      "gzipBytes": 47415
     },
     {
       "id": "chunk-f44c80f8ed164dd6addb",
@@ -2109,10 +2006,10 @@
         "api:verifier",
         "api:viewer",
         "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
         "verifier",
         "viewer"
       ],
@@ -2134,10 +2031,10 @@
         "api:verifier",
         "api:viewer",
         "designer",
-        "module:shared/appearance-F5OVEIOP.js",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/properties-BDIGZWI3.js",
-        "module:shared/symbol-XHATWLCQ.js",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
         "verifier",
         "verify:charts",
         "verify:charts-density-calendar",
@@ -2242,6 +2139,152 @@
       "gzipBytes": 5321
     },
     {
+      "id": "chunk-7db7e5d28c1d9f204721",
+      "file": "chunks/chunk-7db7e5d28c1d9f204721.js",
+      "hash": "c97cd9ef7c5614aa01611e62970bfcd8f885cd6a072e805ec3c16edabfa519a2",
+      "dependencies": [
+        "chunk-05e7edd69ca0db18c2b8",
+        "chunk-0f931f5298b9d454618b",
+        "chunk-1879d977d331bb55a59b",
+        "chunk-3b4ad78bb688aec7e29d",
+        "chunk-51dfa1c4e262cf881484"
+      ],
+      "moduleIds": [
+        "shared/chunk-K7ZBOKGF.js"
+      ],
+      "entries": [
+        "api:designer",
+        "api:viewer",
+        "designer",
+        "viewer"
+      ],
+      "rawBytes": 3995,
+      "gzipBytes": 1932
+    },
+    {
+      "id": "chunk-edea6b4854ab438c6045",
+      "file": "chunks/chunk-edea6b4854ab438c6045.js",
+      "hash": "2c7308bf0c6c057f160d2124ef8953893e8860996ffffa5b3b16d6ef8c0c8fab",
+      "dependencies": [
+        "chunk-0f931f5298b9d454618b",
+        "chunk-3b4ad78bb688aec7e29d",
+        "chunk-4216949ef77d180da015",
+        "chunk-51dfa1c4e262cf881484"
+      ],
+      "moduleIds": [
+        "shared/chunk-FZFC5ZZO.js"
+      ],
+      "entries": [
+        "api:designer",
+        "designer",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js"
+      ],
+      "rawBytes": 31902,
+      "gzipBytes": 11639
+    },
+    {
+      "id": "chunk-57325b59a6f120a5be1c",
+      "file": "chunks/chunk-57325b59a6f120a5be1c.js",
+      "hash": "0e45af9393d09173d374ebd6c07bec4928e683369ee612e5dc794c606c649b7b",
+      "dependencies": [
+        "chunk-e3b4b9257fd7288fc6a9",
+        "chunk-fa291def36369b75ebb4"
+      ],
+      "moduleIds": [
+        "shared/chunk-SNS3IFSG.js"
+      ],
+      "entries": [
+        "api:designer",
+        "designer",
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
+        "verifier",
+        "viewer"
+      ],
+      "rawBytes": 9690,
+      "gzipBytes": 4020
+    },
+    {
+      "id": "chunk-73c4e3ffbc034a4c7b9b",
+      "file": "chunks/chunk-73c4e3ffbc034a4c7b9b.js",
+      "hash": "67d711235b33def93f043acc9f2b53b0f55447d9ddeaf9a41bc23d538e53affd",
+      "dependencies": [
+        "chunk-51dfa1c4e262cf881484",
+        "chunk-57325b59a6f120a5be1c",
+        "chunk-edea6b4854ab438c6045",
+        "chunk-fa291def36369b75ebb4"
+      ],
+      "moduleIds": [
+        "shared/chunk-LMMQRZOU.js"
+      ],
+      "entries": [
+        "api:designer",
+        "designer",
+        "module:shared/properties-ZVW535MS.js"
+      ],
+      "rawBytes": 7797,
+      "gzipBytes": 3252
+    },
+    {
+      "id": "chunk-97a44dc18bb30aeddf31",
+      "file": "chunks/chunk-97a44dc18bb30aeddf31.js",
+      "hash": "a68183e2946a0ebcc3491eb7795505e372f873234a9ae1299c41b5f2ab71d179",
+      "dependencies": [
+        "chunk-146a8399618bed41d59f"
+      ],
+      "moduleIds": [
+        "shared/chunk-UUKJBJFV.js"
+      ],
+      "entries": [
+        "api:designer",
+        "designer",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/view-layout-picker-WBPA3BA4.js"
+      ],
+      "rawBytes": 1123,
+      "gzipBytes": 745
+    },
+    {
+      "id": "chunk-a090ee7aba8345faf8f7",
+      "file": "chunks/chunk-a090ee7aba8345faf8f7.js",
+      "hash": "db5355cabc9cf461e2709d15f97fa5afe0bbe5e3deba41ddff8252264c145da0",
+      "dependencies": [
+        "chunk-4216949ef77d180da015"
+      ],
+      "moduleIds": [
+        "shared/chunk-DTKE5C4J.js"
+      ],
+      "entries": [
+        "api:designer",
+        "designer",
+        "module:shared/appearance-XDXT4BG5.js"
+      ],
+      "rawBytes": 3989,
+      "gzipBytes": 1996
+    },
+    {
+      "id": "chunk-cf5589a771120f1a4a94",
+      "file": "chunks/chunk-cf5589a771120f1a4a94.js",
+      "hash": "f71a695f6c5c1a2d1ea7a27db6686a9ba2104177fd820e74d40137dfa20539e0",
+      "dependencies": [
+        "chunk-3b4ad78bb688aec7e29d"
+      ],
+      "moduleIds": [
+        "shared/chunk-ZLKOFP2R.js"
+      ],
+      "entries": [
+        "api:designer",
+        "designer",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/view-picker-UB2THBHB.js"
+      ],
+      "rawBytes": 6937,
+      "gzipBytes": 2702
+    },
+    {
       "id": "chunk-5467f091eae9a4469bcd",
       "file": "chunks/chunk-5467f091eae9a4469bcd.js",
       "hash": "b29267a5758b188172dcbff844218978ce0c4f814803078cb9b3473f944d47f6",
@@ -2268,133 +2311,90 @@
       "gzipBytes": 1374
     },
     {
-      "id": "chunk-cf5589a771120f1a4a94",
-      "file": "chunks/chunk-cf5589a771120f1a4a94.js",
-      "hash": "f71a695f6c5c1a2d1ea7a27db6686a9ba2104177fd820e74d40137dfa20539e0",
-      "dependencies": [
-        "chunk-3b4ad78bb688aec7e29d"
-      ],
+      "id": "chunk-5ee6bed5173eaefa4371",
+      "file": "chunks/chunk-5ee6bed5173eaefa4371.js",
+      "hash": "11e1891ae4e77b9b129ca4be944834f61eeb8a0a6d7fba7709d0a17e304a1acf",
+      "dependencies": [],
       "moduleIds": [
-        "shared/chunk-ZLKOFP2R.js"
+        "shared/chunk-7WBER65N.js"
       ],
       "entries": [
         "api:designer",
         "designer",
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/view-picker-UB2THBHB.js"
+        "module:shared/appearance-XDXT4BG5.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/properties-ZVW535MS.js",
+        "module:shared/symbol-WUCFKEJW.js",
+        "module:shared/view-layout-picker-WBPA3BA4.js"
       ],
-      "rawBytes": 6937,
-      "gzipBytes": 2702
+      "rawBytes": 820,
+      "gzipBytes": 572
     },
     {
-      "id": "chunk-7353e395c4659a623554",
-      "file": "chunks/chunk-7353e395c4659a623554.js",
-      "hash": "6302ae98c4eec9f1e8d24d05c0e313d913361f4387000071e166ce5761deae34",
-      "dependencies": [
-        "chunk-51dfa1c4e262cf881484",
-        "chunk-57325b59a6f120a5be1c",
-        "chunk-c815afb5823b25f6f661",
-        "chunk-fa291def36369b75ebb4"
-      ],
-      "moduleIds": [
-        "shared/chunk-2PYNFPUT.js"
-      ],
-      "entries": [
-        "api:designer",
-        "designer",
-        "module:shared/properties-BDIGZWI3.js"
-      ],
-      "rawBytes": 7797,
-      "gzipBytes": 3249
-    },
-    {
-      "id": "chunk-4c7d215a22dc7b3b4f7e",
-      "file": "chunks/chunk-4c7d215a22dc7b3b4f7e.js",
-      "hash": "a5728462f1f47697404abc7a494efb95a65085f848b1a7b2890d6cb7adac1fb1",
+      "id": "chunk-7e02fc06d38cab8586e0",
+      "file": "chunks/chunk-7e02fc06d38cab8586e0.js",
+      "hash": "240c4439c22e1db4975bcd2e1ad1060ecf7beb018ed8e585297b2ebd5f0f7a7d",
       "dependencies": [
         "chunk-05e7edd69ca0db18c2b8",
-        "chunk-07389564f8ce279dc6cb",
-        "chunk-1879d977d331bb55a59b",
-        "chunk-3b4ad78bb688aec7e29d",
-        "chunk-51dfa1c4e262cf881484"
-      ],
-      "moduleIds": [
-        "shared/chunk-P6RLXBAX.js"
-      ],
-      "entries": [
-        "api:designer",
-        "api:viewer",
-        "designer",
-        "viewer"
-      ],
-      "rawBytes": 3995,
-      "gzipBytes": 1935
-    },
-    {
-      "id": "chunk-9a7122586ca8445e1bec",
-      "file": "chunks/chunk-9a7122586ca8445e1bec.js",
-      "hash": "d25337f2b1123e26320985c3fb7c6c18a8178a9112669bca48056dbf0a136aeb",
-      "dependencies": [
-        "chunk-05e7edd69ca0db18c2b8",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-146a8399618bed41d59f",
         "chunk-3b4ad78bb688aec7e29d",
         "chunk-3bae5445a9724b75ede9",
         "chunk-4216949ef77d180da015",
-        "chunk-4c7d215a22dc7b3b4f7e",
         "chunk-51dfa1c4e262cf881484",
         "chunk-5467f091eae9a4469bcd",
         "chunk-57325b59a6f120a5be1c",
-        "chunk-7353e395c4659a623554",
+        "chunk-73c4e3ffbc034a4c7b9b",
+        "chunk-7db7e5d28c1d9f204721",
         "chunk-84b71bfba0c4e50d7b65",
         "chunk-97a44dc18bb30aeddf31",
         "chunk-bba66106914a2f99ba8f",
-        "chunk-c815afb5823b25f6f661",
         "chunk-cf5589a771120f1a4a94",
         "chunk-e3b4b9257fd7288fc6a9",
+        "chunk-edea6b4854ab438c6045",
         "chunk-fa291def36369b75ebb4"
       ],
       "moduleIds": [
-        "shared/chunk-6HLCZF2M.js"
+        "shared/chunk-LPIR5D6T.js"
       ],
       "entries": [
         "api:designer",
         "designer"
       ],
-      "rawBytes": 125982,
-      "gzipBytes": 41239
+      "rawBytes": 126043,
+      "gzipBytes": 41258
     },
     {
-      "id": "chunk-24edb2300037fb3f5114",
-      "file": "chunks/chunk-24edb2300037fb3f5114.js",
-      "hash": "0779da3ec894f377d799284526ca73587aa7602fc14d61c410f28155dedc9b26",
+      "id": "chunk-4cccd0df2c91899e5468",
+      "file": "chunks/chunk-4cccd0df2c91899e5468.js",
+      "hash": "7c04fe62ca72db3b5f6d67907d243560cfe284f13b941ba27538234ecd0d9ff2",
       "dependencies": [
         "chunk-01af8b7d4facf4fa5e13",
         "chunk-05e7edd69ca0db18c2b8",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-146a8399618bed41d59f",
         "chunk-1879d977d331bb55a59b",
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-3b4ad78bb688aec7e29d",
         "chunk-3bae5445a9724b75ede9",
         "chunk-4216949ef77d180da015",
-        "chunk-4c7d215a22dc7b3b4f7e",
         "chunk-51dfa1c4e262cf881484",
         "chunk-5467f091eae9a4469bcd",
         "chunk-556c479c1c72b37f81f1",
         "chunk-57325b59a6f120a5be1c",
         "chunk-5ee6bed5173eaefa4371",
-        "chunk-7353e395c4659a623554",
+        "chunk-73c4e3ffbc034a4c7b9b",
+        "chunk-7db7e5d28c1d9f204721",
+        "chunk-7e02fc06d38cab8586e0",
         "chunk-84b71bfba0c4e50d7b65",
         "chunk-8db2bf665aa9a4111008",
         "chunk-97a44dc18bb30aeddf31",
-        "chunk-9a7122586ca8445e1bec",
         "chunk-a090ee7aba8345faf8f7",
         "chunk-b6ff0d5975340753b2e9",
         "chunk-bba66106914a2f99ba8f",
-        "chunk-c815afb5823b25f6f661",
         "chunk-cf5589a771120f1a4a94",
         "chunk-e3b4b9257fd7288fc6a9",
+        "chunk-edea6b4854ab438c6045",
         "chunk-f44c80f8ed164dd6addb",
         "chunk-fa291def36369b75ebb4"
       ],
@@ -2453,47 +2453,47 @@
       "gzipBytes": 1066
     },
     {
-      "id": "chunk-06170fe5d3898c3593c6",
-      "file": "chunks/chunk-06170fe5d3898c3593c6.js",
-      "hash": "ec15642a8a886380f84ec6efaaef64eec84814f1948ba581ee63fa0f82bb4a1a",
+      "id": "chunk-bef3bc01f3867f57857b",
+      "file": "chunks/chunk-bef3bc01f3867f57857b.js",
+      "hash": "b3da80bd6effbbda386a47d5996bdb8836cb5ba1685b916059b5d815d792567a",
       "dependencies": [
         "chunk-05e7edd69ca0db18c2b8",
-        "chunk-07389564f8ce279dc6cb",
-        "chunk-4c7d215a22dc7b3b4f7e",
+        "chunk-0f931f5298b9d454618b",
+        "chunk-7db7e5d28c1d9f204721",
         "chunk-84b71bfba0c4e50d7b65"
       ],
       "moduleIds": [
-        "shared/chunk-PNLMMJX2.js"
+        "shared/chunk-GXSAQYVK.js"
       ],
       "entries": [
         "api:viewer",
         "viewer"
       ],
       "rawBytes": 1450,
-      "gzipBytes": 855
+      "gzipBytes": 857
     },
     {
-      "id": "chunk-a49153b7bbd658d898b5",
-      "file": "chunks/chunk-a49153b7bbd658d898b5.js",
-      "hash": "7d979e04c470fab6ea8840eabe9cb616ff0128fbbb2663d94c6bfaf8eb1c6c9c",
+      "id": "chunk-3d8e3cf7c0c526b9adb3",
+      "file": "chunks/chunk-3d8e3cf7c0c526b9adb3.js",
+      "hash": "635e1295468b87c6071966bd863d3e02fbed5e00a0db03dbeff024f085b89fc4",
       "dependencies": [
         "chunk-01af8b7d4facf4fa5e13",
         "chunk-05e7edd69ca0db18c2b8",
-        "chunk-06170fe5d3898c3593c6",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-146a8399618bed41d59f",
         "chunk-1879d977d331bb55a59b",
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-3b4ad78bb688aec7e29d",
         "chunk-3bae5445a9724b75ede9",
         "chunk-4216949ef77d180da015",
-        "chunk-4c7d215a22dc7b3b4f7e",
         "chunk-51dfa1c4e262cf881484",
         "chunk-556c479c1c72b37f81f1",
+        "chunk-7db7e5d28c1d9f204721",
         "chunk-84b71bfba0c4e50d7b65",
         "chunk-8db2bf665aa9a4111008",
         "chunk-b6ff0d5975340753b2e9",
         "chunk-bba66106914a2f99ba8f",
+        "chunk-bef3bc01f3867f57857b",
         "chunk-e3b4b9257fd7288fc6a9",
         "chunk-f44c80f8ed164dd6addb",
         "chunk-fa291def36369b75ebb4"
@@ -2505,7 +2505,7 @@
         "api:viewer"
       ],
       "rawBytes": 3271,
-      "gzipBytes": 1340
+      "gzipBytes": 1343
     },
     {
       "id": "chunk-8473507c6eb8949234b7",
@@ -2526,37 +2526,37 @@
       "gzipBytes": 7462
     },
     {
-      "id": "chunk-68771d8c6e759132aa2b",
-      "file": "chunks/chunk-68771d8c6e759132aa2b.js",
-      "hash": "be9af12ff7272e26befc3174bf89d3fd0e8bf374605863f0bd11bbc439ad7fe6",
+      "id": "chunk-d3d5a7285e4aadb9f592",
+      "file": "chunks/chunk-d3d5a7285e4aadb9f592.js",
+      "hash": "319219fcce181f330ef175da848885968677481a70ba40ff931a4a324ae8d4d4",
       "dependencies": [
         "chunk-01af8b7d4facf4fa5e13",
         "chunk-05e7edd69ca0db18c2b8",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-146a8399618bed41d59f",
         "chunk-1879d977d331bb55a59b",
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-3b4ad78bb688aec7e29d",
         "chunk-3bae5445a9724b75ede9",
         "chunk-4216949ef77d180da015",
-        "chunk-4c7d215a22dc7b3b4f7e",
         "chunk-51dfa1c4e262cf881484",
         "chunk-5467f091eae9a4469bcd",
         "chunk-556c479c1c72b37f81f1",
         "chunk-57325b59a6f120a5be1c",
         "chunk-5ee6bed5173eaefa4371",
-        "chunk-7353e395c4659a623554",
+        "chunk-73c4e3ffbc034a4c7b9b",
+        "chunk-7db7e5d28c1d9f204721",
+        "chunk-7e02fc06d38cab8586e0",
         "chunk-8473507c6eb8949234b7",
         "chunk-84b71bfba0c4e50d7b65",
         "chunk-8db2bf665aa9a4111008",
         "chunk-97a44dc18bb30aeddf31",
-        "chunk-9a7122586ca8445e1bec",
         "chunk-a090ee7aba8345faf8f7",
         "chunk-b6ff0d5975340753b2e9",
         "chunk-bba66106914a2f99ba8f",
-        "chunk-c815afb5823b25f6f661",
         "chunk-cf5589a771120f1a4a94",
         "chunk-e3b4b9257fd7288fc6a9",
+        "chunk-edea6b4854ab438c6045",
         "chunk-f44c80f8ed164dd6addb",
         "chunk-fa291def36369b75ebb4"
       ],
@@ -2567,15 +2567,15 @@
         "designer"
       ],
       "rawBytes": 82132,
-      "gzipBytes": 26161
+      "gzipBytes": 26157
     },
     {
-      "id": "chunk-38fa50e3aacba078a776",
-      "file": "chunks/chunk-38fa50e3aacba078a776.js",
-      "hash": "dbe2b9db7ae7801be364d49b0d64419fb23067e6d78e18580ebc70137183ea5c",
+      "id": "chunk-108ca1dce83b52888b0a",
+      "file": "chunks/chunk-108ca1dce83b52888b0a.js",
+      "hash": "62e86147ff4c579ca93fa9b971ec8923204bfcdf1818271b559632ecb5d1b6f4",
       "dependencies": [
         "chunk-01af8b7d4facf4fa5e13",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-146a8399618bed41d59f",
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-3b4ad78bb688aec7e29d",
@@ -2590,37 +2590,19 @@
         "chunk-a090ee7aba8345faf8f7",
         "chunk-b6ff0d5975340753b2e9",
         "chunk-bba66106914a2f99ba8f",
-        "chunk-c815afb5823b25f6f661",
         "chunk-e3b4b9257fd7288fc6a9",
+        "chunk-edea6b4854ab438c6045",
         "chunk-f44c80f8ed164dd6addb",
         "chunk-fa291def36369b75ebb4"
       ],
       "moduleIds": [
-        "shared/appearance-F5OVEIOP.js"
+        "shared/appearance-XDXT4BG5.js"
       ],
       "entries": [
-        "module:shared/appearance-F5OVEIOP.js"
+        "module:shared/appearance-XDXT4BG5.js"
       ],
       "rawBytes": 14532,
       "gzipBytes": 5635
-    },
-    {
-      "id": "chunk-f82dcdd35b6640cd05d8",
-      "file": "chunks/chunk-f82dcdd35b6640cd05d8.js",
-      "hash": "efbf74e3971d1823778f7972fb8cfcb4a6a7a9e089bbcaaa91331e5b78c78e7c",
-      "dependencies": [
-        "chunk-146a8399618bed41d59f",
-        "chunk-fa291def36369b75ebb4"
-      ],
-      "moduleIds": [
-        "shared/chunk-G5BNEL57.js"
-      ],
-      "entries": [
-        "module:shared/new-diagram-CIJX3AQQ.js",
-        "module:shared/view-layout-picker-WBPA3BA4.js"
-      ],
-      "rawBytes": 9327,
-      "gzipBytes": 3742
     },
     {
       "id": "chunk-1d8a790b6972cfc90a08",
@@ -2634,19 +2616,37 @@
         "shared/chunk-TUYEZ3NG.js"
       ],
       "entries": [
-        "module:shared/new-diagram-CIJX3AQQ.js",
+        "module:shared/new-diagram-MJXTNHGL.js",
         "module:shared/view-picker-UB2THBHB.js"
       ],
       "rawBytes": 34849,
       "gzipBytes": 14155
     },
     {
-      "id": "chunk-ddc63c3e7ab717b6e404",
-      "file": "chunks/chunk-ddc63c3e7ab717b6e404.js",
-      "hash": "80364ce16f7a3360a80cf98010d8aff2d350146fc00839eab34c8a9335232e9d",
+      "id": "chunk-f82dcdd35b6640cd05d8",
+      "file": "chunks/chunk-f82dcdd35b6640cd05d8.js",
+      "hash": "efbf74e3971d1823778f7972fb8cfcb4a6a7a9e089bbcaaa91331e5b78c78e7c",
+      "dependencies": [
+        "chunk-146a8399618bed41d59f",
+        "chunk-fa291def36369b75ebb4"
+      ],
+      "moduleIds": [
+        "shared/chunk-G5BNEL57.js"
+      ],
+      "entries": [
+        "module:shared/new-diagram-MJXTNHGL.js",
+        "module:shared/view-layout-picker-WBPA3BA4.js"
+      ],
+      "rawBytes": 9327,
+      "gzipBytes": 3742
+    },
+    {
+      "id": "chunk-f579f1981de3d5edbbaa",
+      "file": "chunks/chunk-f579f1981de3d5edbbaa.js",
+      "hash": "fb7c53c9787985f6a2e32407dcf9f4cc93053cc36a39787f3d1e0677e75eaee9",
       "dependencies": [
         "chunk-01af8b7d4facf4fa5e13",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-146a8399618bed41d59f",
         "chunk-1d8a790b6972cfc90a08",
         "chunk-1fd35a3e06ff096d1c6e",
@@ -2668,21 +2668,21 @@
         "chunk-fa291def36369b75ebb4"
       ],
       "moduleIds": [
-        "shared/new-diagram-CIJX3AQQ.js"
+        "shared/new-diagram-MJXTNHGL.js"
       ],
       "entries": [
-        "module:shared/new-diagram-CIJX3AQQ.js"
+        "module:shared/new-diagram-MJXTNHGL.js"
       ],
       "rawBytes": 8135,
-      "gzipBytes": 3437
+      "gzipBytes": 3433
     },
     {
-      "id": "chunk-1591043eae1a57800d05",
-      "file": "chunks/chunk-1591043eae1a57800d05.js",
-      "hash": "d97d7396a6df1ed707f2ced27bfdaa872defa61285fecc54c8f4d80c8a508b69",
+      "id": "chunk-a0f4f5239cf6a8a14a66",
+      "file": "chunks/chunk-a0f4f5239cf6a8a14a66.js",
+      "hash": "b9d2690a1ab069c8b06c24fd423d493e6347ce661576401b74982ddbaf487957",
       "dependencies": [
         "chunk-01af8b7d4facf4fa5e13",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-146a8399618bed41d59f",
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-3b4ad78bb688aec7e29d",
@@ -2692,32 +2692,32 @@
         "chunk-556c479c1c72b37f81f1",
         "chunk-57325b59a6f120a5be1c",
         "chunk-5ee6bed5173eaefa4371",
-        "chunk-7353e395c4659a623554",
+        "chunk-73c4e3ffbc034a4c7b9b",
         "chunk-84b71bfba0c4e50d7b65",
         "chunk-8db2bf665aa9a4111008",
         "chunk-b6ff0d5975340753b2e9",
         "chunk-bba66106914a2f99ba8f",
-        "chunk-c815afb5823b25f6f661",
         "chunk-e3b4b9257fd7288fc6a9",
+        "chunk-edea6b4854ab438c6045",
         "chunk-f44c80f8ed164dd6addb",
         "chunk-fa291def36369b75ebb4"
       ],
       "moduleIds": [
-        "shared/properties-BDIGZWI3.js"
+        "shared/properties-ZVW535MS.js"
       ],
       "entries": [
-        "module:shared/properties-BDIGZWI3.js"
+        "module:shared/properties-ZVW535MS.js"
       ],
       "rawBytes": 9687,
-      "gzipBytes": 4199
+      "gzipBytes": 4196
     },
     {
-      "id": "chunk-d1048656b4d261936401",
-      "file": "chunks/chunk-d1048656b4d261936401.js",
-      "hash": "3b68d87d344cabd7c5a0fc3652b007740f6b17fcfb88e82df65e31b6ac1b3c76",
+      "id": "chunk-78f205dee4be20483aea",
+      "file": "chunks/chunk-78f205dee4be20483aea.js",
+      "hash": "7838767205d1fff2bf42a3eaeca28d233114c57c31a9c858fd0540a8e782a4fb",
       "dependencies": [
         "chunk-01af8b7d4facf4fa5e13",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-146a8399618bed41d59f",
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-3b4ad78bb688aec7e29d",
@@ -2731,19 +2731,19 @@
         "chunk-8db2bf665aa9a4111008",
         "chunk-b6ff0d5975340753b2e9",
         "chunk-bba66106914a2f99ba8f",
-        "chunk-c815afb5823b25f6f661",
         "chunk-e3b4b9257fd7288fc6a9",
+        "chunk-edea6b4854ab438c6045",
         "chunk-f44c80f8ed164dd6addb",
         "chunk-fa291def36369b75ebb4"
       ],
       "moduleIds": [
-        "shared/symbol-XHATWLCQ.js"
+        "shared/symbol-WUCFKEJW.js"
       ],
       "entries": [
-        "module:shared/symbol-XHATWLCQ.js"
+        "module:shared/symbol-WUCFKEJW.js"
       ],
       "rawBytes": 7231,
-      "gzipBytes": 3256
+      "gzipBytes": 3254
     },
     {
       "id": "chunk-7400b30a3c4bd54f104f",
@@ -5013,29 +5013,29 @@
       "gzipBytes": 889
     },
     {
-      "id": "chunk-5f1f71065dd4ad4e086c",
-      "file": "chunks/chunk-5f1f71065dd4ad4e086c.js",
-      "hash": "1172064b1760650e9de7d0c053200f1174396a4743836972c4f9072f4e380658",
+      "id": "chunk-31fa2c62ee0ec5f7da33",
+      "file": "chunks/chunk-31fa2c62ee0ec5f7da33.js",
+      "hash": "bb17295d34642f7e779e302705f5042ffa5f80acb9809d52e4822bd584e433f4",
       "dependencies": [
         "chunk-01af8b7d4facf4fa5e13",
         "chunk-05e7edd69ca0db18c2b8",
-        "chunk-06170fe5d3898c3593c6",
-        "chunk-07389564f8ce279dc6cb",
+        "chunk-0f931f5298b9d454618b",
         "chunk-146a8399618bed41d59f",
         "chunk-1879d977d331bb55a59b",
         "chunk-1fd35a3e06ff096d1c6e",
         "chunk-3b4ad78bb688aec7e29d",
         "chunk-3bae5445a9724b75ede9",
         "chunk-4216949ef77d180da015",
-        "chunk-4c7d215a22dc7b3b4f7e",
         "chunk-51dfa1c4e262cf881484",
         "chunk-556c479c1c72b37f81f1",
         "chunk-57325b59a6f120a5be1c",
+        "chunk-7db7e5d28c1d9f204721",
         "chunk-8473507c6eb8949234b7",
         "chunk-84b71bfba0c4e50d7b65",
         "chunk-8db2bf665aa9a4111008",
         "chunk-b6ff0d5975340753b2e9",
         "chunk-bba66106914a2f99ba8f",
+        "chunk-bef3bc01f3867f57857b",
         "chunk-e3b4b9257fd7288fc6a9",
         "chunk-f44c80f8ed164dd6addb",
         "chunk-fa291def36369b75ebb4"
@@ -5047,7 +5047,7 @@
         "viewer"
       ],
       "rawBytes": 80734,
-      "gzipBytes": 25604
+      "gzipBytes": 25601
     },
     {
       "id": "chunk-75d361417a3c1704e792",
@@ -5079,8 +5079,8 @@
   "totals": {
     "modules": 141,
     "chunks": 141,
-    "rawBytes": 2307578,
-    "gzipBytes": 724135
+    "rawBytes": 2307696,
+    "gzipBytes": 724193
   },
   "optimizer": {
     "name": "esbuild",
@@ -5089,13 +5089,13 @@
     "minified": true
   },
   "sourceModules": {
-    "shared/symbol-XHATWLCQ.js": [
+    "shared/symbol-WUCFKEJW.js": [
       {
         "id": "designer/src/symbol.js",
         "bytes": 4541
       }
     ],
-    "shared/properties-BDIGZWI3.js": [
+    "shared/properties-ZVW535MS.js": [
       {
         "id": "designer/src/properties.js",
         "bytes": 6842
@@ -5103,7 +5103,7 @@
     ],
     "shared/view-picker-UB2THBHB.js": [],
     "shared/view-layout-picker-WBPA3BA4.js": [],
-    "shared/new-diagram-CIJX3AQQ.js": [
+    "shared/new-diagram-MJXTNHGL.js": [
       {
         "id": "designer/src/new-diagram.js",
         "bytes": 5287
@@ -5137,7 +5137,7 @@
         "bytes": 1650
       }
     ],
-    "shared/appearance-F5OVEIOP.js": [
+    "shared/appearance-XDXT4BG5.js": [
       {
         "id": "designer/src/appearance.js",
         "bytes": 11571
@@ -5677,14 +5677,14 @@
       }
     ],
     "api-viewer.js": [],
-    "shared/chunk-PNLMMJX2.js": [
+    "shared/chunk-GXSAQYVK.js": [
       {
         "id": "standalone/src/modular-viewer-api.js",
         "bytes": 170
       }
     ],
     "api-designer.js": [],
-    "shared/chunk-6HLCZF2M.js": [
+    "shared/chunk-LPIR5D6T.js": [
       {
         "id": "standalone/src/modular-designer-api.js",
         "bytes": 427
@@ -5715,7 +5715,7 @@
       },
       {
         "id": "designer/src/index.js",
-        "bytes": 100249
+        "bytes": 100309
       },
       {
         "id": "runtime/src/save.js",
@@ -5726,7 +5726,7 @@
         "bytes": 2357
       }
     ],
-    "shared/chunk-2PYNFPUT.js": [
+    "shared/chunk-LMMQRZOU.js": [
       {
         "id": "designer/src/schema-editor.js",
         "bytes": 6498
@@ -5750,7 +5750,7 @@
         "bytes": 2953
       }
     ],
-    "shared/chunk-QUBKPITX.js": [
+    "shared/chunk-FZFC5ZZO.js": [
       {
         "id": "runtime/src/layout-edit.js",
         "bytes": 1519
@@ -5777,7 +5777,7 @@
         "bytes": 8594
       }
     ],
-    "shared/chunk-P6RLXBAX.js": [
+    "shared/chunk-K7ZBOKGF.js": [
       {
         "id": "standalone/src/modular-runtime.js",
         "bytes": 2250
@@ -5787,7 +5787,7 @@
         "bytes": 236
       }
     ],
-    "shared/chunk-WZLCMPCO.js": [
+    "shared/chunk-KHGPBHYD.js": [
       {
         "id": "runtime/src/registry.js",
         "bytes": 2580
@@ -5814,7 +5814,7 @@
       },
       {
         "id": "presentation/src/project-core.js",
-        "bytes": 27858
+        "bytes": 27863
       },
       {
         "id": "presentation/src/graph-isometric.js",
@@ -5850,7 +5850,7 @@
       },
       {
         "id": "viewer/src/core.js",
-        "bytes": 54241
+        "bytes": 54304
       },
       {
         "id": "runtime/src/profile-loading.js",
@@ -6109,16 +6109,16 @@
         "chunk-bba66106914a2f99ba8f",
         "chunk-fa291def36369b75ebb4",
         "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-07389564f8ce279dc6cb",
-        "chunk-4c7d215a22dc7b3b4f7e",
-        "chunk-84b71bfba0c4e50d7b65",
-        "chunk-06170fe5d3898c3593c6",
+        "chunk-0f931f5298b9d454618b",
         "chunk-57325b59a6f120a5be1c",
+        "chunk-7db7e5d28c1d9f204721",
         "chunk-8473507c6eb8949234b7",
-        "chunk-5f1f71065dd4ad4e086c"
+        "chunk-84b71bfba0c4e50d7b65",
+        "chunk-bef3bc01f3867f57857b",
+        "chunk-31fa2c62ee0ec5f7da33"
       ],
-      "rawBytes": 757678,
-      "gzipBytes": 244112
+      "rawBytes": 757735,
+      "gzipBytes": 244146
     },
     "designer": {
       "chunks": [
@@ -6138,23 +6138,23 @@
         "chunk-bba66106914a2f99ba8f",
         "chunk-fa291def36369b75ebb4",
         "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-07389564f8ce279dc6cb",
-        "chunk-4c7d215a22dc7b3b4f7e",
+        "chunk-0f931f5298b9d454618b",
         "chunk-5467f091eae9a4469bcd",
         "chunk-57325b59a6f120a5be1c",
         "chunk-5ee6bed5173eaefa4371",
-        "chunk-c815afb5823b25f6f661",
-        "chunk-7353e395c4659a623554",
-        "chunk-8473507c6eb8949234b7",
+        "chunk-edea6b4854ab438c6045",
+        "chunk-73c4e3ffbc034a4c7b9b",
+        "chunk-7db7e5d28c1d9f204721",
         "chunk-84b71bfba0c4e50d7b65",
         "chunk-97a44dc18bb30aeddf31",
         "chunk-cf5589a771120f1a4a94",
-        "chunk-9a7122586ca8445e1bec",
+        "chunk-7e02fc06d38cab8586e0",
+        "chunk-8473507c6eb8949234b7",
         "chunk-a090ee7aba8345faf8f7",
-        "chunk-68771d8c6e759132aa2b"
+        "chunk-d3d5a7285e4aadb9f592"
       ],
-      "rawBytes": 938784,
-      "gzipBytes": 307331
+      "rawBytes": 938902,
+      "gzipBytes": 307383
     },
     "verifier": {
       "chunks": [
@@ -6177,14 +6177,14 @@
         "chunk-04ef032535ca5a0915c9"
       ],
       "rawBytes": 507279,
-      "gzipBytes": 153216
+      "gzipBytes": 153203
     }
   },
   "loader": {
     "file": "ddn-loader.js",
-    "sha256": "341a4ea65cf15d57b56bdd8acdaf67a4c06daf4b7a34cb15970350dfbfd837f7",
+    "sha256": "ed7e14c08a314eb4a99c5fded5483a6e853e93bab941c79839543acea182e8ae",
     "rawBytes": 75387,
-    "gzipBytes": 16848
+    "gzipBytes": 16835
   },
   "startup": {
     "viewer": {
@@ -6210,15 +6210,15 @@
         "chunk-bba66106914a2f99ba8f",
         "chunk-fa291def36369b75ebb4",
         "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-07389564f8ce279dc6cb",
-        "chunk-4c7d215a22dc7b3b4f7e",
-        "chunk-06170fe5d3898c3593c6",
+        "chunk-0f931f5298b9d454618b",
         "chunk-57325b59a6f120a5be1c",
+        "chunk-7db7e5d28c1d9f204721",
         "chunk-8473507c6eb8949234b7",
-        "chunk-5f1f71065dd4ad4e086c"
+        "chunk-bef3bc01f3867f57857b",
+        "chunk-31fa2c62ee0ec5f7da33"
       ],
-      "rawBytes": 1098343,
-      "gzipBytes": 324981
+      "rawBytes": 1098400,
+      "gzipBytes": 325015
     },
     "designer": {
       "chunks": [
@@ -6243,22 +6243,22 @@
         "chunk-bba66106914a2f99ba8f",
         "chunk-fa291def36369b75ebb4",
         "chunk-e3b4b9257fd7288fc6a9",
-        "chunk-07389564f8ce279dc6cb",
-        "chunk-4c7d215a22dc7b3b4f7e",
+        "chunk-0f931f5298b9d454618b",
         "chunk-5467f091eae9a4469bcd",
         "chunk-57325b59a6f120a5be1c",
         "chunk-5ee6bed5173eaefa4371",
-        "chunk-c815afb5823b25f6f661",
-        "chunk-7353e395c4659a623554",
-        "chunk-8473507c6eb8949234b7",
+        "chunk-edea6b4854ab438c6045",
+        "chunk-73c4e3ffbc034a4c7b9b",
+        "chunk-7db7e5d28c1d9f204721",
         "chunk-97a44dc18bb30aeddf31",
         "chunk-cf5589a771120f1a4a94",
-        "chunk-9a7122586ca8445e1bec",
+        "chunk-7e02fc06d38cab8586e0",
+        "chunk-8473507c6eb8949234b7",
         "chunk-a090ee7aba8345faf8f7",
-        "chunk-68771d8c6e759132aa2b"
+        "chunk-d3d5a7285e4aadb9f592"
       ],
-      "rawBytes": 1279449,
-      "gzipBytes": 388200
+      "rawBytes": 1279567,
+      "gzipBytes": 388252
     },
     "verifier": {
       "chunks": [
@@ -6285,7 +6285,7 @@
         "chunk-04ef032535ca5a0915c9"
       ],
       "rawBytes": 847944,
-      "gzipBytes": 234085
+      "gzipBytes": 234072
     }
   },
   "sizeBudgets": {

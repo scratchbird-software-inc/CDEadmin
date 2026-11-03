@@ -22,6 +22,10 @@ export interface ViewerHandle {
     subscribeOpen(listener: () => void): () => void;
     subscribeSelection(listener: (ref: Ref | undefined) => void): () => void;
     refresh(): Promise<void>;
+    /** Verify on each refresh. The designer enables it while attached: the
+     *  verifier checks user edits, and a viewer alone renders DDN that is
+     *  already verified (owner direction 2026-11-03). */
+    setVerification(enabled: boolean): void;
     whenRendered(): Promise<void>;
     diagnostics(): readonly Diagnostic[];
     toWorld(x: number, y: number): {

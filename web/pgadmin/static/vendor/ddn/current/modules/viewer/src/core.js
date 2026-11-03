@@ -907,7 +907,7 @@ export function createViewer(element, options) {
             return;
         const current = () => !disposed && ticket === generation && runtime.snapshot() === snapshot;
         emit({ kind: 'pending', revision: snapshot.revision });
-        const report = await runtime.verifier.verifyModel(snapshot, { scope: { kind: 'workarea' }, purpose: 'display', level: 'structural' });
+        const report = verifyOnRefresh ? await runtime.verifier.verifyModel(snapshot, { scope: { kind: 'workarea' }, purpose: 'display', level: 'structural' }) : undefined;
         if (!current())
             return;
         const all = records(snapshot);
@@ -924,7 +924,7 @@ export function createViewer(element, options) {
             workareaBackground = '#f2f4f7';
             workareaTexture = undefined;
         }
-        diagnostics = [...runtimeDiagnostics, ...report.diagnostics];
+        diagnostics = [...runtimeDiagnostics, ...(report?.diagnostics ?? [])];
         const geographyProblems = await loadGeography(snapshot, current);
         if (!current())
             return;
@@ -981,9 +981,9 @@ export function createViewer(element, options) {
         emit({ kind: 'diagnostics', revision: snapshot.revision, diagnostics });
         emit({ kind: 'ready', revision: snapshot.revision });
     }
-    let renderKey = '', queued = false, openGeneration = 0;
+    let renderKey = '', queued = false, openGeneration = 0, verifyOnRefresh = false;
     const schedule = () => {
-        const key = JSON.stringify([runtime.snapshot()?.revision, styleGeneration, fontGeneration, runtime.registry.describe(), runtimeDiagnostics]);
+        const key = JSON.stringify([runtime.snapshot()?.revision, styleGeneration, fontGeneration, runtime.registry.describe(), runtimeDiagnostics, verifyOnRefresh]);
         if (key === renderKey)
             return;
         renderKey = key;
@@ -1593,7 +1593,8 @@ export function createViewer(element, options) {
                 runtime.destroy();
         },
     };
-    handles.set(viewer, { runtime, element, surface: svg, container, overlays, ownerDocument: document, scene: () => projection, viewport: () => viewport, selected: () => selection, clearSelection, expanded: () => expandedView, stage, subscribeOpen(listener) { openListeners.add(listener); return () => openListeners.delete(listener); }, selectedEntry: () => projection?.entries.find(e => selectedOccurrence ? e.item.occurrence === selectedOccurrence : !!selection && refKey(e.definition.ref) === refKey(selection)), select, subscribeSelection(listener) { selectionListeners.add(listener); return () => selectionListeners.delete(listener); }, refresh: async () => { schedule(); await waitForRendering(); }, whenRendered: waitForRendering, diagnostics: () => diagnostics, toWorld, announce });
+    handles.set(viewer, { runtime, element, surface: svg, container, overlays, ownerDocument: document, scene: () => projection, viewport: () => viewport, selected: () => selection, clearSelection, expanded: () => expandedView, stage, subscribeOpen(listener) { openListeners.add(listener); return () => openListeners.delete(listener); }, selectedEntry: () => projection?.entries.find(e => selectedOccurrence ? e.item.occurrence === selectedOccurrence : !!selection && refKey(e.definition.ref) === refKey(selection)), select, subscribeSelection(listener) { selectionListeners.add(listener); return () => selectionListeners.delete(listener); }, refresh: async () => { schedule(); await waitForRendering(); }, setVerification: (enabled) => { if (verifyOnRefresh === enabled)
+            return; verifyOnRefresh = enabled; schedule(); }, whenRendered: waitForRendering, diagnostics: () => diagnostics, toWorld, announce });
     if (runtime.snapshot())
         schedule();
     return viewer;

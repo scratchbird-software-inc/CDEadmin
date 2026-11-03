@@ -64,6 +64,9 @@ export function createDesigner(viewer, options) {
     const newDiagramDialog = (...args) => deferred(import('./new-diagram.js'), module => { module.newDiagramDialog(...args); });
     const viewLayoutDialog = (...args) => deferred(import('./view-layout-picker.js'), module => { module.viewLayoutDialog(...args); });
     const cleanups = [];
+    // The verifier checks what a user edits; the viewer alone only renders.
+    handle.setVerification(true);
+    cleanups.push(() => handle.setVerification(false));
     const panels = new Set();
     const panelClosers = new Map();
     const toolbar = document.createElement('div');
