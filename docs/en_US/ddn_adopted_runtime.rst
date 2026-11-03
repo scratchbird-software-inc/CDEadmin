@@ -14,6 +14,14 @@ The owner authorized publication of this standalone DDN integration on
 dependency. Source acquisition still requires an explicitly configured, reviewed
 location for the matching new foundation.
 
+.. note::
+
+   Owner direction, 2026-11-03: DDN now comes only from the public
+   ``Diagram-Design-Notation`` repository; ScratchWeaver's copy is diverging on
+   purpose and is no longer a source. ``tools/refresh_ddn.py`` defaults to the
+   sibling ``../Diagram-Design-Notation`` checkout, and CI clones the public
+   repository.
+
 ``tools/refresh_ddn.py`` captures only standalone sources, maintained DDN tests,
 public contract inputs and required build tools. It builds an isolated capture,
 checks the compiler's resolved dependency boundary, and ships the viewer,

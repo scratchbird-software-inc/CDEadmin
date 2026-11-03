@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture ScratchWeaver's current standalone open DDN without editing it."""
+"""Capture the public Diagram-Design-Notation repository's current DDN without editing it."""
 import argparse
 import json
 import os
@@ -8,7 +8,7 @@ from pathlib import Path
 from ddn_intake import CONTRACT, refresh as capture, verify_artifacts
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SOURCE = Path(os.environ.get('SCRATCHROBIN_DDN_SOURCE', str(ROOT.parent / 'ScratchWeaver')))
+DEFAULT_SOURCE = Path(os.environ.get('SCRATCHROBIN_DDN_SOURCE', str(ROOT.parent / 'Diagram-Design-Notation')))
 DEFAULT_WORK = Path(os.environ.get('SCRATCHROBIN_DDN_WORK',
                                   str(ROOT.parent / 'ChatGPT_Codex_1_Workarea/ddn-intake')))
 DEST = ROOT / 'web/pgadmin/static/vendor/ddn/current'

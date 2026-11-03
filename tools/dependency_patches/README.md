@@ -15,6 +15,11 @@ preserves the last admitted distribution and fails the build; it cannot select
 an older dialect as a fallback. The owner authorized publication of the
 standalone DDN integration on 2026-10-28; commercial Weaver remains excluded.
 
+Updated 2026-11-03 (owner direction): DDN now comes only from the public
+`Diagram-Design-Notation` repository; ScratchWeaver's copy is diverging on
+purpose and is no longer a source. The geometry patch now edits the
+public contract layout (`standard/codex`).
+
 Native MariaDB 12.2.2 macOS builds apply one guarded source correction in
 `native_servers.patch_mariadb_darwin_linker`: ColumnStore's GNU ld
 `--as-needed` flag is conditional on a non-Apple toolchain. On Intel macOS its

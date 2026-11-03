@@ -8,16 +8,19 @@ import subprocess
 import tempfile
 import sys
 import importlib.util
-from ddn_toolchain import resolve as resolve_tools
+from ddn_toolchain import optimizer as resolve_optimizer, resolve as resolve_tools
 
 CONTRACT = 'ddn-next-1'
 INPUT_TREES = ('project/ddn/', 'project/tests/ddn/')
 BUILD_TOOLS = ('context', 'run', 'ddn-boundary', 'ddn-distribution',
                'ddn-bundle', 'ddn-modular', 'ddn-fonts', 'ddn-license',
-               'runtime-packages')
+               'runtime-packages', 'ddn-optimize', 'ddn-shells')
+# Owner direction 2026-11-03: DDN comes only from the public
+# Diagram-Design-Notation repository, in its public contract layout.
 INPUT_FILES = {'package.json', 'tsconfig.base.json',
-    'docs/Weaver-Specifications/implementation/contracts/library-lock.json',
-    *(f'docs/Weaver-Specifications/reference/planning/2026-10-property-codex/{name}.json' for name in ('profile-contracts','property-codex','ddn.schema','role-contracts','core-contracts','relation-contracts','css-map')),
+    'tooling/bootstrap/library-lock.json',
+    *(f'standard/codex/{name}.json' for name in ('profile-contracts','property-codex','ddn.schema','role-contracts','core-contracts','relation-contracts','css-map')),
+    'tooling/optimizer/package.json', 'tooling/optimizer/package-lock.json',
     *(f'tooling/workspace/{name}.mjs' for name in BUILD_TOOLS)}
 
 
@@ -43,7 +46,7 @@ def inventory(source):
             files[name] = digest(path)
     missing = INPUT_FILES - files.keys()
     if missing:
-        raise RuntimeError('Unsupported ScratchWeaver DDN source: ' + ', '.join(sorted(missing)))
+        raise RuntimeError('Unsupported public DDN source: ' + ', '.join(sorted(missing)))
     return {'revision': git(source, 'rev-parse', 'HEAD').decode().strip(),
             'subtree': 'project/ddn',
             'status': git(source, 'status', '--porcelain', '--',
@@ -59,7 +62,7 @@ def artifact_paths(root):
 def verify_artifacts(root, manifest):
     artifacts = manifest.get('artifacts') or {}
     if manifest.get('contract') != CONTRACT or not artifacts:
-        raise RuntimeError('The bundled DDN contract is obsolete; refresh from ScratchWeaver')
+        raise RuntimeError('The bundled DDN contract is obsolete; refresh from the public DDN repository')
     for name, sha in artifacts.items():
         path = Path(name)
         if path.is_absolute() or '..' in path.parts or '\\' in name:
@@ -83,12 +86,14 @@ def _copy_tool(source, target):
 
 def refresh(source, work, destination, intake_tool):
     if os.environ.get('SCRATCHROBIN_DDN_OFFLINE', '').lower() in ('1', 'true', 'yes'):
-        raise RuntimeError('Builds require current ScratchWeaver source; offline checks are inspection only')
+        raise RuntimeError('Builds require the current public DDN source; offline checks are inspection only')
     before = inventory(source)
     patch = Path(__file__).parent / 'dependency_patches/ddn_next_native_geometry.py'
     review = patch.with_name('ddn-next-native-geometry.md')
     tool_hashes = {p.name: digest(p) for p in (Path(__file__), intake_tool, patch, review, Path(__file__).with_name('ddn_toolchain.py'))}
     pinned_node, typescript, tool_receipts = resolve_tools(source, work)
+    optimizer_modules, optimizer_receipts = resolve_optimizer(source, work)
+    tool_receipts = [*tool_receipts, *optimizer_receipts]
     node_name = 'node/node.exe' if os.name == 'nt' else 'node/bin/node'
     compiler = {'node': digest(pinned_node), 'typescript': digest(typescript / 'lib/typescript.js')}
     manifest_path = destination / 'resource-manifest.json'
@@ -119,9 +124,10 @@ def refresh(source, work, destination, intake_tool):
         isolated_tools = snapshot / '.work/tools/toolchain'
         node = _copy_tool(pinned_node, isolated_tools / node_name)
         shutil.copytree(typescript, isolated_tools / 'typescript', copy_function=_copy_tool)
+        shutil.copytree(optimizer_modules, snapshot / '.work/tools/optimizer/node_modules', copy_function=_copy_tool)
         env = dict(os.environ)
-        for key in ('WEAVER_ROOT', 'WEAVER_WORKAREA', 'ARTIFACT_ROOT',
-                    'WEAVER_BUILD_ROOT', 'WEAVER_DDN_BUILD_ROOT'):
+        for key in ('DDN_ROOT', 'DDN_TEMP_ROOT', 'DDN_BUILD_WORKAREA', 'DDN_BUILD_ROOT', 'ARTIFACT_ROOT',
+                    'WEAVER_ROOT', 'WEAVER_WORKAREA', 'WEAVER_BUILD_ROOT', 'WEAVER_DDN_BUILD_ROOT'):
             env.pop(key, None)
         env.update(TMPDIR=str(snapshot / '.work/tmp'), TMP=str(snapshot / '.work/tmp'),
                    TEMP=str(snapshot / '.work/tmp'), PYTHONDONTWRITEBYTECODE='1')

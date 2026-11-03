@@ -38,6 +38,8 @@ without a `ui_descriptors` entry does not count as surfaced. Do not introduce un
 
 Owner-designated sister project:
 `/home/dcalford/Sandbox/ScratchWeaver/project/ddn/`.
+Superseded by owner direction 2026-11-03 (below): the sister project is now the
+public `/home/dcalford/Sandbox/Diagram-Design-Notation/` repository.
 Use its tools for ERD and dashboard display and editing. ScratchRobin owns
 provider metadata/data adapters, authorization, persistence and native-operation
 execution; DDN owns diagram/dashboard rendering and visual editing. Do not build
@@ -77,6 +79,13 @@ workspaces use `ddn-source-workspace@1`; native DDN ModelSnapshot is a different
 contract. Legacy saved designs require an explicit, loss-reported conversion,
 never a format relabel. Refresh with `tools/refresh_ddn.py`; review the exact
 source revision and artifact hashes in the provenance manifest.
+
+Owner direction, 2026-11-03: Weaver is starting its intended divergence from
+the public DDN sources. Consume DDN only from the public Diagram-Design-Notation
+repository (`/home/dcalford/Sandbox/Diagram-Design-Notation`, subtree
+`project/ddn`); Weaver maintains its own copy and is no longer a source.
+`tools/refresh_ddn.py` and `native.py` default to that checkout, and CI clones
+the public repository. The 2026-10-28 direction above is otherwise unchanged.
 
 ## Bidirectional native metadata and DDN
 

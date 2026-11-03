@@ -6,6 +6,14 @@ The current source/runtime contract and migration boundary are documented in
 standalone open ``ddn-next-1`` foundation for all paths below. Earlier implementation
 notes do not authorize use of the incompatible old runtime or grammar.
 
+.. note::
+
+   Owner direction, 2026-11-03: DDN now comes only from the public
+   ``Diagram-Design-Notation`` repository; ScratchWeaver's copy is diverging on
+   purpose and is no longer a source. ``tools/refresh_ddn.py`` defaults to the
+   sibling ``../Diagram-Design-Notation`` checkout, and CI clones the public
+   repository.
+
 Owner requirements and scope
 ============================
 

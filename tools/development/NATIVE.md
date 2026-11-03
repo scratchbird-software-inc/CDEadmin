@@ -89,13 +89,22 @@ CI/container acquisition requires an explicitly configured
 changes must be captured locally; they cannot be fetched from an older release.
 Publish only the standalone open DDN dependency; commercial Weaver remains excluded.
 
+Updated 2026-11-03 (owner direction): DDN now comes only from the public
+`Diagram-Design-Notation` repository; ScratchWeaver's copy is diverging on
+purpose and is no longer a source. Set `SCRATCHROBIN_DDN_SOURCE` to a
+public checkout (the default is the sibling `../Diagram-Design-Notation`). CI
+clones that repository unless `CDEADMIN_DDN_SOURCE_URL` names another copy of
+it. The public build also minifies with locked esbuild and terser packages;
+the intake installs them from the public lock, integrity-checked, without
+package scripts.
+
 ## Windows stages
 
 From the CDEadmin checkout, use an evidence directory outside the repository:
 
 ```powershell
 $evidence = 'C:\dev-evidence\cdeadmin-native'
-$env:SCRATCHROBIN_DDN_SOURCE = 'C:\src\ScratchWeaver'
+$env:SCRATCHROBIN_DDN_SOURCE = 'C:\src\Diagram-Design-Notation'
 python tools/development/native.py doctor --evidence $evidence
 python tools/development/native.py clients --evidence $evidence
 python tools/development/native.py python --evidence $evidence
@@ -118,7 +127,7 @@ wrapper for the separate Linux reference estate.
 
 ```bash
 export SCRATCHROBIN_PYTHON=/absolute/path/to/python3.14
-export SCRATCHROBIN_DDN_SOURCE="$HOME/src/ScratchWeaver"
+export SCRATCHROBIN_DDN_SOURCE="$HOME/src/Diagram-Design-Notation"
 bash tools/development/native.sh doctor --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh clients --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh python --evidence "$HOME/dev-evidence/cdeadmin-native"

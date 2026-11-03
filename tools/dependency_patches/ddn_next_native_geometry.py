@@ -7,7 +7,7 @@ change. See ddn-next-native-geometry.md; source checkout is never modified.
 import json
 from pathlib import Path
 
-CONTRACTS = 'docs/Weaver-Specifications/reference/planning/2026-10-property-codex'
+CONTRACTS = 'standard/codex'  # public Diagram-Design-Notation layout
 
 
 def apply(root):

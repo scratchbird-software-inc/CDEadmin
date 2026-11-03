@@ -34,7 +34,7 @@ def _package(name, version, destination, cache, expected=None):
     if (metadata.get('version') != version or not isinstance(integrity, str) or
             not integrity.startswith('sha512-') or url.scheme != 'https' or url.hostname != 'registry.npmjs.org'):
         raise RuntimeError('Untrusted DDN build tool metadata')
-    archive = cache / (name + '-' + version + '.tgz')
+    archive = cache / (name.replace('/', '__') + '-' + version + '.tgz')  # scoped names stay one file
     cache.mkdir(parents=True, exist_ok=True)
     if not archive.exists():
         with urlopen(dist['tarball'], timeout=60) as response:
@@ -71,8 +71,36 @@ def _package(name, version, destination, cache, expected=None):
             shutil.rmtree(stage)
 
 
+# Public Diagram-Design-Notation layout (owner direction 2026-11-03).
+LIBRARY_LOCK = 'tooling/bootstrap/library-lock.json'
+OPTIMIZER_LOCK = 'tooling/optimizer/package-lock.json'
+NPM_SYSTEMS = {'Windows': 'win32', 'Darwin': 'darwin', 'Linux': 'linux'}
+NPM_CPUS = {'AMD64': 'x64', 'x86_64': 'x64', 'aarch64': 'arm64', 'arm64': 'arm64'}
+
+
+def optimizer(source, work):
+    """Install the public build's locked minifier packages in consumer work.
+
+    Exact versions and the lock's SHA-512 integrity, as `npm ci
+    --ignore-scripts` would; no package script runs. Optional packages are
+    taken only for this host's npm platform."""
+    lock = json.loads((source / OPTIMIZER_LOCK).read_text())
+    system, cpu = NPM_SYSTEMS.get(platform.system()), NPM_CPUS.get(platform.machine())
+    modules, receipts = work / 'optimizer/node_modules', []
+    for key, entry in sorted(lock['packages'].items()):
+        if not key:
+            continue
+        name = key[len('node_modules/'):]
+        if not key.startswith('node_modules/') or 'node_modules/' in name or not entry.get('integrity'):
+            raise RuntimeError('DDN optimizer lock entry requires review: ' + key)
+        if entry.get('optional') and not (system in entry.get('os', []) and cpu in entry.get('cpu', [])):
+            continue
+        receipts.append(_package(name, entry['version'], modules / name, work / 'tool-cache', entry['integrity']))
+    return modules, receipts
+
+
 def resolve(source, work):
-    lock = json.loads((source / 'docs/Weaver-Specifications/implementation/contracts/library-lock.json').read_text())
+    lock = json.loads((source / LIBRARY_LOCK).read_text())
     types = next(item for item in lock['libraries'] if item['package'] == 'typescript')
     tree = source / '.work/tools/toolchain'
     local_node = tree / ('node/node.exe' if os.name == 'nt' else 'node/bin/node')

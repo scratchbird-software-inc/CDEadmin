@@ -80,7 +80,7 @@ def test_registry_version_and_origin_are_pinned(tmp_path, monkeypatch, version, 
 
 
 def test_explicit_native_versions_must_match_source_lock(tmp_path, monkeypatch):
-    lock = tmp_path / 'docs/Weaver-Specifications/implementation/contracts/library-lock.json'
+    lock = tmp_path / tools.LIBRARY_LOCK
     lock.parent.mkdir(parents=True)
     lock.write_text(json.dumps({'node': '24.22.1', 'libraries': [{'package': 'typescript', 'version': '6.0.3', 'integrity': 'sha512-pinned'}]}))
     node, typescript = tmp_path / 'node', tmp_path / 'typescript'
@@ -93,3 +93,26 @@ def test_explicit_native_versions_must_match_source_lock(tmp_path, monkeypatch):
     monkeypatch.setattr(tools.subprocess, 'check_output', lambda *_a, **_k: 'v22.0.0\n')
     with pytest.raises(RuntimeError, match='versions differ'):
         tools.resolve(tmp_path, tmp_path / 'work')
+
+
+def test_optimizer_installs_only_locked_packages_for_this_platform(tmp_path, monkeypatch):
+    lock = tmp_path / tools.OPTIMIZER_LOCK
+    lock.parent.mkdir(parents=True)
+    lock.write_text(json.dumps({'packages': {'': {'name': 'ddn-production-build-tools'},
+        'node_modules/esbuild': {'version': '0.28.2', 'integrity': 'sha512-esbuild'},
+        'node_modules/@esbuild/linux-x64': {'version': '0.28.2', 'integrity': 'sha512-linux', 'optional': True, 'os': ['linux'], 'cpu': ['x64']},
+        'node_modules/@esbuild/win32-x64': {'version': '0.28.2', 'integrity': 'sha512-win', 'optional': True, 'os': ['win32'], 'cpu': ['x64']}}}))
+    installed = []
+    monkeypatch.setattr(tools, '_package', lambda name, version, destination, cache, expected=None:
+                        installed.append((name, version, destination, expected)) or {'package': name})
+    monkeypatch.setattr(tools.platform, 'system', lambda: 'Linux')
+    monkeypatch.setattr(tools.platform, 'machine', lambda: 'x86_64')
+    modules, receipts = tools.optimizer(tmp_path, tmp_path / 'work')
+    assert [(name, expected) for name, _version, _destination, expected in installed] == [
+        ('@esbuild/linux-x64', 'sha512-linux'), ('esbuild', 'sha512-esbuild')]
+    assert all(destination == modules / name for name, _version, destination, _expected in installed)
+    for bad in ({'node_modules/a/node_modules/b': {'version': '1', 'integrity': 'sha512-x'}},
+                {'node_modules/unpinned': {'version': '1'}}):
+        lock.write_text(json.dumps({'packages': bad}))
+        with pytest.raises(RuntimeError, match='requires review'):
+            tools.optimizer(tmp_path, tmp_path / 'work')

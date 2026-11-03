@@ -345,3 +345,7 @@ from the authorized ScratchWeaver checkout. See
 [the integration contract](docs/en_US/ddn_adopted_runtime.rst). Publication of
 this standalone dependency is authorized. Builds require matching `ddn-next-1`
 source; the old DDN repository is incompatible.
+Updated 2026-11-03 (owner direction): that source is now the public
+[Diagram-Design-Notation](https://github.com/scratchbird-software-inc/Diagram-Design-Notation)
+repository, which carries `ddn-next-1`; ScratchWeaver's copy is diverging on
+purpose and is no longer a source.

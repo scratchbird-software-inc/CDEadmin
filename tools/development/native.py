@@ -193,12 +193,12 @@ def install_scratchbird_driver(env, evidence):
 
 def ddn(evidence):
     source = Path(os.environ.get('SCRATCHROBIN_DDN_SOURCE',
-                                str(ROOT.parent / 'ScratchWeaver')))
+                                str(ROOT.parent / 'Diagram-Design-Notation')))
     work = Path(os.environ.get('SCRATCHROBIN_DDN_WORK',
                               str(evidence / 'ddn-intake')))
     if not source.is_dir():
-        raise RuntimeError('Provide the authorized ScratchWeaver DDN source and set '
-                           'SCRATCHROBIN_DDN_SOURCE to that checkout')
+        raise RuntimeError('Provide a public Diagram-Design-Notation checkout and set '
+                           'SCRATCHROBIN_DDN_SOURCE to it')
     command(['git', '-C', source, 'rev-parse', 'HEAD'])
     command(['git', '-C', source, 'status', '--short'])
     print((source / 'project/ddn/README.md').read_text(
@@ -212,7 +212,7 @@ def ddn(evidence):
 
 def stage(name, evidence):
     env = environment()
-    env.setdefault('SCRATCHROBIN_DDN_SOURCE', str(ROOT.parent / 'ScratchWeaver'))
+    env.setdefault('SCRATCHROBIN_DDN_SOURCE', str(ROOT.parent / 'Diagram-Design-Notation'))
     env.setdefault('SCRATCHROBIN_DDN_WORK', str(evidence / 'ddn-intake'))
     if name == 'prerequisites':
         if os.environ.get('GITHUB_ACTIONS') != 'true':
