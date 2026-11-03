@@ -88,7 +88,10 @@ not replace each provider's live or platform qualification. Existing Python
    offline result above was recorded on that unoptimised build. The
    application's startup budget is missed on the qualifying host with every
    interpreter tried, the uv release build included, so that is not an
-   interpreter-build effect.
+   interpreter-build effect. Corrected later the same day: the miss came
+   from running the tests with ``TMPDIR`` on an encrypted ext4 disk, where
+   the measurement creates its fresh application database. With the
+   default tmpfs ``/tmp`` the startup test passes in about 3 seconds.
 
 The root requirement set did **not** install under Linux CPython 3.14.6t.
 ``pymilvus==2.6.5`` depends on ``orjson``; the selected ``orjson==3.13.0``

@@ -226,6 +226,10 @@ different SQLite version; see the
 > (`test_live_quality_gate_meets_startup_and_performance_budgets`) is missed
 > on this host with every interpreter tried, uv's included (about 9.1 to
 > 9.6 seconds), so that failure is not caused by the interpreter build.
+> Corrected later on 2026-11-02: that miss came from running the tests with
+> `TMPDIR` on an encrypted ext4 disk. The measurement creates a fresh
+> application database under `TMPDIR`; with the default tmpfs `/tmp` the
+> same test passes in about 3 seconds on the optimised interpreter.
 > `manage.py` itself needs Python 3.14, so on a host without one run the
 > stage with `SCRATCHROBIN_PYTHON` set to any CPython 3.14 (for example one
 > installed by uv); the interpreter it builds is still the tracked 3.14.8.

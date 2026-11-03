@@ -13,8 +13,12 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / 'web')]
+# Owned-server tools whose application run sends each operation through the
+# authenticated visual-administration API on both the pure and C interfaces.
+APPLICATION_TOOLS = ('xa', 'page_tracking', 'rewriter', 'key_cache', 'key_cache_lifecycle', 'instance')
 JOBS = ('generic', 'constraints', 'object_changes', 'partition', 'role',
-        'resource_group', 'tablespace', 'server_operations', 'replication', 'group_replication')
+        'resource_group', 'tablespace', 'server_operations', 'replication', 'group_replication',
+        *APPLICATION_TOOLS)
 
 
 def bindings():
@@ -46,8 +50,44 @@ def reconcile(name, receipt, exit_code):
             if key.startswith('visual_admin.') and value.get('live_execution') == 'passed'}
 
 
+def application_evidence(proof, fixture, expected):
+    """Translate an application tool's receipts into task evidence.
+
+    A task passes only when its operation was acknowledged through the API on
+    both interfaces and names exactly one declared task."""
+    application = proof.get('application') if isinstance(proof.get('application'), dict) else {}
+    receipts = application.get('operations') or application.get('receipts') or []
+    interfaces = {}
+    for receipt in receipts:
+        if any(key.endswith('acknowledged') and value is True for key, value in receipt.items()):
+            interfaces.setdefault(receipt.get('operation'), set()).add(receipt.get('use_pure'))
+    evidence = {}
+    for operation, selected in interfaces.items():
+        tasks = [task for task in expected if task.split('.', 2)[-1] == operation]
+        if selected == {True, False} and len(tasks) == 1:
+            evidence[tasks[0]] = {'live_execution': 'passed', 'interfaces': ['pure', 'c'],
+                                  'operation': operation}
+    return {'passed': proof.get('complete') is True and application.get('complete') is True and bool(evidence),
+            'failures': [], 'engine_version': fixture.get('engine_version'),
+            'owned_cleanup_confirmed': proof.get('owned_server_stopped') is True and
+                                       fixture.get('owned_server_stopped') is True,
+            'task_evidence': evidence, 'receipt_count': len(receipts)}
+
+
 def worker(name, output):
     import config  # noqa: F401
+    if name in APPLICATION_TOOLS:
+        module = importlib.import_module('tools.cdeadmin_mysql_' + name + '_qualification')
+        tool = output / 'tool'
+        try:
+            module.qualify(tool, application=True)
+        finally:
+            proof = json.loads((tool / 'summary.json').read_text()) if (tool / 'summary.json').is_file() else {}
+            fixture = tool / 'fixture/fixture.json'
+            fixture = json.loads(fixture.read_text()) if fixture.is_file() else {}
+            receipt = application_evidence(proof, fixture, declared())
+            (output / 'summary.json').write_text(json.dumps(receipt, indent=2) + '\n')
+        return
     from tools.mysql_qualification_support import server
     from tools.cdeadmin_mysql_family_object_live_orchestrator import _run
     if name == 'group_replication':
