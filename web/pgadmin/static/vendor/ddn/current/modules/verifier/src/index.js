@@ -1,4 +1,4 @@
-import { allNodes, decodeSources } from '../../language/src/index.js';
+import { allNodes, decodeSources, decodedSourceSet } from '../../language/src/index.js';
 import { fingerprint, createContext, ComputationStopped, clone, freeze } from '../../execution/src/index.js';
 import { normalizeLocation } from '../../model/src/index.js';
 import { bundleFiles, getProfile, indexRecords, enclosingDefinitions, nativeProfileDiagnostics, normalizedReference, resolveRecord as resolveUnindexedRecord, roleDescriptor, coreTypeDescriptor, coreDescriptor, safeLocation } from '../../profiles/src/core.js';
@@ -6,6 +6,22 @@ import { codex, getPath, isRecord, stableStringify, validateSchema } from '../..
 import { resolveProperties } from '../../defaults/src/index.js';
 const levelOrder = ['decode', 'structural', 'semantic', 'review', 'publication'];
 const decodedVerifiers = new WeakMap();
+const sourceVerifiers = new WeakMap();
+/** verifySources for a caller that has already decoded the same sources.
+ *  `decoded` is reused only when it is the unmodified result of a completed
+ *  decodeSources call, without a previous result, over exactly the sources
+ *  verification captures; otherwise the sources are decoded again. */
+export function verifyDecodedSources(verifier, input, decoded, options) {
+    const run = sourceVerifiers.get(verifier);
+    if (!run)
+        throw new TypeError('Expected an instance created by createVerifier');
+    return run(input, options, decoded);
+}
+function decodedFrom(decoded, input) {
+    const origin = decoded && decodedSourceSet(decoded);
+    return !!origin && origin.entry === input.entry && origin.files.length === input.files.length &&
+        origin.files.every((file, index) => file.id === input.files[index].id && file.text === input.files[index].text && file.revision === input.files[index].revision);
+}
 /** Internal worker bridge: retain decoder diagnostics without decoding a second time. */
 export function verifyDecoded(verifier, input, options, diagnostics) {
     const run = decodedVerifiers.get(verifier);
@@ -274,6 +290,9 @@ export function createVerifier(runtimeOptions) {
                 capabilities.push(issue('DDN-PROFILE-REGISTRATION', 'Malformed or undeclared profile ' + profile.id));
         }
     const cache = new Map();
+    // Snapshots verifySources has just built from its own fingerprint; verify
+    // clones its argument synchronously, so their fingerprint already holds.
+    const builtSnapshots = new WeakSet();
     const ruleCache = new Map();
     async function verify(inputArgument, optionsArgument, decodeDiagnostics = []) {
         const requestId = 'verify-' + (++serial);
@@ -361,13 +380,14 @@ export function createVerifier(runtimeOptions) {
                     throw new Error('Non-JSON value');
                 context.accountMemory(bytes);
             }
-            if (input.semanticFingerprint !== fingerprint(input.normalized)) {
+            if (!builtSnapshots.has(inputArgument) && input.semanticFingerprint !== fingerprint(input.normalized)) {
                 diagnostics.push(issue('DDN-SNAPSHOT-FINGERPRINT', 'Snapshot semantic fingerprint does not match its data'));
                 outcome = 'invalid';
                 complete = false;
                 return report();
             }
-            const key = fingerprint([input.rootFile, input.normalized, input.revision, input.coverage, options.scope, options.level, options.purpose, options.measurement ?? null, versions, packs.map(p => p.manifest)]);
+            // The semantic fingerprint now provably identifies the normalized model.
+            const key = fingerprint([input.rootFile, input.semanticFingerprint, input.revision, input.coverage, options.scope, options.level, options.purpose, options.measurement ?? null, versions, packs.map(p => p.manifest)]);
             if (!decodeDiagnostics.length && cacheAllowed) {
                 const previous = cache.get(key);
                 if (previous)
@@ -431,7 +451,15 @@ export function createVerifier(runtimeOptions) {
             // so errors in unincluded files cannot hide an active schema error.
             const validationFiles = isRecord(input.normalized) && Array.isArray(input.normalized.files) ? input.normalized.files.filter(file => !isRecord(file) || typeof file.location !== 'string' || reachable.has(file.location)) : undefined;
             const activeNormalized = isRecord(input.normalized) ? { ...input.normalized, ...(validationFiles ? { files: validationFiles } : {}) } : input.normalized;
-            const bundleIssues = validateSchema('bundle', activeNormalized, { checkpoint: schemaAccount, maxIssues: 200 });
+            // References are collected in this pass: a bundle path is the file
+            // path under /files/<index>/document of an admitted file row.
+            const referenceFiles = (validationFiles ?? []).map(file => isRecord(file) && typeof file.location === 'string' && reachable.has(file.location) && isRecord(file.document) ? file.location : undefined);
+            const bundleIssues = validateSchema('bundle', activeNormalized, { checkpoint: schemaAccount, maxIssues: 200, reference: (value, path) => {
+                    const match = /^\/files\/(\d+)\/document(\/.*)?$/.exec(path);
+                    const file = match ? referenceFiles[Number(match[1])] : undefined;
+                    if (file !== undefined)
+                        schemaReferences.push({ file, path: match[2] ?? '', value });
+                } });
             if (bundleIssues.some(issue => issue.keyword === 'depth'))
                 throw new ComputationStopped('budget-exceeded', 'Schema recursion bound exceeded');
             if (bundleIssues.length >= 200)
@@ -462,11 +490,6 @@ export function createVerifier(runtimeOptions) {
                         diagnostics.push(issue('DDN-NAME-DUPLICATE', 'Declared names must be unique within a physical file', record.ref));
                     byName.add(nk);
                 }
-            }
-            for (const file of fileRows) {
-                if (!reachable.has(file.location))
-                    continue;
-                validateSchema('file', file.document, { maxIssues: 0, checkpoint: schemaAccount, reference: (value, path) => schemaReferences.push({ file: file.location, path, value }) });
             }
             await context.checkpoint(pendingWork);
             pendingWork = 0;
@@ -943,55 +966,57 @@ export function createVerifier(runtimeOptions) {
             return freeze({ allowed: false, diagnostics: [...diagnostics, issue(error instanceof ComputationStopped ? 'DDN-' + error.outcome.toUpperCase() : 'DDN-TRANSITION-INPUT', error instanceof Error ? error.message : 'Invalid transition input')] });
         }
     }
+    async function verifySourceSet(inputArgument, optionsArgument, supplied) {
+        const started = Date.now();
+        let input = { entry: 'unavailable.ddn', files: [] };
+        let options = { scope: { kind: 'workarea' }, level: 'decode', purpose: '' };
+        let normalized = { version: 'ddn-next-1', entry: input.entry, files: [] };
+        let sourceUnits = 0;
+        let diagnostics = [];
+        let coverage = { scope: options.scope, complete: false, checked: [], unavailable: [] };
+        let stopped;
+        let task = options;
+        const spans = new Map();
+        try {
+            options = captureOptions(optionsArgument);
+            task = { ...options, ...(!options.budget && limits ? { budget: limits } : {}) };
+            if (destroyed)
+                throw new ComputationStopped('cancelled', 'Verifier has been destroyed');
+            const context = createContext(versions, liveTask(task));
+            context.check();
+            input = captureSources(inputArgument, context);
+            sourceUnits = input.files.reduce((n, f) => n + f.text.length, 0);
+            context.accountMemory(sourceUnits * 2);
+            await context.checkpoint(sourceUnits);
+            const decoded = decodedFrom(supplied, input) ? supplied : decodeSources(input, task);
+            context.check();
+            normalized = decoded.normalized;
+            diagnostics = decoded.diagnostics;
+            coverage = decoded.coverage;
+            for (const node of allNodes(decoded))
+                if (node.ref && !spans.has(refKey(node.ref)))
+                    spans.set(refKey(node.ref), { file: node.file, revision: input.files.find(file => file.id === node.file).revision, start: node.start, end: node.end });
+        }
+        catch (error) {
+            stopped = error instanceof ComputationStopped ? error.outcome : 'invalid';
+            diagnostics = [issue('DDN-DECODE-' + stopped.toUpperCase(), error instanceof Error ? error.message : 'Source decoding failed')];
+        }
+        const digest = fingerprint(normalized);
+        const snapshot = { contract: 'ddn-next-1', rootFile: input.entry, revision: { model: digest, sources: Object.fromEntries(input.files.map(f => [f.id, f.revision])), data: {} }, versions, semanticFingerprint: digest, normalized, coverage };
+        const remaining = task.budget ? { ...task.budget, elapsedMs: Math.max(0, task.budget.elapsedMs - (Date.now() - started)), workUnits: Math.max(0, task.budget.workUnits - sourceUnits) } : undefined;
+        builtSnapshots.add(snapshot);
+        const result = await verify(snapshot, { ...task, ...(remaining ? { budget: remaining } : {}) }, diagnostics);
+        const located = result.diagnostics.map(diagnostic => {
+            if (diagnostic.source)
+                return diagnostic;
+            const span = diagnostic.target ? spans.get(refKey(diagnostic.target)) : undefined;
+            const root = input.files.find(file => file.id === input.entry);
+            return span ? { ...diagnostic, source: span } : root ? { ...diagnostic, source: { file: root.id, revision: root.revision, start: 0, end: root.text.length } } : diagnostic;
+        });
+        return freeze({ ...result, diagnostics: located, ...(stopped ? { outcome: stopped, reviewEligible: false, coverage: { ...result.coverage, complete: false } } : {}), stats: { ...result.stats, elapsedMs: Date.now() - started, workUnits: sourceUnits + result.stats.workUnits } });
+    }
     const verifier = {
-        async verifySources(inputArgument, optionsArgument) {
-            const started = Date.now();
-            let input = { entry: 'unavailable.ddn', files: [] };
-            let options = { scope: { kind: 'workarea' }, level: 'decode', purpose: '' };
-            let normalized = { version: 'ddn-next-1', entry: input.entry, files: [] };
-            let sourceUnits = 0;
-            let diagnostics = [];
-            let coverage = { scope: options.scope, complete: false, checked: [], unavailable: [] };
-            let stopped;
-            let task = options;
-            const spans = new Map();
-            try {
-                options = captureOptions(optionsArgument);
-                task = { ...options, ...(!options.budget && limits ? { budget: limits } : {}) };
-                if (destroyed)
-                    throw new ComputationStopped('cancelled', 'Verifier has been destroyed');
-                const context = createContext(versions, liveTask(task));
-                context.check();
-                input = captureSources(inputArgument, context);
-                sourceUnits = input.files.reduce((n, f) => n + f.text.length, 0);
-                context.accountMemory(sourceUnits * 2);
-                await context.checkpoint(sourceUnits);
-                const decoded = decodeSources(input, task);
-                context.check();
-                normalized = decoded.normalized;
-                diagnostics = decoded.diagnostics;
-                coverage = decoded.coverage;
-                for (const node of allNodes(decoded))
-                    if (node.ref && !spans.has(refKey(node.ref)))
-                        spans.set(refKey(node.ref), { file: node.file, revision: input.files.find(file => file.id === node.file).revision, start: node.start, end: node.end });
-            }
-            catch (error) {
-                stopped = error instanceof ComputationStopped ? error.outcome : 'invalid';
-                diagnostics = [issue('DDN-DECODE-' + stopped.toUpperCase(), error instanceof Error ? error.message : 'Source decoding failed')];
-            }
-            const digest = fingerprint(normalized);
-            const snapshot = { contract: 'ddn-next-1', rootFile: input.entry, revision: { model: digest, sources: Object.fromEntries(input.files.map(f => [f.id, f.revision])), data: {} }, versions, semanticFingerprint: digest, normalized, coverage };
-            const remaining = task.budget ? { ...task.budget, elapsedMs: Math.max(0, task.budget.elapsedMs - (Date.now() - started)), workUnits: Math.max(0, task.budget.workUnits - sourceUnits) } : undefined;
-            const result = await verify(snapshot, { ...task, ...(remaining ? { budget: remaining } : {}) }, diagnostics);
-            const located = result.diagnostics.map(diagnostic => {
-                if (diagnostic.source)
-                    return diagnostic;
-                const span = diagnostic.target ? spans.get(refKey(diagnostic.target)) : undefined;
-                const root = input.files.find(file => file.id === input.entry);
-                return span ? { ...diagnostic, source: span } : root ? { ...diagnostic, source: { file: root.id, revision: root.revision, start: 0, end: root.text.length } } : diagnostic;
-            });
-            return freeze({ ...result, diagnostics: located, ...(stopped ? { outcome: stopped, reviewEligible: false, coverage: { ...result.coverage, complete: false } } : {}), stats: { ...result.stats, elapsedMs: Date.now() - started, workUnits: sourceUnits + result.stats.workUnits } });
-        },
+        verifySources: (inputArgument, optionsArgument) => verifySourceSet(inputArgument, optionsArgument),
         verifyModel: verify, checkTransition, destroy() { destroyed = true; cache.clear(); ruleCache.clear(); for (const listener of destroyListeners) {
             try {
                 listener();
@@ -1000,6 +1025,7 @@ export function createVerifier(runtimeOptions) {
         } destroyListeners.clear(); },
     };
     decodedVerifiers.set(verifier, verify);
+    sourceVerifiers.set(verifier, verifySourceSet);
     return verifier;
 }
 //# sourceMappingURL=index.js.map

@@ -26,6 +26,10 @@ export declare const recordRef: (file: string, record: RecordValue) => Ref;
 export declare function normalizedFiles(value: unknown): BundleFile[];
 /** Canonical identity only: selecting or fetching a location remains the host's responsibility. */
 export declare function normalizeLocation(value: string, fromFile?: string): string;
+/** Run a phase that adds, removes and renames no records of `bundle`.
+ *  Inside it, record listing and reference resolution for that bundle use
+ *  one lazily built index instead of rescanning every record per lookup. */
+export declare function withRecordIndex<T>(bundle: unknown, run: () => T): T;
 export declare function listRecords(bundle: unknown): RecordEntry[];
 export declare function resolveReference(bundle: unknown, fromFile: string, reference: unknown): RecordEntry | undefined;
 export declare function findRecord(bundle: unknown, ref: Ref): RecordValue | undefined;

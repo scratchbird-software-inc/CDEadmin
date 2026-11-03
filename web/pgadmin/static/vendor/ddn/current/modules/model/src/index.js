@@ -72,7 +72,54 @@ export function normalizeLocation(value, fromFile = '') {
     return (value.startsWith('/') || base.startsWith('/') ? '/' : '') + parts.join('/');
 }
 const collections = [['definitions', 'definition'], ['views', 'view'], ['placements', 'placement'], ['appearances', 'appearance'], ['data', 'data'], ['sources', 'source'], ['assets', 'asset'], ['templates', 'template'], ['publications', 'publication']];
+let recordScope;
+/** Run a phase that adds, removes and renames no records of `bundle`.
+ *  Inside it, record listing and reference resolution for that bundle use
+ *  one lazily built index instead of rescanning every record per lookup. */
+export function withRecordIndex(bundle, run) {
+    const previous = recordScope;
+    recordScope = { bundle };
+    try {
+        return run();
+    }
+    finally {
+        recordScope = previous;
+    }
+}
+function scopedRecords(bundle) {
+    if (!recordScope || recordScope.bundle !== bundle)
+        return undefined;
+    return recordScope.records ??= collectRecords(bundle);
+}
+function scopedFile(bundle, file) {
+    const records = scopedRecords(bundle);
+    if (!records || !recordScope)
+        return undefined;
+    if (!recordScope.files) {
+        const files = new Map();
+        const add = (map, key, entry) => { const list = map.get(key); if (list)
+            list.push(entry);
+        else
+            map.set(key, [entry]); };
+        for (const entry of records) {
+            let index = files.get(entry.file);
+            if (!index)
+                files.set(entry.file, index = { records: [], byId: new Map(), byName: new Map() });
+            index.records.push(entry);
+            if (typeof entry.record.id === 'string')
+                add(index.byId, entry.record.id, entry);
+            if (typeof entry.record.name === 'string')
+                add(index.byName, entry.record.name.normalize('NFC'), entry);
+        }
+        recordScope.files = files;
+    }
+    return recordScope.files.get(file) ?? { records: [], byId: new Map(), byName: new Map() };
+}
 export function listRecords(bundle) {
+    const scoped = scopedRecords(bundle);
+    return scoped ? scoped.slice() : collectRecords(bundle);
+}
+function collectRecords(bundle) {
     const records = [];
     for (const { location: file, document } of normalizedFiles(bundle)) {
         const add = (record, kind) => {
@@ -98,15 +145,17 @@ export function resolveReference(bundle, fromFile, reference) {
     if (!file || (!id && !name) || (reference.id !== undefined && !id) || (reference.name !== undefined && !name)
         || (reference.file !== undefined && typeof reference.file !== 'string'))
         return undefined;
-    const records = listRecords(bundle).filter(x => x.file === file);
-    const byId = id ? records.filter(x => x.record.id === id) : [];
-    const byName = name ? records.filter(x => typeof x.record.name === 'string' && x.record.name.normalize('NFC') === name) : [];
+    const indexed = scopedFile(bundle, file);
+    const records = indexed ? indexed.records : listRecords(bundle).filter(x => x.file === file);
+    const withId = (value) => indexed ? indexed.byId.get(value) ?? [] : records.filter(x => x.record.id === value);
+    const byId = id ? withId(id) : [];
+    const byName = name ? (indexed ? indexed.byName.get(name) ?? [] : records.filter(x => typeof x.record.name === 'string' && x.record.name.normalize('NFC') === name)) : [];
     if ((id && byId.length !== 1) || (name && byName.length !== 1))
         return undefined;
     if (id && name && byId[0] !== byName[0])
         return undefined;
     const target = id ? byId[0] : byName[0];
-    if (!target?.ref.id || (!id && records.filter(x => x.record.id === target.ref.id).length !== 1))
+    if (!target?.ref.id || (!id && withId(target.ref.id).length !== 1))
         return undefined;
     return target;
 }

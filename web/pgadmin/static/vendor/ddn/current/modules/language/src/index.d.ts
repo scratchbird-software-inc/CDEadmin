@@ -57,6 +57,19 @@ export declare function decodeText(raw: string): string;
 export declare function quoteText(text: string): string;
 export declare function parseTableHeader(text: string): RecordValue[];
 export declare function parseTableRow(text: string, columns: readonly RecordValue[]): Json[];
+/** The exact source text each completed fresh decode read. Strings are
+ *  immutable, so a later comparison proves the same sources were decoded. */
+export interface DecodedSourceSet {
+    readonly entry: string;
+    readonly files: readonly {
+        readonly id: string;
+        readonly text: string;
+        readonly revision: string;
+    }[];
+}
+/** The source set a result of decodeSources read, when it was a completed
+ *  decode without a previous result; otherwise undefined. */
+export declare function decodedSourceSet(result: DecodeResult): DecodedSourceSet | undefined;
 export declare function decodeSources(input: SourceSet, options?: DecodeOptions): DecodeResult;
 export declare function allNodes(result: DecodeResult): SyntaxNode[];
 export declare function findNode(result: DecodeResult, target: Ref): SyntaxNode | undefined;

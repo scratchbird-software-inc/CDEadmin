@@ -1,4 +1,4 @@
-import { asArray, asRecord, asString, findRecord, getPath, isRecord, listRecords, normalizeLocation, recordRef, resolveReference, safePath, setPath } from '../../model/src/index.js';
+import { asArray, asRecord, asString, findRecord, getPath, isRecord, listRecords, normalizeLocation, recordRef, resolveReference, safePath, setPath, withRecordIndex } from '../../model/src/index.js';
 import { coreTypes, profiles, roleTypes, shapes } from './schema.js';
 const aliases = { look: 'style.look', font: 'style.font', 'font-size': 'style.font_size', status: 'design.state', paper: 'style.paper' };
 const recipeProfiles = { erd: 'ddn@1', mindmap: 'mindmap.basic@1', bar: 'chart.basic@1' };
@@ -1780,9 +1780,22 @@ class Decoder {
             if (item.kind === 'definition')
                 expand(item.file, item.record);
     }
-    run() { this.parseFile(this.bundle.entry); this.resolve(); this.resolveFieldBindings(); this.expandTemplates(); this.resolveFieldBindings(); this.resolveChildren(); const checked = listRecords(this.bundle).filter(r => typeof r.record.id === 'string' && r.record.id.length > 0).map(r => r.ref); const unavailable = this.diagnostics.filter(d => ['include.missing', 'reference.unresolved', 'version.unsupported'].includes(d.code)).map(d => d.message); return { syntaxValid: !this.diagnostics.some(d => d.severity === 'error' && /^(syntax|property|table)\./.test(d.code)), normalized: this.bundle, documents: this.documents, diagnostics: this.diagnostics, coverage: { scope: { kind: 'workarea' }, complete: !this.diagnostics.some(d => d.severity === 'error'), checked, unavailable }, references: this.references }; }
+    run() { this.parseFile(this.bundle.entry); withRecordIndex(this.bundle, () => this.resolve()); this.resolveFieldBindings(); this.expandTemplates(); this.resolveFieldBindings(); withRecordIndex(this.bundle, () => this.resolveChildren()); const checked = listRecords(this.bundle).filter(r => typeof r.record.id === 'string' && r.record.id.length > 0).map(r => r.ref); const unavailable = this.diagnostics.filter(d => ['include.missing', 'reference.unresolved', 'version.unsupported'].includes(d.code)).map(d => d.message); return { syntaxValid: !this.diagnostics.some(d => d.severity === 'error' && /^(syntax|property|table)\./.test(d.code)), normalized: this.bundle, documents: this.documents, diagnostics: this.diagnostics, coverage: { scope: { kind: 'workarea' }, complete: !this.diagnostics.some(d => d.severity === 'error'), checked, unavailable }, references: this.references }; }
+}
+const decodeOrigins = new WeakMap();
+/** The source set a result of decodeSources read, when it was a completed
+ *  decode without a previous result; otherwise undefined. */
+export function decodedSourceSet(result) {
+    return decodeOrigins.get(result);
 }
 export function decodeSources(input, options = {}) {
+    const result = decodeSourcesOnce(input, options);
+    // A previous result reuses identities, and a cancelled decode is partial.
+    if (!options.previous && !options.cancel?.aborted)
+        decodeOrigins.set(result, { entry: input.entry, files: input.files.map(file => ({ id: file.id, text: file.text, revision: file.revision })) });
+    return result;
+}
+function decodeSourcesOnce(input, options) {
     if (options.cancel?.aborted)
         return { syntaxValid: false, normalized: { version: 'ddn-next-1', entry: input.entry, files: [] }, documents: [], diagnostics: [{ code: 'decode.cancelled', severity: 'info', message: 'Decoding was cancelled' }], coverage: { scope: { kind: 'workarea' }, complete: false, checked: [], unavailable: ['cancelled'] }, references: [] };
     return new Decoder(input, options).run();
