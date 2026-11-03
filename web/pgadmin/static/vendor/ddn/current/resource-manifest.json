@@ -4,7 +4,7 @@
   "version": "ddn-next-1",
   "license": "GPL-2.0-or-later",
   "source": {
-    "revision": "19b4c49cc6ef9f39fdc004bd573f1ee8d4152ce0",
+    "revision": "515dd2e5f4e561a2a34bdcb7a5926cd88b731812",
     "subtree": "project/ddn",
     "status": "",
     "files": {
