@@ -366,6 +366,13 @@ def _relational_editor_evidence(provider, request, engine):
         if (engine in {'mariadb', 'sqlite', 'firebird'} and
                 draft.get('cascade') is False):
             draft = {key: value for key, value in draft.items() if key != 'cascade'}
+        # MySQL's typed routine forms declare no output-parameter list, and a
+        # procedure no scalar return type.
+        if (engine == 'mysql' and kind in {'procedure', 'function'} and
+                operation == 'create'):
+            draft = {key: value for key, value in draft.items()
+                     if key != 'return_parameters' and
+                     not (kind == 'procedure' and key == 'returns')}
         if engine == 'firebird':
             draft = dict(draft)
             if kind == 'table' and operation in {'create', 'alter'}:
@@ -797,10 +804,10 @@ def _relational_editor_evidence(provider, request, engine):
         ) and attempt(
             'view.create', 'view', 'create', {
                 'name': 'cde_editor_view',
-                **({'database': parent, 'algorithm': 'UNDEFINED',
-                    'sql_security': 'DEFINER', 'check_option': 'NONE'}
-                   if engine == 'mysql' else ({'parent': parent} if parent else {})),
-                ('definition' if engine == 'mysql' else 'query'): (
+                # MySQL's typed view form is not yet admitted (descriptor
+                # status: draft and unsurfaced); the admitted form is generic.
+                **({'parent': parent} if parent else {}),
+                'query': (
                     'SELECT ID, QUALIFICATION_VALUE FROM QUALIFICATION'
                     if engine == 'firebird' else
                     'SELECT id, value FROM qualification'
@@ -818,10 +825,7 @@ def _relational_editor_evidence(provider, request, engine):
                                 'complete_definition_confirmed': True,
                                 'metadata_reset_acknowledged': True,
                             } if engine == 'duckdb' else {}),
-                            **({'algorithm': 'UNDEFINED', 'sql_security': 'DEFINER',
-                                'check_option': 'NONE', 'confirmation': 'alter-live-editor-view'}
-                               if engine == 'mysql' else {}),
-                            ('definition' if engine == 'mysql' else 'query'): (
+                            'query': (
                                 'SELECT ID FROM QUALIFICATION'
                                 if engine == 'firebird' else
                                 (
@@ -1202,6 +1206,11 @@ def _relational_editor_evidence(provider, request, engine):
                     **({} if engine in {'dolt', 'mariadb'} else {
                         'active': False, 'administrator': False,
                     }),
+                    # MySQL's typed account form confirms the exact account
+                    # and names the authentication change explicitly.
+                    **({'confirmation': user['display_name'],
+                        'authentication_mode': 'PASSWORD'}
+                       if engine == 'mysql' else {}),
                 }, user,
             )
             grant_draft = {
@@ -1230,6 +1239,8 @@ def _relational_editor_evidence(provider, request, engine):
                     'user', 'rename') and attempt(
                 'user.rename', 'user', 'rename', {
                     'new_name': 'cde_editor_user_renamed',
+                    **({'confirmation': user['display_name']}
+                       if engine == 'mysql' else {}),
                 }, user,
             ):
                 user = inspect_created(

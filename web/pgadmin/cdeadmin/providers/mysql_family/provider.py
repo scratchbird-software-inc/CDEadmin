@@ -1020,7 +1020,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             return trigger_contract(request['legacy_fields'])
         if request['resource_kind'] in {'procedure', 'function', 'event'}:
             from .descriptor_contracts import routine_contract
-            return routine_contract(request['resource_kind'], request['operation_id'])
+            return routine_contract(request['resource_kind'], request['operation_id'], request['legacy_fields'])
         if request['resource_kind'] == 'index':
             from .descriptor_contracts import index_contract
             return index_contract(request['operation_id'], request['legacy_fields'])

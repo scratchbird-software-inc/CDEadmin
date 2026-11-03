@@ -49,7 +49,11 @@ def index_contract(operation, legacy_fields):
     return None
 
 
-def routine_contract(kind, operation):
+def routine_contract(kind, operation, legacy_fields=()):
+    if kind == 'event' and operation == 'drop':
+        # The generic drop form's CASCADE default is not native event grammar;
+        # mysql_events admits only the confirmation.
+        return {'fields': [deepcopy(field) for field in legacy_fields if field['field_id'] == 'confirmation']}
     if operation in {'create', 'alter'}:
         suffix = {'procedure': 'routine', 'function': 'routine-function',
                   'event': 'routine-scheduled'}[kind]

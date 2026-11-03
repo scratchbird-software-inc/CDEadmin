@@ -42,3 +42,22 @@ def test_rename_can_cross_databases_without_losing_exact_names():
 def test_invalid_or_empty_event_changes_refuse_validation(draft):
     result=MYSQL_ADMINISTRATION.validate({'resource_kind':'event','operation_id':'alter','target_resource':TARGET,'draft':draft})
     assert result['errors']
+
+
+def test_drop_contract_adds_no_generic_cascade_default():
+    # Visual administration fills each contract field's default into the
+    # draft; a generic CASCADE default made every native event drop invalid.
+    import copy
+    from pgadmin.cdeadmin.providers.mysql_family.provider import MySQLDBAPIClient
+    catalog = {row['resource_kind']: row for row in MYSQL_ADMINISTRATION.catalog(catalog_for_engine('mysql'))['objects']}
+    legacy = next(item for item in catalog['event']['operations'] if item['operation_id'] == 'drop')['form']['fields']
+    assert 'cascade' in {field['field_id'] for field in legacy}
+    contract = MySQLDBAPIClient.admin_operation_field_contract(None, {
+        'resource_kind': 'event', 'operation_id': 'drop', 'legacy_fields': copy.deepcopy(legacy), 'draft': {}})
+    fields = contract['fields']
+    assert [field['field_id'] for field in fields] == ['confirmation'] and fields[0]['required'] is True
+    admitted = {field['field_id']: field['default'] for field in fields if 'default' in field}
+    admitted['confirmation'] = 'nightly'
+    target = {'resource_kind': 'event', 'display_name': 'nightly', 'display_path': ['db', 'nightly']}
+    request = {'resource_kind': 'event', 'operation_id': 'drop', 'draft': admitted, 'target_resource': target}
+    assert MYSQL_ADMINISTRATION.validate(request)['errors'] == []
