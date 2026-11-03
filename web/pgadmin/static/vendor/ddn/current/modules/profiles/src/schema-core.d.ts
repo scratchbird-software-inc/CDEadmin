@@ -93,8 +93,6 @@ interface Codex {
         id: string;
         method: string;
         projection: string;
-        primary_palette: string[];
-        relation_roles: string[];
     }>;
     core: Record<string, {
         payload: number;

@@ -11,8 +11,8 @@ function unfold(shape) {
     }
     return shape;
 }
-const genericOptions = unfold(unfold(lexicalShapes.view_definition)?.properties?.projection)?.properties?.options;
-const aliases = { boolean: 'bool', timestamp: 'instant', datetime: 'instant', int: 'integer', json: 'json_value' };
+const genericOptions = () => unfold(unfold(lexicalShapes.view_definition)?.properties?.projection)?.properties?.options;
+const aliases = { boolean: 'bool', timestamp: 'instant' };
 export const shapes = new Proxy(lexicalShapes, {
     get(target, key) {
         if (typeof key !== 'string')
@@ -23,12 +23,12 @@ export const shapes = new Proxy(lexicalShapes, {
         // Non-native profiles remain parseable against the shared option vocabulary; their
         // specialized verification and rendering still require their registered packs.
         if (key.startsWith('profile_') && Object.hasOwn(codex.knownProfiles, key.slice(8)))
-            return genericOptions;
+            return genericOptions();
         return undefined;
     },
 });
 const descriptor = (entry) => ({ category: entry.category, schema: 'n' + entry.schema, core: entry.core });
 export const roleTypes = Object.fromEntries(Object.entries(codex.roles).map(([key, value]) => [key, descriptor(value)]));
 export const coreTypes = Object.fromEntries(Object.entries(codex.coreTypes).map(([key, value]) => [key, descriptor(value)]));
-export const profiles = codex.knownProfiles;
+export const profiles = Object.keys(codex.knownProfiles);
 //# sourceMappingURL=schema.js.map

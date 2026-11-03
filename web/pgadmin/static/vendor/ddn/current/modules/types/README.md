@@ -1,6 +1,6 @@
 # @ddn/types
 
-Declaration-only contracts for the new DDN standalone utilities. The [adopted standard utility specification](../../../../docs/Weaver-Specifications/reference/planning/2026-10-standard-plugins/README.md) supplies the complete core, scene and browser ABI. The [property codex](../../../../docs/Weaver-Specifications/reference/planning/2026-10-property-codex/CONTRACT.md) defines normalized language records; these API declarations do not introduce a second language schema.
+Declaration-only contracts for the new DDN standalone utilities. The [adopted standard utility specification](../../../../standard/utilities/README.md) supplies the complete core, scene and browser ABI. The [property codex](../../../../standard/codex/CONTRACT.md) defines normalized language records; these API declarations do not introduce a second language schema.
 
 | Import | Contract |
 | --- | --- |

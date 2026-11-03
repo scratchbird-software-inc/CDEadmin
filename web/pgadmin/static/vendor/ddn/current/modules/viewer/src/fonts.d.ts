@@ -30,6 +30,11 @@ export interface LocalFontOptions {
 export declare function fontFamily(key: string): string;
 /** Standard entries report availability after installation; generic choices always remain usable. */
 export declare function listFonts(document: Document): readonly FontOption[];
+/** Load only the named trusted standard resources; generic/system fonts perform no IO. */
+export declare function ensureFontResources(document: Document, requests: readonly {
+    family: string;
+    style?: FontStyle;
+}[]): Promise<boolean>;
 /** Install an explicit local resource pack (or the page's DDN_FONT_RESOURCES) without fetching. */
 export declare function installFontResources(document: Document, resources?: readonly FontResource[]): Promise<readonly FontOption[]>;
 /** Register a user-selected local binary; no file upload, storage or source-document mutation occurs. */

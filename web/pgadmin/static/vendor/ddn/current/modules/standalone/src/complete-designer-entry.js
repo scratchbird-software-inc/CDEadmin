@@ -3,7 +3,7 @@ import { createCompletePresentationPack } from '../../presentation/src/pack.js';
 import { createRuntime, createCompleteRuntimeOptions, createCommandService } from '../../runtime/src/index.js';
 import { createViewer, getViewerHandle } from '../../viewer/src/index.js';
 import { createDesigner } from '../../designer/src/index.js';
-import { newDiagramDialog } from '../../designer/src/new-diagram.js';
+import { newDiagramDialog } from './lazy-new-diagram.js';
 import { createVerifier } from '../../verifier/src/index.js';
 import { mountShell } from './shell.js';
 import { withBrowserExecutor } from './browser-options.js';

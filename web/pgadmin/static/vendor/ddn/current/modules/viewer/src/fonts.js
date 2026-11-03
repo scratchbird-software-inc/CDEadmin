@@ -99,7 +99,7 @@ function decode(resource) {
         throw new Error('Font MIME type does not match its binary format.');
     return { resource: Object.freeze({ family, dataURL: resource.dataURL, weight, style, category: resource.category ?? 'custom', source: resource.source ?? 'custom', ...(resource.license !== undefined ? { license: resource.license } : {}) }), bytes };
 }
-function slot(resource) { return JSON.stringify([resource.family.toLowerCase(), resource.weight, resource.style]); }
+function slot(resource) { return JSON.stringify([familyName(resource.family).toLowerCase(), fontWeight(resource.weight), resource.style ?? 'normal']); }
 function copyOption(value) { return { ...value, weights: [...value.weights], styles: [...value.styles] }; }
 /** Standard entries report availability after installation; generic choices always remain usable. */
 export function listFonts(document) {
@@ -121,8 +121,26 @@ export function listFonts(document) {
     }
     return options;
 }
+/** Load only the named trusted standard resources; generic/system fonts perform no IO. */
+export async function ensureFontResources(document, requests) {
+    const host = document.defaultView;
+    if (!host)
+        return false;
+    const selected = requests.flatMap(request => names(request.family).filter(name => !generics.has(name) && !aliases[name]).map(family => ({ family, style: request.style ?? 'normal' })));
+    if (!selected.length)
+        return false;
+    const supplied = host.DDN_FONT_RESOURCES ?? [];
+    const resources = host.DDN_LOAD_FONTS ? await host.DDN_LOAD_FONTS(selected) : supplied.filter(resource => selected.some(request => resource.family.toLowerCase() === request.family.toLowerCase() && ((resource.style ?? 'normal') === request.style || !supplied.some(face => face.family === resource.family && face.style === request.style) && (resource.style ?? 'normal') === 'normal'))), current = state(document);
+    const missing = resources.some(resource => !current.installed.has(slot(resource)));
+    if (missing)
+        await installFontResources(document, resources);
+    return missing;
+}
 /** Install an explicit local resource pack (or the page's DDN_FONT_RESOURCES) without fetching. */
 export async function installFontResources(document, resources) {
+    const loader = document.defaultView?.DDN_LOAD_FONTS;
+    if (resources === undefined && loader)
+        return installFontResources(document, await loader());
     const supplied = resources ?? document.defaultView?.DDN_FONT_RESOURCES ?? [];
     if (!Array.isArray(supplied) || supplied.length > MAX_FACES)
         throw new Error('A font pack may contain at most 128 faces.');

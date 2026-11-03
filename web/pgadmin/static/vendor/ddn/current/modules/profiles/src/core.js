@@ -7,8 +7,9 @@ export const nativeProfileIds = Object.freeze([...codex.nativeProfiles]);
 export function freezeProfileData(v) {
     if (v && typeof v === 'object' && !Object.isFrozen(v)) {
         Object.freeze(v);
-        for (const child of Object.values(v))
-            freezeProfileData(child);
+        for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(v)))
+            if ('value' in descriptor)
+                freezeProfileData(descriptor.value);
     }
     return v;
 }
@@ -189,12 +190,11 @@ export function nativeProfileDiagnostics(normalized, view, records, review = fal
             }
         }
     const allowed = new Set([...profile.primary_palette, ...profile.context_roles]);
-    const allowedRoles = [...allowed];
     for (const node of nodes) {
         const role = typeof node.record.role === 'string' ? node.record.role : 'object';
         const linkedContext = mindmap && contextKeys.has(mindmapKey(node)) && contextRoles.has(role);
         if (mindmap ? !topicKeys.has(mindmapKey(node)) && !linkedContext : !allowed.has(role))
-            issue('DDN-PROFILE-ROLE', `${role} is not allowed in ${profileId} (allowed: ${allowedRoles.slice(0, 12).join(', ')})`, node.ref);
+            issue('DDN-PROFILE-ROLE', `${role} is not allowed in ${profileId}`, node.ref);
     }
     for (const edge of edges) {
         const role = typeof edge.record.role === 'string' ? edge.record.role : 'assoc';
@@ -207,7 +207,7 @@ export function nativeProfileDiagnostics(normalized, view, records, review = fal
             continue;
         }
         if ((kind === 'internal' && role !== 'assoc') || !relationProfile.relation_roles.includes(role)) {
-            issue('DDN-PROFILE-RELATION', `${role} is not allowed in ${profileId} (allowed: ${relationProfile.relation_roles.slice(0, 12).join(', ')})`, edge.ref);
+            issue('DDN-PROFILE-RELATION', `${role} is not allowed in ${profileId}`, edge.ref);
             continue;
         }
         const contract = relationProfile.relation_endpoint_contracts.find(x => x.role === role);
@@ -223,7 +223,7 @@ export function nativeProfileDiagnostics(normalized, view, records, review = fal
             issue('DDN-RELATION-SELF', `${role} does not permit a self connection`, edge.ref);
         const ar = typeof a.record.role === 'string' ? a.record.role : 'object', br = typeof b.record.role === 'string' ? b.record.role : 'object';
         if (!contract.source_roles.includes(ar) || !contract.target_roles.includes(br))
-            issue('DDN-RELATION-ENDPOINT', `Endpoint roles ${ar} → ${br} are not allowed for ${role}` + (contract.source_roles.includes(br) && contract.target_roles.includes(ar) ? ` (reverse direction ${br} → ${ar} is valid for ${role})` : ` (expected ${contract.source_roles.slice(0, 6).join('|')} → ${contract.target_roles.slice(0, 6).join('|')})`), edge.ref);
+            issue('DDN-RELATION-ENDPOINT', `Endpoint roles ${ar} → ${br} are not allowed for ${role}`, edge.ref);
         if (!contract.member_endpoints && ends.some(x => x.member !== undefined))
             issue('DDN-RELATION-MEMBER', `${role} does not permit member endpoints`, edge.ref);
     }

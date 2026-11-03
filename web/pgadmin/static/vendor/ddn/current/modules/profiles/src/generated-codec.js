@@ -1,5 +1,21 @@
 /** Expand generated declarative tables; no source code is interpreted. */
 export function decodeWire(encoded) {
+    if (encoded[3] === 'compact-1') {
+        const [shapes, strings, root] = encoded;
+        function expand(value) {
+            if (typeof value === 'number' && value < 0)
+                return strings[-value - 1];
+            if (!Array.isArray(value))
+                return value;
+            const tag = value[0];
+            if (tag === null)
+                return value[1];
+            if (tag === 0)
+                return value.slice(1).map(expand);
+            return Object.fromEntries(shapes[tag - 1].map((key, index) => [key, expand(value[index + 1])]));
+        }
+        encoded = expand(root);
+    }
     const pool = encoded[1];
     function unpack(value) {
         if (Array.isArray(value))

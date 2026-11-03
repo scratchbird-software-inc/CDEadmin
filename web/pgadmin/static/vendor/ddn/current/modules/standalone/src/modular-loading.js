@@ -1,6 +1,7 @@
 import { decodeSources } from '../../language/src/index.js';
 import { indexRecords } from '../../profiles/src/core.js';
-import { profileCatalogueFamily } from '../../profiles/src/generated-families.js';
+import { profileCatalogueShard } from '../../profiles/src/generated-shards.js';
+import { catalogueShards } from '../../profiles/src/generated-shards.js';
 import { loadedProfilePacks } from '../../profiles/src/family-packs.js';
 import { STANDARD_VERSIONS } from '../../runtime/src/versions.js';
 import { withBrowserExecutor } from './browser-options.js';
@@ -58,7 +59,9 @@ export async function ensureProfileInput(input, drawing, task = {}) {
     if (!Array.isArray(input) && 'files' in input)
         context.accountMemory(units * 2);
     await context.checkpoint(units);
-    const families = [...new Set(requiredProfiles(input, task).map(profileCatalogueFamily).filter((family) => !!family && family !== 'native'))];
+    await waitForPack(loader().loadEntry('schema:native'), task, started);
+    await waitForPack(loader().prepareEntry('worker'), task, started);
+    const families = [...new Set(requiredProfiles(input, task).map(profileCatalogueShard).filter((family) => !!family && family !== 'native'))];
     await Promise.all(families.map(async (family) => {
         try {
             context.check();
@@ -83,7 +86,7 @@ export function installModularWorkerFactory() {
             const packs = options?.packs ?? loadedProfilePacks();
             const initializers = packs.filter(pack => pack.manifest.id !== 'ddn-native' && !pack.manifest.id.endsWith('-commands')).map(pack => {
                 const family = pack.manifest.id.slice(4);
-                if (!['graphs', 'charts', 'geography', 'surfaces'].includes(family))
+                if (!Object.hasOwn(catalogueShards, family))
                     throw new Error('No local compute initializer for pack ' + pack.manifest.id);
                 return 'verify:' + family;
             });

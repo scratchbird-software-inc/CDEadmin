@@ -1,43 +1,9 @@
 import { asArray, asRecord, asString, findRecord, getPath, isRecord, listRecords, normalizeLocation, recordRef, resolveReference, safePath, setPath } from '../../model/src/index.js';
 import { coreTypes, profiles, roleTypes, shapes } from './schema.js';
 const aliases = { look: 'style.look', font: 'style.font', 'font-size': 'style.font_size', status: 'design.state', paper: 'style.paper' };
-const OCCURRENCE_ONLY_ROOTS = new Set(['position', 'size', 'body', 'columns', 'pinned', 'rotation', 'visible', 'layer', 'order', 'min_size', 'max_size', 'include_in_output', 'border', 'opacity']);
-const STATEMENT_KEYWORDS = ['element', 'connect', 'relation', 'use', 'notes', 'data', 'source', 'asset', 'template', 'draft', 'fields', 'endpoint', 'with', 'defaults', 'style'];
 const recipeProfiles = { erd: 'ddn@1', mindmap: 'mindmap.basic@1', bar: 'chart.basic@1' };
 const rootKeys = { definition: 'definitions', view: 'views', placement: 'placements', appearance: 'appearances', data: 'data', source: 'sources', asset: 'assets', template: 'templates', publication: 'publications' };
 const prohibited = new Set(['__proto__', 'constructor', 'prototype']);
-function editDistance(a, b) {
-    const al = a.length, bl = b.length;
-    if (Math.abs(al - bl) > 4)
-        return 99;
-    const dp = Array.from({ length: al + 1 }, (_, i) => i);
-    for (let j = 1; j <= bl; j++) {
-        let prev = dp[0];
-        dp[0] = j;
-        for (let i = 1; i <= al; i++) {
-            const temp = dp[i];
-            dp[i] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[i], dp[i - 1]);
-            prev = temp;
-        }
-    }
-    return dp[al];
-}
-function suggestClosest(input, candidates, maxDistance = 3) {
-    const target = input.toLowerCase();
-    let best;
-    let bestDist = maxDistance + 1;
-    for (const candidate of candidates) {
-        if (!candidate || candidate === input)
-            continue;
-        const d = editDistance(target, candidate.toLowerCase());
-        const limit = Math.min(maxDistance, Math.max(1, Math.floor(Math.max(target.length, candidate.length) / 2)));
-        if (d <= limit && d < bestDist) {
-            bestDist = d;
-            best = candidate;
-        }
-    }
-    return best;
-}
 function array(record, key) {
     if (!Array.isArray(record[key]))
         record[key] = [];
@@ -231,7 +197,6 @@ function ownerShape(owner, record, path) {
         shape = childShape(shape, segment);
     return shape;
 }
-function admitsString(shape) { return variants(shape).some(choice => choice.type === 'string' || Array.isArray(choice.type) && choice.type.includes('string')); }
 function isReferenceShape(shape) { return variants(shape).some(v => v.properties?.name && v.properties?.file && v.properties?.id); }
 function typedValue(raw, shape, file) {
     const text = decodeText(raw), quoted = /^["']/.test(raw.trim());
@@ -286,60 +251,30 @@ function typedValue(raw, shape, file) {
         throw Error('Expected an indented record or collection');
     return text;
 }
-const COLUMN_TYPES = {
-    text: 'text',
-    number: 'number',
-    integer: 'integer',
-    int: 'integer',
-    boolean: 'boolean',
-    bool: 'boolean',
-    date: 'date',
-    timestamp: 'timestamp',
-    datetime: 'timestamp',
-    json: 'json',
-};
 export function parseTableHeader(text) {
     const used = new Set();
     return splitDelimited(text, '.').map(raw => {
         const bits = splitDelimited(raw, ':');
-        if (bits.length > 6)
-            throw Error('A column has at most alignment, percentage, minimum characters, maximum lines and type');
+        if (bits.length > 5)
+            throw Error('A column has at most alignment, percentage, minimum characters and maximum lines');
         const id = decodeText(bits[0]).normalize('NFC');
         if (!id || used.has(id) || prohibited.has(id))
             throw Error('Column names must be nonempty and unique');
         used.add(id);
         const c = { id };
         if (bits[1]?.trim()) {
-            const rawAlign = decodeText(bits[1]);
-            const alignment = /^[rlcf]$/.test(rawAlign) ? rawAlign + 't' : rawAlign;
+            const alignment = decodeText(bits[1]);
             if (!/^[rlcf][tmb]$/.test(alignment))
                 throw Error('Invalid column alignment');
             c.alignment = alignment;
         }
-        const shorthandTypeIn2 = bits.length === 3 && !bits[1]?.trim() && bits[2]?.trim() && COLUMN_TYPES[decodeText(bits[2]).toLowerCase()];
-        const shorthandTypeIn4 = bits.length === 5 && bits[4]?.trim() && COLUMN_TYPES[decodeText(bits[4]).toLowerCase()];
-        if (shorthandTypeIn2) {
-            c.type = shorthandTypeIn2;
-            return c;
-        }
-        for (const [i, key] of [[2, 'percentage'], [3, 'min_chars'], [4, 'max_lines']]) {
-            if (i === 4 && shorthandTypeIn4) {
-                c.type = shorthandTypeIn4;
-                continue;
-            }
+        for (const [i, key] of [[2, 'percentage'], [3, 'min_chars'], [4, 'max_lines']])
             if (bits[i]?.trim()) {
                 const value = Number(decodeText(bits[i]));
                 if (!Number.isFinite(value) || (i !== 2 && (!Number.isInteger(value) || value < 1)) || (i === 2 && (value < 0 || value > 100)))
                     throw Error('Invalid column ' + key);
                 c[key] = value;
             }
-        }
-        if (bits[5]?.trim()) {
-            const colType = COLUMN_TYPES[decodeText(bits[5]).toLowerCase()];
-            if (!colType)
-                throw Error('Invalid column type');
-            c.type = colType;
-        }
         return c;
     });
 }
@@ -416,7 +351,7 @@ class Decoder {
                 this.sourceMap.set(id, { ...f, id });
         }
     }
-    diagnostic(code, message, line, target, severity = 'error', start, end) { this.diagnostics.push({ code, message, severity, ...(this.current && line ? { source: { file: this.current.id, revision: this.current.revision, start: start ?? line.contentStart, end: end ?? line.end } } : {}), ...(target ? { target } : {}) }); }
+    diagnostic(code, message, line, target, severity = 'error') { this.diagnostics.push({ code, message, severity, ...(this.current && line ? { source: { file: this.current.id, revision: this.current.revision, start: line.contentStart, end: line.end } } : {}), ...(target ? { target } : {}) }); }
     structuralLine(line, literal = false) {
         if (this.current.text.slice(line.start, line.contentStart).includes('\t'))
             this.diagnostic('syntax.tab', 'Tabs are not allowed in structural indentation', line);
@@ -535,28 +470,6 @@ class Decoder {
             a.title = title;
         return a;
     }
-    explicitText(raw, shape, index, end) {
-        const marker = /^text(?:[ \t]+([0-9]+))?$/.exec(raw.trim());
-        if (!marker || !this.ls.slice(index + 1, end).some(line => line.indent > this.ls[index].indent))
-            return undefined;
-        if (!admitsString(shape))
-            throw Error('An explicit text body requires a property or item type that admits string');
-        const width = marker[1] === undefined ? 4 : Number(marker[1]);
-        if (!Number.isInteger(width) || width < 1 || width > 128)
-            throw Error('An explicit text indentation width must be from 1 to 128');
-        return width;
-    }
-    explicitTextBody(start, end, prefix) {
-        return this.ls.slice(start, end).map(line => {
-            const raw = this.current.text.slice(line.start, line.end - line.eol.length);
-            const spaces = /^ */.exec(raw)[0].length;
-            if (spaces >= prefix)
-                return raw.slice(prefix);
-            if (!raw.trim())
-                return '';
-            throw Error('An explicit text body line must reach its declared indentation prefix');
-        }).join('\n');
-    }
     rawBody(start, end) {
         const body = this.ls.slice(start, end);
         if (!body.length)
@@ -565,7 +478,7 @@ class Decoder {
         const first = raw.find(line => line.trim());
         // Only spaces establish the literal container's indentation. A following
         // tab is authored content, including on the first literal line.
-        const indent = first === undefined ? raw.reduce((width, line) => Math.min(width, /^ */.exec(line)[0].length), Infinity) : /^ */.exec(first)[0].length;
+        const indent = first === undefined ? Math.min(...raw.map(line => /^ */.exec(line)[0].length)) : /^ */.exec(first)[0].length;
         return raw.map(line => line.slice(Math.min(indent, /^ */.exec(line)[0].length))).join('\n');
     }
     sequence(start, end, parent, ctx, nodes) {
@@ -633,8 +546,7 @@ class Decoder {
             if (owner === 'definition' && record.category === 'relation' && /^(source|target)\./.test(path))
                 path = 'qualifiers.' + path;
             safePath(path);
-            const rootKey = path.split('.')[0];
-            const appearancePath = appearance && (OCCURRENCE_ONLY_ROOTS.has(rootKey) || record.category === 'relation' && ['label', 'legend'].includes(rootKey) || !ownerShape('definition', record, path) && Boolean(ownerShape('appearance', appearance, path)));
+            const appearancePath = appearance && (['position', 'size', 'body', 'columns', 'pinned'].includes(path.split('.')[0]) || record.category === 'relation' && ['label', 'legend'].includes(path.split('.')[0]));
             const propertyRecord = appearancePath ? appearance : record, propertyOwner = appearancePath ? 'appearance' : owner;
             const n = this.node(line, stop, 'property');
             if (appearancePath)
@@ -642,8 +554,6 @@ class Decoder {
             else if (node.ref || node.owner)
                 n.owner = (node.ref || node.owner);
             n.path = path;
-            n.nameStart = line.contentStart + w[0].start;
-            n.nameEnd = line.contentStart + w[0].end;
             n.valueStart = line.contentStart + (w[1]?.start ?? line.text.length);
             n.valueEnd = line.end - line.eol.length;
             node.children.push(n);
@@ -652,22 +562,7 @@ class Decoder {
             if (owner === 'template_record' && !['id', 'name', 'role', 'settings', 'parameters', 'defaults', 'fragment', 'version', 'method', 'profile', 'view'].includes(path.split('.')[0]))
                 shape = ownerShape('definition', { role: record.role }, path);
             if (!shape) {
-                const nearAlias = { font_size: 'style.font_size', theme: 'style.theme', 'body.mode': 'body' };
-                let match = nearAlias[path] ?? nearAlias[key];
-                if (!match && propertyOwner === 'definition' && ownerShape('definition', propertyRecord, 'content.' + path))
-                    match = 'content.' + path;
-                if (!match) {
-                    const segments = safePath(path);
-                    const parentPath = segments.slice(0, -1).join('.');
-                    const parentShape = parentPath ? ownerShape(propertyOwner, propertyRecord, parentPath) : shapes[propertyOwner];
-                    const candidates = [...new Set([
-                            ...variants(parentShape).flatMap(s => Object.keys(s.properties ?? {})).map(k => parentPath ? `${parentPath}.${k}` : k),
-                            ...Object.keys(aliases),
-                            ...(appearance ? variants(shapes.appearance).flatMap(s => Object.keys(s.properties ?? {})) : []),
-                        ])];
-                    match = suggestClosest(path, candidates) ?? suggestClosest(key, candidates);
-                }
-                this.diagnostic('property.unknown', 'Unknown or inapplicable property: ' + path + (match ? ` (did you mean '${match}'?)` : ''), line, node.ref, 'error', n.nameStart, n.nameEnd);
+                this.diagnostic('property.unknown', 'Unknown or inapplicable property: ' + path, line, node.ref);
                 i = stop;
                 continue;
             }
@@ -678,12 +573,7 @@ class Decoder {
                 if (exists)
                     this.diagnostic('property.duplicate', 'Repeated supplied property: ' + path, line, node.ref);
                 let value;
-                const textWidth = this.explicitText(raw, shape, i, stop);
-                if (textWidth !== undefined) {
-                    n.literalBody = true;
-                    value = this.explicitTextBody(i + 1, stop, line.indent + textWidth);
-                }
-                else if (raw) {
+                if (raw) {
                     this.scalarChildren(i, stop);
                     const valueWords = words(raw);
                     if (valueWords[0]?.raw === 'parameter' && owner === 'template_record')
@@ -719,7 +609,7 @@ class Decoder {
                     setPath(destination, path, value);
             }
             catch (error) {
-                this.diagnostic('property.value', error instanceof Error ? error.message : String(error), line, node.ref, 'error', raw.trim() ? n.valueStart : n.nameStart, raw.trim() ? n.valueEnd : n.nameEnd);
+                this.diagnostic('property.value', error instanceof Error ? error.message : String(error), line, node.ref);
             }
             i = stop;
         }
@@ -745,9 +635,7 @@ class Decoder {
                 throw Error('Unsafe property name');
             const child = childShape(shape, key);
             if (!child) {
-                const candidates = variants(shape).flatMap(s => Object.keys(s.properties ?? {}));
-                const match = suggestClosest(key, candidates);
-                this.diagnostic('property.unknown', 'Unknown record property: ' + key + (match ? ` (did you mean '${match}'?)` : ''), l, undefined, 'error', l.contentStart + w[0].start, l.contentStart + w[0].end);
+                this.diagnostic('property.unknown', 'Unknown record property: ' + key, l);
                 i = stop;
                 continue;
             }
@@ -761,12 +649,7 @@ class Decoder {
             node.children.push(n);
             const raw = l.text.slice(w[1]?.start ?? l.text.length);
             let value;
-            const textWidth = this.explicitText(raw, child, i, stop);
-            if (textWidth !== undefined) {
-                n.literalBody = true;
-                value = this.explicitTextBody(i + 1, stop, l.indent + textWidth);
-            }
-            else if (raw) {
+            if (raw) {
                 this.scalarChildren(i, stop);
                 value = this.value(raw, child, n.valueStart);
             }
@@ -806,12 +689,6 @@ class Decoder {
         if (!first)
             return arrays[0];
         const index = this.ls.indexOf(first), stop = this.blockEnd(index, end);
-        const tokens = words(first.text), raw = first.text.slice(tokens[1]?.start ?? first.text.length);
-        if (/^text(?:[ \t]+[0-9]+)?$/.test(raw.trim()) && this.ls.slice(index + 1, stop).some(line => line.indent > first.indent)) {
-            const textItems = arrays.find(shape => admitsString(shape.items));
-            if (textItems)
-                return textItems;
-        }
         const body = this.ls.slice(index + 1, stop).filter(line => line.text.trim() && !line.text.trimStart().startsWith('//'));
         const indent = body[0]?.indent;
         const keys = body.filter(line => line.indent === indent).map(line => decodeText(words(line.text)[0].raw));
@@ -860,12 +737,7 @@ class Decoder {
             node.children.push(n);
             sites.push({ start: n.valueStart, end: n.valueEnd, node: n });
             const raw = l.text.slice(w[1]?.start ?? l.text.length);
-            const textWidth = this.explicitText(raw, shape, i, stop);
-            if (textWidth !== undefined) {
-                n.literalBody = true;
-                result.push(this.explicitTextBody(i + 1, stop, l.indent + textWidth));
-            }
-            else if (raw) {
+            if (raw) {
                 this.scalarChildren(i, stop);
                 result.push(this.value(raw, shape, n.valueStart));
             }
@@ -1074,11 +946,9 @@ class Decoder {
                 inputColumns = parseTableHeader(tail(as + 1));
                 record.table_schema = inputColumns;
             }
-            if (keyword !== 'document' && !Object.hasOwn(profiles, profile)) {
-                const match = suggestClosest(profile, [...Object.keys(profiles), ...Object.keys(recipeProfiles)]);
-                this.diagnostic('profile.unknown', 'Unknown profile: ' + profile + (match ? ` (did you mean '${match}'?)` : ''), line, node.ref);
-            }
-            const next = { kind: keyword === 'document' ? 'document' : 'view', record, owner: keyword === 'document' ? 'document' : 'view_definition', ...(keyword !== 'document' ? { profile: profile } : {}) };
+            if (keyword !== 'document' && !profiles.includes(profile))
+                this.diagnostic('profile.unknown', 'Unknown profile: ' + profile, line, node.ref);
+            const next = { kind: keyword === 'document' ? 'document' : 'view', record, owner: keyword === 'document' ? 'document' : 'view_definition' };
             if (recipe)
                 next.recipe = recipe;
             if (inputColumns)
@@ -1132,8 +1002,6 @@ class Decoder {
                 return;
             }
             if (ctx.kind === 'element' && ctx.recipe === 'erd' && keyword !== 'element') {
-                if (keyword === 'withh' && ws.length === 1 && parts.at === undefined)
-                    this.diagnostic('role.keyword-typo', 'Possible statement keyword typo "' + keyword + '" (did you mean "with"?)', line, ctx.record.id ? recordRef(this.current.id, ctx.record) : undefined, 'warning');
                 node.kind = 'field-row';
                 node.owner = recordRef(this.current.id, ctx.record);
                 const rows = this.parseData(index, end, node, ctx.inputColumns || ['field', 'type', 'domain', 'key', 'comment'].map(id => ({ id })));
@@ -1157,17 +1025,9 @@ class Decoder {
                 nameSpan(1, as);
             }
             else {
-                const prof = ctx.profile ? profiles[ctx.profile] : undefined;
-                role = ctx.recipe === 'erd' ? 'entity' : ctx.recipe === 'mindmap' ? 'object' : prof?.primary_palette?.length === 1 ? prof.primary_palette[0] : '';
-                const isUnquoted = !/^["']/.test(w[0].raw);
-                const typoMatch = isUnquoted ? suggestClosest(keyword, STATEMENT_KEYWORDS, 1) : undefined;
-                if (!role) {
-                    if (typoMatch)
-                        throw Error('Unknown statement keyword "' + keyword + '" (did you mean "' + typoMatch + '"?); or prefix with "element" to declare an element');
-                    throw Error('This profile requires an explicit element role' + (prof?.primary_palette?.length ? ' (allowed: ' + prof.primary_palette.slice(0, 10).join(', ') + ')' : ''));
-                }
-                if (typoMatch && ((keyword === 'withh' && ws.length === 1 && parts.at === undefined) || (keyword === 'connet' && clause('to') >= 0) || (keyword === 'relaton' && clause('as') >= 0) || (keyword === 'uses' && ws.length >= 2)))
-                    this.diagnostic('role.keyword-typo', 'Element name "' + keyword + '" looks like statement keyword "' + typoMatch + '" (did you mean "' + typoMatch + '"?)', line, undefined, 'warning');
+                role = ctx.recipe === 'erd' ? 'entity' : ctx.recipe === 'mindmap' ? 'object' : '';
+                if (!role)
+                    throw Error('This profile requires an explicit element role');
                 nameEnd = from >= 0 ? from : ws.length;
                 name = decodeText(tail(0, nameEnd));
                 nameSpan(0, nameEnd);
@@ -1175,14 +1035,8 @@ class Decoder {
             if (['core::Workarea', 'core::View', 'core::Appearance', 'core::Document'].includes(role))
                 throw Error('Structural core types require dedicated declarations');
             const info = coreTypes[role] || roleTypes[role];
-            if (!info || info.category !== 'element') {
-                const roleCandidates = [
-                    ...Object.entries(roleTypes).filter(([k, v]) => !k.startsWith('relation::') && v.category === 'element').map(([k]) => k),
-                    ...Object.entries(coreTypes).filter(([, v]) => v.category === 'element').map(([k]) => k),
-                ];
-                const match = suggestClosest(role, roleCandidates);
-                this.diagnostic('role.unknown', 'Unknown element role: ' + role + (match ? ` (did you mean '${match}'?)` : ''), line);
-            }
+            if (!info || info.category !== 'element')
+                this.diagnostic('role.unknown', 'Unknown element role: ' + role, line);
             node.kind = 'element';
             const record = this.add('definition', { role }, node, name || undefined);
             if (parts.title !== undefined)
@@ -1217,8 +1071,6 @@ class Decoder {
                 child.appearance = occurrence;
             if (ctx.view)
                 child.view = ctx.view;
-            if (ctx.profile)
-                child.profile = ctx.profile;
             if (ctx.recipe)
                 child.recipe = ctx.recipe;
             if (ctx.inputColumns)
@@ -1264,7 +1116,7 @@ class Decoder {
             else {
                 if (ctx.kind !== 'element')
                     throw Error('Anonymous data belongs to an element');
-                record = isRecord(ctx.record.data) ? ctx.record.data : {};
+                record = {};
                 ctx.record.data = record;
                 node.owner = recordRef(this.current.id, ctx.record);
             }
@@ -1272,26 +1124,10 @@ class Decoder {
             if (from >= 0 || firstBody?.text.trim() === 'with') {
                 if (from >= 0)
                     record.source = this.reference(tail(from + 1), line.contentStart + ws[from + 1].start);
-                if (firstBody?.text.trim() === 'with') {
-                    const firstIndex = this.ls.indexOf(firstBody);
-                    const withStop = this.blockEnd(firstIndex, end);
-                    this.sequence(index + 1, withStop, line.indent, { kind: 'element', record, owner: 'data_record' }, node.children);
-                    const remaining = this.ls.slice(withStop, end).filter(l => l.text.trim() && !l.text.trimStart().startsWith('//'));
-                    if (remaining.length) {
-                        const remKeyword = words(remaining[0].text)[0]?.raw;
-                        if (remKeyword !== 'with' && remKeyword !== 'notes' && Array.isArray(record.columns) && record.columns.length > 0 && record.rows === undefined)
-                            Object.assign(record, this.parseData(withStop, end, node, record.columns));
-                        else
-                            this.sequence(withStop, end, line.indent, { kind: 'element', record, owner: 'data_record' }, node.children);
-                    }
-                }
-                else
-                    this.sequence(index + 1, end, line.indent, { kind: 'element', record, owner: 'data_record' }, node.children);
+                this.sequence(index + 1, end, line.indent, { kind: 'element', record, owner: 'data_record' }, node.children);
             }
-            else {
-                const existingCols = Array.isArray(record.columns) && record.columns.length > 0 && record.rows === undefined ? record.columns : undefined;
-                Object.assign(record, this.parseData(index + 1, end, node, existingCols));
-            }
+            else
+                Object.assign(record, this.parseData(index + 1, end, node));
             return;
         }
         if (keyword === 'use') {
@@ -1323,10 +1159,9 @@ class Decoder {
             if (!['file', 'view'].includes(ctx.kind))
                 throw Error('Relations belong at file or view scope');
             const as = clause('as'), named = clause('named');
-            const prof = ctx.profile ? profiles[ctx.profile] : undefined;
-            let role = as >= 0 ? decodeText(tail(as + 1, named > as ? named : ws.length)) : ctx.recipe === 'erd' || ctx.recipe === 'mindmap' ? 'assoc' : prof?.relation_roles?.length === 1 ? prof.relation_roles[0] : '';
+            let role = as >= 0 ? decodeText(tail(as + 1, named > as ? named : ws.length)) : ctx.recipe === 'erd' || ctx.recipe === 'mindmap' ? 'assoc' : '';
             if (!role)
-                throw Error('Choose a relationship role with as' + (prof?.relation_roles?.length ? ' (allowed: ' + prof.relation_roles.slice(0, 10).join(', ') + ')' : ''));
+                throw Error('Choose a relationship role with as');
             const name = keyword === 'relation' ? decodeText(tail(1, as)) : named >= 0 ? decodeText(tail(named + 1)) : undefined;
             node.kind = 'relation';
             if (keyword === 'relation')
@@ -1574,36 +1409,8 @@ class Decoder {
                 site.reference.id = match.ref.id;
                 site.target = match.ref;
             }
-            else {
-                const targetFile = asString(site.reference.file, site.file), refName = asString(site.reference.name), refId = asString(site.reference.id);
-                const allRecords = listRecords(this.bundle);
-                const sameFileMatches = [...scoped, ...allRecords].filter(r => r.file === targetFile && (refId ? r.ref.id === refId : r.record.name === refName || r.ref.id === refName));
-                let detail = '';
-                if (sameFileMatches.length > 1)
-                    detail = ` (ambiguous: ${sameFileMatches.length} matches in scope)`;
-                else if (refName) {
-                    let otherFile = allRecords.find(r => r.file !== targetFile && r.record.name === refName)?.file;
-                    if (!otherFile) {
-                        const escaped = refName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        const declPattern = new RegExp(`(?:^|\\n)\\s*(?:element|data|source|asset|template|view|document|publication)\\s+(?:"${escaped}"|'${escaped}'|${escaped})(?:\\s|$|:)`);
-                        for (const [candidateFile, candidateSource] of this.sourceMap.entries()) {
-                            if (candidateFile !== targetFile && declPattern.test(candidateSource.text)) {
-                                otherFile = candidateFile;
-                                break;
-                            }
-                        }
-                    }
-                    if (otherFile)
-                        detail = ` (found in '${otherFile}'; add 'include "${otherFile}"' or qualify as '"${otherFile}"::${refName}')`;
-                    else {
-                        const localNames = [...new Set([...scoped, ...allRecords.filter(r => r.file === targetFile)].map(r => asString(r.record.name)).filter(Boolean))];
-                        const closest = suggestClosest(refName, localNames);
-                        if (closest)
-                            detail = ` (did you mean '${closest}'?)`;
-                    }
-                }
-                this.diagnostics.push({ code: 'reference.unresolved', severity: 'error', message: 'Unresolved or ambiguous reference: ' + (refName || refId) + detail, source: { file: site.file, revision: this.sourceMap.get(site.file)?.revision || '', start: site.start, end: site.end } });
-            }
+            else
+                this.diagnostics.push({ code: 'reference.unresolved', severity: 'error', message: 'Unresolved or ambiguous reference: ' + asString(site.reference.name), source: { file: site.file, revision: this.sourceMap.get(site.file)?.revision || '', start: site.start, end: site.end } });
         }
     }
     resolveFieldBindings() {
@@ -1678,7 +1485,7 @@ class Decoder {
                 if (typeof binding.key === 'string' && allowedKeys.has(binding.key))
                     content.key = binding.key;
                 else
-                    incomplete('content.key', binding.key, 'The key cell is retained as draft text; use a registered key value (primary, foreign, candidate, business, partition, clustering) to assert its meaning');
+                    incomplete('content.key', binding.key, 'The key cell is retained as draft text; use a registered key value to assert its meaning');
             }
             if (binding.constraints !== undefined) {
                 const values = Array.isArray(binding.constraints) ? binding.constraints : [binding.constraints], resolved = [];
@@ -1758,28 +1565,15 @@ class Decoder {
                     }
                     if (isRecord(ep.member) && definition) {
                         const id = asString(ep.member.id), name = asString(ep.member.name, id), file = asString(ep.member.file, definition.file);
-                        const allMembers = asArray(definition.record.members).map(ref => resolveReference(this.bundle, definition.file, ref)).filter((x) => !!x && x.file === file);
-                        const candidates = allMembers.filter(x => id ? x.record.id === id : x.record.id === name || x.record.title === name || x.record.name === name);
+                        const candidates = asArray(definition.record.members).map(ref => resolveReference(this.bundle, definition.file, ref)).filter(x => x && x.file === file && (id ? x.record.id === id : x.record.id === name || x.record.title === name || x.record.name === name));
                         const site = this.references.find(s => s.reference === ep.member);
                         if (candidates.length === 1) {
                             ep.member = { file: candidates[0].file, id: candidates[0].ref.id };
                             if (site)
                                 site.target = candidates[0].ref;
                         }
-                        else {
-                            let detail = '';
-                            if (candidates.length > 1)
-                                detail = ` (ambiguous: ${candidates.length} matches on ${asString(definition.record.name, definition.ref.id)})`;
-                            else {
-                                const memberNames = [...new Set(allMembers.flatMap(m => [asString(m.record.name), asString(m.record.title)].filter(Boolean)))];
-                                const closest = suggestClosest(name, memberNames);
-                                if (closest)
-                                    detail = ` (did you mean '${closest}'?)`;
-                                else if (memberNames.length)
-                                    detail = ` (available on ${asString(definition.record.name, definition.ref.id)}: ${memberNames.slice(0, 8).join(', ')})`;
-                            }
-                            this.diagnostics.push({ code: 'reference.member', severity: 'error', message: 'Missing or ambiguous endpoint member: ' + name + detail, target: entry.ref });
-                        }
+                        else
+                            this.diagnostics.push({ code: 'reference.member', severity: 'error', message: 'Missing or ambiguous endpoint member: ' + name, target: entry.ref });
                     }
                 }
             if (entry.kind === 'view' && entry.record.kind === 'document')
@@ -1988,27 +1782,6 @@ class Decoder {
     }
     run() { this.parseFile(this.bundle.entry); this.resolve(); this.resolveFieldBindings(); this.expandTemplates(); this.resolveFieldBindings(); this.resolveChildren(); const checked = listRecords(this.bundle).filter(r => typeof r.record.id === 'string' && r.record.id.length > 0).map(r => r.ref); const unavailable = this.diagnostics.filter(d => ['include.missing', 'reference.unresolved', 'version.unsupported'].includes(d.code)).map(d => d.message); return { syntaxValid: !this.diagnostics.some(d => d.severity === 'error' && /^(syntax|property|table)\./.test(d.code)), normalized: this.bundle, documents: this.documents, diagnostics: this.diagnostics, coverage: { scope: { kind: 'workarea' }, complete: !this.diagnostics.some(d => d.severity === 'error'), checked, unavailable }, references: this.references }; }
 }
-export function createSourceSet(input, entry = 'main.ddn') {
-    if (typeof input === 'string') {
-        const id = normalizeLocation(entry);
-        return { entry: id, files: [{ id, text: input, revision: 'rev-1', encoding: 'utf-8', writable: true }] };
-    }
-    if (isRecord(input) && typeof input.entry === 'string' && Array.isArray(input.files))
-        return input;
-    const record = input;
-    const keys = Object.keys(record);
-    const normalizedEntry = normalizeLocation(keys.includes(entry) ? entry : keys[0] ?? entry);
-    return {
-        entry: normalizedEntry,
-        files: Object.entries(record).map(([id, text], index) => ({
-            id: normalizeLocation(id),
-            text,
-            revision: `rev-${index + 1}`,
-            encoding: 'utf-8',
-            writable: true,
-        })),
-    };
-}
 export function decodeSources(input, options = {}) {
     if (options.cancel?.aborted)
         return { syntaxValid: false, normalized: { version: 'ddn-next-1', entry: input.entry, files: [] }, documents: [], diagnostics: [{ code: 'decode.cancelled', severity: 'info', message: 'Decoding was cancelled' }], coverage: { scope: { kind: 'workarea' }, complete: false, checked: [], unavailable: ['cancelled'] }, references: [] };
@@ -2115,29 +1888,12 @@ function textBodyShape(shape) {
     const choices = variants(shape), types = choices.flatMap(choice => typeof choice.type === 'string' ? [choice.type] : choice.type ?? []);
     return types.includes('string') && !types.includes('object') && !types.includes('array') && !choices.some(choice => choice.properties);
 }
-function implicitTextPreservesIndent(value) {
-    const lines = value.replace(/\r\n/g, '\n').split('\n'), first = lines.find(line => line.trim());
-    return (first === undefined ? lines.reduce((width, line) => Math.min(width, /^ */.exec(line)[0].length), Infinity) : /^ */.exec(first)[0].length) === 0;
-}
-function serializeLiteralText(value, indent, newline) {
-    // A final lone CR is data. Using CRLF for that structural terminator leaves
-    // the data CR separate instead of folding it into the LF line ending.
-    const eol = value.endsWith('\r') ? '\r\n' : newline;
-    return value.replace(/\r\n/g, '\n').split('\n').map(line => indent + line).join(eol) + eol;
-}
 function serializeList(values, indent, newline, shape) {
-    return values.map(value => {
-        if (Array.isArray(value))
-            return value.length ? indent + 'item' + newline + serializeList(value, indent + '    ', newline, variants(shape).find(choice => choice.type === 'array')?.items) : indent + 'item empty list' + newline;
-        if (isRecord(value))
-            return Object.keys(value).length ? indent + 'item' + newline + serializePropertyRecord(value, indent + '    ', newline, key => childShape(shape, key)) : indent + 'item empty record' + newline;
-        if (typeof value === 'string' && /[\r\n]/.test(value)) {
-            if (!admitsString(shape))
-                throw Error('A multiline collection item requires a type that admits string');
-            return indent + 'item text' + newline + serializeLiteralText(value, indent + '    ', newline);
-        }
-        return indent + 'item ' + scalar(value) + newline;
-    }).join('');
+    return values.map(value => Array.isArray(value)
+        ? value.length ? indent + 'item' + newline + serializeList(value, indent + '    ', newline, variants(shape).find(choice => choice.type === 'array')?.items) : indent + 'item empty list' + newline
+        : isRecord(value)
+            ? Object.keys(value).length ? indent + 'item' + newline + serializePropertyRecord(value, indent + '    ', newline, key => childShape(shape, key)) : indent + 'item empty record' + newline
+            : indent + 'item ' + scalar(value) + newline).join('');
 }
 function serializePropertyRecord(properties, indent, newline, resolve) {
     return Object.entries(properties).map(([key, value]) => {
@@ -2149,9 +1905,9 @@ function serializePropertyRecord(properties, indent, newline, resolve) {
         if (isRecord(value))
             return Object.keys(value).length ? indent + label + newline + serializePropertyRecord(value, indent + '    ', newline, child => childShape(shape, child)) : indent + label + ' empty record' + newline;
         if (typeof value === 'string' && /[\r\n]/.test(value)) {
-            if (!admitsString(shape))
-                throw Error('Multiline text requires a property type that admits string');
-            return indent + label + (textBodyShape(shape) && implicitTextPreservesIndent(value) ? '' : ' text') + newline + serializeLiteralText(value, indent + '    ', newline);
+            if (!textBodyShape(shape))
+                throw Error('Multiline text requires an unambiguous registered text-body property');
+            return indent + label + newline + value.replace(/\r\n/g, '\n').split('\n').map(line => indent + '    ' + line).join(newline) + newline;
         }
         return indent + label + ' ' + scalar(value) + newline;
     }).join('');
@@ -2176,9 +1932,8 @@ export function patchProperty(result, target, path, value) {
         return replaceDraftBody(result, target, value, asString(asRecord(findRecord(result.normalized, target)?.draft).format, 'text'));
     if (node.implicit) {
         const occurrence = findRecord(result.normalized, target);
-        const rootKey = path.split('.')[0];
-        const relationDisplay = ['label', 'legend'].includes(rootKey) && resolveReference(result.normalized, target.file, occurrence?.target)?.record.category === 'relation';
-        if (!OCCURRENCE_ONLY_ROOTS.has(rootKey) && !relationDisplay)
+        const relationDisplay = ['label', 'legend'].includes(path.split('.')[0]) && resolveReference(result.normalized, target.file, occurrence?.target)?.record.category === 'relation';
+        if (!['position', 'size', 'body', 'columns', 'pinned'].includes(path.split('.')[0]) && !relationDisplay)
             throw Error('An implicit occurrence supports only unambiguous appearance properties; author an explicit use occurrence for this property');
         const declaration = allNodes(result).find(n => !n.implicit && n.start === node.start && n.file === node.file);
         if (!declaration)
@@ -2302,9 +2057,7 @@ export function replaceRecordData(result, target, columns, rows) {
     // typed rows. No other declaration's bytes or source spans are changed.
     const properties = { ...record, columns: columns, rows: rows };
     delete properties.name;
-    const literals = allNodes(result).filter(child => child.file === target.file && child.literalBody && child.start >= node.bodyStart && child.end <= node.end);
-    const comments = lines(document.file.text).filter(line => line.start >= node.bodyStart && line.start < node.end && line.text.trimStart().startsWith('//')
-        && !literals.some(literal => line.start >= literal.bodyStart && line.start < literal.end)).map(line => document.file.text.slice(line.start, line.end - line.eol.length));
+    const comments = document.file.text.slice(node.bodyStart, node.end).split(/\r?\n/).filter(line => line.trimStart().startsWith('//'));
     const indent = ' '.repeat(node.indent + 4);
     const text = (comments.length ? comments.join(document.newline) + document.newline : '') + indent + 'with' + document.newline + serializePropertyRecord(properties, indent + '    ', document.newline, key => ownerShape('data_record', record, key));
     return [patch(result, target.file, node.bodyStart, node.end, text)];

@@ -1,0 +1,5 @@
+// Generated from the adopted codex; run profiles/tools/generate.py.
+import { installPresentationFamily } from '../../../presentation/src/adapters.js';
+import { graphsPresentation as family } from '../../../presentation/src/family-graphs.js';
+installPresentationFamily({ ...family, id: "graphs-systems", profiles: ["sysml.bdd@1", "sysml.ibd@1", "sysml.parametric@1", "sysml.requirements@1", "sysml.bdd@2", "sysml.ibd@2", "sysml.parametric@2", "sysml.package@1", "sysml.usecase@1", "sysml.activity@1", "sysml.sequence@1", "sysml.statemachine@1", "soaml.services@1", "uaf.strategic@1", "uaf.operational@1", "uaf.services@1", "uaf.systems@1", "uaf.personnel@1", "uaf.resources@1", "uaf.security@1", "uaf.projects@1", "uaf.standards@1", "uaf.actualresources@1", "uaf.dictionary@1", "uaf.summary@1"] });
+//# sourceMappingURL=graphs-systems.js.map

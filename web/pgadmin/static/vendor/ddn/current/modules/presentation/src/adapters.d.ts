@@ -3,7 +3,7 @@ import type { LocatedRecord, DataRecord } from './model.js';
 import type { ProjectedRecord } from './project-core.js';
 import type { GraphProjectionOptions, GraphProjectionResult } from './graph-common.js';
 import type { DataProfileProjection, DataProjectionOptions } from './data-common.js';
-export type PresentationFamilyId = 'graphs' | 'charts' | 'geography' | 'surfaces';
+export type PresentationFamilyId = string;
 export type GraphProjector = (snapshot: ModelSnapshot, view: LocatedRecord, entries: readonly ProjectedRecord[], options?: GraphProjectionOptions) => GraphProjectionResult;
 export type DataProjector = (snapshot: ModelSnapshot, view: LocatedRecord, bounds: Bounds, effective: DataRecord, options?: DataProjectionOptions & {
     geography?: ReadonlyMap<string, unknown>;

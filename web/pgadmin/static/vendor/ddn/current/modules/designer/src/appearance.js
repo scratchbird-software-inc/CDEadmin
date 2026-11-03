@@ -1,5 +1,5 @@
 import { getViewerHandle } from '../../viewer/src/native.js';
-import { fontFamily, listFonts, loadFontFile, getFontResources, installFontResources } from '../../viewer/src/fonts.js';
+import { fontFamily, listFonts, loadFontFile, ensureFontResources, getFontResources, installFontResources } from '../../viewer/src/fonts.js';
 import { textureBackground } from '../../viewer/src/texture.js';
 import { choiceField } from '../../viewer/src/choice-field.js';
 import { flushLiveSettings, notifyLiveSettings } from './live-settings.js';
@@ -13,25 +13,22 @@ const unsavedLibraries = new WeakSet();
 const valueAt = (values, path, fallback) => values.get(path) ?? fallback;
 function download(document, name, text) { const url = URL.createObjectURL(new Blob([text], { type: 'application/json' })), a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 /** Live appearance editor; every valid change uses the authorized source command service. */
-export function openAppearance(viewer, panel, commit, initialTab = 'Background') {
+export function openAppearance(viewer, panel, commit) {
     const handle = getViewerHandle(viewer), document = handle.ownerDocument, snapshot = handle.runtime.snapshot();
     if (!snapshot)
         throw Error('Open a workarea first.');
     const all = records(snapshot), entry = handle.selectedEntry(), scopes = [];
-    const activeViewRef = handle.viewport().activeView;
-    const fallbackView = (activeViewRef ? handle.scene()?.views.find(v => refKey(v.ref) === refKey(activeViewRef)) : undefined) ?? entry?.view ?? handle.scene()?.views[0];
-    const targetView = entry?.view ?? fallbackView;
     if (entry && entry.definition.owner === 'definition' && entry.definition.record.category !== 'relation') {
         const decoded = runtimeState(handle.runtime).decoded;
         if (entry.appearance && decoded && !findNode(decoded, entry.appearance.ref)?.implicit)
             scopes.push({ ref: entry.appearance.ref, label: 'This appearance', target: 'element', profile: str(entry.view.record.profile) });
         scopes.push({ ref: entry.definition.ref, label: 'Shared element', target: 'element', profile: str(entry.view.record.profile) });
     }
-    if (targetView) {
+    if (entry) {
         const decoded = runtimeState(handle.runtime).decoded;
-        if (entry?.placement && decoded && !findNode(decoded, entry.placement.ref)?.implicit)
-            scopes.push({ ref: entry.placement.ref, label: 'This view placement', target: 'view', profile: str(targetView.record.profile) });
-        scopes.push({ ref: targetView.ref, label: 'View background and text', target: 'view', profile: str(targetView.record.profile) });
+        if (entry.placement && decoded && !findNode(decoded, entry.placement.ref)?.implicit)
+            scopes.push({ ref: entry.placement.ref, label: 'This view placement', target: 'view', profile: str(entry.view.record.profile) });
+        scopes.push({ ref: entry.view.ref, label: 'View background and text', target: 'view', profile: str(entry.view.record.profile) });
     }
     const workarea = all.find(r => r.owner === 'workarea' && r.file === snapshot.rootFile);
     if (workarea)
@@ -70,7 +67,7 @@ export function openAppearance(viewer, panel, commit, initialTab = 'Background')
         message.className = 'ddn-appearance-message';
         message.setAttribute('role', 'status');
         body.append(message);
-        let changes = {}, values = new Map(), chosen = 0, tab = initialTab, loading = false, ticket = 0;
+        let changes = {}, values = new Map(), chosen = 0, tab = 'Background', loading = false, ticket = 0;
         const field = (container, name, value, type = 'text') => { const wrap = document.createElement('label'); wrap.textContent = name; const input = document.createElement('input'); input.setAttribute('aria-label', name); input.type = type; input.value = value; wrap.append(input); container.append(wrap); return input; };
         const select = (container, name, choices, value) => choiceField(container, name, choices, value);
         const effective = (path, fallback) => Object.hasOwn(changes, path) && changes[path] !== undefined ? changes[path] : valueAt(values, path, fallback);
@@ -106,7 +103,7 @@ export function openAppearance(viewer, panel, commit, initialTab = 'Background')
         } };
         const render = () => {
             const current = scopes[chosen];
-            targetLabel.textContent = 'Editing: ' + titleOf(current.target === 'element' ? entry.definition.record : current.target === 'view' ? targetView.record : workarea.record);
+            targetLabel.textContent = 'Editing: ' + titleOf(current.target === 'element' ? entry.definition.record : current.target === 'view' ? entry.view.record : workarea.record);
             if (current.target === 'workarea' && tab === 'Font')
                 tab = 'Background';
             content.replaceChildren();
@@ -146,7 +143,11 @@ export function openAppearance(viewer, panel, commit, initialTab = 'Background')
                 const family = select(grid, 'Font family', names, String(effective('style.font', 'sans'))), size = numberField(grid, 'Font size (pt)', Number(effective('style.font_size', 16)) * .75, { min: 6, max: 48, step: .5 });
                 size.step = 'any';
                 syncNumberField(size);
-                family.addEventListener('change', () => { changed('style.font', family.value); update(); });
+                family.addEventListener('change', () => { const key = family.value, scopeTicket = ticket; void ensureFontResources(document, [{ family: key }]).then(() => { if (body.isConnected && ticket === scopeTicket) {
+                    changed('style.font', key);
+                    update();
+                } }).catch(error => { if (body.isConnected)
+                    message.textContent = String(error.message); }); });
                 size.addEventListener('input', () => { changed('style.font_size', size.valueAsNumber * 4 / 3); update(); });
                 const ink = colourField(grid, 'Text colour', String(effective('text.color', '#243449')));
                 ink.addEventListener('input', () => { changed('text.color', ink.value); update(); });
@@ -183,43 +184,6 @@ export function openAppearance(viewer, panel, commit, initialTab = 'Background')
                 const note = document.createElement('p');
                 note.textContent = 'Bundled fonts work offline. Custom font files stay local; text uses a fallback when their resources are unavailable.';
                 content.append(note);
-                update();
-            }
-            else if (tab === 'Style') {
-                const update = preview(content), grid = document.createElement('div');
-                grid.className = 'ddn-appearance-grid';
-                content.append(grid);
-                const look = select(grid, 'Drawing style', ['classic', 'handdrawn', 'clean', 'neo'], String(effective('style.look', 'classic')));
-                look.addEventListener('change', () => { changed('style.look', look.value); update(); });
-                inherit(grid, 'style.look');
-                const theme = select(grid, 'Colour theme', ['default', 'neutral', 'dark', 'night', 'blueprint', 'warm'], String(effective('style.theme', 'default')));
-                theme.addEventListener('change', () => { changed('style.theme', theme.value); update(); });
-                inherit(grid, 'style.theme');
-                const roughness = numberField(grid, 'Hand-drawn roughness', Number(effective('style.roughness', 1)), { min: 0, max: 4, step: .1 });
-                roughness.step = 'any';
-                syncNumberField(roughness);
-                roughness.addEventListener('input', () => { changed('style.roughness', roughness.valueAsNumber); });
-                inherit(grid, 'style.roughness');
-                const note = document.createElement('p');
-                note.textContent = 'Setting a drawing style or theme on the workarea cascades to all views, documents and elements unless overridden.';
-                content.append(note);
-                update();
-            }
-            else if (tab === 'Border') {
-                const update = preview(content), grid = document.createElement('div');
-                grid.className = 'ddn-appearance-grid';
-                content.append(grid);
-                const style = select(grid, 'Border style', ['solid', 'dashed', 'dotted', 'none'], String(effective('border.style', 'solid')));
-                style.addEventListener('change', () => { changed('border.style', style.value); });
-                inherit(grid, 'border.style');
-                const width = numberField(grid, 'Border width', Number(effective('border.width', 1)), { min: 0, max: 16, step: .5 });
-                width.step = 'any';
-                syncNumberField(width);
-                width.addEventListener('input', () => { changed('border.width', width.valueAsNumber); });
-                inherit(grid, 'border.width');
-                const borderColor = colourField(grid, 'Border colour', String(effective('border.color', '#94a3b8')));
-                borderColor.addEventListener('input', () => { changed('border.color', borderColor.value); });
-                inherit(grid, 'border.color');
                 update();
             }
             else {
@@ -294,7 +258,7 @@ export function openAppearance(viewer, panel, commit, initialTab = 'Background')
                 content.append(note);
             }
         };
-        for (const name of ['Background', 'Font', 'Style', 'Border', 'Presets']) {
+        for (const name of ['Background', 'Font', 'Presets']) {
             const button = document.createElement('button');
             button.type = 'button';
             button.textContent = name;

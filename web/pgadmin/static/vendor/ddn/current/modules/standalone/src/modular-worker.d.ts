@@ -1,1 +1,1 @@
-export {};
+import './schema-native.js';

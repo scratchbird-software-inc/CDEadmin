@@ -1,0 +1,82 @@
+{
+  "format": "ddn-font-chunks-1",
+  "faces": [
+    {
+      "id": "3e4f2243d9b92319ce06bd65e798acd333b183f3dc37cdbfc71d1f9a490445e6",
+      "family": "Inter",
+      "category": "sans",
+      "style": "normal",
+      "weight": "100 900",
+      "file": "fonts/3e4f2243d9b92319ce06bd65e798acd333b183f3dc37cdbfc71d1f9a490445e6.js",
+      "rawBytes": 474446,
+      "sha256": "689820b31761bcb8726f5b3788e773d16377221de551ad0e24ed95908cc31656",
+      "fontSha256": "693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3"
+    },
+    {
+      "id": "c4f124d288f977c6a4678c5c8825f6fbacbba4539f218a4d3bcc1c47f67d7fab",
+      "family": "Inter",
+      "category": "sans",
+      "style": "italic",
+      "weight": "100 900",
+      "file": "fonts/c4f124d288f977c6a4678c5c8825f6fbacbba4539f218a4d3bcc1c47f67d7fab.js",
+      "rawBytes": 522094,
+      "sha256": "e319523a9a26997db08ff3dac113362af6812245a40a828355ff40aad97159f1",
+      "fontSha256": "e564f652916db6c139570fefb9524a77c4d48f30c92928de9db19b6b5c7a262a"
+    },
+    {
+      "id": "f50c7566e276fe7d20b13b1c70806cb424e1149b7481559b74f990e764051c61",
+      "family": "Source Serif 4",
+      "category": "serif",
+      "style": "normal",
+      "weight": "200 900",
+      "file": "fonts/f50c7566e276fe7d20b13b1c70806cb424e1149b7481559b74f990e764051c61.js",
+      "rawBytes": 577048,
+      "sha256": "a9c12ea2a659ba3c06b151a4892cda42460b2fa215147194c9275967fb3a8273",
+      "fontSha256": "940a76eda1388de39d38c8e7a79bf6ea058a387faee0a9f33c8d25c6ba05e1be"
+    },
+    {
+      "id": "205034cb3a3057293fb92f6c67b33b1a3b5f7583970d91e8635bcf4dce4fc5fa",
+      "family": "Source Serif 4",
+      "category": "serif",
+      "style": "italic",
+      "weight": "200 900",
+      "file": "fonts/205034cb3a3057293fb92f6c67b33b1a3b5f7583970d91e8635bcf4dce4fc5fa.js",
+      "rawBytes": 467164,
+      "sha256": "69ccf834b805b79477dbac59bbbb58177630c7d54137d35c7fec598d9f161396",
+      "fontSha256": "9d28b5749a1ad096a295cb607c521bd1af4cd9979b6f37332daf70143149fb44"
+    },
+    {
+      "id": "4ccc2c9edf1782f2012bf90cf09d76f76b4f3173364229879337494d7a77c4f6",
+      "family": "JetBrains Mono",
+      "category": "monospace",
+      "style": "normal",
+      "weight": "100 800",
+      "file": "fonts/4ccc2c9edf1782f2012bf90cf09d76f76b4f3173364229879337494d7a77c4f6.js",
+      "rawBytes": 156388,
+      "sha256": "729b869306a00a52baf6e9498e2e79e01962260c77305a7475bd74a2d636b091",
+      "fontSha256": "31ec365b93e4bad6f202ce23352a56d01ca4462b2afc782ed2cf6fa42ca9ac0e"
+    },
+    {
+      "id": "9f496177af52d864c09365c9b3058d7d2a7ce4e72b5071ac4717a0d82d7566ac",
+      "family": "JetBrains Mono",
+      "category": "monospace",
+      "style": "italic",
+      "weight": "100 800",
+      "file": "fonts/9f496177af52d864c09365c9b3058d7d2a7ce4e72b5071ac4717a0d82d7566ac.js",
+      "rawBytes": 169040,
+      "sha256": "6c3cebd76ac45183d239e46922efd7781a8f5c1ea1c92c690b75e4b619168d53",
+      "fontSha256": "76a805b6ea613ce2e3973f1bac6fa29db23116b2881390b59247d22890844ecc"
+    },
+    {
+      "id": "1fc33837de09157deb06bfabf5fde8aa974317e930b3b4ad3eb22a35051902bb",
+      "family": "Caveat",
+      "category": "handwriting",
+      "style": "normal",
+      "weight": "400 700",
+      "file": "fonts/1fc33837de09157deb06bfabf5fde8aa974317e930b3b4ad3eb22a35051902bb.js",
+      "rawBytes": 236068,
+      "sha256": "4fe1e113f36ad9e8cc771724ecccea02cda84d1c72412b2935cffbd3567ca745",
+      "fontSha256": "b86b9d7dbc3ca0e04ccf794c9c0e06a9854cbacfc08e69208abd719f40f579cb"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-export declare function profileDisplayName(id: string): string;
+export { profileDisplayName, diagramHeader } from './view-labels.js';
 export interface ViewTypePicker {
     readonly element: HTMLElement;
     readonly value: string;
@@ -10,4 +10,3 @@ export declare function viewTypePicker(body: HTMLElement, profiles: readonly {
     method: string;
 }[], label?: string, selected?: string): ViewTypePicker;
 /** A new mind map includes its central topic; other defaults remain implicit. */
-export declare function diagramHeader(name: string, profile: string, title?: string): string;

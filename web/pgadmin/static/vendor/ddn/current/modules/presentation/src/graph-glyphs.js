@@ -68,7 +68,7 @@ export function shadowPrimitive(primitive, dx = 5, dy = 5) {
 export function nodeGlyph(role, record, b, options) {
     const { x, y, width: w, height: h } = b, cx = x + w / 2, cy = y + h / 2;
     const fill = options.fill ?? '#fff', stroke = options.stroke ?? '#475569', width = options.width ?? 1.5;
-    const ps = [], m = (key) => object(metadata(record, key)), render = roleDescriptor(role)?.render, silhouette = str(render?.silhouette), coreCard = !role.includes('.') && !role.includes('::') && !options.profile.startsWith('chen.');
+    const ps = [], m = (key) => object(metadata(record, key)), render = roleDescriptor(role)?.render, silhouette = str(render?.silhouette), coreCard = !role.includes('.') && !role.includes('::') && !(options.profile.startsWith('chen.') || options.profile === 'chebotko.conceptual@1');
     const diamond = () => polygon([[cx, y], [x + w, cy], [cx, y + h], [x, cy]], fill, stroke, width);
     const hexagon = () => polygon([[x + 20, y], [x + w - 20, y], [x + w, cy], [x + w - 20, y + h], [x + 20, y + h], [x, cy]], fill, stroke, width);
     const document = () => path(`M${x},${y}H${x + w}V${y + h - 10}C${x + w * .66},${y + h - 26} ${x + w * .4},${y + h + 10} ${x},${y + h - 8}Z`, fill, stroke, width);

@@ -1,9 +1,6 @@
 import { knownProfile } from '../../profiles/src/core.js';
-import { quoteText } from '../../language/src/index.js';
 import { methodLabel, profileLabel, methodPreview, profilePreview } from './view-previews.js';
-export function profileDisplayName(id) {
-    return `${profileLabel(id)} (${id})`;
-}
+export { profileDisplayName, diagramHeader } from './view-labels.js';
 const pickerStyle = `
 .ddn-ui-dialog.ddn-view-picker-dialog{max-height:min(760px,calc(100vh - 24px));max-height:min(760px,calc(100dvh - 24px))}
 .ddn-view-type-settings[hidden]{display:none}
@@ -160,16 +157,6 @@ export function viewTypePicker(body, profiles, label = 'View profile', selected)
                         button.setAttribute('aria-pressed', String(button.dataset.profile === value));
                     status.textContent = `${profileLabel(profile.id)} selected.`;
                 });
-                tile.addEventListener('dblclick', () => {
-                    choose(profile.id);
-                    for (const button of grid.querySelectorAll('button[data-profile]'))
-                        button.setAttribute('aria-pressed', String(button.dataset.profile === value));
-                    status.textContent = `${profileLabel(profile.id)} selected.`;
-                    const hostDialog = tile.closest('[role="dialog"]');
-                    const primary = hostDialog?.querySelector('button[data-ddn-apply], .ddn-form-actions button:first-child');
-                    if (primary && !primary.disabled)
-                        primary.click();
-                });
                 grid.append(tile);
             }
             if (!matches.length) {
@@ -188,10 +175,4 @@ export function viewTypePicker(body, profiles, label = 'View profile', selected)
     return { element, get value() { return value; }, onChange(listener) { listeners.add(listener); } };
 }
 /** A new mind map includes its central topic; other defaults remain implicit. */
-export function diagramHeader(name, profile, title) {
-    const header = profile === 'ddn@1' ? 'erd ' + quoteText(name)
-        : profile === 'mindmap.basic@1' ? 'mindmap ' + quoteText(name)
-            : 'view ' + quoteText(name) + ' as ' + quoteText(profile);
-    return header + (title === undefined ? '' : ' : ' + quoteText(title));
-}
 //# sourceMappingURL=view-picker.js.map

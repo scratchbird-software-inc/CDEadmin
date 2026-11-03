@@ -1,6 +1,8 @@
 import { codex } from './schema-core.js';
 import { contractVersion, nativeProfileIds, profileDescriptor, freezeProfileData } from './core.js';
-import { catalogueFamilies } from './generated-families.js';
+import { catalogueFamilies as parentFamilies } from './generated-families.js';
+import { catalogueShards } from './generated-shards.js';
+const catalogueFamilies = { ...parentFamilies, ...catalogueShards };
 import { createNativePack } from './native.js';
 import { rulesFor } from './rules.js';
 const families = new Map();

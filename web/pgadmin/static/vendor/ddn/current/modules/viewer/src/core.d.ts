@@ -12,14 +12,13 @@ export interface ViewerHandle {
     readonly overlays: HTMLElement;
     readonly stage: HTMLElement;
     readonly ownerDocument: Document;
-    readonly selectedOccurrences: Set<string>;
     scene(): Projection | undefined;
     viewport(): Viewport;
     selected(): Ref | undefined;
     expanded(): Ref | undefined;
     clearSelection(): void;
     selectedEntry(): ProjectedRecord | undefined;
-    select(ref: Ref | undefined, occurrence?: string, additive?: boolean): void;
+    select(ref: Ref, occurrence?: string): void;
     subscribeOpen(listener: () => void): () => void;
     subscribeSelection(listener: (ref: Ref | undefined) => void): () => void;
     refresh(): Promise<void>;
@@ -29,7 +28,7 @@ export interface ViewerHandle {
         x: number;
         y: number;
     };
-    announce(message: string, tone?: 'info' | 'warning' | 'error'): void;
+    announce(message: string): void;
 }
 export declare function getViewerHandle(viewer: Viewer): ViewerHandle;
 /** Small UI previews use the same SVG realization as the canvas, without assets

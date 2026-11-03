@@ -15,10 +15,10 @@ export interface CatalogueFamily {
     readonly hash: string;
     readonly profiles: Readonly<Record<string, unknown>>;
 }
-/** A stable codex object with immutable snapshots of installed descriptors.
- * Schema instructions and indexes never change when a family is installed. */
-export declare function createCatalogue(base: Record<string, unknown>, manifests: Readonly<Record<string, CatalogueFamilyManifest>>): {
+/** Stable read-only facade; deferred schema access fails explicitly until installed. */
+export declare function createCatalogue(base: Record<string, unknown>, manifests: Readonly<Record<string, CatalogueFamilyManifest>>, expectedCoreHash?: string): {
     compiledCodex: Record<string, unknown>;
     installCatalogueFamily: (family: CatalogueFamily) => void;
     installedCatalogueFamilies: () => readonly string[];
+    installCore: (value: Record<string, unknown>, hash?: string) => void;
 };

@@ -1,6 +1,6 @@
 import * as api from './modular-designer-api.js';
 import { bootModularShell } from './modular-shell.js';
-import { newDiagramDialog } from '../../designer/src/new-diagram.js';
+import { newDiagramDialog } from './lazy-new-diagram.js';
 const { createBrowserRuntimeOptions, createVerifier, createViewer, getViewerHandle, createDesigner } = api;
 export { api };
 bootModularShell({ mode: 'designer', options: createBrowserRuntimeOptions, verifier: createVerifier, viewer: createViewer, getRuntime: viewer => getViewerHandle(viewer).runtime,

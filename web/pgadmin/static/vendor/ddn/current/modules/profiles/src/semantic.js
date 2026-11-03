@@ -429,7 +429,7 @@ export function completeProfileDiagnostics(view, records, review = false) {
             if (review && (!text(object(meta(n, 'x_diagram')).code).trim() || !text(object(meta(n, 'x_diagram')).text).trim()))
                 incomplete('A completed requirement needs nonempty code and text', n.ref);
     }
-    if (profileId.startsWith('chen.')) {
+    if (profileId.startsWith('chen.') || profileId === 'chebotko.conceptual@1') {
         for (const l of links) {
             if (l.ends.some(e => e.member !== undefined))
                 issue('DDN-CHEN-MEMBER', 'Chen relationships connect entities, not member endpoints', l.item.ref);
@@ -468,6 +468,28 @@ export function completeProfileDiagnostics(view, records, review = false) {
             }
         }
         cycle(ownerLinks, 'DDN-CHEN-OWNER-CYCLE');
+    }
+    if (profileId === 'chebotko.logical@1') {
+        for (const n of nodes.filter(n => role(n) === 'table')) {
+            const cols = members(n), prop = (c) => object(c.record.properties);
+            const partition = cols.filter(c => prop(c).key === 'partition'), clustering = cols.filter(c => prop(c).key === 'clustering');
+            if (!partition.length)
+                incomplete('A Chebotko table needs at least one partition-key column', n.ref);
+            for (const c of [...partition, ...clustering]) {
+                if (prop(c).nullable === true)
+                    issue('DDN-CHEBOTKO-KEY-NULLABLE', 'Key columns cannot be nullable', c.ref);
+                if (object(meta(c, 'x_member')).static === true)
+                    issue('DDN-CHEBOTKO-KEY-STATIC', 'A key column cannot be static', c.ref);
+                if (['set', 'array', 'map'].includes(text(prop(c).shape)))
+                    issue('DDN-CHEBOTKO-KEY-COLLECTION', 'A key column cannot be a collection', c.ref);
+            }
+            for (const c of cols) {
+                if (prop(c).sort !== undefined && prop(c).key !== 'clustering')
+                    issue('DDN-CHEBOTKO-SORT', 'Sort direction applies to clustering columns only', c.ref);
+                if (object(meta(c, 'x_member')).static === true && !clustering.length)
+                    issue('DDN-CHEBOTKO-STATIC', 'Static columns require the table to have a clustering column', c.ref);
+            }
+        }
     }
     if (profileId === 'erd.crowfoot@1')
         for (const l of links) {

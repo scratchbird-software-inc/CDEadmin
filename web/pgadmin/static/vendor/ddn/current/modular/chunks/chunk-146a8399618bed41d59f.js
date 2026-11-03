@@ -1,0 +1,9 @@
+/*! DDN — Diagram Design Notation
+ * Copyright (c) 2026 ScratchBird Software Inc. and DDN contributors.
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ * Free and open-source software. See LICENSE and NOTICE.md.
+ * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
+ * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
+ */
+(()=>{"use strict";const d=globalThis.DDN_MODULES;if(!d)throw Error("Missing DDN module runtime");d.register({id:"chunk-146a8399618bed41d59f",version:"ddn-next-1",dependencies:[],modules:[{id:"shared/chunk-ISRE6U3Z.js",bytes:1309,sha256:"4458b9df65cac6a83746514892d489a696fb619fd8bab2f600108880b57107ee",dependencies:[]}],hash:"5951f93386ba46293072a542c1c4216814dfc03ca649970f51bd29fa2b8e2eb6"},{"shared/chunk-ISRE6U3Z.js":function(l,e,h,r){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.a=void 0,e.b=s;var a=Object.freeze([{id:"dynamic",label:"Dynamic",description:"The view grows and shrinks with its diagram content.",width:null,height:null,scale:1},{id:"tv-hd",label:"HD",description:"1280 \xD7 720 pixels \xB7 16:9 dashboard for an HD display.",width:1280,height:720,scale:.6666666666666666},{id:"tv-fhd",label:"Full HD",description:"1920 \xD7 1080 pixels \xB7 16:9 dashboard for a Full HD display.",width:1920,height:1080,scale:1},{id:"tv-2k",label:"2K",description:"2048 \xD7 1080 pixels \xB7 the 2K format, distinct from 2560 \xD7 1440 QHD.",width:2048,height:1080,scale:1},{id:"tv-qhd",label:"QHD",description:"2560 \xD7 1440 pixels \xB7 16:9 dashboard for a QHD display.",width:2560,height:1440,scale:1.3333333333333333},{id:"tv-4k",label:"4K UHD",description:"3840 \xD7 2160 pixels \xB7 16:9 dashboard for a 4K UHD display.",width:3840,height:2160,scale:2},{id:"tv-8k",label:"8K UHD",description:"7680 \xD7 4320 pixels \xB7 16:9 dashboard for an 8K UHD display.",width:7680,height:4320,scale:4}].map(i=>Object.freeze(i)));e.a=a;function s(i){return a.find(t=>t.id===i)}}})})();
+

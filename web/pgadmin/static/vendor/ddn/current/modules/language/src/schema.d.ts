@@ -11,10 +11,4 @@ export declare const coreTypes: Record<string, {
     schema: string;
     core: string;
 }>;
-export declare const profiles: Record<string, {
-    id: string;
-    method: string;
-    projection: string;
-    primary_palette: string[];
-    relation_roles: string[];
-}>;
+export declare const profiles: readonly string[];

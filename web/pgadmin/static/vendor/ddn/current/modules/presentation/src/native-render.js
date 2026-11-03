@@ -121,70 +121,18 @@ export function badgePrimitives(values, b, size, color, fill) {
     }
     return result;
 }
-export function originRank(origin, level) {
-    if (!origin || origin.startsWith('standard:'))
-        return 0;
-    if (origin === 'css:workarea')
-        return 1;
-    if (origin === 'css:view')
-        return 2;
-    if (origin === 'css:element')
-        return 3;
-    if (origin === 'css')
-        return level === 'workarea' ? 1 : level === 'view' ? 2 : 3;
-    if (origin === 'file:defaults')
-        return 4;
-    if (origin === 'file:workarea defaults')
-        return 5;
-    if (origin === 'file:workarea' || level === 'workarea')
-        return 6;
-    if (origin === 'file:view defaults')
-        return 7;
-    if (origin === 'file:view' || level === 'view')
-        return 8;
-    if (origin === 'file:definition defaults')
-        return 9;
-    if (origin === 'file:definition')
-        return 10;
-    if (origin === 'file:occurrence')
-        return 11;
-    return 10;
-}
-const INHERITABLE_STYLE_KEYS = ['look', 'font', 'font_size', 'seed', 'roughness', 'theme', 'hachure'];
-export function inheritedPresentation(values, properties, view, viewOrigins, targetOrigins, level = 'element') {
+export function inheritedPresentation(values, properties, view) {
     const result = { ...values };
-    const parentLevel = level === 'view' ? 'workarea' : 'view';
-    const groups = level === 'view' ? ['style', 'text', 'border'] : ['style', 'text'];
-    for (const group of groups) {
+    for (const group of ['style', 'text']) {
         const next = { ...object(values[group]) };
         for (const [key, value] of Object.entries(object(view[group]))) {
-            if (group === 'style' && !INHERITABLE_STYLE_KEYS.includes(key))
+            if (group === 'style' && !['look', 'font', 'font_size', 'seed', 'roughness', 'theme'].includes(key))
                 continue;
-            const path = group + '.' + key;
-            const origin = targetOrigins?.[path] ?? properties.find(p => p.path === path)?.origin;
-            const parentOrigin = viewOrigins ? viewOrigins[path] : 'file:view';
-            if (originRank(parentOrigin, parentLevel) > originRank(origin, level)) {
+            const origin = properties.find(p => p.path === group + '.' + key)?.origin;
+            if (!origin || origin === 'standard:definition' || origin === 'standard:appearance')
                 next[key] = value;
-                if (targetOrigins) {
-                    const inheritedOrigin = !parentOrigin || parentOrigin.startsWith('standard:')
-                        ? origin ?? ('standard:' + level)
-                        : parentOrigin.startsWith('css')
-                            ? (parentOrigin === 'css:workarea' || parentLevel === 'workarea' ? 'css:workarea' : 'css:view')
-                            : (parentOrigin === 'file:workarea' || parentLevel === 'workarea' ? 'file:workarea' : 'file:view');
-                    targetOrigins[path] = inheritedOrigin;
-                }
-            }
         }
         result[group] = next;
-    }
-    if (level === 'view' && view.shadow && typeof view.shadow === 'object') {
-        const shadowOrigin = targetOrigins?.shadow ?? properties.find(p => p.path === 'shadow' || p.path.startsWith('shadow.'))?.origin;
-        const parentShadowOrigin = viewOrigins?.shadow ?? Object.entries(viewOrigins ?? {}).find(([k]) => k.startsWith('shadow.'))?.[1];
-        if (originRank(parentShadowOrigin, 'workarea') > originRank(shadowOrigin, 'view')) {
-            result.shadow = { ...object(view.shadow) };
-            if (targetOrigins && parentShadowOrigin)
-                targetOrigins.shadow = parentShadowOrigin.startsWith('css') ? 'css:workarea' : 'file:workarea';
-        }
     }
     return result;
 }
