@@ -51,7 +51,8 @@ JSON_CONTROLS = {
     "failover": {"empty_as_null": True, "label": "Failover endpoints", "control": "grid", "help": "Targets inherit connection settings unless overridden. Each protected password reference is scoped to this endpoint and owner. Provider-owned target pools are independent; native priority order and random choice among equal priorities apply.", "columns": [{"field_id": "host", "label": "Host", "control": "text"}, {"field_id": "port", "label": "Port", "control": "number", "min": 1, "max": 65535}, {"field_id": "unix_socket", "label": "Unix socket", "control": "text"}, {"field_id": "user", "label": "User", "control": "text"}, {"field_id": "database", "label": "Database", "control": "text"}, {"field_id": "priority", "label": "Priority", "control": "number", "min": 0, "max": 100}, {"field_id": "credential_reference_id", "label": "Password reference", "control": "reference", "reference_kind": "secret-reference"}, {"field_id": "credential_kind", "label": "Credential kind", "control": "select", "options": [{"value": "database_password", "label": "Registration password"}, {"value": "password", "label": "Protected account password"}]}, {"field_id": "pool_name", "label": "Pool name", "control": "text"}, {"field_id": "pool_size", "label": "Pool size", "control": "number", "min": 1, "max": 32}, {"field_id": "pool_reset_session", "label": "Reset session", "control": "boolean", "default": True}]},
     "tls_versions": {"empty_as_null": True, "label": "TLS versions", "control": "multiselect", "help": "", "options": [{"value": "TLSv1.2", "label": "TLSv1.2"}, {"value": "TLSv1.3", "label": "TLSv1.3"}]},
     "tls_ciphersuites": {"empty_as_null": True, "label": "TLS cipher suites", "control": "grid", "help": "", "item_kind": "string", "columns": [{"field_id": "value", "label": "Cipher suite", "control": "text"}]},
-    "conn_attrs": {"empty_as_null": True, "label": "Connection attributes", "control": "keyvalue", "help": ""},
+    "conn_attrs": {"empty_as_null": True, "label": "Connection attributes", "control": "keyvalue",
+                   "help": "Name and value pairs sent in the handshake. The server stores at most performance_schema_session_connect_attrs_size bytes of attributes per session (512 by default), shared with the connector's own attributes and one CDEadmin adds; beyond that it truncates them, and CDEadmin's native session observer then refuses the session."},
 }
 TITLE = {"mysql": "MySQL", "mariadb": "MariaDB", "firebird": "Firebird", "duckdb": "DuckDB", "sqlite": "SQLite",
          "dolt": "Dolt", "tidb": "TiDB", "vitess": "Vitess", "cockroachdb": "CockroachDB", "yugabytedb": "YugabyteDB",
@@ -92,13 +93,8 @@ GROUP_TABS = {
 }
 PARITY_ENGINES = {"dolt", "tidb", "vitess", "cockroachdb", "yugabytedb", "immudb", "xtdb"}
 # Contract fields a form does not offer, with the evidence; each becomes a gap of the form.
-CONN_ATTRS = ("Not offered: any connection attribute makes the connection fail ('B' format requires "
-              "0 <= number <= 255): the provider adds its own observer attribute to every MySQL "
-              "Connector/Python connection, and the extra attribute exceeds the connector's limit. Live on "
-              "the pinned demos, 2026-11-04; the legacy dialog sends it through the same path.")
 COMPRESS = "Not offered: with protocol compression the connection hangs on the pinned {} demo (live, 2026-11-04)."
 UNSUPPORTED = {
-    ("dolt", "conn_attrs"): CONN_ATTRS, ("tidb", "conn_attrs"): CONN_ATTRS, ("vitess", "conn_attrs"): CONN_ATTRS,
     ("dolt", "compress"): COMPRESS.format("Dolt 1.86.6"), ("vitess", "compress"): COMPRESS.format("Vitess 23.0.3"),
 }
 

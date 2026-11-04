@@ -238,9 +238,9 @@ with the legacy dialog as the fallback.
      - complete (55f, 3g)
      - complete (5f, 2g)
    * - Server
-     - complete (48f, 2g)
-     - complete (63f, 1g)
-     - complete (69f, 2g)
+     - complete (49f, 1g)
+     - complete (64f, 0g)
+     - complete (70f, 1g)
      - complete (68f, 0g)
      - complete (96f, 0g)
      - complete (67f, 0g)
@@ -281,6 +281,21 @@ count sets its maximum to zero in the enforcement file.
 
 Change log
 ----------
+
+MySQL Connector/Python connection attributes (2026-11-04)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Supersedes "connection attributes not offered" in the entry below. Connector/Python 26.7 packs
+each attribute length and their total into one byte, counted in characters; with the observer
+attribute the MySQL-family connection adds, any user attribute failed the handshake.
+``mysql_connections`` now installs a length-encoded, byte-counted encoder (the handshake
+response format) when the installed one fails on a long attribute; for attributes of up to 250
+ASCII bytes the bytes are unchanged. Dolt, TiDB and Vitess offer connection attributes again;
+their round trips passed with one set, and the MySQL 9.7.0 demo stored a 300-byte non-ASCII
+attribute intact. The server still bounds attributes by
+``performance_schema_session_connect_attrs_size`` (512 bytes on the demo), shared with the
+connector's and CDEadmin's own; the field's help says so, because truncation makes the native
+session observer refuse the session. MySQL's own Server form is unchanged (MySQL stream).
 
 Parity engine Server forms complete; empty typed values; registration route fixes (2026-11-04, later)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

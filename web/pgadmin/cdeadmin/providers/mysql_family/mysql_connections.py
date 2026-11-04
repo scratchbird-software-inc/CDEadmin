@@ -26,6 +26,48 @@ def _close(connection):
         pass
 
 
+_CONN_ATTRS_LOCK = threading.Lock()
+_conn_attrs_checked = False
+
+
+def encode_conn_attrs(conn_attrs):
+    """Connection attributes as the handshake response defines them: a
+    length-encoded total, then length-encoded key and value strings, with
+    lengths in bytes."""
+    from mysql.connector.utils import lc_int
+    body = []
+    for name in conn_attrs:
+        if conn_attrs[name] is None:
+            conn_attrs[name] = ''
+        key = str(name).encode('utf-8')
+        value = str(conn_attrs[name]).encode('utf-8')
+        body.extend((lc_int(len(key)), key, lc_int(len(value)), value))
+    payload = b''.join(body)
+    return lc_int(len(payload)) + payload
+
+
+def install_conn_attrs_encoding():
+    """Connector/Python 26.7 packs every attribute length, and their total,
+    into one byte, counted in characters. With the observer attribute this
+    provider adds, any user-supplied attribute made the handshake fail
+    ("'B' format requires 0 <= number <= 255"). Replace the encoder only
+    while the installed one fails on a long attribute; for attributes of up
+    to 250 ASCII bytes the bytes are unchanged."""
+    global _conn_attrs_checked
+    with _CONN_ATTRS_LOCK:
+        if _conn_attrs_checked:
+            return
+        _conn_attrs_checked = True
+        try:
+            from mysql.connector.protocol import MySQLProtocol
+        except ImportError:
+            return
+        try:
+            MySQLProtocol.make_conn_attrs({'probe': 'x' * 300})
+        except Exception:  # struct.error from the one-byte length
+            MySQLProtocol.make_conn_attrs = staticmethod(encode_conn_attrs)
+
+
 def live_sql_mode_conversion(native):
     """Use native OK/EOF status for escaping after SQL changes session mode.
 
@@ -256,6 +298,7 @@ class Connector:
     def _native_connect(self,*args,**options):
         attribute = None
         if getattr(self.module, '__name__', '').startswith('mysql.connector'):
+            install_conn_attrs_encoding()
             attributes = dict(options.get('conn_attrs') or {})
             key = 'scratchrobin_' + secrets.token_hex(8)
             while key in attributes:

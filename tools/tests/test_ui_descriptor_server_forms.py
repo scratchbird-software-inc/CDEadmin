@@ -149,12 +149,13 @@ def test_firebird_embedded_server_form_maps_to_its_contract(tmp_path):
 PARITY = {
     'dolt': ('dolt-native', 'cdeadmin_demo', {
         'ssl_disabled': True, 'connection_timeout': 7, 'autocommit': True, 'time_zone': '+00:00',
-        'tls_versions': ['TLSv1.2', 'TLSv1.3']}),
+        'conn_attrs': {'program_name': 'cdeadmin-rt'}, 'tls_versions': ['TLSv1.2', 'TLSv1.3']}),
     'tidb': ('tidb-native', 'cdeadmin_demo', {
         'ssl_disabled': True, 'connection_timeout': 7, 'autocommit': True, 'compress': True,
-        'tls_ciphersuites': [{'value': 'TLS_AES_128_GCM_SHA256'}]}),
+        'conn_attrs': {'program_name': 'cdeadmin-rt'}, 'tls_ciphersuites': [{'value': 'TLS_AES_128_GCM_SHA256'}]}),
     'vitess': ('vitess-native', 'test_keyspace', {
-        'ssl_disabled': True, 'connection_timeout': 7, 'autocommit': True}),
+        'ssl_disabled': True, 'connection_timeout': 7, 'autocommit': True,
+        'conn_attrs': {'program_name': 'cdeadmin-rt'}}),
     'cockroachdb': ('cockroachdb-native', 'cdeadmin_demo', {
         'sslmode': 'disable', 'application_name': 'cdeadmin-rt', 'connect_timeout': 7}),
     'yugabytedb': ('yugabytedb-native', 'cdeadmin_demo', {
@@ -275,14 +276,14 @@ def test_mysql_wire_empty_typed_fields_leave_the_route_unset(engine):
     from pgadmin.cdeadmin.endpoints.profiles import registration_profile
     from ui_descriptor_roundtrip import backend_draft
     profile_id, draft = parity_draft(engine)
-    draft = {key: value for key, value in draft.items() if key not in ('tls_versions', 'tls_ciphersuites')}
+    draft = {key: value for key, value in draft.items() if key not in ('conn_attrs', 'tls_versions', 'tls_ciphersuites')}
     form = resolved_form(engine, 'server')
     data = registration_data(form, draft)
-    for key in ('failover', 'tls_versions', 'tls_ciphersuites'):
+    for key in ('failover', 'tls_versions', 'tls_ciphersuites', 'conn_attrs'):
         assert data.get(f'cde_route_{key}', None) is None, (engine, key, data.get(f'cde_route_{key}'))
     route = registration_route(registration_profile(profile_id), data)
     assert not {'failover', 'tls_versions', 'tls_ciphersuites', 'conn_attrs'} & set(route), sorted(route)
     offered = {field['field_id'] for tab in form['tabs'] for field in tab['fields']}
-    assert 'conn_attrs' not in offered and ('compress' in offered) == (engine == 'tidb'), sorted(offered)
+    assert 'conn_attrs' in offered and ('compress' in offered) == (engine == 'tidb'), sorted(offered)
     edit = backend_draft(form, {'failover': []}, mode='alter', baseline={'failover': [{'host': 'b', 'port': 3306}]})
     assert edit == {'cde_route_failover': None}

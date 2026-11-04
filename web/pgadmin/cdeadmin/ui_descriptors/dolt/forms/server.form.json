@@ -12,10 +12,6 @@
     {
       "concept": "server.compress",
       "reason": "Not offered: with protocol compression the connection hangs on the pinned Dolt 1.86.6 demo (live, 2026-11-04)."
-    },
-    {
-      "concept": "server.conn_attrs",
-      "reason": "Not offered: any connection attribute makes the connection fail ('B' format requires 0 <= number <= 255): the provider adds its own observer attribute to every MySQL Connector/Python connection, and the extra attribute exceeds the connector's limit. Live on the pinned demos, 2026-11-04; the legacy dialog sends it through the same path."
     }
   ],
   "fields": [
@@ -556,6 +552,17 @@
           "label": "Serializable"
         }
       ]
+    },
+    {
+      "field_id": "conn_attrs",
+      "label": "Connection attributes",
+      "tab": "Advanced",
+      "control": "keyvalue",
+      "empty_as_null": true,
+      "help": "Name and value pairs sent in the handshake. The server stores at most performance_schema_session_connect_attrs_size bytes of attributes per session (512 by default), shared with the connector's own attributes and one CDEadmin adds; beyond that it truncates them, and CDEadmin's native session observer then refuses the session.",
+      "backend_field_id": "cde_route_conn_attrs",
+      "group": "Session",
+      "required": false
     },
     {
       "field_id": "pool_size",
