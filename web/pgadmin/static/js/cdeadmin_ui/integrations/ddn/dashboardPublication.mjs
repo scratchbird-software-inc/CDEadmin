@@ -111,7 +111,7 @@ function records(libraries,snapshot,decoded) {
   check(Array.isArray(data.rows) && data.rows.length>0 && data.rows.length<=4096 && data.rows.every(row=>Array.isArray(row) && row.length===METRIC_COLUMNS.length && row.every(cell=>typeof cell==='string')),'Metric records require string value, unit and rate fields.');
   return {input,parsed,all,data,source:sources[0].record};
 }
-export async function validatePublication(libraries,snapshot,scope,engine='firebird') {
+function envelope(snapshot,scope,engine) {
   check(['firebird','postgresql','mysql','mariadb','duckdb','sqlite'].includes(engine),'Unknown dashboard engine.');
   const bindings=engine==='postgresql'?postgresCounts:['mysql','mariadb'].includes(engine)?mysqlCounts:engine==='duckdb'?duckdbCounts:engine==='sqlite'?sqliteCounts:counts;
   check(bindings[scope],'Unknown dashboard scope.');
@@ -120,18 +120,11 @@ export async function validatePublication(libraries,snapshot,scope,engine='fireb
   check(Object.keys(snapshot.files || {}).join()==='dashboard.ddn','Use one dashboard.ddn file.');
   check(snapshot.entry==='dashboard.ddn' && typeof snapshot.view==='string','Invalid selected view.');
   check(typeof snapshot.files['dashboard.ddn']==='string' && new TextEncoder().encode(snapshot.files['dashboard.ddn']).length<=512*1024,'Dashboard source exceeds its limit.');
-  // The verifier decodes these sources (in a worker in the browser) and returns the decode it
-  // verified, so they are not decoded again here. Record checks run before its outcome is read.
-  const api=libraries.viewer;
-  const verifier=api.createVerifier(api.createBrowserRuntimeOptions?api.createBrowserRuntimeOptions():api.createCompleteRuntimeOptions());
-  let verified;
-  try {verified=await api.verifySourcesWithModel(verifier,sourceSet(snapshot),{level:'semantic',scope:{kind:'workarea'},purpose:'view'});}
-  finally {verifier.destroy();}
-  // Without a model the decode did not complete: invalid input, or a verification that was
-  // interrupted, cancelled or out of budget, which the user can retry.
-  check(verified.model || verified.report.outcome!=='invalid','Invalid dashboard notation.');
-  check(verified.model,'Dashboard verification is unavailable; try again.');
-  const {input,parsed,all,data,source}=records(libraries,snapshot,verified.model);
+  return bindings;
+}
+// CDEadmin's own admission checks: engine source, declarations and metric bindings.
+function admit(libraries,snapshot,scope,engine,bindings,decoded) {
+  const admitted=records(libraries,snapshot,decoded), {all,data,source}=admitted;
   check(source.channel===metricChannel(`scratchrobin.${engine}.monitoring`),'Wrong dashboard engine source.');
   check(all.every(item=>['source','data','view','placement','appearance','publication','definition'].includes(item.kind)),'Unsupported dashboard declaration.');
   // A publication cannot smuggle extra providers or opaque native payloads.
@@ -146,16 +139,41 @@ export async function validatePublication(libraries,snapshot,scope,engine='fireb
     seen.add(id);
   }
   check(all.some(item=>item.kind==='view' && item.ref.id===snapshot.view),'Selected dashboard view does not exist.');
-  check(verified.report.outcome==='valid' && verified.report.coverage.complete,'Invalid dashboard view or binding.');
+  return admitted;
+}
+// The authored source with every observed value replaced by Unavailable.
+function cleaned(libraries,snapshot,{input,parsed,data}) {
   const rows=data.rows.map(row=>[...row.slice(0,3),unavailable.value,unavailable.unit,unavailable.rate]);
   const patches=libraries.language.patchProperty(parsed,{file:snapshot.entry,id:'observations'},'rows',rows);
   const changed=libraries.language.applySourcePatches(input,patches);
   return {format:'ddn-source-workspace@1',entry:snapshot.entry,view:snapshot.view,files:Object.fromEntries(changed.files.map(file=>[file.id,file.text]))};
 }
+// Publishing verifies the user's edited dashboard source.
+export async function validatePublication(libraries,snapshot,scope,engine='firebird') {
+  const bindings=envelope(snapshot,scope,engine);
+  // The verifier decodes these sources (in a worker in the browser) and returns the decode it
+  // verified, so they are not decoded again here. Record checks run before its outcome is read.
+  const api=libraries.viewer;
+  const verifier=api.createVerifier(api.createBrowserRuntimeOptions?api.createBrowserRuntimeOptions():api.createCompleteRuntimeOptions());
+  let verified;
+  try {verified=await api.verifySourcesWithModel(verifier,sourceSet(snapshot),{level:'semantic',scope:{kind:'workarea'},purpose:'view'});}
+  finally {verifier.destroy();}
+  // Without a model the decode did not complete: invalid input, or a verification that was
+  // interrupted, cancelled or out of budget, which the user can retry.
+  check(verified.model || verified.report.outcome!=='invalid','Invalid dashboard notation.');
+  check(verified.model,'Dashboard verification is unavailable; try again.');
+  const admitted=admit(libraries,snapshot,scope,engine,bindings,verified.model);
+  check(verified.report.outcome==='valid' && verified.report.coverage.complete,'Invalid dashboard view or binding.');
+  return cleaned(libraries,snapshot,admitted);
+}
+// Monitoring shows a published dashboard, which the server verified when it was published and
+// rechecks when it is read. Binding does not verify it again: it keeps CDEadmin's own admission
+// checks on one decode, so every poll decodes the publication once and the live sources once.
 export async function bindPublication(libraries,snapshot,scope,liveFiles,engine='firebird') {
-  const clean=await validatePublication(libraries,snapshot,scope,engine);
-  const wanted=records(libraries,clean), current=records(libraries,{entry:'dashboard.ddn',files:liveFiles});
+  const admitted=admit(libraries,snapshot,scope,engine,envelope(snapshot,scope,engine));
+  const clean=cleaned(libraries,snapshot,admitted), current=records(libraries,{entry:'dashboard.ddn',files:liveFiles});
   const values=new Map(current.data.rows.map(row=>[row[0],row.slice(3)]));
-  return {...clean,liveData:[{kind:'replace',source:wanted.source.channel,schema:wanted.data.columns,
-    rows:wanted.data.rows.map(row=>[...row.slice(0,3),...(values.get(row[0]) || ['Unavailable','',''])])}]};
+  // Cleaning changes only the value columns, so the ids, labels and kinds come from this decode.
+  return {...clean,liveData:[{kind:'replace',source:admitted.source.channel,schema:admitted.data.columns,
+    rows:admitted.data.rows.map(row=>[...row.slice(0,3),...(values.get(row[0]) || ['Unavailable','',''])])}]};
 }

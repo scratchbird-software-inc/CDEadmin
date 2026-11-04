@@ -87,4 +87,24 @@ describe('published DDN host observations', () => {
     extra.files['dashboard.ddn'] += 'source evil as host\n    with\n        channel "foreign"\n';
     await expect(validatePublication(libraries, extra, 'server')).rejects.toThrow();
   });
+  it('binds a published dashboard without verifying it again, keeping its own admission checks', async () => {
+    const clean = await validatePublication(libraries, source('server'), 'server');
+    let decodes = 0;
+    const refuse = () => { throw new Error('monitoring verified a published dashboard'); };
+    const viewing = {...libraries, viewer: {...libraries.viewer, createVerifier: refuse, verifySourcesWithModel: refuse},
+      language: {...libraries.language, decodeSources: (...args) => { decodes++; return libraries.language.decodeSources(...args); }}};
+    const bound = await bindPublication(viewing, clean, 'server', source('server').files);
+    // One decode of the publication and one of the live sources.
+    expect(decodes).toBe(2);
+    expect(bound.files).toEqual(clean.files);
+    expect(bound).toEqual(await bindPublication(libraries, clean, 'server', source('server').files));
+    const bad = source('server');
+    bad.files['dashboard.ddn'] = bad.files['dashboard.ddn'].replaceAll('server_0', 'evil_query');
+    await expect(bindPublication(viewing, bad, 'server', source('server').files)).rejects.toThrow('Unknown, duplicate or wrong-scope metric binding.');
+    await expect(bindPublication(viewing, {...clean, view: 'missing'}, 'server', source('server').files)).rejects.toThrow('Selected dashboard view does not exist.');
+    const extra = source('server');
+    extra.files['dashboard.ddn'] += 'source evil as host\n    with\n        channel "foreign"\n';
+    await expect(bindPublication(viewing, extra, 'server', source('server').files)).rejects.toThrow('Only the collector host source is admitted.');
+    await expect(bindPublication(viewing, clean, 'database', source('server').files)).rejects.toThrow();
+  });
 });
