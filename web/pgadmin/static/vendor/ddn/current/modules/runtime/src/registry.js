@@ -10,9 +10,15 @@ export function registrations(registry) {
 }
 export function createRegistry(versions, onChange = () => { }) {
     const installed = new Map();
+    // install() is the only change to the installed packs; until then the
+    // merged, deep-frozen registrations are reused instead of rebuilt and
+    // re-frozen on every lookup (a projection asks once per item).
+    let mergedCache;
     function merged() {
+        if (mergedCache)
+            return mergedCache;
         const packs = [...installed.values()];
-        return freeze({
+        return mergedCache = freeze({
             profiles: packs.flatMap(p => p.registrations.profiles ?? []),
             rules: packs.flatMap(p => p.registrations.rules ?? []),
             commands: packs.flatMap(p => p.registrations.commands ?? []),
@@ -62,6 +68,7 @@ export function createRegistry(versions, onChange = () => { }) {
                     ...(incoming.schemas ? { schemas: freeze(clone(incoming.schemas)) } : {}),
                 }) };
             installed.set(m.id, copy);
+            mergedCache = undefined;
             onChange();
         },
         describe() { return freeze([...installed.values()].map(p => p.manifest)); },
