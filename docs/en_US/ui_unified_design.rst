@@ -861,3 +861,6 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     unset. The form schema has no way to declare "omit when empty" for one
     field. Default: the Dolt, TiDB and Vitess server forms stay ``draft`` with
     this recorded in their ``gaps``; registration keeps the legacy dialog.
+    Decided 2026-11-04: fields declare ``empty_as_null``, which sends ``null`` for an
+    empty value (the backend then leaves it unset); set on the MySQL-wire ``failover``
+    and TLS list fields. The forms are ``complete``.

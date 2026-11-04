@@ -156,6 +156,8 @@ def backend_draft(form: dict, draft: dict, mode: str = "create", baseline: dict 
                          if (row.get(column) if isinstance(row, dict) else row) not in (None, "")]
             elif isinstance(value, list):
                 value = [_strip(row) for row in value]
+            if field.get("empty_as_null") and value in ("", [], {}):
+                value = None
             if "." in target:
                 node = out
                 parts = target.split(".")

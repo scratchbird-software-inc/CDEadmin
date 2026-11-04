@@ -96,6 +96,24 @@ describe('family editor tree glue', () => {
     expect(await tryOpenFamilyEditor({_type: 'server'}, 'server')).toBe(false);
   });
 
+  it('never opens a Server-family form for an inventory resource: it edits the registration', async () => {
+    await primeBundle('firebird');
+    const serverResource = {...tableData, cde_resource_kind: 'server', cde_resource_id: 'server:Firebird', label: 'Firebird'};
+    installTree({server: {data: serverData}, resource: {data: serverResource, parent: 'server'}});
+    expect(familyEditorContextActions(serverResource, 'resource').find((entry) => entry.id === 'family-editor-edit')).toBeUndefined();
+    expect(await tryOpenFamilyEditor(serverResource, 'resource')).toBe(false);
+  });
+
+  it('keeps immudb server operations on its inventory server resource', async () => {
+    await primeBundle('immudb');
+    const immudbServer = {data: {...serverData, cde_engine_id: 'immudb', cde_profile_id: 'immudb-native'}};  // primeBundle caches under version 5.0.4
+    const resource = {...tableData, cde_engine_id: 'immudb', cde_resource_kind: 'server', cde_resource_id: 'server', label: 'immudb'};
+    installTree({server: immudbServer, resource: {data: resource, parent: 'server'}});
+    const ids = familyEditorContextActions(resource, 'resource').map((entry) => entry.id);
+    expect(ids).toEqual(expect.arrayContaining(['descriptor-op-health', 'descriptor-op-load_database']));
+    expect(ids).not.toContain('family-editor-edit');
+  });
+
   it('stays out of the way when the endpoint session is not verified', async () => {
     installTree({server: {data: {...serverData, cde_session_authenticated: false}}, table: {data: tableData, parent: 'server'}});
     await primeBundle('firebird');

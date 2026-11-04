@@ -31,6 +31,13 @@ import {generateNodeUrl} from './node_ajax';
 
 let editorSequence = 0;
 
+/** Whether a tree resource of this kind opens in the family editor. A Server-family form edits the
+ *  endpoint registration (servers-API keys) and opens only through tryOpenServerForm, never as a
+ *  provider object editor for an inventory resource. */
+function resourceEditorAvailable(bundle, resourceKind) {
+  return bundle?.kinds?.[resourceKind]?.family !== 'server' && editorAvailable(bundle, resourceKind);
+}
+
 /*
  * LEGACY REGISTRATION RETIRED (2026-10-28) for these engines. Their Server form in
  * ui_descriptors/<engine>/forms/server.form.json is `complete`, and register / edit now go only
@@ -122,7 +129,7 @@ export async function tryOpenFamilyEditor(itemData, item, {mode='alter'}={}) {
     // No descriptors served for this engine: the legacy workspace still works.
     return false;
   }
-  if(!editorAvailable(bundle, itemData.cde_resource_kind)) return false;
+  if(!resourceEditorAvailable(bundle, itemData.cde_resource_kind)) return false;
   return openEditorPanel({context, itemData, item, resourceKind: itemData.cde_resource_kind,
     resourceId: itemData.cde_resource_id, mode, displayName: itemData.label || itemData._label});
 }
@@ -132,7 +139,7 @@ export function openFamilyCreate(itemData, item, resourceKind) {
   const context = treeContext(itemData, item);
   if(!context) return false;
   const bundle = descriptorClient(context.api).cached(context.engine, {version: context.version});
-  if(!bundle || !editorAvailable(bundle, resourceKind)) return false;
+  if(!bundle || !resourceEditorAvailable(bundle, resourceKind)) return false;
   return openEditorPanel({context, itemData, item, resourceKind, resourceId: null, mode: 'create',
     displayName: `${itemData.label || itemData._label} / ${kindTitle(bundle, resourceKind)}`});
 }
@@ -213,7 +220,7 @@ export function familyEditorContextActions(itemData, item) {
   if(!bundle) return [];
   const entries = [];
   const resourceKind = itemData._type === 'cde_database_target' ? 'database' : itemData.cde_resource_kind;
-  if(itemData._type === 'cde_resource' && editorAvailable(bundle, resourceKind)) {
+  if(itemData._type === 'cde_resource' && resourceEditorAvailable(bundle, resourceKind)) {
     entries.push({category: 'common', id: 'family-editor-edit', label: gettext('Edit...'), iconKey: 'action.edit',
       intent: 'default', enabled: true, execute: () => tryOpenFamilyEditor(itemData, item, {mode: 'alter'})});
   }
@@ -222,7 +229,7 @@ export function familyEditorContextActions(itemData, item) {
     itemData._type === 'cde_database_target' ?
       Object.values(bundle.kinds).filter((kind) => kind.family !== 'engine_object' && kind.tier1.includes('create') &&
         !['database', 'server'].includes(kind.resource_kind)).map((kind) => kind.resource_kind) : [];
-  const creatable = childKinds.filter((kind) => editorAvailable(bundle, kind) && bundle.kinds[kind]?.tier1.includes('create'));
+  const creatable = childKinds.filter((kind) => resourceEditorAvailable(bundle, kind) && bundle.kinds[kind]?.tier1.includes('create'));
   if(creatable.length === 1) {
     entries.push({category: 'common', id: `family-editor-create-${creatable[0]}`,
       label: gettext('Create %s...', kindTitle(bundle, creatable[0])), iconKey: 'action.create',

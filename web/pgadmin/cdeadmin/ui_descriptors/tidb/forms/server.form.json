@@ -5,13 +5,13 @@
   "resource_kinds": [
     "server"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "TiDB",
   "omitted_tabs": [],
   "gaps": [
     {
-      "concept": "server.failover",
-      "reason": "Live round trip failed 2026-11-04 on the pinned TiDB 8.5.6 demo: an untouched Failover endpoints grid is sent as [] and kept in the route, and the MySQL-wire connector refuses an empty target list ('Select a bounded native failover target list'). Caused by the typed grid: the legacy JSON field sent '' and was dropped. Blocked on design open decision 20 (no per-field 'omit when empty')."
+      "concept": "server.conn_attrs",
+      "reason": "Not offered: any connection attribute makes the connection fail ('B' format requires 0 <= number <= 255): the provider adds its own observer attribute to every MySQL Connector/Python connection, and the extra attribute exceeds the connector's limit. Live on the pinned demos, 2026-11-04; the legacy dialog sends it through the same path."
     }
   ],
   "fields": [
@@ -287,6 +287,7 @@
       "label": "TLS versions",
       "tab": "SSL/TLS",
       "control": "multiselect",
+      "empty_as_null": true,
       "help": "",
       "options": [
         {
@@ -306,6 +307,7 @@
       "label": "TLS cipher suites",
       "tab": "SSL/TLS",
       "control": "grid",
+      "empty_as_null": true,
       "help": "",
       "item_kind": "string",
       "columns": [
@@ -366,6 +368,7 @@
       "label": "Failover endpoints",
       "tab": "Advanced",
       "control": "grid",
+      "empty_as_null": true,
       "help": "Targets inherit connection settings unless overridden. Each protected password reference is scoped to this endpoint and owner. Provider-owned target pools are independent; native priority order and random choice among equal priorities apply.",
       "columns": [
         {
@@ -559,16 +562,6 @@
           "label": "Serializable"
         }
       ]
-    },
-    {
-      "field_id": "conn_attrs",
-      "label": "Connection attributes",
-      "tab": "Advanced",
-      "control": "keyvalue",
-      "help": "",
-      "backend_field_id": "cde_route_conn_attrs",
-      "group": "Session",
-      "required": false
     },
     {
       "field_id": "pool_size",
@@ -783,5 +776,5 @@
       ]
     }
   ],
-  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for tidb-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Placement for the parity engines follows the contract groups (GROUP_TABS). Status stays draft: see gaps; mapping is tested without a server and the live round trip (tools/tests/test_ui_descriptor_server_forms.py) failed as recorded."
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for tidb-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Placement follows the contract groups (GROUP_TABS). Round-tripped 2026-11-04 against the pinned TiDB 8.5.6 demo (tools/tests/test_ui_descriptor_server_forms.py): draft -> servers-API payload -> persisted route via the registration contract -> live runtime identity through the provider; mapping and edit pre-fill are tested without a server."
 }

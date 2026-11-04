@@ -5,15 +5,10 @@
   "resource_kinds": [
     "server"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "XTDB",
   "omitted_tabs": [],
-  "gaps": [
-    {
-      "concept": "server.route_keys",
-      "reason": "Live round trip failed 2026-11-04 on the pinned XTDB 2.1.0 demo: the servers API always writes 'user' and 'connection_timeout' into a network route, and the XTDB client refuses them ('XTDB route contains unknown fields: connection_timeout, user'). Predates this form: the legacy registration route has the same keys. Its route also carries the contract default keepalives=true, not tested live because of this error."
-    }
-  ],
+  "gaps": [],
   "fields": [
     {
       "field_id": "name",
@@ -42,15 +37,6 @@
       "max": 65535
     },
     {
-      "field_id": "database",
-      "label": "XTDB database",
-      "tab": "Connection",
-      "control": "text",
-      "backend_field_id": "cde_route_database",
-      "required": false,
-      "default": "xtdb"
-    },
-    {
       "field_id": "read_only",
       "label": "Read-only route",
       "tab": "Connection",
@@ -58,6 +44,16 @@
       "backend_field_id": "cde_route_read_only",
       "required": false,
       "default": false
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "XTDB database",
+      "control": "text",
+      "required": false,
+      "help": "Database the profile connects to first; leave empty for the engine default.",
+      "default": "xtdb"
     },
     {
       "field_id": "connect_now",
@@ -566,5 +562,5 @@
       ]
     }
   ],
-  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for xtdb-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Placement for the parity engines follows the contract groups (GROUP_TABS). Status stays draft: see gaps; mapping is tested without a server and the live round trip (tools/tests/test_ui_descriptor_server_forms.py) failed as recorded."
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for xtdb-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Placement follows the contract groups (GROUP_TABS). Round-tripped 2026-11-04 against the pinned XTDB 2.1.0 demo (tools/tests/test_ui_descriptor_server_forms.py): draft -> servers-API payload -> persisted route via the registration contract -> live runtime identity through the provider; mapping and edit pre-fill are tested without a server."
 }

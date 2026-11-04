@@ -442,6 +442,12 @@ function stripMeta(row) {
   return copy;
 }
 
+/** An empty list, object or string: what a field with `empty_as_null` sends as null. */
+function emptyValue(value) {
+  if(value === '' || (Array.isArray(value) && !value.length)) return true;
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value) && !Object.keys(value).length;
+}
+
 /** Map a UI draft onto the provider's field ids (backend_field_id) for plan/apply. */
 export function toBackendDraft(form, draft, {mode='create', baseline=null}={}) {
   const out = {};
@@ -476,6 +482,7 @@ export function toBackendDraft(form, draft, {mode='create', baseline=null}={}) {
       } else if(Array.isArray(value)) {
         value = value.map((row) => (row && typeof row === 'object' && '_id' in row) ? stripMeta(row) : row);
       }
+      if(field.empty_as_null && emptyValue(value)) value = null;
       if(target.includes('.')) {
         const parts = target.split('.');
         let node = out;

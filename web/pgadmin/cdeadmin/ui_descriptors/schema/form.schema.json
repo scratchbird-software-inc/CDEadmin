@@ -461,6 +461,10 @@
         "record_pattern": {
           "type": "string",
           "description": "regular expression applied to the record text; the first group pre-fills the field (e.g. strip a DEFAULT keyword)"
+        },
+        "empty_as_null": {
+          "type": "boolean",
+          "description": "Send null instead of an empty list, object or string, so the backend treats the field as unset (the servers API then leaves its route key out); for a field whose provider treats an empty value differently from no value"
         }
       }
     },

@@ -92,6 +92,7 @@ optional and all handled identically by the shell and the Python twin:
 | `record_pluck` | grid column: take one key from each item of a list of objects (`backing_index.segments` → `field_name`) |
 | `record_pattern` | regular expression whose first group is the value (strip `DEFAULT `, `CHECK (...)`, outer parentheses) |
 | `ui_only` | never sent to the provider (variant switches) |
+| `empty_as_null` | send `null` instead of an empty list, object or string, so the backend treats the field as unset (the servers API leaves its route key out); for a provider that treats an empty value differently from no value (MySQL-wire `failover`) |
 | `hidden` | grid column: kept in the row and sent to the provider, never shown (provider bookkeeping such as PostgreSQL's `inheritedid`) |
 | `detail` | grid column: shown in the row's details drawer; a grid shows at most six columns inline and the rest go there too |
 | `record_children` (form level) | `{field_id: {resource_kind}}` — fill a grid from the object's child resources when the inventory lists columns/constraints separately (MySQL family); each child is `{name, ...native}` |

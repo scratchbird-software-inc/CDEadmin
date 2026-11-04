@@ -338,3 +338,25 @@ describe('reference pickers fed by the catalog (operation dialog and editor)', (
     expect(values(field, operationContext(vitess, [row('table', ['shop', 'orders'])], null))).toEqual(['shop.orders']);
   });
 });
+
+describe('empty_as_null', () => {
+  const form = {tabs: [{tab: 'Connection', fields: [
+    {field_id: 'failover', control: 'grid', empty_as_null: true, backend_field_id: 'cde_route_failover',
+      columns: [{field_id: 'host', control: 'text'}]},
+    {field_id: 'tls_ciphersuites', control: 'grid', item_kind: 'string', empty_as_null: true, columns: [{field_id: 'value', control: 'text'}]},
+    {field_id: 'conn_attrs', control: 'keyvalue', empty_as_null: true},
+    {field_id: 'attached', control: 'grid', columns: [{field_id: 'name', control: 'text'}]},
+  ]}]};
+  it('sends an empty list, string-list or object as null, and leaves other empty grids alone', () => {
+    expect(toBackendDraft(form, {failover: [], tls_ciphersuites: [{_id: '1', value: ''}], conn_attrs: {}, attached: []}))
+      .toEqual({cde_route_failover: null, tls_ciphersuites: null, conn_attrs: null, attached: []});
+  });
+  it('keeps non-empty values', () => {
+    expect(toBackendDraft(form, {failover: [{_id: '1', host: 'b'}], tls_ciphersuites: [{_id: '1', value: 'X'}], conn_attrs: {a: '1'}}))
+      .toEqual({cde_route_failover: [{host: 'b'}], tls_ciphersuites: ['X'], conn_attrs: {a: '1'}});
+  });
+  it('clearing a set value in alter mode sends null, so the stored route key is removed', () => {
+    expect(toBackendDraft(form, {failover: []}, {mode: 'alter', baseline: {failover: [{host: 'b'}]}}))
+      .toEqual({cde_route_failover: null});
+  });
+});

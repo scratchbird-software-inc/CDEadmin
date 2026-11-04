@@ -148,13 +148,13 @@ def test_firebird_embedded_server_form_maps_to_its_contract(tmp_path):
 # same object its family round trip reads), the persisted route opens a live session.
 PARITY = {
     'dolt': ('dolt-native', 'cdeadmin_demo', {
-        'connection_timeout': 7, 'compress': True, 'autocommit': True, 'time_zone': '+00:00',
-        'conn_attrs': {'program_name': 'cdeadmin-rt'}, 'tls_versions': ['TLSv1.2', 'TLSv1.3']}),
+        'ssl_disabled': True, 'connection_timeout': 7, 'autocommit': True, 'time_zone': '+00:00',
+        'tls_versions': ['TLSv1.2', 'TLSv1.3']}),
     'tidb': ('tidb-native', 'cdeadmin_demo', {
-        'connection_timeout': 7, 'autocommit': True, 'conn_attrs': {'program_name': 'cdeadmin-rt'},
+        'ssl_disabled': True, 'connection_timeout': 7, 'autocommit': True, 'compress': True,
         'tls_ciphersuites': [{'value': 'TLS_AES_128_GCM_SHA256'}]}),
     'vitess': ('vitess-native', 'test_keyspace', {
-        'connection_timeout': 7, 'autocommit': True, 'conn_attrs': {'program_name': 'cdeadmin-rt'}}),
+        'ssl_disabled': True, 'connection_timeout': 7, 'autocommit': True}),
     'cockroachdb': ('cockroachdb-native', 'cdeadmin_demo', {
         'sslmode': 'disable', 'application_name': 'cdeadmin-rt', 'connect_timeout': 7}),
     'yugabytedb': ('yugabytedb-native', 'cdeadmin_demo', {
@@ -174,6 +174,10 @@ def parity_draft(engine, settings=None):
              'connect_now': True, **extra}
     if settings.get('password'):
         draft.update(password=settings['password'], save_password=False)
+    if engine == 'immudb' and settings.get('web_port'):  # the native REST API on its own port
+        draft['web_port'] = int(settings['web_port'])
+    if engine == 'vitess' and settings.get('http_port'):  # vtgate's HTTP endpoint reports its identity
+        draft['vtgate_http_port'] = int(settings['http_port'])
     if engine == 'yugabytedb':  # one form serves the YSQL and YCQL profiles
         draft['profile'] = profile_id
     return profile_id, draft
@@ -200,23 +204,24 @@ def test_yugabytedb_server_form_serves_its_ycql_profile():
     assert 'sslmode' in ysql_only and 'keyspace' not in ysql_only
 
 
-@pytest.mark.parametrize('engine', sorted(PARITY))
-def test_parity_server_form_opens_a_live_session(engine):
-    variable = f'CDEADMIN_ROUNDTRIP_{engine.upper()}'
-    if not os.environ.get(variable):
-        pytest.skip(f'{variable} is not set')
+def live_identity(form_engine, profile_id, draft, module_name, password=None, passwordless=False):
+    """Register the draft through the form, then open the persisted route with the provider."""
     import importlib
     import uuid
     from pgadmin.cdeadmin.security.secrets import SecretLease
-    settings = json.loads(os.environ[variable])
-    profile_id, draft = parity_draft(engine, settings)
-    _form, _profile, route = roundtrip(engine, profile_id, draft)
-    provider_module = importlib.import_module(f'pgadmin.cdeadmin.providers.{engine}.provider')
-    password = settings.get('password')
+    _form, profile_contract, route = roundtrip(form_engine, profile_id, draft)
+    provider_module = importlib.import_module(f'pgadmin.cdeadmin.providers.{module_name}.provider')
     route = dict(route)
+    # As the endpoint service does before every provider call (_route_and_reference): a profile
+    # whose database target is another route key (YCQL keyspace) receives it under that key.
+    target_key = (profile_contract.get('database_targeting') or {}).get('route_key', 'database')
+    if target_key != 'database':
+        database = route.pop('database', None)
+        if target_key and database is not None:
+            route[target_key] = database
     if password:
         route.update(credential_reference_id='rt', principal_reference='rt')
-    elif engine in ('dolt', 'tidb', 'vitess'):
+    elif passwordless:
         route['passwordless'] = True
     permissions = SimpleNamespace(acquire_secret=(lambda *_args: SecretLease(password.encode())) if password else None,
                                   require=lambda *_args: None)
@@ -230,9 +235,54 @@ def test_parity_server_form_opens_a_live_session(engine):
         target_adapter_id=None, effective_permissions=frozenset())
     provider = provider_module.create_provider(context, permissions)
     try:
-        identity = provider.client.runtime_identity({'route': route})
-        assert identity['engine_id'] == engine and identity['version'], identity
+        return provider.client.runtime_identity({'route': route})
     finally:
         close = getattr(provider, 'close', None) or getattr(provider.client, 'close', None)
         if close:
             close()
+
+
+@pytest.mark.parametrize('engine', sorted(PARITY))
+def test_parity_server_form_opens_a_live_session(engine):
+    variable = f'CDEADMIN_ROUNDTRIP_{engine.upper()}'
+    if not os.environ.get(variable):
+        pytest.skip(f'{variable} is not set')
+    settings = json.loads(os.environ[variable])
+    profile_id, draft = parity_draft(engine, settings)
+    identity = live_identity(engine, profile_id, draft, engine, settings.get('password'),
+                             passwordless=engine in ('dolt', 'tidb', 'vitess'))
+    assert identity['engine_id'] == engine and identity['version'], identity
+
+
+@pytest.mark.skipif(not os.environ.get('CDEADMIN_ROUNDTRIP_YUGABYTEDB_YCQL'),
+                    reason='CDEADMIN_ROUNDTRIP_YUGABYTEDB_YCQL is not set')
+def test_yugabytedb_ycql_server_form_opens_a_live_session():
+    settings = json.loads(os.environ['CDEADMIN_ROUNDTRIP_YUGABYTEDB_YCQL'])
+    draft = {'profile': 'yugabytedb-ycql', 'name': 'ycql rt', 'host': settings['host'], 'port': int(settings['port']),
+             'username': settings['user'], 'keyspace': settings['database'], 'local_dc': settings.get('local_dc', 'datacenter1'),
+             'connect_now': True}
+    if settings.get('password'):
+        draft.update(auth_mode='password', password=settings['password'], save_password=False)
+    if settings.get('version_api_port'):  # the master's HTTP endpoint reports the version
+        draft['version_api_port'] = int(settings['version_api_port'])
+    identity = live_identity('yugabytedb', 'yugabytedb-ycql', draft, 'yugabytedb_ycql', settings.get('password'))
+    assert identity['engine_id'] == 'yugabytedb' and identity['protocol_id'] == 'cql' and identity['version'], identity
+
+@pytest.mark.parametrize('engine', ['dolt', 'tidb', 'vitess'])
+def test_mysql_wire_empty_typed_fields_leave_the_route_unset(engine):
+    """An untouched Failover grid, TLS lists and attribute map send null (empty_as_null), so the
+    route has no key, as with the legacy empty JSON field; the connector refuses an empty list."""
+    from pgadmin.cdeadmin.endpoints.profiles import registration_profile
+    from ui_descriptor_roundtrip import backend_draft
+    profile_id, draft = parity_draft(engine)
+    draft = {key: value for key, value in draft.items() if key not in ('tls_versions', 'tls_ciphersuites')}
+    form = resolved_form(engine, 'server')
+    data = registration_data(form, draft)
+    for key in ('failover', 'tls_versions', 'tls_ciphersuites'):
+        assert data.get(f'cde_route_{key}', None) is None, (engine, key, data.get(f'cde_route_{key}'))
+    route = registration_route(registration_profile(profile_id), data)
+    assert not {'failover', 'tls_versions', 'tls_ciphersuites', 'conn_attrs'} & set(route), sorted(route)
+    offered = {field['field_id'] for tab in form['tabs'] for field in tab['fields']}
+    assert 'conn_attrs' not in offered and ('compress' in offered) == (engine == 'tidb'), sorted(offered)
+    edit = backend_draft(form, {'failover': []}, mode='alter', baseline={'failover': [{'host': 'b', 'port': 3306}]})
+    assert edit == {'cde_route_failover': None}

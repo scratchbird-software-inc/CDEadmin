@@ -150,9 +150,9 @@ Parity engines (added 2026-11-04)
 Generated from ``ui_descriptors/<engine>/forms`` and ``omitted_families.json`` on 2026-11-04;
 same notation as above. The owner added these engines to beta on 2026-10-30. Statuses are as
 the descriptor files record them; ``complete`` was set by the stream that built each form.
-The Server forms were drafted on 2026-11-04 and stay ``draft``; their ``gaps`` record why
-(see the change log entry of that date). immudb's Server form is not yet reachable: its
-``server`` resource kind is an engine object (recorded in the form's ``gaps``).
+The Server forms were drafted on 2026-11-04 and round-tripped the same day on the pinned demos
+(see the two change log entries of that date); registration for these engines now opens them,
+with the legacy dialog as the fallback.
 
 .. list-table::
    :header-rows: 1
@@ -238,13 +238,13 @@ The Server forms were drafted on 2026-11-04 and stay ``draft``; their ``gaps`` r
      - complete (55f, 3g)
      - complete (5f, 2g)
    * - Server
-     - draft (50f, 1g)
-     - draft (64f, 1g)
-     - draft (71f, 1g)
-     - draft (68f, 1g)
-     - draft (96f, 1g)
-     - draft (67f, 2g)
-     - draft (44f, 1g)
+     - complete (48f, 2g)
+     - complete (63f, 1g)
+     - complete (69f, 2g)
+     - complete (68f, 0g)
+     - complete (96f, 0g)
+     - complete (67f, 0g)
+     - complete (44f, 0g)
 
 Baseline lint counts (2026-10-25)
 ---------------------------------
@@ -281,6 +281,42 @@ count sets its maximum to zero in the enforcement file.
 
 Change log
 ----------
+
+Parity engine Server forms complete; empty typed values; registration route fixes (2026-11-04, later)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Supersedes the statuses in the entry below. The seven parity Server forms are ``complete``: each
+was round-tripped on its pinned demo (Dolt 1.86.6, TiDB 8.5.6, Vitess 23.0.3, CockroachDB 26.1.3,
+YugabyteDB 2025.2.2.2 for both YSQL and YCQL, immudb 1.11.0, XTDB 2.1.0): draft, servers-API
+payload, route through the registration contract, live runtime identity through the provider.
+Registration for these engines now opens the descriptor form, with the legacy dialog as the
+fallback (``LEGACY_REGISTRATION_RETIRED`` is unchanged). Nothing was run in a browser.
+
+* ``empty_as_null`` (design open decision 20, decided): a field sends ``null`` instead of an
+  empty list, object or string, so the route key stays unset. Set on the MySQL-wire
+  ``failover``, ``tls_versions`` and ``tls_ciphersuites`` fields; handled in the shell
+  (``toBackendDraft``), its Python twin and the form schema.
+* Provider fixes found by the round trips, each predating the forms (the legacy dialog builds
+  the same routes): PostgreSQL-wire routes send libpq switches such as ``keepalives`` as 0/1
+  (CockroachDB, YugabyteDB YSQL, immudb) and XTDB does the same; MySQL-wire routes drop the TLS
+  verification defaults when SSL is disabled (Dolt, TiDB, Vitess); the XTDB client maps the
+  servers API's ``user`` and ``connection_timeout`` and keeps its own username when ``user`` is
+  empty; the CQL client maps ``connection_timeout`` (YugabyteDB YCQL, Cassandra).
+* XTDB's form sends its database as the servers API's ``db``, which create and edit both write
+  into the route (its contract field was overwritten on edit).
+* Not offered, recorded in the forms' ``gaps``: connection attributes on Dolt, TiDB and Vitess
+  (any attribute fails the connector, because the provider adds its own observer attribute;
+  MySQL's draft form offers the field and was not tested) and protocol compression on Dolt and
+  Vitess (the connection hangs).
+* immudb's ``server`` kind is now in the ``server`` family so its form is reachable. A tree
+  resource whose kind is in the ``server`` family no longer opens in the object editor (it
+  edits the registration): this also removes the "Edit..." entry Firebird's inventory
+  ``server`` resource had. immudb's server operations are unchanged.
+
+The YCQL round trip used the demo's default Cassandra password: the demo container accepted
+it and refused the password ``connection_profiles.template.json`` records, although
+``dev.sh status`` reports it seeded. Gates: ``make ui-descriptors-check`` reports the same 20
+earlier errors and unchanged lint counts.
 
 Parity engine Server forms drafted; MariaDB Type omission recorded (2026-11-04)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

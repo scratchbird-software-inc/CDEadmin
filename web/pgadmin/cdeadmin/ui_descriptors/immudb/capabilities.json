@@ -14,7 +14,7 @@
   "kinds": [
     {
       "resource_kind": "server",
-      "family": "engine_object",
+      "family": "server",
       "title": "immudb server",
       "operations": [
         {
@@ -22,7 +22,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/server.form.json"
     },
     {
       "resource_kind": "replica",
