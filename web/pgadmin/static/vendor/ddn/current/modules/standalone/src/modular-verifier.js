@@ -1,6 +1,7 @@
 import { loadedProfilePacks } from '../../profiles/src/family-packs.js';
 import { createBrowserVerifier } from '../../execution/src/browser-verifier.js';
-import { registerModelVerifier, verifySourcesWithModel } from '../../verifier/src/index.js';
+import { verifySourcesWithModel } from '../../verifier/src/index.js';
+import { registerModelVerifier } from '../../verifier/src/model-verifiers.js';
 import { canonical } from '../../execution/src/index.js';
 import { withBrowserExecutor } from './browser-options.js';
 import { createModularRuntimeOptions, ensureProfileInput, HostStopped, loadingDiagnostic, remainingTask, scanUnits, verificationFailure } from './modular-loading.js';

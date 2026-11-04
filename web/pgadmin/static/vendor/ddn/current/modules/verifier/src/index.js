@@ -1,4 +1,5 @@
 import { allNodes, decodeSources, decodedSourceSet } from '../../language/src/index.js';
+import { modelVerifier, registerModelVerifier, verifiedModel } from './model-verifiers.js';
 import { fingerprint, createContext, ComputationStopped, clone, freeze } from '../../execution/src/index.js';
 import { normalizeLocation } from '../../model/src/index.js';
 import { bundleFiles, getProfile, indexRecords, enclosingDefinitions, nativeProfileDiagnostics, normalizedReference, resolveRecord as resolveUnindexedRecord, roleDescriptor, coreTypeDescriptor, coreDescriptor, safeLocation } from '../../profiles/src/core.js';
@@ -6,21 +7,14 @@ import { codex, getPath, isRecord, stableStringify, stableStringifyLength, valid
 import { resolveProperties } from '../../defaults/src/index.js';
 const levelOrder = ['decode', 'structural', 'semantic', 'review', 'publication'];
 const decodedVerifiers = new WeakMap();
-const modelVerifiers = new WeakMap();
-/** For verifier implementations: how verifySourcesWithModel runs on `verifier`. */
-export function registerModelVerifier(verifier, run) { modelVerifiers.set(verifier, run); }
 /** Verify sources and return the decoded model that was verified, so a host does
  *  not decode the same sources again. `model` is absent when decoding did not
  *  complete (an interrupted, cancelled or failed verification). */
 export function verifySourcesWithModel(verifier, input, options) {
-    const run = modelVerifiers.get(verifier);
+    const run = modelVerifier(verifier);
     if (!run)
         throw new TypeError('Expected an instance created by createVerifier');
     return run(input, options);
-}
-/** The full decode result, usable with the language package's patching functions. */
-export function verifiedModel(decoded) {
-    return Object.freeze({ ...decoded });
 }
 const sourceVerifiers = new WeakMap();
 /** verifySources for a caller that has already decoded the same sources.

@@ -136,6 +136,41 @@ export interface Runtime {
 }
 export declare function createRuntime(options: RuntimeOptions): Runtime;
 export declare function createVerifier(options: RuntimeOptions): Verifier;
+/** The decode a verification used: the language package's decode result, which its
+ *  source-patching functions accept. Documents and references are opaque here. */
+export interface VerifiedModel {
+  readonly syntaxValid: boolean; readonly normalized: Json; readonly diagnostics: readonly Diagnostic[];
+  readonly coverage: Coverage; readonly documents: readonly Json[]; readonly references: readonly Json[];
+}
+/** A verification report with the model it verified; `model` is absent when decoding did not complete. */
+export interface VerifiedSources { readonly report: VerificationReport; readonly model?: VerifiedModel }
+/** Verify sources and return the decoded model that was verified, so a host does not decode the same sources again. */
+export declare function verifySourcesWithModel(verifier: Verifier, input: SourceSet, options: VerifyOptions): Promise<VerifiedSources>;
+/** verifySources for sources the caller has already decoded; the decode is reused only when it read exactly these sources. */
+export declare function verifyDecodedSources(verifier: Verifier, input: SourceSet, decoded: VerifiedModel, options: VerifyOptions): Promise<VerificationReport>;
+/** verifyModel for a snapshot whose decode diagnostics the caller already holds. */
+export declare function verifyDecoded(verifier: Verifier, input: ModelSnapshot, options: VerifyOptions, diagnostics: readonly Diagnostic[]): Promise<VerificationReport>;
+/** Profile and command packs shipped by the native and complete editions. */
+export declare function createNativePack(registrations?: PackRegistrations): Pack;
+export declare function createCompletePack(registrations?: PackRegistrations): Pack;
+export declare function createCompletePresentationPack(): Pack;
+export declare function createNativeCommandPack(): Pack;
+/** Runtime options with the edition's packs and no browser executor. */
+export declare function createNativeRuntimeOptions(): RuntimeOptions;
+export declare function createCompleteRuntimeOptions(): RuntimeOptions;
+/** The command service for `runtime`, bounded by its history limits. */
+export declare function createCommandService(runtime: Runtime, authority: AuthorityProvider, limits?: { readonly maxCommands: number; readonly maxBytes: number }): CommandService;
+/** The analysis-profile summary of `target` in a normalized model; `values` supplies observed data. */
+export declare function analyzeProfile(normalized: Json, target: Ref, values?: Record<string, Json>): Json;
+/** Appearance presets a designer offers; the source command still checks each use. */
+export type PresetTarget = 'workarea' | 'element' | 'view';
+export interface AppearancePreset {
+  id: string; name: string; scope: 'user' | 'company'; target: PresetTarget;
+  profile?: string; properties: Record<string, Json>;
+}
+export interface PresetPack { format: 'ddn-appearance-presets'; version: 1; presets: AppearancePreset[] }
+export declare function parsePresetPack(text: string): PresetPack;
+export declare function serializePresetPack(presets: readonly AppearancePreset[]): string;
 
 export interface SourcePatch { readonly file: FileId; readonly base: Revision; readonly start: number; readonly end: number; readonly text: string }
 export interface DependencyRead { readonly target: Ref; readonly path: string; readonly fingerprint: Fingerprint }

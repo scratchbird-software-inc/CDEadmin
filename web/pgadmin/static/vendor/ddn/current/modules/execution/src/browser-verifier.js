@@ -1,4 +1,5 @@
-import { createVerifier, registerModelVerifier, verifiedModel, verifySourcesWithModel } from '../../verifier/src/index.js';
+import { createVerifier, verifySourcesWithModel } from '../../verifier/src/index.js';
+import { registerModelVerifier, verifiedModel } from '../../verifier/src/model-verifiers.js';
 import { createComputeExecutor, decodePayload } from './compute.js';
 import { fingerprint, freeze, clone } from './index.js';
 import { normalizeLocation } from '../../model/src/index.js';
