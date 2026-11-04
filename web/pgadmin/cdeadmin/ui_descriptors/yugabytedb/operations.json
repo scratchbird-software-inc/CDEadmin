@@ -997,7 +997,7 @@
           ],
           "default": "VALUE",
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "RANGE"
           }
         },
@@ -1007,7 +1007,7 @@
           "control": "text",
           "required": false,
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "RANGE"
           }
         },
@@ -1028,7 +1028,7 @@
           ],
           "default": "VALUE",
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "RANGE"
           }
         },
@@ -1038,7 +1038,7 @@
           "control": "text",
           "required": false,
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "RANGE"
           }
         },
@@ -1048,7 +1048,7 @@
           "control": "grid",
           "required": true,
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "LIST"
           },
           "columns": [
@@ -1066,7 +1066,7 @@
           "control": "number",
           "required": true,
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "HASH"
           }
         },
@@ -1076,7 +1076,7 @@
           "control": "number",
           "required": true,
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "HASH"
           }
         }
@@ -1142,7 +1142,7 @@
           ],
           "default": "VALUE",
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "RANGE"
           }
         },
@@ -1152,7 +1152,7 @@
           "control": "text",
           "required": false,
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "RANGE"
           }
         },
@@ -1173,7 +1173,7 @@
           ],
           "default": "VALUE",
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "RANGE"
           }
         },
@@ -1183,7 +1183,7 @@
           "control": "text",
           "required": false,
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "RANGE"
           }
         },
@@ -1193,7 +1193,7 @@
           "control": "grid",
           "required": true,
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "LIST"
           },
           "columns": [
@@ -1211,7 +1211,7 @@
           "control": "number",
           "required": true,
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "HASH"
           }
         },
@@ -1221,7 +1221,7 @@
           "control": "number",
           "required": true,
           "visible_when": {
-            "field_id": "bound",
+            "field": "bound",
             "equals": "HASH"
           }
         }

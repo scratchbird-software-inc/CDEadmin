@@ -69,14 +69,16 @@
       "label": "Condition",
       "tab": "Definition",
       "control": "code",
-      "help": "WHERE: a boolean expression over NEW and OLD. Empty: always."
+      "help": "WHERE: a boolean expression over NEW and OLD. Empty: always.",
+      "language": "sql"
     },
     {
       "field_id": "actions",
       "label": "Commands",
       "tab": "Definition",
       "control": "code",
-      "help": "The commands to run, separated by semicolons. Empty: NOTHING. A change replaces the rule (CREATE OR REPLACE RULE)."
+      "help": "The commands to run, separated by semicolons. Empty: NOTHING. A change replaces the rule (CREATE OR REPLACE RULE).",
+      "language": "sql"
     }
   ],
   "gaps": [

@@ -1457,7 +1457,7 @@
           "control": "text",
           "required": false,
           "visible_when": {
-            "field_id": "strategy",
+            "field": "strategy",
             "in": [
               "LIST",
               "RANGE"
@@ -1471,7 +1471,7 @@
           "control": "grid",
           "required": true,
           "visible_when": {
-            "field_id": "strategy",
+            "field": "strategy",
             "equals": "LIST"
           },
           "help": "One row per value: partition, value, or Default for rows matching no other.",
@@ -1501,7 +1501,7 @@
           "control": "grid",
           "required": true,
           "visible_when": {
-            "field_id": "strategy",
+            "field": "strategy",
             "equals": "RANGE"
           },
           "help": "One row per partition: from and to, each a value or the open end.",
