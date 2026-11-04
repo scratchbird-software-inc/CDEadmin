@@ -7,3 +7,4 @@ import { createModularVerifier as createVerifier } from './modular-verifier.js';
 export declare const createBrowserRuntimeOptions: () => import("@ddn/types").RuntimeOptions;
 export declare const createDesigner: (viewer: Viewer, options: DesignerOptions) => import("../../types/src/browser.js").Designer;
 export { createRuntime, createModularRuntimeOptions, createCommandService, createViewer, getViewerHandle, createVerifier };
+export { verifySourcesWithModel } from '../../verifier/src/index.js';

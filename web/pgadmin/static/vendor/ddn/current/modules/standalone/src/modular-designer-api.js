@@ -15,4 +15,5 @@ export const createDesigner = (viewer, options) => {
     return createNativeDesigner(viewer, options);
 };
 export { createRuntime, createModularRuntimeOptions, createCommandService, createViewer, getViewerHandle, createVerifier };
+export { verifySourcesWithModel } from '../../verifier/src/index.js';
 //# sourceMappingURL=modular-designer-api.js.map

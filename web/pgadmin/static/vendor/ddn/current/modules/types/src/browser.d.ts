@@ -66,6 +66,14 @@ export interface Designer {
 }
 export declare function createViewer(element: HTMLElement, options: ViewerOptions): Viewer;
 export declare function createDesigner(viewer: Viewer, options: DesignerOptions): Designer;
+/** Browser editions also export the core runtime and verifier factories. */
+export { createRuntime, createVerifier } from './core.js';
+/** The edition's profile packs with its worker-backed browser executor. */
+export declare function createBrowserRuntimeOptions(): RuntimeOptions;
+/** Modular editions: the profile packs loaded so far, without a browser executor. */
+export declare function createModularRuntimeOptions(): RuntimeOptions;
+/** Designer editions: the command service for `runtime`, bounded by its history limits. */
+export declare function createCommandService(runtime: Runtime, authority: AuthorityProvider, limits?: { readonly maxCommands: number; readonly maxBytes: number }): CommandService;
 /** The decode a verification used: the language package's decode result, which its
  *  source-patching functions accept. Documents and references are opaque here. */
 export interface VerifiedModel {
