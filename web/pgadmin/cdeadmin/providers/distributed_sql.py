@@ -266,6 +266,11 @@ def postgresql_route(route):
         'pool_workers', 'pool_check_connection',
     }
     result = {key: value for key, value in route.items() if key in allowed}
+    for key, value in result.items():
+        # libpq takes 0/1 for its switches (keepalives, sslcompression ...); a
+        # boolean would reach it as the text "True". Pool settings are not libpq's.
+        if isinstance(value, bool) and not key.startswith('pool_'):
+            result[key] = int(value)
     if 'database' in route and 'dbname' not in result:
         result['dbname'] = route['database']
     if route.get('route_id'):
@@ -465,6 +470,12 @@ def mysql_route(route):
         'pool_reset_session', 'failover',
     }
     result = {key: value for key, value in route.items() if key in allowed}
+    if result.get('ssl_disabled') is True:
+        # The registration defaults ssl_verify_cert/ssl_verify_identity=True govern
+        # TLS routes only; MySQL Connector/Python treats them as "require TLS" even
+        # with ssl_disabled (refused by the Dolt, TiDB and Vitess demos, 2026-11-04).
+        result.pop('ssl_verify_cert', None)
+        result.pop('ssl_verify_identity', None)
     if result.get('auth_plugin') == 'auto':
         result.pop('auth_plugin')
     if result.get('pool_size') and not result.get('pool_name'):

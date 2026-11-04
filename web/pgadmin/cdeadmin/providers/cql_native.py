@@ -403,6 +403,12 @@ class CassandraClient:
             request.get('route', request.get('_provider_route')),
             'Cassandra route',
         )
+        if 'connection_timeout' in route:
+            # The servers API writes its generic connection_timeout into every
+            # network route; the CQL route names it connect_timeout.
+            route = dict(route)
+            timeout = route.pop('connection_timeout')
+            route.setdefault('connect_timeout', timeout)
         unknown = sorted(set(route).difference(cls.ROUTE_KEYS))
         if unknown:
             raise CassandraClientError(

@@ -257,6 +257,24 @@ def context():
 
 
 class XTDBClientContractTests(unittest.TestCase):
+    def test_route_accepts_the_servers_api_registration_keys(self):
+        """The servers API writes user and connection_timeout into every network
+        route; they were refused as unknown (live on the XTDB 2.1.0 demo, 2026-11-04)."""
+        route = XTDBClient._route({'route': {'host': 'h', 'user': 'alice', 'connection_timeout': 7}})
+        self.assertEqual((route['username'], route['connect_timeout']), ('alice', 7))
+        self.assertNotIn('user', route)
+        self.assertNotIn('connection_timeout', route)
+        kept = XTDBClient._route({'route': {'user': 'bob', 'connection_timeout': 7, 'connect_timeout': 20}})
+        self.assertEqual((kept['username'], kept['connect_timeout']), ('bob', 20))
+        arguments = XTDBClient._connection_arguments(
+            XTDBClient._route({'route': {'host': 'h', 'keepalives': True, 'pool_enabled': True}}))
+        self.assertEqual((arguments['keepalives'], type(arguments['keepalives'])), (1, int))
+        self.assertIs(arguments['pool_enabled'], True)
+        own = XTDBClient._route({'route': {'user': None, 'username': 'carol', 'connection_timeout': 7}})
+        self.assertEqual(own['username'], 'carol')
+        with self.assertRaises(XTDBClientError):
+            XTDBClient._route({'route': {'host': 'h', 'invented': 1}})
+
 
     def setUp(self):
         self.module = FakeModule()

@@ -290,6 +290,15 @@ class Permissions:
 
 
 class CassandraProviderTests(unittest.TestCase):
+    def test_route_accepts_the_servers_api_connection_timeout(self):
+        """The servers API writes connection_timeout into every network route;
+        the CQL route refused it (live on the YugabyteDB YCQL demo, 2026-11-04)."""
+        route = CassandraClient._route({'route': {'host': 'h', 'user': 'u', 'credential_reference_id': 'r', 'connection_timeout': 7}})
+        self.assertEqual(route['connect_timeout'], 7)
+        self.assertNotIn('connection_timeout', route)
+        kept = CassandraClient._route({'route': {'host': 'h', 'user': 'u', 'credential_reference_id': 'r', 'connection_timeout': 7, 'connect_timeout': 20}})
+        self.assertEqual(kept['connect_timeout'], 20)
+
 
     def test_non_lwt_result_does_not_probe_was_applied_as_failure(self):
         class NonLwtResult:

@@ -343,6 +343,19 @@ class XTDBClient:
         if route is None:
             route = request.get('_provider_route')
         route = _mapping(route, 'XTDB route')
+        # The servers API writes the generic registration keys user and
+        # connection_timeout into every network route; XTDB names them
+        # username and connect_timeout. user is the effective principal (the
+        # endpoint service also sets it for connect-as overrides).
+        if 'user' in route or 'connection_timeout' in route:
+            route = dict(route)
+            if 'user' in route:
+                user = route.pop('user')
+                if user not in (None, ''):  # none when the form sent its own username field
+                    route['username'] = user
+            if 'connection_timeout' in route:
+                timeout = route.pop('connection_timeout')
+                route.setdefault('connect_timeout', timeout)
         unknown = sorted(set(route).difference(cls.ROUTE_FIELDS))
         if unknown:
             raise XTDBClientError(
@@ -496,6 +509,10 @@ class XTDBClient:
         ):
             if route.get(field) is not None:
                 values[field] = route[field]
+        if isinstance(values.get('keepalives'), bool):
+            # libpq takes 0/1; a boolean reached it as the text "True" (refused
+            # on the XTDB 2.1.0 demo, 2026-11-04).
+            values['keepalives'] = int(values['keepalives'])
         return values
 
     def _connect(self, request):

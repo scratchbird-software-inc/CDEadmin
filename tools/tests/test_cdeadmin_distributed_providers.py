@@ -4870,3 +4870,24 @@ class DistributedProviderTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_postgresql_route_sends_libpq_switches_as_integers():
+    """A registration route carries checkbox values as booleans; libpq refuses "True"
+    for keepalives (live on the CockroachDB, YugabyteDB and immudb demos, 2026-11-04)."""
+    result = postgresql_route({'host': 'h', 'keepalives': True, 'sslcompression': False,
+                               'pool_enabled': True, 'pool_check_connection': False, 'database': 'd'})
+    assert result['keepalives'] == 1 and type(result['keepalives']) is int
+    assert result['sslcompression'] == 0 and type(result['sslcompression']) is int
+    assert result['pool_enabled'] is True and result['pool_check_connection'] is False
+    assert result['dbname'] == 'd'
+
+
+def test_mysql_route_drops_certificate_verification_when_ssl_is_disabled():
+    """The registration defaults ssl_verify_cert/ssl_verify_identity=True made the connector
+    demand TLS on a route with SSL disabled (live on the Dolt, TiDB and Vitess demos, 2026-11-04)."""
+    off = mysql_route({'host': 'h', 'ssl_disabled': True, 'ssl_verify_cert': True, 'ssl_verify_identity': True})
+    assert off['ssl_disabled'] is True and 'ssl_verify_cert' not in off and 'ssl_verify_identity' not in off
+    on = mysql_route({'host': 'h', 'ssl_disabled': False, 'ssl_verify_cert': True, 'ssl_verify_identity': True})
+    assert on['ssl_verify_cert'] is True and on['ssl_verify_identity'] is True
+
