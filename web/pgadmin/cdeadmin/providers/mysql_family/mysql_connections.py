@@ -68,6 +68,40 @@ def install_conn_attrs_encoding():
             MySQLProtocol.make_conn_attrs = staticmethod(encode_conn_attrs)
 
 
+_compression_checked = False
+
+
+def install_compression_negotiation():
+    """Connector/Python 26.7 switches to the compressed protocol whenever
+    compress is requested, even when the server's greeting does not advertise
+    CLIENT_COMPRESS (Dolt 1.86.6 and Vitess 23.0.3 do not); the handshake then
+    waited without a timeout. As libmysqlclient does, request compression only
+    when the server offers it; otherwise the session stays uncompressed."""
+    global _compression_checked
+    with _CONN_ATTRS_LOCK:
+        if _compression_checked:
+            return
+        _compression_checked = True
+        try:
+            from mysql.connector.connection import MySQLConnection
+            from mysql.connector.constants import ClientFlag
+        except ImportError:
+            return
+        original = MySQLConnection._do_handshake
+        if getattr(original, '_cdeadmin_negotiates_compression', False):
+            return
+
+        def _do_handshake(self):
+            original(self)
+            capabilities = (self._handshake or {}).get('capabilities', 0)
+            if not capabilities & ClientFlag.COMPRESS:
+                self._client_flags &= ~ClientFlag.COMPRESS
+                self._compress = False
+
+        _do_handshake._cdeadmin_negotiates_compression = True
+        MySQLConnection._do_handshake = _do_handshake
+
+
 def live_sql_mode_conversion(native):
     """Use native OK/EOF status for escaping after SQL changes session mode.
 
@@ -299,6 +333,7 @@ class Connector:
         attribute = None
         if getattr(self.module, '__name__', '').startswith('mysql.connector'):
             install_conn_attrs_encoding()
+            install_compression_negotiation()
             attributes = dict(options.get('conn_attrs') or {})
             key = 'scratchrobin_' + secrets.token_hex(8)
             while key in attributes:

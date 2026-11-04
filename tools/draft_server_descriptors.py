@@ -93,7 +93,8 @@ GROUP_TABS = {
 }
 PARITY_ENGINES = {"dolt", "tidb", "vitess", "cockroachdb", "yugabytedb", "immudb", "xtdb"}
 # Contract fields a form does not offer, with the evidence; each becomes a gap of the form.
-COMPRESS = "Not offered: with protocol compression the connection hangs on the pinned {} demo (live, 2026-11-04)."
+COMPRESS = ("Not offered: the pinned {} demo does not advertise protocol compression (no CLIENT_COMPRESS in its "
+            "greeting, 2026-11-04); a route that requests it connects uncompressed.")
 UNSUPPORTED = {
     ("dolt", "compress"): COMPRESS.format("Dolt 1.86.6"), ("vitess", "compress"): COMPRESS.format("Vitess 23.0.3"),
 }

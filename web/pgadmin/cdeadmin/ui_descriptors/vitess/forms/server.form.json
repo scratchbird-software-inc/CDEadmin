@@ -11,7 +11,7 @@
   "gaps": [
     {
       "concept": "server.compress",
-      "reason": "Not offered: with protocol compression the connection hangs on the pinned Vitess 23.0.3 demo (live, 2026-11-04)."
+      "reason": "Not offered: the pinned Vitess 23.0.3 demo does not advertise protocol compression (no CLIENT_COMPRESS in its greeting, 2026-11-04); a route that requests it connects uncompressed."
     }
   ],
   "fields": [

@@ -282,6 +282,18 @@ count sets its maximum to zero in the enforcement file.
 Change log
 ----------
 
+MySQL Connector/Python compression negotiation (2026-11-04)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Supersedes "the connection hangs" for compression in the entries below. Dolt 1.86.6 and Vitess
+23.0.3 do not advertise protocol compression (no ``CLIENT_COMPRESS`` in their greeting); TiDB
+8.5.6 does. Connector/Python 26.7 switched to the compressed protocol whenever compression was
+requested, so the handshake waited without a timeout. ``mysql_connections`` now requests
+compression only when the server offers it, as libmysqlclient does. Live: Dolt and Vitess
+connect through the provider with compression requested and run uncompressed; TiDB still
+compresses (``Compression`` ON). The Dolt and Vitess Server forms still do not offer the field,
+because those servers do not support it; their gap reasons now say so.
+
 MySQL Connector/Python connection attributes (2026-11-04)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
