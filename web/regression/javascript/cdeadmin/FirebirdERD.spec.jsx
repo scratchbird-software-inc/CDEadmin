@@ -135,7 +135,7 @@ it('awaits source capture before downloading an edited relational design', async
   const snapshot={format:'ddn-source-workspace@1',entry:'relations.ddn',view:'relations',files:{'relations.ddn':'native design'}};
   const create=jest.fn(()=> 'blob:owned-test');
   const previousCreate=URL.createObjectURL, previousRevoke=URL.revokeObjectURL;
-  URL.createObjectURL=create;URL.revokeObjectURL=jest.fn();
+  const revoke=jest.fn();URL.createObjectURL=create;URL.revokeObjectURL=revoke;
   const click=jest.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{});
   try {
     render(<Component diagram={{snapshot,views:[]}} />);
@@ -145,6 +145,9 @@ it('awaits source capture before downloading an edited relational design', async
     await waitFor(()=>expect(create).toHaveBeenCalledTimes(1));
     const text=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsText(create.mock.calls[0][0]);});
     expect(JSON.parse(text).files['relations.ddn']).toBe('instant edit');
+    // The component revokes the download URL from a timer; keep the mock until it has,
+    // so the revoke never runs against a restored URL in a later test.
+    await waitFor(()=>expect(revoke).toHaveBeenCalledWith('blob:owned-test'),{timeout:3000});
   } finally {URL.createObjectURL=previousCreate;URL.revokeObjectURL=previousRevoke;click.mockRestore();}
 });
 
