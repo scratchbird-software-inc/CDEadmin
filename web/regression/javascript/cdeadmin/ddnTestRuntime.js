@@ -1,12 +1,12 @@
 // Test adapters call the adopted public APIs; no legacy parser or renderer.
 import {configure} from '@testing-library/react';
 import * as api from '../../../pgadmin/static/vendor/ddn/current/complete/ddn-viewer.js';
-import {createVerifier} from '../../../pgadmin/static/vendor/ddn/current/complete/ddn-verifier.js';
+import {createVerifier,verifySourcesWithModel} from '../../../pgadmin/static/vendor/ddn/current/complete/ddn-verifier.js';
 import * as designer from '../../../pgadmin/static/vendor/ddn/current/complete/ddn-visual-designer.js';
 import * as language from '../../../pgadmin/static/vendor/ddn/current/modules/language/src/index.js';
 import * as model from '../../../pgadmin/static/vendor/ddn/current/modules/model/src/index.js';
 import {sourceSet,captureSVG,entriesOf,checkOpen} from 'sources/cdeadmin_ui/integrations/ddn/runtime';
-export const libraries={viewer:{...api,createVerifier,createBrowserRuntimeOptions:api.createCompleteRuntimeOptions},language,model,
+export const libraries={viewer:{...api,createVerifier,verifySourcesWithModel,createBrowserRuntimeOptions:api.createCompleteRuntimeOptions},language,model,
   loader:{loadEntry:async()=>designer}};
 export function setupDDNDOM() {
   configure({asyncUtilTimeout:5000});

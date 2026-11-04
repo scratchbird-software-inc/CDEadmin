@@ -96,8 +96,9 @@ function check(condition, message) { if(!condition) throw new Error(message); }
 function sourceSet(snapshot) {
   return {entry:snapshot.entry,files:Object.entries(snapshot.files).map(([id,text])=>({id,text,revision:'publication',encoding:'utf-8',writable:true}))};
 }
-function records(libraries,snapshot) {
-  const input=sourceSet(snapshot), parsed=libraries.language.decodeSources(input);
+function records(libraries,snapshot,decoded) {
+  // A verifier-returned decode is reused; otherwise these sources are decoded here.
+  const input=sourceSet(snapshot), parsed=decoded || libraries.language.decodeSources(input);
   check(parsed.syntaxValid && !parsed.diagnostics.some(item=>item.severity==='error'),'Invalid dashboard notation.');
   const all=libraries.model.listRecords(parsed.normalized);
   const sources=all.filter(item=>item.kind==='source');
@@ -119,7 +120,18 @@ export async function validatePublication(libraries,snapshot,scope,engine='fireb
   check(Object.keys(snapshot.files || {}).join()==='dashboard.ddn','Use one dashboard.ddn file.');
   check(snapshot.entry==='dashboard.ddn' && typeof snapshot.view==='string','Invalid selected view.');
   check(typeof snapshot.files['dashboard.ddn']==='string' && new TextEncoder().encode(snapshot.files['dashboard.ddn']).length<=512*1024,'Dashboard source exceeds its limit.');
-  const {input,parsed,all,data,source}=records(libraries,snapshot);
+  // The verifier decodes these sources (in a worker in the browser) and returns the decode it
+  // verified, so they are not decoded again here. Record checks run before its outcome is read.
+  const api=libraries.viewer;
+  const verifier=api.createVerifier(api.createBrowserRuntimeOptions?api.createBrowserRuntimeOptions():api.createCompleteRuntimeOptions());
+  let verified;
+  try {verified=await api.verifySourcesWithModel(verifier,sourceSet(snapshot),{level:'semantic',scope:{kind:'workarea'},purpose:'view'});}
+  finally {verifier.destroy();}
+  // Without a model the decode did not complete: invalid input, or a verification that was
+  // interrupted, cancelled or out of budget, which the user can retry.
+  check(verified.model || verified.report.outcome!=='invalid','Invalid dashboard notation.');
+  check(verified.model,'Dashboard verification is unavailable; try again.');
+  const {input,parsed,all,data,source}=records(libraries,snapshot,verified.model);
   check(source.channel===metricChannel(`scratchrobin.${engine}.monitoring`),'Wrong dashboard engine source.');
   check(all.every(item=>['source','data','view','placement','appearance','publication','definition'].includes(item.kind)),'Unsupported dashboard declaration.');
   // A publication cannot smuggle extra providers or opaque native payloads.
@@ -134,12 +146,7 @@ export async function validatePublication(libraries,snapshot,scope,engine='fireb
     seen.add(id);
   }
   check(all.some(item=>item.kind==='view' && item.ref.id===snapshot.view),'Selected dashboard view does not exist.');
-  const api=libraries.viewer;
-  const verifier=api.createVerifier(api.createBrowserRuntimeOptions?api.createBrowserRuntimeOptions():api.createCompleteRuntimeOptions());
-  try {
-    const verified=await verifier.verifySources(input,{level:'semantic',scope:{kind:'workarea'},purpose:'view'});
-    check(verified.outcome==='valid' && verified.coverage.complete,'Invalid dashboard view or binding.');
-  } finally {verifier.destroy();}
+  check(verified.report.outcome==='valid' && verified.report.coverage.complete,'Invalid dashboard view or binding.');
   const rows=data.rows.map(row=>[...row.slice(0,3),unavailable.value,unavailable.unit,unavailable.rate]);
   const patches=libraries.language.patchProperty(parsed,{file:snapshot.entry,id:'observations'},'rows',rows);
   const changed=libraries.language.applySourcePatches(input,patches);

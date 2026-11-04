@@ -61,6 +61,20 @@ describe('published DDN host observations', () => {
       }
     }, 'server')).rejects.toThrow();
   });
+  it('verifies each publication with one verifier decode and refuses honestly when no decode returns', async () => {
+    const calls = [];
+    const counted = {...libraries, viewer: {...libraries.viewer, verifySourcesWithModel: (...args) => {
+      calls.push(args[1]); return libraries.viewer.verifySourcesWithModel(...args);
+    }}, language: {...libraries.language, decodeSources: () => { throw new Error('validatePublication decoded on its own'); }}};
+    await expect(validatePublication(counted, source('database'), 'database')).resolves.toBeDefined();
+    expect(calls).toHaveLength(1);
+    const without = outcome => ({...libraries, viewer: {...libraries.viewer, verifySourcesWithModel: async () => ({
+      report: {outcome, coverage: {complete: false}, diagnostics: []}})}});
+    // An interrupted, cancelled or out-of-budget verification is retryable, not the user's error.
+    for (const outcome of ['cancelled', 'budget-exceeded', 'unsupported', 'incomplete'])
+      await expect(validatePublication(without(outcome), source('database'), 'database')).rejects.toThrow('Dashboard verification is unavailable; try again.');
+    await expect(validatePublication(without('invalid'), source('database'), 'database')).rejects.toThrow('Invalid dashboard notation.');
+  });
   it('rejects invented bindings, extra providers and missing views', async () => {
     const bad = source('server');
     bad.files['dashboard.ddn'] = bad.files['dashboard.ddn'].replaceAll('server_0', 'evil_query');

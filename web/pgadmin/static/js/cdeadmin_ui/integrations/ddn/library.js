@@ -46,7 +46,7 @@ async function browserLibraryLoader() {
     importPublicModule(staticAssetUrl('modules/language/src/index.js')),
     importPublicModule(staticAssetUrl('modules/model/src/index.js')),
   ]);
-  for(const name of ['createRuntime','createViewer','createVerifier','createBrowserRuntimeOptions']) {
+  for(const name of ['createRuntime','createViewer','createVerifier','createBrowserRuntimeOptions','verifySourcesWithModel']) {
     if(typeof viewer[name] !== 'function') throw new Error(`Missing DDN public API: ${name}`);
   }
   return {viewer,language,model,loader};
