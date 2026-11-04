@@ -318,6 +318,10 @@ it and refused the password ``connection_profiles.template.json`` records, altho
 ``dev.sh status`` reports it seeded. Gates: ``make ui-descriptors-check`` reports the same 20
 earlier errors and unchanged lint counts.
 
+(Note 2026-11-04: the YCQL demo was re-seeded with ``dev.sh seed yugabytedb_ycql``. It then
+accepted the recorded password and refused the default, and the YCQL Server form round trip
+passed with the template's settings.)
+
 Parity engine Server forms drafted; MariaDB Type omission recorded (2026-11-04)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
