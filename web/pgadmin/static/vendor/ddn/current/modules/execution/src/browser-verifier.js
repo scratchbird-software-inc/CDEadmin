@@ -1,4 +1,4 @@
-import { createVerifier } from '../../verifier/src/index.js';
+import { createVerifier, registerModelVerifier, verifiedModel, verifySourcesWithModel } from '../../verifier/src/index.js';
 import { createComputeExecutor, decodePayload } from './compute.js';
 import { fingerprint, freeze, clone } from './index.js';
 import { normalizeLocation } from '../../model/src/index.js';
@@ -65,41 +65,43 @@ export function createBrowserVerifier(inputOptions) {
             return freeze(clone(result.payload));
         return interrupted(result, verifyOptions, snapshot.revision, snapshot.semanticFingerprint);
     }
-    return {
-        async verifySources(inputArgument, optionsArgument) {
-            let input, verifyOptions;
-            try {
-                input = captureSources(inputArgument);
-                verifyOptions = captureTask(optionsArgument);
-            }
-            catch {
-                return local.verifySources(inputArgument, optionsArgument);
-            }
-            if (destroyed)
-                return local.verifySources(input, verifyOptions);
-            const started = Date.now(), sourceUnits = input.files.reduce((n, f) => n + f.text.length, 0), sourceTask = task(verifyOptions);
-            const revision = { model: '0', sources: Object.fromEntries(input.files.map(f => [f.id, f.revision])), data: {} };
-            const result = await executor.run(request('decode', decodePayload(input), revision, fingerprint(input.files.map(f => [f.id, f.revision, f.text]))), sourceTask);
-            const payload = result.payload;
-            if (!payload?.decoded)
-                return interrupted(result, verifyOptions, revision, result.request.dependencyFingerprint);
-            const snapshot = { contract: 'ddn-next-1', rootFile: input.entry, revision: { ...revision, model: payload.fingerprint }, versions: options.versions, semanticFingerprint: payload.fingerprint, normalized: payload.decoded.normalized, coverage: payload.decoded.coverage };
-            const remaining = sourceTask.budget ? { ...sourceTask.budget, elapsedMs: Math.max(0, sourceTask.budget.elapsedMs - (Date.now() - started)), workUnits: Math.max(0, sourceTask.budget.workUnits - sourceUnits) } : undefined;
-            const report = await verifyModel(snapshot, { ...verifyOptions, ...(remaining ? { budget: remaining } : {}) }, payload.decoded.diagnostics);
-            const spans = new Map();
-            const refKey = (ref) => JSON.stringify([ref.file, ref.id]);
-            for (const node of allNodes(payload.decoded))
-                if (node.ref && !spans.has(refKey(node.ref)))
-                    spans.set(refKey(node.ref), { file: node.file, revision: input.files.find(file => file.id === node.file).revision, start: node.start, end: node.end });
-            const root = input.files.find(file => file.id === input.entry);
-            const diagnostics = report.diagnostics.map(diagnostic => {
-                if (diagnostic.source)
-                    return diagnostic;
-                const span = diagnostic.target ? spans.get(refKey(diagnostic.target)) : undefined;
-                return span ? { ...diagnostic, source: span } : root ? { ...diagnostic, source: { file: root.id, revision: root.revision, start: 0, end: root.text.length } } : diagnostic;
-            });
-            return freeze({ ...report, diagnostics, stats: { ...report.stats, elapsedMs: Date.now() - started, workUnits: sourceUnits + report.stats.workUnits } });
-        },
+    async function verifySourcesAndModel(inputArgument, optionsArgument) {
+        let input, verifyOptions;
+        try {
+            input = captureSources(inputArgument);
+            verifyOptions = captureTask(optionsArgument);
+        }
+        catch {
+            return verifySourcesWithModel(local, inputArgument, optionsArgument);
+        }
+        if (destroyed)
+            return verifySourcesWithModel(local, input, verifyOptions);
+        const started = Date.now(), sourceUnits = input.files.reduce((n, f) => n + f.text.length, 0), sourceTask = task(verifyOptions);
+        const revision = { model: '0', sources: Object.fromEntries(input.files.map(f => [f.id, f.revision])), data: {} };
+        const result = await executor.run(request('decode', decodePayload(input), revision, fingerprint(input.files.map(f => [f.id, f.revision, f.text]))), sourceTask);
+        const payload = result.payload;
+        if (!payload?.decoded)
+            return { report: interrupted(result, verifyOptions, revision, result.request.dependencyFingerprint) };
+        const snapshot = { contract: 'ddn-next-1', rootFile: input.entry, revision: { ...revision, model: payload.fingerprint }, versions: options.versions, semanticFingerprint: payload.fingerprint, normalized: payload.decoded.normalized, coverage: payload.decoded.coverage };
+        const remaining = sourceTask.budget ? { ...sourceTask.budget, elapsedMs: Math.max(0, sourceTask.budget.elapsedMs - (Date.now() - started)), workUnits: Math.max(0, sourceTask.budget.workUnits - sourceUnits) } : undefined;
+        const report = await verifyModel(snapshot, { ...verifyOptions, ...(remaining ? { budget: remaining } : {}) }, payload.decoded.diagnostics);
+        const spans = new Map();
+        const refKey = (ref) => JSON.stringify([ref.file, ref.id]);
+        for (const node of allNodes(payload.decoded))
+            if (node.ref && !spans.has(refKey(node.ref)))
+                spans.set(refKey(node.ref), { file: node.file, revision: input.files.find(file => file.id === node.file).revision, start: node.start, end: node.end });
+        const root = input.files.find(file => file.id === input.entry);
+        const diagnostics = report.diagnostics.map(diagnostic => {
+            if (diagnostic.source)
+                return diagnostic;
+            const span = diagnostic.target ? spans.get(refKey(diagnostic.target)) : undefined;
+            return span ? { ...diagnostic, source: span } : root ? { ...diagnostic, source: { file: root.id, revision: root.revision, start: 0, end: root.text.length } } : diagnostic;
+        });
+        // The page already holds the worker's decode: return it with the report.
+        return Object.freeze({ report: freeze({ ...report, diagnostics, stats: { ...report.stats, elapsedMs: Date.now() - started, workUnits: sourceUnits + report.stats.workUnits } }), model: verifiedModel(payload.decoded) });
+    }
+    const verifier = {
+        verifySources: async (inputArgument, optionsArgument) => (await verifySourcesAndModel(inputArgument, optionsArgument)).report,
         verifyModel: (snapshot, verifyOptions) => verifyModel(snapshot, verifyOptions),
         checkTransition: (snapshot, transition, verifyOptions) => local.checkTransition(snapshot, transition, verifyOptions),
         destroy() {
@@ -110,5 +112,7 @@ export function createBrowserVerifier(inputOptions) {
             local.destroy();
         },
     };
+    registerModelVerifier(verifier, verifySourcesAndModel);
+    return verifier;
 }
 //# sourceMappingURL=browser-verifier.js.map

@@ -1,5 +1,6 @@
 import { loadedProfilePacks } from '../../profiles/src/family-packs.js';
 import { createBrowserVerifier } from '../../execution/src/browser-verifier.js';
+import { registerModelVerifier, verifySourcesWithModel } from '../../verifier/src/index.js';
 import { canonical } from '../../execution/src/index.js';
 import { withBrowserExecutor } from './browser-options.js';
 import { createModularRuntimeOptions, ensureProfileInput, HostStopped, loadingDiagnostic, remainingTask, scanUnits, verificationFailure } from './modular-loading.js';
@@ -40,7 +41,7 @@ export function createModularVerifier(options = createModularRuntimeOptions()) {
         }
         return verifier;
     };
-    return {
+    const verifier = {
         async verifySources(input, task) {
             const started = Date.now(), budget = effective(task);
             try {
@@ -82,5 +83,18 @@ export function createModularVerifier(options = createModularRuntimeOptions()) {
             verifier.destroy(); verifiers.clear(); if (!providedUsed)
             options.executor?.destroy(); },
     };
+    registerModelVerifier(verifier, async (input, task) => {
+        const started = Date.now(), budget = effective(task);
+        try {
+            if (destroyed)
+                throw new HostStopped('disposed', 'Verifier is disposed.');
+            await ensureProfileInput(input, false, budget);
+            return verifySourcesWithModel(current(), input, { ...task, ...remainingTask(budget, started, scanUnits(input)) });
+        }
+        catch (error) {
+            return Object.freeze({ report: verificationFailure(input, task, options.versions, error, started) });
+        }
+    });
+    return verifier;
 }
 //# sourceMappingURL=modular-verifier.js.map

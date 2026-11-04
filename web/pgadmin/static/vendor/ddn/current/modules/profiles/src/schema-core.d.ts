@@ -127,6 +127,9 @@ export interface SchemaOptions {
     reference?: (value: Record<string, Json>, path: string) => void;
 }
 export declare function isRecord(value: unknown): value is Record<string, Json>;
+/** stableStringify(value).length, without building, sorting or joining the string:
+ *  key order does not change the length, and only scalars are serialized. */
+export declare function stableStringifyLength(value: unknown): number;
 export declare function stableStringify(value: unknown): string;
 /** Interprets deduplicated build-time validation instructions; never evaluates source code. */
 export declare function validateSchema(schema: string | number, value: unknown, options?: SchemaOptions): SchemaIssue[];

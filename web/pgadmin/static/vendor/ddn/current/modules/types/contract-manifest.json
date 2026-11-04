@@ -22,7 +22,7 @@
     {
       "source": "standard/utilities/contracts/browser.d.ts",
       "target": "project/ddn/packages/types/src/browser.d.ts",
-      "sha256": "51482dd6e55d15bfe8ddb065cedbe694514b81896e1329df024d017ee43d4f69"
+      "sha256": "da72891dd77cd48c95eae27ab72f55e5d854a13a91db7759063c6abc6992e400"
     }
   ],
   "entry": {

@@ -1,0 +1,9 @@
+/*! DDN — Diagram Design Notation
+ * Copyright (c) 2026 ScratchBird Software Inc. and DDN contributors.
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ * Free and open-source software. See LICENSE and NOTICE.md.
+ * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
+ * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
+ */
+(()=>{"use strict";const s=globalThis.DDN_MODULES;if(!s)throw Error("Missing DDN module runtime");s.register({id:"chunk-07bc6e27b65cce185a03",version:"ddn-next-1",dependencies:["chunk-01af8b7d4facf4fa5e13","chunk-14961dfb3c5851b435ff","chunk-14b2756f39dd5dc4b6f6","chunk-1fd35a3e06ff096d1c6e","chunk-3bae5445a9724b75ede9","chunk-46050e2dd08952f18618","chunk-69862d4881507f525ec2","chunk-84b71bfba0c4e50d7b65","chunk-8db2bf665aa9a4111008","chunk-f1c022467bca073f5193","chunk-f6565a87abdc5c213841"],modules:[{id:"render-graphs-uml.js",bytes:484,sha256:"332b1330b63cc4c6d9568beeb063b53e1f487809dddbd4ac4c4296d8ed97ec91",dependencies:["shared/chunk-7P3YDSZM.js","shared/chunk-Q4KKFN2I.js","shared/chunk-P7I34I4B.js","shared/chunk-HQ5I6C5B.js","shared/chunk-ZWYVO4Z4.js","shared/chunk-ZHQOQ4T7.js","shared/chunk-AQYBAQRB.js","shared/chunk-6CBMCE4H.js","shared/chunk-6MYARXTT.js","shared/chunk-ZNZ7U7U4.js","shared/chunk-XLWNFKME.js"]}],hash:"5533003126227b62620d5ed29d80e2b254048821ed646750d30f3c79d1d3e36f"},{"render-graphs-uml.js":function(c,h,d,e){"use strict";Object.defineProperty(h,"__esModule",{value:!0}),d("shared/chunk-7P3YDSZM.js"),d("shared/chunk-Q4KKFN2I.js"),d("shared/chunk-P7I34I4B.js"),d("shared/chunk-HQ5I6C5B.js"),d("shared/chunk-ZWYVO4Z4.js"),d("shared/chunk-ZHQOQ4T7.js"),d("shared/chunk-AQYBAQRB.js"),d("shared/chunk-6CBMCE4H.js"),d("shared/chunk-6MYARXTT.js"),d("shared/chunk-ZNZ7U7U4.js"),d("shared/chunk-XLWNFKME.js")}})})();
+

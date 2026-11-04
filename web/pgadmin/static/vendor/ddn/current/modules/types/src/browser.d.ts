@@ -1,4 +1,4 @@
-import type { Runtime, RuntimeOptions, SourceSet, ModelSnapshot, OpenResult, TaskOptions, Ref, Scope, RevisionVector, VersionSet, Json, Diagnostic, Coverage, CommandService, AuthorityProvider } from './core.js';
+import type { Runtime, RuntimeOptions, SourceSet, ModelSnapshot, OpenResult, TaskOptions, Ref, Scope, RevisionVector, VersionSet, Json, Diagnostic, Coverage, CommandService, AuthorityProvider, Verifier, VerifyOptions, VerificationReport } from './core.js';
 import type { Bounds, SceneItem } from './scene.js';
 export type { Bounds, Matrix, Viewport, TextRun, Primitive, SceneItem, ScenePatch } from './scene.js';
 import type { Viewport } from './scene.js';
@@ -66,3 +66,13 @@ export interface Designer {
 }
 export declare function createViewer(element: HTMLElement, options: ViewerOptions): Viewer;
 export declare function createDesigner(viewer: Viewer, options: DesignerOptions): Designer;
+/** The decode a verification used: the language package's decode result, which its
+ *  source-patching functions accept. Documents and references are opaque here. */
+export interface VerifiedModel {
+  readonly syntaxValid: boolean; readonly normalized: Json; readonly diagnostics: readonly Diagnostic[];
+  readonly coverage: Coverage; readonly documents: readonly Json[]; readonly references: readonly Json[];
+}
+/** A verification report with the model it verified; `model` is absent when decoding did not complete. */
+export interface VerifiedSources { readonly report: VerificationReport; readonly model?: VerifiedModel }
+/** Verify sources and return the decoded model that was verified, so a host does not decode the same sources again. */
+export declare function verifySourcesWithModel(verifier: Verifier, input: SourceSet, options: VerifyOptions): Promise<VerifiedSources>;

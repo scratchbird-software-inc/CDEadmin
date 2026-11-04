@@ -43,6 +43,24 @@ function applicableAllOf(node, value) {
     return selected;
 }
 export function isRecord(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
+/** stableStringify(value).length, without building, sorting or joining the string:
+ *  key order does not change the length, and only scalars are serialized. */
+export function stableStringifyLength(value) {
+    if (Array.isArray(value)) {
+        let length = 2 + Math.max(0, value.length - 1);
+        for (const item of value)
+            length += stableStringifyLength(item);
+        return length;
+    }
+    if (isRecord(value)) {
+        const keys = Object.keys(value);
+        let length = 2 + Math.max(0, keys.length - 1);
+        for (const key of keys)
+            length += JSON.stringify(key).length + 1 + stableStringifyLength(value[key]);
+        return length;
+    }
+    return (JSON.stringify(value) ?? 'undefined').length;
+}
 export function stableStringify(value) {
     if (Array.isArray(value))
         return '[' + value.map(stableStringify).join(',') + ']';
