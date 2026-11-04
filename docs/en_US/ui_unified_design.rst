@@ -847,3 +847,17 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     ``version_support`` after a reload. Capability-filtered bundles for
     network engines must not be cached by engine and version alone; key them
     on the endpoint or a capability digest when those engines adopt this.
+
+20. Empty typed values in registration routes (2026-11-04, parity server
+    forms): ``provider_route_options`` drops a contract field whose value is
+    ``None`` or ``''``, which is what the legacy dialog sent for an empty
+    ``json`` field. A typed grid or key/value control sends ``[]`` or ``{}``
+    instead, and that is kept. For MySQL-wire ``failover`` (Dolt, TiDB,
+    Vitess) an empty list makes the connector refuse the connection ("Select a
+    bounded native failover target list", live on the pinned demos). Dropping
+    every empty value in the shared builder is not safe: DuckDB and SQLite
+    ``attached_databases`` default to ``[]``, and for MongoDB
+    ``auth_oidc_allowed_hosts`` an empty list plausibly differs from leaving it
+    unset. The form schema has no way to declare "omit when empty" for one
+    field. Default: the Dolt, TiDB and Vitess server forms stay ``draft`` with
+    this recorded in their ``gaps``; registration keeps the legacy dialog.

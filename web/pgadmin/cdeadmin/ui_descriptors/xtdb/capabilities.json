@@ -259,6 +259,18 @@
       ],
       "form": "forms/role.form.json",
       "variant": "user"
+    },
+    {
+      "resource_kind": "server",
+      "family": "server",
+      "form": "forms/server.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
     }
   ]
 }

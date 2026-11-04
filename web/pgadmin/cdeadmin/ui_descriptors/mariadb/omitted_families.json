@@ -1,0 +1,9 @@
+{
+  "engine": "mariadb",
+  "omitted": [
+    {
+      "family": "type",
+      "reason": "MariaDB has no user-defined types or domains: CREATE TYPE, CREATE DOMAIN and, with sql_mode=ORACLE, CREATE TYPE ... AS OBJECT / AS VARRAY are syntax errors, and information_schema has no type or domain table (live probe on 12.2.2, 2026-11-04)"
+    }
+  ]
+}

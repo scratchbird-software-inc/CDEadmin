@@ -1,0 +1,886 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "vitess",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "draft",
+  "engine_tab_title": "Vitess",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "server.failover",
+      "reason": "Live round trip failed 2026-11-04 on the pinned Vitess 23.0.3 demo: an untouched Failover endpoints grid is sent as [] and kept in the route, and the MySQL-wire connector refuses an empty target list ('Select a bounded native failover target list'). Caused by the typed grid: the legacy JSON field sent '' and was dropped. Blocked on design open decision 20 (no per-field 'omit when empty')."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "name",
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Server host or address",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "host",
+      "required": true
+    },
+    {
+      "field_id": "port",
+      "label": "Server port",
+      "tab": "Connection",
+      "control": "number",
+      "backend_field_id": "port",
+      "required": true,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Maintenance database",
+      "control": "text",
+      "required": false,
+      "help": "Database the profile connects to first; leave empty for the engine default."
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
+    },
+    {
+      "field_id": "username",
+      "label": "User or principal",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "username",
+      "required": false
+    },
+    {
+      "field_id": "passwordless",
+      "label": "Passwordless account",
+      "tab": "Authentication",
+      "control": "boolean",
+      "backend_field_id": "cde_route_passwordless",
+      "required": false,
+      "default": false,
+      "help": "The account has no password. The connection authenticates without one and no password is requested or stored."
+    },
+    {
+      "field_id": "auth_plugin",
+      "label": "Authentication plugin",
+      "tab": "Authentication",
+      "control": "select",
+      "backend_field_id": "cde_route_auth_plugin",
+      "required": false,
+      "options": [
+        {
+          "value": "auto",
+          "label": "Server-selected"
+        },
+        {
+          "value": "mysql_native_password",
+          "label": "mysql_native_password"
+        },
+        {
+          "value": "caching_sha2_password",
+          "label": "caching_sha2_password"
+        },
+        {
+          "value": "sha256_password",
+          "label": "sha256_password"
+        },
+        {
+          "value": "authentication_kerberos_client",
+          "label": "Kerberos"
+        },
+        {
+          "value": "authentication_oci_client",
+          "label": "OCI IAM"
+        },
+        {
+          "value": "authentication_webauthn_client",
+          "label": "WebAuthn"
+        },
+        {
+          "value": "authentication_openid_connect_client",
+          "label": "OpenID Connect"
+        }
+      ],
+      "default": "auto"
+    },
+    {
+      "field_id": "krb_service_principal",
+      "label": "Kerberos service principal",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_krb_service_principal",
+      "required": false
+    },
+    {
+      "field_id": "kerberos_auth_mode",
+      "label": "Kerberos mode",
+      "tab": "Authentication",
+      "control": "select",
+      "backend_field_id": "cde_route_kerberos_auth_mode",
+      "required": false,
+      "options": [
+        {
+          "value": "SSPI",
+          "label": "SSPI"
+        },
+        {
+          "value": "GSSAPI",
+          "label": "GSSAPI"
+        }
+      ]
+    },
+    {
+      "field_id": "oci_config_file",
+      "label": "OCI configuration file",
+      "tab": "Authentication",
+      "control": "file",
+      "backend_field_id": "cde_route_oci_config_file",
+      "required": false
+    },
+    {
+      "field_id": "oci_config_profile",
+      "label": "OCI configuration profile",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_oci_config_profile",
+      "required": false
+    },
+    {
+      "field_id": "openid_token_file",
+      "label": "OpenID Connect token file",
+      "tab": "Authentication",
+      "control": "file",
+      "backend_field_id": "cde_route_openid_token_file",
+      "required": false
+    },
+    {
+      "field_id": "password",
+      "label": "Password / first factor",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_password",
+      "required": false,
+      "visible_when": {
+        "field": "passwordless",
+        "equals": false
+      }
+    },
+    {
+      "field_id": "password_2",
+      "label": "Second authentication factor",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_password_2",
+      "required": false,
+      "visible_when": {
+        "field": "passwordless",
+        "equals": false
+      }
+    },
+    {
+      "field_id": "password_3",
+      "label": "Third authentication factor",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_password_3",
+      "required": false,
+      "visible_when": {
+        "field": "passwordless",
+        "equals": false
+      }
+    },
+    {
+      "field_id": "save_password",
+      "label": "Save default connection credentials",
+      "tab": "Authentication",
+      "control": "boolean",
+      "backend_field_id": "save_password",
+      "required": false,
+      "default": false,
+      "help": "Store the credentials for the default user in CDEadmin. Credentials entered while connecting as another user are never stored as the default credentials."
+    },
+    {
+      "field_id": "ssl_disabled",
+      "label": "Disable TLS",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "backend_field_id": "cde_route_ssl_disabled",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "ssl_ca",
+      "label": "Certificate authority file",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_ssl_ca",
+      "required": false
+    },
+    {
+      "field_id": "ssl_cert",
+      "label": "Client certificate",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_ssl_cert",
+      "required": false
+    },
+    {
+      "field_id": "ssl_key",
+      "label": "Client key",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_ssl_key",
+      "required": false
+    },
+    {
+      "field_id": "ssl_verify_cert",
+      "label": "Verify server certificate",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "backend_field_id": "cde_route_ssl_verify_cert",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "ssl_verify_identity",
+      "label": "Verify server identity",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "backend_field_id": "cde_route_ssl_verify_identity",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "ssl_cipher",
+      "label": "TLS cipher list",
+      "tab": "SSL/TLS",
+      "control": "text",
+      "backend_field_id": "cde_route_ssl_cipher",
+      "required": false
+    },
+    {
+      "field_id": "tls_versions",
+      "label": "TLS versions",
+      "tab": "SSL/TLS",
+      "control": "multiselect",
+      "help": "",
+      "options": [
+        {
+          "value": "TLSv1.2",
+          "label": "TLSv1.2"
+        },
+        {
+          "value": "TLSv1.3",
+          "label": "TLSv1.3"
+        }
+      ],
+      "backend_field_id": "cde_route_tls_versions",
+      "required": false
+    },
+    {
+      "field_id": "tls_ciphersuites",
+      "label": "TLS cipher suites",
+      "tab": "SSL/TLS",
+      "control": "grid",
+      "help": "",
+      "item_kind": "string",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Cipher suite",
+          "control": "text"
+        }
+      ],
+      "backend_field_id": "cde_route_tls_ciphersuites",
+      "required": false
+    },
+    {
+      "field_id": "unix_socket",
+      "label": "Unix socket",
+      "tab": "Advanced",
+      "control": "file",
+      "backend_field_id": "cde_route_unix_socket",
+      "group": "Network",
+      "required": false
+    },
+    {
+      "field_id": "connection_timeout",
+      "label": "Connect timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_connection_timeout",
+      "group": "Network",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 600
+    },
+    {
+      "field_id": "read_timeout",
+      "label": "Read timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_read_timeout",
+      "group": "Network",
+      "required": false,
+      "min": 1,
+      "max": 86400
+    },
+    {
+      "field_id": "write_timeout",
+      "label": "Write timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_write_timeout",
+      "group": "Network",
+      "required": false,
+      "min": 1,
+      "max": 86400
+    },
+    {
+      "field_id": "failover",
+      "label": "Failover endpoints",
+      "tab": "Advanced",
+      "control": "grid",
+      "help": "Targets inherit connection settings unless overridden. Each protected password reference is scoped to this endpoint and owner. Provider-owned target pools are independent; native priority order and random choice among equal priorities apply.",
+      "columns": [
+        {
+          "field_id": "host",
+          "label": "Host",
+          "control": "text"
+        },
+        {
+          "field_id": "port",
+          "label": "Port",
+          "control": "number",
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "field_id": "unix_socket",
+          "label": "Unix socket",
+          "control": "text"
+        },
+        {
+          "field_id": "user",
+          "label": "User",
+          "control": "text"
+        },
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "text"
+        },
+        {
+          "field_id": "priority",
+          "label": "Priority",
+          "control": "number",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "field_id": "credential_reference_id",
+          "label": "Password reference",
+          "control": "reference",
+          "reference_kind": "secret-reference"
+        },
+        {
+          "field_id": "credential_kind",
+          "label": "Credential kind",
+          "control": "select",
+          "options": [
+            {
+              "value": "database_password",
+              "label": "Registration password"
+            },
+            {
+              "value": "password",
+              "label": "Protected account password"
+            }
+          ]
+        },
+        {
+          "field_id": "pool_name",
+          "label": "Pool name",
+          "control": "text"
+        },
+        {
+          "field_id": "pool_size",
+          "label": "Pool size",
+          "control": "number",
+          "min": 1,
+          "max": 32
+        },
+        {
+          "field_id": "pool_reset_session",
+          "label": "Reset session",
+          "control": "boolean",
+          "default": true
+        }
+      ],
+      "backend_field_id": "cde_route_failover",
+      "group": "Network",
+      "required": false
+    },
+    {
+      "field_id": "dns_srv",
+      "label": "Use DNS SRV discovery",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_dns_srv",
+      "group": "Network",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "force_ipv6",
+      "label": "Force IPv6",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_force_ipv6",
+      "group": "Network",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "compress",
+      "label": "Protocol compression",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_compress",
+      "group": "Network",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "charset",
+      "label": "Character set",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_charset",
+      "group": "Session",
+      "required": false,
+      "default": "utf8mb4"
+    },
+    {
+      "field_id": "collation",
+      "label": "Collation",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_collation",
+      "group": "Session",
+      "required": false
+    },
+    {
+      "field_id": "autocommit",
+      "label": "Autocommit",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_autocommit",
+      "group": "Session",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "time_zone",
+      "label": "Session time zone",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_time_zone",
+      "group": "Session",
+      "required": false
+    },
+    {
+      "field_id": "sql_mode",
+      "label": "SQL mode",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_sql_mode",
+      "group": "Session",
+      "required": false
+    },
+    {
+      "field_id": "init_command",
+      "label": "Initial session command",
+      "tab": "Advanced",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "cde_route_init_command",
+      "group": "Session",
+      "required": false
+    },
+    {
+      "field_id": "transaction_isolation",
+      "label": "Transaction isolation",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_transaction_isolation",
+      "group": "Session",
+      "required": false,
+      "options": [
+        {
+          "value": "READ UNCOMMITTED",
+          "label": "Read uncommitted"
+        },
+        {
+          "value": "READ COMMITTED",
+          "label": "Read committed"
+        },
+        {
+          "value": "REPEATABLE READ",
+          "label": "Repeatable read"
+        },
+        {
+          "value": "SERIALIZABLE",
+          "label": "Serializable"
+        }
+      ]
+    },
+    {
+      "field_id": "conn_attrs",
+      "label": "Connection attributes",
+      "tab": "Advanced",
+      "control": "keyvalue",
+      "help": "",
+      "backend_field_id": "cde_route_conn_attrs",
+      "group": "Session",
+      "required": false
+    },
+    {
+      "field_id": "pool_size",
+      "label": "Connection pool size",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_pool_size",
+      "group": "Connection pool",
+      "required": false,
+      "min": 1,
+      "max": 32
+    },
+    {
+      "field_id": "pool_reset_session",
+      "label": "Reset sessions on pool return",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_pool_reset_session",
+      "group": "Connection pool",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "vtgate_http_host",
+      "label": "VTGate HTTP host",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_vtgate_http_host",
+      "group": "Vitess identity",
+      "required": false
+    },
+    {
+      "field_id": "vtgate_http_port",
+      "label": "VTGate HTTP port",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_vtgate_http_port",
+      "group": "Vitess identity",
+      "required": false,
+      "default": 15001,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "vtgate_http_tls_mode",
+      "label": "VTGate HTTP TLS mode",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_vtgate_http_tls_mode",
+      "group": "Vitess identity",
+      "required": false,
+      "options": [
+        {
+          "value": "disable",
+          "label": "HTTP"
+        },
+        {
+          "value": "require",
+          "label": "HTTPS without CA verification"
+        },
+        {
+          "value": "verify-ca",
+          "label": "HTTPS with CA verification"
+        },
+        {
+          "value": "verify-full",
+          "label": "HTTPS with CA and hostname verification"
+        }
+      ],
+      "default": "disable"
+    },
+    {
+      "field_id": "vtgate_http_ca_file",
+      "label": "VTGate HTTP CA file",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_vtgate_http_ca_file",
+      "group": "Vitess identity",
+      "required": false
+    },
+    {
+      "field_id": "vtctldclient_path",
+      "label": "vtctldclient executable",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_vtctldclient_path",
+      "group": "Vitess control plane",
+      "required": false
+    },
+    {
+      "field_id": "vtctld_server",
+      "label": "VTctld gRPC address",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_vtctld_server",
+      "group": "Vitess control plane",
+      "required": false
+    },
+    {
+      "field_id": "vtctld_grpc_ca",
+      "label": "VTctld CA file",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_vtctld_grpc_ca",
+      "group": "Vitess control-plane TLS",
+      "required": false
+    },
+    {
+      "field_id": "vtctld_grpc_cert",
+      "label": "VTctld client certificate",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_vtctld_grpc_cert",
+      "group": "Vitess control-plane TLS",
+      "required": false
+    },
+    {
+      "field_id": "vtctld_grpc_key",
+      "label": "VTctld client private key",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_vtctld_grpc_key",
+      "group": "Vitess control-plane TLS",
+      "required": false
+    },
+    {
+      "field_id": "vtctld_grpc_crl",
+      "label": "VTctld certificate revocation list",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_vtctld_grpc_crl",
+      "group": "Vitess control-plane TLS",
+      "required": false
+    },
+    {
+      "field_id": "vtctld_grpc_server_name",
+      "label": "VTctld certificate server name",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_vtctld_grpc_server_name",
+      "group": "Vitess control-plane TLS",
+      "required": false
+    },
+    {
+      "field_id": "grpc_auth_static_client_creds",
+      "label": "Static gRPC credentials file",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_grpc_auth_static_client_creds",
+      "group": "Vitess control-plane authentication",
+      "required": false
+    },
+    {
+      "field_id": "grpc_compression",
+      "label": "Control-plane gRPC compression",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_grpc_compression",
+      "group": "Vitess control-plane transport",
+      "required": false,
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "snappy",
+          "label": "Snappy"
+        }
+      ],
+      "default": "none"
+    },
+    {
+      "field_id": "grpc_keepalive_time_seconds",
+      "label": "gRPC keepalive interval (seconds)",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_grpc_keepalive_time_seconds",
+      "group": "Vitess control-plane transport",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 86400
+    },
+    {
+      "field_id": "grpc_keepalive_timeout_seconds",
+      "label": "gRPC keepalive timeout (seconds)",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_grpc_keepalive_timeout_seconds",
+      "group": "Vitess control-plane transport",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 86400
+    },
+    {
+      "field_id": "grpc_max_message_size",
+      "label": "Maximum gRPC message size",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_grpc_max_message_size",
+      "group": "Vitess control-plane transport",
+      "required": false,
+      "default": 16777216,
+      "min": 1024,
+      "max": 1073741824
+    },
+    {
+      "field_id": "vtctld_action_timeout_seconds",
+      "label": "VTctld action timeout (seconds)",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_vtctld_action_timeout_seconds",
+      "group": "Vitess control-plane transport",
+      "required": false,
+      "default": 3600,
+      "min": 1,
+      "max": 86400
+    },
+    {
+      "field_id": "tablet_manager_grpc_ca",
+      "label": "Tablet-manager CA file",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_tablet_manager_grpc_ca",
+      "group": "Vitess tablet-manager TLS",
+      "required": false
+    },
+    {
+      "field_id": "tablet_manager_grpc_cert",
+      "label": "Tablet-manager client certificate",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_tablet_manager_grpc_cert",
+      "group": "Vitess tablet-manager TLS",
+      "required": false
+    },
+    {
+      "field_id": "tablet_manager_grpc_key",
+      "label": "Tablet-manager client private key",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_tablet_manager_grpc_key",
+      "group": "Vitess tablet-manager TLS",
+      "required": false
+    },
+    {
+      "field_id": "tablet_manager_grpc_crl",
+      "label": "Tablet-manager certificate revocation list",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_tablet_manager_grpc_crl",
+      "group": "Vitess tablet-manager TLS",
+      "required": false
+    },
+    {
+      "field_id": "tablet_manager_grpc_server_name",
+      "label": "Tablet-manager certificate server name",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_tablet_manager_grpc_server_name",
+      "group": "Vitess tablet-manager TLS",
+      "required": false
+    },
+    {
+      "field_id": "tablet_manager_grpc_concurrency",
+      "label": "Tablet-manager gRPC concurrency",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_tablet_manager_grpc_concurrency",
+      "group": "Vitess control-plane transport",
+      "required": false,
+      "default": 8,
+      "min": 1,
+      "max": 1024
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for vitess-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Placement for the parity engines follows the contract groups (GROUP_TABS). Status stays draft: see gaps; mapping is tested without a server and the live round trip (tools/tests/test_ui_descriptor_server_forms.py) failed as recorded."
+}

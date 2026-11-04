@@ -40,7 +40,7 @@ Phase status
    * - 3
      - Engine descriptors (Firebird, MySQL, MariaDB, DuckDB, SQLite)
      - in progress
-     - Firebird 10/10, MariaDB 8/8, DuckDB 8/8, SQLite 6/6 forms ``complete`` by live round trip (server forms through the registration contract, ``tools/tests/test_ui_descriptor_server_forms.py``). MySQL: owned by the MySQL stream. PostgreSQL: drafts pass the ui.js schema-id gate; 5 large-object tier 2/3 operations ``complete`` on PostgreSQL 16.15 (not 18.3); routing is phase 5. Family table below
+     - Firebird 10/10, MariaDB 8/8, DuckDB 8/8, SQLite 6/6 forms ``complete`` by live round trip (server forms through the registration contract, ``tools/tests/test_ui_descriptor_server_forms.py``). MySQL: owned by the MySQL stream. PostgreSQL: drafts pass the ui.js schema-id gate; 5 large-object tier 2/3 operations ``complete`` on PostgreSQL 16.15 (not 18.3); routing is phase 5. Family table below. (2026-11-04: the seven parity engines have their own table below; their Server forms are ``draft``.)
    * - 4
      - Operations, panels, menus
      - in progress
@@ -138,6 +138,114 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - complete (10f, 0g)
      - complete (17f, 0g)
 
+Note 2026-11-04: field and gap counts in the table above have moved since it was written (status
+values unchanged): MySQL Table now draft (34f, 7g), SQLite Table complete (13f, 4g), MariaDB
+Routine complete (13f, 2g), MariaDB Trigger complete (6f, 3g), MySQL Server draft (41f, 3g).
+MariaDB's Type ``n/a`` is now recorded in ``mariadb/omitted_families.json`` with its live probe
+(there was no omission file before).
+
+Parity engines (added 2026-11-04)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Generated from ``ui_descriptors/<engine>/forms`` and ``omitted_families.json`` on 2026-11-04;
+same notation as above. The owner added these engines to beta on 2026-10-30. Statuses are as
+the descriptor files record them; ``complete`` was set by the stream that built each form.
+The Server forms were drafted on 2026-11-04 and stay ``draft``; their ``gaps`` record why
+(see the change log entry of that date). immudb's Server form is not yet reachable: its
+``server`` resource kind is an engine object (recorded in the form's ``gaps``).
+
+.. list-table::
+   :header-rows: 1
+
+   * - Family
+     - Dolt
+     - TiDB
+     - Vitess
+     - CockroachDB
+     - YugabyteDB
+     - immudb
+     - XTDB
+   * - Table
+     - complete (7f, 0g)
+     - complete (9f, 0g)
+     - complete (17f, 0g)
+     - complete (13f, 4g)
+     - complete (19f, 8g)
+     - complete (5f, 4g)
+     - complete (6f, 1g)
+   * - View
+     - complete (3f, 0g)
+     - complete (3f, 0g)
+     - complete (3f, 0g)
+     - complete (6f, 4g)
+     - complete (11f, 2g)
+     - n/a
+     - n/a
+   * - Index
+     - complete (5f, 0g)
+     - complete (6f, 0g)
+     - complete (5f, 0g)
+     - complete (11f, 2g)
+     - complete (13f, 3g)
+     - complete (3f, 2g)
+     - n/a
+   * - Routine
+     - complete (10f, 1g)
+     - n/a
+     - complete (5f, 0g)
+     - complete (12f, 4g)
+     - complete (24f, 5g)
+     - n/a
+     - n/a
+   * - Trigger
+     - complete (8f, 0g)
+     - n/a
+     - n/a
+     - complete (7f, 2g)
+     - complete (14f, 3g)
+     - n/a
+     - n/a
+   * - Sequence
+     - n/a
+     - complete (8f, 0g)
+     - complete (5f, 0g)
+     - complete (11f, 4g)
+     - complete (12f, 1g)
+     - n/a
+     - n/a
+   * - Type
+     - n/a
+     - n/a
+     - n/a
+     - complete (7f, 3g)
+     - complete (15f, 4g)
+     - n/a
+     - n/a
+   * - Role
+     - complete (6f, 1g)
+     - complete (6f, 2g)
+     - n/a
+     - complete (9f, 5g)
+     - complete (10f, 3g)
+     - complete (11f, 3g)
+     - complete (3f, 3g)
+   * - Database
+     - complete (4f, 0g)
+     - complete (4f, 0g)
+     - n/a
+     - complete (7f, 3g)
+     - complete (14f, 4g)
+     - complete (55f, 3g)
+     - complete (5f, 2g)
+   * - Server
+     - draft (50f, 1g)
+     - draft (64f, 1g)
+     - draft (71f, 1g)
+     - draft (68f, 1g)
+     - draft (96f, 1g)
+     - draft (67f, 2g)
+     - draft (44f, 1g)
+
 Baseline lint counts (2026-10-25)
 ---------------------------------
 
@@ -173,6 +281,47 @@ count sets its maximum to zero in the enforcement file.
 
 Change log
 ----------
+
+Parity engine Server forms drafted; MariaDB Type omission recorded (2026-11-04)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Seven Server forms were missing, one per parity engine, and none was recorded as omitted;
+MariaDB had no Type form and no omission record. (An earlier count of five missing Server
+forms was wrong.)
+
+MariaDB Type: MariaDB 12.2.2 refuses ``CREATE TYPE``, ``CREATE DOMAIN`` and, with
+``sql_mode=ORACLE``, ``CREATE TYPE ... AS OBJECT`` / ``AS VARRAY``; ``information_schema`` has
+no type or domain table (live, 2026-11-04). The family is recorded in
+``mariadb/omitted_families.json``; no form is offered.
+
+Server forms: ``tools/draft_server_descriptors.py`` now covers the parity engines. Their fields
+are placed by the registration contract's own groups (``GROUP_TABS``), and the four MySQL-wire
+JSON fields use the MySQL form's typed controls. The YugabyteDB form serves the YSQL and YCQL
+profiles behind a connection-kind select, because YCQL registrations resolve the
+``yugabytedb`` bundle. The drafter no longer adds a second ``database`` field when the contract
+declares one (XTDB). Each engine except immudb gained a ``server`` capability entry.
+
+All seven stay ``draft``; registration keeps the legacy dialog. Mapping tests pass without a
+server; the live round trips on the pinned demos (``tools/tests/test_ui_descriptor_server_forms.py``
+with ``CDEADMIN_ROUNDTRIP_<ENGINE>``) failed, recorded in each form's ``gaps``:
+
+* Dolt, TiDB, Vitess: an empty Failover grid reaches the connector as ``[]`` and is refused.
+  Caused by the typed grid; design open decision 20.
+* CockroachDB, YugabyteDB YSQL, immudb: the contract default ``keepalives=true`` reaches libpq
+  as ``True`` and is refused. Predates the forms (the legacy route has the same default).
+* XTDB: the servers API writes ``user`` and ``connection_timeout`` into the route and the XTDB
+  client refuses them. Predates the form.
+* immudb: the form is not reachable; its ``server`` kind is an engine object with its own
+  operations, left unchanged.
+
+The YCQL profile's live round trip was not run. These failures were found with the provider
+clients against the demos, not through a registration in the running application.
+
+Gates: ``make ui-descriptors-check`` reports the same 20 errors as before this change
+(CockroachDB and YugabyteDB operations and the YugabyteDB rule form, plus
+``json_controls_in_provider_forms`` 312 over its maximum of 301); lint counts are unchanged.
+Descriptor service, server-form and endpoint-registration tests: 89 passed, 9 skipped (the live
+tests without settings). Front-end family suite: 202 passed.
 
 Parity engines join beta; create-only fields; existing-column edits (2026-10-30)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

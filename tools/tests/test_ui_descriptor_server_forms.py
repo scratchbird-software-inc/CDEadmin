@@ -141,3 +141,98 @@ def test_firebird_embedded_server_form_maps_to_its_contract(tmp_path):
              'user': 'SYSDBA', 'attachment_mode': 'embedded', 'filesystem_root': str(tmp_path), 'charset': 'UTF8', 'connect_now': False}
     _form, _profile, route = roundtrip('firebird', 'firebird-embedded', draft)
     assert route['attachment_mode'] == 'embedded' and route['user'] == 'SYSDBA' and route['database'].endswith('rt.fdb')
+
+
+# Parity engines (owner direction 2026-10-30): each server form maps a draft onto its own
+# registration contract, and, when its CDEADMIN_ROUNDTRIP_<ENGINE> settings are present (the
+# same object its family round trip reads), the persisted route opens a live session.
+PARITY = {
+    'dolt': ('dolt-native', 'cdeadmin_demo', {
+        'connection_timeout': 7, 'compress': True, 'autocommit': True, 'time_zone': '+00:00',
+        'conn_attrs': {'program_name': 'cdeadmin-rt'}, 'tls_versions': ['TLSv1.2', 'TLSv1.3']}),
+    'tidb': ('tidb-native', 'cdeadmin_demo', {
+        'connection_timeout': 7, 'autocommit': True, 'conn_attrs': {'program_name': 'cdeadmin-rt'},
+        'tls_ciphersuites': [{'value': 'TLS_AES_128_GCM_SHA256'}]}),
+    'vitess': ('vitess-native', 'test_keyspace', {
+        'connection_timeout': 7, 'autocommit': True, 'conn_attrs': {'program_name': 'cdeadmin-rt'}}),
+    'cockroachdb': ('cockroachdb-native', 'cdeadmin_demo', {
+        'sslmode': 'disable', 'application_name': 'cdeadmin-rt', 'connect_timeout': 7}),
+    'yugabytedb': ('yugabytedb-native', 'cdeadmin_demo', {
+        'sslmode': 'disable', 'application_name': 'cdeadmin-rt', 'connect_timeout': 7}),
+    'immudb': ('immudb-native', 'cdeadmin_demo', {
+        'sslmode': 'disable', 'application_name': 'cdeadmin-rt', 'connect_timeout': 7}),
+    'xtdb': ('xtdb-native', 'xtdb', {
+        'tls_mode': 'disable', 'application_name': 'cdeadmin-rt', 'transaction_mode': 'read-only'}),
+}
+
+
+def parity_draft(engine, settings=None):
+    profile_id, database, extra = PARITY[engine]
+    settings = settings or {'host': '127.0.0.1', 'port': 5000, 'user': 'rt'}
+    draft = {'name': f'{engine} rt', 'host': settings['host'], 'port': int(settings['port']),
+             'username': settings['user'], 'database': settings.get('database', database),
+             'connect_now': True, **extra}
+    if settings.get('password'):
+        draft.update(password=settings['password'], save_password=False)
+    if engine == 'yugabytedb':  # one form serves the YSQL and YCQL profiles
+        draft['profile'] = profile_id
+    return profile_id, draft
+
+
+@pytest.mark.parametrize('engine', sorted(PARITY))
+def test_parity_server_form_maps_to_its_contract(engine):
+    profile_id, draft = parity_draft(engine)
+    _form, _profile, route = roundtrip(engine, profile_id, draft)
+    assert route['host'] == '127.0.0.1' and int(route['port']) == 5000
+    for key, value in PARITY[engine][2].items():
+        if isinstance(value, list) and value and isinstance(value[0], dict) and set(value[0]) == {'value'}:
+            value = [row['value'] for row in value]  # a string-list grid's rows reach the route as strings
+        assert route.get(key) == value, (engine, key, route.get(key))
+
+
+def test_yugabytedb_server_form_serves_its_ycql_profile():
+    draft = {'profile': 'yugabytedb-ycql', 'name': 'ycql rt', 'host': '127.0.0.1', 'port': 9042,
+             'username': 'cassandra', 'keyspace': 'cdeadmin_demo', 'local_dc': 'datacenter1', 'connect_now': False}
+    form, _profile, route = roundtrip('yugabytedb', 'yugabytedb-ycql', draft)
+    assert route['keyspace'] == 'cdeadmin_demo' and route['local_dc'] == 'datacenter1'
+    ysql_only = {field['field_id'] for tab in form['tabs'] for field in tab['fields']
+                 if field.get('visible_when') == {'field': 'profile', 'equals': 'yugabytedb-native'}}
+    assert 'sslmode' in ysql_only and 'keyspace' not in ysql_only
+
+
+@pytest.mark.parametrize('engine', sorted(PARITY))
+def test_parity_server_form_opens_a_live_session(engine):
+    variable = f'CDEADMIN_ROUNDTRIP_{engine.upper()}'
+    if not os.environ.get(variable):
+        pytest.skip(f'{variable} is not set')
+    import importlib
+    import uuid
+    from pgadmin.cdeadmin.security.secrets import SecretLease
+    settings = json.loads(os.environ[variable])
+    profile_id, draft = parity_draft(engine, settings)
+    _form, _profile, route = roundtrip(engine, profile_id, draft)
+    provider_module = importlib.import_module(f'pgadmin.cdeadmin.providers.{engine}.provider')
+    password = settings.get('password')
+    route = dict(route)
+    if password:
+        route.update(credential_reference_id='rt', principal_reference='rt')
+    elif engine in ('dolt', 'tidb', 'vitess'):
+        route['passwordless'] = True
+    permissions = SimpleNamespace(acquire_secret=(lambda *_args: SecretLease(password.encode())) if password else None,
+                                  require=lambda *_args: None)
+    profile = provider_module.PROFILE
+    namespace = f'ui-server-rt-{uuid.uuid4().hex[:6]}'
+    context = SimpleNamespace(
+        endpoint_id=str(uuid.uuid4()), session_namespace=namespace, pool_namespace=namespace,
+        cache_namespace=namespace, provider_id=profile.provider_id, profile_id=profile.profile_id,
+        profile_version=profile.exact_version, provider_version='0.2.0', mode='legacy_native',
+        runtime_verification_state='unverified', verified_runtime_family=None, declared_runtime_family=None,
+        target_adapter_id=None, effective_permissions=frozenset())
+    provider = provider_module.create_provider(context, permissions)
+    try:
+        identity = provider.client.runtime_identity({'route': route})
+        assert identity['engine_id'] == engine and identity['version'], identity
+    finally:
+        close = getattr(provider, 'close', None) or getattr(provider.client, 'close', None)
+        if close:
+            close()

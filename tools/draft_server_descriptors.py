@@ -3,7 +3,7 @@
 
 Server registration forms do not come from the visual-administration catalog;
 they come from providers/form_contracts.py (``server.define`` per profile).
-This script reads those contracts for the six beta engines and writes a draft
+This script reads those contracts for the beta engines and writes a draft
 Server family form per engine, grouping fields onto the canonical tabs
 (Connection, Authentication, SSL/TLS, Advanced, Engine, Tags). Profiles of one
 engine (firebird-native, firebird-embedded) share one form behind a
@@ -32,7 +32,9 @@ if "pgadmin" not in sys.modules:
 
 from pgadmin.cdeadmin.endpoints.profiles import registration_profiles  # noqa: E402
 
-ENGINES = ("mysql", "mariadb", "firebird", "duckdb", "sqlite")
+ENGINES = ("mysql", "mariadb", "firebird", "duckdb", "sqlite",
+           # Owner direction 2026-10-30: the parity engines are beta engines too.
+           "dolt", "tidb", "vitess", "cockroachdb", "yugabytedb", "immudb", "xtdb")
 # Registration keys of the servers API (web/pgadmin/browser/server_groups/servers) that are
 # not provider contract fields. Everything else travels as cde_route_<id> / cde_secret_<id>.
 GENERIC = {"name": "name", "host": "host", "port": "port", "username": "username", "password": "password",
@@ -43,8 +45,15 @@ JSON_CONTROLS = {
         {"field_id": "name", "label": "Alias", "control": "text", "required": True},
         {"field_id": "database", "label": "Database file", "control": "file", "required": True}]},
     "config": {"control": "keyvalue", "help": "Connection configuration options passed to the engine as named scalar values."},
+    # MySQL-wire JSON fields (Dolt, TiDB, Vitess): the typed controls of the MySQL server form.
+    "failover": {"label": "Failover endpoints", "control": "grid", "help": "Targets inherit connection settings unless overridden. Each protected password reference is scoped to this endpoint and owner. Provider-owned target pools are independent; native priority order and random choice among equal priorities apply.", "columns": [{"field_id": "host", "label": "Host", "control": "text"}, {"field_id": "port", "label": "Port", "control": "number", "min": 1, "max": 65535}, {"field_id": "unix_socket", "label": "Unix socket", "control": "text"}, {"field_id": "user", "label": "User", "control": "text"}, {"field_id": "database", "label": "Database", "control": "text"}, {"field_id": "priority", "label": "Priority", "control": "number", "min": 0, "max": 100}, {"field_id": "credential_reference_id", "label": "Password reference", "control": "reference", "reference_kind": "secret-reference"}, {"field_id": "credential_kind", "label": "Credential kind", "control": "select", "options": [{"value": "database_password", "label": "Registration password"}, {"value": "password", "label": "Protected account password"}]}, {"field_id": "pool_name", "label": "Pool name", "control": "text"}, {"field_id": "pool_size", "label": "Pool size", "control": "number", "min": 1, "max": 32}, {"field_id": "pool_reset_session", "label": "Reset session", "control": "boolean", "default": True}]},
+    "tls_versions": {"label": "TLS versions", "control": "multiselect", "help": "", "options": [{"value": "TLSv1.2", "label": "TLSv1.2"}, {"value": "TLSv1.3", "label": "TLSv1.3"}]},
+    "tls_ciphersuites": {"label": "TLS cipher suites", "control": "grid", "help": "", "item_kind": "string", "columns": [{"field_id": "value", "label": "Cipher suite", "control": "text"}]},
+    "conn_attrs": {"label": "Connection attributes", "control": "keyvalue", "help": ""},
 }
-TITLE = {"mysql": "MySQL", "mariadb": "MariaDB", "firebird": "Firebird", "duckdb": "DuckDB", "sqlite": "SQLite"}
+TITLE = {"mysql": "MySQL", "mariadb": "MariaDB", "firebird": "Firebird", "duckdb": "DuckDB", "sqlite": "SQLite",
+         "dolt": "Dolt", "tidb": "TiDB", "vitess": "Vitess", "cockroachdb": "CockroachDB", "yugabytedb": "YugabyteDB",
+         "immudb": "immudb", "xtdb": "XTDB"}
 ORDER = ["Connection", "Authentication", "SSL/TLS", "Advanced", "Engine", "Tags"]
 CONTROLS = {"text", "number", "boolean", "select", "multiselect", "radio", "password", "secret-reference",
             "code", "grid", "keyvalue", "privileges", "reference", "file"}
@@ -59,10 +68,40 @@ RULES = [
 ]
 
 
-def tab_group(field_id):
+# Contract groups of the parity engines' registration fields (owner direction 2026-10-30).
+# Shared wire options go to the canonical tabs; any other group is engine-specific and
+# stays on the Engine tab under its own name.
+GROUP_TABS = {
+    "MySQL-wire authentication": ("Authentication", None), "PostgreSQL-wire authentication": ("Authentication", None),
+    "XTDB authentication": ("Authentication", None), "CQL authentication": ("Authentication", None),
+    "MySQL-wire TLS": ("SSL/TLS", None), "PostgreSQL-wire TLS": ("SSL/TLS", None), "XTDB TLS": ("SSL/TLS", None),
+    "CQL TLS": ("SSL/TLS", None), "YugabyteDB YCQL TLS": ("SSL/TLS", None),
+    "YugabyteDB identity verification": ("SSL/TLS", None),
+    "MySQL-wire connection": ("Advanced", "Network"), "PostgreSQL-wire network": ("Advanced", "Network"),
+    "XTDB network": ("Advanced", "Network"), "XTDB database": ("Connection", None),
+    "XTDB timeouts": ("Advanced", "Timeouts"), "YugabyteDB YCQL timeouts": ("Advanced", "Timeouts"),
+    "MySQL-wire session": ("Advanced", "Session"), "PostgreSQL-wire session": ("Advanced", "Session"),
+    "XTDB session": ("Advanced", "Session"), "XTDB transactions": ("Advanced", "Session"),
+    "YugabyteDB YCQL session": ("Advanced", "Session"), "YugabyteDB YCQL consistency": ("Advanced", "Session"),
+    "CQL session and retry policy": ("Advanced", "Session"), "YugabyteDB YCQL protocol": ("Advanced", "Session"),
+    "MySQL-wire pool": ("Advanced", "Connection pool"), "PostgreSQL-wire pool": ("Advanced", "Connection pool"),
+    "XTDB pool": ("Advanced", "Connection pool"),
+    "CQL topology and routing": ("Advanced", "Topology"), "YugabyteDB YCQL topology": ("Advanced", "Topology"),
+}
+PARITY_ENGINES = {"dolt", "tidb", "vitess", "cockroachdb", "yugabytedb", "immudb", "xtdb"}
+
+
+def tab_group(field_id, contract_group=None, engine=None):
     for pattern, tab, group in RULES:
         if re.search(pattern, field_id):
+            # The pattern rules were tuned for the first six engines; for a parity engine they
+            # keep only the core connection and credential fields, and its contract group decides
+            # the rest (an engine tool's TLS or timeout fields stay with that tool).
+            if engine in PARITY_ENGINES and contract_group and tab not in ("Connection", "Authentication"):
+                break
             return tab, group
+    if engine in PARITY_ENGINES and contract_group:
+        return GROUP_TABS.get(contract_group, ("Engine", contract_group))
     return "Engine", None
 
 
@@ -75,7 +114,7 @@ def draft(engine, profiles):
             if fid in seen:
                 continue
             seen.add(fid)
-            tab, group = tab_group(fid)
+            tab, group = tab_group(fid, field.get("group"), engine)
             out = {"field_id": fid, "label": field.get("label") or fid, "tab": tab, "control": field.get("control", "text")}
             if out["control"] == "multiline":
                 out["control"], out["language"] = "code", "text"
@@ -121,7 +160,8 @@ def draft(engine, profiles):
     if not network and not embedded:  # mixed profiles (Firebird): file path for the embedded kind only
         database.update({"label": "Database file", "control": "file", "required": True,
                          "visible_when": {"field": "profile", "equals": next(p["profile_id"] for p in profiles if p.get("route_kind") == "embedded_file")}})
-    fields.append(database)
+    if "database" not in seen:  # XTDB's contract declares its own database field
+        fields.append(database)
     fields.extend([
         {"field_id": "connect_now", "label": "Connect now", "tab": "Connection", "control": "boolean", "default": True, "backend_field_id": "connect_now"},
         {"field_id": "comment", "label": "Comments", "tab": "Connection", "control": "code", "language": "text", "backend_field_id": "comment"},

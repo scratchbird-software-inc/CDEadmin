@@ -1,0 +1,914 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "immudb",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "draft",
+  "engine_tab_title": "immudb",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "server.keepalives",
+      "reason": "Live round trip failed 2026-11-04 on the pinned immudb 1.11.0 demo: the contract default keepalives=true reaches libpq as 'True' ('invalid integer value \"True\" for connection option \"keepalives\"'). Predates this form: the legacy registration route carries the same default."
+    },
+    {
+      "concept": "server.kind",
+      "reason": "Not reachable yet: immudb declares its 'server' resource kind in the engine_object family with its own operations (health, load_database). Serving this form needs that kind in the server family, which would change how the tree opens immudb server nodes; left unchanged pending a decision."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "name",
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Server host or address",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "host",
+      "required": true
+    },
+    {
+      "field_id": "port",
+      "label": "Server port",
+      "tab": "Connection",
+      "control": "number",
+      "backend_field_id": "port",
+      "required": true,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Maintenance database",
+      "control": "text",
+      "required": false,
+      "help": "Database the profile connects to first; leave empty for the engine default."
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
+    },
+    {
+      "field_id": "username",
+      "label": "User or principal",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "username",
+      "required": false
+    },
+    {
+      "field_id": "channel_binding",
+      "label": "Channel binding",
+      "tab": "Authentication",
+      "control": "select",
+      "backend_field_id": "cde_route_channel_binding",
+      "required": false,
+      "options": [
+        {
+          "value": "disable",
+          "label": "Disable"
+        },
+        {
+          "value": "prefer",
+          "label": "Prefer"
+        },
+        {
+          "value": "require",
+          "label": "Require"
+        }
+      ],
+      "default": "prefer"
+    },
+    {
+      "field_id": "gssencmode",
+      "label": "GSS encryption",
+      "tab": "Authentication",
+      "control": "select",
+      "backend_field_id": "cde_route_gssencmode",
+      "required": false,
+      "options": [
+        {
+          "value": "disable",
+          "label": "Disable"
+        },
+        {
+          "value": "prefer",
+          "label": "Prefer"
+        },
+        {
+          "value": "require",
+          "label": "Require"
+        }
+      ],
+      "default": "prefer"
+    },
+    {
+      "field_id": "krbsrvname",
+      "label": "Kerberos service name",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_krbsrvname",
+      "required": false,
+      "default": "postgres"
+    },
+    {
+      "field_id": "gsslib",
+      "label": "GSS library",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_gsslib",
+      "required": false
+    },
+    {
+      "field_id": "gssdelegation",
+      "label": "Delegate GSS credentials",
+      "tab": "Authentication",
+      "control": "boolean",
+      "backend_field_id": "cde_route_gssdelegation",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "require_auth",
+      "label": "Required authentication methods",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_require_auth",
+      "required": false
+    },
+    {
+      "field_id": "oauth_issuer",
+      "label": "OAuth issuer",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_oauth_issuer",
+      "required": false
+    },
+    {
+      "field_id": "oauth_client_id",
+      "label": "OAuth client ID",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_oauth_client_id",
+      "required": false
+    },
+    {
+      "field_id": "oauth_scope",
+      "label": "OAuth scope",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_oauth_scope",
+      "required": false
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_password",
+      "required": false
+    },
+    {
+      "field_id": "oauth_client_secret",
+      "label": "OAuth client secret",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_oauth_client_secret",
+      "required": false
+    },
+    {
+      "field_id": "save_password",
+      "label": "Save default connection credentials",
+      "tab": "Authentication",
+      "control": "boolean",
+      "backend_field_id": "save_password",
+      "required": false,
+      "default": false,
+      "help": "Store the credentials for the default user in CDEadmin. Credentials entered while connecting as another user are never stored as the default credentials."
+    },
+    {
+      "field_id": "sslmode",
+      "label": "TLS mode",
+      "tab": "SSL/TLS",
+      "control": "select",
+      "backend_field_id": "cde_route_sslmode",
+      "required": false,
+      "options": [
+        {
+          "value": "disable",
+          "label": "Disable"
+        },
+        {
+          "value": "allow",
+          "label": "Allow"
+        },
+        {
+          "value": "prefer",
+          "label": "Prefer"
+        },
+        {
+          "value": "require",
+          "label": "Require"
+        },
+        {
+          "value": "verify-ca",
+          "label": "Verify CA"
+        },
+        {
+          "value": "verify-full",
+          "label": "Verify CA and host"
+        }
+      ],
+      "default": "prefer"
+    },
+    {
+      "field_id": "sslrootcert",
+      "label": "Root certificate",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_sslrootcert",
+      "required": false
+    },
+    {
+      "field_id": "sslcert",
+      "label": "Client certificate",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_sslcert",
+      "required": false
+    },
+    {
+      "field_id": "sslkey",
+      "label": "Client certificate key",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_sslkey",
+      "required": false
+    },
+    {
+      "field_id": "sslcrl",
+      "label": "Certificate revocation list",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_sslcrl",
+      "required": false
+    },
+    {
+      "field_id": "sslcrldir",
+      "label": "Certificate revocation directory",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_sslcrldir",
+      "required": false
+    },
+    {
+      "field_id": "sslsni",
+      "label": "Send TLS SNI",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "backend_field_id": "cde_route_sslsni",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "requirepeer",
+      "label": "Required peer name",
+      "tab": "SSL/TLS",
+      "control": "text",
+      "backend_field_id": "cde_route_requirepeer",
+      "required": false
+    },
+    {
+      "field_id": "ssl_min_protocol_version",
+      "label": "Minimum TLS version",
+      "tab": "SSL/TLS",
+      "control": "select",
+      "backend_field_id": "cde_route_ssl_min_protocol_version",
+      "required": false,
+      "options": [
+        {
+          "value": "TLSv1",
+          "label": "TLS 1.0"
+        },
+        {
+          "value": "TLSv1.1",
+          "label": "TLS 1.1"
+        },
+        {
+          "value": "TLSv1.2",
+          "label": "TLS 1.2"
+        },
+        {
+          "value": "TLSv1.3",
+          "label": "TLS 1.3"
+        }
+      ]
+    },
+    {
+      "field_id": "ssl_max_protocol_version",
+      "label": "Maximum TLS version",
+      "tab": "SSL/TLS",
+      "control": "select",
+      "backend_field_id": "cde_route_ssl_max_protocol_version",
+      "required": false,
+      "options": [
+        {
+          "value": "TLSv1",
+          "label": "TLS 1.0"
+        },
+        {
+          "value": "TLSv1.1",
+          "label": "TLS 1.1"
+        },
+        {
+          "value": "TLSv1.2",
+          "label": "TLS 1.2"
+        },
+        {
+          "value": "TLSv1.3",
+          "label": "TLS 1.3"
+        }
+      ]
+    },
+    {
+      "field_id": "sslnegotiation",
+      "label": "TLS negotiation",
+      "tab": "SSL/TLS",
+      "control": "select",
+      "backend_field_id": "cde_route_sslnegotiation",
+      "required": false,
+      "options": [
+        {
+          "value": "postgres",
+          "label": "PostgreSQL negotiation"
+        },
+        {
+          "value": "direct",
+          "label": "Direct TLS"
+        }
+      ],
+      "default": "postgres"
+    },
+    {
+      "field_id": "tls_key_password",
+      "label": "Client private-key password",
+      "tab": "SSL/TLS",
+      "control": "password",
+      "backend_field_id": "cde_secret_tls_key_password",
+      "required": false
+    },
+    {
+      "field_id": "hostaddr",
+      "label": "Host address",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_hostaddr",
+      "group": "Network",
+      "required": false
+    },
+    {
+      "field_id": "connect_timeout",
+      "label": "Connect timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_connect_timeout",
+      "group": "Network",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 600
+    },
+    {
+      "field_id": "target_session_attrs",
+      "label": "Target session attributes",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_target_session_attrs",
+      "group": "Session",
+      "required": false,
+      "options": [
+        {
+          "value": "any",
+          "label": "Any"
+        },
+        {
+          "value": "read-write",
+          "label": "Read/write"
+        },
+        {
+          "value": "read-only",
+          "label": "Read only"
+        },
+        {
+          "value": "primary",
+          "label": "Primary"
+        },
+        {
+          "value": "standby",
+          "label": "Standby"
+        },
+        {
+          "value": "prefer-standby",
+          "label": "Prefer standby"
+        }
+      ],
+      "default": "any"
+    },
+    {
+      "field_id": "load_balance_hosts",
+      "label": "Host load balancing",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_load_balance_hosts",
+      "group": "Network",
+      "required": false,
+      "options": [
+        {
+          "value": "disable",
+          "label": "Disable"
+        },
+        {
+          "value": "random",
+          "label": "Random"
+        }
+      ],
+      "default": "disable"
+    },
+    {
+      "field_id": "application_name",
+      "label": "Application name",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_application_name",
+      "group": "Session",
+      "required": false,
+      "default": "CDEadmin"
+    },
+    {
+      "field_id": "fallback_application_name",
+      "label": "Fallback application name",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_fallback_application_name",
+      "group": "Session",
+      "required": false,
+      "default": "CDEadmin"
+    },
+    {
+      "field_id": "client_encoding",
+      "label": "Client encoding",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_client_encoding",
+      "group": "Session",
+      "required": false
+    },
+    {
+      "field_id": "options",
+      "label": "Server command-line options",
+      "tab": "Advanced",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "cde_route_options",
+      "group": "Session",
+      "required": false
+    },
+    {
+      "field_id": "autocommit",
+      "label": "Autocommit",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_autocommit",
+      "group": "Session",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "transaction_isolation",
+      "label": "Transaction isolation",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_transaction_isolation",
+      "group": "Session",
+      "required": false,
+      "options": [
+        {
+          "value": "server",
+          "label": "Server default"
+        },
+        {
+          "value": "READ_UNCOMMITTED",
+          "label": "Read uncommitted"
+        },
+        {
+          "value": "READ_COMMITTED",
+          "label": "Read committed"
+        },
+        {
+          "value": "REPEATABLE_READ",
+          "label": "Repeatable read"
+        },
+        {
+          "value": "SERIALIZABLE",
+          "label": "Serializable"
+        }
+      ],
+      "default": "server"
+    },
+    {
+      "field_id": "transaction_read_only",
+      "label": "Transaction read mode",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_transaction_read_only",
+      "group": "Session",
+      "required": false,
+      "options": [
+        {
+          "value": "server",
+          "label": "Server default"
+        },
+        {
+          "value": "read-write",
+          "label": "Read/write"
+        },
+        {
+          "value": "read-only",
+          "label": "Read only"
+        }
+      ],
+      "default": "server"
+    },
+    {
+      "field_id": "transaction_deferrable",
+      "label": "Transaction deferrability",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_transaction_deferrable",
+      "group": "Session",
+      "required": false,
+      "options": [
+        {
+          "value": "server",
+          "label": "Server default"
+        },
+        {
+          "value": "deferrable",
+          "label": "Deferrable"
+        },
+        {
+          "value": "not-deferrable",
+          "label": "Not deferrable"
+        }
+      ],
+      "default": "server"
+    },
+    {
+      "field_id": "keepalives",
+      "label": "Enable TCP keepalives",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_keepalives",
+      "group": "Network",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "keepalives_idle",
+      "label": "TCP keepalive idle (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_keepalives_idle",
+      "group": "Network",
+      "required": false,
+      "min": 0,
+      "max": 86400
+    },
+    {
+      "field_id": "keepalives_interval",
+      "label": "TCP keepalive interval (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_keepalives_interval",
+      "group": "Network",
+      "required": false,
+      "min": 0,
+      "max": 86400
+    },
+    {
+      "field_id": "keepalives_count",
+      "label": "TCP keepalive count",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_keepalives_count",
+      "group": "Network",
+      "required": false,
+      "min": 0,
+      "max": 1000
+    },
+    {
+      "field_id": "tcp_user_timeout",
+      "label": "TCP user timeout (milliseconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_tcp_user_timeout",
+      "group": "Network",
+      "required": false,
+      "min": 0,
+      "max": 86400000
+    },
+    {
+      "field_id": "pool_enabled",
+      "label": "Enable connection pooling",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_pool_enabled",
+      "group": "Connection pool",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "pool_min_size",
+      "label": "Minimum pool size",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_pool_min_size",
+      "group": "Connection pool",
+      "required": false,
+      "default": 1,
+      "min": 0,
+      "max": 1000,
+      "visible_when": {
+        "field": "pool_enabled",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "pool_max_size",
+      "label": "Maximum pool size",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_pool_max_size",
+      "group": "Connection pool",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 1000,
+      "visible_when": {
+        "field": "pool_enabled",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "pool_acquisition_timeout",
+      "label": "Pool acquisition timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_pool_acquisition_timeout",
+      "group": "Connection pool",
+      "required": false,
+      "default": 30,
+      "min": 1,
+      "max": 3600,
+      "visible_when": {
+        "field": "pool_enabled",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "pool_max_waiting",
+      "label": "Maximum queued clients (0 is unlimited)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_pool_max_waiting",
+      "group": "Connection pool",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 100000,
+      "visible_when": {
+        "field": "pool_enabled",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "pool_max_lifetime",
+      "label": "Maximum connection lifetime (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_pool_max_lifetime",
+      "group": "Connection pool",
+      "required": false,
+      "default": 3600,
+      "min": 1,
+      "max": 86400,
+      "visible_when": {
+        "field": "pool_enabled",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "pool_max_idle",
+      "label": "Maximum idle time (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_pool_max_idle",
+      "group": "Connection pool",
+      "required": false,
+      "default": 600,
+      "min": 1,
+      "max": 86400,
+      "visible_when": {
+        "field": "pool_enabled",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "pool_reconnect_timeout",
+      "label": "Background reconnect timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_pool_reconnect_timeout",
+      "group": "Connection pool",
+      "required": false,
+      "default": 300,
+      "min": 0,
+      "max": 86400,
+      "visible_when": {
+        "field": "pool_enabled",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "pool_workers",
+      "label": "Pool background workers",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_pool_workers",
+      "group": "Connection pool",
+      "required": false,
+      "default": 3,
+      "min": 1,
+      "max": 128,
+      "visible_when": {
+        "field": "pool_enabled",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "pool_check_connection",
+      "label": "Check connections on checkout",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_pool_check_connection",
+      "group": "Connection pool",
+      "required": false,
+      "default": true,
+      "visible_when": {
+        "field": "pool_enabled",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "web_host",
+      "label": "Native API host",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_web_host",
+      "group": "immudb native API",
+      "required": false
+    },
+    {
+      "field_id": "web_port",
+      "label": "Native API port",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_web_port",
+      "group": "immudb native API",
+      "required": false,
+      "default": 8080,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "web_tls_mode",
+      "label": "Native API TLS mode",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_web_tls_mode",
+      "group": "immudb native API",
+      "required": false,
+      "options": [
+        {
+          "value": "disable",
+          "label": "HTTP"
+        },
+        {
+          "value": "require",
+          "label": "HTTPS without CA verification"
+        },
+        {
+          "value": "verify-ca",
+          "label": "HTTPS with CA verification"
+        },
+        {
+          "value": "verify-full",
+          "label": "HTTPS with CA and hostname verification"
+        }
+      ],
+      "default": "disable"
+    },
+    {
+      "field_id": "web_ca_file",
+      "label": "Native API CA file",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_web_ca_file",
+      "group": "immudb native API TLS",
+      "required": false
+    },
+    {
+      "field_id": "metrics_port",
+      "label": "Metrics port",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_metrics_port",
+      "group": "immudb native API",
+      "required": false,
+      "default": 9497,
+      "help": "Lists databases while one is unloaded, when immudb 1.11.0 cannot list them itself",
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "web_timeout",
+      "label": "Native API timeout (seconds)",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_web_timeout",
+      "group": "immudb native API",
+      "required": false,
+      "default": 30,
+      "min": 1,
+      "max": 300
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for immudb-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Placement for the parity engines follows the contract groups (GROUP_TABS). Status stays draft: see gaps; mapping is tested without a server and the live round trip (tools/tests/test_ui_descriptor_server_forms.py) failed as recorded."
+}
