@@ -80,11 +80,17 @@ function ensureCoreModules() {
           'activity.data'
         )},
       {id: 'tools.interface-designer.open', label: 'Interface Designer',
-        description: 'Customize accessible presentation, artwork, menus, and commands.',
+        description: 'Customize artwork, menus, and commands.',
         iconKey: 'action.settings', surfaces: ['tools', 'view'],
         execute: (_args, context) => requiredCallback(
           'openInterfaceDesigner', context
-        )}],
+        )()},
+      {id: 'view.appearance.open', label: 'Appearance and Accessibility…',
+        description: 'Fonts, colours, area sizes and saved appearance presets.',
+        iconKey: 'action.settings', surfaces: ['view'],
+        execute: (_args, context) => requiredCallback(
+          'openAppearanceSettings', context
+        )()}],
     },
   });
   if(!moduleRegistry.has(PROJECTS_MODULE_ID)) moduleRegistry.register({

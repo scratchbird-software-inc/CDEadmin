@@ -76,6 +76,9 @@ class _Preference():
         self.allow_blanks = kwargs.get('allow_blanks', None)
         self.disabled = kwargs.get('disabled', False)
         self.dependents = kwargs.get('dependents', None)
+        # Optional callable: takes the parsed value and returns the value to
+        # store, or raises ValueError with a message for the user.
+        self.validator = kwargs.get('validator', None)
 
         # Look into the configuration table to find out the id of the specific
         # preference.
@@ -219,6 +222,12 @@ class _Preference():
             return False, gettext(
                 "Invalid value for {0} option.".format(
                     error_map.get(self._type, self._type)))
+
+        if self.validator is not None:
+            try:
+                value = self.validator(value)
+            except ValueError as error:
+                return False, str(error)
 
         uid = user_id if user_id is not None else current_user.id
         pref = UserPrefTable.query.filter_by(
@@ -434,6 +443,8 @@ class Preferences():
                         take input from user e.g. keyboardshortcut preference)
         :param allow_blanks: Flag specify whether to allow blank value.
         :param disabled: Flag specify whether to disable the setting or not.
+        :param validator: callable that returns the value to store or raises
+                          ValueError; runs after the type check.
         """
         min_val = kwargs.get('min_val', None)
         max_val = kwargs.get('max_val', None)
@@ -447,6 +458,7 @@ class Preferences():
         allow_blanks = kwargs.get('allow_blanks', None)
         disabled = kwargs.get('disabled', False)
         dependents = kwargs.get('dependents', None)
+        validator = kwargs.get('validator', None)
 
         cat = self.__category(category, category_label)
         if name in cat['preferences']:
@@ -465,7 +477,7 @@ class Preferences():
             min_val=min_val, max_val=max_val, options=options,
             select=select, fields=fields, allow_blanks=allow_blanks,
             disabled=disabled, dependents=dependents,
-            control_props=control_props, hidden=hidden
+            control_props=control_props, hidden=hidden, validator=validator
         )
 
         return res

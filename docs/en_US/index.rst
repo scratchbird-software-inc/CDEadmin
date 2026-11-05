@@ -55,6 +55,7 @@ upstream attribution.
    milvus_driver_development
    opensearch_driver_development
    opensearch_sql_ppl_driver_development
+   appearance_settings
    interface_designer
    implementation_status
    python_runtime_policy

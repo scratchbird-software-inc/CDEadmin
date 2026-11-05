@@ -22,7 +22,8 @@ const APPEARANCE_NAMES = [
   'accessibility_grid_row_height', 'accessibility_grid_header_height',
   'accessibility_grid_cell_padding', 'accessibility_tab_height',
   'accessibility_toolbar_height', 'accessibility_menu_row_height',
-  'accessibility_status_height', 'accessibility_corner_radius',
+  'accessibility_menu_font_size', 'accessibility_activity_bar_width',
+  'accessibility_activity_icon_size', 'accessibility_status_height', 'accessibility_corner_radius',
   'accessibility_active_tab_scale', 'accessibility_inactive_brightness',
   'accessibility_focus_width', 'accessibility_focus_offset',
   'accessibility_color_canvas', 'accessibility_color_panel',
@@ -62,12 +63,14 @@ describe('ScratchRobin Interface Designer', () => {
     }
   });
 
-  it('exposes appearance, artwork, menu, and command editors as separate pages', () => {
+  // 2026-11-05: appearance moved to View > Appearance and Accessibility
+  // (AppearanceSettings.spec.jsx); the designer keeps artwork and menus.
+  it('exposes artwork, menu, and command editors and points appearance elsewhere', () => {
     const Component = withTheme(InterfaceDesigner);
     render(<Component />);
-    expect(screen.getByRole('heading', {name: 'Appearance and accessibility'}))
-      .toBeInTheDocument();
-    expect(screen.getByLabelText('Interface font family')).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Appearance'})).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Interface font family')).not.toBeInTheDocument();
+    expect(screen.getByText(/View > Appearance and Accessibility/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', {name: 'Artwork & icons'}));
     expect(screen.getByRole('heading', {name: 'Artwork and icon assignments'}))
@@ -98,25 +101,33 @@ describe('ScratchRobin Interface Designer', () => {
       .not.toBeInTheDocument();
   });
 
-  it('persists appearance and catalog assignments through user preferences',
-    async () => {
-      const Component = withTheme(InterfaceDesigner);
-      render(<Component />);
-      fireEvent.change(screen.getByLabelText('Interface font family'), {
-        target: {value: 'Atkinson Hyperlegible'},
-      });
-      fireEvent.click(screen.getByRole('button', {name: 'Save profile'}));
-      await waitFor(() => expect(usePreferences.getState().setPreferences)
-        .toHaveBeenCalledTimes(2));
-      expect(usePreferences.getState().setPreferences.mock.calls[0][0])
-        .toEqual(expect.arrayContaining([expect.objectContaining({
-          name: 'accessibility_ui_font_family',
-          value: 'Atkinson Hyperlegible',
-        })]));
-      expect(screen.getByRole('status')).toHaveTextContent(
-        'Interface profile saved'
-      );
-    });
+  it('saves catalog assignments without rewriting appearance', async () => {
+    const Component = withTheme(InterfaceDesigner);
+    render(<Component />);
+    fireEvent.click(screen.getByRole('button', {name: 'Save profile'}));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(
+      'Interface profile saved'
+    ));
+    const written = usePreferences.getState().setPreferences.mock.calls
+      .flatMap(([records]) => records.map((record) => record.name));
+    expect(written.some((name) => name.startsWith('accessibility_'))).toBe(false);
+    expect(written).toEqual(expect.arrayContaining(['icon_assignments']));
+  });
+
+  it('writes appearance restored from the packaged profile when saved', async () => {
+    const Component = withTheme(InterfaceDesigner);
+    render(<Component />);
+    fireEvent.click(screen.getByRole('button', {name: 'Restore packaged defaults'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save profile'}));
+    await waitFor(() => expect(usePreferences.getState().setPreferences)
+      .toHaveBeenCalledTimes(2));
+    const appearance = usePreferences.getState().setPreferences.mock.calls[0][0];
+    expect(appearance).toEqual(expect.arrayContaining([
+      expect.objectContaining({name: 'accessibility_profile'}),
+      expect.objectContaining({name: 'accessibility_ui_scale', value: -1}),
+    ]));
+    expect(appearance.map((record) => record.name)).not.toContain('theme');
+  });
 
   it('stages the packaged profile without changing preferences until saved', () => {
     const Component = withTheme(InterfaceDesigner);

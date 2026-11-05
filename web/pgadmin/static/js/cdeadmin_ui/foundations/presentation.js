@@ -223,6 +223,9 @@ export const PRESENTATION_OVERRIDE_RANGES = Object.freeze({
   accessibility_tab_height: [24, 96],
   accessibility_toolbar_height: [24, 96],
   accessibility_menu_row_height: [24, 96],
+  accessibility_menu_font_size: [10, 32],
+  accessibility_activity_bar_width: [32, 120],
+  accessibility_activity_icon_size: [12, 64],
   accessibility_status_height: [20, 72],
   accessibility_corner_radius: [0, 24],
   accessibility_active_tab_scale: [100, 150],
@@ -247,6 +250,16 @@ export const PRESENTATION_COLOR_PREFERENCES = Object.freeze({
 
 export const ACCESSIBILITY_SAFE_MODE_STORAGE_KEY =
   'cdeadmin.accessibility.safe_mode';
+
+// A settings editor shows unsaved appearance values by dispatching this
+// event; detail.values null ends the preview. Safe mode still wins.
+export const APPEARANCE_PREVIEW_EVENT = 'cdeadmin:appearance-preview';
+
+export function previewAppearance(values, target=window) {
+  target?.dispatchEvent?.(new CustomEvent(APPEARANCE_PREVIEW_EVENT, {
+    detail: {values: values ? {...values} : null},
+  }));
+}
 
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -508,14 +521,24 @@ export function resolvePresentation(preferences={}, theme={}, environment={}) {
     preferences, 'accessibility_tree_row_height', profile.treeRowHeight);
   const gridRowHeight = boundedOverride(
     preferences, 'accessibility_grid_row_height', profile.gridRowHeight);
+  const iconScale = boundedOverride(
+    preferences, 'accessibility_icon_scale', profile.iconScale);
+  // The activity bar keeps its packaged 20px icons at 100% icon scale and is
+  // never narrower than its icon plus padding or the activation target.
+  const activityIconSize = boundedOverride(
+    preferences, 'accessibility_activity_icon_size',
+    Math.round(20 * iconScale / 100));
+  const activityBarWidth = Math.max(
+    boundedOverride(preferences, 'accessibility_activity_bar_width',
+      ZERO_GREY_TOKENS.geometry.activity_rail_width),
+    activityIconSize + 8, targetSize);
 
   return Object.freeze({
     schemaVersion: 1,
     profileId,
     scale: boundedOverride(
       preferences, 'accessibility_ui_scale', profile.scale),
-    iconScale: boundedOverride(
-      preferences, 'accessibility_icon_scale', profile.iconScale),
+    iconScale,
     lineHeight: boundedOverride(
       preferences, 'accessibility_line_height', profile.lineHeight),
     letterSpacing: boundedOverride(
@@ -551,6 +574,11 @@ export function resolvePresentation(preferences={}, theme={}, environment={}) {
       preferences, 'accessibility_toolbar_height', profile.toolbarHeight),
     menuRowHeight: boundedOverride(
       preferences, 'accessibility_menu_row_height', profile.menuRowHeight),
+    // null inherits the interface text size (0.875rem).
+    menuFontSize: boundedOverride(
+      preferences, 'accessibility_menu_font_size', null),
+    activityBarWidth,
+    activityIconSize,
     statusHeight: boundedOverride(
       preferences, 'accessibility_status_height', profile.statusHeight),
     cornerRadius: boundedOverride(
@@ -740,6 +768,10 @@ export function presentationCssVariables(presentation) {
     '--cde-tab-height': `${presentation.tabHeight}px`,
     '--cde-toolbar-height': `${presentation.toolbarHeight}px`,
     '--cde-menu-row-height': `${presentation.menuRowHeight}px`,
+    '--cde-menu-font-size': presentation.menuFontSize === null ?
+      '0.875rem' : `${presentation.menuFontSize}px`,
+    '--cde-activity-bar-width': `${presentation.activityBarWidth}px`,
+    '--cde-activity-icon-size': `${presentation.activityIconSize}px`,
     '--cde-status-height': `${presentation.statusHeight}px`,
     '--cde-corner-radius': `${presentation.cornerRadius}px`,
     '--cde-active-tab-scale': String(presentation.activeTabScale),

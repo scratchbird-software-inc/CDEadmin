@@ -31,7 +31,13 @@ and safe-mode persistence. Presentation settings are user preferences; display
 and window placement remain device-local.
 
 `customization/InterfaceDesigner` is the user-facing authority for appearance,
-artwork, menus, and command presentation. It persists only validated preference
+artwork, menus, and command presentation.
+(2026-11-05, owner direction: the designer form is being retired and its
+functions move to dialogs. Appearance is now `customization/AppearanceSettings`,
+opened by `view.appearance.open`; it previews through
+`APPEARANCE_PREVIEW_EVENT`, which safe mode overrides, and stores named
+presets in `misc:accessibility:appearance_presets`, validated by the server
+in `pgadmin/misc/appearance_presets.py`.) It persists only validated preference
 documents. Profile import/export is deliberately data-only and allowlisted:
 unrelated preferences, executable handlers, raw SVG, credentials, and arbitrary
 CSS are neither accepted nor exported. A deployment can distribute the same

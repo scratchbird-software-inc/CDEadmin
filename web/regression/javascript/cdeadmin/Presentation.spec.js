@@ -232,6 +232,35 @@ describe('CDEadmin presentation profiles', () => {
     expect(presentationThemeOverrides(value).shape.borderRadius).toBe(12);
   });
 
+  it('sizes menu text and the activity bar, inheriting the packaged look', () => {
+    const inherited = resolvePresentation({}, baseTheme);
+    expect(inherited.menuFontSize).toBeNull();
+    expect(presentationCssVariables(inherited)['--cde-menu-font-size']).toBe('0.875rem');
+    expect(inherited.activityIconSize).toBe(20);
+    expect(inherited.activityBarWidth).toBe(48);
+
+    const sized = resolvePresentation({
+      accessibility_menu_font_size: 99,
+      accessibility_activity_bar_width: 64,
+      accessibility_activity_icon_size: 28,
+    }, baseTheme);
+    const variables = presentationCssVariables(sized);
+    expect(sized).toMatchObject({menuFontSize: 32, activityBarWidth: 64,
+      activityIconSize: 28});
+    expect(variables['--cde-menu-font-size']).toBe('32px');
+    expect(variables['--cde-activity-bar-width']).toBe('64px');
+    expect(variables['--cde-activity-icon-size']).toBe('28px');
+  });
+
+  it('keeps the activity bar wide enough for its icon and click target', () => {
+    expect(resolvePresentation({accessibility_icon_scale: 150}, baseTheme)
+      .activityIconSize).toBe(30);
+    expect(resolvePresentation({accessibility_activity_bar_width: 32,
+      accessibility_activity_icon_size: 56}, baseTheme).activityBarWidth).toBe(64);
+    expect(resolvePresentation({accessibility_activity_bar_width: 32,
+      accessibility_target_size: 72}, baseTheme).activityBarWidth).toBe(72);
+  });
+
   it('calculates standard contrast ratios', () => {
     expect(contrastRatio('#000000', '#FFFFFF')).toBeCloseTo(21, 4);
     expect(contrastRatio('invalid', '#FFFFFF')).toBe(0);
@@ -246,6 +275,10 @@ describe('CDEadmin presentation profiles', () => {
     expect(preferences.accessibility_profile).toBe('low_vision');
     expect(preferences.accessibility_motion).toBe('reduce');
     expect(preferences.accessibility_color_canvas).toBe('');
+    for (const name of ['accessibility_menu_font_size',
+      'accessibility_activity_bar_width', 'accessibility_activity_icon_size']) {
+      expect(safeModePreferences({[name]: 12})[name]).toBe(-1);
+    }
   });
 
   it('reads and writes safe mode without trusting storage availability', () => {

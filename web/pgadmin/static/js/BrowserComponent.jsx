@@ -57,6 +57,7 @@ import {
   BottomDrawerHost,
   InspectorHost,
   InterfaceDesigner,
+  AppearanceSettings,
   requestWorkbenchInspection,
   workbenchContextService,
 } from 'sources/cdeadmin_ui';
@@ -197,6 +198,16 @@ function Layouts({browser, platform}) {
     );
     return true;
   }, [changeWorkspace, pgAdmin]);
+  const openAppearanceSettings = useCallback(() => {
+    pgAdmin.Browser.notifier.showModal(
+      gettext('Appearance and Accessibility'),
+      (closeModal) => <AppearanceSettings onClose={closeModal} />,
+      {id: 'cdeadmin-appearance-settings', isFullScreen: false,
+        isResizeable: true, showFullScreen: true,
+        dialogWidth: 1080, dialogHeight: 720}
+    );
+    return true;
+  }, [pgAdmin]);
   const workspaceActivities = [
     {
       id: 'activity.interface-designer', label: gettext('Interface Designer'),
@@ -262,6 +273,7 @@ function Layouts({browser, platform}) {
         'cdeadmin:project-create'
       )),
       openInterfaceDesigner,
+      openAppearanceSettings,
       service: platform.schemaCompare,
       schemaCompare: platform.schemaCompare,
       lineage: platform.lineage,
@@ -283,7 +295,8 @@ function Layouts({browser, platform}) {
         delete pgAdmin.Browser.CDEadminCommandContext;
       }
     };
-  }, [changeWorkspace, ensureSurfaceHost, openInterfaceDesigner, pgAdmin,
+  }, [changeWorkspace, ensureSurfaceHost, openAppearanceSettings,
+    openInterfaceDesigner, pgAdmin,
     platform.cdc,
     platform.contract, platform.etl,
     platform.lineage, platform.quality,

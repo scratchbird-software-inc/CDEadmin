@@ -68,6 +68,10 @@ panel dimensions, handedness and interface language. Keyboard navigation,
 visible focus, reduced motion and scalable layouts are required acceptance
 conditions, not theme extras.
 
+These settings, with named presets, are in *View > Appearance and
+Accessibility…* (see :ref:`appearance_settings`); since 2026-11-05 they are
+no longer listed in *File > Preferences*.
+
 .. toctree::
    :maxdepth: 2
 

@@ -27,6 +27,7 @@ import {
   readCustomizationDraft,
   saveCustomizationDraft,
 } from './profile';
+import {APPEARANCE_KEYS, readAppearance} from './appearance';
 
 const Root = styled(Box)(({theme}) => ({
   height: '100%',
@@ -85,74 +86,8 @@ const Root = styled(Box)(({theme}) => ({
   },
 }));
 
-const APPEARANCE_FIELDS = Object.freeze([
-  ['accessibility_ui_scale', gettext('Interface scale (%)'), 75, 300],
-  ['accessibility_icon_scale', gettext('Icon scale (%)'), 75, 300],
-  ['accessibility_line_height', gettext('Text line height'), 1, 2.5],
-  ['accessibility_letter_spacing', gettext('Letter spacing (em)'), 0, 0.2],
-  ['accessibility_control_height', gettext('Control height (pixels)'), 24, 72],
-  ['accessibility_target_size', gettext('Activation target (pixels)'), 24, 72],
-  ['accessibility_target_spacing', gettext('Target spacing (pixels)'), 0, 24],
-  ['accessibility_scrollbar_size', gettext('Scrollbar size (pixels)'), 8, 48],
-  ['accessibility_resize_handle_size', gettext('Resize handle (pixels)'), 5, 32],
-  ['accessibility_panel_gap', gettext('Panel spacing (pixels)'), 0, 32],
-  ['accessibility_tree_row_height', gettext('Tree row height (pixels)'), 24, 72],
-  ['accessibility_tree_indent', gettext('Tree branch indent (pixels)'), 12, 48],
-  ['accessibility_tree_expander_size', gettext('Tree expander size (pixels)'), 12, 40],
-  ['accessibility_tree_guide_width', gettext('Tree branch line width'), 1, 4],
-  ['accessibility_grid_row_height', gettext('Grid row height (pixels)'), 24, 96],
-  ['accessibility_grid_header_height', gettext('Grid header height (pixels)'), 24, 120],
-  ['accessibility_grid_cell_padding', gettext('Grid cell padding (pixels)'), 2, 32],
-  ['accessibility_tab_height', gettext('Workspace tab height (pixels)'), 24, 96],
-  ['accessibility_toolbar_height', gettext('Toolbar height (pixels)'), 24, 96],
-  ['accessibility_menu_row_height', gettext('Menu row height (pixels)'), 24, 96],
-  ['accessibility_status_height', gettext('Status bar height (pixels)'), 20, 72],
-  ['accessibility_corner_radius', gettext('Interface corner radius (pixels)'), 0, 24],
-  ['accessibility_active_tab_scale', gettext('Selected activity scale (%)'), 100, 150],
-  ['accessibility_inactive_brightness', gettext('Inactive activity brightness (%)'), 30, 100],
-  ['accessibility_focus_width', gettext('Focus indicator width'), 2, 8],
-  ['accessibility_focus_offset', gettext('Focus indicator offset'), 0, 6],
-]);
-
-const COLOR_FIELDS = Object.freeze([
-  ['accessibility_color_canvas', gettext('Canvas')],
-  ['accessibility_color_panel', gettext('Panels')],
-  ['accessibility_color_text', gettext('Primary text')],
-  ['accessibility_color_muted_text', gettext('Secondary text')],
-  ['accessibility_color_primary', gettext('Primary action')],
-  ['accessibility_color_focus', gettext('Keyboard focus')],
-  ['accessibility_color_border', gettext('Borders')],
-  ['accessibility_color_selection', gettext('Selection')],
-  ['accessibility_color_success', gettext('Success')],
-  ['accessibility_color_warning', gettext('Warning')],
-  ['accessibility_color_error', gettext('Error')],
-]);
-
-const PROFILE_OPTIONS = [
-  ['cdeadmin_standard', gettext('CDEadmin standard')],
-  ['classic', gettext('Classic compatibility')],
-  ['comfortable', gettext('Comfortable')],
-  ['system_adaptive', gettext('System adaptive')],
-  ['high_contrast_light', gettext('High contrast light')],
-  ['high_contrast_dark', gettext('High contrast dark')],
-  ['low_vision', gettext('Low vision')],
-  ['motor_assistance', gettext('Motor assistance')],
-  ['reduced_motion', gettext('Reduced motion')],
-  ['compact_expert', gettext('Compact expert')],
-].map(([value, label])=>({value, label}));
-
-const DENSITY_OPTIONS = [
-  ['profile', gettext('Use profile')], ['compact', gettext('Compact')],
-  ['standard', gettext('Standard')], ['comfortable', gettext('Comfortable')],
-  ['touch', gettext('Touch')],
-].map(([value, label])=>({value, label}));
-const MOTION_OPTIONS = [
-  ['profile', gettext('Use profile')], ['system', gettext('Use system setting')],
-  ['reduce', gettext('Reduce motion')], ['full', gettext('Full motion')],
-].map(([value, label])=>({value, label}));
-
 function currentAppearance(store) {
-  return store.getPreferencesForModule('misc');
+  return readAppearance(store.getPreferencesForModule('misc'));
 }
 
 function preferenceUpdate(store, name, value) {
@@ -162,43 +97,10 @@ function preferenceUpdate(store, name, value) {
     name: preference.name, value};
 }
 
-function AppearancePage({value, onChange}) {
-  const update = (name, next) => onChange({...value, [name]: next});
-  return <Box component="section" aria-labelledby="appearance-heading">
-    <h2 id="appearance-heading">{gettext('Appearance and accessibility')}</h2>
-    <p>{gettext('Values are validated by the presentation authority. Use -1 or leave a colour blank to inherit the selected profile.')}</p>
-    <div className="InterfaceDesigner-grid">
-      <Select label={gettext('Presentation profile')} value={value.accessibility_profile ||
-        'cdeadmin_standard'} options={PROFILE_OPTIONS}
-      onChange={(next)=>update('accessibility_profile', next)} />
-      <Select label={gettext('Information density')} value={value.accessibility_density ||
-        'profile'} options={DENSITY_OPTIONS}
-      onChange={(next)=>update('accessibility_density', next)} />
-      <Select label={gettext('Motion')} value={value.accessibility_motion || 'profile'}
-        options={MOTION_OPTIONS}
-        onChange={(next)=>update('accessibility_motion', next)} />
-      <TextField label={gettext('Interface font family')}
-        value={value.accessibility_ui_font_family || ''}
-        onChange={(event)=>update('accessibility_ui_font_family', event.target.value)} />
-      <TextField label={gettext('Editor and data font family')}
-        value={value.accessibility_monospace_font_family || ''}
-        onChange={(event)=>update('accessibility_monospace_font_family', event.target.value)} />
-      {APPEARANCE_FIELDS.map(([name, label, min, max]) => <NumberField key={name}
-        label={label} value={value[name] ?? -1} inputProps={{min: -1, max, step:
-          Number.isInteger(min) && Number.isInteger(max) ? 1 : 0.01}}
-        helperText={gettext('-1 inherits; supported range %s–%s', min, max)}
-        onChange={(event)=>update(name, Number(event.target.value))} />)}
-    </div>
-    <h3>{gettext('Colours')}</h3>
-    <div className="InterfaceDesigner-grid">
-      {COLOR_FIELDS.map(([name, label]) => <TextField key={name} label={label}
-        value={value[name] || ''} placeholder="#RRGGBB"
-        onChange={(event)=>update(name, event.target.value)} />)}
-    </div>
-  </Box>;
-}
-
-AppearancePage.propTypes = {value: PropTypes.object, onChange: PropTypes.func};
+// Appearance is edited in View > Appearance and Accessibility (2026-11-05).
+// A profile imported or restored here still carries appearance values; they
+// are written only when one of those actions staged them.
+const DESIGNER_APPEARANCE_KEYS = APPEARANCE_KEYS.filter((name) => name !== 'theme');
 
 function IconPage({value, onChange, definitions}) {
   const [query, setQuery] = useState('');
@@ -434,9 +336,10 @@ MenuPage.propTypes = {
 
 export default function InterfaceDesigner({panelId: _panelId}) {
   const preferenceStore = usePreferences();
-  const [page, setPage] = useState('appearance');
+  const [page, setPage] = useState('icons');
   const [appearance, setAppearance] = useState(()=>currentAppearance(
     usePreferences.getState()));
+  const [appearanceStaged, setAppearanceStaged] = useState(false);
   const [draft, setDraft] = useState(()=>readCustomizationDraft(
     usePreferences.getState()));
   const [message, setMessage] = useState('');
@@ -445,24 +348,19 @@ export default function InterfaceDesigner({panelId: _panelId}) {
     left.key.localeCompare(right.key)), []);
   useEffect(() => {
     setAppearance(currentAppearance(usePreferences.getState()));
+    setAppearanceStaged(false);
     setDraft(readCustomizationDraft(usePreferences.getState()));
   }, [preferenceStore.version]);
   const save = async () => {
     setBusy(true); setMessage('');
     try {
-      const appearanceNames = new Set([
-        'accessibility_profile', 'accessibility_density', 'accessibility_motion',
-        'accessibility_ui_font_family', 'accessibility_monospace_font_family',
-        ...APPEARANCE_FIELDS.map(([name])=>name),
-        ...COLOR_FIELDS.map(([name])=>name),
-      ]);
-      const normalizedAppearance = normalizeAppearanceCustomizations(
-        appearance
-      );
-      await usePreferences.getState().setPreferences([...appearanceNames].map(
-        (name)=>preferenceUpdate(usePreferences.getState(), name,
-          normalizedAppearance[name] ?? '')
-      ));
+      if(appearanceStaged) {
+        const values = readAppearance(appearance);
+        await usePreferences.getState().setPreferences(
+          DESIGNER_APPEARANCE_KEYS.map((name)=>preferenceUpdate(
+            usePreferences.getState(), name, values[name]))
+        );
+      }
       await saveCustomizationDraft(usePreferences.getState(), draft);
       setMessage(gettext(
         'Interface profile saved. Open menus and icons update immediately.'
@@ -475,11 +373,11 @@ export default function InterfaceDesigner({panelId: _panelId}) {
   };
   const reset = () => {
     const packaged = importCustomizationProfile(packagedStandardProfile);
-    setAppearance({...currentAppearance(usePreferences.getState()),
-      ...Object.fromEntries(APPEARANCE_FIELDS.map(([name])=>[name, -1])),
-      ...Object.fromEntries(COLOR_FIELDS.map(([name])=>[name, ''])),
+    setAppearance(readAppearance({
+      theme: currentAppearance(usePreferences.getState()).theme,
       ...packaged.appearance,
-    });
+    }));
+    setAppearanceStaged(true);
     setDraft(packaged.draft);
     setMessage(gettext(
       'Packaged defaults are staged. Choose Save profile to apply them.'
@@ -495,7 +393,10 @@ export default function InterfaceDesigner({panelId: _panelId}) {
   const importProfile = async (event) => {
     try {
       const imported = importCustomizationProfile(await event.target.files?.[0]?.text());
-      setDraft(imported.draft); setAppearance({...appearance, ...imported.appearance});
+      setDraft(imported.draft);
+      setAppearance({...appearance, ...normalizeAppearanceCustomizations(
+        imported.appearance)});
+      setAppearanceStaged(true);
       setMessage(gettext(
         'Profile imported and validated. Choose Save profile to apply it.'
       ));
@@ -506,7 +407,6 @@ export default function InterfaceDesigner({panelId: _panelId}) {
     }
   };
   const pages = [
-    ['appearance', gettext('Appearance')],
     ['icons', gettext('Artwork & icons')],
     ['menus', gettext('Menus & commands')],
   ];
@@ -514,7 +414,7 @@ export default function InterfaceDesigner({panelId: _panelId}) {
     <header className="InterfaceDesigner-header">
       <Icon iconKey="action.settings" decorative size="1.5rem" />
       <strong>{gettext('Interface Designer')}</strong>
-      <span>{gettext('Personalize accessible presentation without changing command authority.')}</span>
+      <span>{gettext('Artwork, menus and commands. Fonts, colours and sizes are in View > Appearance and Accessibility.')}</span>
     </header>
     <div className="InterfaceDesigner-body">
       <nav className="InterfaceDesigner-nav"
@@ -524,8 +424,6 @@ export default function InterfaceDesigner({panelId: _panelId}) {
         onClick={()=>setPage(id)}>{label}</Button>)}
       </nav>
       <main className="InterfaceDesigner-page">
-        {page === 'appearance' && <AppearancePage value={appearance}
-          onChange={setAppearance} />}
         {page === 'icons' && <IconPage value={draft.icons}
           onChange={(icons)=>setDraft({...draft, icons})} definitions={definitions} />}
         {page === 'menus' && <MenuPage menus={draft.menus} commands={draft.commands}

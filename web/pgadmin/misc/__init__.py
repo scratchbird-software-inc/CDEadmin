@@ -21,6 +21,9 @@ from pgadmin.utils.constants import PREF_LABEL_USER_INTERFACE, \
 from pgadmin.utils.csrf import pgCSRFProtect
 from pgadmin.utils.session import cleanup_session_files
 from pgadmin.misc.themes import get_all_themes
+from pgadmin.misc.appearance_presets import NUMERIC_RANGES, \
+    PRESET_PREFERENCE, color_validator, font_family_validator, \
+    numeric_validator, validate_presets
 from pgadmin.utils.ajax import precondition_required, make_json_response, \
     internal_server_error, make_response
 from pgadmin.utils.heartbeat import log_server_heartbeat, \
@@ -118,6 +121,7 @@ class MiscModule(PgAdminModule):
             category_label=gettext('Accessibility and personalization'),
             options=profile_options,
             control_props={'allowClear': False, 'creatable': False},
+            hidden=True,
             help_str=gettext(
                 'Select a reviewed presentation profile. Custom values below '
                 'override the selected profile; -1 uses the profile value.'
@@ -127,7 +131,8 @@ class MiscModule(PgAdminModule):
             'accessibility', 'accessibility_ui_font_family',
             gettext('Interface font family'), 'text', '',
             category_label=gettext('Accessibility and personalization'),
-            allow_blanks=True,
+            allow_blanks=True, hidden=True,
+            validator=font_family_validator,
             help_str=gettext(
                 'Leave blank to use the selected profile and theme font.'
             )
@@ -136,7 +141,8 @@ class MiscModule(PgAdminModule):
             'accessibility', 'accessibility_monospace_font_family',
             gettext('Editor and data font family'), 'text', '',
             category_label=gettext('Accessibility and personalization'),
-            allow_blanks=True,
+            allow_blanks=True, hidden=True,
+            validator=font_family_validator,
             help_str=gettext(
                 'Leave blank to use the selected profile and theme '
                 'monospace font.'
@@ -145,86 +151,95 @@ class MiscModule(PgAdminModule):
 
         numeric_accessibility_preferences = [
             ('accessibility_ui_scale', gettext('Interface scale (%)'),
-             'integer', -1, -1, 300),
+             'integer'),
             ('accessibility_icon_scale', gettext('Icon scale (%)'),
-             'integer', -1, -1, 300),
+             'integer'),
             ('accessibility_line_height', gettext('Text line height'),
-             'numeric', -1, -1, 2.5),
+             'numeric'),
             ('accessibility_letter_spacing', gettext('Letter spacing (em)'),
-             'numeric', -1, -1, 0.2),
+             'numeric'),
             ('accessibility_control_height',
              gettext('Minimum control height (pixels)'),
-             'integer', -1, -1, 72),
+             'integer'),
             ('accessibility_target_size',
              gettext('Minimum activation target (pixels)'),
-             'integer', -1, -1, 72),
+             'integer'),
             ('accessibility_target_spacing',
              gettext('Minimum target spacing (pixels)'),
-             'integer', -1, -1, 24),
+             'integer'),
             ('accessibility_scrollbar_size',
              gettext('Scrollbar size (pixels)'),
-             'integer', -1, -1, 48),
+             'integer'),
             ('accessibility_resize_handle_size',
              gettext('Resize handle target size (pixels)'),
-             'integer', -1, -1, 32),
+             'integer'),
             ('accessibility_panel_gap',
              gettext('Panel spacing (pixels)'),
-             'integer', -1, -1, 32),
+             'integer'),
             ('accessibility_tree_row_height',
              gettext('Object explorer row height (pixels)'),
-             'integer', -1, -1, 72),
+             'integer'),
             ('accessibility_tree_indent',
              gettext('Object explorer branch indent (pixels)'),
-             'integer', -1, -1, 48),
+             'integer'),
             ('accessibility_tree_expander_size',
              gettext('Object explorer expand control size (pixels)'),
-             'integer', -1, -1, 40),
+             'integer'),
             ('accessibility_tree_guide_width',
              gettext('Object explorer branch line width (pixels)'),
-             'integer', -1, -1, 4),
+             'integer'),
             ('accessibility_grid_row_height',
              gettext('Data grid row height (pixels)'),
-             'integer', -1, -1, 96),
+             'integer'),
             ('accessibility_grid_header_height',
              gettext('Data grid header height (pixels)'),
-             'integer', -1, -1, 120),
+             'integer'),
             ('accessibility_grid_cell_padding',
              gettext('Data grid cell horizontal padding (pixels)'),
-             'integer', -1, -1, 32),
+             'integer'),
             ('accessibility_tab_height',
              gettext('Workspace tab height (pixels)'),
-             'integer', -1, -1, 96),
+             'integer'),
             ('accessibility_toolbar_height',
              gettext('Toolbar height (pixels)'),
-             'integer', -1, -1, 96),
+             'integer'),
             ('accessibility_menu_row_height',
              gettext('Menu row height (pixels)'),
-             'integer', -1, -1, 96),
+             'integer'),
+            ('accessibility_menu_font_size',
+             gettext('Menu text size (pixels)'),
+             'integer'),
+            ('accessibility_activity_bar_width',
+             gettext('Activity bar width (pixels)'),
+             'integer'),
+            ('accessibility_activity_icon_size',
+             gettext('Activity bar icon size (pixels)'),
+             'integer'),
             ('accessibility_status_height',
              gettext('Status bar height (pixels)'),
-             'integer', -1, -1, 72),
+             'integer'),
             ('accessibility_corner_radius',
              gettext('Interface corner radius (pixels)'),
-             'integer', -1, -1, 24),
+             'integer'),
             ('accessibility_active_tab_scale',
              gettext('Selected activity scale (%)'),
-             'integer', -1, -1, 150),
+             'integer'),
             ('accessibility_inactive_brightness',
              gettext('Inactive activity brightness (%)'),
-             'integer', -1, -1, 100),
+             'integer'),
             ('accessibility_focus_width',
              gettext('Keyboard focus indicator width (pixels)'),
-             'integer', -1, -1, 8),
+             'integer'),
             ('accessibility_focus_offset',
              gettext('Keyboard focus indicator offset (pixels)'),
-             'integer', -1, -1, 6),
+             'integer'),
         ]
-        for name, label, field_type, default, minimum, maximum in \
-                numeric_accessibility_preferences:
+        for name, label, field_type in numeric_accessibility_preferences:
             self.preference.register(
-                'accessibility', name, label, field_type, default,
+                'accessibility', name, label, field_type, -1,
                 category_label=gettext('Accessibility and personalization'),
-                min_val=minimum, max_val=maximum,
+                min_val=-1, max_val=NUMERIC_RANGES[name][1], hidden=True,
+                validator=numeric_validator(name),
                 help_str=gettext(
                     'Use -1 to inherit the selected accessibility profile.'
                 )
@@ -241,7 +256,8 @@ class MiscModule(PgAdminModule):
                 {'label': gettext('Comfortable'), 'value': 'comfortable'},
                 {'label': gettext('Touch'), 'value': 'touch'},
             ],
-            control_props={'allowClear': False, 'creatable': False}
+            control_props={'allowClear': False, 'creatable': False},
+            hidden=True
         )
         self.preference.register(
             'accessibility', 'accessibility_motion',
@@ -254,6 +270,7 @@ class MiscModule(PgAdminModule):
                 {'label': gettext('Full motion'), 'value': 'full'},
             ],
             control_props={'allowClear': False, 'creatable': False},
+            hidden=True,
             help_str=gettext(
                 'Reduced motion disables nonessential transitions and '
                 'animation.'
@@ -278,12 +295,21 @@ class MiscModule(PgAdminModule):
             self.preference.register(
                 'accessibility_colors', name, label, 'text', '',
                 category_label=gettext('Accessibility colors'),
-                allow_blanks=True,
+                allow_blanks=True, hidden=True, validator=color_validator,
                 help_str=gettext(
                     'Optional #RRGGBB value. Unsafe text, border, or focus '
                     'contrast falls back to the selected theme.'
                 )
             )
+
+        self.preference.register(
+            'accessibility', PRESET_PREFERENCE,
+            gettext('Appearance presets'), 'text', '',
+            category_label=gettext('Accessibility and personalization'),
+            allow_blanks=True, hidden=True,
+            validator=lambda value: validate_presets(value, self.preference),
+            help_str=gettext('Named appearance presets for this account.')
+        )
 
         self.preference.register(
             'user_interface', 'layout',

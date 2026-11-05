@@ -8,6 +8,15 @@ The ScratchRobin *Interface Designer* provides one place to configure visual
 presentation, artwork assignments, menus, and command presentation. Open it
 from *Tools > Interface Designer* or from its workbench activity.
 
+.. note:: 2026-11-05, owner direction: the Interface Designer's functionality
+   is kept but its form is being retired; each part moves to a proper dialog.
+   *Appearance and accessibility* has moved to
+   :ref:`View > Appearance and Accessibility <appearance_settings>`; the
+   section below describes what that dialog now holds. *Artwork & icons* and
+   *Menus & commands* remain here until their dialogs land. The *Tools* and
+   *View* menu entries now open the designer (before this date they did
+   nothing; only its workbench activity opened it).
+
 Artwork catalog
 ===============
 

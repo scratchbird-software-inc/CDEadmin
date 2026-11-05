@@ -10,7 +10,9 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {useTheme} from '@mui/material/styles';
 import {MenuItem, TextField} from '@mui/material';
+import {act} from 'react';
 import Theme from 'sources/Theme';
+import {previewAppearance} from 'sources/cdeadmin_ui/foundations/presentation';
 import DataGrid from 'sources/cdeadmin_ui/data/DataGrid';
 import usePreferences from '../../../pgadmin/preferences/static/js/store';
 
@@ -112,6 +114,31 @@ describe('CDEadmin accessibility Theme integration', () => {
     const value = JSON.parse(screen.getByTestId('theme-probe').textContent);
     expect(value.profileId).toBe('low_vision');
     expect(value.scale).toBe(150);
+  });
+
+  it('shows an unsaved appearance preview until it is cleared', async () => {
+    render(<Theme><ThemeProbe /></Theme>);
+    const probe = () => JSON.parse(screen.getByTestId('theme-probe').textContent);
+    expect(probe().scale).toBe(100);
+
+    act(() => previewAppearance({accessibility_ui_scale: 150}));
+    await waitFor(() => expect(probe().scale).toBe(150));
+
+    act(() => previewAppearance(null));
+    await waitFor(() => expect(probe().scale).toBe(100));
+  });
+
+  it('keeps safe mode above an appearance preview', async () => {
+    window.localStorage.setItem('cdeadmin.accessibility.safe_mode', 'true');
+    render(<Theme><ThemeProbe /></Theme>);
+    act(() => previewAppearance({accessibility_profile: 'compact_expert',
+      accessibility_ui_scale: 75}));
+    await waitFor(() => {
+      const value = JSON.parse(screen.getByTestId('theme-probe').textContent);
+      expect(value.profileId).toBe('low_vision');
+      expect(value.scale).toBe(150);
+    });
+    act(() => previewAppearance(null));
   });
 
   it('keeps virtualized grid metrics synchronized with the profile', () => {

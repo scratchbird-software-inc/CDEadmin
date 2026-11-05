@@ -33,6 +33,7 @@ import szhMenuOverride from './overrides/szhmenu.override';
 import {
   presentationCssVariables,
   presentationThemeOverrides,
+  APPEARANCE_PREVIEW_EVENT,
   readAccessibilitySafeMode,
   resolvePresentation,
   safeModePreferences,
@@ -998,13 +999,17 @@ export default function Theme({children}) {
   const [safeMode, setSafeMode] = useState(() =>
     readAccessibilitySafeMode(window.localStorage)
   );
+  // Unsaved values from View > Appearance and accessibility, shown live.
+  const [preview, setPreview] = useState(null);
+  const previewedPreferences = preview ?
+    {...miscPreferences, ...preview} : miscPreferences;
   const selectedTheme =
-    miscPreferences.theme ||
+    previewedPreferences.theme ||
     window.theme ||
     'light';
   const effectiveSelectedTheme = safeMode ? 'high_contrast' : selectedTheme;
   const effectivePreferences = safeMode ?
-    safeModePreferences(miscPreferences) : miscPreferences;
+    safeModePreferences(miscPreferences) : previewedPreferences;
 
   // Initialize theme state
   const [theme, setTheme] = useState(
@@ -1034,7 +1039,13 @@ export default function Theme({children}) {
       presentationThemeOverrides(presentation)
     );
     return getFinalTheme(baseTheme, presentation);
-  }, [theme, prefStore?.version, systemReduceMotion, safeMode]);
+  }, [theme, prefStore?.version, systemReduceMotion, safeMode, preview]);
+
+  useEffect(() => {
+    const onPreview = (event) => setPreview(event.detail?.values ?? null);
+    window.addEventListener(APPEARANCE_PREVIEW_EVENT, onPreview);
+    return () => window.removeEventListener(APPEARANCE_PREVIEW_EVENT, onPreview);
+  }, []);
 
   // Handle theme updates
   useEffect(() => {

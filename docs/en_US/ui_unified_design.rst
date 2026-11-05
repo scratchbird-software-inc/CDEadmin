@@ -45,7 +45,7 @@ Concrete symptoms the user sees today:
 -  Firebird and MariaDB get a grouped layout (``compactNativeForms``), nobody else does. Firebird's tree is unsorted by design, every other engine's is sorted. These forks are why switching engines feels different.
 -  Capability is read from three unrelated sources (``context_menu.py`` descriptors, per-operation ``native_supported``/``execution_available`` flags, ``form_contracts.py`` ``supported``); no provider implements ``get_capabilities``.
 
-What is sound and should be kept: the provider contract and exact-version engine contracts; the plan → validate → confirm → execute lifecycle with native plan preview; the categorised ``ProviderContextMenu`` descriptors; the ``editor.sections`` concept and Firebird's use of it; ``compact_forms.rst`` as the presentation rulebook; the append-only ``SR-F`` form reference registry; the Zero-Grey component set and Interface Designer; the backend test corpus (5,669 tests).
+What is sound and should be kept: the provider contract and exact-version engine contracts; the plan → validate → confirm → execute lifecycle with native plan preview; the categorised ``ProviderContextMenu`` descriptors; the ``editor.sections`` concept and Firebird's use of it; ``compact_forms.rst`` as the presentation rulebook; the append-only ``SR-F`` form reference registry; the Zero-Grey component set and Interface Designer [2026-11-05, owner direction: the Interface Designer's functionality is kept but its form is retired in favour of proper dialogs; appearance now lives in View > Appearance and Accessibility]; the backend test corpus (5,669 tests).
 
 Design principles
 -----------------
