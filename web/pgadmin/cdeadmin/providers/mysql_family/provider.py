@@ -2308,7 +2308,9 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             native = {'table_type': object_type}
             if create_source:
                 native['ddl'] = create_source
-            if kind == 'view' and profile is MYSQL_PROFILE:
+            if kind in ('view', 'materialized-view') and profile is MYSQL_PROFILE:
+                from ..mysql_view_identity import declared_aliases
+                native['view_aliases'] = declared_aliases(create_source)
                 facts = optional('SELECT VIEW_DEFINITION,CHECK_OPTION,DEFINER,SECURITY_TYPE,IS_UPDATABLE '
                                  'FROM information_schema.VIEWS WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s',
                                  (schema_name, object_name))

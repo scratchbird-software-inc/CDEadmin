@@ -365,9 +365,9 @@ class RelationalAdministration:
                     'operation_id': operation, 'title': self._form(kind, operation)['title'],
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(mysql_constraints.OPERATIONS)]
-            if self.dialect.engine_id == 'mysql' and kind == 'view':
+            if self.dialect.engine_id == 'mysql' and kind in mysql_views.KINDS:
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_views.OPERATIONS] + [{
-                    'operation_id': operation, 'title': operation.title() + ' view',
+                    'operation_id': operation, 'title': operation.title() + ' ' + mysql_views.KINDS[kind],
                     'mutation_class': 'admin', 'target_required': operation != 'create', 'confirmation_required': operation != 'create',
                 } for operation in sorted(mysql_views.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind in mysql_object_changes.OPERATIONS:
@@ -803,9 +803,10 @@ class RelationalAdministration:
             except RelationalClientError as error:
                 errors.append({'field_id': None, 'code': 'invalid_mysql_check_enforcement', 'message': str(error)})
             return {'errors': errors}
-        if self.dialect.engine_id == 'mysql' and resource_kind == 'view' and operation_id in mysql_views.OPERATIONS:
+        if self.dialect.engine_id == 'mysql' and resource_kind in mysql_views.KINDS and operation_id in mysql_views.OPERATIONS:
             try:
-                mysql_views.compile_operation(operation_id, draft, request.get('target_resource'))
+                mysql_views.compile_operation(operation_id, draft, request.get('target_resource'),
+                                              materialized=resource_kind == 'materialized-view')
             except RelationalClientError as error:
                 errors.append({'field_id': None, 'code': 'invalid_mysql_view', 'message': str(error)})
             return {'errors': errors}
@@ -3931,10 +3932,11 @@ class RelationalAdministration:
             return {'statements': [mysql_constraints.compile_operation(operation, request['draft'], request.get('target_resource'))],
                     'warnings': ['Native CHECK enforcement changes use implicit-commit ALTER TABLE.',
                                  'Enabling enforcement validates existing rows; native refusal does not establish a changed constraint.']}
-        if self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'view' and operation in mysql_views.OPERATIONS:
-            return {'statements': [mysql_views.compile_operation(operation, request['draft'], request.get('target_resource'))],
+        if self.dialect.engine_id == 'mysql' and request['resource_kind'] in mysql_views.KINDS and operation in mysql_views.OPERATIONS:
+            return {'statements': [mysql_views.compile_operation(operation, request['draft'], request.get('target_resource'),
+                                                                 materialized=request['resource_kind'] == 'materialized-view')],
                     'warnings': ['Native view DDL commits independently of interactive transactions.',
-                                 'ALTER supplies the complete desired definition. Omitted clauses use native defaults; native updatability, privileges and algorithm warnings remain authoritative.']}
+                                 'ALTER restates the complete definition. Clauses the edit leaves out keep the view\'s current values; native updatability, privileges and algorithm warnings remain authoritative.']}
         if (self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(request['resource_kind'], ())):
             return {'statements': [mysql_object_changes.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
                     'warnings': ['Native object DDL commits independently of interactive transactions.',
@@ -5219,7 +5221,7 @@ class RelationalAdministration:
             return value
         if self.dialect.engine_id == 'mysql' and kind == 'constraint' and operation in mysql_constraints.OPERATIONS:
             return value
-        if self.dialect.engine_id == 'mysql' and kind == 'view' and operation in mysql_views.OPERATIONS:
+        if self.dialect.engine_id == 'mysql' and kind in mysql_views.KINDS and operation in mysql_views.OPERATIONS:
             return value
         if self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(kind, ()):
             return value

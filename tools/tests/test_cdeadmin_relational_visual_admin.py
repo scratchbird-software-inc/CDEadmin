@@ -2656,9 +2656,11 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             },
             '_provider_route': route,
         })
+        # Through the shared view compiler (2026-11-05): MySQL 9.7 accepts the full
+        # ALGORITHM ... MATERIALIZED ... SQL SECURITY clause list, checked live.
         self.assertEqual(
-            'CREATE MATERIALIZED VIEW `app`.`inventory_summary` AS '
-            'SELECT id, value FROM app.inventory',
+            'CREATE ALGORITHM=UNDEFINED MATERIALIZED SQL SECURITY DEFINER VIEW '
+            '`app`.`inventory_summary` AS SELECT id, value FROM app.inventory\n',
             created['command_preview']['statements'][0]['source'],
         )
         target = {
@@ -2673,8 +2675,8 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             '_provider_route': route,
         })
         self.assertEqual(
-            'ALTER MATERIALIZED VIEW `app`.`inventory_summary` AS '
-            'SELECT id FROM app.inventory',
+            'ALTER ALGORITHM=UNDEFINED MATERIALIZED SQL SECURITY DEFINER VIEW '
+            '`app`.`inventory_summary` AS SELECT id FROM app.inventory\n',
             altered['command_preview']['statements'][0]['source'],
         )
         dropped = MYSQL_ADMINISTRATION.plan({
