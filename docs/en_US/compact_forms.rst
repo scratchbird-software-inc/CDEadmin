@@ -139,6 +139,12 @@ release guard: active work must be explicitly completed and closed first. Only
 a successful disconnect removes SQL entries and unloads database internals.
 Registered database names remain browsable while disconnected.
 
+Credentials typed into *Edit endpoint properties...* are tested before they are
+kept, as Connect does: the edited address is tried as the connection's default
+user. If the engine refuses them or cannot be reached, nothing in the edit is
+saved and the engine's reason is shown, so new credentials can only be saved
+while the engine is running.
+
 
 Administration refresh stability
 --------------------------------

@@ -413,13 +413,10 @@ class EndpointService:
                 'server is not a provider-managed endpoint'
             )
         profile = registration_profile(endpoint.profile_id)
-        # Firebird endpoint verification is a Services API attachment. A
-        # retained active database may be offline or missing during recovery;
-        # it must not turn server authentication into a database attachment.
-        # Explicit database verification still uses that selected target.
+        # Explicit database verification uses the selected target below.
         database_override = (
-            None if endpoint.profile_id == 'firebird-native' and
-            database_target_id is None else Ellipsis)
+            self._server_scope_database(endpoint)
+            if database_target_id is None else Ellipsis)
         database_options = None
         credential_target = None
         if database_target_id is not None:
@@ -527,6 +524,64 @@ class EndpointService:
                 connect_as == default_user
             ),
         }
+
+    @staticmethod
+    def _server_scope_database(endpoint):
+        """Return the database override for verifying the endpoint itself.
+
+        Firebird endpoint verification is a Services API attachment. A
+        retained active database may be offline or missing during recovery;
+        it must not turn server authentication into a database attachment.
+        Other profiles verify through their active database, if any.
+        """
+        return None if endpoint.profile_id == 'firebird-native' else Ellipsis
+
+    def _probe_new_credentials(self, server, endpoint, profile, route_model,
+                               credential_values):
+        """Test credentials typed into an endpoint edit before keeping them.
+
+        Connect keeps a typed password only after it works; an edit follows
+        the same rule (2026-11-05). Only the edited primary route is tried,
+        as the endpoint's own default user: no alternate connection user,
+        and no database that signs in with credentials of its own. Route
+        health is not recorded, and nothing is retained on failure.
+
+        As with Connect, the test relies on admission having released
+        providers that hold native sessions, and on provider clients opening
+        a temporary connection from the route given when no session handle
+        is passed, so an existing authenticated connection cannot answer.
+        """
+        database_override = self._server_scope_database(endpoint)
+        active = next((item for item in getattr(
+            endpoint, 'database_targets', ()) if item.active), None)
+        if database_override is Ellipsis and secret_model(active):
+            # The active database signs in as its own user, so test the
+            # endpoint's default credentials at server scope instead.
+            database_override = None
+        embedded = profile['route_kind'] == 'embedded_file'
+        try:
+            route, reference = self._route_and_reference(
+                server, endpoint, profile, route_model=route_model,
+                principal_override=None, database_override=database_override,
+            )
+            context = self._context(
+                endpoint,
+                EMBEDDED_VERIFY_PERMISSIONS if embedded else
+                VERIFY_PERMISSIONS,
+            )
+            with self._transient_credentials(
+                    endpoint, route, reference, credential_values):
+                self.provider_registry.resolve(
+                    context
+                ).instance.discover_endpoint({'route': route})
+        except Exception as exc:
+            detail = redact_text(
+                str(exc), secret_values=tuple(credential_values.values())
+            ).strip()
+            raise EndpointRegistrationError(
+                'the new credentials were not kept because the connection '
+                'test failed' + (f': {detail}' if detail else '')
+            ) from None
 
     @staticmethod
     def _validated_principal_override(value):
@@ -1202,6 +1257,7 @@ class EndpointService:
         route.configuration = self._encoded_route(route_configuration)
         server.name = name
         if profile.get('secret_fields'):
+            protected = None
             if save_password:
                 import config
 
@@ -1210,7 +1266,8 @@ class EndpointService:
                         'saving endpoint credentials is disabled'
                     )
                 if credential_values:
-                    server.password = encrypted_credentials(
+                    # Key and policy first, as Connect does, then the test.
+                    protected = encrypted_credentials(
                         encode_credential_bundle(credential_values)
                     )
                 elif not getattr(server, 'password', None):
@@ -1218,6 +1275,13 @@ class EndpointService:
                         'default connection credentials must be entered '
                         'before they can be saved'
                     )
+            if credential_values:
+                self._probe_new_credentials(
+                    server, endpoint, profile, route, credential_values
+                )
+            if save_password:
+                if protected is not None:
+                    server.password = protected
                 server.save_password = 1
             else:
                 server.password = None
@@ -1233,6 +1297,9 @@ class EndpointService:
         with self._principal_lock:
             self._principal_overrides.pop(endpoint.id, None)
         self.route_health.clear(endpoint.id, route.id)
+        # Only after any credential test has passed: a new generation retires
+        # (closes) the endpoint's existing provider instances, which a
+        # refused edit must leave alone.
         self._stale(endpoint)
         # The navigator still reads these compatibility fields. Keep them in
         # step with the validated primary route, not the pre-edit address.

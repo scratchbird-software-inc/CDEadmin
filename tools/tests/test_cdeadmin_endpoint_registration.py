@@ -58,6 +58,10 @@ from pgadmin.cdeadmin.endpoints.profiles import (  # noqa: E402
     _secret_fields,
 )
 from pgadmin.cdeadmin.security import encode_credential_bundle  # noqa: E402
+from pgadmin.cdeadmin.endpoints.service import (  # noqa: E402
+    ProtectedColumnResolver,
+    VERIFY_PERMISSIONS,
+)
 
 
 class RegistrationProfileTests(unittest.TestCase):
@@ -1023,10 +1027,29 @@ class EndpointVerificationTests(unittest.TestCase):
         self.assertEqual('endpoint-sqlite', result['endpoint_id'])
         self.assertEqual('SQLite workstation', result['display_name'])
 
-    def test_firebird_endpoint_edit_encrypts_only_saved_default_secret(self):
+    @staticmethod
+    def _edit_endpoint(profile_id='firebird-native', password=None,
+                       save_password=0, targets=()):
+        """A provider endpoint whose route and runtime identity are real
+        enough for the edit's connection test to build its context."""
         endpoint = SimpleNamespace(
-            id='endpoint-firebird', provider_version='1.0',
-            profile_id='firebird-native', routes=[SimpleNamespace(
+            id=str(uuid.uuid4()), endpoint_mode='legacy_native',
+            experience_family='firebird', provider_id='org.example',
+            provider_version='1.0', profile_id=profile_id,
+            profile_version='1.0', target_adapter_id='example',
+            target_adapter_version='1.0',
+            pool_namespace=str(uuid.uuid4()),
+            session_namespace=str(uuid.uuid4()),
+            cache_namespace=str(uuid.uuid4()),
+            diagnostic_namespace=str(uuid.uuid4()),
+            profile_generation='original-generation',
+            secret_references=[SimpleNamespace(
+                id=str(uuid.uuid4()), secret_kind='database_password',
+                storage_kind='protected_column',
+                secret_reference='server:7:password:database_password',
+            )],
+            database_targets=list(targets),
+            routes=[SimpleNamespace(
                 id='route-firebird', priority=0, route_kind='network',
                 configuration=json.dumps({
                     'host': '127.0.0.1', 'port': 3050,
@@ -1038,6 +1061,7 @@ class EndpointVerificationTests(unittest.TestCase):
                 }),
             )],
             runtime_identity=SimpleNamespace(
+                declared_runtime_family='firebird',
                 verification_state='verified',
                 verified_runtime_family='firebird',
                 verified_runtime_version='5.0.4',
@@ -1046,32 +1070,68 @@ class EndpointVerificationTests(unittest.TestCase):
             ),
         )
         server = SimpleNamespace(
-            name='Firebird local', password=None, save_password=0,
-            endpoint_profile=endpoint,
+            id=7, user_id=3, name='Firebird local', password=password,
+            save_password=save_password, endpoint_profile=endpoint,
         )
+        return endpoint, server
 
-        class Session:
-            @staticmethod
-            def commit():
-                return None
+    @staticmethod
+    def _edit_service(discover):
+        """An endpoint service whose provider answers with ``discover``."""
+        resolved = []
 
+        def resolve(context):
+            resolved.append(context)
+            return SimpleNamespace(instance=SimpleNamespace(
+                discover_endpoint=discover))
+
+        service = EndpointService(
+            SimpleNamespace(resolve=resolve),
+            SimpleNamespace(secrets=SimpleNamespace(
+                register_resolver=lambda *_args: None,
+                register_reference=lambda *_args: None,
+            )),
+        )
+        return service, resolved
+
+    @staticmethod
+    def _edit_modules(session):
         model_module = ModuleType('pgadmin.model')
-        model_module.db = SimpleNamespace(session=Session())
+        model_module.db = SimpleNamespace(session=session)
         config_module = ModuleType('config')
         config_module.ALLOW_SAVE_PASSWORD = True
         crypto_module = ModuleType('pgadmin.utils.crypto')
         crypto_module.encrypt = lambda value, key: f'{key}:{value}'
         master_module = ModuleType('pgadmin.utils.master_password')
         master_module.get_crypt_key = lambda: (True, 'master-key')
-        service = EndpointService(SimpleNamespace(), SimpleNamespace(
-            secrets=SimpleNamespace(register_resolver=lambda *_args: None)
-        ))
-        with patch.dict(sys.modules, {
+        return {
             'config': config_module,
             'pgadmin.model': model_module,
             'pgadmin.utils.crypto': crypto_module,
             'pgadmin.utils.master_password': master_module,
-        }):
+        }
+
+    def test_firebird_endpoint_edit_encrypts_only_saved_default_secret(self):
+        # 2026-11-05: the edit now tests new credentials before keeping them
+        # (as Connect does); the probe assertions follow the storage ones.
+        endpoint, server = self._edit_endpoint()
+        probes = []
+
+        def discover(request):
+            probes.append({
+                'route': dict(request['route']),
+                'transient': {
+                    locator: bytes(value).decode('utf-8')
+                    for locator, value in service.resolver._transient.items()
+                },
+                'stored': server.password,
+            })
+            return {'verified_runtime': {
+                'engine_id': 'firebird', 'version': '5.0.4',
+                'evidence_reference': 'probe'}}
+
+        service, resolved = self._edit_service(discover)
+        with patch.dict(sys.modules, self._edit_modules(Mock())):
             result = service.update_endpoint_profile(server, {
                 'name': 'Firebird lab', 'host': '127.0.0.10',
                 'port': 53050, 'username': 'database_operator',
@@ -1097,6 +1157,114 @@ class EndpointVerificationTests(unittest.TestCase):
         self.assertIn('CDEADMIN-CREDENTIAL-BUNDLE-V1:', server.password)
         self.assertIn('default-secret-canary', server.password)
         self.assertEqual('Firebird lab', result['display_name'])
+
+        # One test, against the edited route, before anything was stored.
+        self.assertEqual(1, len(probes))
+        probe = probes[0]
+        self.assertIsNone(probe['stored'])
+        self.assertEqual('127.0.0.10', probe['route']['host'])
+        self.assertEqual(53050, probe['route']['port'])
+        self.assertEqual('database_operator', probe['route']['user'])
+        # Firebird server scope is a Services API attachment: no database.
+        self.assertNotIn('database', probe['route'])
+        # The typed password reached the provider only as a transient value.
+        self.assertEqual(['server:7:password:database_password'],
+                         list(probe['transient']))
+        self.assertEqual('default-secret-canary',
+                         ProtectedColumnResolver._select_credential(
+                             probe['transient'][
+                                 'server:7:password:database_password'],
+                             'password', 'database_password'))
+        self.assertEqual({}, service.resolver._transient)
+        # The test ran under the generation in force before the edit; only
+        # the saved edit advanced it.
+        self.assertEqual(1, len(resolved))
+        self.assertEqual('original-generation',
+                         resolved[0].runtime_identity_generation)
+        self.assertNotEqual('original-generation', endpoint.profile_generation)
+        self.assertEqual(VERIFY_PERMISSIONS,
+                         resolved[0].effective_permissions)
+
+    def test_endpoint_edit_keeps_no_credentials_the_engine_refuses(self):
+        canary = 'refused-secret-canary'
+        for save_password in (True, False):
+            with self.subTest(save_password=save_password):
+                endpoint, server = self._edit_endpoint(
+                    password='old-cipher', save_password=1)
+
+                def discover(_request):
+                    raise RuntimeError(
+                        f'Firebird login refused for password {canary}')
+
+                service, resolved = self._edit_service(discover)
+                session = Mock()
+                forget = patch.object(
+                    service, 'forget_server_credentials',
+                    wraps=service.forget_server_credentials)
+                refused = self.assertRaises(EndpointRegistrationError)
+                with patch.dict(sys.modules, self._edit_modules(session)), \
+                        forget as forget, refused as raised:
+                    service.update_endpoint_profile(server, {
+                        'name': 'Firebird lab', 'host': '127.0.0.10',
+                        'port': 53050, 'username': 'SYSDBA',
+                        'database_create_root': '/srv/firebird/databases',
+                        'password': canary,
+                        'save_password': save_password,
+                    })
+                message = str(raised.exception)
+                self.assertIn('not kept because the connection test failed',
+                              message)
+                self.assertIn('Firebird login refused', message)
+                self.assertNotIn(canary, message)
+                self.assertEqual(1, len(resolved))
+                # Nothing stored, the edit rolled back, nothing retained.
+                self.assertEqual('old-cipher', server.password)
+                self.assertEqual(1, server.save_password)
+                session.rollback.assert_called_once_with()
+                session.commit.assert_not_called()
+                forget.assert_called_with(server)
+                self.assertEqual({}, service.resolver._transient)
+                self.assertEqual({}, service.resolver._session)
+                # The generation never advanced, so the registry has no
+                # reason to retire (close) the endpoint's open instances.
+                self.assertEqual('original-generation',
+                                 endpoint.profile_generation)
+                self.assertEqual(
+                    'verified', endpoint.runtime_identity.verification_state)
+
+    def test_endpoint_edit_tests_the_default_user_not_a_database_sign_in(self):
+        profile = registration_profile('mysql-native')
+        for own_credentials in (False, True):
+            with self.subTest(database_own_credentials=own_credentials):
+                target = SimpleNamespace(
+                    id=str(uuid.uuid4()), endpoint_id='owning-endpoint',
+                    active=True, database='shop', configuration='{}',
+                    registration_credentials=own_credentials,
+                    registration_user='shop_owner',
+                )
+                endpoint, server = self._edit_endpoint(
+                    profile_id='mysql-native', targets=[target])
+                routes = []
+                service, _resolved = self._edit_service(
+                    lambda request: routes.append({
+                        'route': dict(request['route']),
+                        'transient': sorted(service.resolver._transient),
+                    }))
+                # An alternate connection user must not be what is tested.
+                service._principal_overrides[endpoint.id] = 'someone_else'
+                service._probe_new_credentials(
+                    server, endpoint, profile, endpoint.routes[0],
+                    {'database_password': 'default-secret-canary'})
+                route = routes[0]['route']
+                self.assertEqual('SYSDBA', route['user'])
+                self.assertEqual(['server:7:password:database_password'],
+                                 routes[0]['transient'])
+                if own_credentials:
+                    # That database signs in as its own user: server scope.
+                    self.assertNotIn('shop', route.values())
+                else:
+                    # As Connect: through the active database.
+                    self.assertIn('shop', route.values())
 
     def test_firebird_server_verification_does_not_open_active_database(self):
         for profile_id, target_id, expected in (
