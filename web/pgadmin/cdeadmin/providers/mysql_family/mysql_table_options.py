@@ -65,3 +65,53 @@ def compile_options(value,connection=None):
             raise RelationalClientError('Select bounded native FEDERATED connection text or a named server reference')
         clauses.append('CONNECTION=%s');parameters.append(connection)
     return (' '+ ' '.join(clauses) if clauses else ''),tuple(parameters)
+
+
+# Table options as MySQL reports them, for re-opening a table (2026-11-05).
+CATALOG_OPTIONS = {'max_rows', 'min_rows', 'avg_row_length', 'row_format', 'stats_sample_pages', 'stats_auto_recalc',
+                   'key_block_size', 'stats_persistent', 'pack_keys', 'checksum', 'delay_key_write', 'compression',
+                   'encryption', 'secondary_engine'}
+DDL_OPTIONS = re.compile(r'\n\) (?:/\*!\d+ TABLESPACE `((?:[^`]|``)+)` \*/ )?(?:/\*!\d+ AUTOEXTEND_SIZE=(\d+) \*/ )?'
+                         r'ENGINE=\w+(?: AUTO_INCREMENT=(\d+))?')
+
+
+def catalog_options(text):
+    """The explicit options in information_schema.TABLES.CREATE_OPTIONS (key=value, strings in double quotes)."""
+    found = {}
+    for key, item in re.findall(r'([A-Za-z_]+)=("(?:[^"\\]|\\.)*"|\S+)', text or ''):
+        key = key.lower()
+        if key not in CATALOG_OPTIONS:
+            continue
+        item = item[1:-1] if item.startswith('"') else item
+        found[key] = item.upper() if key == 'row_format' else item
+    return found
+
+
+def ddl_options(source):
+    """TABLESPACE, AUTOEXTEND_SIZE and AUTO_INCREMENT from SHOW CREATE TABLE. The catalog's AUTO_INCREMENT
+    is a cached statistic; the DDL is current. Only the options head after the column list is read, so a
+    comment cannot be mistaken for an option."""
+    matched = DDL_OPTIONS.search(source or '')
+    if not matched:
+        return {}
+    tablespace, autoextend, increment = matched.groups()
+    return {key: value for key, value in (('tablespace', tablespace and tablespace.replace('``', '`')),
+            ('autoextend_size', autoextend), ('auto_increment', increment)) if value is not None}
+
+
+NUMERIC_TYPES = {'tinyint', 'smallint', 'mediumint', 'int', 'bigint', 'decimal', 'float', 'double', 'bit', 'year'}
+
+
+def default_sql(default, data_type, extra, sql_mode):
+    """A column's catalog default as SQL: an expression default in parentheses (CURRENT_TIMESTAMP as
+    written), a numeric or bit value as written, any other value as a string literal for sql_mode."""
+    if default is None:
+        return None
+    default = str(default)
+    if 'DEFAULT_GENERATED' in str(extra or '').upper():
+        return default if re.fullmatch(r'CURRENT_TIMESTAMP(?:\(\d\))?', default, re.I) else '(' + default + ')'
+    if str(data_type or '').lower() in NUMERIC_TYPES:
+        return default
+    if 'NO_BACKSLASH_ESCAPES' not in str(sql_mode or '').upper():
+        default = default.replace('\\', '\\\\')
+    return "'" + default.replace("'", "''") + "'"

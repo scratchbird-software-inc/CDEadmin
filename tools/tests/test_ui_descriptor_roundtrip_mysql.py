@@ -431,3 +431,74 @@ def test_user_authentication_factors(live, auth_socket):
     run(client, route, 'user', 'alter', alter, target=account)
     assert 'multi_factor_authentication' not in json.loads(account_facts(user, 'localhost')[11] or '{}')
 
+
+def strip_unique(record_value):
+    return [column for row in record_value['unique_constraints'] for column in row['columns']]
+
+
+def test_table_form_create_reopen_and_alter(live):
+    route, client = live
+    form = resolved_form('mysql', 'table')
+    name = 'rt_table'
+    run(client, route, 'table', 'create', backend_draft(form, {
+        'name': name, 'parent': DATABASE, 'comment': "it's a table",
+        'columns': [{'name': 'id', 'type': 'INT UNSIGNED AUTO_INCREMENT', 'nullable': False, 'primary_key': True},
+                    {'name': 'code', 'type': 'VARCHAR(20)', 'nullable': False, 'default': "'x'", 'unique': True},
+                    {'name': 'owner_id', 'type': 'INT'}, {'name': 'amount', 'type': 'DECIMAL(10,2)', 'default': '0.50'},
+                    {'name': 'stamp', 'type': 'DATETIME', 'default': 'CURRENT_TIMESTAMP'}],
+        'foreign_keys': [{'name': 'fk_owner', 'columns': ['owner_id'], 'references_table': f'{DATABASE}.owner',
+                          'references_columns': ['id'], 'on_delete': 'CASCADE', 'on_update': 'RESTRICT'}],
+        'check_constraints': [{'name': 'ck_amount', 'expression': 'amount >= 0', 'enforced': True}],
+        'engine': 'InnoDB', 'character_set': 'utf8mb4', 'collation': 'utf8mb4_bin', 'row_format': 'DYNAMIC',
+        'auto_increment': '100', 'stats_persistent': '1', 'stats_auto_recalc': '0', 'stats_sample_pages': '12',
+        'max_rows': '1000', 'pack_keys': '1', 'checksum': '1', 'delay_key_write': '1'}))
+    target, reopened = record(client, route, 'table', name, 'table')
+    assert (reopened['name'], reopened['parent'], reopened['comment']) == (name, DATABASE, "it's a table")
+    assert (reopened['engine'], reopened['character_set'], reopened['collation'], reopened['row_format']) == (
+        'InnoDB', 'utf8mb4', 'utf8mb4_bin', 'DYNAMIC')
+    assert (reopened['auto_increment'], reopened['stats_persistent'], reopened['stats_auto_recalc'],
+            reopened['stats_sample_pages'], reopened['max_rows'], reopened['pack_keys'], reopened['checksum'],
+            reopened['delay_key_write']) == ('100', '1', '0', '12', '1000', '1', '1', '1')
+    cells = ('name', 'type', 'nullable', 'default', 'unique', 'primary_key')  # rows also keep the child's facts
+    columns = {row['name']: {key: row[key] for key in cells} for row in reopened['columns']}
+    assert [row['name'] for row in reopened['columns']] == ['id', 'code', 'owner_id', 'amount', 'stamp']
+    assert columns['id'] == {'name': 'id', 'type': 'int unsigned AUTO_INCREMENT', 'nullable': False, 'default': None,
+                             'unique': False, 'primary_key': True}, columns['id']
+    assert (columns['code']['default'], columns['code']['unique'], columns['code']['nullable']) == ("'x'", True, False)
+    assert (columns['amount']['default'], columns['stamp']['default']) == ('0.50', 'CURRENT_TIMESTAMP')
+    grids = {field['field_id']: [column['field_id'] for column in field.get('columns', [])]
+             for tab in form['tabs'] for field in tab['fields'] if field['control'] == 'grid'}
+    strip = lambda grid: [{key: row[key] for key in grids[grid] if key in row} for row in reopened[grid]]
+    assert strip('primary_key') == [{'name': 'PRIMARY', 'columns': ['id']}]
+    assert strip('unique_constraints')[0]['columns'] == ['code']
+    fk = strip('foreign_keys')[0]
+    assert {key: fk[key] for key in ('name', 'columns', 'references_table', 'references_columns', 'on_delete', 'on_update')} == {
+        'name': 'fk_owner', 'columns': ['owner_id'], 'references_table': f'{DATABASE}.owner', 'references_columns': ['id'],
+        'on_delete': 'CASCADE', 'on_update': 'RESTRICT'}, fk
+    check = strip('check_constraints')[0]
+    assert (check['name'], check['enforced']) == ('ck_amount', True) and 'amount' in check['expression'], check
+    # Edit: add, rename and drop columns through the grid diff, and change options; the rest stays.
+    # (MySQL refuses to rename a column a CHECK constraint uses, error 3959, so `code` is renamed.)
+    rows = [dict(row) for row in reopened['columns'] if row['name'] != 'stamp']
+    next(row for row in rows if row['name'] == 'code')['name'] = 'tag'
+    rows.append({'name': 'note', 'type': 'VARCHAR(40)', 'nullable': True, 'default': None, 'unique': False,
+                 'primary_key': False})
+    edited = {**reopened, 'columns': rows, 'comment': 'edited', 'stats_sample_pages': '20', 'row_format': 'COMPACT',
+              'max_rows': '2000'}
+    alter = backend_draft(form, edited, mode='alter', baseline=reopened)
+    assert set(alter) == {'add_columns', 'drop_columns', 'rename_columns', 'mysql_table_options'}, alter
+    assert alter['mysql_table_options'] == {'comment': 'edited', 'stats_sample_pages': '20', 'row_format': 'COMPACT',
+                                            'max_rows': '2000'}, alter
+    run(client, route, 'table', 'alter', alter, target=target)
+    target, again = record(client, route, 'table', name, 'table')
+    assert [row['name'] for row in again['columns']] == ['id', 'tag', 'owner_id', 'amount', 'note']
+    assert strip_unique(again) == ['tag']  # the unique key follows the renamed column
+    assert (again['comment'], again['stats_sample_pages'], again['row_format'], again['max_rows']) == (
+        'edited', '20', 'COMPACT', '2000')
+    assert (again['engine'], again['collation'], again['stats_auto_recalc'], again['pack_keys'], again['checksum']) == (
+        'InnoDB', 'utf8mb4_bin', '0', '1', '1')
+    # An option-only edit compiles one ALTER TABLE and leaves the columns alone.
+    only = backend_draft(form, {**again, 'engine': 'InnoDB', 'auto_increment': '500'}, mode='alter', baseline=again)
+    assert only == {'mysql_table_options': {'auto_increment': '500'}}, only
+    assert run(client, route, 'table', 'alter', only, target=target).startswith(f'ALTER TABLE `{DATABASE}`.`{name}` AUTO_INCREMENT=500')
+    assert record(client, route, 'table', name, 'table')[1]['auto_increment'] == '500'

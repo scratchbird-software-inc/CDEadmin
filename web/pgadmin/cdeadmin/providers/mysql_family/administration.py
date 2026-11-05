@@ -33,6 +33,10 @@ HANDLERS = dict(zip(('mysql_'+key for key in (
      mysql_rewriter,mysql_server_control,mysql_xa,cache_lifecycle,mysql_instance,mysql_key_cache,column_masking,foreign_servers,srs)))
 
 
+TABLE_ALTER_OPTIONS = frozenset({'mysql_table_options', 'mysql_connection'})
+CREATE_ONLY_OPTIONS = frozenset({'data_directory', 'index_directory'})
+
+
 class MySQLAdministration(RelationalAdministration):
     def catalog(self, catalog):
         value = deepcopy(catalog)
@@ -129,6 +133,10 @@ class MySQLAdministration(RelationalAdministration):
                 raise RelationalClientError('Temporary table selections conflict')
             if native.get('mysql_connection')=='':native.pop('mysql_connection')
             value=super()._normalize_draft(kind,operation,value);value['options'].update(native);return value
+        if kind=='table' and operation=='alter' and isinstance(draft,Mapping):
+            # The shared alter keeps only the column/constraint keys; table options go with them.
+            value=deepcopy(dict(draft));native={key:value.pop(key) for key in TABLE_ALTER_OPTIONS if key in value}
+            value=super()._normalize_draft(kind,operation,value);value.setdefault('changes',{}).update(native);return value
         return super()._normalize_draft(kind, operation, draft)
 
     @staticmethod
@@ -189,6 +197,12 @@ class MySQLAdministration(RelationalAdministration):
                     self._compile({**request, 'draft': self._normalize_draft('table', 'create', draft)})
             except (RelationalClientError,ValueError) as error:value['errors'].append({'field_id':None,'code':'invalid_mysql_table_options','message':str(error)})
             return value
+        if request.get('resource_kind')=='table' and request.get('operation_id')=='alter':
+            value=super().validate(request)
+            if not value['errors'] and isinstance(request.get('draft'),Mapping) and set(request['draft'])&TABLE_ALTER_OPTIONS:
+                try:self._compile({**request,'draft':self._normalize_draft('table','alter',request['draft'])})
+                except (RelationalClientError,ValueError) as error:value['errors'].append({'field_id':None,'code':'invalid_mysql_table_options','message':str(error)})
+            return value
         return super().validate(request)
 
     def _compile(self, request):
@@ -206,7 +220,29 @@ class MySQLAdministration(RelationalAdministration):
             if options.get('mysql_connection') is not None:compiled['warnings']=[*compiled.get('warnings',[]),
                 'FEDERATED stores a native remote reference; it does not copy remote rows or verify their recovery. Native table access can contact that remote server.']
             return compiled
+        if request.get('resource_kind')=='table' and request.get('operation_id')=='alter':
+            return self._compile_table_alter(request)
         return super()._compile(request)
+
+    def _compile_table_alter(self, request):
+        """The shared column diff, then one ALTER TABLE for the table options (2026-11-05)."""
+        draft=request['draft'];changes=draft.get('changes')
+        if not isinstance(changes,Mapping):raise RelationalClientError('alter changes must be an object')
+        options={key:changes[key] for key in TABLE_ALTER_OPTIONS if key in changes}
+        rest={key:value for key,value in changes.items() if key not in options}
+        statements=[]
+        if any(rest.values()):
+            statements+=super()._compile({**request,'draft':{**draft,'changes':rest}})['statements']
+        selected=options.get('mysql_table_options') or {}
+        if not isinstance(selected,Mapping):raise RelationalClientError('Native MySQL table options require an object')
+        if set(selected)&CREATE_ONLY_OPTIONS:
+            raise RelationalClientError('DATA DIRECTORY and INDEX DIRECTORY are given when a table is created; ALTER TABLE ignores them')
+        suffix,parameters=mysql_table_options.compile_options(dict(selected),options.get('mysql_connection') or None)
+        if suffix:
+            target=self._qualified(self._target_path(request['target_resource']))
+            statements.append({'source':'ALTER TABLE '+target+suffix,'parameters':parameters})
+        if not statements:raise RelationalClientError('table alteration has no structured changes')
+        return {'statements':statements}
 
     def _constraint_definition(self, item):
         from .mysql_tables import constraint

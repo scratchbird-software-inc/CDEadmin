@@ -127,7 +127,7 @@ def test_every_table_binding_changes_the_real_provider_plan_and_uses_accepted_na
     form=load('forms/table.form.json')
     samples={'name':'changed_table','temporary':True,'parent':['changed_database'],'columns':[{'name':'changed_column','type':'BIGINT'}],
         'primary_key':[{'name':'pk','columns':['id']}], 'unique_constraints':[{'name':'uq','columns':['id']}],
-        'foreign_keys':[{'name':'fk','columns':['id'],'references':['db','parent'],'referenced_columns':['id']}],
+        'foreign_keys':[{'name':'fk','columns':['id'],'references_table':['db','parent'],'references_columns':['id']}],
         'check_constraints':[{'name':'ck','expression':'id>0'}], 'engine':'InnoDB','character_set':'utf8mb4',
         'collation':'utf8mb4_bin','tablespace':'owned_space','row_format':'DYNAMIC','auto_increment':'9007199254740993',
         'compression':'ZLIB','encryption':'Y','secondary_engine':'owned_secondary',
@@ -140,7 +140,8 @@ def test_every_table_binding_changes_the_real_provider_plan_and_uses_accepted_na
         return MYSQL_ADMINISTRATION.plan(request)['provider_payload']['compiled']['statements']
     original=planned(base)
     for field in form['fields']:
-        assert field['modes']==['create']
+        # Create-only: TEMPORARY, and the directories ALTER TABLE ignores (2026-11-05).
+        assert field.get('modes',['create','alter'])==(['create'] if field['field_id'] in CREATE_ONLY_TABLE_FIELDS else ['create','alter'])
         name=field['field_id'];value=samples.get(name)
         if name not in samples:value=(field.get('options') or [{'value':'1'}])[0]['value']
         draft=json.loads(json.dumps(base));bind(draft,field,value)
@@ -152,7 +153,39 @@ def test_every_table_binding_changes_the_real_provider_plan_and_uses_accepted_na
     columns=next(f for f in form['fields'] if f['field_id']=='columns')
     assert {c['field_id'] for c in columns['columns']}=={'name','type','nullable','default','unique','primary_key'}
     assert not form['omitted_tabs']  # Missing native controls are gaps, never absent engine concepts.
-    assert form['status']=='draft' and form['gaps']
+    assert form['status']=='complete' and form['gaps']
+
+
+CREATE_ONLY_TABLE_FIELDS={'temporary','data_directory','index_directory'}
+
+
+def test_every_table_option_binding_reaches_the_alter_compiler():
+    # Reopened tables edit their options with ALTER TABLE; each option field binds there.
+    form=load('forms/table.form.json')
+    target={'resource_id':'table:db:t','resource_kind':'table','display_path':['db','t'],'display_name':'t'}
+    samples={'engine':'InnoDB','character_set':'utf8mb4','collation':'utf8mb4_bin','tablespace':'owned_space',
+        'auto_increment':'90','compression':'ZLIB','encryption':'Y','secondary_engine':'owned_secondary',
+        'secondary_engine_attribute':{'attribute':'literal'},'comment':"quoted' 雪",'mysql_connection':'owned_server/remote'}
+    def compiled(draft):
+        request={'resource_kind':'table','operation_id':'alter','draft':draft,'target_resource':target}
+        errors=MYSQL_ADMINISTRATION.validate(request)['errors']
+        return errors,(None if errors else MYSQL_ADMINISTRATION._compile({**request,'draft':MYSQL_ADMINISTRATION._normalize_draft('table','alter',draft)})['statements'])
+    bound=0
+    for field in form['fields']:
+        path=field.get('backend_field_id',field['field_id'])
+        if field['field_id'] in CREATE_ONLY_TABLE_FIELDS or not (path.startswith('mysql_table_options.') or path=='mysql_connection'):continue
+        value=samples.get(field['field_id'],(field.get('options') or [{'value':'1'}])[0]['value'])
+        draft={};bind(draft,field,value)
+        errors,statements=compiled(draft)
+        assert not errors and len(statements)==1 and statements[0]['source'].startswith('ALTER TABLE `db`.`t` '),(field['field_id'],errors)
+        bound+=1
+    assert bound==24  # every table option field but the create-only directories
+    for directory in ('data_directory','index_directory'):  # ALTER TABLE ignores them; refuse rather than drop
+        errors,_=compiled({'mysql_table_options':{directory:'/owned'}})
+        assert errors and 'created' in errors[0]['message'],directory
+    # Options and the column diff together: the columns first, then one ALTER TABLE for the options.
+    _errors,both=compiled({'add_columns':[{'name':'x','type':'INT'}],'mysql_table_options':{'comment':'c'}})
+    assert [row['source'] for row in both]==['ALTER TABLE `db`.`t` ADD `x` INT','ALTER TABLE `db`.`t` COMMENT=%s']
 
 
 def test_table_constraint_discriminators_and_foreign_identity_names_match_backend_contract():
@@ -162,8 +195,10 @@ def test_table_constraint_discriminators_and_foreign_identity_names_match_backen
     assert fields['foreign_keys']['backend_field_id']=='constraints[kind=FOREIGN KEY]'
     assert fields['check_constraints']['backend_field_id']=='constraints[kind=CHECK]'
     children={c['field_id']:c for c in fields['foreign_keys']['columns']}
-    assert children['references']['backend_field_id']=='references_table'
-    assert children['referenced_columns']['backend_field_id']=='references_columns'
+    assert {'references_table','references_columns'}<=children.keys()
+    # The shell sends grid cells under their own field ids (it does not map a cell's
+    # backend_field_id), so every cell is named as the compiler reads it.
+    assert not [c['field_id'] for f in fields.values() for c in f.get('columns',[]) if 'backend_field_id' in c]
 
 
 def test_every_view_binding_reaches_the_real_create_and_alter_compiler():

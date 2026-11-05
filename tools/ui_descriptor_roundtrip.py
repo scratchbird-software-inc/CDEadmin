@@ -204,7 +204,9 @@ def record_from_resource(form: dict, resource: dict, resources=()) -> dict:
     native = resource.get("native") or {}
     record = {**native, "name": native.get("name", resource.get("display_name")),
               "display_name": resource.get("display_name"), "resource_id": resource.get("resource_id"),
-              "resource_kind": resource.get("resource_kind")}
+              "resource_kind": resource.get("resource_kind"),
+              # as the host: the parent path when the native facts carry none
+              "parent": native.get("parent", ".".join((resource.get("display_path") or [])[:-1]) or None)}
     for field_id, rule in (form.get("record_children") or {}).items():
         record[field_id] = [{"name": row.get("display_name"), **(row.get("native") or {})} for row in resources
                             if row.get("resource_kind") == rule["resource_kind"] and is_child_of(row, resource)]

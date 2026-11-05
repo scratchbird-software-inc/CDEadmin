@@ -2257,6 +2257,20 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             else:
                 native['schema_comment'] = row[3]
             add('database', [], row[0], native)
+        table_facts = {}
+        if profile is MYSQL_PROFILE:
+            # The options a table was given, for re-opening it in the table form.
+            from .mysql_table_options import catalog_options
+            for row in optional(
+                'SELECT t.TABLE_SCHEMA, t.TABLE_NAME, t.ENGINE, t.TABLE_COLLATION, c.CHARACTER_SET_NAME, '
+                't.TABLE_COMMENT, t.CREATE_OPTIONS FROM information_schema.TABLES t '
+                'LEFT JOIN information_schema.COLLATIONS c ON c.COLLATION_NAME = t.TABLE_COLLATION '
+                "WHERE t.TABLE_TYPE = 'BASE TABLE' AND t.TABLE_SCHEMA NOT IN ('information_schema', 'mysql', "
+                "'performance_schema', 'sys')"
+            ):
+                table_facts[(str(row[0]), str(row[1]))] = {
+                    'engine': row[2], 'table_collation': row[3], 'table_character_set': row[4],
+                    'table_comment': row[5], 'table_options': catalog_options(row[6])}
         cursor.execute(catalog_source(
             'SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE '
             'FROM information_schema.TABLES '
@@ -2308,6 +2322,10 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             native = {'table_type': object_type}
             if create_source:
                 native['ddl'] = create_source
+            if kind == 'table' and (schema_name, str(object_name)) in table_facts:
+                from .mysql_table_options import ddl_options
+                facts = table_facts[(schema_name, str(object_name))]
+                native.update(facts, table_options={**facts['table_options'], **ddl_options(create_source)})
             if kind in ('view', 'materialized-view') and profile is MYSQL_PROFILE:
                 from ..mysql_view_identity import declared_aliases
                 native['view_aliases'] = declared_aliases(create_source)
@@ -2391,6 +2409,12 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 value = resources[key].setdefault('native', {})
                 value['catalog_metadata'] = facts
                 value['extra'] = facts.get('extra')
+                from .mysql_table_options import default_sql
+                value['default_sql'] = default_sql(facts.get('column_default'), facts.get('data_type'),
+                                                   facts.get('extra'), mode)
+                # The type as the Columns grid's type text declares it (AUTO_INCREMENT is in extra).
+                value['type_sql'] = str(facts.get('column_type')) + (
+                    ' AUTO_INCREMENT' if 'auto_increment' in str(facts.get('extra') or '').lower() else '')
                 table_resource = resources.get(resource_key('table', [schema], table), {})
                 ddl = table_resource.get('native', {}).get('ddl')
                 try:
@@ -2454,6 +2478,31 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     if record['routine_type'] == 'FUNCTION':
                         native['returns'] = next((row['dtd_identifier'] for row in rows if row['ordinal_position'] == 0), None)
                 add(record['routine_type'].lower(), [record['routine_schema']], record['routine_name'], native)
+            # Key columns, references, actions and check expressions, for re-opening a table.
+            constraint_facts = {}
+            for record in optional_records(
+                'SELECT TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME,COLUMN_NAME,REFERENCED_TABLE_SCHEMA,'
+                'REFERENCED_TABLE_NAME,REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE '
+                "WHERE TABLE_SCHEMA NOT IN ('information_schema','mysql','performance_schema','sys') "
+                'ORDER BY TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME,ORDINAL_POSITION'
+            ):
+                facts = constraint_facts.setdefault(
+                    (record['table_schema'], record['table_name'], record['constraint_name']), {'columns': []})
+                facts['columns'].append(record['column_name'])
+                if record['referenced_table_name'] is not None:
+                    facts['referenced_table'] = record['referenced_table_schema'] + '.' + record['referenced_table_name']
+                    facts.setdefault('referenced_columns', []).append(record['referenced_column_name'])
+            for record in optional_records(
+                'SELECT CONSTRAINT_SCHEMA,TABLE_NAME,CONSTRAINT_NAME,UPDATE_RULE,DELETE_RULE '
+                'FROM information_schema.REFERENTIAL_CONSTRAINTS '
+                "WHERE CONSTRAINT_SCHEMA NOT IN ('information_schema','mysql','performance_schema','sys')"
+            ):
+                constraint_facts.setdefault((record['constraint_schema'], record['table_name'], record['constraint_name']),
+                                            {}).update(on_update=record['update_rule'], on_delete=record['delete_rule'])
+            check_clauses = {(record['constraint_schema'], record['constraint_name']): record['check_clause']
+                             for record in optional_records(
+                                 'SELECT CONSTRAINT_SCHEMA,CONSTRAINT_NAME,CHECK_CLAUSE FROM information_schema.CHECK_CONSTRAINTS '
+                                 "WHERE CONSTRAINT_SCHEMA NOT IN ('information_schema','mysql','performance_schema','sys')")}
             for record in optional_records(
                 'SELECT TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME,CONSTRAINT_TYPE,ENFORCED '
                 'FROM information_schema.TABLE_CONSTRAINTS '
@@ -2462,6 +2511,11 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             ):
                 native = {**record, 'enforcement': 'ENFORCED' if record['enforced'] == 'YES' else 'NOT ENFORCED', 'administration': {'allowed_operations':
                     ['inspect', 'create', 'drop'] + (['enforcement'] if record['constraint_type'] == 'CHECK' else [])}}
+                native.update(constraint_facts.get((record['table_schema'], record['table_name'], record['constraint_name']), {}))
+                if record['constraint_type'] == 'CHECK':
+                    check = check_clauses.get((record['table_schema'], record['constraint_name']))
+                    if check is not None:
+                        native['check_clause'] = check
                 add('constraint', [record['table_schema'], record['table_name']], record['constraint_name'], native)
             for record in optional_records(
                 'SELECT p.TABLE_SCHEMA, p.TABLE_NAME, p.PARTITION_NAME, p.PARTITION_METHOD, p.PARTITION_EXPRESSION, '

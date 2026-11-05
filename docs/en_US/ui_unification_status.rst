@@ -40,7 +40,7 @@ Phase status
    * - 3
      - Engine descriptors (Firebird, MySQL, MariaDB, DuckDB, SQLite)
      - in progress
-     - Firebird 10/10, MariaDB 8/8, DuckDB 8/8, SQLite 6/6 forms ``complete`` by live round trip (server forms through the registration contract, ``tools/tests/test_ui_descriptor_server_forms.py``). MySQL: owned by the MySQL stream. PostgreSQL: drafts pass the ui.js schema-id gate; 5 large-object tier 2/3 operations ``complete`` on PostgreSQL 16.15 (not 18.3); routing is phase 5. Family table below. (2026-11-04: the seven parity engines have their own table below; their Server forms are ``draft``.)
+     - Firebird 10/10, MariaDB 8/8, DuckDB 8/8, SQLite 6/6 forms ``complete`` by live round trip (server forms through the registration contract, ``tools/tests/test_ui_descriptor_server_forms.py``). MySQL: owned by the MySQL stream. 2026-11-05: MySQL 8/8 forms ``complete`` by live round trip on MySQL 9.7.0 (``tools/tests/test_ui_descriptor_roundtrip_mysql.py``, ``tools/tests/test_ui_descriptor_server_forms.py``). PostgreSQL: drafts pass the ui.js schema-id gate; 5 large-object tier 2/3 operations ``complete`` on PostgreSQL 16.15 (not 18.3); routing is phase 5. Family table below. (2026-11-04: the seven parity engines have their own table below; their Server forms are ``draft``.)
    * - 4
      - Operations, panels, menus
      - in progress
@@ -69,35 +69,35 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - SQLite
    * - Table
      - draft (54f, 6g)
-     - draft (33f, 9g)
+     - complete (34f, 9g)
      - complete (7f, 5g)
      - complete (11f, 1g)
      - complete (7f, 2g)
      - complete (11f, 5g)
    * - View
      - draft (27f, 2g)
-     - draft (8f, 3g)
+     - complete (10f, 2g)
      - complete (3f, 2g)
      - complete (2f, 1g)
      - complete (5f, 0g)
      - complete (3f, 1g)
    * - Index
      - draft (24f, 2g)
-     - draft (14f, 4g)
+     - complete (14f, 4g)
      - complete (5f, 2g)
      - complete (10f, 0g)
      - complete (5f, 0g)
      - complete (5f, 1g)
    * - Routine
      - draft (57f, 4g)
-     - draft (15f, 3g)
+     - complete (31f, 4g)
      - complete (10f, 2g)
      - complete (9f, 0g)
      - complete (7f, 0g)
      - n/a
    * - Trigger
      - draft (30f, 3g)
-     - draft (11f, 1g)
+     - complete (11f, 1g)
      - complete (6f, 2g)
      - complete (7f, 0g)
      - n/a
@@ -118,7 +118,7 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - n/a
    * - Role
      - draft (18f, 2g)
-     - draft (4f, 1g)
+     - complete (45f, 6g)
      - complete (22f, 2g)
      - complete (10f, 1g)
      - n/a
@@ -132,7 +132,7 @@ on the tested version). ``n/a`` = family omitted with a reason in ``omitted_fami
      - complete (9f, 0g)
    * - Server
      - draft (46f, 5g)
-     - draft (41f, 4g)
+     - complete (48f, 1g)
      - complete (38f, 0g)
      - complete (53f, 0g)
      - complete (10f, 0g)
@@ -281,6 +281,49 @@ count sets its maximum to zero in the enforcement file.
 
 Change log
 ----------
+
+MySQL forms complete; one form per family; host-fixed variants (2026-11-05)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+All eight MySQL forms are ``complete`` by live round trip on MySQL 9.7.0 (draft, provider
+plan, apply, re-inspect, pre-fill, and alter where MySQL supports it).
+
+- **One form per family.** The descriptor service serves one form per family, so MySQL's
+  separate function and scheduled-event routine forms, and its user and privilege role forms,
+  were never served: those kinds opened the procedure or role form. They are merged into one
+  routine form (procedure, function, scheduled variants) and one role form (role, user,
+  privilege variants), as MariaDB, Firebird and CockroachDB do. ``validate_ui_descriptors.py``
+  now refuses a second form for a family, and a kind whose declared variant the form's
+  variant select does not offer.
+- **Variants the editor fixes.** The editor locks the variant a resource kind declares, in
+  create mode too, and a kind without its own variant is offered only the variants no sibling
+  kind declares (``kindForm``). Before, creating a view on MySQL, CockroachDB or YugabyteDB
+  offered "Materialized", which the view create ignored. This applies to every engine.
+- **Views, indexes, triggers.** View aliases and materialized views; index rename and
+  visibility in alter; trigger fields pre-fill and lock what MySQL cannot alter.
+- **Routines.** Procedures and functions alter comment, SQL security and data access; the
+  rest pre-fills and shows locked. Events pre-fill and edit every option, including the
+  schedule now read from ``SHOW CREATE EVENT``.
+- **Roles and users.** Every account option pre-fills and edits: locking, password expiry
+  and history, current-password policy, failed-login lock, limits, TLS, comment, a password
+  change with a retained secondary password, and second-factor add and drop. A comment and
+  attributes given together now merge (``COMMENT 'x'`` is ``ATTRIBUTE '{"comment":"x"}'``)
+  instead of being refused. Attributes do not pre-fill: MySQL merges them and removes a key
+  only for JSON null, which the key-value control cannot send (recorded as a gap). Privileges
+  show read-only; grant and revoke stay typed operations.
+- **Server.** Registration goes through the descriptor form, as for the other engines, with
+  the generic registration fields and the contract's passwordless option. The legacy dialog
+  remains the fallback (MySQL is not in ``LEGACY_REGISTRATION_RETIRED``).
+- **Table.** A table now reopens and edits. Options pre-fill from ``information_schema.TABLES``
+  and ``SHOW CREATE TABLE``; columns from their catalog facts; constraints with key columns,
+  references, actions and check expressions (new MySQL inventory facts). The Columns grid
+  adds, drops and renames columns; table options compile to one ``ALTER TABLE`` (before, an
+  alter draft's options validated and were then dropped). The foreign-key grid's cells were
+  named for a mapping the shell does not do, so foreign keys could not be created from the
+  form; they are now named as the compiler reads them. Changing an existing column's type,
+  nullability or default, and constraint changes, remain gaps (they show locked).
+
+PostgreSQL forms stay ``draft``: phase 5 has not started.
 
 Descriptor check passes; typed grids in CockroachDB and YugabyteDB contracts (2026-11-04)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
