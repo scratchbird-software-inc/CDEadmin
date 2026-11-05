@@ -114,6 +114,34 @@ def test_mariadb_server_form():
         client.close()
 
 
+@pytest.mark.skipif(not os.environ.get('CDEADMIN_ROUNDTRIP_MYSQL'), reason='CDEADMIN_ROUNDTRIP_MYSQL is not set')
+def test_mysql_server_form():
+    settings = json.loads(os.environ['CDEADMIN_ROUNDTRIP_MYSQL'])
+    draft = {'name': 'mysql rt', 'host': settings['host'], 'port': int(settings['port']), 'username': settings['user'],
+             'password': settings['password'], 'save_password': True, 'database': 'information_schema',
+             'connection_timeout': 5, 'compress': True, 'ssl_disabled': True, 'autocommit': False, 'charset': 'utf8mb4',
+             'time_zone': '+00:00', 'transaction_isolation': 'READ COMMITTED', 'pool_size': 2,
+             'conn_attrs': {'program_name': 'cdeadmin-rt'}, 'tls_versions': ['TLSv1.3'], 'connect_now': True,
+             'comment': 'round trip', 'tags': [{'text': 'rt', 'color': '#123456'}]}
+    form, _profile, route = roundtrip('mysql', 'mysql-native', draft)
+    assert (route['compress'], route['ssl_disabled'], route['time_zone'], route['pool_size']) == (True, True, '+00:00', 2)
+    assert route['conn_attrs'] == {'program_name': 'cdeadmin-rt'} and route['user'] == settings['user']
+    # Untouched lists and maps send null (empty_as_null), so the route has no key.
+    untouched = registration_route(registration_profile('mysql-native'),
+                                   registration_data(form, {key: value for key, value in draft.items()
+                                                            if key not in ('conn_attrs', 'tls_versions')}))
+    assert not {'failover', 'tls_versions', 'tls_ciphersuites', 'conn_attrs'} & set(untouched), sorted(untouched)
+    from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_PROFILE, _create_client
+    from pgadmin.cdeadmin.security.secrets import SecretLease
+    client = _create_client(MYSQL_PROFILE, SimpleNamespace(acquire_secret=lambda *_args: SecretLease(settings['password'])),
+                            SimpleNamespace(pool_namespace='ui-server-rt-mysql'))
+    try:
+        identity = client.runtime_identity({'route': {**route, 'credential_reference_id': 'rt', 'principal_reference': 'rt'}})
+        assert identity['engine_id'] == 'mysql' and identity['version'], identity
+    finally:
+        client.close()
+
+
 @pytest.mark.skipif(not os.environ.get('CDEADMIN_ROUNDTRIP_FIREBIRD'), reason='CDEADMIN_ROUNDTRIP_FIREBIRD is not set')
 def test_firebird_network_server_form():
     pytest.importorskip('firebird.driver')
