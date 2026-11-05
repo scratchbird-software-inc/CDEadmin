@@ -345,16 +345,15 @@ class MiscModule(PgAdminModule):
         )
         self.preference.register(
             'user_interface', 'open_in_res_workspace',
-            gettext("Open the Query Tool/PSQL in their respective workspaces"),
+            gettext("Open PSQL in its workspace"),
             'boolean', False,
             category_label=PREF_LABEL_USER_INTERFACE,
             help_str=gettext(
                 'This setting applies only when the layout is set to '
-                'Workspace Layout. When set to True, all Query Tool/PSQL '
-                'tabs will open in their respective workspaces. By default, '
-                'this setting is False, meaning that Query Tool/PSQL tabs '
-                'will open in the currently active workspace (either the '
-                'default or the workspace selected at the time of opening)'
+                'Workspace Layout. When set to True, PSQL tabs open in the '
+                'PSQL workspace; by default they open in the currently '
+                'active workspace. The Query Tool always opens in the main '
+                'work area: it is launched from the Data Explorer.'
             )
         )
 

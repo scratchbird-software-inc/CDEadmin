@@ -96,10 +96,17 @@ export function WorkspaceProvider({children}) {
       workspace = WORKSPACES.DEFAULT;
     }
 
-    // If the layout is Workspace layout and 'Open the Query Tool/PSQL in their respective workspaces'
+    // If the layout is Workspace layout and 'Open PSQL in its workspace'
     // is False then check the current workspace and set the workspace and docker accordingly.
     if (!openInResWorkspace && pgAdmin.Browser.docker.currentWorkspace == WORKSPACES.DEFAULT &&
-      (panelId.indexOf(BROWSER_PANELS.QUERY_TOOL) >= 0 || panelId.indexOf(BROWSER_PANELS.PSQL_TOOL) >= 0)) {
+      panelId.indexOf(BROWSER_PANELS.PSQL_TOOL) >= 0) {
+      docker = pgAdmin.Browser.docker.default_workspace;
+      workspace = WORKSPACES.DEFAULT;
+    }
+    // The Query Tool always opens in the main work area: it is launched from
+    // the Data Explorer and no icon switches to a separate Query Tool
+    // workspace any more (owner direction 2026-11-05).
+    if (panelId.indexOf(BROWSER_PANELS.QUERY_TOOL) >= 0) {
       docker = pgAdmin.Browser.docker.default_workspace;
       workspace = WORKSPACES.DEFAULT;
     }

@@ -503,6 +503,12 @@ Use the fields on the *User Interface* panel to set the user interface related p
   this setting is False, meaning that Query Tool/PSQL tabs will open in the currently
   active workspace (either the default or the workspace selected at the time of opening).
 
+  2026-11-05: the switch is now *Open PSQL in its workspace* and applies to PSQL
+  only. The Query Tool always opens in the main work area: it is launched from
+  the Data Explorer (*Tools > Query Tool* or a node's context menu), which
+  supplies the server, database or object connection and picks the engine's
+  query tool. It is no longer on the activity bar.
+
 * When the *Save the application state?* option is enabled  the current state of various
   tools—such as Query Tool, ERD, Schema Diff, and PSQL—will be saved in the encrypted
   format. If the application is closed unexpectedly, the tab is accidentally closed,

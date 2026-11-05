@@ -22,7 +22,8 @@ import ReactDOM from 'react-dom/client';
 import QueryToolComponent from './components/QueryToolComponent';
 import ModalProvider from '../../../../static/js/helpers/ModalProvider';
 import Theme from '../../../../static/js/Theme';
-import { AllPermissionTypes, BROWSER_PANELS, WORKSPACES } from '../../../../browser/static/js/constants';
+import { AllPermissionTypes, BROWSER_PANELS } from '../../../../browser/static/js/constants';
+import { providerQueryTool } from '../../../../browser/static/js/ProviderContextMenu';
 import { NotifierProvider } from '../../../../static/js/helpers/Notifier';
 import usePreferences, { listenPreferenceBroadcast } from '../../../../preferences/static/js/store';
 import { PgAdminProvider } from '../../../../static/js/PgAdminProvider';
@@ -66,7 +67,11 @@ export default class SQLEditor {
   * in unsupported_nodes, menu will be disabled
   * otherwise enabled.
   */
-  queryToolMenuEnabled(obj) {
+  queryToolMenuEnabled(obj, item) {
+    // CDE engine nodes open their provider's SQL workspace with the node's
+    // connection; PostgreSQL nodes keep the pgAdmin Query Tool below.
+    const provider = providerQueryTool(obj, item || pgBrowser.tree?.selected?.());
+    if(provider) return provider.enabled;
     let isEnabled = (() => {
       if (!_.isUndefined(obj) && !_.isNull(obj)) {
         if (_.indexOf(pgAdmin.unsupported_nodes, obj._type) == -1) {
@@ -104,7 +109,7 @@ export default class SQLEditor {
       label: gettext('Query Tool'),
       data:{
         applies: 'tools',
-        data_disabled: gettext('Please select a database from the object explorer to access Query Tool.'),
+        data_disabled: gettext('Select a server, database or object in the Data Explorer to open its Query Tool.'),
       },
       permission: AllPermissionTypes.TOOLS_QUERY_TOOL,
       shortcut_preference: ['browser', 'sub_menu_query_tool'],
@@ -198,6 +203,13 @@ export default class SQLEditor {
       i = treeIdentifier || t.selected(),
       d = i ? t.itemData(i) : undefined;
 
+    const provider = providerQueryTool(d, i);
+    if(provider) {
+      if(provider.enabled) return provider.open();
+      pgAdmin.Browser.notifier.alert(gettext('Query Tool'), provider.disabledReason);
+      return false;
+    }
+
     if(typeof(url) != 'string') {
       url = '';
     }
@@ -239,11 +251,10 @@ export default class SQLEditor {
   }
 
   async loadComponent(container, params) {
-    let panelDocker = pgWindow.pgAdmin.Browser.docker.query_tool_workspace;
-    if ((params.restore != 'true' && pgWindow.pgAdmin.Browser.docker.currentWorkspace == WORKSPACES.DEFAULT) ||
-        (params.restore == 'true' && params.workSpace == WORKSPACES.DEFAULT)) {
-      panelDocker = pgWindow.pgAdmin.Browser.docker.default_workspace;
-    }
+    // The Query Tool always opens in the main work area (owner direction
+    // 2026-11-05: it is launched from the Data Explorer; there is no Query
+    // Tool workspace switcher to return to a separate workspace).
+    const panelDocker = pgWindow.pgAdmin.Browser.docker.default_workspace;
 
     const selectedNodeInfo = params.selectedNodeInfo ? JSON.parse(_.unescape(params.selectedNodeInfo)) : params.selectedNodeInfo;
     pgAdmin.Browser.keyboardNavigation.init();

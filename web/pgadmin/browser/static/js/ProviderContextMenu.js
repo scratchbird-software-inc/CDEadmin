@@ -253,6 +253,53 @@ export function isProviderContextNode(itemData) {
   return Array.isArray(itemData?.cde_context_actions);
 }
 
+// An engine node's query tool is its provider's SQL workspace: the
+// open_workspace action whose tab is 'studio'. Chosen by handler and tab,
+// never by engine.
+const isQueryToolAction = (action) => action?.handler === 'open_workspace' &&
+  action?.arguments?.tab === 'studio';
+
+/**
+ * The query tool for a Data Explorer node of a CDE engine, with the closest
+ * connection context: the node's own SQL workspace, else its nearest
+ * ancestor's (object, database), else its server's at server scope. Returns
+ * null for nodes that are not CDE engine nodes (PostgreSQL keeps the pgAdmin
+ * Query Tool) and {enabled: false} when no connected context exists.
+ */
+export function providerQueryTool(itemData, item) {
+  if(!isProviderContextNode(itemData) && !itemData?.cde_endpoint) return null;
+  const tree = pgAdmin.Browser.tree;
+  let current = item;
+  let data = itemData;
+  while(data) {
+    const action = (data.cde_context_actions || []).find(isQueryToolAction);
+    if(action) {
+      const node = current;
+      const nodeData = data;
+      return {enabled: action.enabled !== false,
+        disabledReason: action.disabled_reason || '',
+        open: () => {
+          const menu = providerContextMenuItems(nodeData, node)
+            ?.find((candidate) => candidate.commandId === action.command_id);
+          return menu ? executeProviderAction(menu, nodeData, node) : false;
+        }};
+    }
+    if(data._type === 'server') {
+      if(!data.cde_endpoint) return null;
+      const serverItem = current;
+      return {enabled: data.runtime_verification_state === 'verified',
+        disabledReason: gettext('Connect to this server to open its Query Tool.'),
+        open: () => pgAdmin.Browser.Nodes.server.callbacks.open_cde_workspace.call(
+          pgAdmin.Browser.Nodes.server, {item: serverItem}, 'studio',
+          {task_title: gettext('Query Tool')})};
+    }
+    current = current && tree?.hasParent(current) ? tree.parent(current) : null;
+    data = current ? tree.itemData(current) : null;
+  }
+  return {enabled: false, disabledReason: gettext(
+    'Select a server, database or object to open its Query Tool.'), open: () => false};
+}
+
 export function providerContextMenuItems(itemData, item=null) {
   if(!isProviderContextNode(itemData)) return null;
   return itemData.cde_context_actions.filter((action) =>
