@@ -92,4 +92,11 @@ def test_actual_provider_plan_preserves_typed_options_and_never_adds_an_unsuppor
     planned = MYSQL_ADMINISTRATION.plan(request)
     assert planned['provider_payload']['compiled']['mysql_index_create']['table'] == BASE['table']
     assert '(`id` DESC)' in planned['command_preview']['statements'][0]['source']
-    assert not MYSQL_ADMINISTRATION.supports('index', 'alter')
+    # Since 2026-11-05 the index alter changes the name and visibility only; MySQL has no
+    # ALTER INDEX for key parts, so a definition change is still refused.
+    assert MYSQL_ADMINISTRATION.supports('index', 'alter')
+    target = {'display_name': 'owned', 'display_path': ['db', 't', 'owned']}
+    for draft in ({'columns': [{'name': 'id'}]}, {'method': 'HASH'}, {'unique': True}, {}):
+        refused = MYSQL_ADMINISTRATION.validate({'resource_kind': 'index', 'operation_id': 'alter', 'draft': draft,
+                                                 'target_resource': target})
+        assert refused['errors'], draft

@@ -373,7 +373,7 @@ class RelationalAdministration:
             if self.dialect.engine_id == 'mysql' and kind in mysql_object_changes.OPERATIONS:
                 additions = mysql_object_changes.OPERATIONS[kind]
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
-                    'operation_id': operation, 'title': mysql_object_changes.TITLES[operation],
+                    'operation_id': operation, 'title': mysql_object_changes.title(kind, operation),
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(additions)]
             if self.dialect.engine_id == 'mysql' and kind == 'replication-channel':
@@ -812,7 +812,7 @@ class RelationalAdministration:
             return {'errors': errors}
         if (self.dialect.engine_id == 'mysql' and operation_id in mysql_object_changes.OPERATIONS.get(resource_kind, ())):
             try:
-                mysql_object_changes.compile_operation(resource_kind, operation_id, draft, request.get('target_resource'))
+                mysql_object_changes.compile_statements(resource_kind, operation_id, draft, request.get('target_resource'))
             except RelationalClientError as error:
                 errors.append({'field_id': None, 'code': 'invalid_mysql_object_change', 'message': str(error)})
             return {'errors': errors}
@@ -3938,7 +3938,7 @@ class RelationalAdministration:
                     'warnings': ['Native view DDL commits independently of interactive transactions.',
                                  'ALTER restates the complete definition. Clauses the edit leaves out keep the view\'s current values; native updatability, privileges and algorithm warnings remain authoritative.']}
         if (self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(request['resource_kind'], ())):
-            return {'statements': [mysql_object_changes.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
+            return {'statements': mysql_object_changes.compile_statements(request['resource_kind'], operation, request['draft'], request.get('target_resource')),
                     'warnings': ['Native object DDL commits independently of interactive transactions.',
                                  'Routine ALTER changes characteristics, not the body, signature or determinism. Native index constraints remain authoritative.']}
         if (self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'replication-channel' and operation in mysql_replication.OPERATIONS):

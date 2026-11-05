@@ -5,16 +5,42 @@ from .mysql_tablespaces import identifier
 OPERATIONS = {
     'procedure': frozenset({'alter'}),
     'function': frozenset({'alter'}),
-    'index': frozenset({'rename', 'visibility'}),
+    'index': frozenset({'rename', 'visibility', 'alter'}),
 }
 TITLES = {'rename': 'Rename index', 'visibility': 'Change index visibility', 'alter': 'Alter routine'}
+
+
+def title(kind, operation):
+    return 'Alter index' if (kind, operation) == ('index', 'alter') else TITLES[operation]
+
+
+def compile_statements(kind, operation, draft, target):
+    """The statements of one object change. An index edit from the family editor
+    changes visibility and/or the name; MySQL refuses both in one ALTER TABLE
+    (error 1176), so visibility runs on the current name, then the rename."""
+    if (kind, operation) != ('index', 'alter'):
+        return [compile_operation(kind, operation, draft, target)]
+    if not isinstance(draft, dict) or set(draft) - {'new_name', 'visible', 'confirmation'}:
+        raise RelationalClientError('Unknown native object change option')
+    path = (target or {}).get('display_path', [])
+    statements = []
+    if 'visible' in draft:
+        if not isinstance(draft['visible'], bool):
+            raise RelationalClientError('Index visibility must be true or false')
+        statements.append(compile_operation(kind, 'visibility', {
+            'visibility': 'VISIBLE' if draft['visible'] else 'INVISIBLE'}, target))
+    if 'new_name' in draft and isinstance(path, list) and len(path) == 3 and draft['new_name'] != path[2]:
+        statements.append(compile_operation(kind, 'rename', {'new_name': draft['new_name']}, target))
+    if not statements:
+        raise RelationalClientError('Select an index change')
+    return statements
 DATA_ACCESS = ('UNCHANGED', 'CONTAINS SQL', 'NO SQL', 'READS SQL DATA',
                'MODIFIES SQL DATA')
 SECURITY = ('UNCHANGED', 'DEFINER', 'INVOKER')
 
 
 def compile_operation(kind, operation, draft, target):
-    if operation not in OPERATIONS.get(kind, ()) or not isinstance(draft, dict):
+    if operation not in OPERATIONS.get(kind, ()) or (kind, operation) == ('index', 'alter') or not isinstance(draft, dict):
         raise RelationalClientError('Native object change is unavailable')
     path = (target or {}).get('display_path', [])
     if not isinstance(path, list) or len(path) != (3 if kind == 'index' else 2):

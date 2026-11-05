@@ -77,12 +77,14 @@ def resources(client, route):
 
 
 def run(client, route, kind, operation, draft, target=None):
+    """Validate, plan (with the client's native review step) and apply, as the app does."""
     request = {'resource_kind': kind, 'operation_id': operation, 'target_resource': target,
                '_provider_route': route, 'draft': draft}
-    assert ADMINISTRATION.validate(request)['errors'] == [], ADMINISTRATION.validate(request)['errors']
-    planned = ADMINISTRATION.plan(request)
+    errors = client.validate_admin_operation(request)['errors']
+    assert errors == [], errors
+    planned = client.plan_admin_operation(request)
     sql = '\n'.join(statement['source'] for statement in planned['command_preview']['statements'])
-    assert ADMINISTRATION.apply(client, planned)['accepted'], sql
+    assert client.apply_admin_operation(planned)['accepted'], sql
     return sql
 
 
@@ -164,3 +166,55 @@ def test_materialized_view_form_round_trips_and_stays_materialized(live):
     assert 'ALGORITHM=TEMPTABLE MATERIALIZED' in ddl and '(`k`,`v`)' in ddl and 'SQL SECURITY INVOKER' in ddl
     _view, after = record(client, route, 'materialized-view', 'rt_mv', 'view')
     assert after['algorithm'] == 'TEMPTABLE' and [row['value'] for row in after['column_aliases']] == ['k', 'v']
+
+
+def show_create(table):
+    return query(f'SHOW CREATE TABLE `{DATABASE}`.`{table}`')[0][1]
+
+
+def test_index_form_every_create_field_and_alter(live):
+    route, client = live
+    form = resolved_form('mysql', 'index')
+    query(f'CREATE TABLE `{DATABASE}`.docs(id INT PRIMARY KEY, a VARCHAR(40), b INT, body TEXT)')
+    query(f'CREATE TABLE `{DATABASE}`.packed(id INT PRIMARY KEY, a INT) ENGINE=MyISAM')
+    run(client, route, 'index', 'create', backend_draft(form, {
+        'name': 'rt_ix', 'table': f'{DATABASE}.docs', 'index_kind': 'NORMAL', 'unique': True, 'method': 'BTREE',
+        'columns': [{'name': 'a', 'prefix_length': 10, 'direction': 'DESC'}, {'expression': '`b` + 1', 'direction': 'ASC'}],
+        'comment': 'round trip', 'visible': False, 'secondary_engine_attribute': {'k': 'v'}}))
+    # Algorithm and lock are statement options, not stored: they must reach the executed DDL.
+    # MySQL refuses INPLACE with an expression key part (1846), so they get plain columns.
+    sql = run(client, route, 'index', 'create', backend_draft(form, {
+        'name': 'rt_inplace', 'table': f'{DATABASE}.docs', 'columns': [{'name': 'b'}],
+        'algorithm': 'INPLACE', 'lock': 'NONE'}))
+    assert 'ALGORITHM=INPLACE' in sql and 'LOCK=NONE' in sql
+    sql = run(client, route, 'index', 'create', backend_draft(form, {
+        'name': 'rt_copy', 'table': f'{DATABASE}.docs', 'columns': [{'name': 'a'}],
+        'algorithm': 'COPY', 'lock': 'SHARED'}))
+    assert 'ALGORITHM=COPY' in sql and 'LOCK=SHARED' in sql
+    run(client, route, 'index', 'create', backend_draft(form, {
+        'name': 'rt_ft', 'table': f'{DATABASE}.docs', 'index_kind': 'FULLTEXT', 'columns': [{'name': 'body'}],
+        'parser': 'ngram'}))
+    run(client, route, 'index', 'create', backend_draft(form, {
+        'name': 'rt_kb', 'table': f'{DATABASE}.packed', 'columns': [{'name': 'a'}], 'key_block_size': '4'}))
+    query(f'CREATE TABLE `{DATABASE}`.places(id INT PRIMARY KEY, spot POINT NOT NULL SRID 0) ENGINE=InnoDB')
+    query(f'CREATE TABLE `{DATABASE}`.lookup(id INT PRIMARY KEY, code INT) ENGINE=MEMORY')
+    run(client, route, 'index', 'create', backend_draft(form, {
+        'name': 'rt_sp', 'table': f'{DATABASE}.places', 'index_kind': 'SPATIAL', 'columns': [{'name': 'spot'}]}))
+    run(client, route, 'index', 'create', backend_draft(form, {
+        'name': 'rt_hash', 'table': f'{DATABASE}.lookup', 'method': 'HASH', 'columns': [{'name': 'code'}]}))
+    assert 'SPATIAL KEY `rt_sp` (`spot`)' in show_create('places')
+    assert 'KEY `rt_hash` (`code`) USING HASH' in show_create('lookup')
+    ddl = show_create('docs')
+    assert 'UNIQUE KEY `rt_ix` (`a`(10) DESC,((`b` + 1))) USING BTREE' in ddl and "COMMENT 'round trip'" in ddl
+    assert '/*!80000 INVISIBLE */' in ddl and 'SECONDARY_ENGINE_ATTRIBUTE' in ddl
+    assert 'FULLTEXT KEY `rt_ft` (`body`) /*!50100 WITH PARSER `ngram` */' in ddl
+    assert 'KEY `rt_kb` (`a`) KEY_BLOCK_SIZE=' in show_create('packed')
+    index, baseline = record(client, route, 'index', 'rt_ix', 'index')
+    assert baseline['new_name'] == 'rt_ix' and baseline['visible'] is False
+    alter = backend_draft(form, {**baseline, 'new_name': 'rt_ix2', 'visible': True}, mode='alter', baseline=baseline)
+    assert alter == {'new_name': 'rt_ix2', 'visible': True}
+    run(client, route, 'index', 'alter', alter, target=index)
+    assert query(f"SELECT IS_VISIBLE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='{DATABASE}' "
+                 "AND INDEX_NAME='rt_ix2' LIMIT 1") == [('YES',)]
+    _index, after = record(client, route, 'index', 'rt_ix2', 'index')
+    assert after['new_name'] == 'rt_ix2' and after['visible'] is True
