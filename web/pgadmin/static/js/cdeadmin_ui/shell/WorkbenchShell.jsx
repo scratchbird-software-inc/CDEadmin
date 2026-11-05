@@ -19,8 +19,12 @@ import {ActivityThemeToggle} from './ActivityThemeToggle';
 
 export const WORKBENCH_LAYOUT_SCHEMA = 'cdeadmin.workbench-layout.v1';
 export const WORKBENCH_INSPECT_EVENT = 'cdeadmin:workbench-inspect';
-export const ACTIVITY_RAIL_HEIGHT = 30;
-export const ACTIVITY_RAIL_WIDTH = ACTIVITY_RAIL_HEIGHT;
+// The activity bar is a vertical strip on the left (owner direction
+// 2026-11-05; it was a 30px horizontal strip under the menu). Its width and
+// icon size come from the appearance settings through
+// --cde-activity-bar-width and --cde-activity-icon-size; this is the packaged
+// width (ui-tokens.json geometry.activity_rail_width).
+export const ACTIVITY_RAIL_WIDTH = 48;
 export const DEFAULT_WORKBENCH_LAYOUT = Object.freeze({
   schema: WORKBENCH_LAYOUT_SCHEMA,
   navigationWidth: 288,
@@ -96,13 +100,15 @@ export class WorkbenchLayoutStore {
   }
 }
 
+const BAR_WIDTH = `var(--cde-activity-bar-width, ${ACTIVITY_RAIL_WIDTH}px)`;
+const ICON_SIZE = 'var(--cde-activity-icon-size, 20px)';
+
 const activityControlSx = {
-  width: 40,
-  height: '100%',
-  mx: '2px',
+  width: '100%',
+  // Tall enough for the icon with padding, never below the click target.
+  height: `max(var(--cde-target-size, 28px), calc(${ICON_SIZE} + 20px))`,
   flex: '0 0 auto',
-  alignSelf: 'stretch',
-  display: 'inline-flex',
+  display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   border: 'none',
@@ -112,26 +118,38 @@ const activityControlSx = {
   padding: 0,
 };
 
+// Up/Down (and Home/End) move between activities, as in a vertical toolbar.
+function moveFocus(event) {
+  const keys = {ArrowDown: 1, ArrowUp: -1, Home: 'first', End: 'last'};
+  if(!(event.key in keys)) return;
+  const buttons = [...event.currentTarget.querySelectorAll(
+    'button:not([disabled])')];
+  const index = buttons.indexOf(document.activeElement);
+  if(index < 0 && typeof keys[event.key] === 'number') return;
+  const step = keys[event.key];
+  const next = step === 'first' ? buttons[0] : step === 'last' ? buttons.at(-1) :
+    buttons[(index + step + buttons.length) % buttons.length];
+  if(next) {
+    event.preventDefault();
+    next.focus();
+  }
+}
+
 function ActivityRail({activities, active, navigationVisible, onChange}) {
   return <Box component="nav" aria-label="Application activities"
-    sx={{height: ACTIVITY_RAIL_HEIGHT, flex: `0 0 ${ACTIVITY_RAIL_HEIGHT}px`,
-      display: 'flex', alignItems: 'stretch', px: 0.5, border: 'none',
-      bgcolor: 'background.navigation',
-      overflowX: 'auto', overflowY: 'hidden',
-      '& > button, & > span': activityControlSx,
-      '& > span > button': {
-        ...activityControlSx,
-        width: '100%',
-        mx: 0,
-      }}}>
-    <Box sx={{display: 'flex', alignItems: 'stretch', flex: '1 1 auto',
-      minWidth: 0, overflowX: 'auto', overflowY: 'hidden',
-      '& > button, & > span': activityControlSx,
-      '& > span > button': {
-        ...activityControlSx,
-        width: '100%',
-        mx: 0,
-      }}}>
+    data-cdeadmin-activity-bar="vertical"
+    sx={{width: BAR_WIDTH, flex: `0 0 ${BAR_WIDTH}`, minHeight: 0,
+      display: 'flex', flexDirection: 'column', alignItems: 'stretch', py: 0.5,
+      bgcolor: 'background.navigation', borderRight: '1px solid',
+      borderColor: 'divider', overflowX: 'hidden', overflowY: 'auto',
+      scrollbarWidth: 'thin'}}>
+    <Box role="toolbar" aria-orientation="vertical"
+      aria-label="Activities" onKeyDown={moveFocus}
+      sx={{display: 'flex', flexDirection: 'column', alignItems: 'stretch',
+        flex: '1 1 auto', minHeight: 0, overflowX: 'hidden', overflowY: 'auto',
+        scrollbarWidth: 'thin',
+        '& > button, & > span': activityControlSx,
+        '& > span > button': {...activityControlSx}}}>
       {activities.map((activity) => {
         const ownsNavigation = activity.navigationVisible !== false;
         const selected = activity.id === active &&
@@ -150,18 +168,27 @@ function ActivityRail({activities, active, navigationVisible, onChange}) {
             ...activityControlSx,
             filter: selected ? 'none' :
               'brightness(var(--cde-inactive-brightness, 0.85))',
+            '& svg, & [data-icon-key]': {
+              transform: selected ? 'scale(var(--cde-active-tab-scale, 1))' : 'none',
+            },
+            // The theme's icon-button size and padding outrank plain sx;
+            // the bar's buttons span its full width.
             '&&&': {
+              width: '100%',
+              height: activityControlSx.height,
+              padding: 0,
               backgroundColor: selected ? 'primary.main' : 'transparent',
               border: 'none',
               borderRadius: 0,
               boxShadow: 'none',
               color: selected ? 'primary.contrastText' : 'inherit',
             }}}>
-          <Icon iconKey={activity.iconKey || 'command.default'} decorative size="20px" />
+          <Icon iconKey={activity.iconKey || 'command.default'} decorative
+            size={ICON_SIZE} />
         </IconButton>;
       })}
     </Box>
-    <ActivityThemeToggle />
+    <ActivityThemeToggle orientation="vertical" />
   </Box>;
 }
 
@@ -250,12 +277,13 @@ export function WorkbenchShell({activities, navigationViews, children,
 
   return <WorkbenchActivityContext.Provider value={activityContext}>
     <Box data-cdeadmin-shell="zero-grey" sx={{height: '100%', minHeight: 0,
-      display: 'flex', flexDirection: 'column', bgcolor: 'background.default',
+      display: 'flex', flexDirection: 'row', bgcolor: 'background.default',
       color: 'text.primary'}}>
       <ActivityRail activities={knownActivities} active={active}
         navigationVisible={layout.navigationVisible}
         onChange={(activityId) => activateActivity(activityId, {toggle: true})} />
-      <Box sx={{flex: 1, minHeight: 0, display: 'flex', position: 'relative'}}>
+      <Box sx={{flex: 1, minWidth: 0, minHeight: 0, display: 'flex',
+        position: 'relative'}}>
         <Box sx={{width: sidebarOpen ? sidebarWidth : 0,
           flex: sidebarOpen ? `0 0 ${sidebarWidth}px` : '0 0 0px',
           minWidth: 0, minHeight: 0, overflow: 'hidden', display: 'flex',

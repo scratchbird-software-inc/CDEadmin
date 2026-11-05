@@ -260,6 +260,15 @@ large-icon launcher rather than maintaining a second hard-coded catalog. The
 legacy dock remains the panel layout engine behind the semantic shell boundary,
 and focus changes are reflected into workbench context.
 
+2026-11-05, owner direction: the activity rail is a vertical bar on the left
+of the shell (it was a 30px horizontal strip under the menu). Its width and
+icon size come from the appearance settings (`--cde-activity-bar-width`,
+`--cde-activity-icon-size`; packaged width 48px, the
+`geometry.activity_rail_width` token), its buttons are never shorter than the
+click-target size, Up/Down/Home/End move between activities, and the Dark
+toggle sits at its foot. The menu bar's text, icons and logo follow
+`--cde-menu-font-size` and `--cde-menu-row-height`, as do drop-down menus.
+
 Live provider resources and authored project assets are intentionally separate.
 `ProjectAssetService` provides authenticated membership, optimistic project and
 asset versions, immutable asset revisions, safe relative paths, nested secret

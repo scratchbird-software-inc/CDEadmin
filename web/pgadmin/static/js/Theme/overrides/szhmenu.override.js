@@ -23,6 +23,11 @@ export default function szhMenuOverride(theme) {
     '& .szh-menu__item': {
       display: 'flex',
       padding: '3px 12px',
+      // Menu text size from View > Appearance and Accessibility; menus grow
+      // with it and are never shorter than the menu row height setting.
+      fontSize: 'var(--cde-menu-font-size, 0.875rem)',
+      minHeight: 'var(--cde-menu-row-height, 28px)',
+      alignItems: 'center',
       '&:after': {
         right: '0.75rem',
       },

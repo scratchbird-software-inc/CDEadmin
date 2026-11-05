@@ -15,7 +15,9 @@ The interface contains:
 
 * the ScratchRobin application identity, command toolbar and project menus;
 * a configurable controller rail for the Object Explorer, projects, diagrams,
-  dashboards, scheduler and other tools;
+  dashboards, scheduler and other tools (since 2026-11-05 a vertical activity
+  bar on the left; its width and icon size, and the menu text size, are set in
+  *View > Appearance and Accessibility…*);
 * a branching Object Explorer with state, engine and object icons;
 * dockable, resizable single-task workspaces; and
 * status, notification and long-running-operation surfaces.

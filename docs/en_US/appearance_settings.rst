@@ -38,11 +38,11 @@ Areas and controls
    Toolbar, tab and status bar heights, control and click-target sizes,
    spacing, scrollbars, resize handles and corner radius.
 
-Object explorer and grids
+Explorer and grids
    Tree row height, indent, expander and line width; grid row, header and
    cell padding.
 
-Density, motion and focus
+Density and motion
    Information density, animation, and the keyboard focus indicator.
 
 A blank number or colour uses the profile's value, which the field shows.

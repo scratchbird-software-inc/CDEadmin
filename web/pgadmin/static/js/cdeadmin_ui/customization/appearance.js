@@ -174,7 +174,7 @@ export const APPEARANCE_SECTIONS = Object.freeze([
         gettext('Resize handle size (pixels)')),
       number('accessibility_corner_radius', gettext('Corner radius (pixels)')),
     ]},
-  {id: 'explorer', label: gettext('Object explorer and grids'),
+  {id: 'explorer', label: gettext('Explorer and grids'),
     keywords: gettext('tree row indent expander grid header cell padding'),
     fields: [
       number('accessibility_tree_row_height', gettext('Tree row height (pixels)')),
@@ -188,7 +188,7 @@ export const APPEARANCE_SECTIONS = Object.freeze([
       number('accessibility_grid_cell_padding',
         gettext('Grid cell padding (pixels)')),
     ]},
-  {id: 'motion', label: gettext('Density, motion and focus'),
+  {id: 'motion', label: gettext('Density and motion'),
     keywords: gettext('density motion animation focus indicator'),
     fields: [
       {name: 'accessibility_density', label: gettext('Density'), kind: 'select',

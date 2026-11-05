@@ -204,7 +204,7 @@ function Layouts({browser, platform}) {
       (closeModal) => <AppearanceSettings onClose={closeModal} />,
       {id: 'cdeadmin-appearance-settings', isFullScreen: false,
         isResizeable: true, showFullScreen: true,
-        dialogWidth: 1080, dialogHeight: 720}
+        dialogWidth: 1080, dialogHeight: 640}
     );
     return true;
   }, [pgAdmin]);

@@ -19,8 +19,13 @@ import { useForceUpdate } from './custom_hooks';
 import {Icon, inferActionIconKey} from 'sources/cdeadmin_ui/icons';
 
 
+// Text, icons and logo follow the menu text size and height settings
+// (View > Appearance and Accessibility).
+const MENU_FONT = 'var(--cde-menu-font-size, 0.875rem)';
+
 const StyledBox = styled(Box)(({theme}) => ({
   minHeight: 'var(--cde-menu-row-height, 30px)',
+  fontSize: MENU_FONT,
   backgroundColor: theme.palette.primary.main,
   color: theme.palette.primary.contrastText,
   padding: '0 0.5rem',
@@ -33,15 +38,15 @@ const StyledBox = styled(Box)(({theme}) => ({
     background: 'none',
     display: 'flex',
     alignItems: 'center',
-    fontSize: '1.05rem',
+    fontSize: `calc(${MENU_FONT} * 1.2)`,
     fontWeight: 700,
     letterSpacing: '0.03em',
     gap: '6px',
     whiteSpace: 'nowrap',
     '& svg': {
-      width: '24px',
-      height: '24px',
-      flex: '0 0 24px',
+      width: '1.4em',
+      height: '1.4em',
+      flex: '0 0 1.4em',
       filter: 'drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff) '
         + 'drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff)',
     },
@@ -54,14 +59,19 @@ const StyledBox = styled(Box)(({theme}) => ({
 
     '& .MuiButton-containedPrimary': {
       padding: '1px 8px',
-    }
+    },
+  },
+  // '&&' repeats this bar's class so the menu size outranks the small
+  // contained button rule (three classes) on the menu buttons.
+  '&& .AppMenuBar-menus button, && .AppMenuBar-userMenu button': {
+    fontSize: MENU_FONT,
+  },
+  '&& .AppMenuBar-menus button': {
+    minHeight: 'var(--cde-menu-row-height, 30px)',
   },
   '& .AppMenuBar-userMenu': {
     marginLeft: 'auto', maxWidth: '100%',
     '& button': {overflowWrap: 'anywhere'},
-    '& .MuiButton-containedPrimary': {
-      fontSize: '0.825rem',
-    },
     '& .AppMenuBar-gravatar': {
       marginRight: '4px',
     }
@@ -83,10 +93,10 @@ export function MenuCommandLabel({menuItem}) {
   return <span style={style}>
     {presentation.iconPosition !== 'hidden' &&
       presentation.iconPosition !== 'after' &&
-      <Icon iconKey={iconKey} decorative size="1rem" />}
+      <Icon iconKey={iconKey} decorative size="1em" />}
     <span>{menuItem.label}</span>
     {presentation.iconPosition === 'after' &&
-      <Icon iconKey={iconKey} decorative size="1rem" />}
+      <Icon iconKey={iconKey} decorative size="1em" />}
   </span>;
 }
 

@@ -93,6 +93,37 @@ describe('Zero-Grey workbench shell', () => {
       .toHaveAttribute('aria-orientation', 'horizontal');
   });
 
+  // 2026-11-05: the activity bar is a vertical strip on the left.
+  it('lays the activity bar out vertically with arrow-key navigation', async () => {
+    const Component = withTheme(WorkbenchShell);
+    render(<Component activities={[...activities, {id: 'activity.off',
+      label: 'Unavailable', iconKey: 'tool.query', disabled: true},
+    {id: 'activity.third', label: 'Third', iconKey: 'tool.query'}]}
+    navigationViews={{}} />);
+    const nav = screen.getByRole('navigation', {name: 'Application activities'});
+    expect(nav).toHaveAttribute('data-cdeadmin-activity-bar', 'vertical');
+    const toolbar = screen.getByRole('toolbar', {name: 'Activities'});
+    expect(toolbar).toHaveAttribute('aria-orientation', 'vertical');
+    const [data, projects, , third] = activityTabsIn(nav);
+    // Focus moves start MUI ripples that settle asynchronously.
+    const press = async (key) => act(async () => {
+      fireEvent.keyDown(toolbar, {key});
+    });
+    await act(async () => data.focus());
+    await press('ArrowDown');
+    expect(projects).toHaveFocus();
+    await press('ArrowDown');
+    expect(third).toHaveFocus(); // the disabled activity is skipped
+    await press('ArrowDown');
+    expect(data).toHaveFocus(); // wraps
+    await press('End');
+    expect(third).toHaveFocus();
+    await press('Home');
+    expect(data).toHaveFocus();
+    await press('ArrowUp');
+    expect(third).toHaveFocus();
+  });
+
   it('toggles misc.theme between light and dark from the activity rail',
     async () => {
       const setPreferences = jest.spyOn(usePreferences.getState(), 'setPreferences')

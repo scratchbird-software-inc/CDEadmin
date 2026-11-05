@@ -8,11 +8,10 @@
 //////////////////////////////////////////////////////////////
 
 import {useCallback, useMemo} from 'react';
+import PropTypes from 'prop-types';
 import {Box, FormControlLabel, Radio} from '@mui/material';
 import gettext from 'sources/gettext';
 import usePreferences from '../../../../preferences/static/js/store';
-
-const RAIL_CONTROL_HEIGHT = 30;
 
 function resolveThemePreference(selected) {
   if(selected === 'system') {
@@ -22,7 +21,8 @@ function resolveThemePreference(selected) {
   return selected === 'dark' ? 'dark' : 'light';
 }
 
-export function ActivityThemeToggle() {
+export function ActivityThemeToggle({orientation='horizontal'}) {
+  const vertical = orientation === 'vertical';
   const prefStore = usePreferences();
   const selectedTheme = prefStore?.getPreferencesForModule('misc')?.theme ||
     window.theme || 'light';
@@ -55,17 +55,19 @@ export function ActivityThemeToggle() {
   return <Box
     data-cdeadmin-qa-key="activity-theme-dark"
     sx={{
-      ml: 'auto',
+      // At the end of the bar: the right of a horizontal bar, the bottom of
+      // the vertical activity bar, with the label under the radio there.
+      ...(vertical ? {mt: 'auto', py: 0.5} : {ml: 'auto', px: 0.75}),
       flexShrink: 0,
       alignSelf: 'center',
       display: 'inline-flex',
       alignItems: 'center',
-      maxHeight: RAIL_CONTROL_HEIGHT,
-      px: 0.75,
+      minHeight: 'var(--cde-target-size, 28px)',
       color: isDark ? 'primary.main' : 'text.primary',
     }}
   >
     <FormControlLabel
+      labelPlacement={vertical ? 'bottom' : 'end'}
       sx={{
         m: 0,
         gap: 0.25,
@@ -94,3 +96,7 @@ export function ActivityThemeToggle() {
     />
   </Box>;
 }
+
+ActivityThemeToggle.propTypes = {
+  orientation: PropTypes.oneOf(['horizontal', 'vertical']),
+};
