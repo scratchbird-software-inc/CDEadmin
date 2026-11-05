@@ -134,6 +134,32 @@ describe('Preferences interface pages', () => {
       record.name === 'menu_customizations').value).menus.lab).toBeDefined();
   }, 60000);
 
+  it('stores a chosen artwork assignment', async () => {
+    // jsdom has no layout; a tall window keeps MUI's popover-fit check quiet.
+    const height = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', {value: 100000, configurable: true});
+    try {
+      renderPages('artwork');
+      fireEvent.change(screen.getByLabelText('Find semantic icon'),
+        {target: {value: 'action.open'}});
+      fireEvent.click(screen.getByText('action.open').closest('button'));
+      fireEvent.mouseDown(screen.getByRole('combobox',
+        {name: 'Assigned catalog artwork'}));
+      const options = within(screen.getByRole('listbox')).getAllByRole('option');
+      const chosen = options.find((option) =>
+        option.textContent.endsWith('— action.settings'));
+      fireEvent.click(chosen);
+      fireEvent.click(screen.getByText('Save interface customization'));
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(
+        'Interface customization saved'));
+      const record = written().find((item) => item.name === 'icon_assignments');
+      expect(JSON.parse(record.value).assignments).toEqual(
+        {'action.open': 'action.settings'});
+    } finally {
+      Object.defineProperty(window, 'innerHeight', {value: height, configurable: true});
+    }
+  }, 60000);
+
   it('adds and removes user menus and keeps the change across pages', () => {
     renderPages('menus');
     expect(screen.getByText('Designer test command')).toBeInTheDocument();
