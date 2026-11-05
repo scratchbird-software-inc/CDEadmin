@@ -9,7 +9,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
 
@@ -17,10 +17,8 @@ ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / 'web'
 if str(WEB) not in sys.path:
     sys.path.insert(0, str(WEB))
-if 'pgadmin' not in sys.modules:
-    package = ModuleType('pgadmin')
-    package.__path__ = [str(WEB / 'pgadmin')]
-    sys.modules['pgadmin'] = package
+# No pgadmin stand-in here: collected early, one would hide the real package
+# from later test modules that need it (pgadmin.socketio).
 
 # Other test modules leave empty stand-ins for config and pgadmin.utils in
 # sys.modules. These tests need the real modules: the fixture below swaps
