@@ -213,6 +213,23 @@ describe('NotebookBar', () => {
       .not.toHaveAttribute('data-snb-access-keys');
   });
 
+  it.each([
+    ['a click or drag', (target) => fireEvent.pointerDown(target, {altKey: true})],
+    ['a mouse press', (target) => fireEvent.mouseDown(target, {altKey: true})],
+    ['the wheel', (target) => fireEvent.wheel(target, {altKey: true})],
+    ['leaving the window', () => fireEvent.blur(window)],
+  ])('ignores Alt held during %s', (_name, interrupt) => {
+    renderBar();
+    const editor = document.createElement('div');
+    document.body.appendChild(editor);
+    fireEvent.keyDown(window, {key: 'Alt'});
+    interrupt(editor);
+    fireEvent.keyUp(window, {key: 'Alt'});
+    expect(screen.getByRole('region', {name: 'Commands'}))
+      .not.toHaveAttribute('data-snb-access-keys');
+    editor.remove();
+  });
+
   describe('overflow', () => {
     let resize;
     let widthDescriptor;

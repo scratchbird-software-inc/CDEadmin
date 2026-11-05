@@ -257,11 +257,22 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
       }
       alone = false;
     };
+    // Alt with a click, drag (an editor's column selection), wheel, or a
+    // switch away from the window is not a request for hints.
+    const cancel = () => { alone = false; };
     window.addEventListener('keydown', down, true);
     window.addEventListener('keyup', up, true);
+    window.addEventListener('pointerdown', cancel, true);
+    window.addEventListener('mousedown', cancel, true);
+    window.addEventListener('wheel', cancel, true);
+    window.addEventListener('blur', cancel);
     return () => {
       window.removeEventListener('keydown', down, true);
       window.removeEventListener('keyup', up, true);
+      window.removeEventListener('pointerdown', cancel, true);
+      window.removeEventListener('mousedown', cancel, true);
+      window.removeEventListener('wheel', cancel, true);
+      window.removeEventListener('blur', cancel);
     };
   }, [accessKeyTrigger, layer]);
 
