@@ -4,7 +4,9 @@ descriptor fields -> provider plan -> apply on a live server -> re-inspect.
 Set ``CDEADMIN_ROUNDTRIP_MYSQL`` to a JSON object ``{"host", "port", "user",
 "password"}`` for an account that may create databases and accounts (the demo's
 root, ``dev.sh start mysql``). The test creates and drops its own database and
-accounts. Skipped otherwise.
+accounts. Skipped otherwise. Trigger and routine reviews also need MySQL Shell 9.7's
+grammar library: set ``CDEADMIN_MYSQL_PARSER_LIBRARY`` (the demo runtime ships it at
+``tools/reference_engine_demos/runtime/mysql/lib/mysqlsh/yparser/mysql_9.7.so``).
 """
 import json
 import os
@@ -84,7 +86,12 @@ def run(client, route, kind, operation, draft, target=None):
     assert errors == [], errors
     planned = client.plan_admin_operation(request)
     sql = '\n'.join(statement['source'] for statement in planned['command_preview']['statements'])
-    assert client.apply_admin_operation(planned)['accepted'], sql
+    try:
+        applied = client.apply_admin_operation(planned)
+    except Exception as error:
+        raise AssertionError(f"{error} errno={getattr(error, 'errno', None)} "
+                             f"sqlstate={getattr(error, 'sqlstate', None)}\n{sql}") from error
+    assert applied['accepted'], sql
     return sql
 
 
@@ -218,3 +225,34 @@ def test_index_form_every_create_field_and_alter(live):
                  "AND INDEX_NAME='rt_ix2' LIMIT 1") == [('YES',)]
     _index, after = record(client, route, 'index', 'rt_ix2', 'index')
     assert after['new_name'] == 'rt_ix2' and after['visible'] is True
+
+
+def test_trigger_form_every_field_creates_and_reopens_locked(live):
+    route, client = live
+    form = resolved_form('mysql', 'trigger')
+    query(f'CREATE TABLE `{DATABASE}`.audited(id INT PRIMARY KEY, label VARCHAR(40), note VARCHAR(40))')
+    run(client, route, 'trigger', 'create', backend_draft(form, {
+        'name': 'rt_first', 'parent': DATABASE, 'table': 'audited', 'timing': 'BEFORE', 'event': 'UPDATE',
+        'body': 'SET NEW.label = UPPER(NEW.label)'}))
+    run(client, route, 'trigger', 'create', backend_draft(form, {
+        'name': 'rt_second', 'parent': DATABASE, 'table': 'audited', 'timing': 'BEFORE', 'event': 'UPDATE',
+        'if_not_exists': True, 'body': 'SET NEW.note = TRIM(NEW.label)', 'order': 'PRECEDES',
+        'other_trigger': 'rt_first', 'definer_user': 'root', 'definer_host': '%'}))
+    # FOLLOWS/PRECEDES must name a trigger with the same timing and event (MySQL error 3011).
+    run(client, route, 'trigger', 'create', backend_draft(form, {
+        'name': 'rt_third', 'parent': DATABASE, 'table': 'audited', 'timing': 'BEFORE', 'event': 'UPDATE',
+        'body': 'SET NEW.note = CONCAT(NEW.note, \'!\')', 'order': 'FOLLOWS', 'other_trigger': 'rt_first'}))
+    run(client, route, 'trigger', 'create', backend_draft(form, {
+        'name': 'rt_after', 'parent': DATABASE, 'table': 'audited', 'timing': 'AFTER', 'event': 'DELETE',
+        'body': 'SET @rt_deleted = OLD.id'}))
+    rows = query(f"SELECT TRIGGER_NAME, ACTION_TIMING, EVENT_MANIPULATION, ACTION_ORDER, DEFINER FROM "
+                 f"information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='{DATABASE}' ORDER BY TRIGGER_NAME")
+    assert rows == [('rt_after', 'AFTER', 'DELETE', 1, 'root@%'), ('rt_first', 'BEFORE', 'UPDATE', 2, 'root@%'),
+                    ('rt_second', 'BEFORE', 'UPDATE', 1, 'root@%'), ('rt_third', 'BEFORE', 'UPDATE', 3, 'root@%')]
+    _trigger, reopened = record(client, route, 'trigger', 'rt_second', 'trigger')
+    assert (reopened['name'], reopened['parent'], reopened['table']) == ('rt_second', DATABASE, 'audited')
+    assert (reopened['timing'], reopened['event']) == ('BEFORE', 'UPDATE')
+    assert reopened['body'] == 'SET NEW.note = TRIM(NEW.label)'
+    assert (reopened['definer_user'], reopened['definer_host']) == ('root', '%')
+    # Reopened, every stored property is locked: an unchanged edit sends nothing to alter.
+    assert backend_draft(form, dict(reopened), mode='alter', baseline=reopened) == {}

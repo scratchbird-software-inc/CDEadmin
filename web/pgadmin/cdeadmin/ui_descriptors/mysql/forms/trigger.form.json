@@ -3,7 +3,7 @@
  "engine": "mysql",
  "family": "trigger",
  "resource_kinds": ["trigger"],
- "status": "draft",
+ "status": "complete",
  "engine_tab_title": "MySQL",
  "omitted_tabs": [
   {"tab":"Options","reason":"MySQL row triggers have no deferrability, constraint-trigger or transition-table options. Native relative ordering is on Engine."}
@@ -12,17 +12,17 @@
   {"concept":"Reviewed trigger replacement in the family editor","reason":"Explicit native DROP/CREATE and DDN replacement workflows exist. Composed family-editor dispatch remains Decision9; the editor must not invent ALTER TRIGGER or silently recreate the trigger."}
  ],
  "fields": [
-  {"field_id":"name","label":"Name","control":"text","tab":"General","modes":["create"],"required":true},
-  {"field_id":"parent","label":"Database","control":"reference","tab":"General","modes":["create"],"reference_kind":"database","help":"The trigger and owning table belong to the same native database; a qualified table supplies it."},
-  {"field_id":"table","label":"Table","control":"reference","tab":"General","modes":["create"],"reference_kind":"table","required":true},
-  {"field_id":"timing","label":"Timing","control":"select","tab":"General","modes":["create"],"options":[{"value":"BEFORE","label":"BEFORE"},{"value":"AFTER","label":"AFTER"}],"default":"BEFORE","required":true},
-  {"field_id":"event","label":"Event","control":"select","tab":"General","modes":["create"],"options":[{"value":"INSERT","label":"INSERT"},{"value":"UPDATE","label":"UPDATE"},{"value":"DELETE","label":"DELETE"}],"required":true,"default":"INSERT"},
+  {"field_id":"name","label":"Name","control":"text","tab":"General","required":true,"editable_after_create":false},
+  {"field_id":"parent","label":"Database","control":"reference","tab":"General","reference_kind":"database","help":"The trigger and owning table belong to the same native database; a qualified table supplies it.","editable_after_create":false,"record_key":"trigger_schema"},
+  {"field_id":"table","label":"Table","control":"reference","tab":"General","reference_kind":"table","required":true,"editable_after_create":false,"record_key":"event_object_table"},
+  {"field_id":"timing","label":"Timing","control":"select","tab":"General","options":[{"value":"BEFORE","label":"BEFORE"},{"value":"AFTER","label":"AFTER"}],"default":"BEFORE","required":true,"editable_after_create":false},
+  {"field_id":"event","label":"Event","control":"select","tab":"General","options":[{"value":"INSERT","label":"INSERT"},{"value":"UPDATE","label":"UPDATE"},{"value":"DELETE","label":"DELETE"}],"required":true,"default":"INSERT","editable_after_create":false},
   {"field_id":"if_not_exists","label":"If not exists","control":"boolean","tab":"General","modes":["create"],"default":false},
-  {"field_id":"body","label":"Body","control":"code","tab":"Definition","modes":["create"],"language":"sql","required":true,"default_path":["action_statement"]},
+  {"field_id":"body","label":"Body","control":"code","tab":"Definition","language":"sql","required":true,"default_path":["action_statement"],"editable_after_create":false,"record_key":"action_statement"},
   {"field_id":"order","label":"Order","control":"select","tab":"Engine","modes":["create"],"options":[{"value":"NONE","label":"None"},{"value":"FOLLOWS","label":"FOLLOWS"},{"value":"PRECEDES","label":"PRECEDES"}],"default":"NONE","group":"Ordering"},
   {"field_id":"other_trigger","label":"Ordering trigger","control":"text","tab":"Engine","modes":["create"],"help":"Native trigger name for FOLLOWS or PRECEDES. It must have compatible table, timing and event; MySQL checks that constraint.","group":"Ordering"},
-  {"field_id":"definer_user","label":"Definer user","control":"text","tab":"Engine","modes":["create"]},
-  {"field_id":"definer_host","label":"Definer host","control":"text","tab":"Engine","modes":["create"]}
+  {"field_id":"definer_user","label":"Definer user","control":"text","tab":"Engine","editable_after_create":false,"record_key":"definer","record_pattern":"^(.*)@[^@]*$"},
+  {"field_id":"definer_host","label":"Definer host","control":"text","tab":"Engine","editable_after_create":false,"record_key":"definer","record_pattern":"@([^@]*)$"}
  ],
- "notes": "All declared create bindings reach the native trigger compiler. Existing one-element events lists remain compatible. Native MySQL9.7 owns row execution, privileges and order restrictions; no INSTEAD OF or statement-level trigger is invented. Draft pending shared rendering/round-trip acceptance."
+ "notes": "Create binds the native trigger compiler with its review (SQL mode identity and MySQL Shell 9.7 grammar). MySQL has no ALTER TRIGGER and the editor does not recreate one (Decision 9 default; replacement stays an explicit DROP/CREATE or DDN workflow), so a reopened trigger shows its stored properties locked: name, database, table, timing, event, body and definer pre-fill from the inspected record. IF NOT EXISTS and FOLLOWS/PRECEDES are creation options (the catalog keeps only ACTION_ORDER). Round-tripped 2026-11-05 on the MySQL 9.7.0 demo (tools/tests/test_ui_descriptor_roundtrip_mysql.py): every field set, order and definer read back, and reopened values pre-filled."
 }
