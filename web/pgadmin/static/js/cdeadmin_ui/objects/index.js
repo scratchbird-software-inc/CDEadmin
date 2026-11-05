@@ -35,6 +35,7 @@ export {
   fieldOptions,
   fieldVisible,
   formForKind,
+  kindForm,
   initialDraft,
   menuForKind,
   operationContext,

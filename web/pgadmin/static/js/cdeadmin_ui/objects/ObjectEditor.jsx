@@ -63,7 +63,8 @@ function cellErrorsFor(fieldId, errors) {
   return Object.fromEntries(Object.entries(errors).filter(([key]) => key.startsWith(prefix)));
 }
 
-function FieldsTab({tab, form, draft, errors, shownError, mode, context, resourceKind, disabled, onFieldChange}) {
+function FieldsTab({tab, form, draft, errors, shownError, mode, context, resourceKind, disabled, fixedFields=[],
+  onFieldChange}) {
   const fields = activeFields(tab.fields, {mode, draft});
   const groups = groupFields(fields);
   // A tab whose family declares sections (Constraints: primary key, unique, ...) shows
@@ -96,7 +97,8 @@ function FieldsTab({tab, form, draft, errors, shownError, mode, context, resourc
             value={draft[field.field_id]} draft={draft} context={context} resourceKind={resourceKind}
             error={show ? errors[field.field_id] : undefined}
             cellErrors={show ? cellErrorsFor(field.field_id, errors) : undefined} mode={mode}
-            disabled={disabled || (mode === 'alter' && field.editable_after_create === false)}
+            disabled={disabled || fixedFields.includes(field.field_id) ||
+              (mode === 'alter' && field.editable_after_create === false)}
             onChange={(value) => onFieldChange(field.field_id, value)} />;
         })}
       </Grid>
@@ -108,11 +110,13 @@ FieldsTab.propTypes = {
   tab: PropTypes.object.isRequired, form: PropTypes.object.isRequired, draft: PropTypes.object.isRequired,
   errors: PropTypes.object.isRequired, shownError: PropTypes.func.isRequired, mode: PropTypes.string.isRequired,
   context: PropTypes.object, resourceKind: PropTypes.string, disabled: PropTypes.bool,
+  fixedFields: PropTypes.arrayOf(PropTypes.string),
   onFieldChange: PropTypes.func.isRequired,
 };
 
 export default function ObjectEditor({form, mode='create', resourceKind, record={}, context={},
-  plan, apply, tabRenderers={}, onClose, onApplied, title, readOnly=false, autoPlan=true, directApply=false, applyLabel}) {
+  plan, apply, tabRenderers={}, onClose, onApplied, title, readOnly=false, autoPlan=true, directApply=false, applyLabel,
+  fixedFields=[]}) {
   const [draft, setDraft] = useState(() => initialDraft(form, {mode, record}));
   const [baseline] = useState(() => initialDraft(form, {mode, record}));
   const [activeTab, setActiveTab] = useState(form.tabs[0]?.tab);
@@ -246,7 +250,7 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
             <FieldsTab tab={current} form={form} draft={draft} errors={errors} shownError={shownError}
               mode={mode} context={context}
               resourceKind={resourceKind} disabled={readOnly || applyState.status === 'loading'}
-              onFieldChange={onFieldChange} /> :
+              fixedFields={fixedFields} onFieldChange={onFieldChange} /> :
             <EmptyState message={`${current.title} is shown once the object exists.`} />))}
       </Box>}
     </ScrollArea>
@@ -328,4 +332,6 @@ ObjectEditor.propTypes = {
   autoPlan: PropTypes.bool,
   directApply: PropTypes.bool,
   applyLabel: PropTypes.string,
+  // Fields the host decides, locked in every mode (the variant a resource kind fixes).
+  fixedFields: PropTypes.arrayOf(PropTypes.string),
 };

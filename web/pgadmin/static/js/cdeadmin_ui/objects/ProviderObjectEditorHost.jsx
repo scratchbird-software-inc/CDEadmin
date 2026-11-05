@@ -24,7 +24,7 @@ import {Banner, ValidationMessage} from '../feedback/Indicators';
 import {ProgressOverlay} from '../feedback/ProgressOverlay';
 import ObjectEditor from './ObjectEditor';
 import {DescriptorClient, visualAdminCalls} from './DescriptorClient';
-import {buildOptionContext, formForKind, editorAvailable, versionSupportNotice} from './descriptors';
+import {buildOptionContext, kindForm, editorAvailable, versionSupportNotice} from './descriptors';
 import {Stack} from '../primitives/Layout';
 
 const DATABASE_SCOPED = new Set(['resource_inspect', 'resource_page', 'visual_admin_validate',
@@ -194,7 +194,7 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
     return <EmptyState message={`No ${resourceKind} editor is declared for ${engine} yet.`}
       actionLabel="Close" onAction={onClose} />;
   }
-  const form = formForKind(bundle, resourceKind);
+  const {form, fixed, variant} = kindForm(bundle, resourceKind);
   const calls = visualAdminCalls(post, {resourceKind, operationId: mode === 'create' ? 'create' : 'alter',
     target: resource});
   const optionContext = buildOptionContext(bundle, resources);
@@ -208,11 +208,11 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
     Triggers: () => <NativeChildList resource={resource} resources={resources} kind="trigger" />,
     ...tabRenderersProp,
   };
-  const variant = bundle.kinds[resourceKind]?.variant;
   const record = {...recordFromResource(resource, {form, resources}), ...(variant ? {variant} : {})};
   const notice = versionSupportNotice(versionSupport);
   const editor = <ObjectEditor form={form} mode={mode} resourceKind={resourceKind}
     record={record} context={{...context, ...optionContext, target, target_resource: resource}}
+    fixedFields={fixed}
     tabRenderers={tabRenderers}
     title={displayName ? `${mode === 'create' ? 'Create' : 'Edit'} ${form.family_title.toLowerCase()} — ${displayName}` : undefined}
     plan={({draft}) => calls.plan({draft})}

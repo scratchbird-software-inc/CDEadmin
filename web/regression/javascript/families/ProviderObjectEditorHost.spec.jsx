@@ -1,7 +1,7 @@
 import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import Theme from 'sources/Theme';
 import {
-  OperationDialog, ProviderObjectEditorHost, makePost, recordFromResource,
+  OperationDialog, ProviderObjectEditorHost, kindForm, makePost, recordFromResource,
 } from '../../../pgadmin/static/js/cdeadmin_ui/objects';
 import {loadEngineBundle} from './familyFixtures';
 
@@ -61,6 +61,40 @@ describe('ProviderObjectEditorHost', () => {
     expect(api.calls.at(-1)).toMatchObject({action: 'visual_admin_apply',
       request: {plan_id: 'plan-1', plan_digest: 'digest-1', confirmed: true}});
     expect(screen.getByText('Applied.')).toBeInTheDocument();
+  });
+
+  it('fixes the variant the resource kind declares, in create mode too', async () => {
+    // MySQL serves procedures, functions and events from one routine form. Creating a
+    // function must not offer a switch to the procedure variant, whose fields the
+    // function create would then receive.
+    const bundle = loadEngineBundle('mysql');
+    const api = fakeApi(bundle, resource);
+    render(<Theme><ProviderObjectEditorHost api={api} endpointUrl="/x" engine="mysql" resourceKind="function"
+      mode="create" onClose={() => {}} /></Theme>);
+    await screen.findByRole('dialog');
+    const variant = screen.getByLabelText(/^Variant/);
+    expect(variant).toHaveAttribute('aria-disabled', 'true');  // a select renders as a combobox div
+    expect(variant).toHaveTextContent('Function');
+    expect(screen.getByLabelText(/^Returns/)).toBeInTheDocument();
+  });
+
+  it('offers a kind without its own variant only the variants no sibling kind declares', () => {
+    // MySQL `view` shares its form with `materialized-view`: creating a view must not offer
+    // Materialized, which the view create would ignore.
+    const mysql = loadEngineBundle('mysql');
+    const view = kindForm(mysql, 'view');
+    const options = (form) => form.tabs.flatMap((tab) => tab.fields).find((field) => field.field_id === 'variant')
+      .options.map((option) => option.value);
+    expect(options(view.form)).toEqual(['default']);
+    expect(view).toMatchObject({fixed: ['variant'], variant: 'default'});
+    expect(kindForm(mysql, 'materialized-view')).toMatchObject({fixed: ['variant'], variant: 'materialized'});
+    // PostgreSQL `type` keeps every type variant but Domain, which the `domain` kind owns.
+    const type = kindForm(loadEngineBundle('postgresql'), 'type');
+    expect(options(type.form)).not.toContain('domain');
+    expect(options(type.form).length).toBeGreaterThan(1);
+    expect(type).toMatchObject({fixed: [], variant: null});
+    // YugabyteDB's base kinds show their own fields when no variant is chosen.
+    expect(kindForm(loadEngineBundle('yugabytedb'), 'view')).toMatchObject({fixed: ['variant'], variant: null});
   });
 
   it('explains when the engine declares no editor for the kind', async () => {

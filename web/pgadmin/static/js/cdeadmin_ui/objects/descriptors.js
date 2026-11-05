@@ -116,6 +116,35 @@ export function formForKind(bundle, resourceKind) {
   return bundle.forms?.[formKey(kind.family, resourceKind)] || null;
 }
 
+/**
+ * The form as one resource kind edits it. Kinds that share a family form each own the
+ * variant they declare, so a kind without its own (MySQL `view` beside `materialized-view`,
+ * PostgreSQL `type` beside `domain`) is offered only the variants no sibling declares; the
+ * backend acts on the resource kind, so a sibling's variant would be silently ignored.
+ * `fixed` names the fields the host decides: the variant, when the kind declares one or
+ * at most one remains; `variant` is that value, for the record.
+ */
+export function kindForm(bundle, resourceKind) {
+  const form = formForKind(bundle, resourceKind);
+  if(!form) return {form, fixed: [], variant: null};
+  const own = bundle.kinds[resourceKind]?.variant;
+  if(own) return {form, fixed: ['variant'], variant: own};
+  const taken = new Set(Object.keys(bundle.kinds)
+    .filter((kind) => kind !== resourceKind && bundle.kinds[kind].variant && formForKind(bundle, kind) === form)
+    .map((kind) => bundle.kinds[kind].variant));
+  let remaining = null;
+  let only = null;
+  const tabs = form.tabs.map((tab) => ({...tab, fields: tab.fields.map((field) => {
+    if(field.field_id !== 'variant' || !field.ui_only || !taken.size) return field;
+    const options = (field.options || []).filter((option) => !taken.has(option.value));
+    remaining = options.length;
+    only = options.length === 1 ? options[0].value : null;
+    return {...field, options};
+  })}));
+  if(remaining === null) return {form, fixed: [], variant: null};
+  return {form: {...form, tabs}, fixed: remaining <= 1 ? ['variant'] : [], variant: only};
+}
+
 /** Whether the shell should open the family editor for this kind. */
 export function editorAvailable(bundle, resourceKind) {
   const form = formForKind(bundle, resourceKind);
