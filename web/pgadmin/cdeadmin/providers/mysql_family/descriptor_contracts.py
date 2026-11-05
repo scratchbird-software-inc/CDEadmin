@@ -52,11 +52,28 @@ def index_contract(operation, legacy_fields):
 ROUTINE_VARIANTS = {'procedure': 'procedure', 'function': 'function', 'event': 'scheduled'}
 
 
-def _shown(field, variant):
+def _shown(field, variant, by_id=None, seen=()):
+    """Whether the editor can show the field for this variant: a rule on another field
+    holds only where that field is itself shown."""
     rule = field.get('visible_when')
-    if not rule or rule.get('field') != 'variant':
+    if not rule:
         return True
-    return variant == rule['equals'] if 'equals' in rule else variant in rule.get('in', ())
+    if rule.get('field') == 'variant':
+        return variant == rule['equals'] if 'equals' in rule else variant in rule.get('in', ())
+    controller = (by_id or {}).get(rule.get('field'))
+    if controller is None or controller['field_id'] in seen:
+        return True
+    return _shown(controller, variant, by_id, seen + (field['field_id'],))
+
+
+def _variant_fields(variant, operation, name='role'):
+    """A variant's fields in a family's one form, as the editor shows them for the operation."""
+    descriptor = document('forms/'+name+'.form.json')
+    by_id = {field['field_id']: field for field in descriptor['fields']}
+    return [field_contract(field) for field in descriptor['fields']
+            if operation in field.get('modes', ['create', 'alter']) and not field.get('ui_only')
+            and _shown(field, variant, by_id)
+            and not (operation == 'alter' and field.get('editable_after_create') is False)]
 
 
 def routine_contract(kind, operation, legacy_fields=()):
@@ -67,12 +84,7 @@ def routine_contract(kind, operation, legacy_fields=()):
     if operation in {'create', 'alter'}:
         # One routine form serves every variant (2026-11-05); a variant's fields are
         # those its visible_when shows. Fields locked after create are never altered.
-        variant = ROUTINE_VARIANTS[kind]
-        descriptor = document('forms/routine.form.json')
-        fields = [field_contract(field) for field in descriptor['fields']
-                  if operation in field.get('modes', ['create', 'alter']) and not field.get('ui_only')
-                  and _shown(field, variant)
-                  and not (operation == 'alter' and field.get('editable_after_create') is False)]
+        fields = _variant_fields(ROUTINE_VARIANTS[kind], operation, 'routine')
         return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/routine.form.json'}
     if kind == 'event' and operation == 'rename':
         selected = next(value for value in document('operations.json')['operations']
@@ -101,9 +113,7 @@ def account_contract(operation, legacy_fields):
         descriptor = next(value for value in document('operations.json')['operations']
                           if value['resource_kind'] == 'user' and value['operation_id'] == operation)
         return {'fields': [field_contract(field) for field in descriptor['fields']]}
-    descriptor = document('forms/role-user.form.json')
-    fields = [field_contract(field) for field in descriptor['fields']
-              if operation in field.get('modes', ['create', 'alter'])]
+    fields = _variant_fields('user', operation)
     # Factor rows contain password/authentication-string cells. The backend
     # redacts the entire supplied group from validation and public plans.
     for field in fields:
@@ -117,13 +127,12 @@ def account_contract(operation, legacy_fields):
                 value.pop('default', None)
                 value['required'] = False
             fields.append(value)
-    return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/role-user.form.json'}
+    return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/role.form.json'}
 
 
 def role_contract(operation, legacy_fields):
     if operation == 'create':
-        descriptor = document('forms/role.form.json')
-        fields = [field_contract(field) for field in descriptor['fields']]
+        fields = _variant_fields('role', operation)
         fields.extend(deepcopy(field) for field in legacy_fields if field['field_id'] == 'options')
         return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/role.form.json'}
     if operation in {'grant', 'revoke', 'set_default'}:
@@ -142,4 +151,4 @@ def privilege_contract(operation):
     # Preserve the former scalar account/list API without exposing a second UI.
     fields += [{'field_id':'principal','label':'Principal','control':'text','required':False},
                {'field_id':'object_name','label':'Object name','control':'text','required':False}]
-    return {'fields':fields,'authority':'ui_descriptors/mysql/forms/role-privilege.form.json'}
+    return {'fields':fields,'authority':'ui_descriptors/mysql/operations.json'}

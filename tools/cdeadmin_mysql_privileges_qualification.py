@@ -22,7 +22,7 @@ def qualify(output):
     import mysql.connector
     paths=['web/pgadmin/cdeadmin/providers/mysql_family/'+name for name in ('mysql_privileges.py','mysql_accounts.py','mysql_indexes.py','administration.py','provider.py','descriptor_contracts.py')]
     paths+=['web/pgadmin/cdeadmin/providers/mysql_roles.py']
-    paths+=['web/pgadmin/cdeadmin/ui_descriptors/mysql/'+name for name in ('forms/role-privilege.form.json','operations.json','capabilities.json')]
+    paths+=['web/pgadmin/cdeadmin/ui_descriptors/mysql/'+name for name in ('forms/role.form.json','operations.json','capabilities.json')]
     paths+=[str(Path(__file__).relative_to(ROOT))]
     proof={'complete':False,'interfaces':[],'history_testing':'ScratchBird history not run',
         'source_sha256':{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in paths}}

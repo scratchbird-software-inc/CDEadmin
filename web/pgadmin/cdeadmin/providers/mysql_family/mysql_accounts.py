@@ -193,7 +193,13 @@ def compile_operation(operation,draft,target=None):
     if 'failed_login_attempts' in draft:statement.add(' FAILED_LOGIN_ATTEMPTS '+integer(draft['failed_login_attempts'],'Failed login attempts',32767))
     if 'password_lock_time' in draft:
         value=draft['password_lock_time'];statement.add(' PASSWORD_LOCK_TIME '+('UNBOUNDED' if value=='UNBOUNDED' else integer(value,'Password lock time',32767)))
-    if 'comment' in draft and 'attributes' in draft:raise RelationalClientError('Select native COMMENT or ATTRIBUTE for this change')
+    if 'comment' in draft and 'attributes' in draft:
+        # A statement takes COMMENT or ATTRIBUTE; COMMENT 'x' is ATTRIBUTE '{"comment": "x"}', so the
+        # comment joins the attributes (2026-11-05). Two different comments are a conflict.
+        if not isinstance(draft['attributes'],Mapping):raise RelationalClientError('Account attributes require a native object')
+        if draft['attributes'].get('comment',draft['comment'])!=draft['comment']:
+            raise RelationalClientError('The comment and the attributes\' comment key differ; give one comment')
+        draft={**draft,'attributes':{**draft['attributes'],'comment':draft['comment']}};draft.pop('comment')
     if 'comment' in draft:statement.add(' COMMENT ');statement.value(draft['comment'],'Account comment')
     if 'attributes' in draft:
         if not isinstance(draft['attributes'],Mapping):raise RelationalClientError('Account attributes require a native object')

@@ -242,6 +242,10 @@ def validate_descriptors(strict_pending: bool) -> tuple[list[str], dict]:
                 key = f"engine_object:{kinds[0]}" if kinds else family
             else:
                 key = family
+            if key in report["forms"]:
+                # The descriptor service serves one form per family (engine objects per kind);
+                # a second form would silently replace the first. Variants share one form.
+                errors.append(f"{rel}: a second {key!r} form; one form serves every variant of a family")
             report["forms"][key] = doc.get("status")
             skeleton = families.get(family)
             if not skeleton:
@@ -276,9 +280,16 @@ def validate_descriptors(strict_pending: bool) -> tuple[list[str], dict]:
                         continue  # rendered by the shell from the provider plan
                     if tab not in used_tabs and tab not in omitted_tabs:
                         errors.append(f"{rel}: status {doc['status']} but required tab {tab!r} has no fields and is not in omitted_tabs")
+            variant = next((field for field in doc.get("fields", []) if field.get("field_id") == "variant"), None)
+            offered = {option.get("value") for option in (variant or {}).get("options", [])}
             for kind in kinds_by_form.get(f"forms/{form_path.name}", []):
                 if kind["resource_kind"] not in doc.get("resource_kinds", []):
                     errors.append(f"{rel}: capabilities.json routes kind {kind['resource_kind']} here but resource_kinds does not list it")
+                # The editor fixes a kind's declared variant (ProviderObjectEditorHost); one the
+                # form does not offer would open the form on no variant's fields.
+                if kind.get("variant") and variant is not None and kind["variant"] not in offered:
+                    errors.append(f"{rel}: kind {kind['resource_kind']} declares variant {kind['variant']!r} "
+                                  f"but the form's variant select offers {sorted(offered)}")
         for family in FAMILIES:
             has_kind = any(k["family"] == family for k in caps.get("kinds", []))
             if has_kind and family not in report["forms"] and family not in omitted:

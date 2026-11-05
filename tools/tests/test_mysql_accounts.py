@@ -1,4 +1,6 @@
 """Native MySQL account policy clauses and secret-bound plugin authentication."""
+import json
+
 import pytest
 import test_cdeadmin_relational_providers  # noqa: F401
 from test_cdeadmin_visual_admin import context, Permissions
@@ -43,11 +45,20 @@ def test_native_account_and_password_policies_are_typed_and_bound():
     {'password_expire':'INTERVAL','password_expire_days':0}, {'password_expire_days':3},
     {'failed_login_attempts':32768}, {'password_lock_time':'-1'}, {'password_history':True},
     {'max_queries_per_hour':4294967296}, {'attributes':[]}, {'attributes':{'bad':float('nan')}},
-    {'attributes':{},'comment':'conflict'}, {'retain_current_password':True}, {'discard_old_password':True},
+    {'attributes':{'comment':'other'},'comment':'conflict'}, {'retain_current_password':True}, {'discard_old_password':True},
     {'active':'LOCK'}, {'anonymous':True}, {'invented':True},
 ])
 def test_invalid_ignored_or_protected_result_inputs_are_refused(change):
     with pytest.raises(RelationalClientError):accounts.compile_operation('create',{**BASE,**change})
+
+
+def test_a_comment_with_attributes_is_their_comment_key():
+    # COMMENT 'x' is ATTRIBUTE '{"comment": "x"}'; the account form offers both fields (2026-11-05).
+    statement=accounts.compile_operation('alter',{'comment':'note','attributes':{'team':'ops'}},TARGET)['statements'][0]
+    assert statement['source']=='ALTER USER `user@literal`@`host` ATTRIBUTE %s'
+    assert json.loads(statement['parameters'][-1])=={'team':'ops','comment':'note'}
+    same=accounts.compile_operation('alter',{'comment':'note','attributes':{'comment':'note'}},TARGET)['statements'][0]
+    assert json.loads(same['parameters'][-1])=={'comment':'note'}
 
 
 def test_alter_preserves_every_omitted_policy_and_accepts_legacy_changes():

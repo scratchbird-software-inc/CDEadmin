@@ -65,7 +65,7 @@ def live():
         cleanup = admin()
         for statement in (f'DROP DATABASE IF EXISTS `{DATABASE}`',
                           f"DROP USER IF EXISTS 'rt_user_{UNIQUE}'@'localhost'",
-                          f"DROP ROLE IF EXISTS 'rt_role_{UNIQUE}'"):
+                          f"DROP ROLE IF EXISTS 'rt_role_{UNIQUE}'", f"DROP ROLE IF EXISTS 'rt_group_{UNIQUE}'"):
             cleanup.cursor().execute(statement)
         cleanup.close()
 
@@ -96,7 +96,8 @@ def run(client, route, kind, operation, draft, target=None):
 
 
 VARIANTS = {'materialized-view': 'materialized', 'procedure': 'procedure', 'function': 'function',
-            'event': 'scheduled'}  # capabilities.json; the editor host adds it to the record
+            'event': 'scheduled', 'role': 'role', 'user': 'user',
+            'privilege': 'grant'}  # capabilities.json; the editor host adds it to the record
 
 
 def record(client, route, kind, name, family):
@@ -334,3 +335,99 @@ def test_scheduled_event_variant_every_field_reopen_and_alter(live):
     run(client, route, 'event', 'alter', backend_draft(form, {**again, 'status_alter': 'DISABLE', 'confirmation': 'rt_event'},
                                                        mode='alter', baseline=again), target=event)
     assert event_facts('rt_event')[:7] == ('daily', 'DISABLED', 'NOT PRESERVE', 'RECURRING', '1', 'DAY', 'SET @rt_event = 2')
+
+
+def account_facts(user, host):
+    return query("SELECT account_locked, password_lifetime, password_reuse_history, password_reuse_time, "
+                 "password_require_current, ssl_type, max_questions, max_updates, max_connections, max_user_connections, "
+                 "plugin, CAST(User_attributes AS CHAR) FROM mysql.user WHERE user=%s AND host=%s" % (repr(user), repr(host)))[0]
+
+
+@pytest.fixture
+def auth_socket():
+    """auth_socket for a second factor (MySQL keeps internal-storage plugins to the first factor)."""
+    installed = not query("SELECT 1 FROM information_schema.PLUGINS WHERE PLUGIN_NAME='auth_socket'")
+    if installed:
+        query("INSTALL PLUGIN auth_socket SONAME 'auth_socket.so'")
+    try:
+        yield
+    finally:
+        query(f"DROP USER IF EXISTS 'rt_mfa_{UNIQUE}'@'localhost'")
+        if installed:
+            query('UNINSTALL PLUGIN auth_socket')
+
+
+def test_role_user_and_privilege_variants(live):
+    route, client = live
+    form = resolved_form('mysql', 'role')
+    role, group, user = f'rt_role_{UNIQUE}', f'rt_group_{UNIQUE}', f'rt_user_{UNIQUE}'
+    run(client, route, 'role', 'create', backend_draft(form, {'variant': 'role', 'name': role, 'host': '%',
+                                                             'if_not_exists': True}))
+    _role, role_record = record(client, route, 'role', f'{role}@%', 'role')
+    assert (role_record['name'], role_record['host'], role_record['variant']) == (role, '%', 'role')
+    run(client, route, 'user', 'create', backend_draft(form, {
+        'variant': 'user', 'name': user, 'host': 'localhost', 'authentication_create': 'PASSWORD',
+        'password': 'Rt-initial-1', 'active': False, 'password_expire': 'INTERVAL', 'password_expire_days': 30,
+        'password_history': '4', 'password_reuse_days': '10', 'password_require_current': 'OPTIONAL',
+        'failed_login_attempts': 3, 'password_lock_time': '2', 'max_queries_per_hour': 5, 'max_updates_per_hour': 6,
+        'max_connections_per_hour': 7, 'max_user_connections': 3, 'tls_mode': 'SSL', 'comment': 'round trip',
+        'attributes': {'team': 'ops'}, 'default_roles': [{'user': role, 'host': '%'}], 'if_not_exists': True}))
+    facts = account_facts(user, 'localhost')
+    assert facts[:10] == ('Y', 30, 4, 10, 'N', 'ANY', 5, 6, 7, 3), facts
+    assert json.loads(facts[11])['metadata'] == {'comment': 'round trip', 'team': 'ops'}
+    assert query(f"SELECT default_role_user, default_role_host FROM mysql.default_roles WHERE user='{user}'") == [(role, '%')]
+    # A role created with a member grants the role to it.
+    run(client, route, 'role', 'create', backend_draft(form, {'variant': 'role', 'name': group, 'host': '%',
+                                                             'members': [{'user': user, 'host': 'localhost'}]}))
+    assert query(f"SELECT from_user FROM mysql.role_edges WHERE to_user='{user}' AND from_user='{group}'") == [(group,)]
+    account, reopened = record(client, route, 'user', f'{user}@localhost', 'role')
+    assert (reopened['name'], reopened['host'], reopened['variant']) == (user, 'localhost', 'user')
+    assert (reopened['account_lock'], reopened['password_expire'], reopened['password_expire_days']) == ('LOCK', 'INTERVAL', 30)
+    assert (reopened['password_require_current'], reopened['tls_mode'], reopened['comment']) == ('OPTIONAL', 'SSL', 'round trip')
+    assert (reopened['max_queries_per_hour'], reopened['max_user_connections']) == (5, 3)
+    assert 'attributes' not in reopened  # merged by MySQL, so an input rather than state (see the form's gap)
+    edited = {**reopened, 'account_lock': 'UNLOCK', 'password_expire': 'NEVER', 'tls_mode': 'X509', 'max_queries_per_hour': 50,
+              'comment': 'edited', 'password_require_current': 'REQUIRED', 'confirmation': f'{user}@localhost'}
+    alter = backend_draft(form, edited, mode='alter', baseline=reopened)
+    assert set(alter) == {'account_lock', 'password_expire', 'tls_mode', 'max_queries_per_hour', 'comment',
+                          'password_require_current', 'confirmation'}, alter
+    run(client, route, 'user', 'alter', alter, target=account)
+    facts = account_facts(user, 'localhost')
+    assert (facts[0], facts[1], facts[4], facts[5], facts[6]) == ('N', 0, 'Y', 'X509', 50), facts
+    assert json.loads(facts[11])['metadata'] == {'comment': 'edited', 'team': 'ops'}
+    # A password change keeping the old one as the secondary password, then discarding it.
+    account, reopened = record(client, route, 'user', f'{user}@localhost', 'role')
+    change = {**reopened, 'authentication_alter': 'PASSWORD', 'password': 'Rt-second-2',
+              'retain_current_password': True, 'confirmation': f'{user}@localhost'}
+    run(client, route, 'user', 'alter', backend_draft(form, change, mode='alter', baseline=reopened), target=account)
+    assert 'additional_password' in json.loads(account_facts(user, 'localhost')[11])
+    discard = {**reopened, 'discard_old_password': True, 'confirmation': f'{user}@localhost'}
+    run(client, route, 'user', 'alter', backend_draft(form, discard, mode='alter', baseline=reopened), target=account)
+    assert 'additional_password' not in json.loads(account_facts(user, 'localhost')[11])
+    query(f"GRANT SELECT ON `{DATABASE}`.owner TO '{role}'@'%' WITH GRANT OPTION")
+    rows = resources(client, route)
+    grant = next(row for row in rows if row['resource_kind'] == 'privilege' and row['native'].get('table_name') == 'owner'
+                 and role in row['native'].get('grantee', ''))
+    native = record_from_resource(form, grant, rows); native['variant'] = 'grant'
+    shown = record_draft(form, native)
+    assert (shown['privilege'], shown['scope'], shown['database'], shown['table_name'], shown['grantable']) == (
+        'SELECT', 'table', DATABASE, 'owner', True)
+
+
+def test_user_authentication_factors(live, auth_socket):
+    route, client = live
+    form = resolved_form('mysql', 'role')
+    user = f'rt_mfa_{UNIQUE}'
+    run(client, route, 'user', 'create', backend_draft(form, {
+        'variant': 'user', 'name': user, 'host': 'localhost', 'authentication_create': 'PASSWORD', 'password': 'Rt-mfa-1',
+        'authentication_factors': [{'mode': 'AUTHENTICATION_STRING', 'plugin': 'auth_socket',
+                                    'authentication_string': 'root'}]}))
+    attributes = json.loads(account_facts(user, 'localhost')[11])
+    assert [factor['plugin'] for factor in attributes['multi_factor_authentication']] == ['auth_socket']
+    account, reopened = record(client, route, 'user', f'{user}@localhost', 'role')
+    drop = {**reopened, 'factor_actions': [{'action': 'DROP', 'factor': 2}], 'confirmation': f'{user}@localhost'}
+    alter = backend_draft(form, drop, mode='alter', baseline=reopened)
+    assert set(alter) == {'factor_actions', 'confirmation'}, alter
+    run(client, route, 'user', 'alter', alter, target=account)
+    assert 'multi_factor_authentication' not in json.loads(account_facts(user, 'localhost')[11] or '{}')
+

@@ -93,6 +93,18 @@ def test_every_trigger_field_reaches_the_native_compiler_without_invented_flags(
     assert not {'active','position','when','columns_of'} & {field['field_id'] for field in form['fields']}
 
 
+def variant_fields(form,variant,mode):
+    """The fields a family form shows for a variant and mode, as the editor does."""
+    by_id={field['field_id']:field for field in form['fields']}
+    def shown(field):  # a rule on another field holds only where that field is itself shown
+        rule=field.get('visible_when')
+        if not rule:return True
+        if rule.get('field')=='variant':return variant==rule['equals'] if 'equals' in rule else variant in rule['in']
+        return rule.get('field') not in by_id or shown(by_id[rule['field']])
+    return [field for field in form['fields'] if mode in field.get('modes',['create','alter']) and not field.get('ui_only')
+            and shown(field) and not (mode=='alter' and field.get('editable_after_create') is False)]
+
+
 def bind(draft,field,value):
     path=field.get('backend_field_id',field['field_id'])
     match=re.fullmatch(r'constraints\[kind=(.+)\]',path)
@@ -233,10 +245,11 @@ def test_every_user_and_role_binding_reaches_the_native_account_compiler():
         validation=MYSQL_ADMINISTRATION.validate(request)
         assert not validation['errors'],(kind,mode,draft,validation['errors'])
         return MYSQL_ADMINISTRATION._compile(request)['statements']
+    # One role form serves roles, users and privileges (merged 2026-11-05).
     for mode in ('create','alter'):
-        for field in load('forms/role-user.form.json')['fields']:
+        for field in variant_fields(load('forms/role.form.json'),'user',mode):
             name=field['field_id']
-            if name=='confirmation' or mode not in field.get('modes',['create','alter']):continue
+            if name=='confirmation':continue
             draft={'name':'owned','host':'localhost','password':'initial secret'} if mode=='create' else {'comment':'owned comment'}
             if name=='anonymous':draft.pop('name')
             if name in {'authentication_create','authentication_string'}:
@@ -249,7 +262,7 @@ def test_every_user_and_role_binding_reaches_the_native_account_compiler():
             bind(draft,field,samples[name])
             result=compiled('user',mode,draft)
             assert result and result[0]['source'].startswith(mode.upper()+' USER '),name
-    for field in load('forms/role.form.json')['fields']:
+    for field in variant_fields(load('forms/role.form.json'),'role','create'):
         draft={'name':'owned'}
         value={'name':'changed','host':'localhost','if_not_exists':True,
                'members':[{'user':'member@literal','host':'localhost'}]}[field['field_id']]
@@ -280,4 +293,4 @@ def test_every_privilege_operation_field_binds_an_accepted_native_option():
             assert not MYSQL_ADMINISTRATION.validate(request)['errors'],name
             result=MYSQL_ADMINISTRATION._compile(request)
             assert result['statements'][0]['source'].startswith(operation['operation_id'].upper()+' '),name
-    assert all(field['control']!='json' for field in load('forms/role-privilege.form.json')['fields'])
+    assert all(field['control']!='json' for field in load('forms/role.form.json')['fields'])

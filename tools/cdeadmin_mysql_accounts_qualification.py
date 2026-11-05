@@ -22,7 +22,7 @@ def qualify(output):
     from cdeadmin_mysql_physical_tls_qualification import certificates
     import mysql.connector
     paths=['web/pgadmin/cdeadmin/providers/mysql_family/'+name for name in ('mysql_accounts.py','administration.py','provider.py','descriptor_contracts.py')]
-    paths+=['web/pgadmin/cdeadmin/ui_descriptors/mysql/'+name for name in ('forms/role-user.form.json','capabilities.json')]
+    paths+=['web/pgadmin/cdeadmin/ui_descriptors/mysql/'+name for name in ('forms/role.form.json','capabilities.json')]
     paths+=['web/pgadmin/cdeadmin/visual_admin/provider.py',str(Path(__file__).relative_to(ROOT))]
     proof={'complete':False,'interfaces':[],'history_testing':'ScratchBird history not run',
            'source_sha256':{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in paths}}
