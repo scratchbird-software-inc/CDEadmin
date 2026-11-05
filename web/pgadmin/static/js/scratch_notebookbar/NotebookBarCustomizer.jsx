@@ -184,10 +184,12 @@ export function NotebookBarCustomizer({model, customization, catalog={},
   };
 
   const commands = Object.entries(catalog)
-    .map(([id, control]) => ({id, label: control.label ?? id}))
-    .filter((item) => `${item.label} ${item.id}`.toLowerCase()
+    .map(([id, control]) => ({id, label: control.label ?? id,
+      detail: control.detail ?? ''}))
+    .filter((item) => `${item.label} ${item.detail} ${item.id}`.toLowerCase()
       .includes(query.toLowerCase()))
-    .sort((left, right) => left.label.localeCompare(right.label));
+    .sort((left, right) => left.label.localeCompare(right.label) ||
+      left.detail.localeCompare(right.detail));
   const labelOf = (id) => catalog[id]?.label ?? id;
 
   return <div className="snb-customizer" role="group"
@@ -230,7 +232,7 @@ export function NotebookBarCustomizer({model, customization, catalog={},
             checked={!item.hidden} onClick={(event) => event.stopPropagation()}
             onChange={(event) => toggleGroup(item.id, event.target.checked)}
             disabled={Boolean(addedTab)} />
-          {item.label || item.id}
+          {item.title || item.label || item.id}
         </span>} />
       <div style={ROW}>
         <button type="button" onClick={() => moveGroup(-1)} disabled={!group}>
@@ -267,7 +269,10 @@ export function NotebookBarCustomizer({model, customization, catalog={},
       <input type="search" aria-label={text('search')} placeholder={text('search')}
         value={query} onChange={(event) => setQuery(event.target.value)} />
       <ListBox label={text('commands')} items={commands} selected={commandId}
-        onSelect={setCommandId} render={(item) => item.label} />
+        onSelect={setCommandId} render={(item) => <span>{item.label}
+          {item.detail && <small style={{marginInlineStart: 6,
+            color: 'var(--snb-color-muted, GrayText)'}}>{item.detail}</small>}
+        </span>} />
       <div style={ROW}>
         <button type="button" disabled={!addedGroup || !commandId}
           onClick={() => editGroupCommands((items) => [...items, commandId])}>

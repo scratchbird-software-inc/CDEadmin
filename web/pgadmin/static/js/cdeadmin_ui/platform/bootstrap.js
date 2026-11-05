@@ -90,6 +90,12 @@ function ensureCoreModules() {
         iconKey: 'action.settings', surfaces: ['view'],
         execute: (_args, context) => requiredCallback(
           'openAppearanceSettings', context
+        )()},
+      {id: 'view.command-bar.customize', label: 'Customize Tabbed Bar…',
+        description: 'Arrange the tabs, groups and quick-access commands of the tabbed command bar.',
+        iconKey: 'action.settings', surfaces: ['view'],
+        execute: (_args, context) => requiredCallback(
+          'openCommandBarCustomizer', context
         )()}],
     },
   });

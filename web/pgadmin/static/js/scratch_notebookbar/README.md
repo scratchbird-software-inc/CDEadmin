@@ -37,7 +37,8 @@ pass `injectStyles={false}`.
     context: 'table',          // optional: shown only in this context (string or list)
     selectOnContext: true,     // optional: selected when its context appears
     groups: [{
-      id: 'clipboard', label: 'Clipboard',
+      id: 'clipboard', label: 'Clipboard',   // caption under the group ('' for none)
+      title: 'Clipboard',      // optional name in the customizer (else label, else id)
       priority: 10,            // higher folds into the overflow menu later
       controls: [/* controls */],
     }],
@@ -146,7 +147,9 @@ A customization document is:
 
 Tabs and groups given an `order` come first, in that order; the rest follow
 in their model order. User-added groups reference commands by id; the host supplies the catalog of
-commands a user may place (`NotebookBarCustomizer` `catalog` prop), so a
+commands a user may place (`NotebookBarCustomizer` `catalog` prop:
+`{[commandId]: {label, detail?, icon?, type?}}`, where `detail` tells apart
+commands with the same label), so a
 customization can only show commands the host already offers.
 `NotebookBarCustomizer` is a form for editing this document (reorder, hide,
 rename, add tabs and groups, place catalog commands, reset); it renders

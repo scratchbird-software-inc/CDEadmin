@@ -27,7 +27,7 @@ const MODEL = {
 };
 const CATALOG = {
   'file.save': {label: 'Save'}, 'tools.query': {label: 'Query tool'},
-  'tools.diff': {label: 'Schema diff'},
+  'tools.diff': {label: 'Schema diff', detail: 'Tools'},
 };
 
 function Harness({onChange}) {
@@ -114,6 +114,6 @@ describe('NotebookBarCustomizer', () => {
     expect(screen.getByRole('button', {name: 'Add to group'})).toBeDisabled();
     const names = within(screen.getByRole('listbox', {name: 'Commands'}))
       .getAllByRole('option').map((item) => item.textContent);
-    expect(names).toEqual(['Query tool', 'Save', 'Schema diff']);
+    expect(names).toEqual(['Query tool', 'Save', 'Schema diffTools']);
   });
 });

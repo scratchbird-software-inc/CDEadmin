@@ -269,6 +269,17 @@ click-target size, Up/Down/Home/End move between activities, and the Dark
 toggle sits at its foot. The menu bar's text, icons and logo follow
 `--cde-menu-font-size` and `--cde-menu-row-height`, as do drop-down menus.
 
+2026-11-05, owner direction: a tabbed command bar can replace the menu bar
+(`misc:accessibility_command_bar`). The bar itself is the standalone
+`static/js/scratch_notebookbar` package (see its README); it imports nothing
+from CDEadmin. `shell/commandBarModel.js` builds its model from the same
+`pgAdmin.Browser.MainMenus` the menu bar shows and runs their callbacks, so
+availability, permissions and menu customization are shared;
+`shell/commandBarSettings.js` maps `--cde-*` to the bar's `--snb-*`
+variables; `AppNotebookBar.jsx` hosts it; *View > Customize Tabbed Bar*
+(`customization/CommandBarCustomizer.jsx`) edits the per-account
+customization.
+
 Live provider resources and authored project assets are intentionally separate.
 `ProjectAssetService` provides authenticated membership, optimistic project and
 asset versions, immutable asset revisions, safe relative paths, nested secret

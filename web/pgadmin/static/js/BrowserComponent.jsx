@@ -9,6 +9,9 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppMenuBar from './AppMenuBar';
+import AppNotebookBar, {commandIcon} from './AppNotebookBar';
+import {commandBarMode} from './cdeadmin_ui/shell/commandBarSettings';
+import CommandBarCustomizer from './cdeadmin_ui/customization/CommandBarCustomizer';
 import SQLNotebook from './cdeadmin_ui/projects/SQLNotebook';
 import {NOTEBOOK_TYPE} from './cdeadmin_ui/projects/SQLNotebookModel';
 import {createCloseGuardRegistry, ModalCloseGuardContext} from './helpers/ModalCloseGuard';
@@ -208,6 +211,17 @@ function Layouts({browser, platform}) {
     );
     return true;
   }, [pgAdmin]);
+  const openCommandBarCustomizer = useCallback(() => {
+    pgAdmin.Browser.notifier.showModal(
+      gettext('Customize Tabbed Bar'),
+      (closeModal) => <CommandBarCustomizer menus={pgAdmin.Browser.MainMenus}
+        icon={commandIcon} onClose={closeModal} />,
+      {id: 'cdeadmin-command-bar-customizer', isFullScreen: false,
+        isResizeable: true, showFullScreen: true,
+        dialogWidth: 1080, dialogHeight: 640}
+    );
+    return true;
+  }, [pgAdmin]);
   const workspaceActivities = [
     {
       id: 'activity.interface-designer', label: gettext('Interface Designer'),
@@ -274,6 +288,7 @@ function Layouts({browser, platform}) {
       )),
       openInterfaceDesigner,
       openAppearanceSettings,
+      openCommandBarCustomizer,
       service: platform.schemaCompare,
       schemaCompare: platform.schemaCompare,
       lineage: platform.lineage,
@@ -296,7 +311,7 @@ function Layouts({browser, platform}) {
       }
     };
   }, [changeWorkspace, ensureSurfaceHost, openAppearanceSettings,
-    openInterfaceDesigner, pgAdmin,
+    openCommandBarCustomizer, openInterfaceDesigner, pgAdmin,
     platform.cdc,
     platform.contract, platform.etl,
     platform.lineage, platform.quality,
@@ -603,7 +618,8 @@ export default function BrowserComponent({pgAdmin}) {
       <WorkspaceProvider>
         <ModalProvider>
           <NotifierProvider pgAdmin={pgAdmin} pgWindow={pgWindow} onReady={()=>setUiReady(true)}/>
-          {browser != 'Electron' && <AppMenuBar />}
+          {browser != 'Electron' && (commandBarMode(getPreferencesForModule('misc')) ===
+            'notebook' ? <AppNotebookBar /> : <AppMenuBar />)}
           <Layouts browser={browser} platform={platform} />
         </ModalProvider>
         <ObjectBreadcrumbs pgAdmin={pgAdmin} />

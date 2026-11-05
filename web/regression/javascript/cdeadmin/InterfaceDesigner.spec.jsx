@@ -127,6 +127,8 @@ describe('ScratchRobin Interface Designer', () => {
       expect.objectContaining({name: 'accessibility_ui_scale', value: -1}),
     ]));
     expect(appearance.map((record) => record.name)).not.toContain('theme');
+    expect(appearance.map((record) => record.name))
+      .not.toContain('accessibility_command_bar');
   });
 
   it('stages the packaged profile without changing preferences until saved', () => {

@@ -100,7 +100,10 @@ function preferenceUpdate(store, name, value) {
 // Appearance is edited in View > Appearance and Accessibility (2026-11-05).
 // A profile imported or restored here still carries appearance values; they
 // are written only when one of those actions staged them.
-const DESIGNER_APPEARANCE_KEYS = APPEARANCE_KEYS.filter((name) => name !== 'theme');
+// Former designer profiles never held the theme or the command bar mode, so
+// restoring or importing one leaves those alone.
+const DESIGNER_APPEARANCE_KEYS = APPEARANCE_KEYS.filter((name) =>
+  !['theme', 'accessibility_command_bar'].includes(name));
 
 function IconPage({value, onChange, definitions}) {
   const [query, setQuery] = useState('');

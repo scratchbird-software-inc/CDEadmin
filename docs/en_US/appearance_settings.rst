@@ -31,8 +31,9 @@ Colours
    below their minimum contrast are repaired automatically.
 
 Menu and activity bar
-   Menu text size and height, the width and icon size of the activity bar,
-   and how selected and inactive activities are emphasised.
+   The command bar (the menu bar or the tabbed bar, below), menu text size
+   and height, the width and icon size of the activity bar, and how selected
+   and inactive activities are emphasised.
 
 Areas and controls
    Toolbar, tab and status bar heights, control and click-target sizes,
@@ -65,10 +66,30 @@ name. A profile exported by the former Interface Designer
 An account keeps up to 40 presets. The server checks every value in a preset
 by the same rule as the setting itself.
 
+Tabbed command bar
+==================
+
+*Command bar: Tabbed bar* replaces the menu bar with a tabbed bar: one tab
+per menu, its commands in groups, with the same commands, shortcuts and
+availability as the menus. When the window is narrow, groups fold into a
+*More* menu. Double-click a tab, or press ``Ctrl+F1`` in the bar, to shrink
+it to its tabs; a tab click then opens its commands until you use one.
+
+Press and release ``Alt`` to show a key on each tab; type it to open the tab
+and show keys on its commands, and type a command's key to run it.
+``Escape`` goes back a step. The arrow keys move between tabs and commands.
+
+*View > Customize Tabbed Bar…* reorders, hides and renames tabs and groups,
+adds your own tabs and groups of commands, and sets the quick-access
+commands at the left of the bar. Customization is saved to your account and
+can only arrange commands the menus offer.
+
 Deployment defaults
 ===================
 
 The settings are ``misc`` preferences named ``accessibility_*`` (colours
 ``accessibility_color_*``) plus ``theme``; presets are
-``misc:accessibility:appearance_presets``. An administrator can set them for
+``misc:accessibility:appearance_presets``; the command bar is
+``misc:accessibility:accessibility_command_bar`` (``menu`` or ``notebook``)
+and its customization ``browser:interface_customization:command_bar_customization``. An administrator can set them for
 accounts with ``setup.py set-prefs``. The same validation applies.

@@ -78,6 +78,59 @@ const StyledBox = styled(Box)(({theme}) => ({
   },
 }));
 
+export function renderPgMenuItem(menuItem, key, onChecked) {
+  if(menuItem.type == 'separator') {
+    return <PgMenuDivider key={key}/>;
+  }
+  const hasCheck = typeof menuItem.checked == 'boolean';
+
+  return <PgMenuItem
+    key={key}
+    disabled={menuItem.isDisabled}
+    onClick={()=>{
+      menuItem.callback();
+      if(hasCheck) {
+        onChecked?.();
+      }
+    }}
+    hasCheck={hasCheck}
+    checked={menuItem.checked}
+    closeOnCheck={true}
+    shortcut={menuItem.shortcut}
+    datalabel={menuItem.label}
+    data-command-id={menuItem.commandId || undefined}
+  ><MenuCommandLabel menuItem={menuItem} /></PgMenuItem>;
+}
+
+/** The signed-in account's menu; shared by the menu bar and the tabbed bar. */
+export function AppUserMenu() {
+  const pgAdmin = usePgAdmin();
+  const userMenuInfo = pgAdmin.Browser.utils.userMenuInfo;
+  if(!userMenuInfo) return null;
+  return <div className='AppMenuBar-userMenu'>
+    <PgMenu
+      menuButton={
+        <PrimaryButton data-test="loggedin-username">
+          <div className='AppMenuBar-gravatar'>
+            {userMenuInfo.gravatar &&
+            <img src={userMenuInfo.gravatar} width = "18" height = "18"
+              alt ={`Gravatar for ${ userMenuInfo.username }`} />}
+            {!userMenuInfo.gravatar && <AccountCircleRoundedIcon />}
+          </div>
+          { userMenuInfo.username } ({userMenuInfo.auth_source})
+          <KeyboardArrowDownIcon fontSize="small" />
+        </PrimaryButton>
+      }
+      label={userMenuInfo.username}
+      align="end"
+    >
+      {userMenuInfo.menus.map((menuItem, i)=>{
+        return renderPgMenuItem(menuItem, i);
+      })}
+    </PgMenu>
+  </div>;
+}
+
 export function MenuCommandLabel({menuItem}) {
   const iconKey = menuItem.iconKey || inferActionIconKey(menuItem) ||
     'command.default';
@@ -130,31 +183,7 @@ export default function AppMenuBar() {
     }, 100));
   }, []);
 
-  const getPgMenuItem = (menuItem, i)=>{
-    if(menuItem.type == 'separator') {
-      return <PgMenuDivider key={i}/>;
-    }
-    const hasCheck = typeof menuItem.checked == 'boolean';
-
-    return <PgMenuItem
-      key={i}
-      disabled={menuItem.isDisabled}
-      onClick={()=>{
-        menuItem.callback();
-        if(hasCheck) {
-          forceUpdate();
-        }
-      }}
-      hasCheck={hasCheck}
-      checked={menuItem.checked}
-      closeOnCheck={true}
-      shortcut={menuItem.shortcut}
-      datalabel={menuItem.label}
-      data-command-id={menuItem.commandId || undefined}
-    ><MenuCommandLabel menuItem={menuItem} /></PgMenuItem>;
-  };
-
-  const userMenuInfo = pgAdmin.Browser.utils.userMenuInfo;
+  const getPgMenuItem = (menuItem, i)=>renderPgMenuItem(menuItem, i, forceUpdate);
 
   const getPgMenu = (menu)=>{
     return menu.getMenuItems()?.map((menuItem, i)=>{
@@ -213,29 +242,7 @@ export default function AppMenuBar() {
           );
         })}
       </div>
-      {userMenuInfo &&
-        <div className='AppMenuBar-userMenu'>
-          <PgMenu
-            menuButton={
-              <PrimaryButton data-test="loggedin-username">
-                <div className='AppMenuBar-gravatar'>
-                  {userMenuInfo.gravatar &&
-                  <img src={userMenuInfo.gravatar} width = "18" height = "18"
-                    alt ={`Gravatar for ${ userMenuInfo.username }`} />}
-                  {!userMenuInfo.gravatar && <AccountCircleRoundedIcon />}
-                </div>
-                { userMenuInfo.username } ({userMenuInfo.auth_source})
-                <KeyboardArrowDownIcon fontSize="small" />
-              </PrimaryButton>
-            }
-            label={userMenuInfo.username}
-            align="end"
-          >
-            {userMenuInfo.menus.map((menuItem, i)=>{
-              return getPgMenuItem(menuItem, i);
-            })}
-          </PgMenu>
-        </div>}
+      <AppUserMenu />
     </StyledBox>
   );
 }

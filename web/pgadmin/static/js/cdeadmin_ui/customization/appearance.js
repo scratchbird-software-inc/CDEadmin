@@ -26,7 +26,7 @@ const LEGACY_PROFILE_SCHEMA = 'cdeadmin.interface-profile.v1';
 
 export const APPEARANCE_CHOICE_KEYS = Object.freeze([
   'accessibility_profile', 'accessibility_density', 'accessibility_motion',
-  'theme',
+  'accessibility_command_bar', 'theme',
 ]);
 export const APPEARANCE_FONT_KEYS = Object.freeze([
   'accessibility_ui_font_family', 'accessibility_monospace_font_family',
@@ -44,6 +44,7 @@ const CHOICE_DEFAULTS = Object.freeze({
   accessibility_profile: 'cdeadmin_standard',
   accessibility_density: 'profile',
   accessibility_motion: 'profile',
+  accessibility_command_bar: 'menu',
   theme: 'system',
 });
 
@@ -102,6 +103,9 @@ export const DENSITY_OPTIONS = Object.freeze([
   ['standard', gettext('Standard')], ['comfortable', gettext('Comfortable')],
   ['touch', gettext('Touch')],
 ].map(([value, label])=>({value, label})));
+export const COMMAND_BAR_OPTIONS = Object.freeze([
+  ['menu', gettext('Menu bar')], ['notebook', gettext('Tabbed bar')],
+].map(([value, label])=>({value, label})));
 export const MOTION_OPTIONS = Object.freeze([
   ['profile', gettext('Use profile')], ['system', gettext('Follow system')],
   ['reduce', gettext('Reduce motion')], ['full', gettext('Full motion')],
@@ -147,6 +151,8 @@ export const APPEARANCE_SECTIONS = Object.freeze([
   {id: 'menus', label: gettext('Menu and activity bar'),
     keywords: gettext('menu bar activity icon bar rail width size'),
     fields: [
+      {name: 'accessibility_command_bar', label: gettext('Command bar'),
+        kind: 'select', options: COMMAND_BAR_OPTIONS},
       number('accessibility_menu_font_size', gettext('Menu text size (pixels)')),
       number('accessibility_menu_row_height', gettext('Menu height (pixels)')),
       number('accessibility_activity_bar_width',

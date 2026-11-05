@@ -14,6 +14,7 @@ from pgadmin.utils.constants import PREF_LABEL_DISPLAY,\
     PREF_LABEL_BREADCRUMBS
 from flask import current_app
 import config
+from pgadmin.browser.command_bar import validate_command_bar_customization
 
 
 def register_browser_preferences(self):
@@ -44,6 +45,16 @@ def register_browser_preferences(self):
         help_str=gettext(
             'Validated per-user menu labels, ordering, appearance, and '
             'command placement used by the Interface Designer.'
+        )
+    )
+    self.preference.register(
+        'interface_customization', 'command_bar_customization',
+        gettext('Tabbed command bar customization'), 'multiline', '',
+        category_label=gettext('Interface customization'), hidden=True,
+        validator=validate_command_bar_customization,
+        help_str=gettext(
+            'Per-user tabs, groups and quick-access commands of the tabbed '
+            'command bar (View > Customize Tabbed Bar).'
         )
     )
 

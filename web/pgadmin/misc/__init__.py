@@ -303,6 +303,20 @@ class MiscModule(PgAdminModule):
             )
 
         self.preference.register(
+            'accessibility', 'accessibility_command_bar',
+            gettext('Command bar'), 'options', 'menu',
+            category_label=gettext('Accessibility and personalization'),
+            options=[
+                {'label': gettext('Menu bar'), 'value': 'menu'},
+                {'label': gettext('Tabbed bar'), 'value': 'notebook'},
+            ],
+            control_props={'allowClear': False, 'creatable': False},
+            hidden=True,
+            help_str=gettext(
+                'Show commands as the menu bar or as a tabbed command bar.'
+            )
+        )
+        self.preference.register(
             'accessibility', PRESET_PREFERENCE,
             gettext('Appearance presets'), 'text', '',
             category_label=gettext('Accessibility and personalization'),

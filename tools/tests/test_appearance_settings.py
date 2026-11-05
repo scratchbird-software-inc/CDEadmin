@@ -246,3 +246,24 @@ def test_file_preferences_lists_only_visible_settings():
     listed = []
     _iterate_categories(only_hidden, lambda item: item['label'], listed)
     assert listed == []
+
+
+def _js_string_list(source, name):
+    block = source[source.index(f'export const {name} = Object.freeze(['):]
+    return re.findall(r"'([\w]+)'", block[:block.index(']);')])
+
+
+def test_dialog_and_server_hold_the_same_appearance_settings(real, misc):
+    """A setting added on one side only would be lost by presets or Apply."""
+    appearance_js = (ROOT / 'web/pgadmin/static/js/cdeadmin_ui/customization/'
+                     'appearance.js').read_text()
+    presentation = PRESENTATION.read_text()
+    colors = presentation[presentation.index(
+        'PRESENTATION_COLOR_PREFERENCES = Object.freeze({'):]
+    client = (set(_js_string_list(appearance_js, 'APPEARANCE_CHOICE_KEYS')) |
+              set(_js_string_list(appearance_js, 'APPEARANCE_FONT_KEYS')) |
+              set(real.ap.NUMERIC_RANGES) |
+              set(re.findall(r'(accessibility_color_\w+):',
+                             colors[:colors.index('});')])))
+    server = set(appearance(misc)) - {'appearance_presets'} | {'theme'}
+    assert client == server

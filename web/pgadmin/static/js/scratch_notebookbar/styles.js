@@ -58,7 +58,7 @@ export const NOTEBOOKBAR_CSS = `
 .snb-quick { display: flex; align-items: center; gap: 2px; flex: 0 0 auto;
   padding-inline-end: ${S.gap}; border-inline-end: 1px solid ${C.border}; }
 .snb-tabs { display: flex; align-items: stretch; min-width: 0; flex: 0 1 auto;
-  overflow-x: auto; scrollbar-width: thin; }
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
 .snb-tab { border: 0; background: transparent; padding: 0 calc(${S.gap} * 3);
   min-height: ${S.tab}; cursor: pointer; white-space: nowrap; position: relative;
   border-radius: ${S.radius} ${S.radius} 0 0; }
@@ -130,7 +130,7 @@ export const NOTEBOOKBAR_CSS = `
 .snb-palette button { width: 20px; height: 20px; padding: 0;
   border: 1px solid ${C.border}; cursor: pointer; }
 .snb-popup .snb-overflow-group { padding: 4px; border-bottom: 1px solid ${C.border}; }
-.snb-hint { position: absolute; inset-inline-end: -2px; bottom: -4px; z-index: 3;
+.snb-hint { position: absolute; inset-inline-end: 1px; bottom: 1px; z-index: 3;
   background: ${C.hint}; color: ${C.hintText}; font-size: ${S.small};
   line-height: 1; padding: 2px 3px; border-radius: 2px; pointer-events: none;
   font-weight: 600; }
