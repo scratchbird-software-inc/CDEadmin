@@ -92,7 +92,8 @@ def load_model():
 class EndpointPersistenceSourceTests(unittest.TestCase):
     def test_model_version_and_tables_are_declared(self):
         source = MODEL_PATH.read_text(encoding='utf-8')
-        self.assertRegex(source, r'SCHEMA_VERSION\s*=\s*59\b')
+        # 60 since 2026-11-05: user_preferences.value became text.
+        self.assertRegex(source, r'SCHEMA_VERSION\s*=\s*60\b')
         for table in (
             'cde_endpoint',
             'cde_endpoint_runtime_identity',
@@ -135,8 +136,9 @@ class EndpointPersistenceSourceTests(unittest.TestCase):
                 revisions.add(revision.group(1))
             if predecessor:
                 predecessors.add(predecessor.group(1))
+        # One linear head; cde_user_preference_text_v1 since 2026-11-05.
         self.assertEqual(
-            {'cde_bi_embeds_v1'},
+            {'cde_user_preference_text_v1'},
             revisions - predecessors,
         )
 

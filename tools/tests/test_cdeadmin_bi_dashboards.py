@@ -801,7 +801,9 @@ class MigrationTests(unittest.TestCase):
                        "name='uq_cde_bi_dashboard_revision'",
                        "name='ck_cde_bi_dashboard_status'"):
             self.assertIn(needle, source)
-        self.assertIn('SCHEMA_VERSION = 59', source)
+        # 60 since 2026-11-05 (user_preferences.value became text); the BI
+        # tables themselves never bumped it.
+        self.assertIn('SCHEMA_VERSION = 60', source)
 
 
 class MonitoringConversionTests(unittest.TestCase):

@@ -36,7 +36,9 @@ import config
 #
 ##########################################################################
 
-SCHEMA_VERSION = 59
+# 60 (2026-11-05): user_preferences.value is unbounded text
+# (migration cde_user_preference_text_v1).
+SCHEMA_VERSION = 60
 
 ##########################################################################
 #
@@ -420,7 +422,9 @@ class UserPreference(db.Model, UserScopedMixin):
     uid = db.Column(
         db.Integer, db.ForeignKey(USER_ID), primary_key=True
     )
-    value = db.Column(db.String(1024), nullable=False)
+    # Unbounded since schema 60: validated JSON preference documents outgrow
+    # 1024 characters (migration cde_user_preference_text_v1).
+    value = db.Column(db.Text, nullable=False)
 
 
 class DebuggerFunctionArguments(db.Model, UserScopedMixin):

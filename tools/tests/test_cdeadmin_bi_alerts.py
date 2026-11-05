@@ -1695,9 +1695,11 @@ class MigrationTests(unittest.TestCase):
                 sa.inspect(connection).get_table_names()))
 
     def test_schema_version_is_not_bumped(self):
+        # These tables did not bump the version. It is 60 since 2026-11-05
+        # for an unrelated change: user_preferences.value became text.
         source = (ROOT / 'web/pgadmin/model/__init__.py').read_text(
             encoding='utf-8')
-        self.assertRegex(source, r'SCHEMA_VERSION\s*=\s*59\b')
+        self.assertRegex(source, r'SCHEMA_VERSION\s*=\s*60\b')
         for table in ('cde_bi_alert', 'cde_bi_notification'):
             self.assertIn(f"'{table}'", source)
 
