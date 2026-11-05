@@ -219,8 +219,12 @@ def main(argv=None):
     elif args.action == 'frontend':
         ddn()
         run(['corepack', 'yarn', 'install', '--immutable'], ROOT / 'web')
+        # The bundle outgrew a 3072 MB heap (webpack ran out of memory,
+        # 2026-11-05); 8192 MB builds it. CDEADMIN_NODE_HEAP_MB overrides,
+        # as in the native build.
+        heap = int(os.environ.get('CDEADMIN_NODE_HEAP_MB', '8192'))
         environment = dict(os.environ, NODE_ENV='production',
-                           NODE_OPTIONS='--max-old-space-size=3072')
+                           NODE_OPTIONS=f'--max-old-space-size={heap}')
         run(['corepack', 'yarn', 'webpacker'], ROOT / 'web', environment)
     elif args.action == 'ddn':
         ddn()

@@ -26,7 +26,8 @@ For a fresh development machine, see the
 [Native Windows and macOS development setup](tools/development/NATIVE.md) includes the GitHub qualification matrix.
 It covers dependencies, frontend builds, account setup, Docker fixtures, sample
 credentials, and per-engine start/stop/verification commands.
-The `dev.sh frontend` build sets a 3 GiB Node heap.
+The `dev.sh frontend` build sets an 8 GiB Node heap; set `CDEADMIN_NODE_HEAP_MB`
+to change it. (2026-11-05: raised from 3 GiB, which the bundle no longer fits.)
 
 ## Shared development branch
 
