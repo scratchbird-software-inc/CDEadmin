@@ -82,7 +82,8 @@ class DistributedSQLControlPlane(RelationalAdministration):
         operation = self.control_plane.operation(
             request['resource_kind'], request['operation_id']
         )
-        compiled = self._control_compiler(copy.deepcopy(dict(request)))
+        compiled = self._control_compiler(
+            copy.deepcopy(dict(self.control_plane.normalized(request))))
         if not isinstance(compiled, Mapping):
             raise RelationalClientError(
                 'provider control-plane compiler returned no plan'

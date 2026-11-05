@@ -75,7 +75,7 @@ def _bound_fields():
             help='Must match how the table is partitioned; the key is one '
             'column.'),
         *ends,
-        cp_field('in_values', 'Values', 'json', True, json_type='array',
+        cp_field('in_values', 'Values', 'grid', True, columns=[{'field_id': 'value', 'label': 'Value', 'control': 'text'}],
                  visible_when={'field_id': 'bound', 'equals': 'LIST'}),
         cp_field('modulus', 'Modulus', 'number', True, minimum=1,
                  maximum=1024, visible_when={'field_id': 'bound',
@@ -215,14 +215,14 @@ class PGWireAdministration:
                                            'in': ['LIST', 'RANGE']},
                              help='The first primary key column; required '
                              'unless removing partitioning.'),
-                    cp_field('list_partitions', 'List partitions', 'json',
-                             True, json_type='array',
+                    cp_field('list_partitions', 'List partitions', 'grid',
+                             True, columns=[{'field_id': 'partition', 'label': 'Partition', 'control': 'text'}, {'field_id': 'value', 'label': 'Value', 'control': 'text'}, {'field_id': 'default', 'label': 'Default', 'control': 'boolean'}],
                              visible_when={'field_id': 'strategy',
                                            'equals': 'LIST'},
                              help='One row per value: partition, value, '
                              'or Default for rows matching no other.'),
-                    cp_field('range_partitions', 'Range partitions', 'json',
-                             True, json_type='array',
+                    cp_field('range_partitions', 'Range partitions', 'grid',
+                             True, columns=[{'field_id': 'partition', 'label': 'Partition', 'control': 'text'}, {'field_id': 'from_mode', 'label': 'From end', 'control': 'select'}, {'field_id': 'from_value', 'label': 'From value', 'control': 'text'}, {'field_id': 'to_mode', 'label': 'To end', 'control': 'select'}, {'field_id': 'to_value', 'label': 'To value', 'control': 'text'}],
                              visible_when={'field_id': 'strategy',
                                            'equals': 'RANGE'},
                              help='One row per partition: from and to, '
@@ -257,8 +257,8 @@ class PGWireAdministration:
             return ControlPlaneOperation(
                 'table', 'split_at', 'Split ranges at', 'admin',
                 'topology_admin', (
-                    cp_field('split_values', 'Split points', 'json', True,
-                             json_type='array',
+                    cp_field('split_values', 'Split points', 'grid', True,
+                             columns=[{'field_id': 'value', 'label': 'Value', 'control': 'text'}],
                              help='One primary key value per split; the '
                              'key is one column.'),
                 ), impact_scope='resource')

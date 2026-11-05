@@ -282,6 +282,25 @@ count sets its maximum to zero in the enforcement file.
 Change log
 ----------
 
+Descriptor check passes; typed grids in CockroachDB and YugabyteDB contracts (2026-11-04)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``make ui-descriptors-check`` passes with no errors. Nineteen were fixed first: CockroachDB and
+YugabyteDB partition operations spelled ``visible_when`` with the provider contracts'
+``field_id`` key, so the shell ignored the rules, and the YugabyteDB rule form's code fields
+had no language. The last was ``json_controls_in_provider_forms`` at 312 over its maximum of
+301, from eleven raw JSON fields added on 2026-11-01. They are typed grids now, with the
+columns of the descriptors that already offered grids: CockroachDB list and range partitions
+and split points, YugabyteDB partition values (control-plane operations), and YugabyteDB
+event-trigger tags, publication tables, aggregate inputs, foreign options and foreign-table
+columns (object forms). The control-plane contract layer gains a ``grid`` control that admits
+rows keyed by its declared columns, bare values for a one-column grid, and JSON text from older
+text forms, which is parsed before the provider compiles. The count is 301, at its maximum.
+Live family round trips on the pinned demos: CockroachDB 26.1.3 25 of 25; YugabyteDB
+2025.2.2.2 table create, control-plane operations, native partitions, event triggers, rules,
+collations and publications, aggregates, operators and casts, and foreign servers, mappings
+and tables passed.
+
 MySQL Connector/Python compression negotiation (2026-11-04)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

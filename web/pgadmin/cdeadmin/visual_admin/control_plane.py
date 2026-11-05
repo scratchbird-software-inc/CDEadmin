@@ -17,6 +17,7 @@ Each provider must explicitly compile every operation it advertises.
 from __future__ import annotations
 
 import copy
+import json
 import math
 import re
 from dataclasses import dataclass, field
@@ -36,8 +37,20 @@ IMPACT_SCOPES = frozenset({
 })
 CONTROL_PLANE_CONTROLS = frozenset({
     'text', 'multiline', 'password', 'number', 'boolean', 'select',
-    'multiselect', 'json', 'secret-reference',
+    'multiselect', 'json', 'secret-reference', 'grid',
 })
+GRID_MAXIMUM_ROWS = 1024
+
+
+def grid_value(declaration, value):
+    """A grid value as the provider reads it: JSON text (an older text form)
+    is parsed; anything that is not text is returned unchanged."""
+    if declaration.get('control') == 'grid' and isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    return value
 
 
 class ControlPlaneCatalogError(RuntimeError):
@@ -121,6 +134,14 @@ class ControlPlaneOperation:
                 if len(values) != len(set(values)):
                     raise ControlPlaneCatalogError(
                         f'{field_id}.options must contain unique values'
+                    )
+            if control == 'grid':
+                columns = item.get('columns')
+                if not isinstance(columns, list) or not columns or not all(
+                        isinstance(column, Mapping) and isinstance(column.get('field_id'), str)
+                        and column['field_id'] for column in columns):
+                    raise ControlPlaneCatalogError(
+                        f'{field_id}.columns must declare the grid columns'
                     )
             item['required'] = bool(item.get('required', False))
             admitted.append(item)
@@ -241,6 +262,22 @@ class ControlPlaneCatalog:
         value['control_plane_operations'] = len(self._operations)
         return value
 
+    def normalized(self, request):
+        """The request with grid values in their structured form, as the
+        provider's compiler reads them."""
+        operation = self.operation(
+            request.get('resource_kind'), request.get('operation_id')
+        )
+        draft = request.get('draft')
+        if not isinstance(draft, Mapping):
+            return request
+        values = dict(draft)
+        for declaration in operation.fields:
+            if declaration['field_id'] in values:
+                values[declaration['field_id']] = grid_value(
+                    declaration, values[declaration['field_id']])
+        return {**request, 'draft': values}
+
     def validate(self, request):
         operation = self.operation(
             request.get('resource_kind'), request.get('operation_id')
@@ -269,7 +306,7 @@ class ControlPlaneCatalog:
                     continue
                 field_id = declaration['field_id']
                 present = field_id in draft and draft[field_id] is not None
-                value = draft.get(field_id)
+                value = grid_value(declaration, draft.get(field_id))
                 if declaration.get('required') and (
                         not present or value == '' or value == []):
                     errors.append({
@@ -346,6 +383,20 @@ class ControlPlaneCatalog:
         elif control == 'boolean':
             if not isinstance(value, bool):
                 return 'invalid_type', f'{label} must be true or false.'
+        elif control == 'grid':
+            # Rows keyed by the declared columns; a one-column grid also takes
+            # bare values, the scalar-list form providers already read.
+            columns = {column['field_id'] for column in declaration.get('columns', [])}
+            if not isinstance(value, list):
+                return 'invalid_type', f'{label} must be a list of rows.'
+            if len(value) > GRID_MAXIMUM_ROWS:
+                return 'too_long', f'{label} has too many rows.'
+            for row in value:
+                if isinstance(row, Mapping):
+                    if not row or not set(row) <= columns:
+                        return 'invalid_row', f'{label} has a row with undeclared columns.'
+                elif len(columns) != 1 or isinstance(row, (list, dict)) or row is None:
+                    return 'invalid_row', f'{label} rows must be objects.'
         elif control == 'json':
             json_type = declaration.get('json_type')
             if json_type == 'array' and not isinstance(value, list):

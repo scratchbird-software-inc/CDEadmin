@@ -358,6 +358,17 @@ def resources(cursor, generation, resource, optional_rows, excluded):
     return values
 
 
+def _grid_field(field, field_id, label, required, columns, item_kind=None, **options):
+    """A typed grid with the descriptor form's columns."""
+    item = field(field_id, label, 'grid', required, **options)
+    item['columns'] = columns
+    if item_kind:
+        item['item_kind'] = item_kind
+    return item
+
+
+OPTION_COLUMNS = [{'field_id': 'name', 'label': 'Name', 'control': 'text'}, {'field_id': 'value', 'label': 'Value', 'control': 'text'}]
+
 def form(field, kind, operation):
     fields = {
         'foreign-server': lambda: [
@@ -365,19 +376,19 @@ def form(field, kind, operation):
             field('wrapper', 'Foreign data wrapper', 'text', True),
             field('server_type', 'Type', 'text'),
             field('version', 'Version', 'text'),
-            field('options', 'Options', 'json', False, default=[]),
+            _grid_field(field, 'options', 'Options', False, OPTION_COLUMNS, default=[]),
             field('owner', 'Owner', 'text'),
             field('comment', 'Comment', 'text')],
         'user-mapping': lambda: [
             field('user', 'User', 'text', True),
             field('server', 'Server', 'text', True),
-            field('options', 'Options', 'json', False, default=[])],
+            _grid_field(field, 'options', 'Options', False, OPTION_COLUMNS, default=[])],
         'foreign-table': lambda: [
             field('name', 'Name', 'text', True),
             field('parent', 'Schema', 'text'),
-            field('columns', 'Columns', 'json', True),
+            _grid_field(field, 'columns', 'Columns', True, [{'field_id': 'name', 'label': 'Column name', 'control': 'text'}, {'field_id': 'type', 'label': 'Data type', 'control': 'text'}, {'field_id': 'collation', 'label': 'Collation', 'control': 'text'}, {'field_id': 'nullable', 'label': 'Nullable', 'control': 'boolean'}, {'field_id': 'default', 'label': 'Default', 'control': 'text'}, {'field_id': 'identity', 'label': 'Identity', 'control': 'select'}, {'field_id': 'generated_expression', 'label': 'Generated (stored)', 'control': 'text'}, {'field_id': 'unique', 'label': 'Unique', 'control': 'boolean'}, {'field_id': 'primary_key', 'label': 'Primary key', 'control': 'boolean'}, {'field_id': 'comment', 'label': 'Comment', 'control': 'text'}]),
             field('server', 'Server', 'text', True),
-            field('options', 'Options', 'json', False, default=[]),
+            _grid_field(field, 'options', 'Options', False, OPTION_COLUMNS, default=[]),
             field('comment', 'Comment', 'text')],
     }[kind]()
     if operation == 'alter':

@@ -411,6 +411,14 @@ def alter_publication(admin, draft, target):
     return statements
 
 
+def _grid_field(field, field_id, label, required, columns, item_kind=None, **options):
+    """A typed grid with the descriptor form's columns."""
+    item = field(field_id, label, 'grid', required, **options)
+    item['columns'] = columns
+    if item_kind:
+        item['item_kind'] = item_kind
+    return item
+
 def form(field, kind, operation):
     """Provider forms; the descriptor forms carry the full layout."""
     fields = {
@@ -418,7 +426,8 @@ def form(field, kind, operation):
             field('name', 'Name', 'text', True),
             field('event', 'Event', 'select', True, options=list(EVENTS)),
             field('function', 'Function', 'text', True),
-            field('tags', 'Command tags', 'json', False, default=[]),
+            _grid_field(field, 'tags', 'Command tags', False, [{'field_id': 'value', 'label': 'Tag', 'control': 'text'}],
+                        item_kind='string', default=[]),
             field('enabled', 'Fires', 'select', False, default='ORIGIN',
                   options=list(ENABLED)),
             field('comment', 'Comment', 'text')],
@@ -443,12 +452,13 @@ def form(field, kind, operation):
             field('name', 'Name', 'text', True),
             field('all_tables', 'All tables', 'boolean', False,
                   default=False),
-            field('tables', 'Tables', 'json', False, default=[]),
+            _grid_field(field, 'tables', 'Tables', False, [{'field_id': 'value', 'label': 'Table (schema.table)', 'control': 'text'}],
+                        item_kind='string', default=[]),
             field('comment', 'Comment', 'text')],
         'aggregate': lambda: [
             field('name', 'Name', 'text', True),
             field('parent', 'Schema', 'text'),
-            field('parameters', 'Inputs', 'json', True),
+            _grid_field(field, 'parameters', 'Inputs', True, [{'field_id': 'mode', 'label': 'Mode', 'control': 'select'}, {'field_id': 'name', 'label': 'Name', 'control': 'text'}, {'field_id': 'type', 'label': 'Type', 'control': 'text'}, {'field_id': 'default', 'label': 'Default', 'control': 'text'}]),
             field('state_function', 'State function', 'text', True),
             field('state_type', 'State type', 'text', True),
             field('final_function', 'Final function', 'text'),
