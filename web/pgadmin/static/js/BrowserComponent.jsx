@@ -222,20 +222,11 @@ function Layouts({browser, platform}) {
     );
     return true;
   }, [pgAdmin]);
+  // Owner direction 2026-11-05: the Interface Designer is part of
+  // Preferences, whose icon sits at the foot of the bar; the Query Tool is
+  // launched from the Data Explorer with its connection, not from the bar.
   const workspaceActivities = [
-    {
-      id: 'activity.interface-designer', label: gettext('Interface Designer'),
-      iconKey: 'action.settings', priority: 9, navigationVisible: false,
-      onSelect: openInterfaceDesigner,
-    },
-    ...(enabled ? [{
-      id: 'activity.workspace.query', label: gettext('Query Tool'),
-      iconKey: 'tool.query', priority: 11, navigationVisible: false,
-      disabled: !hasOpenTabs(WORKSPACES.QUERY_TOOL),
-      onSelect: () => selectWorkspace(WORKSPACES.QUERY_TOOL,
-        AllPermissionTypes.TOOLS_QUERY_TOOL),
-    },
-    ...(pgAdmin.enable_psql ? [{
+    ...(enabled ? [...(pgAdmin.enable_psql ? [{
       id: 'activity.workspace.psql', label: gettext('Command Line'),
       iconKey: 'action.terminal', priority: 12, navigationVisible: false,
       disabled: !hasOpenTabs(WORKSPACES.PSQL_TOOL),
@@ -252,6 +243,7 @@ function Layouts({browser, platform}) {
     {
       id: 'activity.preferences', label: gettext('Preferences'),
       iconKey: 'action.settings', priority: 1000, navigationVisible: false,
+      placement: 'bottom',
       onSelect: () => {
         changeWorkspace(WORKSPACES.DEFAULT);
         pgAdmin.Browser.MainMenus?.find((menu) => menu.name === 'file')?.menuItems
@@ -271,7 +263,6 @@ function Layouts({browser, platform}) {
     left.priority - right.priority || left.id.localeCompare(right.id)
   );
   const activeWorkspaceActivity = {
-    [WORKSPACES.QUERY_TOOL]: 'activity.workspace.query',
     [WORKSPACES.PSQL_TOOL]: 'activity.workspace.psql',
     [WORKSPACES.SCHEMA_DIFF_TOOL]: 'activity.workspace.schema-diff',
   }[currentWorkspace];

@@ -266,7 +266,11 @@ icon size come from the appearance settings (`--cde-activity-bar-width`,
 `--cde-activity-icon-size`; packaged width 48px, the
 `geometry.activity_rail_width` token), its buttons are never shorter than the
 click-target size, Up/Down/Home/End move between activities, and the Dark
-toggle sits at its foot. The menu bar's text, icons and logo follow
+toggle sits at its foot. Later the same day (owner direction): Preferences
+is the one activity anchored at the foot (`placement: 'bottom'`); the
+Interface Designer is part of Preferences, not a rail activity; and the Query
+Tool is no longer a rail activity: it is launched from the Data Explorer,
+which supplies its connection. The menu bar's text, icons and logo follow
 `--cde-menu-font-size` and `--cde-menu-row-height`, as do drop-down menus.
 
 2026-11-05, owner direction: a tabbed command bar can replace the menu bar

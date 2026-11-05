@@ -7,7 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {withTheme} from '../fake_theme';
 import usePreferences from '../../../pgadmin/preferences/static/js/store';
 import {
@@ -122,6 +122,28 @@ describe('Zero-Grey workbench shell', () => {
     expect(data).toHaveFocus();
     await press('ArrowUp');
     expect(third).toHaveFocus();
+  });
+
+  it('keeps bottom-placed activities at the foot of the bar, in keyboard order', async () => {
+    const Component = withTheme(WorkbenchShell);
+    render(<Component activities={[
+      {id: 'activity.preferences', label: 'Preferences', iconKey: 'action.settings',
+        navigationVisible: false, placement: 'bottom'},
+      ...activities,
+    ]} navigationViews={{}} />);
+    const nav = screen.getByRole('navigation', {name: 'Application activities'});
+    const foot = nav.querySelector('[data-cdeadmin-activity-group="bottom"]');
+    expect(within(foot).getByRole('button', {name: 'Preferences'})).toBeInTheDocument();
+    const order = [...activityTabsIn(nav)].map((button) => button.getAttribute('aria-label') ??
+      button.textContent);
+    expect(order.at(-1)).toMatch(/Preferences/);
+    expect(within(foot).getByRole('button', {name: 'Preferences'})
+      .compareDocumentPosition(nav.querySelector('[data-cdeadmin-qa-key="activity-theme-dark"]'))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const toolbar = screen.getByRole('toolbar', {name: 'Activities'});
+    await act(async () => screen.getByRole('button', {name: 'Data Explorer'}).focus());
+    await act(async () => { fireEvent.keyDown(toolbar, {key: 'End'}); });
+    expect(within(foot).getByRole('button', {name: 'Preferences'})).toHaveFocus();
   });
 
   it('toggles misc.theme between light and dark from the activity rail',

@@ -135,58 +135,83 @@ function moveFocus(event) {
   }
 }
 
+function ActivityButton({activity, active, navigationVisible, onChange}) {
+  const ownsNavigation = activity.navigationVisible !== false;
+  const selected = activity.id === active &&
+    (navigationVisible || !ownsNavigation);
+  return <IconButton
+    data-cdeadmin-qa-key={`activity-${activity.id}`}
+    data-selected={selected ? 'true' : 'false'}
+    data-visual-emphasis={selected ? 'active' : 'inactive'}
+    label={activity.label} aria-current={selected ? 'page' : undefined}
+    disabled={activity.disabled === true}
+    onClick={() => {
+      if(activity.disabled) return;
+      onChange(activity.id);
+    }}
+    sx={{
+      ...activityControlSx,
+      filter: selected ? 'none' :
+        'brightness(var(--cde-inactive-brightness, 0.85))',
+      '& svg, & [data-icon-key]': {
+        transform: selected ? 'scale(var(--cde-active-tab-scale, 1))' : 'none',
+      },
+      // The theme's icon-button size and padding outrank plain sx;
+      // the bar's buttons span its full width.
+      '&&&': {
+        width: '100%',
+        height: activityControlSx.height,
+        padding: 0,
+        backgroundColor: selected ? 'primary.main' : 'transparent',
+        border: 'none',
+        borderRadius: 0,
+        boxShadow: 'none',
+        color: selected ? 'primary.contrastText' : 'inherit',
+      }}}>
+    <Icon iconKey={activity.iconKey || 'command.default'} decorative
+      size={ICON_SIZE} />
+  </IconButton>;
+}
+
+ActivityButton.propTypes = {
+  activity: PropTypes.object.isRequired,
+  active: PropTypes.string.isRequired,
+  navigationVisible: PropTypes.bool.isRequired,
+  onChange: PropTypes.func.isRequired,
+};
+
+const groupSx = {display: 'flex', flexDirection: 'column', alignItems: 'stretch',
+  '& > button, & > span': activityControlSx,
+  '& > span > button': {...activityControlSx}};
+
+// Activities with placement 'bottom' (Preferences) stay at the foot of the
+// bar, above the Dark toggle; the rest scroll above them. One toolbar holds
+// both, so Up/Down/Home/End reach every activity.
 function ActivityRail({activities, active, navigationVisible, onChange}) {
+  const button = (activity) => <ActivityButton key={activity.id}
+    activity={activity} active={active} navigationVisible={navigationVisible}
+    onChange={onChange} />;
+  const bottom = activities.filter((activity) => activity.placement === 'bottom');
   return <Box component="nav" aria-label="Application activities"
     data-cdeadmin-activity-bar="vertical"
     sx={{width: BAR_WIDTH, flex: `0 0 ${BAR_WIDTH}`, minHeight: 0,
       display: 'flex', flexDirection: 'column', alignItems: 'stretch', py: 0.5,
       bgcolor: 'background.navigation', borderRight: '1px solid',
-      borderColor: 'divider', overflowX: 'hidden', overflowY: 'auto',
-      scrollbarWidth: 'thin'}}>
+      borderColor: 'divider', overflow: 'hidden'}}>
     <Box role="toolbar" aria-orientation="vertical"
       aria-label="Activities" onKeyDown={moveFocus}
       sx={{display: 'flex', flexDirection: 'column', alignItems: 'stretch',
-        flex: '1 1 auto', minHeight: 0, overflowX: 'hidden', overflowY: 'auto',
-        scrollbarWidth: 'thin',
-        '& > button, & > span': activityControlSx,
-        '& > span > button': {...activityControlSx}}}>
-      {activities.map((activity) => {
-        const ownsNavigation = activity.navigationVisible !== false;
-        const selected = activity.id === active &&
-          (navigationVisible || !ownsNavigation);
-        return <IconButton key={activity.id}
-          data-cdeadmin-qa-key={`activity-${activity.id}`}
-          data-selected={selected ? 'true' : 'false'}
-          data-visual-emphasis={selected ? 'active' : 'inactive'}
-          label={activity.label} aria-current={selected ? 'page' : undefined}
-          disabled={activity.disabled === true}
-          onClick={() => {
-            if(activity.disabled) return;
-            onChange(activity.id);
-          }}
-          sx={{
-            ...activityControlSx,
-            filter: selected ? 'none' :
-              'brightness(var(--cde-inactive-brightness, 0.85))',
-            '& svg, & [data-icon-key]': {
-              transform: selected ? 'scale(var(--cde-active-tab-scale, 1))' : 'none',
-            },
-            // The theme's icon-button size and padding outrank plain sx;
-            // the bar's buttons span its full width.
-            '&&&': {
-              width: '100%',
-              height: activityControlSx.height,
-              padding: 0,
-              backgroundColor: selected ? 'primary.main' : 'transparent',
-              border: 'none',
-              borderRadius: 0,
-              boxShadow: 'none',
-              color: selected ? 'primary.contrastText' : 'inherit',
-            }}}>
-          <Icon iconKey={activity.iconKey || 'command.default'} decorative
-            size={ICON_SIZE} />
-        </IconButton>;
-      })}
+        flex: '1 1 auto', minHeight: 0}}>
+      <Box sx={{...groupSx, flex: '1 1 auto', minHeight: 0, overflowX: 'hidden',
+        overflowY: 'auto', scrollbarWidth: 'thin'}}>
+        {activities.filter((activity) => activity.placement !== 'bottom')
+          .map(button)}
+      </Box>
+      {bottom.length > 0 && <Box data-cdeadmin-activity-group="bottom"
+        sx={{...groupSx, flex: '0 0 auto', borderTop: '1px solid',
+          borderColor: 'divider'}}>
+        {bottom.map(button)}
+      </Box>}
     </Box>
     <ActivityThemeToggle orientation="vertical" />
   </Box>;
