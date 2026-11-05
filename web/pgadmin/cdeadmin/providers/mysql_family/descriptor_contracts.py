@@ -49,18 +49,31 @@ def index_contract(operation, legacy_fields):
     return None
 
 
+ROUTINE_VARIANTS = {'procedure': 'procedure', 'function': 'function', 'event': 'scheduled'}
+
+
+def _shown(field, variant):
+    rule = field.get('visible_when')
+    if not rule or rule.get('field') != 'variant':
+        return True
+    return variant == rule['equals'] if 'equals' in rule else variant in rule.get('in', ())
+
+
 def routine_contract(kind, operation, legacy_fields=()):
     if kind == 'event' and operation == 'drop':
         # The generic drop form's CASCADE default is not native event grammar;
         # mysql_events admits only the confirmation.
         return {'fields': [deepcopy(field) for field in legacy_fields if field['field_id'] == 'confirmation']}
     if operation in {'create', 'alter'}:
-        suffix = {'procedure': 'routine', 'function': 'routine-function',
-                  'event': 'routine-scheduled'}[kind]
-        descriptor = document('forms/'+suffix+'.form.json')
+        # One routine form serves every variant (2026-11-05); a variant's fields are
+        # those its visible_when shows. Fields locked after create are never altered.
+        variant = ROUTINE_VARIANTS[kind]
+        descriptor = document('forms/routine.form.json')
         fields = [field_contract(field) for field in descriptor['fields']
-                  if operation in field.get('modes', ['create', 'alter'])]
-        return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/'+suffix+'.form.json'}
+                  if operation in field.get('modes', ['create', 'alter']) and not field.get('ui_only')
+                  and _shown(field, variant)
+                  and not (operation == 'alter' and field.get('editable_after_create') is False)]
+        return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/routine.form.json'}
     if kind == 'event' and operation == 'rename':
         selected = next(value for value in document('operations.json')['operations']
                         if value['resource_kind'] == kind and value['operation_id'] == operation)

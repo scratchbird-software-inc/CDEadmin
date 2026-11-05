@@ -75,11 +75,15 @@ def test_family_variants_and_backend_aliases_preserve_alter_characteristics():
         assert planned['command_preview']['statements'][0]['source'] == 'ALTER '+kind.upper()+' `db`.`r` COMMENT <bound-comment>'
     folder = Path(__file__).resolve().parents[2]/'web/pgadmin/cdeadmin/ui_descriptors/mysql'
     caps = json.loads((folder/'capabilities.json').read_text())
+    # One routine form serves every variant (the descriptor service serves one form per
+    # family; merged 2026-11-05). Its variant select offers each kind's capability variant.
+    descriptor = json.loads((folder/'forms/routine.form.json').read_text())
+    variants = {option['value'] for field in descriptor['fields'] if field['field_id'] == 'variant'
+                for option in field['options']}
     for row in caps['kinds']:
         if row['resource_kind'] in {'procedure', 'function', 'event'}:
-            descriptor = json.loads((folder/row['form']).read_text())
-            assert descriptor['resource_kinds'] == [row['resource_kind']]
-            assert descriptor['variant'] == row['variant']
+            assert row['form'] == 'forms/routine.form.json'
+            assert row['resource_kind'] in descriptor['resource_kinds'] and row['variant'] in variants
 
 
 def test_type_literals_are_checked_in_the_actual_mode_and_extra_clauses_never_fit():

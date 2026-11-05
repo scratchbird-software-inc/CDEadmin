@@ -2523,6 +2523,9 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             from .mysql_catalog import identifier as quote_event_identifier
             for record in optional_records("SELECT * FROM information_schema.EVENTS WHERE EVENT_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY EVENT_SCHEMA,EVENT_NAME"):
                 record['show_create']=optional_records('SHOW CREATE EVENT '+quote_event_identifier(record['event_schema'])+'.'+quote_event_identifier(record['event_name']))
+                from ..mysql_events import schedule_from_show_create
+                created=(record['show_create'] or [{}])[0].get('create event')
+                if schedule_from_show_create(created):record['schedule']=schedule_from_show_create(created)
                 add('event',[record['event_schema']],record['event_name'],record)
         roles = set()
         if profile is MYSQL_PROFILE:

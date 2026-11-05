@@ -25,29 +25,52 @@ def test_capabilities_match_current_admin_catalog_including_read_only_and_post_b
 
 
 def test_every_stored_routine_field_binding_reaches_its_native_create_or_alter_path():
-    for kind, filename in [('procedure','routine'),('function','routine-function')]:
-        form=load('forms/'+filename+'.form.json')
+    # One routine form serves procedures, functions and scheduled events (merged 2026-11-05:
+    # the descriptor service serves one form per family). A variant's fields are its visible_when.
+    form=load('forms/routine.form.json')
+    assert form['status']=='complete' and form['resource_kinds']==['procedure','function','event']
+    def shown(field,variant):
+        rule=field.get('visible_when')
+        return not rule or (variant==rule['equals'] if 'equals' in rule else variant in rule['in'])
+    target={'display_path':['db','owned'],'display_name':'owned'}
+    for kind,variant in [('procedure','procedure'),('function','function'),('event','scheduled')]:
         for mode in ('create','alter'):
-            base=({'name':'owned','database':'db','body':'BEGIN SELECT 1; END' if kind=='procedure' else 'RETURN 1',
-                   'definer_user':'owner','definer_host':'localhost',**({'returns':'INT'} if kind=='function' else {})}
-                  if mode=='create' else {})
-            target={'display_path':['db','owned'],'display_name':'owned'}
+            if kind=='event':
+                base=({'name':'owned','database':'db','body':'SET @a=1','schedule':'EVERY 1 HOUR'} if mode=='create'
+                      else {'comment':'base'})
+                base.update(definer_user='owner',definer_host='localhost')  # MySQL takes user and host together
+            else:
+                base=({'name':'owned','database':'db','body':'BEGIN SELECT 1; END' if kind=='procedure' else 'RETURN 1',
+                       'definer_user':'owner','definer_host':'localhost',**({'returns':'INT'} if kind=='function' else {})}
+                      if mode=='create' else {})
             def compiled(draft):
                 request={'resource_kind':kind,'operation_id':mode,'draft':draft,'target_resource':target}
-                assert not MYSQL_ADMINISTRATION.validate(request)['errors']
+                assert not MYSQL_ADMINISTRATION.validate(request)['errors'],(kind,mode,draft)
                 return MYSQL_ADMINISTRATION._compile(request)['statements']
-            samples={'name':'changed','parent':'changed_db','body':'BEGIN SELECT 2; END' if kind=='procedure' else 'RETURN 2',
-                'comment':'changed','returns':'BIGINT','if_not_exists':True,'parameters':[{'name':'arg','type':'INT','mode':'IN'}],
+            samples={'name':'changed','parent':'changed_db','database':'changed_db',
+                'body':'BEGIN SELECT 2; END' if kind=='procedure' else 'RETURN 2',
+                'comment':'changed','event_comment':'changed','clear_comment':True,'returns':'BIGINT','if_not_exists':True,
+                'parameters':[{'name':'arg','type':'INT','mode':'IN'}],
                 'security_create':'INVOKER','security_alter':'INVOKER','data_access_create':'NO SQL','data_access_alter':'NO SQL',
-                'deterministic':True,'language':'SQL','definer_user':'changed_owner','definer_host':'changed_host'}
+                'deterministic':True,'language':'SQL','definer_user':'changed_owner','definer_host':'changed_host',
+                'event_definer_user':'changed_owner','event_definer_host':'changed_host',
+                'body_create':'SET @a=2','body_alter':'SET @a=2','schedule_create':'EVERY 2 HOUR','schedule_alter':'EVERY 2 HOUR',
+                'completion_create':'PRESERVE','completion_alter':'PRESERVE','status_create':'DISABLE','status_alter':'DISABLE',
+                'time_zone':'+00:00'}
             for field in form['fields']:
-                if mode not in field.get('modes',['create','alter']) or field['field_id']=='confirmation':continue
+                if (mode not in field.get('modes',['create','alter']) or field['field_id']=='confirmation' or field.get('ui_only')
+                        or not shown(field,variant) or (mode=='alter' and field.get('editable_after_create') is False)):
+                    continue
                 draft=json.loads(json.dumps(base))
                 if field['field_id']=='parent':draft.pop('database')
+                if field['field_id']=='clear_comment':draft.pop('comment',None)
                 bind(draft,field,samples[field['field_id']])
                 actual=compiled(draft)
-                if mode=='create':assert actual!=compiled(base),field['field_id']
-                else:assert actual[0]['source'].startswith('ALTER '+kind.upper()),field['field_id']
+                if field['field_id']=='time_zone':  # set for the statement's session, not a clause
+                    assert actual[0]=={'source':'SET SESSION time_zone=%s','parameters':('+00:00',)},actual
+                elif mode=='create':assert actual!=compiled(base),(kind,field['field_id'])
+                else:  # ALTER [DEFINER=...] <KIND>
+                    assert actual[-1]['source'].startswith('ALTER ') and ' '+kind.upper()+' ' in actual[-1]['source'],(kind,field['field_id'])
 
 
 def test_every_trigger_field_reaches_the_native_compiler_without_invented_flags():

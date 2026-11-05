@@ -95,7 +95,8 @@ def run(client, route, kind, operation, draft, target=None):
     return sql
 
 
-VARIANTS = {'materialized-view': 'materialized'}  # capabilities.json; the editor host adds it to the record
+VARIANTS = {'materialized-view': 'materialized', 'procedure': 'procedure', 'function': 'function',
+            'event': 'scheduled'}  # capabilities.json; the editor host adds it to the record
 
 
 def record(client, route, kind, name, family):
@@ -256,3 +257,80 @@ def test_trigger_form_every_field_creates_and_reopens_locked(live):
     assert (reopened['definer_user'], reopened['definer_host']) == ('root', '%')
     # Reopened, every stored property is locked: an unchanged edit sends nothing to alter.
     assert backend_draft(form, dict(reopened), mode='alter', baseline=reopened) == {}
+
+
+def routine_facts(name):
+    return query(f"SELECT ROUTINE_COMMENT, SECURITY_TYPE, SQL_DATA_ACCESS, IS_DETERMINISTIC, DEFINER "
+                 f"FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA='{DATABASE}' AND ROUTINE_NAME='{name}'")[0]
+
+
+@pytest.mark.parametrize('kind,family', [('procedure', 'routine'), ('function', 'routine')])
+def test_routine_forms_every_field_reopen_and_alter_characteristics(live, kind, family):
+    route, client = live
+    form = resolved_form('mysql', family)
+    name = f'rt_{kind}'
+    draft = {'variant': kind, 'name': name, 'parent': DATABASE, 'comment': 'first', 'if_not_exists': True,
+             'security_create': 'INVOKER', 'data_access_create': 'READS SQL DATA', 'deterministic': True,
+             'language': 'SQL', 'definer_user': 'root', 'definer_host': '%'}
+    if kind == 'procedure':
+        draft.update(parameters=[{'name': 'a', 'mode': 'IN', 'type': 'INT'},
+                                 {'name': 'b', 'mode': 'OUT', 'type': 'VARCHAR(10)', 'character_set': 'latin1', 'collation': 'latin1_bin'},
+                                 {'name': 'c', 'mode': 'INOUT', 'type': 'INT'}],
+                     body="BEGIN SET b = 'x'; SET c = c + a; END")
+    else:
+        draft.update(parameters=[{'name': 'a', 'type': 'INT'}], returns='VARCHAR(20)', body="RETURN CONCAT('v', a)")
+    run(client, route, kind, 'create', backend_draft(form, draft))
+    assert routine_facts(name) == ('first', 'INVOKER', 'READS SQL DATA', 'YES', 'root@%')
+    routine, reopened = record(client, route, kind, name, family)
+    assert reopened['name'] == name and reopened['comment'] == 'first' and reopened['deterministic'] is True
+    assert (reopened['security_alter'], reopened['data_access_alter']) == ('INVOKER', 'READS SQL DATA')
+    assert reopened['body'] == draft['body'] and (reopened['definer_user'], reopened['definer_host']) == ('root', '%')
+    assert [(row['name'], row.get('mode'), row['type'].lower()) for row in reopened['parameters']] == (
+        [('a', 'IN', 'int'), ('b', 'OUT', 'varchar(10)'), ('c', 'INOUT', 'int')] if kind == 'procedure' else [('a', 'IN', 'int')])
+    if kind == 'procedure':
+        assert (reopened['parameters'][1]['character_set'], reopened['parameters'][1]['collation']) == ('latin1', 'latin1_bin')
+    else:
+        assert reopened['returns'].lower() == 'varchar(20)'
+    edited = {**reopened, 'comment': 'second', 'security_alter': 'DEFINER', 'data_access_alter': 'NO SQL',
+              'confirmation': name}
+    alter = backend_draft(form, edited, mode='alter', baseline=reopened)
+    assert alter == {'comment': 'second', 'sql_security': 'DEFINER', 'data_access': 'NO SQL', 'confirmation': name}
+    run(client, route, kind, 'alter', alter, target=routine)
+    assert routine_facts(name) == ('second', 'DEFINER', 'NO SQL', 'YES', 'root@%')
+
+
+def event_facts(name):
+    return query(f"SELECT EVENT_COMMENT, STATUS, ON_COMPLETION, EVENT_TYPE, INTERVAL_VALUE, INTERVAL_FIELD, "
+                 f"EVENT_DEFINITION, DEFINER FROM information_schema.EVENTS WHERE EVENT_SCHEMA='{DATABASE}' "
+                 f"AND EVENT_NAME='{name}'")[0]
+
+
+def test_scheduled_event_variant_every_field_reopen_and_alter(live):
+    route, client = live
+    form = resolved_form('mysql', 'routine')
+    run(client, route, 'event', 'create', backend_draft(form, {
+        'variant': 'scheduled', 'name': 'rt_event', 'database': DATABASE, 'if_not_exists': True,
+        'event_comment': 'nightly', 'body_create': 'SET @rt_event = 1',
+        'schedule_create': "EVERY 2 HOUR STARTS '2030-01-01 00:00:00' ENDS '2031-01-01 00:00:00'",
+        'completion_create': 'PRESERVE', 'status_create': 'DISABLE', 'time_zone': '+00:00',
+        'event_definer_user': 'root', 'event_definer_host': '%'}))
+    assert event_facts('rt_event') == ('nightly', 'DISABLED', 'PRESERVE', 'RECURRING', '2', 'HOUR',
+                                       'SET @rt_event = 1', 'root@%')
+    event, reopened = record(client, route, 'event', 'rt_event', 'routine')
+    assert reopened['variant'] == 'scheduled' and reopened['event_comment'] == 'nightly'
+    assert reopened['schedule_alter'] == "EVERY 2 HOUR STARTS '2030-01-01 00:00:00' ENDS '2031-01-01 00:00:00'"
+    assert (reopened['completion_alter'], reopened['status_alter']) == ('PRESERVE', 'DISABLE')
+    assert reopened['body_alter'] == 'SET @rt_event = 1' and reopened['time_zone'] == '+00:00'
+    assert (reopened['event_definer_user'], reopened['event_definer_host']) == ('root', '%')
+    edited = {**reopened, 'status_alter': 'ENABLE', 'schedule_alter': 'EVERY 1 DAY', 'body_alter': 'SET @rt_event = 2',
+              'event_comment': 'daily', 'completion_alter': 'NOT PRESERVE', 'confirmation': 'rt_event'}
+    alter = backend_draft(form, edited, mode='alter', baseline=reopened)
+    assert alter == {'status': 'ENABLE', 'schedule': 'EVERY 1 DAY', 'body': 'SET @rt_event = 2', 'comment': 'daily',
+                     'completion': 'NOT PRESERVE', 'confirmation': 'rt_event'}
+    run(client, route, 'event', 'alter', alter, target=event)
+    assert event_facts('rt_event')[:7] == ('daily', 'ENABLED', 'NOT PRESERVE', 'RECURRING', '1', 'DAY', 'SET @rt_event = 2')
+    # An edit of one option leaves the rest as they are.
+    _event, again = record(client, route, 'event', 'rt_event', 'routine')
+    run(client, route, 'event', 'alter', backend_draft(form, {**again, 'status_alter': 'DISABLE', 'confirmation': 'rt_event'},
+                                                       mode='alter', baseline=again), target=event)
+    assert event_facts('rt_event')[:7] == ('daily', 'DISABLED', 'NOT PRESERVE', 'RECURRING', '1', 'DAY', 'SET @rt_event = 2')

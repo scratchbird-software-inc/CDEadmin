@@ -21,6 +21,12 @@ def schedule_expression(value):
     return value
 
 
+def schedule_from_show_create(source):
+    """The schedule an event was given, as SHOW CREATE EVENT writes it (always followed by ON COMPLETION)."""
+    found=re.search(r'\bON\s+SCHEDULE\s+(.*?)\s+ON\s+COMPLETION\b',source or '',re.I|re.S)
+    return found.group(1) if found else None
+
+
 def compile_operation(operation,draft,target,definition):
     if operation not in OPERATIONS or not isinstance(draft,dict):raise RelationalClientError('Native event operation is unavailable')
     draft=dict(draft)
