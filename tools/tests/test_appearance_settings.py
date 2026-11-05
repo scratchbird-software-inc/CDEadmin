@@ -22,26 +22,50 @@ if 'pgadmin' not in sys.modules:
     package.__path__ = [str(WEB / 'pgadmin')]
     sys.modules['pgadmin'] = package
 
-import config  # noqa: F401,E402
-from pgadmin.misc import MiscModule  # noqa: E402
-from pgadmin.misc.appearance_presets import (  # noqa: E402
-    NUMERIC_RANGES, PRESETS_SCHEMA, color_validator, font_family_validator,
-    numeric_validator, validate_presets,
-)
-from pgadmin.utils.preferences import _Preference  # noqa: E402
+# Other test modules leave empty stand-ins for config and pgadmin.utils in
+# sys.modules. These tests need the real modules: the fixture below swaps
+# them in for this module only and puts the stand-ins back afterwards.
+SWAPPED = ('config', 'pgadmin.utils', 'pgadmin.misc', 'pgadmin.model',
+           'pgadmin.preferences')
+
+
+def _swapped(name):
+    return any(name == prefix or name.startswith(prefix + '.')
+               for prefix in SWAPPED)
+
+
+@pytest.fixture(scope='module')
+def real():
+    saved = {name: module for name, module in sys.modules.items()
+             if _swapped(name)}
+    for name in saved:
+        del sys.modules[name]
+    try:
+        import config  # noqa: F401
+        from pgadmin.misc import MiscModule, appearance_presets
+        from pgadmin.utils.preferences import _Preference
+        yield SimpleNamespace(MiscModule=MiscModule, ap=appearance_presets,
+                              Preference=_Preference)
+    finally:
+        for name in [name for name in sys.modules if _swapped(name)]:
+            del sys.modules[name]
+        sys.modules.update(saved)
+
 
 PRESENTATION = ROOT / 'web/pgadmin/static/js/cdeadmin_ui/foundations/presentation.js'
+PRESETS_SCHEMA = 'cdeadmin.appearance-presets.v1'  # checked against the module below
 
 
 class Recorder:
     """Stands in for the misc Preferences object: keeps real _Preference
     objects (built without the configuration database) by category."""
 
-    def __init__(self):
+    def __init__(self, preference_class):
         self.categories = {}
+        self.preference_class = preference_class
 
     def register(self, category, name, label, _type, default, **kwargs):
-        pref = _Preference.__new__(_Preference)
+        pref = self.preference_class.__new__(self.preference_class)
         pref.name, pref.label, pref._type, pref.default = name, label, _type, default
         for key in ('min_val', 'max_val', 'options', 'validator', 'hidden',
                     'control_props', 'allow_blanks'):
@@ -58,9 +82,9 @@ class Recorder:
 
 
 @pytest.fixture(scope='module')
-def misc():
-    recorder = Recorder()
-    MiscModule.register_preferences(SimpleNamespace(preference=recorder))
+def misc(real):
+    recorder = Recorder(real.Preference)
+    real.MiscModule.register_preferences(SimpleNamespace(preference=recorder))
     return recorder
 
 
@@ -69,19 +93,20 @@ def appearance(misc):
             **misc.categories['accessibility_colors']['preferences']}
 
 
-def test_server_ranges_match_the_presentation_authority():
+def test_server_ranges_match_the_presentation_authority(real):
+    assert real.ap.PRESETS_SCHEMA == PRESETS_SCHEMA
     source = PRESENTATION.read_text()
     block = source[source.index('PRESENTATION_OVERRIDE_RANGES = Object.freeze({'):]
     block = block[:block.index('});')]
     client = {name: (float(low), float(high)) for name, low, high in re.findall(
         r'(accessibility_\w+): \[([\d.]+), ([\d.]+)\]', block)}
     assert client == {name: (float(low), float(high))
-                      for name, (low, high) in NUMERIC_RANGES.items()}
+                      for name, (low, high) in real.ap.NUMERIC_RANGES.items()}
 
 
-def test_every_numeric_setting_is_registered_hidden_and_bounded(misc):
+def test_every_numeric_setting_is_registered_hidden_and_bounded(real, misc):
     prefs = misc.categories['accessibility']['preferences']
-    for name, (_low, high) in NUMERIC_RANGES.items():
+    for name, (_low, high) in real.ap.NUMERIC_RANGES.items():
         pref = prefs[name]
         assert (pref.min_val, pref.max_val, pref.default) == (-1, high, -1)
         assert pref.hidden is True and pref.validator is not None
@@ -90,49 +115,49 @@ def test_every_numeric_setting_is_registered_hidden_and_bounded(misc):
         assert name in prefs
 
 
-def test_appearance_settings_leave_file_preferences(misc):
+def test_appearance_settings_leave_file_preferences(real, misc):
     hidden = {name for name, pref in appearance(misc).items() if pref.hidden}
     assert hidden == set(appearance(misc))
     assert misc.preference('theme').hidden is None  # still in File > Preferences
     for name, pref in appearance(misc).items():
         if '_color_' in name:
-            assert pref.validator is color_validator
+            assert pref.validator is real.ap.color_validator
         if name.endswith('font_family'):
-            assert pref.validator is font_family_validator
+            assert pref.validator is real.ap.font_family_validator
 
 
-def test_numeric_values_keep_inherit_and_clamp_into_range():
-    height = numeric_validator('accessibility_control_height')
+def test_numeric_values_keep_inherit_and_clamp_into_range(real):
+    height = real.ap.numeric_validator('accessibility_control_height')
     assert height(-1) == -1
     assert height(10) == 24 and height(40) == 40 and height(500) == 72
-    assert numeric_validator('accessibility_line_height')(0.5) == 1
+    assert real.ap.numeric_validator('accessibility_line_height')(0.5) == 1
 
 
 @pytest.mark.parametrize('value', ['', '#abc', '#AABBCC', ' #aabbcc '])
-def test_colours_accept_blank_and_hex(value):
-    assert color_validator(value) == value.strip()
+def test_colours_accept_blank_and_hex(real, value):
+    assert real.ap.color_validator(value) == value.strip()
 
 
 @pytest.mark.parametrize('value', ['red', '#12345', 'url(x)', '#AABBCCDD',
                                    '#aabbcc;}'])
-def test_colours_refuse_anything_else(value):
+def test_colours_refuse_anything_else(real, value):
     with pytest.raises(ValueError):
-        color_validator(value)
+        real.ap.color_validator(value)
 
 
-def test_font_families_refuse_css_markup():
-    assert font_family_validator('"Atkinson Hyperlegible", sans-serif') == \
+def test_font_families_refuse_css_markup(real):
+    assert real.ap.font_family_validator('"Atkinson Hyperlegible", sans-serif') == \
         '"Atkinson Hyperlegible", sans-serif'
     for value in ('Arial; } body { display:none', 'url(evil)', 'a<b>', 'x' * 201):
         with pytest.raises(ValueError):
-            font_family_validator(value)
+            real.ap.font_family_validator(value)
 
 
-def test_set_refuses_a_value_its_validator_refuses_before_storing():
-    pref = _Preference.__new__(_Preference)
+def test_set_refuses_a_value_its_validator_refuses_before_storing(real):
+    pref = real.Preference.__new__(real.Preference)
     pref.name, pref._type, pref.min_val, pref.max_val = 'c', 'text', None, None
     pref.options = pref.control_props = None
-    pref.validator = color_validator
+    pref.validator = real.ap.color_validator
     assert pref.set('not-a-colour', user_id=1) == (
         False, 'Use a #RRGGBB colour, or leave it blank.')
 
@@ -141,8 +166,8 @@ def presets(*items):
     return json.dumps({'schema': PRESETS_SCHEMA, 'presets': list(items)})
 
 
-def test_a_valid_presets_document_is_normalized(misc):
-    stored = json.loads(validate_presets(presets(
+def test_a_valid_presets_document_is_normalized(real, misc):
+    stored = json.loads(real.ap.validate_presets(presets(
         {'name': '  Large text ', 'values': {
             'accessibility_ui_scale': 175, 'accessibility_line_height': 1.75,
             'accessibility_menu_font_size': 99, 'accessibility_color_text': '#101010',
@@ -156,7 +181,7 @@ def test_a_valid_presets_document_is_normalized(misc):
     assert large['values']['accessibility_menu_font_size'] == 32  # clamped
     assert large['values']['theme'] == 'dark'
     assert compact['values']['accessibility_control_height'] == 24
-    assert validate_presets('', misc) == json.dumps(
+    assert real.ap.validate_presets('', misc) == json.dumps(
         {'schema': PRESETS_SCHEMA, 'presets': []}, sort_keys=True)
 
 
@@ -180,9 +205,9 @@ def test_a_valid_presets_document_is_normalized(misc):
     (presets({'name': 'A', 'values': []}), 'malformed'),
     (presets(*[{'name': f'P{i}', 'values': {}} for i in range(41)]), 'at most 40'),
 ])
-def test_presets_refuse_what_their_settings_refuse(misc, document, message):
+def test_presets_refuse_what_their_settings_refuse(real, misc, document, message):
     with pytest.raises(ValueError, match=message):
-        validate_presets(document, misc)
+        real.ap.validate_presets(document, misc)
 
 
 def test_the_presets_preference_validates_through_its_own_registration(misc):
