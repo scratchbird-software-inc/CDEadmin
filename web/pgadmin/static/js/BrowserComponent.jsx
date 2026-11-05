@@ -9,9 +9,8 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppMenuBar from './AppMenuBar';
-import AppNotebookBar, {commandIcon} from './AppNotebookBar';
+import AppNotebookBar from './AppNotebookBar';
 import {commandBarMode} from './cdeadmin_ui/shell/commandBarSettings';
-import CommandBarCustomizer from './cdeadmin_ui/customization/CommandBarCustomizer';
 import SQLNotebook from './cdeadmin_ui/projects/SQLNotebook';
 import {NOTEBOOK_TYPE} from './cdeadmin_ui/projects/SQLNotebookModel';
 import {createCloseGuardRegistry, ModalCloseGuardContext} from './helpers/ModalCloseGuard';
@@ -59,8 +58,9 @@ import {
   ActiveStatusHost,
   BottomDrawerHost,
   InspectorHost,
-  InterfaceDesigner,
-  AppearanceSettings,
+  requestPreferencesSection,
+  APPEARANCE_PREFERENCES_ID,
+  DESIGNER_PREFERENCES_ID,
   requestWorkbenchInspection,
   workbenchContextService,
 } from 'sources/cdeadmin_ui';
@@ -71,14 +71,6 @@ export const processesPanelData = {
 
 export const preferencesPanelData = {
   id: BROWSER_PANELS.PREFERENCES, title: gettext('Preferences'), content: <PreferencesComponent panelId={BROWSER_PANELS.PREFERENCES} />, closable: true, manualClose: true, group: 'playground'
-};
-
-export const interfaceDesignerPanelData = {
-  id: 'cdeadmin-interface-designer', title: gettext('Interface Designer'),
-  tooltip: gettext('Customize appearance, artwork, menus, and commands'),
-  iconKey: 'action.settings',
-  content: <InterfaceDesigner panelId="cdeadmin-interface-designer" />,
-  closable: true, group: 'playground'
 };
 
 export const defaultTabsData = [
@@ -194,34 +186,21 @@ function Layouts({browser, platform}) {
     )();
     return permitted;
   };
-  const openInterfaceDesigner = useCallback(() => {
+  // The interface designer, appearance and the tabbed bar are pages of
+  // Preferences (owner direction 2026-11-05); their commands open it there.
+  const openPreferences = useCallback((sectionId) => {
     changeWorkspace(WORKSPACES.DEFAULT);
-    pgAdmin.Browser.docker.default_workspace.openTab(
-      interfaceDesignerPanelData, BROWSER_PANELS.MAIN, 'middle', true
-    );
+    if(sectionId) requestPreferencesSection(sectionId);
+    pgAdmin.Browser.MainMenus?.find((menu) => menu.name === 'file')?.menuItems
+      ?.find((menu) => menu.name === 'mnu_preferences')?.callback?.();
     return true;
   }, [changeWorkspace, pgAdmin]);
-  const openAppearanceSettings = useCallback(() => {
-    pgAdmin.Browser.notifier.showModal(
-      gettext('Appearance and Accessibility'),
-      (closeModal) => <AppearanceSettings onClose={closeModal} />,
-      {id: 'cdeadmin-appearance-settings', isFullScreen: false,
-        isResizeable: true, showFullScreen: true,
-        dialogWidth: 1080, dialogHeight: 640}
-    );
-    return true;
-  }, [pgAdmin]);
-  const openCommandBarCustomizer = useCallback(() => {
-    pgAdmin.Browser.notifier.showModal(
-      gettext('Customize Tabbed Bar'),
-      (closeModal) => <CommandBarCustomizer menus={pgAdmin.Browser.MainMenus}
-        icon={commandIcon} onClose={closeModal} />,
-      {id: 'cdeadmin-command-bar-customizer', isFullScreen: false,
-        isResizeable: true, showFullScreen: true,
-        dialogWidth: 1080, dialogHeight: 640}
-    );
-    return true;
-  }, [pgAdmin]);
+  const openInterfaceDesigner = useCallback(
+    () => openPreferences(DESIGNER_PREFERENCES_ID), [openPreferences]);
+  const openAppearanceSettings = useCallback(
+    () => openPreferences(APPEARANCE_PREFERENCES_ID), [openPreferences]);
+  const openCommandBarCustomizer = useCallback(
+    () => openPreferences(`${DESIGNER_PREFERENCES_ID}-command-bar`), [openPreferences]);
   // Owner direction 2026-11-05: the Interface Designer is part of
   // Preferences, whose icon sits at the foot of the bar; the Query Tool is
   // launched from the Data Explorer with its connection, not from the bar.
@@ -244,12 +223,7 @@ function Layouts({browser, platform}) {
       id: 'activity.preferences', label: gettext('Preferences'),
       iconKey: 'action.settings', priority: 1000, navigationVisible: false,
       placement: 'bottom',
-      onSelect: () => {
-        changeWorkspace(WORKSPACES.DEFAULT);
-        pgAdmin.Browser.MainMenus?.find((menu) => menu.name === 'file')?.menuItems
-          ?.find((menu) => menu.name === 'mnu_preferences')?.callback?.();
-        return true;
-      },
+      onSelect: () => openPreferences(),
     },
   ];
   const shellActivities = [...activities.map((activity) => ({

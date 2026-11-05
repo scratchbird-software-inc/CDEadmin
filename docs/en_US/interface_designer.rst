@@ -17,6 +17,16 @@ from *Tools > Interface Designer* or from its workbench activity.
    *View* menu entries now open the designer (before this date they did
    nothing; only its workbench activity opened it).
 
+.. note:: Later on 2026-11-05, owner direction: the interface designer is part
+   of *Preferences*. Its form and its activity-bar icon are gone; *Preferences*
+   (the icon at the foot of the activity bar, or *File > Preferences*) has an
+   *Interface designer* category with *Artwork and icons*, *Menus and
+   commands*, *Tabbed bar* and *Interface profiles*, and an *Appearance and
+   accessibility* category with the appearance sections. *Tools > Interface
+   Designer…*, *View > Appearance and Accessibility…* and *View > Customize
+   Tabbed Bar…* open Preferences at those pages. The pages below are those
+   Preferences pages; each saves with its own button.
+
 Artwork catalog
 ===============
 

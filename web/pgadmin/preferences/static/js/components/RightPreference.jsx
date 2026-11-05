@@ -12,6 +12,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Box, Link } from '@mui/material';
 import PropTypes from 'prop-types';
 import SchemaView from '../../../../static/js/SchemaView';
+import {InterfacePreferenceEditor} from '../../../../static/js/cdeadmin_ui/customization/InterfacePreferences';
 // Import helpers from new file
 
 
@@ -41,6 +42,16 @@ export default function RightPreference({ schema, filteredItemIds, selectedItem,
   useEffect(() => {
     updateVisibleFields();
   }, [filteredItemIds, selectedItem]);
+
+  if(selectedItem?.editor) {
+    return (
+      <div className='PreferencesComponent-preferencesContainer'
+        data-cdeadmin-preferences-editor={selectedItem.editor}
+        style={{overflow: 'auto'}}>
+        <InterfacePreferenceEditor item={selectedItem} />
+      </div>
+    );
+  }
 
   if(selectedItem?.children) {
     return (

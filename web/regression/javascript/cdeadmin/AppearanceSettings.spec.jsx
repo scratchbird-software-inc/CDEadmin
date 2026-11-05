@@ -7,14 +7,18 @@
 //
 //////////////////////////////////////////////////////////////
 
-// View > Appearance and Accessibility (2026-11-05): fonts, colours, area
-// sizes and named presets, previewed live and saved as misc preferences.
+// Preferences > Appearance and accessibility (2026-11-05; first a dialog,
+// then part of Preferences the same day): fonts, colours, area sizes and named
+// presets, previewed live across sections and saved as misc preferences.
 
+import {useState} from 'react';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {withTheme} from '../fake_theme';
 import usePreferences from '../../../pgadmin/preferences/static/js/store';
-import AppearanceSettings from
-  'sources/cdeadmin_ui/customization/AppearanceSettings';
+import {AppearanceSectionEditor} from
+  'sources/cdeadmin_ui/customization/AppearancePreferences';
+import {InterfacePreferencesProvider} from
+  'sources/cdeadmin_ui/customization/interfaceDrafts';
 import {
   APPEARANCE_KEYS,
   APPEARANCE_PRESETS_SCHEMA,
@@ -111,14 +115,27 @@ describe('appearance settings helpers', () => {
   });
 });
 
-describe('Appearance and Accessibility dialog', () => {
+// Preferences shows one section at a time inside one drafts provider.
+function Sections({initial='presets'}) {
+  const [section, setSection] = useState(initial);
+  return <InterfacePreferencesProvider>
+    <button type="button" onClick={() => setSection('text')}>Show text</button>
+    <button type="button" onClick={() => setSection('menus')}>Show menus</button>
+    <AppearanceSectionEditor sectionId={section} />
+  </InterfacePreferencesProvider>;
+}
+
+function renderSections(initial) {
+  const Component = withTheme(Sections);
+  return render(<Component initial={initial} />);
+}
+
+describe('Preferences > Appearance and accessibility', () => {
   beforeEach(() => setStore(''));
 
   it('previews a change and saves only the changed setting', async () => {
     const watch = previews();
-    const Component = withTheme(AppearanceSettings);
-    render(<Component />);
-    fireEvent.click(screen.getByText('Text and fonts'));
+    renderSections('text');
     fireEvent.change(screen.getByLabelText('Interface scale (%)'),
       {target: {value: '150'}});
     expect(watch.seen.at(-1).accessibility_ui_scale).toBe(150);
@@ -132,10 +149,25 @@ describe('Appearance and Accessibility dialog', () => {
     watch.stop();
   });
 
+  it('keeps unsaved changes while moving between sections', async () => {
+    renderSections('text');
+    fireEvent.change(screen.getByLabelText('Interface scale (%)'),
+      {target: {value: '160'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Show menus'}));
+    fireEvent.change(screen.getByLabelText('Menu text size (pixels)'),
+      {target: {value: '18'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Show text'}));
+    expect(screen.getByLabelText('Interface scale (%)')).toHaveValue(160);
+    fireEvent.click(screen.getByRole('button', {name: 'Apply'}));
+    await waitFor(() => expect(written()).toHaveLength(2));
+    expect(written()).toEqual(expect.arrayContaining([
+      expect.objectContaining({name: 'accessibility_ui_scale', value: 160}),
+      expect.objectContaining({name: 'accessibility_menu_font_size', value: 18}),
+    ]));
+  });
+
   it('sizes the menu and activity bar from its own section', () => {
-    const Component = withTheme(AppearanceSettings);
-    render(<Component />);
-    fireEvent.click(screen.getByText('Menu and activity bar'));
+    renderSections('menus');
     expect(screen.getByLabelText('Menu text size (pixels)')).toBeInTheDocument();
     expect(screen.getByLabelText('Activity bar width (pixels)')).toBeInTheDocument();
     expect(screen.getByLabelText('Activity bar icon size (pixels)'))
@@ -143,8 +175,7 @@ describe('Appearance and Accessibility dialog', () => {
   });
 
   it('saves the current settings as a named preset', async () => {
-    const Component = withTheme(AppearanceSettings);
-    render(<Component />);
+    renderSections('presets');
     fireEvent.click(screen.getByRole('button', {name: 'Save current settings as…'}));
     fireEvent.change(screen.getByLabelText('Preset name'), {target: {value: 'Mine'}});
     fireEvent.click(screen.getAllByRole('button', {name: 'Apply'}).at(-1));
@@ -162,8 +193,7 @@ describe('Appearance and Accessibility dialog', () => {
     setStore(JSON.stringify({schema: APPEARANCE_PRESETS_SCHEMA, presets: [
       {name: 'Large', values: {accessibility_ui_scale: 175}}]}));
     const watch = previews();
-    const Component = withTheme(AppearanceSettings);
-    render(<Component />);
+    renderSections('presets');
     fireEvent.click(screen.getByText('Large'));
     fireEvent.click(screen.getByRole('button', {name: 'Use preset'}));
     expect(watch.seen.at(-1).accessibility_ui_scale).toBe(175);
@@ -174,10 +204,11 @@ describe('Appearance and Accessibility dialog', () => {
     watch.stop();
   });
 
-  it('ends the preview when the dialog closes', () => {
+  it('ends the preview when Preferences closes', () => {
     const watch = previews();
-    const Component = withTheme(AppearanceSettings);
-    const {unmount} = render(<Component />);
+    const {unmount} = renderSections('text');
+    fireEvent.change(screen.getByLabelText('Interface scale (%)'),
+      {target: {value: '150'}});
     unmount();
     expect(watch.seen.at(-1)).toBeNull();
     watch.stop();

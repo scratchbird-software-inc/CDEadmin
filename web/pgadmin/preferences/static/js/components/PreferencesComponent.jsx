@@ -41,6 +41,23 @@ import {
 } from 'sources/cdeadmin_ui/workspace/Workspace';
 import LeftTree from './LeftTree';
 import RightPreference from './RightPreference';
+import {
+  PREFERENCES_SECTION_EVENT, interfacePreferenceCategories,
+  takePendingPreferencesSection,
+} from '../../../../static/js/cdeadmin_ui/customization/InterfacePreferences';
+import {InterfacePreferencesProvider} from
+  '../../../../static/js/cdeadmin_ui/customization/interfaceDrafts';
+
+// An entry by id: a page, or a category's first page.
+function findPreferenceItem(tree, id) {
+  if(!id) return null;
+  for(const category of tree) {
+    if(category.id === id) return category.children[0] ?? null;
+    const child = category.children.find((item) => item.id === id);
+    if(child) return child;
+  }
+  return null;
+}
 
 // --- Styled Components ---
 const Root = styled(Box)(({ theme }) => ({
@@ -142,6 +159,8 @@ export default function PreferencesComponent({panelId}) {
   const [loaderText, setLoaderText] = useState(gettext('Loading preferences...'));
   const layoutDocker = React.useContext(LayoutDockerContext);
   const valuesVersionRef = useRef();
+  // Whether an interface page (appearance, designer) has unsaved changes.
+  const interfaceChanged = useRef(false);
 
   const fetchPreferences = async () => {
     setLoaderText(gettext('Loading preferences...'));
@@ -152,7 +171,9 @@ export default function PreferencesComponent({panelId}) {
       });
 
       const schemaFields = [];
-      const treeNodesData = [];
+      // The interface pages (appearance, the interface designer) come first;
+      // they are editors, not preference fields (owner direction 2026-11-05).
+      const treeNodesData = [...interfacePreferenceCategories()];
       let values = {};
 
       res.data.forEach((node) => {
@@ -187,7 +208,8 @@ export default function PreferencesComponent({panelId}) {
       valuesVersionRef.current = new Date().getTime();
       setInitValues(values);
       setPrefTreeData(treeNodesData);
-      setSelectedItem(selectedItem || treeNodesData[0]?.children[0]);
+      setSelectedItem(findPreferenceItem(treeNodesData, takePendingPreferencesSection()) ||
+        selectedItem || treeNodesData[0]?.children[0]);
       prefSchema.current = new PreferencesSchema(values, schemaFields);
       setLoaderText(null);
     } catch (err) {
@@ -200,12 +222,28 @@ export default function PreferencesComponent({panelId}) {
     fetchPreferences();
   }, []); // Added dependencies
 
+  // Opening Preferences at a page (View > Appearance and Accessibility,
+  // Customize Tabbed Bar, Interface Designer) while it is already open.
+  useEffect(() => {
+    if(prefTreeData.length === 0) return undefined;
+    const show = () => {
+      const item = findPreferenceItem(prefTreeData, takePendingPreferencesSection());
+      if(item) {
+        setSearchVal('');
+        setSelectedItem(item);
+      }
+    };
+    show();
+    window.addEventListener(PREFERENCES_SECTION_EVENT, show);
+    return () => window.removeEventListener(PREFERENCES_SECTION_EVENT, show);
+  }, [prefTreeData]);
+
   useEffect(()=>{
     /* Bind the close event and check if user should be warned */
     const deregister = layoutDocker.eventBus.registerListener(LAYOUT_EVENTS.CLOSING, (id)=>{
       if(panelId != id) return;
 
-      if(Object.keys(prefChangedData.current).length > 0) {
+      if(Object.keys(prefChangedData.current).length > 0 || interfaceChanged.current) {
         pgAdmin.Browser.notifier.confirm(
           gettext('Warning'),
           gettext('Changes will be lost. Are you sure you want to close the preferences?'),
@@ -353,53 +391,55 @@ export default function PreferencesComponent({panelId}) {
   const filteredItemIds = useMemo(()=>filteredList.map((item) => item.id), [filteredList]);
 
   return (
-    <Root height={'100%'}>
-      <Box className='PreferencesComponent-header'>
-        <Box className='PreferencesComponent-actionBtn'>
-          <PgButtonGroup>
-            <PgIconButton
-              icon={<SaveSharpIcon style={{height: '1.4rem'}}/>}
-              aria-label="Save"
-              title={gettext('Save')}
-              onClick={savePreferences}
-              disabled={disableSave || Boolean(loaderText)}
-            />
-          </PgButtonGroup>
-          <PgButtonGroup>
-            <PgIconButton
-              onClick={resetAllPreferences}
-              icon={<SettingsBackupRestoreIcon />}
-              aria-label="Reset all preferences"
-              title={gettext('Reset all preferences')}
-            />
-            <PgIconButton
-              data-test="dialog-help" onClick={()=>{
-                window.open(url_for('help.static', { filename: 'preferences.html' }), 'pgadmin_help');
-              }}
-              icon={<HelpIcon />} title={gettext('Help')}
-            />
-          </PgButtonGroup>
-        </Box>
-        <InputText
-          className='PreferencesComponent-searchInput'
-          placeholder={gettext('Search')}
-          controlProps={{ title: gettext('Search') }}
-          value={searchVal}
-          onChange={setSearchVal} // Direct setter for state
-          startAdornment={<SearchRounded />}
-        />
-      </Box>
-      <Box className='PreferencesComponent-body'>
-        <Loader message={loaderText} />
-        <div className='PreferencesComponent-bodyWrap'>
-          <LeftTree
-            prefTreeData={prefTreeData}
-            selectedItem={selectedItem}
-            setSelectedItem={setSelectedItem}
-            filteredList={filteredList}
+    <InterfacePreferencesProvider changedRef={interfaceChanged}>
+      <Root height={'100%'}>
+        <Box className='PreferencesComponent-header'>
+          <Box className='PreferencesComponent-actionBtn'>
+            <PgButtonGroup>
+              <PgIconButton
+                icon={<SaveSharpIcon style={{height: '1.4rem'}}/>}
+                aria-label="Save"
+                title={gettext('Save')}
+                onClick={savePreferences}
+                disabled={disableSave || Boolean(loaderText)}
+              />
+            </PgButtonGroup>
+            <PgButtonGroup>
+              <PgIconButton
+                onClick={resetAllPreferences}
+                icon={<SettingsBackupRestoreIcon />}
+                aria-label="Reset all preferences"
+                title={gettext('Reset all preferences')}
+              />
+              <PgIconButton
+                data-test="dialog-help" onClick={()=>{
+                  window.open(url_for('help.static', { filename: 'preferences.html' }), 'pgadmin_help');
+                }}
+                icon={<HelpIcon />} title={gettext('Help')}
+              />
+            </PgButtonGroup>
+          </Box>
+          <InputText
+            className='PreferencesComponent-searchInput'
+            placeholder={gettext('Search')}
+            controlProps={{ title: gettext('Search') }}
+            value={searchVal}
+            onChange={setSearchVal} // Direct setter for state
+            startAdornment={<SearchRounded />}
           />
-          {
-            prefSchema.current &&
+        </Box>
+        <Box className='PreferencesComponent-body'>
+          <Loader message={loaderText} />
+          <div className='PreferencesComponent-bodyWrap'>
+            <LeftTree
+              prefTreeData={prefTreeData}
+              selectedItem={selectedItem}
+              setSelectedItem={setSelectedItem}
+              filteredList={filteredList}
+              searchVal={searchVal}
+            />
+            {
+              prefSchema.current &&
             <RightPreference
               key={valuesVersionRef.current}
               schema={prefSchema.current}
@@ -412,10 +452,11 @@ export default function PreferencesComponent({panelId}) {
                 prefChangedData.current = changedData;
               }}
             />
-          }
-        </div>
-      </Box >
-    </Root>
+            }
+          </div>
+        </Box >
+      </Root>
+    </InterfacePreferencesProvider>
   );
 }
 

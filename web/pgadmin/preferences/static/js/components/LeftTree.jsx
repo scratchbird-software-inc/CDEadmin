@@ -14,12 +14,17 @@ import { Resizable } from 're-resizable';
 
 
 import PgTreeView from '../../../../static/js/PgTreeView';
+import {interfacePreferenceMatches} from '../../../../static/js/cdeadmin_ui/customization/InterfacePreferences';
 
-export default function LeftTree({prefTreeData, selectedItem, setSelectedItem, filteredList}) {
+export default function LeftTree({prefTreeData, selectedItem, setSelectedItem, filteredList,
+  searchVal=''}) {
   const filteredTreeData = useMemo(() => {
     const parentIds = filteredList.map((item) => item.parentId);
     const filteredTreeData = prefTreeData.reduce((retVal, category) => {
-      const filteredChildren = category.children.filter((child) => parentIds.includes(child.id));
+      // Interface pages are editors without preference fields; they match on
+      // their names and keywords.
+      const filteredChildren = category.children.filter((child) => child.editor ?
+        interfacePreferenceMatches(child, searchVal) : parentIds.includes(child.id));
       if( filteredChildren.length > 0) {
         retVal.push({
           ...category,
@@ -29,15 +34,17 @@ export default function LeftTree({prefTreeData, selectedItem, setSelectedItem, f
       return retVal;
     }, []);
     return filteredTreeData;
-  }, [prefTreeData, filteredList]);
+  }, [prefTreeData, filteredList, searchVal]);
 
   useEffect(() => {
-    // When the filtered list changes, we need to update the selected item
-    // to the first item in the filtered tree data, if available.
-    if (filteredTreeData.length > 0) {
+    // When the filtered list changes, select the first entry it shows,
+    // unless the selected entry is still shown (a page opened on request).
+    const shown = filteredTreeData.some((category) => category.children
+      .some((child) => child.id === selectedItem?.id));
+    if (filteredTreeData.length > 0 && !shown) {
       setSelectedItem(filteredTreeData[0]?.children[0] ?? null);
     }
-  }, [filteredList.length]);
+  }, [filteredList.length, searchVal]);
 
   return (
     <Resizable className='PreferencesComponent-treeContainer'
@@ -72,4 +79,5 @@ LeftTree.propTypes = {
   selectedItem: PropTypes.object,
   setSelectedItem: PropTypes.func.isRequired,
   filteredList: PropTypes.array,
+  searchVal: PropTypes.string,
 };

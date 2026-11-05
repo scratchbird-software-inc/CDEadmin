@@ -37,7 +37,17 @@ functions move to dialogs. Appearance is now `customization/AppearanceSettings`,
 opened by `view.appearance.open`; it previews through
 `APPEARANCE_PREVIEW_EVENT`, which safe mode overrides, and stores named
 presets in `misc:accessibility:appearance_presets`, validated by the server
-in `pgadmin/misc/appearance_presets.py`.) It persists only validated preference
+in `pgadmin/misc/appearance_presets.py`.)
+(Later on 2026-11-05, owner direction: the interface designer is part of
+Preferences. The form, `AppearanceSettings` and the tabbed-bar dialog are
+retired. `customization/InterfacePreferences` adds two client-side
+categories to the Preferences tree (`cde-appearance`, `cde-designer`) whose
+pages are editors: `AppearancePreferences` (one per appearance section) and
+`DesignerPreferences` (artwork, menus and commands, tabbed bar, profiles).
+Their unsaved drafts live in `interfaceDrafts` for the whole Preferences tab;
+the preview ends when the tab closes. `tools.interface-designer.open`,
+`view.appearance.open` and `view.command-bar.customize` keep their ids and
+open Preferences at their page through `requestPreferencesSection`.) It persists only validated preference
 documents. Profile import/export is deliberately data-only and allowlisted:
 unrelated preferences, executable handlers, raw SVG, credentials, and arbitrary
 CSS are neither accepted nor exported. A deployment can distribute the same

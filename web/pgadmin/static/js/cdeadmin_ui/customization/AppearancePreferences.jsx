@@ -7,10 +7,10 @@
 //
 //////////////////////////////////////////////////////////////
 
-// View > Appearance and accessibility: fonts, colours, area sizes and named
-// presets. Changes preview live and are saved with Apply; the presentation
-// authority bounds and repairs every value, and safe mode (Ctrl+Shift+0)
-// still overrides whatever is shown or saved here.
+// Preferences > Appearance and accessibility: one editor per section (fonts,
+// colours, area sizes, presets...). Changes preview live across sections and
+// are saved with Apply; the presentation authority bounds and repairs every
+// value, and safe mode (Ctrl+Shift+0) still overrides what is shown or saved.
 
 import {useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
@@ -24,13 +24,11 @@ import {ValidationMessage} from '../feedback/Indicators';
 import {
   ColorPicker,
   DestructiveConfirmationDialog,
-  PreferencesSurface,
   SimpleInputDialog,
 } from '../overlays/StandardSurfaces';
 import {
   PRESENTATION_COLOR_PREFERENCES,
   PRESENTATION_OVERRIDE_RANGES,
-  previewAppearance,
   resolvePresentation,
 } from '../foundations/presentation';
 import {
@@ -43,26 +41,17 @@ import {
   importPresets,
   parsePresets,
   presetValues,
-  readAppearance,
   removePreset,
   serializePresets,
   storePreset,
 } from './appearance';
+import {errorText, preferenceRecord, useInterfaceDrafts} from './interfaceDrafts';
 
 const GRID = {display: 'grid', gap: 'var(--cde-panel-gap, 8px) 16px',
   gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
   alignItems: 'start'};
 const ROW = {display: 'flex', flexWrap: 'wrap', alignItems: 'center',
   gap: 'var(--cde-target-spacing, 8px)'};
-
-function preferenceRecord(store, name, value) {
-  const preference = store.getPreferences('misc', name);
-  if(!preference) {
-    throw new Error(gettext('The appearance setting %s is unavailable.', name));
-  }
-  return {category_id: preference.cid, id: preference.id, mid: preference.mid,
-    name: preference.name, value};
-}
 
 // Enough of a theme for resolvePresentation to pick light or dark colours.
 function themeHint(theme) {
@@ -162,7 +151,7 @@ function PresetsPanel({presets, values, update, onSaveAs, onReplace, onDelete,
       {gettext('Your presets')}
     </h3>
     <p style={{margin: 0}}>{gettext(
-      'Saving a preset stores every setting in this dialog under a name. Using a preset changes only the settings it holds and shows the result here; Apply makes it your appearance.'
+      'Saving a preset stores every appearance setting under a name. Using a preset changes only the settings it holds and previews the result; Apply makes it your appearance.'
     )}</p>
     <div role="listbox" aria-label={gettext('Saved presets')}
       style={{border: '1px solid var(--cde-color-border, currentColor)',
@@ -211,11 +200,10 @@ PresetsPanel.propTypes = {
   busy: PropTypes.bool,
 };
 
-export default function AppearanceSettings({onClose}) {
-  const store = usePreferences();
-  const version = store.version;
-  const saved = useMemo(() => readAppearance(
-    usePreferences.getState().getPreferencesForModule('misc')), [version]);
+export function AppearanceSectionEditor({sectionId}) {
+  const drafts = useInterfaceDrafts();
+  const section = APPEARANCE_SECTIONS.find((item) => item.id === sectionId);
+  const version = usePreferences((state) => state.version);
   const themeOptions = useMemo(() => (usePreferences.getState()
     .getPreferences('misc', 'theme')?.options ?? []).map((option) => ({
     value: option.value, label: option.label})), [version]);
@@ -232,13 +220,14 @@ export default function AppearanceSettings({onClose}) {
   const [naming, setNaming] = useState(null);
   const [deleting, setDeleting] = useState('');
   const [picking, setPicking] = useState(null);
-  const updateRef = useRef(null);
-
-  useEffect(() => () => previewAppearance(null), []);
+  const pickingRef = useRef(null);
+  pickingRef.current = picking;
   useEffect(() => {
     if(presetsError) setMessage({status: 'error', text: presetsError});
   }, [presetsError]);
 
+  const values = drafts.appearance;
+  const update = drafts.updateAppearance;
   const persist = async (records, success) => {
     setBusy(true);
     try {
@@ -246,8 +235,7 @@ export default function AppearanceSettings({onClose}) {
       setMessage({status: 'success', text: success});
       return true;
     } catch(error) {
-      setMessage({status: 'error', text: error?.response?.data?.errormsg ||
-        error.message});
+      setMessage({status: 'error', text: errorText(error)});
       return false;
     } finally {
       setBusy(false);
@@ -255,29 +243,29 @@ export default function AppearanceSettings({onClose}) {
   };
   const persistPresets = (document, success) => {
     try {
-      return persist([preferenceRecord(usePreferences.getState(),
-        APPEARANCE_PRESET_PREFERENCE, serializePresets(document))], success);
+      return persist([preferenceRecord('misc', APPEARANCE_PRESET_PREFERENCE,
+        serializePresets(document))], success);
     } catch(error) {
       setMessage({status: 'error', text: error.message});
       return Promise.resolve(false);
     }
   };
-  const apply = async (draft) => {
-    const changed = APPEARANCE_KEYS.filter((name) => draft[name] !== saved[name]);
+  const apply = async () => {
+    const changed = APPEARANCE_KEYS.filter((name) =>
+      values[name] !== drafts.savedAppearance[name]);
     if(changed.length === 0) return;
     try {
-      const records = changed.map((name) => preferenceRecord(
-        usePreferences.getState(), name, draft[name]));
+      const records = changed.map((name) => preferenceRecord('misc', name, values[name]));
       if(await persist(records, gettext('Appearance saved.'))) {
-        previewAppearance(null);
+        drafts.discardAppearance();
       }
     } catch(error) {
       setMessage({status: 'error', text: error.message});
     }
   };
-  const savePreset = async (name, values) => {
+  const savePreset = async (name, presetSource) => {
     try {
-      await persistPresets(storePreset(presets, name, values),
+      await persistPresets(storePreset(presets, name, presetSource),
         gettext('Preset “%s” saved.', name.trim()));
     } catch(error) {
       setMessage({status: 'error', text: error.message});
@@ -305,65 +293,55 @@ export default function AppearanceSettings({onClose}) {
       setMessage({status: 'error', text: error.message});
     }
   };
+  if(!section) return null;
+  const presentation = resolvePresentation(values, themeHint(values.theme));
+  const set = (name) => (value) => update({[name]: value});
 
-  const sections = APPEARANCE_SECTIONS.map((section) => ({
-    ...section,
-    render: ({values, update}) => {
-      updateRef.current = update;
-      const presentation = resolvePresentation(values, themeHint(values.theme));
-      const set = (name) => (value) => update({[name]: value});
-      return <section aria-labelledby={`appearance-${section.id}-heading`}
-        style={{display: 'grid', gap: 16}}>
-        <h2 id={`appearance-${section.id}-heading`} style={{margin: 0}}>
-          {section.label}
-        </h2>
-        <div style={GRID}>
-          {section.fields.map((field) => {
-            if(field.kind === 'number') {
-              return <NumberSetting key={field.name} field={field}
-                value={values[field.name]} presentation={presentation}
-                onChange={set(field.name)} />;
-            }
-            if(field.kind === 'color') {
-              return <ColorSetting key={field.name} field={field}
-                value={values[field.name]} presentation={presentation}
-                onChange={set(field.name)}
-                onChoose={(chosen, shown) => setPicking({field: chosen, shown,
-                  background: presentation.colors?.canvas})} />;
-            }
-            if(field.kind === 'font') {
-              return <FontSetting key={field.name} field={field}
-                value={values[field.name]} onChange={set(field.name)} />;
-            }
-            return <Select key={field.name} label={field.label}
-              value={values[field.name]}
-              options={field.kind === 'theme' ? themeOptions : field.options}
-              onChange={set(field.name)} />;
-          })}
-        </div>
-        {section.id === 'presets' && <PresetsPanel presets={presets}
-          values={values} update={update} busy={busy}
-          onSaveAs={(current) => setNaming({values: current})}
-          onReplace={(name, current) => savePreset(name, current)}
-          onDelete={setDeleting} onExport={exportPresets} onImport={importFile} />}
-      </section>;
-    },
-  }));
-
-  return <div data-cdeadmin-qa-key="appearance-settings.dialog"
-    style={{height: '100%', minHeight: 0, display: 'grid',
-      gridTemplateRows: 'auto minmax(0, 1fr)'}}>
-    <div style={{...ROW, padding: '4px 8px', minHeight: 28}}>
-      <div style={{flex: 1}}>
-        {message.text && <ValidationMessage status={message.status}>
-          {message.text}</ValidationMessage>}
-      </div>
-      {onClose && <Button onClick={onClose}>{gettext('Close')}</Button>}
+  return <div data-cdeadmin-qa-key={`appearance.${section.id}`}
+    style={{display: 'grid', gap: 16, padding: 16, alignContent: 'start'}}>
+    <h2 style={{margin: 0}}>{section.label}</h2>
+    <div style={GRID}>
+      {section.fields.map((field) => {
+        if(field.kind === 'number') {
+          return <NumberSetting key={field.name} field={field}
+            value={values[field.name]} presentation={presentation}
+            onChange={set(field.name)} />;
+        }
+        if(field.kind === 'color') {
+          return <ColorSetting key={field.name} field={field}
+            value={values[field.name]} presentation={presentation}
+            onChange={set(field.name)}
+            onChoose={(chosen, shown) => setPicking({field: chosen, shown,
+              background: presentation.colors?.canvas})} />;
+        }
+        if(field.kind === 'font') {
+          return <FontSetting key={field.name} field={field}
+            value={values[field.name]} onChange={set(field.name)} />;
+        }
+        return <Select key={field.name} label={field.label}
+          value={values[field.name]}
+          options={field.kind === 'theme' ? themeOptions : field.options}
+          onChange={set(field.name)} />;
+      })}
     </div>
-    <PreferencesSurface sections={sections} values={saved}
-      onPreview={(next) => previewAppearance(next)}
-      onApply={apply}
-      onReset={() => { previewAppearance(null); setMessage({status: 'info', text: ''}); }} />
+    {section.id === 'presets' && <PresetsPanel presets={presets}
+      values={values} update={update} busy={busy}
+      onSaveAs={(current) => setNaming({values: current})}
+      onReplace={(name, current) => savePreset(name, current)}
+      onDelete={setDeleting} onExport={exportPresets} onImport={importFile} />}
+    <div style={{...ROW, borderTop: '1px solid var(--cde-color-border, currentColor)',
+      paddingTop: 8}}>
+      <div style={{flex: 1}}>
+        {message.text ? <ValidationMessage status={message.status}>{message.text}</ValidationMessage> :
+          drafts.appearanceChanged && <ValidationMessage status="info">
+            {gettext('Previewing unsaved appearance changes.')}</ValidationMessage>}
+      </div>
+      <Button disabled={!drafts.appearanceChanged} onClick={() => {
+        drafts.discardAppearance(); setMessage({status: 'info', text: ''});
+      }}>{gettext('Reset')}</Button>
+      <Button intent="primary" loading={busy} disabled={!drafts.appearanceChanged}
+        onClick={apply}>{gettext('Apply')}</Button>
+    </div>
     <SimpleInputDialog open={Boolean(naming)} title={gettext('Save preset')}
       label={gettext('Preset name')} value=""
       validation={(name) => !name.trim() ? gettext('Enter a name.') :
@@ -391,10 +369,10 @@ export default function AppearanceSettings({onClose}) {
       minimumContrast={picking?.field.minimumContrast ?? 0}
       onClose={() => setPicking(null)}
       onConfirm={(value) => {
-        updateRef.current?.({[picking.field.name]: value});
+        update({[pickingRef.current.field.name]: value});
         setPicking(null);
       }} />
   </div>;
 }
 
-AppearanceSettings.propTypes = {onClose: PropTypes.func};
+AppearanceSectionEditor.propTypes = {sectionId: PropTypes.string.isRequired};

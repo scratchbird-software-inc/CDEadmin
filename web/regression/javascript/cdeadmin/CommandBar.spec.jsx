@@ -15,8 +15,9 @@ import {fireEvent, render, screen, waitFor, within} from '@testing-library/react
 import {withTheme} from '../fake_theme';
 import {PgAdminProvider} from 'sources/PgAdminProvider';
 import AppNotebookBar from 'sources/AppNotebookBar';
-import CommandBarCustomizer from
-  'sources/cdeadmin_ui/customization/CommandBarCustomizer';
+import {CommandBarEditor} from 'sources/cdeadmin_ui/customization/DesignerPreferences';
+import {InterfacePreferencesProvider} from
+  'sources/cdeadmin_ui/customization/interfaceDrafts';
 import {buildCommandBarModel} from 'sources/cdeadmin_ui/shell/commandBarModel';
 import {COMMAND_BAR_THEME, commandBarMode} from
   'sources/cdeadmin_ui/shell/commandBarSettings';
@@ -145,33 +146,41 @@ describe('AppNotebookBar', () => {
   });
 });
 
-describe('Customize Tabbed Bar dialog', () => {
+// View > Customize Tabbed Bar opens Preferences > Interface designer > Tabbed
+// bar (2026-11-05; first a dialog, then a Preferences page the same day).
+function renderEditor() {
+  const Page = withTheme(({menus: source}) => <InterfacePreferencesProvider>
+    <CommandBarEditor menus={source} />
+  </InterfacePreferencesProvider>);
+  render(<Page menus={menus()} />);
+}
+
+describe('Preferences > Interface designer > Tabbed bar', () => {
   beforeEach(() => setPreferences());
 
   it('saves the customization to the account', async () => {
-    const onClose = jest.fn();
-    const Dialog = withTheme(CommandBarCustomizer);
-    render(<Dialog menus={menus()} onClose={onClose} />);
+    renderEditor();
     fireEvent.click(within(screen.getByRole('listbox', {name: 'Tabs'}))
       .getByRole('checkbox', {name: 'Show View'}));
     fireEvent.click(screen.getByRole('button', {name: 'Save'}));
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole('status'))
+      .toHaveTextContent('Tabbed bar saved.'));
     const [[records]] = usePreferences.getState().setPreferences.mock.calls;
     expect(records[0]).toMatchObject({name: 'command_bar_customization', mid: 3});
     expect(JSON.parse(records[0].value).tabs.view.hidden).toBe(true);
   });
 
-  it('reports a refused save and stays open', async () => {
+  it('reports a refused save and keeps the change', async () => {
     usePreferences.setState({setPreferences: jest.fn(async () => {
       throw Object.assign(new Error('x'),
         {response: {data: {errormsg: 'The command bar customization is not valid.'}}});
     })});
-    const onClose = jest.fn();
-    const Dialog = withTheme(CommandBarCustomizer);
-    render(<Dialog menus={menus()} onClose={onClose} />);
+    renderEditor();
+    fireEvent.click(within(screen.getByRole('listbox', {name: 'Tabs'}))
+      .getByRole('checkbox', {name: 'Show View'}));
     fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     expect(await screen.findByText('The command bar customization is not valid.'))
       .toBeInTheDocument();
-    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', {name: 'Discard changes'})).toBeEnabled();
   });
 });

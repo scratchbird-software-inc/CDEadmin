@@ -142,7 +142,9 @@ Interface Designer lets each account edit reviewed fonts, colours, relative
 geometry, density, motion, semantic artwork assignments, menu structure, and
 authorized command placement. (2026-11-05: fonts, colours, sizes and named
 presets have moved to View > Appearance and Accessibility; the designer's
-other pages are moving to their own dialogs.) Portable validated profiles support personal,
+other pages are moving to their own dialogs. Later the same day: the
+interface designer is part of Preferences, with Appearance and accessibility
+beside it.) Portable validated profiles support personal,
 team, and organization baselines without embedding executable code or
 weakening command permissions. Product, engine, authentication, and command
 artwork is held in the canonical

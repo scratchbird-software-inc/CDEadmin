@@ -9,6 +9,14 @@ of the interface and keeps them as named presets. It replaces the
 *Appearance* page of the Interface Designer and the accessibility pages of
 *File > Preferences* (2026-11-05).
 
+.. note:: Later on 2026-11-05, owner direction: these settings are pages of
+   *Preferences*, in the *Appearance and accessibility* category, one page per
+   section below; *View > Appearance and Accessibility…* opens Preferences
+   there. Unsaved changes preview while you move between the pages and are
+   kept until *Apply* or *Reset*; closing Preferences ends the preview. The
+   tabbed bar's customization is *Preferences > Interface designer > Tabbed
+   bar* (*View > Customize Tabbed Bar…* opens it).
+
 Changes show immediately as a preview. *Apply* saves them to your account;
 *Reset* or closing the dialog returns to what was saved. ``Ctrl+Shift+0``
 still switches the emergency safe mode (high contrast, large sizes, reduced

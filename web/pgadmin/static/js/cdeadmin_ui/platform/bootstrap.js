@@ -79,20 +79,20 @@ function ensureCoreModules() {
         execute: (_args, context) => requiredCallback('showActivity', context)(
           'activity.data'
         )},
-      {id: 'tools.interface-designer.open', label: 'Interface Designer',
-        description: 'Customize artwork, menus, and commands.',
+      {id: 'tools.interface-designer.open', label: 'Interface Designer…',
+        description: 'Preferences > Interface designer: artwork, menus, commands, the tabbed bar and profiles.',
         iconKey: 'action.settings', surfaces: ['tools', 'view'],
         execute: (_args, context) => requiredCallback(
           'openInterfaceDesigner', context
         )()},
       {id: 'view.appearance.open', label: 'Appearance and Accessibility…',
-        description: 'Fonts, colours, area sizes and saved appearance presets.',
+        description: 'Preferences > Appearance and accessibility: fonts, colours, area sizes and presets.',
         iconKey: 'action.settings', surfaces: ['view'],
         execute: (_args, context) => requiredCallback(
           'openAppearanceSettings', context
         )()},
       {id: 'view.command-bar.customize', label: 'Customize Tabbed Bar…',
-        description: 'Arrange the tabs, groups and quick-access commands of the tabbed command bar.',
+        description: 'Preferences > Interface designer > Tabbed bar.',
         iconKey: 'action.settings', surfaces: ['view'],
         execute: (_args, context) => requiredCallback(
           'openCommandBarCustomizer', context

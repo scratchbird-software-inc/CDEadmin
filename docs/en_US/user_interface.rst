@@ -72,7 +72,13 @@ conditions, not theme extras.
 
 These settings, with named presets, are in *View > Appearance and
 Accessibility…* (see :ref:`appearance_settings`); since 2026-11-05 they are
-no longer listed in *File > Preferences*.
+no longer listed in *File > Preferences*. (Later the same day: they are
+Preferences pages again, under *Appearance and accessibility*, beside the
+*Interface designer*; the View menu entry opens them. Preferences is the icon
+at the foot of the activity bar. The Query Tool is not on the activity bar:
+open it from a server, database or object in the Data Explorer, with *Tools >
+Query Tool* or the node's context menu, and it starts with that connection
+and the engine's own query tool.)
 
 .. toctree::
    :maxdepth: 2
