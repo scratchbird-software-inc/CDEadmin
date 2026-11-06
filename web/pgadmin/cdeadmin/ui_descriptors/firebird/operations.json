@@ -356,7 +356,7 @@
           "field_id": "access_mode",
           "label": "Database access mode",
           "group": "Database settings",
-          "control": "select",
+          "control": "radio",
           "required": false,
           "default": "READ_WRITE",
           "options": [
@@ -938,7 +938,7 @@
         {
           "field_id": "mode",
           "label": "Shutdown mode",
-          "control": "select",
+          "control": "radio",
           "required": true,
           "default": "FULL",
           "options": [
@@ -959,7 +959,7 @@
         {
           "field_id": "method",
           "label": "Shutdown method",
-          "control": "select",
+          "control": "radio",
           "required": true,
           "default": "DENY_ATTACHMENTS",
           "options": [
@@ -1010,7 +1010,7 @@
         {
           "field_id": "mode",
           "label": "Online mode",
-          "control": "select",
+          "control": "radio",
           "required": true,
           "default": "NORMAL",
           "options": [
@@ -1109,7 +1109,7 @@
         {
           "field_id": "mode",
           "label": "Page space policy",
-          "control": "select",
+          "control": "radio",
           "required": true,
           "default": "RESERVE",
           "options": [
@@ -1148,7 +1148,7 @@
         {
           "field_id": "mode",
           "label": "Write mode",
-          "control": "select",
+          "control": "radio",
           "required": true,
           "default": "SYNC",
           "options": [
@@ -1187,7 +1187,7 @@
         {
           "field_id": "mode",
           "label": "Access mode",
-          "control": "select",
+          "control": "radio",
           "required": true,
           "default": "READ_WRITE",
           "options": [
@@ -1367,7 +1367,7 @@
         {
           "field_id": "mode",
           "label": "Replica mode",
-          "control": "select",
+          "control": "radio",
           "required": true,
           "default": "NONE",
           "options": [

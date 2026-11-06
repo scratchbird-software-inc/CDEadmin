@@ -28,6 +28,20 @@ import KeyValueEditor from './KeyValueEditor';
 
 const SIMPLE_TEXT = new Set(['text', 'file']);
 
+/*
+ * A short fixed list of choices is shown as checkboxes instead of behind a
+ * picker, so every option is visible (compact_forms.rst: multiple choices use
+ * checkboxes or multi-selects). The rule is the same for every engine. Choices
+ * drawn from the draft or catalog at runtime, long lists and grid cells keep
+ * the picker, so a form's layout never depends on the data it is showing.
+ */
+export const MAX_CHECKBOX_CHOICES = 12;
+
+export function showsChoicesAsCheckboxes(field, inGrid=false) {
+  return !inGrid && field.control === 'multiselect' && Array.isArray(field.options) &&
+    field.options.length > 0 && field.options.length <= MAX_CHECKBOX_CHOICES;
+}
+
 function HelpLine({id, error, help}) {
   if(error) return <ValidationMessage id={id} status="error">{error}</ValidationMessage>;
   if(help) return <Box id={id} component="p" sx={{m: 0, mt: 0.5, fontSize: '0.75rem', color: 'text.secondary'}}>{help}</Box>;
@@ -42,7 +56,7 @@ export function fieldHelpText(field) {
 }
 
 export default function FieldControl({field, value, onChange, draft={}, context={}, resourceKind,
-  error, cellErrors, disabled=false, dense=false, mode='create'}) {
+  error, cellErrors, disabled=false, dense=false, inGrid=false, mode='create'}) {
   const helpId = useId();
   const unavailable = field.available === false;
   const isDisabled = disabled || unavailable || Boolean(field.readonly);
@@ -89,6 +103,32 @@ export default function FieldControl({field, value, onChange, draft={}, context=
   // Help is help: only an error turns a picker red.
   const picker = {label: field.label, required: Boolean(field.required), disabled: isDisabled, fullWidth: true,
     size: dense ? 'small' : 'medium', validationMessage: error || undefined, helperText: help || undefined};
+  if(control === 'multiselect' && showsChoicesAsCheckboxes(field, inGrid)) {
+    // As with the picker, only offered options are shown and a value outside
+    // them is dropped on the next change; the result keeps option order.
+    const chosen = new Set(Array.isArray(value) ? value : []);
+    const toggle = (optionValue, checked) => {
+      const next = new Set(chosen);
+      if(checked) next.add(optionValue); else next.delete(optionValue);
+      onChange(options.filter((option) => next.has(option.value)).map((option) => option.value));
+    };
+    return <Box component="fieldset" data-cdeadmin-qa-key={qaKey} disabled={isDisabled}
+      aria-describedby={error || help ? helpId : undefined} aria-invalid={error ? 'true' : undefined}
+      sx={{m: 0, p: 0, border: 0, minWidth: 0, gridColumn: '1 / -1'}}>
+      <Box component="legend" sx={{p: 0, mb: 0.5, fontSize: '0.75rem',
+        color: error ? 'error.main' : 'text.secondary'}}>
+        {field.label}{field.required ? ' *' : ''}
+      </Box>
+      <Box sx={{display: 'grid', columnGap: 1,
+        gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 14rem), 1fr))'}}>
+        {options.map((option) => <Checkbox key={String(option.value)}
+          label={option.label ?? String(option.value)} checked={chosen.has(option.value)}
+          disabled={isDisabled} size={dense ? 'small' : 'medium'}
+          onChange={(checked) => toggle(option.value, checked)} />)}
+      </Box>
+      <HelpLine id={helpId} error={error} help={help} />
+    </Box>;
+  }
   if(control === 'multiselect') {
     const selected = options.filter((option) => (Array.isArray(value) ? value : []).includes(option.value));
     return <Box data-cdeadmin-qa-key={qaKey}>
@@ -146,4 +186,6 @@ FieldControl.propTypes = {
   cellErrors: PropTypes.object,
   disabled: PropTypes.bool,
   dense: PropTypes.bool,
+  // Set by RecordGrid: a cell keeps the picker for a multiselect.
+  inGrid: PropTypes.bool,
 };

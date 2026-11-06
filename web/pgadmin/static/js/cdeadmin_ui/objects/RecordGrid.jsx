@@ -71,7 +71,7 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
   });
   const cellError = (index, column) => (cellErrors || {})[`${field.field_id}[${index}].${column.field_id}`];
   const cell = (row, index, column) => <FieldControl field={{...column, label: `${column.label} (row ${index + 1})`}}
-    value={row[column.field_id]} dense mode={mode} error={cellError(index, column)}
+    value={row[column.field_id]} dense inGrid mode={mode} error={cellError(index, column)}
     disabled={disabled || lockedCell(column, row, mode)}
     draft={{...draft, ...row}} context={context} resourceKind={resourceKind}
     onChange={(value) => update(index, column.field_id, value)} />;

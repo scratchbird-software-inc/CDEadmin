@@ -9,6 +9,7 @@ import {fireEvent, render, screen, waitFor, within} from '@testing-library/react
 import Theme from 'sources/Theme';
 import {FieldControl, ObjectEditor, OperationDialog, RecordGrid} from '../../../pgadmin/static/js/cdeadmin_ui/objects';
 import {gridColumns, MAX_INLINE_COLUMNS} from '../../../pgadmin/static/js/cdeadmin_ui/objects/RecordGrid';
+import {MAX_CHECKBOX_CHOICES, showsChoicesAsCheckboxes} from '../../../pgadmin/static/js/cdeadmin_ui/objects/FieldControl';
 import {enterSubmits} from '../../../pgadmin/static/js/cdeadmin_ui/overlays/Dialog';
 import {validateDraft} from '../../../pgadmin/static/js/cdeadmin_ui/objects/descriptors';
 import {loadEngineBundle} from './familyFixtures';
@@ -44,10 +45,75 @@ describe('pickers', () => {
   });
 
   it('turn red only for an error', () => {
+    // 2026-11-05: a short fixed list now renders as checkboxes (see
+    // 'short fixed choices' below), so this picker test uses a list one
+    // longer than that limit to keep testing the picker.
+    const options = Array.from({length: MAX_CHECKBOX_CHOICES + 1}, (_item, index) =>
+      ({value: `o${index}`, label: `o${index}`}));
     render(<Theme><FieldControl field={{field_id: 'owner', label: 'Owner', control: 'multiselect', help: 'h',
-      options: [{value: 'a', label: 'a'}]}} value={[]} error="Owner is required." onChange={() => {}} /></Theme>);
+      options}} value={[]} error="Owner is required." onChange={() => {}} /></Theme>);
     expect(screen.getByRole('combobox').getAttribute('aria-invalid')).toBe('true');
     expect(screen.getByText('Owner is required.')).toBeTruthy();
+  });
+});
+
+describe('short fixed choices', () => {
+  const FLAGS = [{value: 'IGNORE_CHECKSUMS', label: 'Ignore checksums'},
+    {value: 'IGNORE_LIMBO', label: 'Ignore limbo transactions'},
+    {value: 'METADATA_ONLY', label: 'Only metadata'}];
+  const flags = (extra={}) => ({field_id: 'backup_flags', label: 'Backup options', control: 'multiselect',
+    help: 'Native gbak switches.', options: FLAGS, ...extra});
+
+  it('show every option as a checkbox in a labelled group', () => {
+    render(<Theme><FieldControl field={flags({required: true})} value={['IGNORE_LIMBO']} onChange={() => {}} /></Theme>);
+    const group = screen.getByRole('group', {name: 'Backup options *'});
+    expect(screen.queryByRole('combobox')).toBeNull();
+    const boxes = within(group).getAllByRole('checkbox');
+    expect(boxes.map((box) => box.checked)).toEqual([false, true, false]);
+    expect(within(group).getByLabelText('Ignore limbo transactions').checked).toBe(true);
+    const help = screen.getByText('Native gbak switches.');
+    expect(group.getAttribute('aria-describedby')).toBe(help.id);
+  });
+
+  it('send the chosen values in option order and drop a value no option offers', () => {
+    const onChange = jest.fn();
+    render(<Theme><FieldControl field={flags()} value={['METADATA_ONLY', 'NOT_OFFERED']} onChange={onChange} /></Theme>);
+    fireEvent.click(screen.getByLabelText('Ignore checksums'));
+    expect(onChange).toHaveBeenLastCalledWith(['IGNORE_CHECKSUMS', 'METADATA_ONLY']);
+    fireEvent.click(screen.getByLabelText('Only metadata'));
+    expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it('mark the group invalid and show the error', () => {
+    render(<Theme><FieldControl field={flags()} value={[]} error="Choose at least one." onChange={() => {}} /></Theme>);
+    const group = screen.getByRole('group', {name: 'Backup options'});
+    expect(group.getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByText('Choose at least one.')).toBeTruthy();
+  });
+
+  it('disable every checkbox when the field is disabled', () => {
+    render(<Theme><FieldControl field={flags()} value={[]} disabled onChange={() => {}} /></Theme>);
+    expect(screen.getAllByRole('checkbox').every((box) => box.disabled)).toBe(true);
+  });
+
+  it('keep the picker in a grid cell, for runtime choices and for long lists', () => {
+    expect(showsChoicesAsCheckboxes(flags())).toBe(true);
+    expect(showsChoicesAsCheckboxes(flags(), true)).toBe(false);
+    expect(showsChoicesAsCheckboxes(flags({options: undefined, option_values_path: ['draft', 'columns']}))).toBe(false);
+    expect(showsChoicesAsCheckboxes(flags({options: Array.from({length: MAX_CHECKBOX_CHOICES + 1},
+      (_item, index) => ({value: index, label: String(index)}))}))).toBe(false);
+    render(<Theme><FieldControl field={flags()} value={[]} inGrid onChange={() => {}} /></Theme>);
+    expect(screen.getByRole('combobox')).toBeTruthy();
+  });
+
+  it('keep the picker for a multiselect column of a record grid', () => {
+    const {field_id: _id, label: _label, ...column} = flags();
+    const field = {field_id: 'rows', label: 'Rows', control: 'grid',
+      columns: [{field_id: 'name', label: 'Name', control: 'text'}, {field_id: 'flags', label: 'Flags', ...column}]};
+    render(<Theme><RecordGrid field={field} rows={[{name: 'a', flags: []}]} onChange={() => {}} /></Theme>);
+    const table = screen.getByRole('table', {name: 'Rows'});
+    expect(within(table).queryAllByRole('checkbox')).toEqual([]);
+    expect(within(table).getByRole('combobox', {name: 'Flags (row 1)'})).toBeTruthy();
   });
 });
 
