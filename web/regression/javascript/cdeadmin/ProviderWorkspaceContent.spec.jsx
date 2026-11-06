@@ -29,6 +29,7 @@ import ProviderWorkspaceContent, {
 import * as ProviderWorkspaceModule from '../../../pgadmin/static/js/Dialogs/ProviderWorkspaceContent';
 import {modelFixtures} from '../bi/modelFixtures';
 import getApiInstance from '../../../pgadmin/static/js/api_instance';
+import {requestSQLSource} from '../../../pgadmin/static/js/cdeadmin_ui/editors/SQLConnections';
 import firebirdManifest from '../../../pgadmin/cdeadmin/providers/firebird/provider_manifest.json';
 
 jest.mock('../../../pgadmin/static/js/api_instance');
@@ -1450,6 +1451,43 @@ describe('ProviderWorkspaceContent', () => {
     await waitFor(() => expect(screen.getByRole('button', {name: 'Run', exact: true})).not.toBeDisabled());
     expect(screen.getByRole('button', {name: 'Close query session'})).toBeDisabled();
     expect(api.post.mock.calls.filter(([, payload]) => payload.action === 'execute')).toHaveLength(1);
+  });
+
+  // Owner direction 2026-11-05: Browse data from a table's context menu
+  // fills this connection's editor with SELECT of every column. The request
+  // can reach an editor that is already open, and the statement is not run.
+  it('fills the open editor with a Browse data SELECT and does not run it', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'firebird-sql', title: 'Firebird SQL',
+      starter_source: 'SELECT 1 FROM RDB$DATABASE', parameter_shape: 'array',
+    }]}}});
+    let answerInspect;
+    const inspected = new Promise((resolve) => {answerInspect = resolve;});
+    const metadata = {resources: [
+      {resource_kind: 'table', display_name: 'ASSETS', display_path: ['ASSETS']},
+      {resource_kind: 'column', display_name: 'ASSET_ID', display_path: ['ASSETS', 'ASSET_ID']},
+      {resource_kind: 'column', display_name: 'TAG', display_path: ['ASSETS', 'TAG']},
+    ]};
+    api.post.mockImplementation((_url, payload) => {
+      if (payload.action === 'resource_inspect') {
+        return inspected.then(() => ({data: {data: {resource_id: 'table:ASSETS',
+          resource_kind: 'table', display_name: 'ASSETS'}}}));
+      }
+      return Promise.resolve({data: {data: {firebird_editor_metadata: metadata}[payload.action]}});
+    });
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/browse" initialTab="studio" />);
+    await waitFor(() => expect(screen.getByLabelText('Query source')).toHaveValue('SELECT 1 FROM RDB$DATABASE'));
+    act(() => requestSQLSource('/workspace/browse', {resource_id: 'table:ASSETS'}));
+    await waitFor(() => expect(api.post.mock.calls.some(([, payload]) => payload.action === 'resource_inspect')).toBe(true));
+    // Other activity re-renders the workspace while the inspection is out.
+    act(() => requestSQLSource('/workspace/another-connection', {resource_id: 'table:OTHER'}));
+    await act(async () => {answerInspect();});
+    await waitFor(() => expect(screen.getByLabelText('Query source')).toHaveValue(
+      'SELECT "ASSET_ID", "TAG"\nFROM "ASSETS"'));
+    expect(api.post.mock.calls.map(([, payload]) => payload.action)).not.toContain('execute');
+    expect(api.post.mock.calls.find(([, payload]) => payload.action === 'resource_inspect')[1].request)
+      .toMatchObject({resource_id: 'table:ASSETS'});
   });
 
   it('keeps the old language and owned session if language-switch release fails', async () => {

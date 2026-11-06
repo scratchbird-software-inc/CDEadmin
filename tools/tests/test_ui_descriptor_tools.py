@@ -92,3 +92,30 @@ def test_builders_still_emit_the_migrated_entries():
     system = {**resource, 'native': {'system_object': True}}
     assert 'resource.sqlite.table.export_sql' not in ids(resource_context_actions(
         profile('sqlite', route_kind='embedded_file'), system, catalog, database_target_id='t1'))
+
+
+def test_browse_data_is_a_top_level_entry_for_tables_and_views_only():
+    """Owner direction 2026-11-05: Browse data opens the SQL editor with the
+    relation's SELECT. It is declared, not branched, and only where the SQL
+    editor's metadata lists relation columns."""
+    catalog = {'objects': [
+        {'resource_kind': kind, 'title': kind.title(), 'operations': [], 'editor': {'sections': []}}
+        for kind in ('table', 'view', 'sequence')]}
+    for engine, route in (('firebird', 'network'), ('mysql', 'network'), ('mariadb', 'network'),
+                          ('sqlite', 'embedded_file'), ('duckdb', 'embedded_file')):
+        command = f'resource.{engine}.relation.browse_data'
+        for kind in ('table', 'view'):
+            resource = {'resource_id': f'{kind}:r', 'resource_kind': kind, 'display_name': 'r',
+                        'display_path': ['r']}
+            actions = {item['command_id']: item for item in resource_context_actions(
+                profile(engine, route_kind=route), resource, catalog, database_target_id='t1')}
+            action = actions[command]
+            assert action['label'] == 'Browse data'
+            assert action['menu_group'] == 'common'
+            assert action['handler'] == 'open_workspace'
+            assert action['arguments'] == {'resource_id': f'{kind}:r', 'database_target_id': 't1',
+                                           'tab': 'studio', 'browse_data': True}
+        sequence = {'resource_id': 'sequence:s', 'resource_kind': 'sequence', 'display_name': 's',
+                    'display_path': ['s']}
+        assert command not in ids(resource_context_actions(
+            profile(engine, route_kind=route), sequence, catalog, database_target_id='t1'))

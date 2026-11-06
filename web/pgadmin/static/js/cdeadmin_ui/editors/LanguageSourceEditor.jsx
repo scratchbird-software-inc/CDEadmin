@@ -17,8 +17,10 @@ import {formatNative} from './nativeFormatting';
 import {diagnosticRanges} from './nativeDiagnostics';
 import SessionCatalog from './SessionCatalog';
 import {mysqlQueryAttributes} from './mysqlQueryAttributes';
+import {relationSelectSource} from './relationSelect';
+import {Dialog as ConfirmDialog} from '../overlays/Dialog';
 
-export default function LanguageSourceEditor({language, source, onChange, post, ensureSession, databaseTargetId, disabled=false, onScriptLock, historySensitive=false, clientSqlDialect=3, resources, onExecute, parameterSource='{}', mysqlAttributeSource='{}'}) {
+export default function LanguageSourceEditor({language, source, onChange, post, ensureSession, databaseTargetId, disabled=false, onScriptLock, historySensitive=false, clientSqlDialect=3, resources, onExecute, parameterSource='{}', mysqlAttributeSource='{}', selectRequest=null}) {
   const [syntax, setSyntax] = useState(true);
   const [completion, setCompletion] = useState(null);
   const [prepared, setPrepared] = useState(null);
@@ -118,17 +120,59 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
     completionGeneration.current++; setCompletion(null);
     return () => {completionGeneration.current++;};
   }, [post, databaseTargetId, nativeProfile, clientSqlDialect]);
+  const fetchCompletion = async () => firebird ?
+    await post({action: 'firebird_editor_metadata', database_target_id: databaseTargetId}) :
+    (await post({action: 'source_complete', session_id: await ensureSession(), source,
+      source_before_cursor: source, database_target_id: databaseTargetId})).editor_context;
   const loadCompletion = async () => {
     const current = ++completionGeneration.current;
     setChecking(true); setError('');
     try {
-      const value = firebird ? await post({action: 'firebird_editor_metadata', database_target_id: databaseTargetId}) :
-        (await post({action: 'source_complete', session_id: await ensureSession(), source,
-          source_before_cursor: source, database_target_id: databaseTargetId})).editor_context;
+      const value = await fetchCompletion();
       if(current === completionGeneration.current) setCompletion(value);
     } catch(failure) {if(current === completionGeneration.current) setError(failure.message);}
     finally {if(current === completionGeneration.current) setChecking(false);}
   };
+  // Browse data (owner direction 2026-11-05): load the editor's metadata,
+  // build SELECT <every column> FROM <relation> from it, and put it in the
+  // editor. Text already in the editor is replaced only when the user agrees.
+  // The statement is never run automatically.
+  const [pendingSource, setPendingSource] = useState(null);
+  const sourceRef = useRef(source);
+  // The last statement Browse data put in the editor; replacing it unchanged
+  // loses nothing the user wrote, so it needs no question.
+  const browseSource = useRef(null);
+  // Never replace the text under a statement that is running or awaiting
+  // its outcome; read when the metadata arrives, not when it was requested.
+  const editorBusy = useRef(false);
+  editorBusy.current = disabled || running || Boolean(plan?.occurrence_id) || Boolean(plan?.unresolved);
+  sourceRef.current = source;
+  useEffect(() => {
+    if(!selectRequest?.name) return undefined;
+    let current = true;
+    setChecking(true); setError('');
+    fetchCompletion().then((value) => {
+      if(!current || !mounted.current) return;
+      setCompletion(value);
+      const config = value?.context ? nativeSQLConfig(value) :
+        firebirdSQLConfig(language?.editor?.keywords || '', clientSqlDialect, value?.resources,
+          language?.editor?.reserved_words);
+      const built = relationSelectSource(config?.schema, selectRequest.name, selectRequest.path, config?.defaultSchema);
+      if(built.error) {setError(built.error); return;}
+      if(editorBusy.current) {
+        setError('Finish or cancel the current statement before Browse data replaces the editor text.');
+        return;
+      }
+      const existing = sourceRef.current.trim();
+      const replaceable = [built.source, browseSource.current,
+        typeof language?.starter_source === 'string' ? language.starter_source : null]
+        .filter((text) => typeof text === 'string').map((text) => text.trim());
+      if(!existing || replaceable.includes(existing)) {browseSource.current = built.source; onChange(built.source);}
+      else setPendingSource(built.source);
+    }).catch((failure) => {if(current && mounted.current) setError(failure.message);})
+      .finally(() => {if(current && mounted.current) setChecking(false);});
+    return () => {current = false;};
+  }, [selectRequest?.nonce]);
   const format = async () => {
     if(disabled || running || plan?.occurrence_id) return;
     const token = ++generation.current; setChecking(true);
@@ -225,6 +269,16 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
   };
   return <FormReference formKey="query-editor" sx={{display: 'flex', flexDirection: 'column', height: '50%',
     flex: '0 0 auto', minHeight: 160, maxHeight: '60%', resize: 'vertical', overflow: 'auto'}}>
+    <ConfirmDialog open={pendingSource !== null} title="Replace the editor text?"
+      onClose={() => setPendingSource(null)}
+      actions={<>
+        <Button onClick={() => setPendingSource(null)}>Keep current text</Button>
+        <Button variant="contained" disabled={disabled || running || Boolean(plan?.occurrence_id) || Boolean(plan?.unresolved)}
+          onClick={() => {browseSource.current = pendingSource; onChange(pendingSource); setPendingSource(null);}}>Replace</Button>
+      </>}>
+      <Box component="p" sx={{mt: 0}}>The editor already holds text. Replace it with this statement?</Box>
+      <Box component="pre" sx={{m: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{pendingSource}</Box>
+    </ConfirmDialog>
     <Box component="details" sx={{flexShrink: 0, maxHeight: '45%', overflow: 'auto'}}><summary>Source tools</summary>
       {!firebird && ['mysql-sql', 'mariadb-sql', 'postgresql-sql', 'duckdb-sql', 'sqlite-sql'].includes(nativeProfile) &&
         <Button disabled={disabled || checking || running || Boolean(plan?.occurrence_id)} onClick={format}>Format native source</Button>}
@@ -300,4 +354,4 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       helperText={'Validation: '+(language?.tooling?.validation_authority || 'unavailable')+'. Native execution remains the grammar/semantic authority.'} />}
   </FormReference>;
 }
-LanguageSourceEditor.propTypes={parameterSource:PropTypes.string,mysqlAttributeSource:PropTypes.string,onExecute:PropTypes.func,resources:PropTypes.array,historySensitive:PropTypes.bool,clientSqlDialect:PropTypes.number,language:PropTypes.object,source:PropTypes.string.isRequired,onChange:PropTypes.func.isRequired,post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,databaseTargetId:PropTypes.string,disabled:PropTypes.bool,onScriptLock:PropTypes.func.isRequired};
+LanguageSourceEditor.propTypes={parameterSource:PropTypes.string,mysqlAttributeSource:PropTypes.string,onExecute:PropTypes.func,resources:PropTypes.array,historySensitive:PropTypes.bool,clientSqlDialect:PropTypes.number,language:PropTypes.object,source:PropTypes.string.isRequired,onChange:PropTypes.func.isRequired,post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,databaseTargetId:PropTypes.string,disabled:PropTypes.bool,onScriptLock:PropTypes.func.isRequired,selectRequest:PropTypes.shape({name:PropTypes.string,path:PropTypes.array,nonce:PropTypes.number})};

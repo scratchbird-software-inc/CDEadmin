@@ -3,7 +3,7 @@ import PostgresqlTestData from './PostgresqlTestData';
 import MySQLQueryOptions from '../cdeadmin_ui/editors/MySQLQueryOptions';
 import SQLNotebook from '../cdeadmin_ui/projects/SQLNotebook';
 import {QueryToolFrame, QueryToolToolbar, QueryToolAction} from '../cdeadmin_ui/editors/QueryToolControls';
-import {SQLConnectionSlot} from '../cdeadmin_ui/editors/SQLConnections';
+import {SQLConnectionSlot, takeSQLSourceRequest, useSQLSourceRequest} from '../cdeadmin_ui/editors/SQLConnections';
 import {Dialog as InfoDialog} from '../cdeadmin_ui/overlays/Dialog';
 import useNativeRowPages from '../cdeadmin_ui/data/useNativeRowPages';
 import BIModelsTool from '../cdeadmin_ui/modules/bi/models/BIModelsTool';
@@ -5360,6 +5360,28 @@ export default function ProviderWorkspaceContent({
     });
   }, [api, endpointUrl, onCredentialRequired, queryDatabaseTargetId]);
 
+  // Browse data: a request for this connection names a table or view; its
+  // editor builds the SELECT from its own metadata (LanguageSourceEditor).
+  const sourceRequest = useSQLSourceRequest(endpointUrl);
+  const [selectRequest, setSelectRequest] = useState(null);
+  // Taking a request removes it, which re-runs this effect; the inspection
+  // it started must still land, so it is matched by nonce, not by cleanup.
+  const handledSourceRequest = useRef(null);
+  const workspaceMounted = useRef(true);
+  useEffect(() => () => {workspaceMounted.current = false;}, []);
+  useEffect(() => {
+    if (!sourceRequest || !workspace || handledSourceRequest.current === sourceRequest.nonce) return;
+    const nonce = sourceRequest.nonce;
+    handledSourceRequest.current = nonce;
+    takeSQLSourceRequest(endpointUrl, nonce);
+    const latest = () => workspaceMounted.current && handledSourceRequest.current === nonce;
+    post({action: 'resource_inspect', request: {resource_id: sourceRequest.resource_id}})
+      .then((resource) => {
+        if (latest()) setSelectRequest({name: resource?.display_name, path: resource?.display_path || [], nonce});
+      })
+      .catch((requestError) => {if (latest()) setError(requestError.message);});
+  }, [sourceRequest?.nonce, Boolean(workspace)]);
+
   useEffect(() => {
     querySessionIdRef.current = sessionId;
   }, [sessionId]);
@@ -6132,7 +6154,8 @@ export default function ProviderWorkspaceContent({
           onExecute={(preparedSource, scriptMode) => execute(preparedSource, 'native', false, scriptMode)}
           post={post} ensureSession={ensureSession} databaseTargetId={queryDatabaseTargetId} parameterSource={parameterSource} mysqlAttributeSource={mysqlAttributeSource}
           disabled={busy || Boolean(occurrenceId) || querySessionBlocked || sessionPolicyUnknown}
-          onScriptLock={setScriptLocked} historySensitive={historySensitive} clientSqlDialect={clientSqlDialect} />
+          onScriptLock={setScriptLocked} historySensitive={historySensitive} clientSqlDialect={clientSqlDialect}
+          selectRequest={selectRequest} />
         <Box aria-label="SQL results and diagnostics" sx={{flex: 1, minHeight: 120, overflow: 'auto'}}>
           <Tabs value={resultPresentation} onChange={(_, value) => setResultPresentation(value)}
             variant="scrollable" aria-label="SQL result panels">

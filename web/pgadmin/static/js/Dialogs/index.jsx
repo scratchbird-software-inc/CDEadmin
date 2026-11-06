@@ -26,7 +26,7 @@ import {createCloseGuardRegistry, ModalCloseGuardContext} from '../helpers/Modal
 import QuickSearch from '../QuickSearch';
 import ProviderWorkspaceContent from './ProviderWorkspaceContent';
 import MySQLPhysical from './MySQLPhysical';
-import {activateSQLConnection, registerSQLConnection} from '../cdeadmin_ui/editors/SQLConnections';
+import {activateSQLConnection, registerSQLConnection, requestSQLSource} from '../cdeadmin_ui/editors/SQLConnections';
 import FirebirdMonitoring from './FirebirdMonitoring';
 import PostgresqlMonitoring from './PostgresqlMonitoring';
 import PostgresqlContinuity from './PostgresqlContinuity';
@@ -377,6 +377,11 @@ export function showProviderWorkspace(
   };
   if (initialTab === 'studio') {
     activateSQLConnection({...connection, content: panel.content});
+    // Browse data: the connection's editor (new or already open) fills in
+    // the relation's SELECT from its own metadata.
+    if (initialContext.browse_data && initialContext.resource_id) {
+      requestSQLSource(connection.id, {resource_id: initialContext.resource_id});
+    }
     workspace.focus(BROWSER_PANELS.SQL);
     return BROWSER_PANELS.SQL;
   }

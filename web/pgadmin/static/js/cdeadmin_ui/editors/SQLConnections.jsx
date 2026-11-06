@@ -43,6 +43,21 @@ export function useSQLConnections() {
   useSyncExternalStore(subscribe, () => version);
   return {entries, selected};
 }
+// Source requests for a connection's editor (Browse data). The editor may
+// already be open, so a request is posted here rather than passed on open.
+const sourceRequests = new Map();
+let requestSequence = 0;
+export function requestSQLSource(id, request) {
+  sourceRequests.set(id, {...request, nonce: ++requestSequence});
+  notifyAll();
+}
+export function takeSQLSourceRequest(id, nonce) {
+  if (sourceRequests.get(id)?.nonce === nonce) sourceRequests.delete(id);
+}
+export function useSQLSourceRequest(id) {
+  useSyncExternalStore(subscribe, () => version);
+  return sourceRequests.get(id) || null;
+}
 /**
  * The SQL tab's connection selector. Owner direction 2026-11-05: it sits at
  * the right of the query toolbar, after the dialect and max rows fields.
