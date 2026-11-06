@@ -52,6 +52,19 @@ describe('CDEadmin main dock tab switcher', () => {
       .toBeInTheDocument();
   });
 
+  it('lets a long tab title shrink to an ellipsis and keeps it in the tooltip', () => {
+    const title = 'Open ASSETS — localhost / cdeadmin_demo.fdb';
+    render(<Theme><ToolTabTitle id="long" defaultInternal={{
+      title, iconKey: 'tool.query', closable: false,
+    }} /></Theme>);
+    const tab = document.querySelector('[data-cdeadmin-tab-id="long"]');
+    expect(tab).toHaveAttribute('title', title);
+    expect(getComputedStyle(tab).minWidth).toBe('0');
+    const text = screen.getByText(title);
+    expect(text.style.minWidth).toBe('0');
+    expect(text.style.textOverflow).toBe('ellipsis');
+  });
+
   it('fills the main dock bar with the active tab', () => {
     const theme = {
       custom: {icon: {contrastText: '#111'}},
@@ -65,6 +78,10 @@ describe('CDEadmin main dock tab switcher', () => {
     const layout = rcdockOverride(theme)['.dock-layout'];
     expect(layout['& .dock-bar'].flexShrink).toBe(0);
     expect(layout['& .dock-tab'].height).toBe('auto');
+    // Owner report 2026-11-05: a shrunk tab let its title spill over the
+    // next tab. Tabs keep their width; long titles are capped and ellipsized.
+    expect(layout['& .dock-tab'].flexShrink).toBe(0);
+    expect(layout['& .dock-tab'].maxWidth).toBe('24rem');
     const panel = layout['& .dock-panel'];
     expect(panel['&.dock-style-playground'][
       '& > .dock > .dock-bar:has(.dock-tab):not(:has(.dock-tab ~ .dock-tab))'

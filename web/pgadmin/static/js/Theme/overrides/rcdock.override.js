@@ -142,6 +142,12 @@ export default function rcdockOverride(theme) {
       },
       '& .dock-tab': {
         minWidth: 'unset',
+        // A tab never shrinks under its title (a shrunk tab let its title
+        // spill over the next tab); a long title is capped and ends in an
+        // ellipsis, with the full title in its tooltip. Extra tabs go to the
+        // tab bar's overflow menu.
+        flexShrink: 0,
+        maxWidth: '24rem',
         height: 'auto',
         borderBottom: 'none',
         marginRight: 0,

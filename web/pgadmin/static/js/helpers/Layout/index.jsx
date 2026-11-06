@@ -174,7 +174,7 @@ export function TabTitle({id, closable, defaultInternal}) {
   return (
     <Box display="flex" alignItems="center" title={attrs.tooltip}
       data-cdeadmin-tab-id={id} onContextMenu={onContextMenu}
-      onMouseDown={onMouseDown} width="100%"
+      onMouseDown={onMouseDown} width="100%" minWidth={0}
       sx={{pl: attrs.iconKey === 'tool.scratchrobin' ? '12px' : 0}}>
       {attrs.iconKey !== 'tool.scratchrobin' &&
         <span className="dock-tab-icon">
@@ -196,7 +196,7 @@ export function TabTitle({id, closable, defaultInternal}) {
           }}
         />
       )}
-      <span style={{textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap'}} data-visible={isVisible}>{attrs.title}</span>
+      <span style={{textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', minWidth: 0}} data-visible={isVisible}>{attrs.title}</span>
       {closable && <PgIconButton title={gettext('Close')} icon={<CloseIcon style={{height: '0.7em'}} />} size="xs" noBorder onClick={()=>{
         layoutDocker.close(id);
       }} />}
