@@ -126,155 +126,6 @@
           "required": true
         },
         {
-          "field_id": "column_mode",
-          "label": "Column mode",
-          "control": "select",
-          "required": true,
-          "default": "STORED",
-          "options": [
-            {
-              "value": "STORED",
-              "label": "Stored"
-            },
-            {
-              "value": "IDENTITY",
-              "label": "Identity"
-            },
-            {
-              "value": "COMPUTED",
-              "label": "Computed"
-            },
-            {
-              "value": "COMPUTED INFERRED",
-              "label": "Computed Inferred"
-            }
-          ],
-          "record_derive": {
-            "cases": [
-              {
-                "key": "computed_source",
-                "truthy": true,
-                "value": "COMPUTED"
-              },
-              {
-                "key": "identity_type",
-                "truthy": true,
-                "value": "IDENTITY"
-              }
-            ],
-            "default": "STORED"
-          }
-        },
-        {
-          "field_id": "has_default",
-          "label": "Set column default",
-          "control": "boolean",
-          "required": false,
-          "default": false,
-          "visible_when": {
-            "field": "column_mode",
-            "equals": "STORED"
-          },
-          "record_key": "default_source",
-          "record_truthy": true
-        },
-        {
-          "field_id": "default_kind",
-          "label": "Default value type",
-          "control": "select",
-          "required": true,
-          "default": "TEXT",
-          "options": [
-            {
-              "value": "TEXT",
-              "label": "Text"
-            },
-            {
-              "value": "BINARY",
-              "label": "Binary"
-            },
-            {
-              "value": "NUMBER",
-              "label": "Number"
-            },
-            {
-              "value": "NULL",
-              "label": "Null"
-            },
-            {
-              "value": "TRUE",
-              "label": "True"
-            },
-            {
-              "value": "FALSE",
-              "label": "False"
-            },
-            {
-              "value": "DATE",
-              "label": "Date"
-            },
-            {
-              "value": "TIME",
-              "label": "Time"
-            },
-            {
-              "value": "TIMESTAMP",
-              "label": "Timestamp"
-            },
-            {
-              "value": "CURRENT_USER",
-              "label": "Current User"
-            },
-            {
-              "value": "CURRENT_ROLE",
-              "label": "Current Role"
-            },
-            {
-              "value": "CURRENT_DATE",
-              "label": "Current Date"
-            },
-            {
-              "value": "CURRENT_TIME",
-              "label": "Current Time"
-            },
-            {
-              "value": "CURRENT_TIMESTAMP",
-              "label": "Current Timestamp"
-            },
-            {
-              "value": "LOCALTIME",
-              "label": "Localtime"
-            },
-            {
-              "value": "LOCALTIMESTAMP",
-              "label": "Localtimestamp"
-            },
-            {
-              "value": "CURRENT_CONNECTION",
-              "label": "Current Connection"
-            },
-            {
-              "value": "CURRENT_TRANSACTION",
-              "label": "Current Transaction"
-            }
-          ]
-        },
-        {
-          "field_id": "default_value",
-          "label": "Default value",
-          "control": "text",
-          "required": false,
-          "record_key": "default_source",
-          "record_pattern": "^\\s*DEFAULT\\s+(.*)$"
-        },
-        {
-          "field_id": "time_precision",
-          "label": "Time precision",
-          "control": "number",
-          "required": false,
-          "help": "Optional fractional digits, 0–3; empty uses the native default."
-        },
-        {
           "field_id": "data_type",
           "label": "Data type",
           "control": "select",
@@ -480,6 +331,156 @@
             ]
           },
           "record_key": "type_editor.data_type"
+        },
+        {
+          "field_id": "column_mode",
+          "label": "Column mode",
+          "control": "select",
+          "required": true,
+          "default": "STORED",
+          "options": [
+            {
+              "value": "STORED",
+              "label": "Stored"
+            },
+            {
+              "value": "IDENTITY",
+              "label": "Identity"
+            },
+            {
+              "value": "COMPUTED",
+              "label": "Computed"
+            },
+            {
+              "value": "COMPUTED INFERRED",
+              "label": "Computed Inferred"
+            }
+          ],
+          "record_derive": {
+            "cases": [
+              {
+                "key": "computed_source",
+                "truthy": true,
+                "value": "COMPUTED"
+              },
+              {
+                "key": "identity_type",
+                "truthy": true,
+                "value": "IDENTITY"
+              }
+            ],
+            "default": "STORED"
+          }
+        },
+        {
+          "field_id": "has_default",
+          "label": "Set column default",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "column_mode",
+            "equals": "STORED"
+          },
+          "record_key": "default_source",
+          "record_truthy": true
+        },
+        {
+          "field_id": "default_kind",
+          "label": "Default value type",
+          "control": "select",
+          "required": true,
+          "default": "TEXT",
+          "options": [
+            {
+              "value": "TEXT",
+              "label": "Text"
+            },
+            {
+              "value": "BINARY",
+              "label": "Binary"
+            },
+            {
+              "value": "NUMBER",
+              "label": "Number"
+            },
+            {
+              "value": "NULL",
+              "label": "Null"
+            },
+            {
+              "value": "TRUE",
+              "label": "True"
+            },
+            {
+              "value": "FALSE",
+              "label": "False"
+            },
+            {
+              "value": "DATE",
+              "label": "Date"
+            },
+            {
+              "value": "TIME",
+              "label": "Time"
+            },
+            {
+              "value": "TIMESTAMP",
+              "label": "Timestamp"
+            },
+            {
+              "value": "CURRENT_USER",
+              "label": "Current User"
+            },
+            {
+              "value": "CURRENT_ROLE",
+              "label": "Current Role"
+            },
+            {
+              "value": "CURRENT_DATE",
+              "label": "Current Date"
+            },
+            {
+              "value": "CURRENT_TIME",
+              "label": "Current Time"
+            },
+            {
+              "value": "CURRENT_TIMESTAMP",
+              "label": "Current Timestamp"
+            },
+            {
+              "value": "LOCALTIME",
+              "label": "Localtime"
+            },
+            {
+              "value": "LOCALTIMESTAMP",
+              "label": "Localtimestamp"
+            },
+            {
+              "value": "CURRENT_CONNECTION",
+              "label": "Current Connection"
+            },
+            {
+              "value": "CURRENT_TRANSACTION",
+              "label": "Current Transaction"
+            }
+          ]
+        },
+        {
+          "field_id": "default_value",
+          "label": "Default value",
+          "control": "text",
+          "required": false,
+          "record_key": "default_source",
+          "record_pattern": "^\\s*DEFAULT\\s+(.*)$"
+        },
+        {
+          "field_id": "time_precision",
+          "label": "Time precision",
+          "control": "number",
+          "required": false,
+          "detail": true,
+          "help": "Optional fractional digits, 0–3; empty uses the native default."
         },
         {
           "field_id": "domain",
