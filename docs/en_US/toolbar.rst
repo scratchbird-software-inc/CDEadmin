@@ -21,6 +21,12 @@ the selected object node.
   selected table.
 * Use the :ref:`Filtered Rows <viewdata_filter>` button to access the Data Filter popup
   to apply a filter to a set of data for viewing/editing.
+
+.. note:: Owner direction, 2026-11-06: the *View Data* and *Filtered Rows*
+   buttons are replaced by one *Browse data* button. It opens the Query Tool
+   holding ``SELECT`` of every column of the selected table or view, without
+   running it. Its keyboard shortcut (Alt+Shift+V by default) is the former
+   view data shortcut.
 * Use the :ref:`Search objects <search_objects>` button to access the search objects
   dialog. It helps you search any database object.
 * Use the :ref:`PSQL Tool <psql_tool>` button to open the PSQL in the current

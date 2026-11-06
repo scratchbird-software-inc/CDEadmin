@@ -16,15 +16,12 @@ class BrowserToolBarLocators():
     query_tool_panel_css = \
         ".dock-tab .pg-font-icon.icon-query_tool"
 
+    # Owner direction 2026-11-06: View/Edit Data (All Rows, Filtered Rows)
+    # became Browse data, which opens a Query Tool holding the SELECT.
     view_table_data_button_css = \
-        "button[aria-label='All Rows']:not(:disabled)"
+        "button[aria-label='Browse data']:not(:disabled)"
 
-    view_data_panel_css = ".dock-tab .pg-font-icon.icon-view_data"
-
-    filter_data_button_css = \
-        "button[aria-label='Filtered Rows...']:not(:disabled)"
-
-    filter_box_css = ".dock-fbox div[title^='Data Filter']"
+    view_data_panel_css = ".dock-tab .pg-font-icon.icon-query_tool"
 
 
 class NavMenuLocators:
@@ -36,7 +33,9 @@ class NavMenuLocators:
 
     tools_menu_css = "button[data-label='Tools']"
 
-    view_data_link_css = "div[data-label='View/Edit Data']"
+    # 2026-11-06: a top-level Browse data item replaced the View/Edit Data
+    # submenu.
+    view_data_link_css = "li[data-label='Browse data']"
 
     object_menu_css = "button[data-label='Object']"
 

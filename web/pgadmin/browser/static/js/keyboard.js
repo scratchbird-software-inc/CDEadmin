@@ -230,9 +230,9 @@ _.extend(pgBrowser.keyboardNavigation, {
     if (!tree.d)
       return;
 
-    // Call data grid method to render view data
-    // 1, 2 are used for limit
-    pgAdmin.Tools.SQLEditor.showViewData({'mnuid': 3}, tree.i);
+    // Owner direction 2026-11-06: the view data shortcut opens Browse data,
+    // which replaced the View/Edit Data menu.
+    pgAdmin.Tools.SQLEditor.showBrowseData({}, tree.i);
   },
   bindSubMenuSearchObjects: function() {
     const tree = this.getTreeDetails();

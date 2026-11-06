@@ -48,7 +48,8 @@ from pgadmin.cdeadmin.core import (
 from pgadmin.utils import PgAdminModule
 from pgadmin.utils import get_storage_directory
 from pgadmin.utils.ajax import make_json_response, bad_request, \
-    success_return, internal_server_error, service_unavailable, gone
+    success_return, internal_server_error, service_unavailable, gone, \
+    make_response as ajax_response
 from pgadmin.utils.driver import get_driver
 from pgadmin.utils.crypto import encrypt
 from pgadmin.utils.master_password import get_crypt_key
@@ -119,6 +120,7 @@ class SqlEditorModule(PgAdminModule):
             'sqleditor.initialize_sqleditor',
             'sqleditor.initialize_sqleditor_with_did',
             'sqleditor.filter_validate',
+            'sqleditor.browse_data_sql',
             'sqleditor.panel',
             'sqleditor.close',
             'sqleditor.update_sqleditor_connection',
@@ -801,6 +803,43 @@ def validate_filter(sid, did, obj_id):
         return internal_server_error(errormsg=str(e))
 
     return make_json_response(data={'status': status, 'result': res})
+
+
+@blueprint.route(
+    '/browse_data_sql/<int:sid>/<int:did>/<int:obj_id>',
+    methods=["GET"], endpoint='browse_data_sql'
+)
+@permissions_required(AllPermissionTypes.tools_query_tool)
+@pga_login_required
+def browse_data_sql(sid, did, obj_id):
+    """
+    Browse data (owner direction 2026-11-06): the SELECT of every column of
+    one table, view, materialized view, foreign table, partition or catalog
+    object, for the Query Tool to open with. The statement is not run here.
+    Names are quoted only where PostgreSQL needs it (Driver.qtIdent).
+
+    Args:
+        sid: Server Id
+        did: Database Id
+        obj_id: pg_class OID of the selected relation
+    """
+    driver = get_driver(PG_DEFAULT_DRIVER)
+    conn = driver.connection_manager(sid).connection(did=did)
+    if not conn.connected():
+        return internal_server_error(errormsg=SERVER_CONNECTION_CLOSED)
+    status, result = conn.execute_dict(render_template(
+        'sqleditor/sql/default/browse_data_columns.sql', obj_id=obj_id))
+    if not status:
+        return internal_server_error(errormsg=str(result))
+    rows = result['rows']
+    if not rows:
+        return gone(gettext('The specified object could not be found.'))
+    columns = [driver.qtIdent(conn, row['attname'])
+               for row in rows if row['attname'] is not None]
+    sql = 'SELECT {0}\nFROM {1}'.format(
+        ', '.join(columns) or '*',
+        driver.qtIdent(conn, rows[0]['nspname'], rows[0]['relname']))
+    return ajax_response(response=sql)
 
 
 def close_sqleditor_session(trans_id):

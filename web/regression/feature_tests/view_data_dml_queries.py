@@ -328,16 +328,14 @@ CREATE TABLE public.nonintpkey
             return False
 
     def _view_data_grid(self, table_name):
+        # Owner direction 2026-11-06: Browse data replaced View/Edit Data >
+        # All Rows. It opens the Query Tool holding the table's SELECT
+        # without running it; Execute shows the editable rows.
         self.page.driver.find_element(By.CSS_SELECTOR,
                                       NavMenuLocators.object_menu_css).click()
-        ActionChains(
-            self.page.driver
-        ).move_to_element(
-            self.page.driver.find_element(
-                By.CSS_SELECTOR, NavMenuLocators.view_data_link_css)
-        ).perform()
-
-        self.page.find_by_css_selector("li[data-label='All Rows']").click()
+        self.page.find_by_css_selector(
+            NavMenuLocators.view_data_link_css).click()
+        self.page.click_execute_query_button()
 
         # wait until datagrid frame is loaded.
         self.page.wait_for_query_tool_loading_indicator_to_appear()

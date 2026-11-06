@@ -81,6 +81,10 @@ class ToolPermissionRequiredTestCase(BaseTestGenerator):
          dict(method='post', endpoint='sqleditor.initialize_viewdata',
               url_kwargs=dict(trans_id=_TRANS, cmd_type=1, obj_type='table',
                               sgid=1, sid=1, did=1, obj_id=1))),
+        # Browse data (2026-11-06) replaced View/Edit Data in the menus.
+        ('sqleditor.browse_data_sql requires tools_query_tool',
+         dict(method='get', endpoint='sqleditor.browse_data_sql',
+              url_kwargs=dict(sid=1, did=1, obj_id=1))),
 
         # --- Grant Wizard: discovery, SQL preview, apply (AC-002) ---
         ('grant_wizard.objects requires tools_grant_wizard',

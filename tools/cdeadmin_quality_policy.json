@@ -34,7 +34,7 @@
     "maximum_bytes": 77623060
   },
   "startup": {
-    "route_count": 1415,
+    "route_count": 1416,
     "wall_seconds_maximum": 8.0,
     "wall_seconds_platform_maximum": {
       "darwin:x86_64": 25.0,

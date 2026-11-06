@@ -723,6 +723,12 @@ Use the fields on the *Options* panel to manage editor preferences.
   by the Primary Key columns by default. When using the First/Last 100 Rows options,
   data is always sorted.
 
+.. note:: Owner direction, 2026-11-06: the View/Edit Data menu was replaced
+   by *Browse data*, which opens the Query Tool holding the table's
+   ``SELECT``. The View/Edit Data preferences above no longer affect anything
+   the menus or toolbar open. The *View data* keyboard shortcut is now named
+   *Browse data* and opens Browse data.
+
 * When the *Underline query at cursor?* switch is set to *True*, query tool will
   parse and underline the query at the cursor position.
 

@@ -115,73 +115,34 @@ export default class SQLEditor {
       shortcut_preference: ['browser', 'sub_menu_query_tool'],
     }];
 
-    // Create context menu
+    // Owner direction 2026-11-06: View/Edit Data becomes Browse data, as on
+    // every other connector. One top-level entry opens the Query Tool holding
+    // SELECT of every column of the relation; the statement is not run. The
+    // All Rows / First 100 / Last 100 / Filtered Rows submenu is retired.
     for (const supportedNode of this.SUPPORTED_NODES) {
       menus.push({
-        name: 'view_all_rows_context_' + supportedNode,
+        name: 'browse_data_context_' + supportedNode,
         node: supportedNode,
         module: this,
-        data: {
-          mnuid: 3,
-        },
         applies: ['context', 'object'],
-        callback: 'showViewData',
+        callback: 'showBrowseData',
         enable: this.viewMenuEnabled,
-        category: 'view_data',
-        priority: 101,
-        label: gettext('All Rows'),
+        priority: 100,
+        label: gettext('Browse data'),
         permission: AllPermissionTypes.TOOLS_QUERY_TOOL,
         shortcut_preference: ['browser', 'sub_menu_view_data'],
-      }, {
-        name: 'view_first_100_rows_context_' + supportedNode,
-        node: supportedNode,
-        module: this,
-        data: {
-          mnuid: 1,
-        },
-        applies: ['context', 'object'],
-        callback: 'showViewData',
-        enable: this.viewMenuEnabled,
-        category: 'view_data',
-        priority: 102,
-        label: gettext('First 100 Rows'),
-        permission: AllPermissionTypes.TOOLS_QUERY_TOOL,
-      }, {
-        name: 'view_last_100_rows_context_' + supportedNode,
-        node: supportedNode,
-        module: this,
-        data: {
-          mnuid: 2,
-        },
-        applies: ['context', 'object'],
-        callback: 'showViewData',
-        enable: this.viewMenuEnabled,
-        category: 'view_data',
-        priority: 103,
-        label: gettext('Last 100 Rows'),
-        permission: AllPermissionTypes.TOOLS_QUERY_TOOL,
-      }, {
-        name: 'view_filtered_rows_context_' + supportedNode,
-        node: supportedNode,
-        module: this,
-        data: {
-          mnuid: 4,
-        },
-        applies: ['context', 'object'],
-        callback: 'showFilteredRow',
-        enable: this.viewMenuEnabled,
-        category: 'view_data',
-        priority: 104,
-        label: gettext('Filtered Rows...'),
-        permission: AllPermissionTypes.TOOLS_QUERY_TOOL,
       });
     }
 
-    pgBrowser.add_menu_category({
-      name: 'view_data', label: gettext('View/Edit Data'), priority: 100
-    });
-
     pgBrowser.add_menus(menus);
+  }
+
+  // Browse data: open the Query Tool with the relation's SELECT, not run.
+  showBrowseData(_data, i) {
+    const item = i || pgBrowser.tree.selected();
+    const url = showViewData.browseDataUrl(pgBrowser, item);
+    if(url) return this.showQueryTool(url, item);
+    return false;
   }
 
   // This is a callback function to show data when user click on menu item.

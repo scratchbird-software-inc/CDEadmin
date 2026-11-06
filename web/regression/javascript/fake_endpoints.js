@@ -21,6 +21,7 @@ module.exports = {
   'sqleditor.initialize_sqleditor_with_did': '/initialize/sqleditor/<int:sgid>/<int:sid>/<int:did>',
   'restore.create_job': '/restore/job/<int:sid>',
   'sqleditor.panel': '/panel/<int:trans_id>',
+  'sqleditor.browse_data_sql': '/sqleditor/browse_data_sql/<int:sid>/<int:did>/<int:obj_id>',
   'search_objects.types': '/search_objects/types/<int:sid>/<int:did>',
   'search_objects.search': '/search_objects/search/<int:sid>/<int:did>',
   'dashboard.dashboard_stats': '/dashboard/dashboard_stats',

@@ -201,18 +201,15 @@ class PgadminPage:
                 time.sleep(0.2)
 
     def open_view_data(self, table_name):
+        # Owner direction 2026-11-06: Browse data replaced View/Edit Data >
+        # All Rows. It opens the Query Tool holding the table's SELECT
+        # without running it, so the rows appear after Execute.
         self.click_element(self.find_by_css_selector(
             NavMenuLocators.object_menu_css))
-
-        ActionChains(
-            self.driver
-        ).move_to_element(
-            self.driver.find_element(
-                By.CSS_SELECTOR, NavMenuLocators.view_data_link_css)
-        ).perform()
         self.click_element(self.find_by_css_selector(
-            "li[data-label='All Rows']"))
+            NavMenuLocators.view_data_link_css))
         time.sleep(1)
+        self.click_execute_query_button()
         # wait until datagrid frame is loaded.
 
         self.click_tab(table_name)

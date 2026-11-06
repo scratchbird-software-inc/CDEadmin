@@ -114,6 +114,34 @@ export function showViewData(
   }
 }
 
+/*
+ * Browse data (owner direction 2026-11-06): the URL from which the Query Tool
+ * reads SELECT of every column of the selected relation, or null when the
+ * selection is not a relation inside a connected database.
+ */
+export function browseDataUrl(pgBrowser, treeIdentifier) {
+  const node = treeIdentifier ? pgBrowser.tree.findNodeByDomElement(treeIdentifier) : undefined;
+  const nodeData = node?.getData();
+  if (!nodeData) {
+    pgAdmin.Browser.notifier.alert(gettext('Browse data'), gettext('No object selected.'));
+    return null;
+  }
+  const parentData = pgBrowser.tree.getTreeNodeHierarchy(treeIdentifier);
+  if (hasServerOrDatabaseConfiguration(parentData) || !hasSchemaOrCatalogOrViewInformation(parentData)) {
+    return null;
+  }
+  if (BROWSE_DATA_NODES.indexOf(nodeData._type) === -1) {
+    return null;
+  }
+  return url_for('sqleditor.browse_data_sql', {
+    'sid': parentData.server._id,
+    'did': parentData.database._id,
+    'obj_id': nodeData._id,
+  });
+}
+
+const BROWSE_DATA_NODES = ['table', 'partition', 'view', 'mview', 'foreign_table', 'catalog_object'];
+
 export function retrieveNameSpaceName(parentData) {
   if(!parentData) {
     return null;

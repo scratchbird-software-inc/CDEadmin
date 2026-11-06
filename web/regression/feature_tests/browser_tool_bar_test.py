@@ -47,16 +47,13 @@ class BrowserToolBarFeatureTest(BaseFeatureTest):
         self.test_query_tool_button()
         print("OK.", file=sys.stderr)
 
-        # Check for view data button
-        print("\nView Data ToolBar Button ",
+        # Check for the Browse data button. Owner direction 2026-11-06:
+        # it replaced the All Rows and Filtered Rows buttons, whose
+        # View/Edit Data menu was retired, so the filtered rows check went
+        # with that button.
+        print("\nBrowse data ToolBar Button ",
               file=sys.stderr, end="")
         self.test_view_data_tool_button()
-        print("OK.", file=sys.stderr)
-
-        # Check for filtered rows button
-        print("\nFiltered Rows ToolBar Button ",
-              file=sys.stderr, end="")
-        self.test_filtered_rows_tool_button()
         print("OK.", file=sys.stderr)
 
     def after(self):
@@ -110,14 +107,5 @@ class BrowserToolBarFeatureTest(BaseFeatureTest):
             (By.CSS_SELECTOR,
              BrowserToolBarLocators.view_table_data_button_css),
             (By.CSS_SELECTOR, BrowserToolBarLocators.view_data_panel_css)),
-            'View/Edit Data tab did not open after clicking View/Edit button.')
-        self.page.close_query_tool(prompt=False)
-
-    def test_filtered_rows_tool_button(self):
-        self.assertTrue(self.page.retry_click(
-            (By.CSS_SELECTOR,
-             BrowserToolBarLocators.filter_data_button_css),
-            (By.CSS_SELECTOR, BrowserToolBarLocators.filter_box_css)),
-            'Filter dialogue did not open on clicking filter button.')
-        self.page.click_modal('Close', docker=True)
+            'Query Tool did not open after clicking Browse data button.')
         self.page.close_query_tool(prompt=False)

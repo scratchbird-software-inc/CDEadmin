@@ -9,6 +9,15 @@ To view or modify data, right click on a table or view name in the
 *Object Explorer*. When the context menu opens, use the *View/Edit Data* menu
 to specify the number of rows you would like to display in the editor panel.
 
+.. note:: Owner direction, 2026-11-06: the *View/Edit Data* context menu
+   (*All Rows*, *First 100 Rows*, *Last 100 Rows*, *Filtered Rows...*) is
+   replaced by one *Browse data* entry, as on every other connector. It opens
+   the Query Tool holding ``SELECT`` of every column of the table or view,
+   with names quoted only where PostgreSQL needs it. The statement is not run;
+   run it to see the rows. A result from a single table with a primary key can
+   be edited in the Query Tool's result grid. The text below describes the
+   retired View/Edit Data panel and is kept for reference.
+
 .. image:: images/editgrid.png
     :alt: Edit grid window
     :align: center

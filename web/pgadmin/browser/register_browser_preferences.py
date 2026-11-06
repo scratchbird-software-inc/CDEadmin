@@ -328,7 +328,7 @@ def register_browser_preferences(self):
     self.preference.register(
         'keyboard_shortcuts',
         'sub_menu_view_data',
-        gettext('View data'),
+        gettext('Browse data'),
         'keyboardshortcut',
         {
             'alt': True,
