@@ -93,6 +93,19 @@ is never run. Text you typed is replaced only after you confirm, and nothing
 is replaced while a statement is running. PostgreSQL's *View/Edit Data* menu
 became the same *Browse data* entry, opening the Query Tool.
 
+Owner direction, 2026-11-06: Browse data quotes only the names that need
+it. A name is written without quotes when the connector's SQL reads it back
+as the same name: it is a plain identifier, in the letter case that SQL
+gives unquoted names, and it is not a keyword the connector's dialect
+contract reserves. Other names are quoted, for example a name with a space,
+a reserved word, or ``Orders`` on PostgreSQL-wire SQL, which reads unquoted
+names in lower case. On MySQL, MariaDB, TiDB, Vitess, Dolt, SQLite and
+immudb every keyword is quoted: their contracts either do not say which
+keywords are reserved or, as checks against MySQL and TiDB showed, do not
+say where a keyword can stand unquoted. Connectors whose contract has no
+keyword list (ClickHouse, XTDB, InfluxDB, Apache Ignite, OpenSearch SQL and
+PPL, Neo4j) still quote every name.
+
 Maximum rows per fetch is an editable integer from 1 through 500, bounded further
 by the admitted result renderer. Result descriptors advertise their admitted
 maximum page size so subsequent fetches observe that limit too. It controls each server-to-browser result page,

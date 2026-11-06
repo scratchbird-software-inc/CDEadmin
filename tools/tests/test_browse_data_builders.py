@@ -5,6 +5,8 @@ reads every record of a resource; CDEadmin puts it in the editor and never
 runs it. Resource shapes below follow what each client's list_resources
 builds (cited in the provider modules). The kinds a connector offers come
 from its manifest; these tests also tie the manifests to the builders.
+Names are quoted only where the connector's dialect needs it, from the
+keywords in its dialect contract (owner direction 2026-11-06).
 """
 import base64
 import importlib
@@ -24,7 +26,7 @@ from pgadmin.cdeadmin.sdk.actual_engine import (  # noqa: E402
     ActualEnginePilotProvider, PilotProfile, PilotProviderError,
 )
 from pgadmin.cdeadmin.sdk.browse import (  # noqa: E402
-    BrowseUnavailable, path_columns)
+    BrowseUnavailable, SqlNames, contract_keywords, path_columns)
 
 PROVIDERS = ROOT / 'web/pgadmin/cdeadmin/providers'
 
@@ -34,9 +36,43 @@ def res(kind, path, native=None, **extra):
             'display_path': list(path), 'native': native or {}, **extra}
 
 
-def build(builder, resource, catalog=(), language=None):
-    return builder(None, resource, resource.get('native', {}),
-                   list(catalog), language)
+# The connector whose dialect contract each builder reads by default.
+BUILDER_PROFILE = {
+    'firebird': 'firebird-native', 'mysql_family': 'mysql-native',
+    'sqlite': 'sqlite-native', 'duckdb': 'duckdb-native',
+    'cockroachdb': 'cockroachdb-native', 'yugabytedb': 'yugabytedb-native',
+    'tidb': 'tidb-native', 'vitess': 'vitess-native', 'dolt': 'dolt-native',
+    'clickhouse': 'clickhouse-native', 'cassandra': 'cassandra-native',
+    'yugabytedb_ycql': 'yugabytedb-ycql', 'xtdb': 'xtdb-native',
+    'immudb': 'immudb-native', 'influxdb': 'influxdb-native',
+    'apache_ignite': 'apache-ignite-native',
+    'opensearch_sql_ppl': 'opensearch-sql-ppl', 'mongodb': 'mongodb-native',
+    'neo4j': 'neo4j-native', 'opensearch': 'opensearch-native',
+    'milvus': 'milvus-native', 'redis': 'redis-native',
+    'tikv': 'tikv-native', 'foundationdb': 'foundationdb-native',
+}
+
+
+def provider(profile_id):
+    """A stand-in carrying a connector's real profile, in its module."""
+    for manifest, module in BUILTIN_PACKAGES:
+        document = json.loads((PROVIDERS / manifest).read_text())
+        if document['identity']['profile_id'] != profile_id:
+            continue
+        loaded = importlib.import_module(module)
+        stand_in = type('Provider', (), {'__module__': module})()
+        stand_in.profile = next(
+            value for value in vars(loaded).values()
+            if isinstance(value, PilotProfile) and
+            value.profile_id == profile_id)
+        return stand_in
+    raise KeyError(profile_id)
+
+
+def build(builder, resource, catalog=(), language=None, profile=None):
+    return builder(provider(profile or BUILDER_PROFILE[builder.__name__]),
+                   resource, resource.get('native', {}), list(catalog),
+                   language)
 
 
 # -- Manifests and builders agree --------------------------------------------
@@ -99,7 +135,7 @@ def test_admitted_resources_are_read_from_their_extension():
     column = {'resource_kind': 'column', 'display_name': 'ID',
               'display_path': ['ASSETS', 'ID'],
               'extensions': {'firebird': {'native': {'position': 0}}}}
-    assert build(b.firebird, table, [column]) == 'SELECT "ID"\nFROM "ASSETS"'
+    assert build(b.firebird, table, [column]) == 'SELECT ID\nFROM ASSETS'
 
 
 # -- Native-editor SQL connectors -------------------------------------------
@@ -110,24 +146,44 @@ def test_firebird_lists_columns_in_position_order():
                res('column', ['ASSETS', 'Mixed "Case"'], {'position': 2}),
                res('column', ['ASSETS', 'ASSET_ID'], {'position': 0})]
     assert build(b.firebird, table, catalog) == (
-        'SELECT "ASSET_ID", "TAG", "Mixed ""Case"""\nFROM "ASSETS"')
+        'SELECT ASSET_ID, TAG, "Mixed ""Case"""\nFROM ASSETS')
 
 
 def test_firebird_dialect_1_writes_regular_names_and_refuses_others():
     table = res('table', ['ASSETS'], client_sql_dialect=1)
     catalog = [res('column', ['ASSETS', 'ASSET_ID'], {'position': 0})]
     assert build(b.firebird, table, catalog) == 'SELECT ASSET_ID\nFROM ASSETS'
-    catalog.append(res('column', ['ASSETS', 'lower'], {'position': 1}))
-    with pytest.raises(BrowseUnavailable, match='SQL dialect 1 cannot name'):
-        build(b.firebird, table, catalog)
+    for name in ('lower', 'TIME'):  # not regular; a reserved word
+        with pytest.raises(BrowseUnavailable,
+                           match=f'SQL dialect 1 cannot name {name}'):
+            build(b.firebird, table, catalog + [
+                res('column', ['ASSETS', name], {'position': 1})])
 
 
 def test_mysql_family_uses_backticks_and_catalog_order():
     table = res('table', ['shop', 'order`s'])
-    catalog = [res('column', ['shop', 'order`s', 'id']),
-               res('column', ['shop', 'order`s', 'total'])]
-    assert build(b.mysql_family, table, catalog) == (
-        'SELECT `id`, `total`\nFROM `shop`.`order``s`')
+    catalog = [res('column', ['shop', 'order`s', 'total']),
+               res('column', ['shop', 'order`s', 'name'])]
+    # Every keyword is quoted on MySQL and MariaDB.
+    for profile in ('mysql-native', 'mariadb-native'):
+        assert build(b.mysql_family, table, catalog, profile=profile) == (
+            'SELECT total, `name`\nFROM shop.`order``s`')
+
+
+@pytest.mark.parametrize('builder,profile,names', [
+    (b.mysql_family, 'mysql-native',
+     ['tablesample', 'qualify', 'sql_no_cache', 'cube', 'name']),
+    (b.tidb, 'tidb-native',
+     ['sql_buffer_result', 'sql_cache', 'sql_no_cache', 'status'])])
+def test_mysql_wire_quotes_keywords_classed_as_non_reserved(
+        builder, profile, names):
+    # MySQL 9.7.0 and TiDB 8.5.6 refused these bare in a SELECT list
+    # (but NAME and STATUS) although their keyword classifications call
+    # them non-reserved.
+    table = res('table', ['d', 't'])
+    catalog = [res('column', ['d', 't', name]) for name in names]
+    assert build(builder, table, catalog, profile=profile) == (
+        'SELECT {0}\nFROM d.t'.format(', '.join(f'`{n}`' for n in names)))
 
 
 def test_sqlite_leaves_out_hidden_virtual_table_columns():
@@ -140,15 +196,14 @@ def test_sqlite_leaves_out_hidden_virtual_table_columns():
                res('column', ['main', 'docs', 'rank'], meta(1, hidden=1)),
                res('column', ['main', 'docs', 'total'], meta(2, hidden=3))]
     assert build(b.sqlite, table, catalog) == (
-        'SELECT "body", "total"\nFROM "main"."docs"')
+        'SELECT body, total\nFROM main.docs')
 
 
 def test_duckdb_qualifies_with_database_and_schema():
     view = res('view', ['memory', 'main', 'v'])
     catalog = [res('column', ['memory', 'main', 'v', 'a'],
                    {'catalog_metadata': {'ordinal_position': 1}})]
-    assert build(b.duckdb, view, catalog) == (
-        'SELECT "a"\nFROM "memory"."main"."v"')
+    assert build(b.duckdb, view, catalog) == 'SELECT a\nFROM memory.main.v'
 
 
 # -- Wire-compatible distributed SQL ----------------------------------------
@@ -163,7 +218,7 @@ def test_cockroachdb_drops_engine_hidden_columns():
         res('column', ['service', 'customers', 'name'],
             {'ordinal_position': 3})]
     assert build(b.cockroachdb, table, catalog) == (
-        'SELECT "id", "name"\nFROM "service"."customers"')
+        'SELECT id, name\nFROM service.customers')
 
 
 def test_materialized_views_use_their_column_names():
@@ -171,26 +226,27 @@ def test_materialized_views_use_their_column_names():
                {'column_names': ['asset_id', 'open_orders']})
     for builder in (b.cockroachdb, b.yugabytedb):
         assert build(builder, view) == (
-            'SELECT "asset_id", "open_orders"\nFROM "service"."workload"')
+            'SELECT asset_id, open_orders\nFROM service.workload')
 
 
 def test_yugabytedb_foreign_table():
     table = res('foreign-table', ['ext', 'remote'])
     catalog = [res('column', ['ext', 'remote', 'k'], {'ordinal_position': 1})]
-    assert build(b.yugabytedb, table, catalog) == (
-        'SELECT "k"\nFROM "ext"."remote"')
+    assert build(b.yugabytedb, table, catalog) == 'SELECT k\nFROM ext.remote'
 
 
-@pytest.mark.parametrize('builder', [b.tidb, b.vitess, b.dolt])
-def test_mysql_wire_tables_and_sequences(builder):
+@pytest.mark.parametrize('builder,name', [
+    (b.tidb, 'name'), (b.vitess, '`name`'), (b.dolt, '`name`')])
+def test_mysql_wire_tables_and_sequences(builder, name):
     table = res('table', ['cdeadmin_demo', 'customers'],
                 {'table_type': 'BASE TABLE'})
     catalog = [res('column', ['cdeadmin_demo', 'customers', 'customer_id'],
                    {'ordinal_position': 1}),
                res('column', ['cdeadmin_demo', 'customers', 'name'],
                    {'ordinal_position': 2})]
+    # NAME is a keyword in the Vitess and Dolt contracts, not in TiDB's.
     assert build(builder, table, catalog) == (
-        'SELECT `customer_id`, `name`\nFROM `cdeadmin_demo`.`customers`')
+        f'SELECT customer_id, {name}\nFROM cdeadmin_demo.customers')
     with pytest.raises(BrowseUnavailable, match='sequence'):
         build(builder, res('table', ['d', 's'], {'table_type': 'SEQUENCE'}))
 
@@ -222,7 +278,7 @@ def test_cassandra_table_and_materialized_view():
                  'columns': [{'column_name': 'status'},
                              {'column_name': 'work_order_id'}]})
     assert build(b.cassandra, table) == (
-        'SELECT "status", "work_order_id"\nFROM "cdeadmin_demo"."work_orders"')
+        'SELECT status, work_order_id\nFROM cdeadmin_demo.work_orders')
     view = res('materialized-view', ['cassandra', 'keyspace', 'cdeadmin_demo',
                                      'materialized-view', 'by_status'],
                {'keyspace_name': 'cdeadmin_demo', 'view_name': 'by_status'})
@@ -230,7 +286,7 @@ def test_cassandra_table_and_materialized_view():
                    {'keyspace_name': 'cdeadmin_demo',
                     'table_name': 'by_status', 'column_name': 'status'})]
     assert build(b.cassandra, view, catalog) == (
-        'SELECT "status"\nFROM "cdeadmin_demo"."by_status"')
+        'SELECT status\nFROM cdeadmin_demo.by_status')
 
 
 def test_ycql_qualifies_from_native_keyspace_not_the_path():
@@ -238,7 +294,7 @@ def test_ycql_qualifies_from_native_keyspace_not_the_path():
                           'table', 't'],
                 {'keyspace_name': 'ks', 'table_name': 't',
                  'columns': [{'column_name': 'k'}, {'column_name': 'v'}]})
-    assert build(b.yugabytedb_ycql, table) == 'SELECT "k", "v"\nFROM "ks"."t"'
+    assert build(b.yugabytedb_ycql, table) == 'SELECT k, v\nFROM ks.t'
 
 
 def test_xtdb_leaves_out_temporal_columns():
@@ -254,7 +310,7 @@ def test_xtdb_leaves_out_temporal_columns():
 def test_immudb_names_the_table_unqualified():
     table = res('table', ['public', 'work_orders'],
                 {'columns': [{'name': 'id'}, {'name': 'key'}]})
-    assert build(b.immudb, table) == 'SELECT "id", "key"\nFROM "work_orders"'
+    assert build(b.immudb, table) == 'SELECT id, "key"\nFROM work_orders'
 
 
 def test_influxdb_sql_and_influxql_in_the_session_database():
@@ -302,6 +358,93 @@ def test_opensearch_sql_and_ppl_list_mapping_fields():
                 {'index': 'work-orders'})
     assert build(b.opensearch_sql_ppl, alias, [mapping])[0] == (
         'SELECT `asset_id`, `status`\nFROM `current`')
+
+
+# -- Quoting only the names that need it ------------------------------------
+
+@pytest.mark.parametrize('profile,builder,path,plain,quoted', [
+    # Firebird SQL dialect 3 folds undelimited names to upper case.
+    ('firebird-native', b.firebird, ['T'], ['ID', 'NAME', 'FIRST', 'R$1'],
+     ['"id"', '"Mixed"', '"TIME"', '"POSITION"', '"_X"', '"A B"']),
+    ('firebird-embedded', b.firebird, ['T'], ['ID'], ['"TIME"']),
+    # The MySQL family never changes a name's case by quoting it.
+    ('mysql-native', b.mysql_family, ['d', 't'],
+     ['id', 'Mixed', 'UPPER', 'total'],
+     ['`select`', '`key`', '`name`', '`first`', '`_utf8mb4`', '`a b`',
+      '`1x`', '`a$b`']),
+    ('mariadb-native', b.mysql_family, ['d', 't'], ['total', 'Mixed'],
+     ['`id`', '`name`', '`first`', '`select`']),
+    ('tidb-native', b.tidb, ['d', 't'], ['id', 'total', 'name'],
+     ['`status`', '`sql_cache`', '`select`']),
+    ('vitess-native', b.vitess, ['d', 't'], ['id'], ['`name`', '`select`']),
+    ('dolt-native', b.dolt, ['d', 't'], ['id', 'total'],
+     ['`name`', '`select`']),
+    # SQLite and DuckDB match names without regard to case.
+    ('sqlite-native', b.sqlite, ['main', 't'], ['id', 'Mixed', 'name', '_x'],
+     ['"select"', '"first"', '"a b"', '"a$b"']),
+    ('duckdb-native', b.duckdb, ['memory', 'main', 't'],
+     ['id', 'Mixed', 'name', 'first'],
+     ['"select"', '"position"', '"time"', '"a b"']),
+    # PostgreSQL-wire SQL folds to lower case; only unreserved keywords are
+    # written bare.
+    ('cockroachdb-native', b.cockroachdb, ['s', 't'],
+     ['id', 'name', 'key', '_x'],
+     ['"Mixed"', '"UPPER"', '"user"', '"time"', '"select"', '"a b"']),
+    ('yugabytedb-native', b.yugabytedb, ['s', 't'], ['id', 'name'],
+     ['"Mixed"', '"select"']),
+])
+def test_sql_names_are_quoted_only_where_the_dialect_needs_it(
+        profile, builder, path, plain, quoted):
+    names = plain + [name[1:-1] for name in quoted]
+    table = res('table', path)
+    catalog = [res('column', path + [name]) for name in names]
+    source = build(builder, table, catalog, profile=profile)
+    assert source == 'SELECT {0}\nFROM {1}'.format(
+        ', '.join(plain + quoted), '.'.join(path))
+
+
+@pytest.mark.parametrize('builder,plain,quoted', [
+    # Cassandra quotes the words of its reserved_keywords.txt only; its
+    # other contract rows are lexer rules (K_TTL, BOOLEAN), of which only
+    # type tokens such as boolean read as words.
+    (b.cassandra, ['id', 'key', 'boolean'], ['"token"', '"select"']),
+    # YCQL quotes all but its unreserved keywords.
+    (b.yugabytedb_ycql, ['id', 'key', 'ttl'],
+     ['"token"', '"select"', '"boolean"'])])
+def test_cql_names_are_quoted_only_where_needed(builder, plain, quoted):
+    names = plain + ['Mixed', '_x', 'a b'] + [n[1:-1] for n in quoted]
+    table = res('table', ['ks', 't'], {
+        'keyspace_name': 'ks', 'table_name': 't',
+        'columns': [{'column_name': name} for name in names]})
+    assert build(builder, table) == 'SELECT {0}\nFROM ks.t'.format(
+        ', '.join(plain + ['"Mixed"', '"_x"', '"a b"'] + quoted))
+
+
+def test_contract_keywords_skip_operators_and_sentinels():
+    firebird = contract_keywords(provider('firebird-native'),
+                                 b._every_keyword)
+    assert 'SELECT' in firebird and '!<' not in firebird
+    dolt = contract_keywords(provider('dolt-native'), b._every_keyword)
+    assert 'SELECT' in dolt and not [word for word in dolt if '<' in word]
+    # No dialect contract: no keyword list.
+    assert contract_keywords(provider('clickhouse-native'),
+                             b._every_keyword) is None
+
+
+def test_sql_names_without_a_keyword_list_quote_every_name():
+    unknown = SqlNames('"', regular=b._LOWER, reserved=None)
+    assert unknown('id') == '"id"'
+    known = SqlNames('"', regular=b._LOWER, reserved=frozenset({'SELECT'}))
+    assert [known(name) for name in ('id', 'select', 'Id', 'a"b')] == [
+        'id', '"select"', '"Id"', '"a""b"']
+
+
+@pytest.mark.parametrize('builder', [
+    b.clickhouse, b.xtdb, b.influxdb, b.apache_ignite, b.opensearch_sql_ppl,
+    b.neo4j])
+def test_connectors_without_a_keyword_list_still_quote_every_name(builder):
+    assert contract_keywords(
+        provider(BUILDER_PROFILE[builder.__name__]), b._every_keyword) is None
 
 
 # -- Document, graph, search, vector and key-value --------------------------

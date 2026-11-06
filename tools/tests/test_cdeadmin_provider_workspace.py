@@ -532,7 +532,7 @@ class ProviderWorkspaceTests(unittest.TestCase):
             'language_profile': 'mysql-sql'})
         self.assertEqual({
             'resource_id': 'table:shop:orders',
-            'source': 'SELECT `id`, `order total`\nFROM `shop`.`orders`',
+            'source': 'SELECT id, `order total`\nFROM shop.orders',
             'language_profile': 'mysql-sql'}, result)
         self.assertEqual([], executed)
         with self.assertRaisesRegex(Exception, 'cannot read a column'):

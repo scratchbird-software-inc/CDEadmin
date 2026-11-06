@@ -19,6 +19,13 @@ each connector supports are declared in its provider manifest
 The forms follow what each connector's studio execute path accepts. Where a
 column list is known it is listed; otherwise the language's whole-record read
 is used (``SELECT *``, a document find, ``RETURN n``, a key range).
+
+Names are delimited only where the dialect needs it (owner direction
+2026-11-06): a name is written bare when it is a regular identifier in the
+case the dialect folds to and is not a keyword the dialect's contract
+reserves (SqlNames). Where a contract does not say which keywords are
+reserved, every keyword is delimited; a connector with no keyword list in
+its contract delimits every name.
 """
 
 from __future__ import annotations
@@ -27,8 +34,8 @@ import re
 import shlex
 
 from pgadmin.cdeadmin.sdk.browse import (
-    BrowseUnavailable, json_source, native_of, path_columns, quote,
-    sql_select,
+    BrowseUnavailable, SqlNames, contract_keywords, json_source, native_of,
+    path_columns, quote, sql_select,
 )
 
 
@@ -46,6 +53,56 @@ def _double(name):
 
 def _backtick(name):
     return quote(name, '`')
+
+
+# Undelimited names each dialect reads back unchanged. Only ASCII names are
+# written bare. PostgreSQL-wire SQL and CQL fold undelimited names to lower
+# case and Firebird (SQL dialect 3) to upper case; SQLite and DuckDB match
+# names without regard to case, and quoting never changes a name's case in
+# the MySQL family. A MySQL-family name may not start with an underscore,
+# which can begin a character set introducer (_utf8mb4); CQL and immudb
+# names start with a letter.
+_LOWER = re.compile(r'[a-z_][a-z0-9_]*')
+_LOWER_LETTER = re.compile(r'[a-z][a-z0-9_]*')
+_UPPER = re.compile(r'[A-Z][A-Z0-9_$]*')
+_ANY_CASE = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
+_MYSQL = re.compile(r'[A-Za-z][A-Za-z0-9_]*')
+
+
+# Which contract keywords a name must not be. Only unreserved keywords are
+# written bare in the PostgreSQL-derived grammars, as PostgreSQL's
+# quote_ident does; Cassandra quotes the reserved keywords its own
+# identifier quoting does. A contract row with no classification counts as
+# reserved, so MariaDB, Vitess, SQLite and immudb delimit every keyword.
+# The MySQL family's classifications do not say where a keyword can stand
+# bare: MySQL 9.7.0 rejected eight keywords it marks non-reserved in a
+# SELECT list (CUBE, EXTERNAL, MANUAL, PARALLEL, QUALIFY and TABLESAMPLE
+# anywhere; SQL_BUFFER_RESULT and SQL_NO_CACHE first), and TiDB 8.5.6
+# rejected three of its unreserved keywords first in one (SQL_BUFFER_RESULT,
+# SQL_CACHE, SQL_NO_CACHE). MySQL, TiDB and Dolt delimit every keyword.
+
+def _pg_reserved(row):  # pg_get_keywords(): CockroachDB, YugabyteDB YSQL
+    return row.get('category_code') != 'U'
+
+
+def _duckdb_reserved(row):  # duckdb_keywords()
+    return row.get('category') != 'unreserved'
+
+
+def _ycql_reserved(row):
+    return row.get('category') != 'UNRESERVED_KEYWORD'
+
+
+def _cassandra_reserved(row):
+    return row.get('category') == 'reserved_keyword'
+
+
+def _firebird_reserved(row):
+    return row.get('non_reserved') is not True
+
+
+def _every_keyword(row):
+    return True
 
 
 def _route(resource):
@@ -67,31 +124,45 @@ def _catalog_columns(catalog, match, *, order=None, exclude=None,
 
 # -- Embedded and native-editor SQL connectors --------------------------------
 
-_FIREBIRD_REGULAR = re.compile(r'[A-Z][A-Z0-9_$]*')
-
-
 def firebird(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view')
     columns = path_columns(resource, catalog)
+    names = SqlNames('"', regular=_UPPER,
+                     reserved=contract_keywords(self, _firebird_reserved))
     if resource.get('client_sql_dialect') == 1:
         # SQL dialect 1 has no delimited identifiers: a double-quoted name
-        # is a string. Only names that are already regular can be written.
-        names = [*resource.get('display_path', ()), *columns]
-        irregular = [name for name in names
-                     if not _FIREBIRD_REGULAR.fullmatch(name)]
+        # is a string. Only names that need no quotes can be written.
+        irregular = [name for name in
+                     [*resource.get('display_path', ()), *columns]
+                     if not names.bare(name)]
         if irregular:
             raise BrowseUnavailable(
                 'SQL dialect 1 cannot name ' + ', '.join(irregular[:3]) +
                 '; switch the editor to SQL dialect 3.')
         return sql_select(columns, resource['display_path'], str)
-    return sql_select(columns, resource['display_path'], _double)
+    return sql_select(columns, resource['display_path'], names)
+
+
+def _mysql_names(provider):
+    # Backticks delimit identifiers in every sql_mode, ANSI_QUOTES included.
+    return SqlNames('`', regular=_MYSQL,
+                    reserved=contract_keywords(provider, _every_keyword))
 
 
 def mysql_family(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view')
-    # Backticks delimit identifiers in every sql_mode, ANSI_QUOTES included.
     return sql_select(path_columns(resource, catalog),
-                      resource['display_path'], _backtick)
+                      resource['display_path'], _mysql_names(self))
+
+
+def _sqlite_keywords(provider):
+    # The keywords of the SQLite library that runs the editor's statements;
+    # the contract's list when the library cannot be asked.
+    from .sqlite.identifier_keywords import native_keywords
+    try:
+        return frozenset(native_keywords()[0])
+    except (OSError, AttributeError, ValueError, UnicodeError):
+        return contract_keywords(provider, _every_keyword)
 
 
 def sqlite(self, resource, native, catalog, language):
@@ -100,18 +171,21 @@ def sqlite(self, resource, native, catalog, language):
     # generated columns (2, 3) are.
     columns = path_columns(resource, catalog, exclude=lambda column: (
         column.get('catalog_metadata') or {}).get('hidden') == 1)
-    return sql_select(columns, resource['display_path'], _double)
+    return sql_select(columns, resource['display_path'], SqlNames(
+        '"', regular=_ANY_CASE, reserved=_sqlite_keywords(self)))
 
 
 def duckdb(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view')
     return sql_select(path_columns(resource, catalog),
-                      resource['display_path'], _double)
+                      resource['display_path'], SqlNames(
+                          '"', regular=_ANY_CASE,
+                          reserved=contract_keywords(self, _duckdb_reserved)))
 
 
 # -- PostgreSQL-wire and MySQL-wire distributed SQL ---------------------------
 
-def _pg_wire(resource, native, catalog):
+def _pg_wire(provider, resource, native, catalog):
     kind = resource.get('resource_kind')
     if kind == 'materialized-view' and isinstance(
             native.get('column_names'), list):
@@ -121,40 +195,42 @@ def _pg_wire(resource, native, catalog):
         # not part of SELECT *.
         columns = path_columns(resource, catalog,
                                exclude=lambda column: column.get('hidden'))
-    return sql_select(columns, resource['display_path'], _double)
+    return sql_select(columns, resource['display_path'], SqlNames(
+        '"', regular=_LOWER,
+        reserved=contract_keywords(provider, _pg_reserved)))
 
 
 def cockroachdb(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view', 'materialized-view')
-    return _pg_wire(resource, native, catalog)
+    return _pg_wire(self, resource, native, catalog)
 
 
 def yugabytedb(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view', 'materialized-view', 'foreign-table')
-    return _pg_wire(resource, native, catalog)
+    return _pg_wire(self, resource, native, catalog)
 
 
-def _mysql_wire(resource, native, catalog):
+def _mysql_wire(provider, resource, native, catalog):
     if resource.get('resource_kind') == 'table' and str(
             native.get('table_type') or '').upper() == 'SEQUENCE':
         raise BrowseUnavailable('A sequence has no rows to browse.')
     return sql_select(path_columns(resource, catalog),
-                      resource['display_path'], _backtick)
+                      resource['display_path'], _mysql_names(provider))
 
 
 def tidb(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view')
-    return _mysql_wire(resource, native, catalog)
+    return _mysql_wire(self, resource, native, catalog)
 
 
 def vitess(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view')
-    return _mysql_wire(resource, native, catalog)
+    return _mysql_wire(self, resource, native, catalog)
 
 
 def dolt(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view')
-    return _mysql_wire(resource, native, catalog)
+    return _mysql_wire(self, resource, native, catalog)
 
 
 # -- Other SQL and CQL connectors ---------------------------------------------
@@ -172,7 +248,7 @@ def clickhouse(self, resource, native, catalog, language):
     return sql_select(columns, [database, table], _backtick)
 
 
-def _cql(native, catalog, kind, name):
+def _cql(native, catalog, kind, name, names):
     keyspace = native.get('keyspace_name')
     if kind == 'table' and isinstance(native.get('columns'), list):
         columns = [str(column.get('column_name'))
@@ -183,19 +259,23 @@ def _cql(native, catalog, kind, name):
                 column.get('keyspace_name') == keyspace and
                 column.get('table_name') == name),
             name='column_name')
-    return sql_select(columns, [keyspace, name], _double)
+    return sql_select(columns, [keyspace, name], names)
 
 
 def cassandra(self, resource, native, catalog, language):
     kind = _kind(resource, 'table', 'materialized-view')
     name = (native.get('table_name') if kind == 'table'
             else native.get('view_name')) or resource.get('display_name')
-    return _cql(native, catalog, kind, name)
+    return _cql(native, catalog, kind, name, SqlNames(
+        '"', regular=_LOWER_LETTER,
+        reserved=contract_keywords(self, _cassandra_reserved)))
 
 
 def yugabytedb_ycql(self, resource, native, catalog, language):
     kind = _kind(resource, 'table')
-    return _cql(native, catalog, kind, native.get('table_name'))
+    return _cql(native, catalog, kind, native.get('table_name'), SqlNames(
+        '"', regular=_LOWER_LETTER,
+        reserved=contract_keywords(self, _ycql_reserved)))
 
 
 def xtdb(self, resource, native, catalog, language):
@@ -212,7 +292,9 @@ def immudb(self, resource, native, catalog, language):
     # immudb SQL has no schema-qualified names.
     columns = [str(column.get('name'))
                for column in native.get('columns') or ()]
-    return sql_select(columns, [resource.get('display_name')], _double)
+    return sql_select(columns, [resource.get('display_name')], SqlNames(
+        '"', regular=_LOWER_LETTER,
+        reserved=contract_keywords(self, _every_keyword)))
 
 
 def influxdb(self, resource, native, catalog, language):
