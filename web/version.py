@@ -14,7 +14,7 @@
 # CDEadmin has its own product version. APP_VERSION remains the upstream
 # compatibility/schema baseline because pgAdmin migrations and extension
 # compatibility still consume its numeric form.
-CDEADMIN_VERSION = '0.1.0-dev'
+CDEADMIN_VERSION = '0.325-alpha'
 CDEADMIN_FORK_STATUS = 'Hard fork'
 UPSTREAM_PRODUCT_NAME = 'pgAdmin 4'
 UPSTREAM_BASE_VERSION = '9.17'

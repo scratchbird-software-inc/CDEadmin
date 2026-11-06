@@ -2,7 +2,6 @@ import { Box, Checkbox, FormControlLabel, Icon } from '@mui/material';
 import { useRef, useState } from 'react';
 import { InputSelectNonSearch, InputText, MESSAGE_TYPE, NotifierMessage } from '../components/FormComponents';
 import BasePage, { SecurityButton } from './BasePage';
-import LoginIllustration from './LoginIllustration';
 import gettext from 'sources/gettext';
 import PropTypes from 'prop-types';
 import {QAVisualIdentityToggle} from 'sources/cdeadmin_ui/qa';
@@ -31,26 +30,25 @@ export default function LoginPage({userLanguage, langOptions, forgotPassUrl, csr
         marginRight: 'auto',
         marginLeft: 'auto'
       }} textCenter />}
-      <BasePage title={gettext('Login')} pageImage={<LoginIllustration />} {...props}>
+      <BasePage title={gettext('Welcome to ScratchRobin')}
+        subtitle={gettext('Sign in to your administration console.')}
+        brandQaKey="security.login.product-identity" {...props}>
         <form ref={formRef} data-cdeadmin-qa-key="security.login.form"
           style={{display:'flex', gap:'15px', flexDirection:'column'}}
           action={loginUrl} method="POST">
-          <Box data-cdeadmin-qa-key="security.login.product-identity"
-            textAlign="center">
-            <Box component="strong" display="block">
-              {gettext('ScratchRobin CDE Administration Console')}
-            </Box>
-            <Box component="span" display="block">
-              {gettext('Alpha QA Release')}
-            </Box>
-          </Box>
           {showLoginForm &&
           <>
             <input name="csrf_token" defaultValue={csrfToken} hidden/>
-            <InputText name="email" value={form.email} onChange={(v)=>onTextChange('email', v)} placeholder={gettext('Email Address / Username')} autoFocus
-              required controlProps={{autoComplete: 'username'}} />
-            <InputText name="password" value={form.password} onChange={(v)=>onTextChange('password', v)} type={showPassword ? 'text' : 'password'} placeholder={gettext('Password')}
-              required controlProps={{autoComplete: 'current-password'}} />
+            <Box>
+              <label className="BasePage-label" htmlFor="security-login-email">{gettext('Email address or username')}</label>
+              <InputText cid="security-login-email" name="email" value={form.email} onChange={(v)=>onTextChange('email', v)} autoFocus
+                required controlProps={{autoComplete: 'username'}} />
+            </Box>
+            <Box>
+              <label className="BasePage-label" htmlFor="security-login-password">{gettext('Password')}</label>
+              <InputText cid="security-login-password" name="password" value={form.password} onChange={(v)=>onTextChange('password', v)} type={showPassword ? 'text' : 'password'}
+                required controlProps={{autoComplete: 'current-password'}} />
+            </Box>
             <FormControlLabel label={gettext('Show password')} control={<Checkbox size="small" checked={showPassword}
               onChange={(event) => {
                 // Autofill may update native inputs without a React change event.
@@ -69,7 +67,7 @@ export default function LoginPage({userLanguage, langOptions, forgotPassUrl, csr
           }
           <QAVisualIdentityToggle />
           {showLoginForm &&
-            <SecurityButton name="internal_button" value="Login">{gettext('Login')}</SecurityButton>
+            <SecurityButton name="internal_button" value="Login">{gettext('Sign in')}</SecurityButton>
           }
           {authSources?.includes?.(authSourcesEnum.OAUTH2) &&
           oauth2Config.map((oauth)=>{

@@ -9,6 +9,11 @@ behavior; they are not CDEadmin release notes and do not describe the current
 multi-engine implementation. CDEadmin is presently 0.1.0-dev and has no
 production release. See :doc:`implementation_status` for its current status.
 
+Owner direction, 2026-11-06: ScratchRobin (a CDEadmin, or CDE administration
+console) is now an open-source alpha release, version 0.325 (``0.325-alpha``).
+Only a few of its supported platforms and part of its functionality are ready
+for review. It is still not a production release.
+
 .. toctree::
    :maxdepth: 1
 

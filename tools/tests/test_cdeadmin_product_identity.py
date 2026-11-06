@@ -89,8 +89,13 @@ class ProductIdentityContractTests(unittest.TestCase):
         self.assertEqual('CDEadmin', self.identity['product']['display_name'])
         self.assertEqual('cdeadmin', self.identity['product']['short_name'])
 
-    def test_login_illustration_is_self_contained(self):
-        path = ROOT / 'web/pgadmin/static/assets/cdeadmin/auth/login.svg'
+    def test_sign_in_artwork_is_self_contained(self):
+        # Owner direction 2026-11-06: the sign-in pages show the ScratchRobin
+        # mark for navy backgrounds; the former login illustration (which
+        # embedded a PNG) was deleted. The same rules apply: no script, and
+        # only local or data references; any embedded image must be a PNG.
+        path = (ROOT / 'web/pgadmin/static/assets/cdeadmin/branding/'
+                'scratchrobin-dark.svg')
         source = path.read_text(encoding='utf-8')
         root = ElementTree.fromstring(source)
         images = []
@@ -105,7 +110,6 @@ class ProductIdentityContractTests(unittest.TestCase):
                         images.append(value)
 
         references.extend(re.findall(r'url\(([^)]+)\)', source))
-        self.assertTrue(images)
         self.assertTrue(all(
             value.strip(' "\'').startswith(('#', 'data:'))
             for value in references

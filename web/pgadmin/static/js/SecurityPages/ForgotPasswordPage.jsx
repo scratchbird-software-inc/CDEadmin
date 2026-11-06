@@ -1,6 +1,5 @@
 import { Box } from '@mui/material';
 import { useState } from 'react';
-import ForgotPasswordImage from '../../assets/cdeadmin/controls/forgot_password.svg?svgr';
 import { InputText } from '../components/FormComponents';
 import BasePage, { SecurityButton } from './BasePage';
 import gettext from 'sources/gettext';
@@ -14,7 +13,7 @@ export default function ForgotPasswordPage({csrfToken, actionUrl, loginUrl, ...p
   };
 
   return (
-    <BasePage title={gettext('Forgot Password')} pageImage={<ForgotPasswordImage style={{height: '100%', width: '100%'}} />} {...props} >
+    <BasePage title={gettext('Forgot Password')} {...props} >
       <form style={{display:'flex', gap:'15px', flexDirection:'column'}} action={actionUrl} method="POST">
         <input name="csrf_token" defaultValue={csrfToken} hidden/>
         <div>{gettext('Enter the email address for the user account you wish to recover the password for:')}</div>

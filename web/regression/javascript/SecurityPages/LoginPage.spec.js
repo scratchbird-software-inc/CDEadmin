@@ -12,6 +12,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import Theme from '../../../pgadmin/static/js/Theme';
 import LoginPage from '../../../pgadmin/static/js/SecurityPages/LoginPage';
+import { releaseLabel } from '../../../pgadmin/static/js/SecurityPages/BasePage';
 
 describe('LoginPage', ()=>{
 
@@ -41,14 +42,25 @@ describe('LoginPage', ()=>{
         KERBEROS: 'kerberos'
       },
       oauth2Config: [],
-      loginBanner: 'login banner'
+      loginBanner: 'login banner',
+      productVersion: '0.325-alpha',
     });
     expect(ctrl.container.querySelector('form').getAttribute('action')).toBe('/login/url');
-    expect(ctrl.container.querySelector('input[name="email"]')).not.toBeNull();
-    expect(ctrl.container.querySelector('input[name="password"]')).not.toBeNull();
-    expect(screen.getByText('ScratchRobin CDE Administration Console'))
-      .toBeInTheDocument();
-    expect(screen.getByText('Alpha QA Release')).toBeInTheDocument();
+    // Owner direction 2026-11-06: labelled fields, and a brand panel stating
+    // the open-source alpha release and how much is ready for review.
+    expect(screen.getByLabelText('Email address or username'))
+      .toHaveAttribute('name', 'email');
+    expect(screen.getByLabelText('Password')).toHaveAttribute('name', 'password');
+    expect(screen.getByText('Welcome to ScratchRobin')).toBeInTheDocument();
+    const brand = screen.getByRole('complementary', {name: 'About ScratchRobin'});
+    expect(brand).toHaveAttribute('data-cdeadmin-qa-key',
+      'security.login.product-identity');
+    expect(brand).toHaveTextContent('Open-source project · Alpha 0.325');
+    expect(brand).toHaveTextContent(
+      'Only a few of its supported platforms, and part of its functionality, are ready for review.');
+    expect(brand).toHaveTextContent('ScratchBird Software Inc.');
+    expect(screen.getByRole('button', {name: 'Sign in'}))
+      .toHaveAttribute('name', 'internal_button');
     expect(screen.getByLabelText('Enable QA visual element IDs'))
       .not.toBeChecked();
   });
@@ -84,7 +96,7 @@ describe('LoginPage', ()=>{
     // Model autofill that does not dispatch React's change event.
     email.value = 'owner@example.test';
     password.value = 'autofilled-test-value';
-    expect(screen.getByRole('button', {name: 'Login'})).toBeEnabled();
+    expect(screen.getByRole('button', {name: 'Sign in'})).toBeEnabled();
     fireEvent.click(screen.getByLabelText('Show password'));
     await waitFor(() => expect(password).toHaveAttribute('type', 'text'));
     expect(password).toHaveValue('autofilled-test-value');
@@ -137,5 +149,11 @@ describe('LoginPage', ()=>{
     expect(ctrl.container.querySelector('input[name="email"]')).not.toBeNull();
     expect(ctrl.container.querySelector('input[name="password"]')).not.toBeNull();
     expect(ctrl.container.querySelector('button[name="oauth2_button"]')).toHaveValue('github');
+  });
+
+  it('reads the release from the product version', ()=>{
+    expect(releaseLabel('0.325-alpha')).toBe('Alpha 0.325');
+    expect(releaseLabel('1.0')).toBe('1.0');
+    expect(releaseLabel(undefined)).toBeNull();
   });
 });

@@ -7,6 +7,11 @@ Implementation status
 Status date and scope
 =====================
 
+Owner direction, 2026-11-06: the product version is now **alpha 0.325**
+(``0.325-alpha``), an open-source alpha release in which only a few of the
+supported platforms and part of the functionality are ready for review. The
+14 October status below is kept as written.
+
 14 October 2026. ScratchRobin CDE Admin remains **0.1.0-dev**. This page
 describes source and local verification; it is not a production-readiness or
 release approval. The pushed source baseline before this consolidation was

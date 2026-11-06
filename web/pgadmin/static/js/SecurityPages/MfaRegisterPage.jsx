@@ -10,7 +10,6 @@ import { Box } from '@mui/material';
 import { useState } from 'react';
 import { FormNote, InputText } from '../components/FormComponents';
 import BasePage, { SecurityButton } from './BasePage';
-import LoginIllustration from './LoginIllustration';
 import { DefaultButton } from '../components/Buttons';
 import gettext from 'sources/gettext';
 import PropTypes from 'prop-types';
@@ -76,7 +75,7 @@ AuthenticatorRegisterView.propTypes = {
 
 export default function MfaRegisterPage({actionUrl, mfaList, nextUrl, mfaView, ...props}) {
   return (
-    <BasePage title={gettext('Authentication Registration')} pageImage={<LoginIllustration />} {...props}>
+    <BasePage title={gettext('Authentication Registration')} {...props}>
       <form style={{display:'flex', gap:'15px', flexDirection:'column', minHeight: 0}} action={actionUrl} method="POST">
         {mfaView ? <>
           {mfaView.auth_method == 'email' && <EmailRegisterView mfaView={mfaView} />}

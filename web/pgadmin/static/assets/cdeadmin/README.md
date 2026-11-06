@@ -4,7 +4,10 @@ This directory is the canonical source location for artwork used by the
 ScratchRobin interface. Runtime features refer to semantic icon keys and must
 not import a provider- or command-specific SVG directly.
 
-- `branding/` contains ScratchRobin product artwork.
+- `branding/` contains ScratchRobin product artwork. `scratchrobin-dark.svg`
+  (2026-11-06, sign-in pages) is a verbatim copy of the family mark for navy
+  backgrounds in `website/assets/brand/`; see that directory's README for its
+  source. Replace both copies together.
 - `engines/` contains database-engine identities.
 - `commands/` contains action and tool glyphs plus their license records.
 - `auth/` contains authentication-page artwork.
