@@ -3,6 +3,8 @@ import PostgresqlTestData from './PostgresqlTestData';
 import MySQLQueryOptions from '../cdeadmin_ui/editors/MySQLQueryOptions';
 import SQLNotebook from '../cdeadmin_ui/projects/SQLNotebook';
 import {QueryToolFrame, QueryToolToolbar, QueryToolAction} from '../cdeadmin_ui/editors/QueryToolControls';
+import {SQLConnectionSlot} from '../cdeadmin_ui/editors/SQLConnections';
+import {Dialog as InfoDialog} from '../cdeadmin_ui/overlays/Dialog';
 import useNativeRowPages from '../cdeadmin_ui/data/useNativeRowPages';
 import BIModelsTool from '../cdeadmin_ui/modules/bi/models/BIModelsTool';
 /////////////////////////////////////////////////////////////
@@ -5137,6 +5139,7 @@ export default function ProviderWorkspaceContent({
   const [mysqlAttributeSource, setMySQLAttributeSource] = useState('{}');
   const [maximumRows, setMaximumRows] = useState('1000');
   const [bufferRows, setBufferRows] = useState(500);
+  const [connectionInfoOpen, setConnectionInfoOpen] = useState(false);
   const [queryStreamActive, setQueryStreamActive] = useState(false);
   const [clientSqlDialect, setClientSqlDialect] = useState(3);
   const [historySensitive, setHistorySensitive] = useState(false);
@@ -6040,20 +6043,25 @@ export default function ProviderWorkspaceContent({
       {workspace && tab === 'firebird-recovery' &&
         ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <FirebirdRecoveryGroup post={post} />}
-      {workspace && tab === 'studio' && <Box role="status" aria-label={gettext('SQL editor connection')}
-        sx={{px: 2, py: 1, flexShrink: 0, borderBottom: 1, borderColor: 'divider', overflowWrap: 'anywhere'}}>
-        <strong>{workspace.endpoint?.display_name || workspace.endpoint?.endpoint_id || gettext('Unnamed connection')}</strong>
-        {queryRoute.host && <> ({queryRoute.host}{queryRoute.port ? `:${queryRoute.port}` : ''})</>}
-        {' — '}{queryTarget?.display_name || queryTarget?.name || queryDatabaseTargetId || gettext('No database selected')}
-        {' — '}{workspace.endpoint?.verified_runtime_family || workspace.endpoint?.profile_id}
-        {' — '}{activeLanguage?.title || languageProfile}
-        {languageProfile === 'firebird-sql' && ` / SQL ${clientSqlDialect}`}
-        {' — '}{querySessionBlocked ? gettext('Session requires reconnect') : sessionId ? gettext('Session open') : gettext('Session not open')}
-        <Box component="small" sx={{display: 'block'}}>
-          {gettext('Connection')}: {workspace.endpoint?.endpoint_id}
-          {queryDatabaseTargetId && <> · {gettext('Database')}: {queryDatabaseTargetId}</>}
+      {/* Owner direction 2026-11-05: the connection details open from the
+          toolbar's info button instead of a banner above the editor. */}
+      {workspace && tab === 'studio' && <InfoDialog open={connectionInfoOpen}
+        title={gettext('Connection details')} onClose={() => setConnectionInfoOpen(false)}
+        size="medium" actions={<Button onClick={() => setConnectionInfoOpen(false)}>{gettext('Close')}</Button>}>
+        <Box role="status" aria-label={gettext('SQL editor connection')} sx={{overflowWrap: 'anywhere'}}>
+          <strong>{workspace.endpoint?.display_name || workspace.endpoint?.endpoint_id || gettext('Unnamed connection')}</strong>
+          {queryRoute.host && <> ({queryRoute.host}{queryRoute.port ? `:${queryRoute.port}` : ''})</>}
+          {' — '}{queryTarget?.display_name || queryTarget?.name || queryDatabaseTargetId || gettext('No database selected')}
+          {' — '}{workspace.endpoint?.verified_runtime_family || workspace.endpoint?.profile_id}
+          {' — '}{activeLanguage?.title || languageProfile}
+          {languageProfile === 'firebird-sql' && ` / SQL ${clientSqlDialect}`}
+          {' — '}{querySessionBlocked ? gettext('Session requires reconnect') : sessionId ? gettext('Session open') : gettext('Session not open')}
+          <Box component="small" sx={{display: 'block'}}>
+            {gettext('Connection')}: {workspace.endpoint?.endpoint_id}
+            {queryDatabaseTargetId && <> · {gettext('Database')}: {queryDatabaseTargetId}</>}
+          </Box>
         </Box>
-      </Box>}
+      </InfoDialog>}
       {workspace && <QueryToolFrame role="region"
         aria-label={gettext('Provider query workspace')}
         sx={{p: 0, flex: 1, display: tab === 'studio' ? 'flex' : 'none', flexDirection: 'column',
@@ -6085,8 +6093,10 @@ export default function ProviderWorkspaceContent({
               disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || (managedAutocommit && sessionAutocommit !== false)} onClick={() => controlTransaction(action)} />)}
           <QueryToolAction action="close" title={gettext('Close query session')} disabled={busy || !!occurrenceId || !sessionId}
             onClick={releaseQuerySession} />
-          <TextField select size="small" sx={{width: 200, ml: 1}}
-            label={gettext('Provider language')} value={languageProfile}
+          <QueryToolAction action="info" title={gettext('Connection details')}
+            onClick={() => setConnectionInfoOpen(true)} />
+          <TextField select size="small" sx={{ml: 1}} InputProps={{sx: {width: 200}}}
+            label={gettext('Dialect')} value={languageProfile}
             disabled={busy || queryStreamActive || !!occurrenceId || scriptLocked || notebookDirty}
             onChange={(event) => selectLanguage(event.target.value)}>
             {(workspace.languages || []).map((language) => <MenuItem
@@ -6094,11 +6104,12 @@ export default function ProviderWorkspaceContent({
               {language.title}
             </MenuItem>)}
           </TextField>
-          <TextField type="number" size="small" label={gettext('Maximum rows per fetch')}
+          <TextField type="number" size="small" label={gettext('Max rows')}
             value={bufferRows} disabled={busy || queryStreamActive || !!occurrenceId || Boolean(rendered) || scriptLocked}
             error={!bufferValid} inputProps={{min: 1, max: 500, step: 1}}
-            sx={{width: 155}} onChange={event => setBufferRows(Number(event.target.value))}
+            InputProps={{sx: {width: 80}}} onChange={event => setBufferRows(Number(event.target.value))}
             title={gettext('Rows per browser buffer (1–500). Native fetch limits are separate. Close the query session to change this after a result.')} />
+          <SQLConnectionSlot />
           {busy && <CircularProgress size={24} />}
         </QueryToolToolbar>
         {notebookMounted && languageProfile === 'mysql-sql' && <Box sx={{display: notebookOpen ? 'block' : 'none', maxHeight: '55%', overflow: 'auto', flexShrink: 0}}>

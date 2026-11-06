@@ -71,6 +71,15 @@ session state. Changing language or target follows the existing session boundary
 source text never selects an engine. Plans, diagnostics and transaction actions
 come from the selected provider/language capabilities. Passwords are never shown.
 
+Owner direction, 2026-11-05: the banner moves into a *Connection details*
+dialog. It opens from an info button placed right after *Close query session*
+on the query toolbar, and shows the same facts, including the session state.
+The toolbar keeps every action button, the dialect selector (labelled
+*Dialect*), the per-fetch limit (labelled *Max rows*) and the SQL tab's
+connection selector (labelled *Connection*) on one line. Labels sit to the
+left of their fields. The line still wraps instead of clipping in a narrow
+pane or at enlarged text sizes.
+
 Maximum rows per fetch is an editable integer from 1 through 500, bounded further
 by the admitted result renderer. Result descriptors advertise their admitted
 maximum page size so subsequent fetches observe that limit too. It controls each server-to-browser result page,

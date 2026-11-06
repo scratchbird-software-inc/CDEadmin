@@ -1473,13 +1473,13 @@ describe('ProviderWorkspaceContent', () => {
     await waitFor(() => expect(screen.getByRole('button', {name: 'Run', exact: true})).toBeEnabled());
     fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
     await waitFor(() => expect(screen.getByRole('button', {name: 'Close query session'})).not.toBeDisabled());
-    fireEvent.mouseDown(screen.getByLabelText('Provider language'));
+    fireEvent.mouseDown(screen.getByLabelText('Dialect'));
     fireEvent.click(await screen.findByRole('option', {name: 'Another language'}));
     expect(await screen.findByText('Release unavailable')).toBeInTheDocument();
     expect(screen.getByLabelText('Query source')).toHaveValue('SELECT 1 FROM RDB$DATABASE');
     expect(screen.getByRole('button', {name: 'Close query session'})).not.toBeDisabled();
     releaseFails = false;
-    fireEvent.mouseDown(screen.getByLabelText('Provider language'));
+    fireEvent.mouseDown(screen.getByLabelText('Dialect'));
     fireEvent.click(await screen.findByRole('option', {name: 'Another language'}));
     await waitFor(() => expect(screen.getByLabelText('Query source')).toHaveValue('native command'));
     expect(screen.getByRole('button', {name: 'Close query session'})).toBeDisabled();
@@ -2402,7 +2402,10 @@ describe('ProviderWorkspaceContent', () => {
       .toBeInTheDocument();
   });
 
-  it('always shows the bound endpoint, database and admitted dialect above the SQL editor', async () => {
+  // Owner direction 2026-11-05: the bound endpoint, database and dialect
+  // moved from a banner above the editor into a dialog opened by the
+  // toolbar's info button; the content assertions are unchanged.
+  it('shows the bound endpoint, database and admitted dialect from the info button', async () => {
     api.get.mockResolvedValue({data: {data: {...bootstrap,
       endpoint: {...bootstrap.endpoint, endpoint_id: 'endpoint-a', display_name: 'Reporting connection'},
       endpoint_registration: {primary_route: {configuration: {host: 'db.example', port: 3307}}},
@@ -2410,13 +2413,20 @@ describe('ProviderWorkspaceContent', () => {
     }}});
     render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1"
       initialTab="studio" initialContext={{database_target_id: 'db-a'}} />);
+    const info = await screen.findByRole('button', {name: 'Connection details'});
+    expect(screen.queryByRole('status', {name: 'SQL editor connection'})).not.toBeInTheDocument();
+    const toolbar = screen.getByLabelText('SQL execution toolbar');
+    const buttons = within(toolbar).getAllByRole('button');
+    expect(buttons.indexOf(info)).toBe(buttons.indexOf(
+      within(toolbar).getByRole('button', {name: 'Close query session'})) + 1);
+    fireEvent.click(info);
     const banner = await screen.findByRole('status', {name: 'SQL editor connection'});
     expect(banner).toHaveTextContent('Reporting connection');
     expect(banner).toHaveTextContent('db.example:3307');
     expect(banner).toHaveTextContent('Accounts');
     expect(banner).toHaveTextContent('MySQL SQL');
     expect(banner).toHaveTextContent('Session not open');
-    expect(screen.getByLabelText('Maximum rows per fetch')).toHaveValue(500);
+    expect(screen.getByLabelText('Max rows')).toHaveValue(500);
   });
 
   it('requests the next provider-owned result page from its occurrence', async () => {

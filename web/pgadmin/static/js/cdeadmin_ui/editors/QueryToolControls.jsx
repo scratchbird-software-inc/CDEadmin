@@ -9,6 +9,7 @@ import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import {CommitIcon, RollbackIcon, ExecuteQueryIcon} from '../../components/ExternalIcon';
+import {Icon} from '../icons';
 
 // PostgreSQL Query Tool primitives shared by every native execution adapter.
 // These controls never choose SQL, issue transactions, or infer an outcome.
@@ -73,18 +74,32 @@ export const queryToolControlStyles = {
   '& .MuiFormControlLabel-label': {whiteSpace: 'nowrap'},
 };
 
+// Owner direction 2026-11-05: buttons, labelled fields and the connection
+// selector share one line. Labels sit beside their field rather than above
+// it, so every control keeps the toolbar's control height; the bar still
+// wraps instead of clipping in a narrow pane or at enlarged text sizes.
 export const QueryToolToolbar = styled(Box)(({theme}) => ({
   padding: '2px 4px', display: 'flex', alignItems: 'center', gap: '4px',
   flexShrink: 0, flexWrap: 'wrap', backgroundColor: theme.otherVars.editorToolbarBg,
   ...theme.mixins.panelBorder.bottom,
   ...queryToolControlStyles,
+  // A disabled icon button is wrapped in a span for its tooltip.
+  '& > span': {display: 'inline-flex', alignItems: 'center'},
+  '& .MuiTextField-root': {flexDirection: 'row', alignItems: 'center', gap: '4px'},
+  '& .MuiTextField-root > .MuiInputLabel-root[data-shrink]': {
+    marginBottom: 0, whiteSpace: 'nowrap', flexShrink: 0, maxWidth: 'none',
+  },
 }));
+
+function InfoIcon(props) {
+  return <Icon iconKey="action.about" decorative {...props} />;
+}
 
 const icons = {
   execute: ExecuteQueryIcon, script: PlayArrowRoundedIcon, cancel: StopRoundedIcon,
   explain: ExplicitRoundedIcon, analyze: AssessmentRoundedIcon,
   commit: CommitIcon, rollback: RollbackIcon, refresh: RefreshRoundedIcon,
-  close: CloseRoundedIcon,
+  close: CloseRoundedIcon, info: InfoIcon,
 };
 export function QueryToolAction({action, title, ...props}) {
   const Icon = icons[action] || ExecuteQueryIcon;

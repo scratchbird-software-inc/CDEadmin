@@ -268,9 +268,9 @@ def run(options):
         )
         complete_endpoint_prompt(driver, password, timeout=5)
         wait.until(lambda value: visible_named_control(
-            value, 'Provider language'
+            value, 'Dialect'
         ))
-        language = visible_named_control(driver, 'Provider language')
+        language = visible_named_control(driver, 'Dialect')
         language_value = language.get_attribute('value') or ''
         language_text = language.get_attribute('textContent') or ''
         if 'mariadb-sql' not in language_value and (
