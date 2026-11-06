@@ -17,7 +17,6 @@ import {formatNative} from './nativeFormatting';
 import {diagnosticRanges} from './nativeDiagnostics';
 import SessionCatalog from './SessionCatalog';
 import {mysqlQueryAttributes} from './mysqlQueryAttributes';
-import {relationSelectSource} from './relationSelect';
 import {Dialog as ConfirmDialog} from '../overlays/Dialog';
 
 export default function LanguageSourceEditor({language, source, onChange, post, ensureSession, databaseTargetId, disabled=false, onScriptLock, historySensitive=false, clientSqlDialect=3, resources, onExecute, parameterSource='{}', mysqlAttributeSource='{}', selectRequest=null}) {
@@ -133,45 +132,40 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
     } catch(failure) {if(current === completionGeneration.current) setError(failure.message);}
     finally {if(current === completionGeneration.current) setChecking(false);}
   };
-  // Browse data (owner direction 2026-11-05): load the editor's metadata,
-  // build SELECT <every column> FROM <relation> from it, and put it in the
-  // editor. Text already in the editor is replaced only when the user agrees.
-  // The statement is never run automatically.
+  // Browse data (owner direction 2026-11-05, 2026-11-06): the connector's
+  // provider builds the text that reads every record of the chosen object,
+  // in its own language; the workspace passes it here. Text already in the
+  // editor is replaced only when the user agrees. The statement is never run
+  // automatically.
   const [pendingSource, setPendingSource] = useState(null);
   const sourceRef = useRef(source);
   // The last statement Browse data put in the editor; replacing it unchanged
   // loses nothing the user wrote, so it needs no question.
   const browseSource = useRef(null);
   // Never replace the text under a statement that is running or awaiting
-  // its outcome; read when the metadata arrives, not when it was requested.
+  // its outcome.
   const editorBusy = useRef(false);
   editorBusy.current = disabled || running || Boolean(plan?.occurrence_id) || Boolean(plan?.unresolved);
   sourceRef.current = source;
   useEffect(() => {
-    if(!selectRequest?.name) return undefined;
-    let current = true;
-    setChecking(true); setError('');
-    fetchCompletion().then((value) => {
-      if(!current || !mounted.current) return;
-      setCompletion(value);
-      const config = value?.context ? nativeSQLConfig(value) :
-        firebirdSQLConfig(language?.editor?.keywords || '', clientSqlDialect, value?.resources,
-          language?.editor?.reserved_words);
-      const built = relationSelectSource(config?.schema, selectRequest.name, selectRequest.path, config?.defaultSchema);
-      if(built.error) {setError(built.error); return;}
-      if(editorBusy.current) {
-        setError('Finish or cancel the current statement before Browse data replaces the editor text.');
-        return;
-      }
-      const existing = sourceRef.current.trim();
-      const replaceable = [built.source, browseSource.current,
-        typeof language?.starter_source === 'string' ? language.starter_source : null]
-        .filter((text) => typeof text === 'string').map((text) => text.trim());
-      if(!existing || replaceable.includes(existing)) {browseSource.current = built.source; onChange(built.source);}
-      else setPendingSource(built.source);
-    }).catch((failure) => {if(current && mounted.current) setError(failure.message);})
-      .finally(() => {if(current && mounted.current) setChecking(false);});
-    return () => {current = false;};
+    const built = selectRequest?.source;
+    if(typeof built !== 'string' || !built) return;
+    setError('');
+    if(selectRequest.languageProfile && selectRequest.languageProfile !== nativeProfile) {
+      setError(`Browse data is written in ${selectRequest.languageTitle || selectRequest.languageProfile}. ` +
+        'Choose that dialect, then use Browse data again.');
+      return;
+    }
+    if(editorBusy.current) {
+      setError('Finish or cancel the current statement before Browse data replaces the editor text.');
+      return;
+    }
+    const existing = sourceRef.current.trim();
+    const replaceable = [built, browseSource.current,
+      typeof language?.starter_source === 'string' ? language.starter_source : null]
+      .filter((text) => typeof text === 'string').map((text) => text.trim());
+    if(!existing || replaceable.includes(existing)) {browseSource.current = built; onChange(built);}
+    else setPendingSource(built);
   }, [selectRequest?.nonce]);
   const format = async () => {
     if(disabled || running || plan?.occurrence_id) return;
@@ -354,4 +348,4 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       helperText={'Validation: '+(language?.tooling?.validation_authority || 'unavailable')+'. Native execution remains the grammar/semantic authority.'} />}
   </FormReference>;
 }
-LanguageSourceEditor.propTypes={parameterSource:PropTypes.string,mysqlAttributeSource:PropTypes.string,onExecute:PropTypes.func,resources:PropTypes.array,historySensitive:PropTypes.bool,clientSqlDialect:PropTypes.number,language:PropTypes.object,source:PropTypes.string.isRequired,onChange:PropTypes.func.isRequired,post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,databaseTargetId:PropTypes.string,disabled:PropTypes.bool,onScriptLock:PropTypes.func.isRequired,selectRequest:PropTypes.shape({name:PropTypes.string,path:PropTypes.array,nonce:PropTypes.number})};
+LanguageSourceEditor.propTypes={parameterSource:PropTypes.string,mysqlAttributeSource:PropTypes.string,onExecute:PropTypes.func,resources:PropTypes.array,historySensitive:PropTypes.bool,clientSqlDialect:PropTypes.number,language:PropTypes.object,source:PropTypes.string.isRequired,onChange:PropTypes.func.isRequired,post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,databaseTargetId:PropTypes.string,disabled:PropTypes.bool,onScriptLock:PropTypes.func.isRequired,selectRequest:PropTypes.shape({source:PropTypes.string,languageProfile:PropTypes.string,languageTitle:PropTypes.string,nonce:PropTypes.number})};

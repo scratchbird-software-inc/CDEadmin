@@ -112,6 +112,7 @@
   "registration": {
     "display_name": "Firebird 5.0 Embedded",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["table", "view"]},
     "route_kind": "embedded_file",
     "requires_secret": false,
     "default_port": null,

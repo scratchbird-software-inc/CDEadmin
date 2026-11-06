@@ -12,6 +12,7 @@
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 
 from .driver import XTDBNativeClient
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -63,6 +64,8 @@ PROFILE = PilotProfile(
 
 class XTDBPilotProvider(ActualEnginePilotProvider):
     """Bind the XTDB adapter to the common actual-engine facade."""
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.xtdb
 
     def _discard_unverified_session(self, handle):
         self.client._forget_and_close(handle)

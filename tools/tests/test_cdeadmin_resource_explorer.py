@@ -394,6 +394,44 @@ class ResourceExplorerTests(unittest.TestCase):
         with self.assertRaises(ResourceAccessError):
             self.service.inspect(self.ctx, ref)
 
+    def test_browse_source_passes_route_options_and_catalog(self):
+        """Browse data (owner direction 2026-11-06): the provider builds the
+        editor text for a cached resource; nothing is run here."""
+        page = self.first_page()
+        ref = ResourceRef(self.ctx.endpoint_id, page.items[0]['resource_id'])
+        calls = []
+
+        def browse(request, catalog):
+            calls.append((copy.deepcopy(request), catalog))
+            return {'source': 'SELECT 1', 'language_profile': 'test-sql',
+                    'ignored': True}
+        self.provider.browse_source = browse
+        result = self.service.browse_source(
+            self.ctx, ref, provider_route={'database': 'db'},
+            options={'language_profile': 'test-sql'},
+            catalog=tuple(page.items))
+        self.assertEqual({'resource_id': ref.resource_id, 'source': 'SELECT 1',
+                          'language_profile': 'test-sql'}, result)
+        request, catalog = calls[0]
+        self.assertEqual(ref.resource_id, request['resource_id'])
+        self.assertEqual({'database': 'db'}, request['route'])
+        self.assertEqual('test-sql', request['language_profile'])
+        self.assertEqual([item['resource_id'] for item in page.items],
+                         [item['resource_id'] for item in catalog])
+
+    def test_browse_source_refuses_unknown_unsupported_or_empty_results(self):
+        page = self.first_page()
+        ref = ResourceRef(self.ctx.endpoint_id, page.items[0]['resource_id'])
+        with self.assertRaisesRegex(ResourceAccessError, 'not available'):
+            self.service.browse_source(self.ctx, ref)
+        self.provider.browse_source = lambda request, catalog: {
+            'source': '  ', 'language_profile': 'test-sql'}
+        with self.assertRaisesRegex(ResourceAccessError, 'invalid'):
+            self.service.browse_source(self.ctx, ref)
+        with self.assertRaises(ResourceAccessError):
+            self.service.browse_source(
+                self.ctx, ResourceRef(self.ctx.endpoint_id, 'opaque:unknown'))
+
     def test_context_menu_requires_capability_and_permission(self):
         page = self.first_page()
         ref = ResourceRef(

@@ -149,6 +149,7 @@
   "registration": {
     "display_name": "Firebird 5.0",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["table", "view"]},
     "route_kind": "network",
     "requires_secret": true,
     "default_port": 3050,

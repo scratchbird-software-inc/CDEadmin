@@ -38,6 +38,7 @@ from .control_plane import (
     inspect_action,
     post_validate_action,
 )
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -1169,6 +1170,8 @@ def _catalog(connection, request):
 
 
 class YugabyteDBProvider(ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.yugabytedb
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 

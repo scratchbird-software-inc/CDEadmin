@@ -33,6 +33,7 @@ from pgadmin.cdeadmin.visual_admin import (
     ControlPlaneOperation,
     control_plane_field as cp_field,
 )
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -2206,6 +2207,8 @@ def _catalog(connection, request):
 
 
 class CockroachDBProvider(ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.cockroachdb
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 

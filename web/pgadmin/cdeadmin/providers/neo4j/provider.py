@@ -6,6 +6,7 @@ from pgadmin.cdeadmin.sdk import (
 )
 from .client import Neo4jClient, QUALIFIED_GDS_SHA256
 from .driver import Neo4jDriver, Neo4jDriverBackend
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -49,6 +50,8 @@ PROFILE = PilotProfile(
 
 
 class Neo4jPilotProvider(ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.neo4j
     def _discard_unverified_session(self, handle):
         self.client.close_session(handle)
 

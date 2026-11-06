@@ -1360,6 +1360,21 @@ def resource_context_actions(
                 'resource_kind': resource_kind,
             },
         ))
+        # Owner direction 2026-11-06: Browse data on every connector, for
+        # the resource kinds its provider declares it can read. The
+        # provider builds the statement; it is put in the editor, not run.
+        if resource_kind in profile.get('browse_data_kinds', ()):
+            actions.append(_action(
+                f'resource.{engine_id}.{resource_kind}.browse_data',
+                'Browse data', 'open_workspace', icon='action.view',
+                description=(
+                    'Open the query editor holding a read of every record '
+                    'of this object. The statement is not run.'),
+                group='common', priority=0, arguments={
+                    **base, 'tab': 'studio', 'browse_data': True,
+                    'resource_kind': resource_kind,
+                },
+            ))
     descriptor = next((item for item in (
         (visual_catalog or {}).get('objects') or []
     ) if item.get('resource_kind') == resource_kind), None)

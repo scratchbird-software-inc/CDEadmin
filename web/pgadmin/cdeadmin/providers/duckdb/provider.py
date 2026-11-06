@@ -21,6 +21,7 @@ from .object_metadata import KINDS as COMMENT_KINDS
 from ..native_editor import NativeEditorProvider
 from ..embedded_route import duckdb_arguments
 from ..embedded_route import contained_database
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -146,6 +147,8 @@ ADMINISTRATION = DuckDBAdministration(RelationalAdminDialect(
 
 
 class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.duckdb
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 

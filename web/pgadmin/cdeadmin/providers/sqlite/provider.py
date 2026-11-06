@@ -26,6 +26,7 @@ from ..relational_admin import (
     RelationalAdminDialect,
 )
 from ..embedded_route import contained_database, sqlite_arguments
+from .. import browse_builders
 
 
 def _declared_version_range():
@@ -285,6 +286,8 @@ ADMINISTRATION = SQLiteAdministration(RelationalAdminDialect(
 
 
 class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.sqlite
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 

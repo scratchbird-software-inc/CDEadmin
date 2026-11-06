@@ -143,6 +143,7 @@
   "registration": {
     "display_name": "Dolt 1.86.6",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["table", "view"]},
     "route_kind": "network",
     "requires_secret": false,
     "default_port": 3306,

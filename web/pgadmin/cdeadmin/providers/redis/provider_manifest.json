@@ -22,6 +22,7 @@
   "registration": {
     "display_name": "Redis 8.6+",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["key"]},
     "route_kind": "network",
     "requires_secret": false,
     "default_port": 6379,

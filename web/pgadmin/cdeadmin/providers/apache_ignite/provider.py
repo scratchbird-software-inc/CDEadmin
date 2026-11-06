@@ -1,6 +1,7 @@
 """Apache Ignite 2.17.0 distributed cache and SQL provider."""
 
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -56,6 +57,8 @@ OPERATIONS = {
 
 
 class ApacheIgniteProvider(ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.apache_ignite
     def _discard_unverified_session(self, handle):
         self.client.close_session(handle)
 

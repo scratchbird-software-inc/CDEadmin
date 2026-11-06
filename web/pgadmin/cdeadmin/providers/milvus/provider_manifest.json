@@ -9,7 +9,7 @@
   "composition": {"experience_families": ["milvus"], "target_adapter_ids": ["pymilvus-grpc-client"]},
   "extension_schema": null,
   "registration": {
-    "display_name": "Milvus 2.6.5", "workflow": "provider_endpoint", "route_kind": "network", "requires_secret": false, "supports_secret": true, "default_port": 19530, "default": false, "target_adapter_version": "pymilvus-2.6.x",
+    "display_name": "Milvus 2.6.5", "workflow": "provider_endpoint", "browse_data": {"resource_kinds": ["collection", "partition"]}, "route_kind": "network", "requires_secret": false, "supports_secret": true, "default_port": 19530, "default": false, "target_adapter_version": "pymilvus-2.6.x",
     "connection_capability_set": "milvus-grpc-v1",
     "secret_fields": [{"field_id": "password", "secret_kind": "database_password", "label": "Password", "group": "Milvus authentication", "primary": true, "visible_when": {"field_id": "auth_kind", "equals": "basic"}}, {"field_id": "api_token", "secret_kind": "api_token", "label": "API token", "group": "Milvus authentication", "primary": true, "visible_when": {"field_id": "auth_kind", "equals": "token"}}],
     "connection_fields": [

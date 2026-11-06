@@ -143,6 +143,7 @@
   "registration": {
     "display_name": "YugabyteDB 2025.2.2.2 (YSQL)",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["table", "view", "materialized-view", "foreign-table"]},
     "route_kind": "network",
     "requires_secret": false,
     "default_port": 5433,

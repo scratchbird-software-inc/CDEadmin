@@ -2,6 +2,7 @@
 
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 from .client import ADMIN_OPERATIONS
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -24,6 +25,8 @@ OPERATIONS = ADMIN_OPERATIONS
 
 
 class FoundationDBProvider(ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.foundationdb
     def _discard_unverified_session(self, handle):
         self.client.close_session(handle)
 

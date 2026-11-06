@@ -9,7 +9,7 @@
   "composition": {"experience_families": ["clickhouse"], "target_adapter_ids": ["stdlib-clickhouse-http-json-client"]},
   "extension_schema": null,
   "registration": {
-    "display_name": "ClickHouse 25.12.10.7", "workflow": "provider_endpoint", "route_kind": "network", "requires_secret": false, "supports_secret": true, "default_port": 8123, "default": false, "target_adapter_version": "python-stdlib-http-json",
+    "display_name": "ClickHouse 25.12.10.7", "workflow": "provider_endpoint", "browse_data": {"resource_kinds": ["table", "view", "materialized-view"]}, "route_kind": "network", "requires_secret": false, "supports_secret": true, "default_port": 8123, "default": false, "target_adapter_version": "python-stdlib-http-json",
     "connection_field_sets": ["analytic-http-v1"],
     "secret_field_sets": ["analytic-http-v1"],
     "connection_capability_set": "clickhouse-http-v1",

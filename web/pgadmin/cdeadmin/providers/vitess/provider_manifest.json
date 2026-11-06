@@ -143,6 +143,7 @@
   "registration": {
     "display_name": "Vitess 23.0.3",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["table", "view"]},
     "route_kind": "network",
     "requires_secret": false,
     "default_port": 15306,

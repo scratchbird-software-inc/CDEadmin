@@ -35,6 +35,7 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -2715,6 +2716,8 @@ def _security(connection, request):
 
 
 class ImmudbProvider(ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.immudb
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 

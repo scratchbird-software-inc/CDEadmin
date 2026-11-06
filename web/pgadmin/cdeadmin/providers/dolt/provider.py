@@ -28,6 +28,7 @@ from pgadmin.cdeadmin.visual_admin import (
     ControlPlaneOperation,
     control_plane_field as cp_field,
 )
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -1125,6 +1126,8 @@ def _extras(cursor, _request, generation):
 
 
 class DoltProvider(ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.dolt
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 

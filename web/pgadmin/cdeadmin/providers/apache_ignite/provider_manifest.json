@@ -7,7 +7,7 @@
   "required_permissions": ["network", "secret_read"],
   "composition": {"experience_families":["apache_ignite"],"target_adapter_ids":["ignite-thin-client"]}, "extension_schema": null,
   "registration": {
-    "display_name": "Apache Ignite 2.17.0", "workflow": "provider_endpoint",
+    "display_name": "Apache Ignite 2.17.0", "workflow": "provider_endpoint", "browse_data": {"resource_kinds": ["table", "view"]},
     "route_kind": "network", "requires_secret": false, "supports_secret": true,
     "default_port": 10800, "default": false,
     "target_adapter_version": "pyignite-0.6.1",

@@ -39,6 +39,7 @@ from .control_plane import (
     vschema_documents as control_vschema_documents,
     vschema_records as control_vschema_records,
 )
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -1189,6 +1190,8 @@ def _catalog(connection, request):
 
 
 class VitessProvider(ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.vitess
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 

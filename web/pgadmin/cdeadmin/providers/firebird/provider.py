@@ -66,6 +66,7 @@ from . import repair
 from .embedded import (
     embedded_route, reject_embedded_service, require_attachment_mode,
 )
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -200,6 +201,8 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
 
 
 class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.firebird
     def __init__(self, context, permissions, client, *, profile=PROFILE):
         embedded = context.target_adapter_id == 'firebird-embedded-client'
         if embedded and 'network' in context.effective_permissions:

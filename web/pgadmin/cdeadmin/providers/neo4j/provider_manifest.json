@@ -8,6 +8,7 @@
   "registration": {
     "display_name": "Neo4j 2026.04",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["label", "relationship-type"]},
     "route_kind": "network",
     "requires_secret": true,
     "default_port": 7687,

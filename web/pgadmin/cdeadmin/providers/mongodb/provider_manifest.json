@@ -8,6 +8,7 @@
   "registration": {
     "display_name": "MongoDB 8.2",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["collection", "view"]},
     "route_kind": "network",
     "requires_secret": false,
     "supports_secret": true,

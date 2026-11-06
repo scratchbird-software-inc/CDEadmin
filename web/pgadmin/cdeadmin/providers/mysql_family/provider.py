@@ -31,6 +31,7 @@ from ..distributed_sql import mysql_route
 from ..form_contracts import provider_form_contract
 from .mariadb_connections import Connector as _MariaDBConnectorFacade
 from .administration import MySQLAdministration, HANDLERS
+from .. import browse_builders
 
 
 MYSQL_PROFILE = PilotProfile(
@@ -1723,6 +1724,8 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
 
 class MySQLPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.mysql_family
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MYSQL_PROFILE)
 
@@ -1859,6 +1862,8 @@ class MySQLPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
 
 
 class MariaDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.mysql_family
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
 

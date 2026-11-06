@@ -219,28 +219,6 @@
       "enabled_when": [
         "verified"
       ]
-    },
-    {
-      "command_id": "resource.sqlite.relation.browse_data",
-      "scope": "resource",
-      "label": "Browse data",
-      "description": "Open the SQL editor with SELECT of every column of this table or view. The statement is not run.",
-      "handler": "open_workspace",
-      "slot": "after_data",
-      "icon": "action.view",
-      "group": "common",
-      "priority": 0,
-      "arguments": {
-        "tab": "studio",
-        "browse_data": true
-      },
-      "when": {
-        "resource_kinds": [
-          "table",
-          "view"
-        ],
-        "requires_database_target": true
-      }
     }
   ]
 }

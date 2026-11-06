@@ -30,6 +30,7 @@
     "database_targeting": {"route_key": "keyspace", "mode": "optional", "multiple": true},
     "display_name": "YugabyteDB 2025.2.2.2 (YCQL)",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["table"]},
     "route_kind": "network",
     "requires_secret": false,
     "default_port": 9042,

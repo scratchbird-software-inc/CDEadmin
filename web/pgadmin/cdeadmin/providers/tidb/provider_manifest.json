@@ -28,6 +28,7 @@
   "registration": {
     "display_name": "TiDB 8.5.6",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["table", "view"]},
     "route_kind": "network",
     "requires_secret": false,
     "default_port": 4000,

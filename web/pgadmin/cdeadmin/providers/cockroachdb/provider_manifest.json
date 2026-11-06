@@ -29,6 +29,7 @@
   "registration": {
     "display_name": "CockroachDB 26.1.3",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["table", "view", "materialized-view"]},
     "route_kind": "network",
     "requires_secret": false,
     "default_port": 26257,

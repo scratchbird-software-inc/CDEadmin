@@ -9,7 +9,7 @@
   "composition": {"experience_families": ["opensearch_sql_ppl"], "target_adapter_ids": ["stdlib-opensearch-sql-ppl-http-json-client"]},
   "extension_schema": null,
   "registration": {
-    "display_name": "OpenSearch SQL/PPL 3.6.0", "workflow": "provider_endpoint", "route_kind": "network", "requires_secret": false, "supports_secret": true, "default_port": 9200, "default": false, "target_adapter_version": "python-stdlib-http-json",
+    "display_name": "OpenSearch SQL/PPL 3.6.0", "workflow": "provider_endpoint", "browse_data": {"resource_kinds": ["index", "alias"]}, "route_kind": "network", "requires_secret": false, "supports_secret": true, "default_port": 9200, "default": false, "target_adapter_version": "python-stdlib-http-json",
     "connection_field_sets": ["analytic-http-v1"],
     "secret_field_sets": ["analytic-http-v1"],
     "connection_capability_set": "opensearch-sql-ppl-http-v1",

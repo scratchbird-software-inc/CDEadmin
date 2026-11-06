@@ -2576,6 +2576,47 @@ class ProviderWorkspaceService:
             provider_route=endpoint['route'],
         )
 
+    def browse_source(self, server, request):
+        """Editor text reading one resource's records (Browse data).
+
+        Owner direction 2026-11-06. The resource must be in this endpoint's
+        cached generation; the provider builds the text and nothing runs.
+        """
+        if not isinstance(request, dict) or set(request).difference({
+                'resource_id', 'database_target_id', 'language_profile',
+                'client_sql_dialect'}):
+            raise ProviderWorkspaceError('browse data request is invalid')
+        options = {}
+        if isinstance(request.get('language_profile'), str):
+            options['language_profile'] = request['language_profile']
+        if request.get('client_sql_dialect') in (1, 3):
+            options['client_sql_dialect'] = request['client_sql_dialect']
+        resource_id = request.get('resource_id')
+        if not isinstance(resource_id, str) or not resource_id:
+            raise ProviderWorkspaceError('resource ID is required')
+        context, endpoint, root = self.endpoint_service.workspace(
+            server,
+            database_target_id=request.get('database_target_id', Ellipsis),
+        )
+        # The tree's own cached pages (read once if the cache is cold).
+        catalog, continuation, generation = [], None, None
+        while True:
+            page = self.resource_service.list_page(
+                context, root, page_size=500, cursor=continuation,
+                expected_generation=generation,
+                provider_route=endpoint['route'],
+            ).to_dict()
+            catalog.extend(page['items'])
+            generation = page['generation']
+            continuation = page.get('next_cursor')
+            if continuation is None:
+                break
+        return self.resource_service.browse_source(
+            context, ResourceRef(context.endpoint_id, resource_id),
+            provider_route=endpoint['route'], options=options,
+            catalog=tuple(catalog),
+        )
+
     def semantic_model_action(self, server, action, request):
         """Apply an endpoint-scoped semantic-model lifecycle action."""
         if self.semantic_model_service is None:

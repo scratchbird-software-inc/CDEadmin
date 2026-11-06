@@ -287,6 +287,47 @@ class ResourceExplorerService:
             )
         return admitted
 
+    def browse_source(
+        self, context, ref: ResourceRef, *,
+        provider_route: Mapping[str, Any] | None = None,
+        options: Mapping[str, Any] | None = None,
+        catalog: tuple[Mapping[str, Any], ...] = (),
+    ) -> Mapping[str, Any]:
+        """Editor text that reads one cached resource's records.
+
+        Browse data (owner direction 2026-11-06). The provider builds the
+        text in its own language from its catalog; nothing is run here.
+        """
+        self._require_endpoint(context, ref)
+        resource = self._known_resource(context, ref)
+        binding = self._binding_for_resources(
+            self.provider_registry, context
+        )
+        self._ensure_contributions(binding)
+        build = getattr(binding.instance, 'browse_source', None)
+        if not callable(build):
+            raise ResourceAccessError(
+                'Browse data is not available for this connector.'
+            )
+        provider_request = copy.deepcopy(resource)
+        provider_request.update(copy.deepcopy(dict(options or {})))
+        if provider_route is not None:
+            provider_request['route'] = copy.deepcopy(provider_route)
+        # ``catalog`` is the endpoint's cached root page set: providers with
+        # flat catalogs find a relation's columns there without a new read.
+        result = build(provider_request, list(catalog))
+        if (not isinstance(result, Mapping) or
+                not isinstance(result.get('source'), str) or
+                not result['source'].strip() or
+                not isinstance(result.get('language_profile'), str) or
+                not result['language_profile']):
+            raise ResourceAccessError(
+                'provider returned an invalid Browse data source'
+            )
+        return {'resource_id': ref.resource_id,
+                'source': result['source'],
+                'language_profile': result['language_profile']}
+
     def context_menu(
         self, context, ref: ResourceRef, *, fixture: bool = False
     ) -> tuple[ExplorerAction, ...]:

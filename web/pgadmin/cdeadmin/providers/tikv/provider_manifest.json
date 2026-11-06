@@ -119,6 +119,7 @@
   "registration": {
     "display_name": "TiKV 8.5.6",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["key-range"]},
     "route_kind": "network",
     "requires_secret": false,
     "default_port": 2379,

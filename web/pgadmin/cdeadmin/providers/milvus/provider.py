@@ -4,6 +4,7 @@ from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 
 from .client import MilvusClientAdapter
 from .driver import MilvusDriver, MilvusDriverBackend
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -36,6 +37,8 @@ PROFILE = PilotProfile(
 
 
 class MilvusPilotProvider(ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.milvus
     def _discard_unverified_session(self, handle):
         self.client.close_session(handle)
 

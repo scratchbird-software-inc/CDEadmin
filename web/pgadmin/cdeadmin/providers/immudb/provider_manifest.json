@@ -38,6 +38,7 @@
   "registration": {
     "display_name": "immudb 1.11.0",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["table"]},
     "route_kind": "network",
     "requires_secret": true,
     "default_port": 5432,

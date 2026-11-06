@@ -9,7 +9,7 @@
   "composition": {"experience_families": ["influxdb"], "target_adapter_ids": ["stdlib-influxdb3-http-json-client"]},
   "extension_schema": null,
   "registration": {
-    "display_name": "InfluxDB 3.9.0", "workflow": "provider_endpoint", "route_kind": "network", "requires_secret": false, "supports_secret": true, "default_port": 8181, "default": false, "target_adapter_version": "python-stdlib-http-json",
+    "display_name": "InfluxDB 3.9.0", "workflow": "provider_endpoint", "browse_data": {"resource_kinds": ["table"]}, "route_kind": "network", "requires_secret": false, "supports_secret": true, "default_port": 8181, "default": false, "target_adapter_version": "python-stdlib-http-json",
     "connection_field_sets": ["analytic-http-v1"],
     "secret_field_sets": ["analytic-http-v1"],
     "connection_capability_set": "influxdb-http-v1",

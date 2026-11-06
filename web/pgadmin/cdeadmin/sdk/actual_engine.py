@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from pgadmin.cdeadmin.visual_admin import ProviderVisualAdministration
+from pgadmin.cdeadmin.sdk.browse import BrowseUnavailable, native_of
 from pgadmin.cdeadmin.resources.properties import (
     normalize_resource_properties,
 )
@@ -1329,6 +1330,39 @@ class ActualEnginePilotProvider:
             'is_virtual': True,
             'native': {'common_service': False},
         }) for tool in self.profile.admin_tools]
+
+    # Browse data (owner direction 2026-11-06) ---------------------------
+    def browse_source(self, request, catalog=()):
+        """Editor text that reads every record of one resource; not run.
+
+        ``request`` is the cached resource plus the route and, from the
+        workspace, the editor's active ``language_profile``. ``catalog`` is
+        the cached flat resource list the resource came from, so providers
+        find columns without another catalog read. A provider supports
+        Browse data by overriding ``_browse_text``; the kinds it supports
+        are declared in its manifest (registration.browse_data).
+        """
+        self._require('data_read', 'resource')
+        payload = _mapping(request)
+        language = payload.get('language_profile')
+        if not isinstance(language, str) or not language:
+            language = self.profile.language_profile
+        try:
+            built = self._browse_text(
+                payload, native_of(payload), list(catalog or ()), language)
+        except BrowseUnavailable as exc:
+            raise PilotProviderError(str(exc)) from exc
+        source, language = (built if isinstance(built, tuple)
+                            else (built, self.profile.language_profile))
+        if not isinstance(source, str) or not source.strip():
+            raise PilotProviderError('Browse data text is empty')
+        return {'source': source, 'language_profile': language}
+
+    def _browse_text(self, resource, native, catalog, language):
+        """Return the text, or ``(text, language_profile)`` when it is
+        written in a language other than the profile's default."""
+        raise BrowseUnavailable(
+            'Browse data is not available for this connector.')
 
     def describe_security(self, request):
         self._require('data_read', 'resource')

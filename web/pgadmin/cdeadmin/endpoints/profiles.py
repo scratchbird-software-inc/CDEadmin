@@ -38,6 +38,28 @@ CONNECTION_CONTROLS = frozenset({
 })
 
 
+def _browse_data_kinds(registration):
+    """Resource kinds whose records the provider's editor can read.
+
+    Owner direction 2026-11-06: every connector offers Browse data on the
+    resources it can read. The provider declares the kinds in its manifest
+    (registration.browse_data.resource_kinds); the menu tests membership, so
+    no engine is named in shared code, and the provider builds the text.
+    """
+    declared = registration.get('browse_data')
+    if declared is None:
+        return ()
+    kinds = (declared.get('resource_kinds')
+             if isinstance(declared, dict) else None)
+    if (not isinstance(kinds, list) or not kinds or
+            any(not isinstance(kind, str) or not kind for kind in kinds) or
+            len(set(kinds)) != len(kinds) or
+            set(declared) != {'resource_kinds'}):
+        raise EndpointRegistrationError(
+            'browse_data must declare unique, non-empty resource_kinds')
+    return tuple(kinds)
+
+
 def _connection_fields(registration):
     fields = registration.get('connection_fields', [])
     if not isinstance(fields, list):
@@ -439,6 +461,7 @@ def _load_profiles():
             'secret_fields': secret_fields,
             'connection_capabilities': _capabilities(registration),
             'database_targeting': targeting,
+            'browse_data_kinds': _browse_data_kinds(registration),
             'default': registration.get('default') is True,
             'available': True,
         }

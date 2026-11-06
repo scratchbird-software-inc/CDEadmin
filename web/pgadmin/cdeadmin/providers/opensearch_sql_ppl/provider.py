@@ -3,6 +3,7 @@
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 
 from .driver import OpenSearchSQLPPLDriver, OpenSearchSQLPPLDriverBackend
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -37,6 +38,8 @@ PROFILE = PilotProfile(
 
 
 class OpenSearchSQLPPLPilotProvider(ActualEnginePilotProvider):
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.opensearch_sql_ppl
     language_alternatives = (('opensearch-sql', 'OpenSearch SQL', 'text/x-sql'), ('opensearch-ppl', 'OpenSearch PPL', 'text/x-ppl'))
     language_routes = {'opensearch-sql': 'sql', 'opensearch-ppl': 'ppl'}
 

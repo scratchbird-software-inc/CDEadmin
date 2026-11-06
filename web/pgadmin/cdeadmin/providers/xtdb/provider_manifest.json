@@ -22,6 +22,7 @@
   "registration": {
     "display_name": "XTDB 2.1.0",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["table"]},
     "route_kind": "network",
     "requires_secret": false,
     "supports_secret": true,

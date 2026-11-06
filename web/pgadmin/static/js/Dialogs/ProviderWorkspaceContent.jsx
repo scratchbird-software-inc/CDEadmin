@@ -5360,12 +5360,13 @@ export default function ProviderWorkspaceContent({
     });
   }, [api, endpointUrl, onCredentialRequired, queryDatabaseTargetId]);
 
-  // Browse data: a request for this connection names a table or view; its
-  // editor builds the SELECT from its own metadata (LanguageSourceEditor).
+  // Browse data: a request for this connection names a resource; its
+  // provider builds the text that reads it, and the editor shows it
+  // (LanguageSourceEditor). Nothing is run.
   const sourceRequest = useSQLSourceRequest(endpointUrl);
   const [selectRequest, setSelectRequest] = useState(null);
-  // Taking a request removes it, which re-runs this effect; the inspection
-  // it started must still land, so it is matched by nonce, not by cleanup.
+  // Taking a request removes it, which re-runs this effect; the request it
+  // started must still land, so it is matched by nonce, not by cleanup.
   const handledSourceRequest = useRef(null);
   const workspaceMounted = useRef(true);
   useEffect(() => () => {workspaceMounted.current = false;}, []);
@@ -5375,9 +5376,17 @@ export default function ProviderWorkspaceContent({
     handledSourceRequest.current = nonce;
     takeSQLSourceRequest(endpointUrl, nonce);
     const latest = () => workspaceMounted.current && handledSourceRequest.current === nonce;
-    post({action: 'resource_inspect', request: {resource_id: sourceRequest.resource_id}})
-      .then((resource) => {
-        if (latest()) setSelectRequest({name: resource?.display_name, path: resource?.display_path || [], nonce});
+    // The editor's active dialect lets a provider with several languages
+    // write in the one in use; client_sql_dialect matters only where the
+    // provider's language has dialects.
+    post({action: 'browse_source', request: {resource_id: sourceRequest.resource_id,
+      language_profile: languageProfile, client_sql_dialect: clientSqlDialect}})
+      .then((browse) => {
+        if (!latest()) return;
+        const languageTitle = (workspace.languages || []).find((item) =>
+          item.language_profile === browse?.language_profile)?.title;
+        setSelectRequest({source: browse?.source, languageProfile: browse?.language_profile,
+          languageTitle, nonce});
       })
       .catch((requestError) => {if (latest()) setError(requestError.message);});
   }, [sourceRequest?.nonce, Boolean(workspace)]);

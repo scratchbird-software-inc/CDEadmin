@@ -80,6 +80,19 @@ connection selector (labelled *Connection*) on one line. Labels sit to the
 left of their fields. The line still wraps instead of clipping in a narrow
 pane or at enlarged text sizes.
 
+Owner direction, 2026-11-05 and 2026-11-06: *Browse data* is a top-level
+entry on the context menu of every resource whose records the connector's
+query editor can read: tables and views on the SQL connectors, and the
+equivalent object elsewhere (MongoDB collections, Neo4j labels and
+relationship types, OpenSearch indexes, Milvus collections, Redis keys, TiKV
+and FoundationDB key ranges). Each connector's provider declares those
+resource kinds in its manifest (``registration.browse_data``) and builds the
+text in its own editor language: a column list where the catalog has one,
+otherwise the language's whole-record read. The text is put in the editor and
+is never run. Text you typed is replaced only after you confirm, and nothing
+is replaced while a statement is running. PostgreSQL's *View/Edit Data* menu
+became the same *Browse data* entry, opening the Query Tool.
+
 Maximum rows per fetch is an editable integer from 1 through 500, bounded further
 by the admitted result renderer. Result descriptors advertise their admitted
 maximum page size so subsequent fetches observe that limit too. It controls each server-to-browser result page,

@@ -12,6 +12,7 @@
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 
 from .driver import NativeYCQLClient
+from .. import browse_builders
 
 
 PROFILE = PilotProfile(
@@ -60,6 +61,8 @@ PROFILE = PilotProfile(
 
 class YugabyteDBYCQLProvider(ActualEnginePilotProvider):
     """CDEadmin facade for the native YCQL interface."""
+    # Browse data (owner direction 2026-11-06).
+    _browse_text = browse_builders.yugabytedb_ycql
 
     def _discard_unverified_session(self, handle):
         self.client.close_session(handle)

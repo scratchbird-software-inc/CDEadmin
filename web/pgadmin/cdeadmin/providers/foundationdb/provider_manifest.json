@@ -127,6 +127,7 @@
   "registration": {
     "display_name": "FoundationDB 7.3.77",
     "workflow": "provider_endpoint",
+    "browse_data": {"resource_kinds": ["key-range", "subspace"]},
     "route_kind": "network",
     "requires_secret": false,
     "supports_secret": true,

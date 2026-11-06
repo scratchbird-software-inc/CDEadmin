@@ -510,6 +510,42 @@ class ProviderWorkspaceTests(unittest.TestCase):
                 'native': {'forged': True},
             })
 
+    def test_browse_data_builds_the_select_from_every_cached_page(self):
+        """Browse data (owner direction 2026-11-06), end to end through the
+        MySQL provider: the columns are found in the tree's cached catalog,
+        across pages, and the statement is returned, not run."""
+        def item(kind, path):
+            return {'resource_id': f'{kind}:' + ':'.join(path),
+                    'resource_kind': kind, 'display_name': path[-1],
+                    'display_path': list(path), 'authority_path': list(path),
+                    'generation': 'workspace-test'}
+        filler = [item('table', ['shop', f't{index}']) for index in range(520)]
+        self.client.list_resources = lambda _request: [
+            item('table', ['shop', 'orders']), *filler,
+            item('column', ['shop', 'orders', 'id']),
+            item('column', ['shop', 'orders', 'order total']),
+            item('column', ['shop', 'other', 'x'])]
+        executed = []
+        self.client.execute = lambda *args: executed.append(args)
+        result = self.workspace.browse_source(SimpleNamespace(), {
+            'resource_id': 'table:shop:orders',
+            'language_profile': 'mysql-sql'})
+        self.assertEqual({
+            'resource_id': 'table:shop:orders',
+            'source': 'SELECT `id`, `order total`\nFROM `shop`.`orders`',
+            'language_profile': 'mysql-sql'}, result)
+        self.assertEqual([], executed)
+        with self.assertRaisesRegex(Exception, 'cannot read a column'):
+            self.workspace.browse_source(SimpleNamespace(), {
+                'resource_id': 'column:shop:orders:id'})
+        with self.assertRaisesRegex(Exception, 'invalid'):
+            self.workspace.browse_source(SimpleNamespace(), {
+                'resource_id': 'table:shop:orders',
+                'native': {'forged': True}})
+        with self.assertRaisesRegex(Exception, 'required'):
+            self.workspace.browse_source(
+                SimpleNamespace(), {'resource_id': ''})
+
     def test_resource_refresh_is_endpoint_scoped_and_generation_bound(self):
         first = self.workspace.bootstrap(SimpleNamespace())['resource_page']
         refreshed = self.workspace.refresh_resources(SimpleNamespace(), {
