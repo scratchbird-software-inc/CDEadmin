@@ -46,7 +46,7 @@
         "create"
       ],
       "placeholder": "log: !Local\n  path: /var/lib/xtdb/sales/log\nstorage: !Local\n  path: /var/lib/xtdb/sales/buffers",
-      "help": "Set once, at attach: XTDB never returns it, so CDEadmin cannot show it afterwards. Paths are on the XTDB server. Leaving log or storage out keeps it in memory, and its data is lost when the server restarts. Detach leaves the files; attaching the same paths again reopens the old data. After a restart, an attached database returns only once the primary log has been replayed, which can be after the server reports ready."
+      "help": "Set once, at attach: XTDB never returns it, so ScratchRobin cannot show it afterwards. Paths are on the XTDB server. Leaving log or storage out keeps it in memory, and its data is lost when the server restarts. Detach leaves the files; attaching the same paths again reopens the old data. After a restart, an attached database returns only once the primary log has been replayed, which can be after the server reports ready."
     },
     {
       "field_id": "primary",

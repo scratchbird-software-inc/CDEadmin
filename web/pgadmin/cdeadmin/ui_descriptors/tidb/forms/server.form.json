@@ -216,7 +216,7 @@
       "backend_field_id": "save_password",
       "required": false,
       "default": false,
-      "help": "Store the credentials for the default user in CDEadmin. Credentials entered while connecting as another user are never stored as the default credentials."
+      "help": "Store the credentials for the default user in ScratchRobin. Credentials entered while connecting as another user are never stored as the default credentials."
     },
     {
       "field_id": "ssl_disabled",
@@ -564,7 +564,7 @@
       "tab": "Advanced",
       "control": "keyvalue",
       "empty_as_null": true,
-      "help": "Name and value pairs sent in the handshake. The server stores at most performance_schema_session_connect_attrs_size bytes of attributes per session (512 by default), shared with the connector's own attributes and one CDEadmin adds; beyond that it truncates them, and CDEadmin's native session observer then refuses the session.",
+      "help": "Name and value pairs sent in the handshake. The server stores at most performance_schema_session_connect_attrs_size bytes of attributes per session (512 by default), shared with the connector's own attributes and one ScratchRobin adds; beyond that it truncates them, and ScratchRobin's native session observer then refuses the session.",
       "backend_field_id": "cde_route_conn_attrs",
       "group": "Session",
       "required": false

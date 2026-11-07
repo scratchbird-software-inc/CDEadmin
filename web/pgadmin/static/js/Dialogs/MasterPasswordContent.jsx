@@ -67,7 +67,7 @@ export default function MasterPasswordContent({ closeModal, onResetPassowrd, onO
             </span>
             <br />
             <span style={{ fontWeight: 'bold' }}>
-              <FormNote text={gettext(`Saved passwords are encrypted using an encryption key stored in ${keyringName}. Enter the master password for your existing CDEadmin saved passwords; they will be re-encrypted when you click OK.`)}></FormNote>
+              <FormNote text={gettext(`Saved passwords are encrypted using an encryption key stored in ${keyringName}. Enter the master password for your existing ScratchRobin saved passwords; they will be re-encrypted when you click OK.`)}></FormNote>
             </span>
           </Box>
           <Box marginTop='12px'>
@@ -81,7 +81,7 @@ export default function MasterPasswordContent({ closeModal, onResetPassowrd, onO
         <Box flexGrow="1" p={2}>
           <Box>
             <span style={{ fontWeight: 'bold' }}>
-              {isPWDPresent ? gettext('Please enter your master password.') : gettext('Please set a master password for CDEadmin.')}
+              {isPWDPresent ? gettext('Please enter your master password.') : gettext('Please set a master password for ScratchRobin.')}
             </span>
             <br />
             <span style={{ fontWeight: 'bold' }}>

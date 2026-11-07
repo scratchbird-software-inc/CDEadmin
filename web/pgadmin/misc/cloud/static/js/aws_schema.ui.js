@@ -152,7 +152,7 @@ class DatabaseSchema extends BaseUISchema {
 
   get baseFields() {
     return [{
-      id: 'gid', label: gettext('CDEadmin server group'), type: 'select',
+      id: 'gid', label: gettext('ScratchRobin server group'), type: 'select',
       options: this.fieldOptions.server_groups,
       mode: ['create'],
       controlProps: { allowClear: false },

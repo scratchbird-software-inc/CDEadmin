@@ -4334,7 +4334,7 @@ def service_for_app(app):
         return app.extensions[APP_EXTENSION_KEY]
     except (AttributeError, KeyError) as exc:
         raise ProjectAssetError(
-            'CDEadmin project asset service is not initialized'
+            'ScratchRobin project asset service is not initialized'
         ) from exc
 
 

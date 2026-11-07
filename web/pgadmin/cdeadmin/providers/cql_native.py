@@ -657,7 +657,7 @@ class CassandraClient:
                 route['schema_agreement_timeout']
             ),
             'executor_threads': route['executor_threads'],
-            'application_name': route.get('application_name', 'CDEadmin'),
+            'application_name': route.get('application_name', 'ScratchRobin'),
         }
         dc_policy = getattr(self.module, 'DCAwareRoundRobinPolicy', None)
         round_robin = getattr(self.module, 'RoundRobinPolicy', None)
@@ -1407,21 +1407,21 @@ class CassandraClient:
         if kind == 'table' and operation == 'update':
             return self._form(
                 'cassandra-table-update', 'Update CQL row', [
-                    f('selector', 'CDEadmin row identity', 'json', True,
+                    f('selector', 'ScratchRobin row identity', 'json', True,
                       default={}),
                     f('changes', 'Non-key column changes', 'json', True,
                       default={}),
-                    f('concurrency_token', 'CDEadmin row concurrency token',
-                      required=False),
+                    f('concurrency_token',
+                      'ScratchRobin row concurrency token', required=False),
                 ],
             )
         if kind == 'table' and operation == 'delete':
             return self._form(
                 'cassandra-table-delete', 'Delete CQL row', [
-                    f('selector', 'CDEadmin row identity', 'json', True,
+                    f('selector', 'ScratchRobin row identity', 'json', True,
                       default={}),
-                    f('concurrency_token', 'CDEadmin row concurrency token',
-                      required=False),
+                    f('concurrency_token',
+                      'ScratchRobin row concurrency token', required=False),
                     f('confirmation', 'Confirm deletion of this CQL row',
                       required=True),
                 ],

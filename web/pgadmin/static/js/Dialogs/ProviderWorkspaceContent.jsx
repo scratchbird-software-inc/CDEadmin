@@ -153,7 +153,7 @@ function EngineContractStatus({contract}) {
     contract[name]?.state !== 'passed');
   return <Alert severity="warning" sx={{m: 1}}
     aria-label={gettext('Exact engine contract status')}>
-    {gettext('Exact engine activation is blocked: %s. CDEadmin will not substitute another engine family or invent defaults.',
+    {gettext('Exact engine activation is blocked: %s. ScratchRobin will not substitute another engine family or invent defaults.',
       blocked.join(', '))}
   </Alert>;
 }
@@ -1325,7 +1325,7 @@ export function VisualAdministration({catalog, resources, selectedResource, post
           </Box>
           {operation?.graphical_ready === false && <Alert severity="warning"
             sx={{mb: 2}}>
-            {gettext('This provider has not supplied an exact graphical form for this engine operation. Execution is blocked; CDEadmin will not show a generic substitute.')}
+            {gettext('This provider has not supplied an exact graphical form for this engine operation. Execution is blocked; ScratchRobin will not show a generic substitute.')}
           </Alert>}
           {!objectEditor && operation?.target_required && <TextField select fullWidth sx={{mt: 2}}
             disabled={working}
@@ -2217,7 +2217,7 @@ export function StructuredDataGrid({catalog, resources, post, setError,
           page.editable ? gettext('Edits use provider-issued native row identities.') :
             target?.resource_kind === 'table' ?
               gettext('This table is read-only because the provider did not admit a stable row identity.') :
-              gettext('This grid is read-only because CDEadmin has no admitted view row-mutation contract. The engine may support writes to this view through native commands; this message does not classify the view as read-only in the engine.')}
+              gettext('This grid is read-only because ScratchRobin has no admitted view row-mutation contract. The engine may support writes to this view through native commands; this message does not classify the view as read-only in the engine.')}
       </Alert>
       {languageProfile?.startsWith('firebird-') && <Box component="details" sx={{my: 1}}>
         <Box component="summary" sx={{cursor: 'pointer'}}>{gettext('Generate SQL from fetched rows')}</Box>
@@ -2686,7 +2686,7 @@ function QueryPlanView({rendered}) {
   return <Box aria-label={gettext('Query plan results')}
     sx={{overflow: 'auto', mt: 1, flex: 1}}>
     <Alert severity="info" sx={{mb: 1}}>
-      {gettext('This plan is the provider\'s native presentation; CDEadmin does not reinterpret cost, finality, or execution state.')}
+      {gettext('This plan is the provider\'s native presentation; ScratchRobin does not reinterpret cost, finality, or execution state.')}
     </Alert>
     <Box component="pre" sx={{whiteSpace: 'pre-wrap', mb: 0}}>
       {JSON.stringify(nodes, null, 2)}
@@ -3678,7 +3678,7 @@ function OperationHistory({post, setError}) {
       {working && <CircularProgress size={24} />}
     </Box>
     <Alert severity="info" sx={{mt: 2}}>
-      {gettext('Operation state, cancellation, and finality are reported by the selected provider. CDEadmin does not retry mutations automatically.')}
+      {gettext('Operation state, cancellation, and finality are reported by the selected provider. ScratchRobin does not retry mutations automatically.')}
     </Alert>
     {operations.map((operation) => <Box key={operation.operation_id}
       sx={{mt: 2, p: 2, border: 1, borderColor: 'divider'}}>
@@ -3870,7 +3870,7 @@ function OperationalWorkspace({workspace, endpoint, catalog, resources,
               ` · ${endpoint.verified_runtime_version}` : ''}
           </Box>
           <Alert severity="info" sx={{mt: 1}}>
-            {gettext('Resources, state, plans, progress, cancellation, and finality are provider-reported. CDEadmin does not infer success or automatically replay mutations.')}
+            {gettext('Resources, state, plans, progress, cancellation, and finality are provider-reported. ScratchRobin does not infer success or automatically replay mutations.')}
           </Alert>
           {facet?.catalog_state === 'unavailable' && <Alert severity="warning"
             sx={{mt: 1}}>{facet.unavailable_reason}</Alert>}
@@ -4034,7 +4034,7 @@ function ConnectionRouteWorkspace({post, setError}) {
   if (!catalog || !draft) return <Box p={3}><CircularProgress /></Box>;
   return <Box sx={{p: 2, overflow: 'auto', flex: 1}}>
     <Alert severity="info" sx={{mb: 2}}>
-      {gettext('Routes share the endpoint credential profile. CDEadmin only fails over before a provider session exists and never replays mutations.')}
+      {gettext('Routes share the endpoint credential profile. ScratchRobin only fails over before a provider session exists and never replays mutations.')}
     </Alert>
     <Box sx={{display: 'flex', gap: 1, mb: 2}}>
       <TextField select label={gettext('Route')} value={draft.route_id || ''}

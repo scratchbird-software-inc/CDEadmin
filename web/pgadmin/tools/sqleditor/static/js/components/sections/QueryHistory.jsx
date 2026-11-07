@@ -540,7 +540,7 @@ export function QueryHistory() {
           <Box className='QuerySources-leftRoot'>
             <Box className='QuerySources-header'>
               <Box marginRight="auto">
-                {gettext('Show queries generated internally by CDEadmin?')}
+                {gettext('Show queries generated internally by ScratchRobin?')}
                 <InputSwitch value={showInternal} onChange={(e)=>{
                   setShowInternal(e.target.checked);
                   qhu.current.showInternal = e.target.checked;

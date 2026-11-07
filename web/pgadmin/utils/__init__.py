@@ -349,8 +349,8 @@ def does_utility_exist(file):
     if Path(config.STORAGE_DIR) == Path(file) or \
             Path(config.STORAGE_DIR) in Path(file).parents:
         error_msg = gettext("Please correct the Binary Path in the "
-                            "Preferences. CDEadmin storage directory cannot "
-                            "be a utility binary directory.")
+                            "Preferences. ScratchRobin storage directory "
+                            "cannot be a utility binary directory.")
 
     if not os.path.exists(file):
         error_msg = gettext("'%s' file not found. Please correct the Binary"

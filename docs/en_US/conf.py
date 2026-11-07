@@ -220,7 +220,7 @@ htmlhelp_basename = 'cdeadmin'
 # [howto/manual]).
 latex_documents = [
     ('index', 'cdeadmin.tex', 'ScratchRobin CDE Admin Documentation',
-     'CDEadmin contributors; based on pgAdmin 4', 'manual'),
+     'ScratchRobin contributors; based on pgAdmin 4', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -267,5 +267,5 @@ latex_elements = {
 # (source start file, name, description, authors, manual section).
 man_pages = [
     ('index', 'cdeadmin', 'ScratchRobin CDE Admin Documentation',
-     ['CDEadmin contributors; based on pgAdmin 4'], 1)
+     ['ScratchRobin contributors; based on pgAdmin 4'], 1)
 ]

@@ -548,7 +548,7 @@ export function showChangeServerPassword() {
 }
 
 export function showChangeUserPassword(url) {
-  const title = gettext('Change CDEadmin User Password');
+  const title = gettext('Change ScratchRobin User Password');
   pgAdmin.Browser.notifier.showModal(title, (onClose) => {
     return <ChangePasswordContent
       getInitData={()=>{

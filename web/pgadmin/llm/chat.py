@@ -25,7 +25,7 @@ from pgadmin.llm.utils import get_max_tool_iterations
 
 # Default system prompt for database assistant
 DEFAULT_SYSTEM_PROMPT = (
-    "You are a PostgreSQL database assistant integrated into CDEadmin. "
+    "You are a PostgreSQL database assistant integrated into ScratchRobin. "
     "You have access to tools that allow you to query the database and "
     "inspect its schema.\n\n"
     "When helping users:\n"

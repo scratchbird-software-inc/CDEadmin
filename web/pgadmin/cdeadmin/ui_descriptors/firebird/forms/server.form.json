@@ -81,7 +81,7 @@
       "control": "text",
       "backend_field_id": "cde_route_service_expected_database",
       "required": false,
-      "help": "Optional ordinary database path or alias whose server-configured SecurityDatabase and mappings should authenticate Services API requests. Do not enter the security store filename here. This does not change server configuration, the database being opened, or an operation target. Leave empty for the server default; CDEadmin prevents FB_EXPECTED_DB in its process environment from overriding that choice.",
+      "help": "Optional ordinary database path or alias whose server-configured SecurityDatabase and mappings should authenticate Services API requests. Do not enter the security store filename here. This does not change server configuration, the database being opened, or an operation target. Leave empty for the server default; ScratchRobin prevents FB_EXPECTED_DB in its process environment from overriding that choice.",
       "visible_when": {
         "field": "profile",
         "equals": "firebird-native"
@@ -168,7 +168,7 @@
       "backend_field_id": "cde_route_auth_plugin_list",
       "required": true,
       "default": "Srp256,Srp,Legacy_Auth",
-      "help": "Ordered native AuthClient list for database creation, attachment and Services API. Separate case-sensitive plugin names with commas, spaces, tabs or semicolons. Native negotiation selects a compatible installed plugin; this does not install plugins or change AuthServer. An unavailable-only or nonmatching list fails; CDEadmin never retries with a broader list. Legacy_Auth cannot satisfy Required wire encryption. Win_Sspi requires Windows. Do not leave an explicit list empty.",
+      "help": "Ordered native AuthClient list for database creation, attachment and Services API. Separate case-sensitive plugin names with commas, spaces, tabs or semicolons. Native negotiation selects a compatible installed plugin; this does not install plugins or change AuthServer. An unavailable-only or nonmatching list fails; ScratchRobin never retries with a broader list. Legacy_Auth cannot satisfy Required wire encryption. Win_Sspi requires Windows. Do not leave an explicit list empty.",
       "visible_when": {
         "field": "profile",
         "equals": "firebird-native"
@@ -182,7 +182,7 @@
       "backend_field_id": "cde_route_trusted_auth",
       "required": false,
       "default": false,
-      "help": "Windows Win_Sspi authentication requires the CDEadmin application host (not merely the browser or database server) to run Windows. Linux and macOS reject this selection without password fallback. Windows native login qualification is separate from authentication mapping DDL.",
+      "help": "Windows Win_Sspi authentication requires the ScratchRobin application host (not merely the browser or database server) to run Windows. Linux and macOS reject this selection without password fallback. Windows native login qualification is separate from authentication mapping DDL.",
       "visible_when": {
         "field": "profile",
         "equals": "firebird-native"
@@ -216,7 +216,7 @@
       "backend_field_id": "save_password",
       "required": false,
       "default": false,
-      "help": "Store the credentials for the default user in CDEadmin. Credentials entered while connecting as another user are never stored as the default credentials.",
+      "help": "Store the credentials for the default user in ScratchRobin. Credentials entered while connecting as another user are never stored as the default credentials.",
       "visible_when": {
         "field": "profile",
         "equals": "firebird-native"

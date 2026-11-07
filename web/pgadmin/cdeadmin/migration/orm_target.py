@@ -45,7 +45,8 @@ class OrmMigrationTarget:
             return
         if Path(database).resolve() == Path(source_path).resolve():
             raise MigrationError(
-                'source pgAdmin profile and CDEadmin target must be distinct'
+                'source pgAdmin profile and ScratchRobin target must be '
+                'distinct'
             )
 
     def begin(self, plan, consent_reference):

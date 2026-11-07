@@ -891,7 +891,7 @@ function Dashboard({
             .then((res) => {
               const data = res.data;
               if(!data['ss_present']){
-                setSsMsg(gettext('The system_stats extension is not installed. You can install the extension in a database using the "CREATE EXTENSION system_stats;" SQL command. Reload CDEadmin once it is installed.'));
+                setSsMsg(gettext('The system_stats extension is not installed. You can install the extension in a database using the "CREATE EXTENSION system_stats;" SQL command. Reload ScratchRobin once it is installed.'));
                 setLdid(0);
               } else {
                 setSsMsg('installed');

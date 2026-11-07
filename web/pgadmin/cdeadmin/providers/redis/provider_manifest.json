@@ -63,7 +63,7 @@
       {"field_id": "health_check_interval", "route_key": "health_check_interval", "label": "Health-check interval (seconds)", "control": "number", "group": "Redis pool", "default": 30, "minimum": 0, "maximum": 300},
       {"field_id": "max_connections", "route_key": "max_connections", "label": "Maximum pooled connections", "control": "number", "group": "Redis pool", "default": 100, "minimum": 1, "maximum": 100000},
       {"field_id": "socket_keepalive", "route_key": "socket_keepalive", "label": "Enable TCP keep-alive", "control": "boolean", "group": "Redis connection", "default": true},
-      {"field_id": "client_name", "route_key": "client_name", "label": "Client name", "control": "text", "group": "Redis advanced", "default": "CDEadmin"},
+      {"field_id": "client_name", "route_key": "client_name", "label": "Client name", "control": "text", "group": "Redis advanced", "default": "ScratchRobin"},
       {"field_id": "tool_workspace", "route_key": "tool_workspace", "label": "Backup/import/export workspace", "control": "text", "group": "Redis operational tools"}
     ]
   },

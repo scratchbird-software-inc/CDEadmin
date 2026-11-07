@@ -507,7 +507,7 @@ export default function BrowserComponent({pgAdmin}) {
     beforeClose: (forceClose)=>{
       window.electronUI?.focus();
       pgAdmin.Browser.notifier.confirm(
-        gettext('Quit CDEadmin'),
+        gettext('Quit ScratchRobin'),
         gettext('Are you sure you want to quit the application?'),
         function() { forceClose(); },
         function() { return true; },
@@ -573,7 +573,7 @@ export default function BrowserComponent({pgAdmin}) {
     return <>Failed to load preferences</>;
   }
   if(platformError) {
-    return <div role="alert">CDEadmin platform initialization failed: {
+    return <div role="alert">ScratchRobin platform initialization failed: {
       platformError.message}</div>;
   }
   if(!platform) return <></>;

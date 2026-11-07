@@ -126,7 +126,7 @@ export default function AboutComponent() {
       { aboutData.config_db &&
         <Grid container spacing={0} style={{marginBottom: '8px'}}>
           <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-            <InputLabel style={{fontWeight: 'bold'}}>{gettext('CDEadmin Configuration Database')}</InputLabel>
+            <InputLabel style={{fontWeight: 'bold'}}>{gettext('ScratchRobin Configuration Database')}</InputLabel>
           </Grid>
           <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
             <InputLabel>{aboutData.config_db}</InputLabel>
@@ -146,7 +146,7 @@ export default function AboutComponent() {
       { aboutData.settings &&
         <Box flexGrow="1" display="flex" flexDirection="column" minHeight="0">
           <Box>
-            <InputLabel style={{fontWeight: 'bold'}}>{gettext('CDEadmin Server Configuration')}</InputLabel>
+            <InputLabel style={{fontWeight: 'bold'}}>{gettext('ScratchRobin Server Configuration')}</InputLabel>
           </Box>
           <Box flexGrow="1" paddingTop="1px" minHeight="0">
             <InputSQL value={aboutData.settings}

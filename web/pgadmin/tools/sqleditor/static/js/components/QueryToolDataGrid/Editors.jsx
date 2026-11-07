@@ -504,7 +504,7 @@ export function JsonTextEditor(props) {
     let confirmed = false;
     pgAdmin.Browser.notifier.confirm(
       gettext('Large data'),
-      gettext('This cell contains a large amount of data. Opening it in the JSON editor may make CDEadmin slow or unresponsive. Do you want to continue?'),
+      gettext('This cell contains a large amount of data. Opening it in the JSON editor may make ScratchRobin slow or unresponsive. Do you want to continue?'),
       () => {
         confirmed = true;
         setProceed(true);

@@ -27,7 +27,7 @@ export function send_heartbeat(_server_id, _item) {
       })
       .catch((error) => {
         if (error && error.message == 'Network Error') {
-          pgAdmin.Browser.notifier.errorText(gettext(`CDEadmin server not responding, try to login again: ${error.message || error.response.data.errormsg}`));
+          pgAdmin.Browser.notifier.errorText(gettext(`ScratchRobin server not responding, try to login again: ${error.message || error.response.data.errormsg}`));
         } else if (!error.response?.data?.data?.includes('Manager not found')) {
           pgAdmin.Browser.notifier.errorText(gettext(`Server heartbeat logging error: ${error.message || error.response.data.errormsg}`));
         }

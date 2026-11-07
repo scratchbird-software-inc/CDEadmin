@@ -417,7 +417,7 @@ class TiKVBackend:
         path = Path(self.helper_path).expanduser().resolve()
         if not path.is_file() or not os.access(path, os.X_OK):
             raise NativeDistributedError(
-                'the trusted CDEadmin TiKV helper is unavailable')
+                'the trusted ScratchRobin TiKV helper is unavailable')
         return str(path)
 
     @staticmethod

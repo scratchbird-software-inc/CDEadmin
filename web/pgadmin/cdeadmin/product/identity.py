@@ -102,8 +102,12 @@ def validate_identity(identity):
     product = identity.get('product')
     if not isinstance(product, dict):
         raise ProductIdentityError('product must be an object')
-    if _require_string(product, 'display_name', 'product') != 'CDEadmin':
-        raise ProductIdentityError('product.display_name must be CDEadmin')
+    # Owner direction 2026-11-07: the product is ScratchRobin (short name
+    # Robin); short_name stays the cdeadmin path and namespace token.
+    if _require_string(product, 'display_name', 'product') != 'ScratchRobin':
+        raise ProductIdentityError('product.display_name must be ScratchRobin')
+    if _require_string(product, 'display_short_name', 'product') != 'Robin':
+        raise ProductIdentityError('product.display_short_name must be Robin')
     if _require_string(product, 'short_name', 'product') != 'cdeadmin':
         raise ProductIdentityError('product.short_name must be cdeadmin')
     if product.get('identity_status') != 'hard-fork':
@@ -125,7 +129,7 @@ def validate_identity(identity):
         )
     if product.get('release_ready') is not False:
         raise ProductIdentityError(
-            'CDEadmin cannot be release-ready before release approvals'
+            'ScratchRobin cannot be release-ready before release approvals'
         )
 
     namespaces = identity.get('namespaces')
@@ -175,7 +179,8 @@ def validate_identity(identity):
         raise ProductIdentityError('update_channel must be an object')
     if update.get('enabled') is not False:
         raise ProductIdentityError(
-            'CDEadmin update channel must be disabled until release approval'
+            'ScratchRobin update channel must be disabled until release '
+            'approval'
         )
     if _require_string(update, 'channel_id', 'update_channel').casefold() \
             == 'pgadmin4':

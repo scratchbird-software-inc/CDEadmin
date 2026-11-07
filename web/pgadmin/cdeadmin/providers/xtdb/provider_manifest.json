@@ -41,7 +41,7 @@
       {"field_id": "tls_key_file", "route_key": "tls_key_file", "label": "Client key", "control": "file", "group": "XTDB TLS"},
       {"field_id": "connect_timeout", "route_key": "connect_timeout", "label": "Connect timeout (seconds)", "control": "number", "group": "XTDB timeouts", "default": 10, "minimum": 1, "maximum": 120},
       {"field_id": "statement_timeout", "route_key": "statement_timeout", "label": "Statement timeout (seconds)", "control": "number", "group": "XTDB timeouts", "default": 30, "minimum": 1, "maximum": 3600},
-      {"field_id": "application_name", "route_key": "application_name", "label": "Application name", "control": "text", "group": "XTDB session", "default": "CDEadmin"},
+      {"field_id": "application_name", "route_key": "application_name", "label": "Application name", "control": "text", "group": "XTDB session", "default": "ScratchRobin"},
       {"field_id": "transaction_mode", "route_key": "transaction_mode", "label": "Default transaction mode", "control": "select", "group": "XTDB transactions", "default": "inferred", "options": [{"value": "inferred", "label": "Infer from statements"}, {"value": "read-only", "label": "Read only"}, {"value": "read-write", "label": "Read/write"}]},
       {"field_id": "transaction_async", "route_key": "transaction_async", "label": "Asynchronous transaction", "control": "boolean", "group": "XTDB transactions", "default": false, "visible_when": {"field_id": "transaction_mode", "equals": "read-write"}},
       {"field_id": "transaction_timezone", "route_key": "transaction_timezone", "label": "Transaction time zone", "control": "text", "group": "XTDB transactions"},

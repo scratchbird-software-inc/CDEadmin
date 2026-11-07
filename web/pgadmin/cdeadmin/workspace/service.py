@@ -4162,7 +4162,7 @@ class ProviderWorkspaceService:
             cdeadmin = extensions.setdefault('cdeadmin', {})
             if not isinstance(cdeadmin, dict):
                 raise ProviderWorkspaceError(
-                    'target CDEadmin extensions are invalid'
+                    'target ScratchRobin extensions are invalid'
                 )
             retained_target_id = cdeadmin.get('database_target_id')
             if retained_target_id not in {None, database_target_id}:
@@ -4248,5 +4248,5 @@ def service_for_app(app):
         return app.extensions[APP_EXTENSION_KEY]
     except (AttributeError, KeyError) as exc:
         raise ProviderWorkspaceError(
-            'CDEadmin provider workspace is not initialized'
+            'ScratchRobin provider workspace is not initialized'
         ) from exc

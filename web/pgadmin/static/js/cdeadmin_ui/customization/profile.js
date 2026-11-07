@@ -165,7 +165,7 @@ export function exportCustomizationProfile(draft, appearance={}) {
 export function importCustomizationProfile(input) {
   const candidate = objectValue(input);
   if(candidate.schema !== 'cdeadmin.interface-profile.v1') {
-    throw new TypeError('The file is not a CDEadmin interface profile.');
+    throw new TypeError('The file is not a ScratchRobin interface profile.');
   }
   return Object.freeze({
     appearance: normalizeAppearanceCustomizations(candidate.presentation),

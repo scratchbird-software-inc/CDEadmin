@@ -54,7 +54,7 @@ def service_for_app(app) -> DataStudioService:
         return app.extensions[APP_EXTENSION_KEY]
     except (AttributeError, KeyError) as exc:
         raise DataStudioError(
-            'CDEadmin Data Studio is not initialized'
+            'ScratchRobin Data Studio is not initialized'
         ) from exc
 
 

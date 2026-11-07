@@ -1,9 +1,9 @@
 {
   "name": "cdeadmin",
   "productName": "CDEadmin",
-  "description": "CDEadmin multi-engine and multi-model database administration desktop runtime.",
+  "description": "ScratchRobin multi-engine and multi-model database administration desktop runtime.",
   "private": true,
-  "author": "CDEadmin contributors; derived from the pgAdmin Development Team's pgAdmin 4",
+  "author": "ScratchRobin contributors; derived from the pgAdmin Development Team's pgAdmin 4",
   "cdeadminFork": {
     "upstream": "pgAdmin 4",
     "upstreamVersion": "9.17",

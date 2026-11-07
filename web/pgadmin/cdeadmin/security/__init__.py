@@ -45,7 +45,7 @@ def service_for_app(app) -> SecurityService:
         return app.extensions[APP_EXTENSION_KEY]
     except (AttributeError, KeyError) as exc:
         raise SecurityPolicyError(
-            'CDEadmin security service is not initialized'
+            'ScratchRobin security service is not initialized'
         ) from exc
 
 

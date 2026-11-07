@@ -55,7 +55,7 @@ def service_for_app(app) -> OperationBus:
         return app.extensions[APP_EXTENSION_KEY]
     except (AttributeError, KeyError) as exc:
         raise OperationBusError(
-            'CDEadmin operation bus is not initialized'
+            'ScratchRobin operation bus is not initialized'
         ) from exc
 
 

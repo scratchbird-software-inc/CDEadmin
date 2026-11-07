@@ -260,13 +260,13 @@ function startDesktopMode() {
   serverCheckUrl = `${baseUrl}/misc/ping?key=${UUID}`;
 
   // Record the Python path, compatibility launcher and command.
-  misc.writeServerLog('CDEadmin Runtime Environment');
+  misc.writeServerLog('ScratchRobin Runtime Environment');
   misc.writeServerLog('--------------------------------------------------------');
   let command = pythonPath + ' -s ' + cdeadminFile;
   misc.writeServerLog('Python Path: "' + pythonPath + '"');
   misc.writeServerLog('Runtime Config File: "' + path.resolve(configStore.path) + '"');
   misc.writeServerLog('Webapp Path: "' + cdeadminFile + '"');
-  misc.writeServerLog('CDEadmin Command: "' + command + '"');
+  misc.writeServerLog('ScratchRobin Command: "' + command + '"');
   misc.writeServerLog('Native runtime paths: ');
   Object.keys(process.env).forEach(function (key) {
     // Below code is included only for Mac OS as default path for azure CLI
@@ -294,13 +294,13 @@ function startDesktopMode() {
   cdeadminServerProcess = spawn(pythonPath, ['-s', cdeadminFile]);
   cdeadminServerProcess.on('error', function (err) {
     // Log the error into the log file if process failed to launch
-    misc.writeServerLog('Failed to launch CDEadmin. Error:');
+    misc.writeServerLog('Failed to launch ScratchRobin. Error:');
     misc.writeServerLog(err);
     showErrorDialog(pingTimeoutID);
   });
 
   let spawnEndTime = (new Date).getTime();
-  misc.writeServerLog('Total spawn time to start the CDEadmin server: ' + (spawnEndTime - spawnStartTime) / 1000 + ' Sec');
+  misc.writeServerLog('Total spawn time to start the ScratchRobin server: ' + (spawnEndTime - spawnStartTime) / 1000 + ' Sec');
 
   cdeadminServerProcess.stdout.setEncoding('utf8');
   cdeadminServerProcess.stdout.on('data', (chunk) => {
@@ -340,16 +340,16 @@ function startDesktopMode() {
     pingInProgress = true;
     pingServer().then(() => {
       pingInProgress = false;
-      splashWindow.webContents.executeJavaScript('document.getElementById(\'loader-text-status\').innerHTML = \'CDEadmin started\';', true);
+      splashWindow.webContents.executeJavaScript('document.getElementById(\'loader-text-status\').innerHTML = \'ScratchRobin started\';', true);
       // Expose the CDEadmin server process to the runtime helpers.
       misc.setProcessObject(cdeadminServerProcess);
 
       clearTimeout(pingTimeoutID);
       let appEndTime = (new Date).getTime();
       misc.writeServerLog('------------------------------------------');
-      misc.writeServerLog('Total time taken to ping CDEadmin server: ' + (appEndTime - pingStartTime) / 1000 + ' Sec');
+      misc.writeServerLog('Total time taken to ping ScratchRobin server: ' + (appEndTime - pingStartTime) / 1000 + ' Sec');
       misc.writeServerLog('------------------------------------------');
-      misc.writeServerLog('Total launch time of CDEadmin: ' + (appEndTime - appStartTime) / 1000 + ' Sec');
+      misc.writeServerLog('Total launch time of ScratchRobin: ' + (appEndTime - appStartTime) / 1000 + ' Sec');
       misc.writeServerLog('------------------------------------------');
       launchCDEadminWindow();
     }).catch(() => {

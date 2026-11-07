@@ -36,7 +36,7 @@ INDEXES_TEMPLATE_PATH = 'indexes/sql'
 
 
 # Application name prefix for LLM connections
-LLM_APP_NAME_PREFIX = 'CDEadmin - LLM'
+LLM_APP_NAME_PREFIX = 'ScratchRobin - LLM'
 
 
 # Statement keywords permitted at the start of an LLM-supplied query.

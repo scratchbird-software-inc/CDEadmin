@@ -44,7 +44,7 @@
       {"field_id": "impersonated_user", "route_key": "impersonated_user", "label": "Impersonated user", "control": "text", "group": "Neo4j session"},
       {"field_id": "bookmarks", "route_key": "bookmarks", "label": "Initial bookmarks (JSON array)", "control": "json", "group": "Neo4j session"},
       {"field_id": "keep_alive", "route_key": "keep_alive", "label": "Use TCP keep-alive", "control": "boolean", "group": "Neo4j pool", "default": true},
-      {"field_id": "user_agent", "route_key": "user_agent", "label": "Driver user agent", "control": "text", "group": "Neo4j advanced", "default": "CDEadmin"},
+      {"field_id": "user_agent", "route_key": "user_agent", "label": "Driver user agent", "control": "text", "group": "Neo4j advanced", "default": "ScratchRobin"},
       {"field_id": "tool_workspace", "route_key": "tool_workspace", "label": "Administration tool workspace", "control": "text", "group": "Neo4j operational tools", "help": "Absolute non-root directory explicitly granted to provider-owned tools."}
     ]
   },

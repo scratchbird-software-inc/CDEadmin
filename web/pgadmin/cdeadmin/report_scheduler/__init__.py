@@ -105,7 +105,7 @@ def service_for_app(app):
         return app.extensions[APP_EXTENSION_KEY]
     except (AttributeError, KeyError) as exc:
         raise ReportSchedulerUnavailable(
-            'CDEadmin report scheduler service is not initialized'
+            'ScratchRobin report scheduler service is not initialized'
         ) from exc
 
 

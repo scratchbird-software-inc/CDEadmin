@@ -144,7 +144,7 @@ def metadata_warnings(columns):
             f'View column {column.get("name", "(unknown)")} has inconsistent '
             'or missing native UTF8 CHAR length metadata. Firebird may reject '
             'result fetching with string truncation. Review the stored view '
-            'definition and native column properties; CDEadmin has not '
+            'definition and native column properties; ScratchRobin has not '
             'rewritten the SQL or changed the database.')
     return warnings
 

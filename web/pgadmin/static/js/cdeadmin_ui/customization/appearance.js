@@ -87,7 +87,7 @@ export const PERCENT_FIELDS = Object.freeze(new Set([
 ]));
 
 export const PROFILE_OPTIONS = Object.freeze([
-  ['cdeadmin_standard', gettext('CDEadmin standard')],
+  ['cdeadmin_standard', gettext('ScratchRobin standard')],
   ['classic', gettext('Classic compatibility')],
   ['comfortable', gettext('Comfortable')],
   ['system_adaptive', gettext('System adaptive')],

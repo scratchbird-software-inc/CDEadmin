@@ -368,7 +368,7 @@ export default function AdHocConnection({mode}) {
       connectCallback?.(respData.data);
     } catch (error) {
       if(!error.response) {
-        pgAdmin.Browser.notifier.pgNotifier('error', error, 'Connection error', gettext('Connection to CDEadmin server has been lost.'));
+        pgAdmin.Browser.notifier.pgNotifier('error', error, 'Connection error', gettext('Connection to ScratchRobin server has been lost.'));
       } else {
         modal.showModal(gettext('Connect to server'), (closeModal)=>{
           return (

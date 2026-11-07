@@ -46,7 +46,7 @@ def user_info_server():
         # Prompt the user for their default username and password.
         print(
             "Enter the email address and password to use for the initial "
-            "CDEadmin user account:\n"
+            "ScratchRobin user account:\n"
         )
 
         # Bound the retry loop so a non-interactive caller (mocked

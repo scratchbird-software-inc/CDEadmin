@@ -70,7 +70,7 @@ function requiredCallback(name, context) {
 
 function ensureCoreModules() {
   if(!moduleRegistry.has(CORE_MODULE_ID)) moduleRegistry.register({
-    id: CORE_MODULE_ID, version: '1.0.0', title: 'CDEadmin shell',
+    id: CORE_MODULE_ID, version: '1.0.0', title: 'ScratchRobin shell',
     contributions: {
       activity: [{id: 'activity.data', label: 'Data Explorer',
         iconKey: 'tool.data-explorer', priority: 10}],

@@ -222,7 +222,7 @@ export function ActiveStatusHost({contextService=workbenchContextService,
   return <Box role="status" aria-label="Active workbench status"
     sx={{display: 'flex', alignItems: 'center', gap: 1,
       minWidth: 0, width: '100%'}}>
-    <SafeText text={context.surfaceTitle || 'CDEadmin workbench'} />
+    <SafeText text={context.surfaceTitle || 'Robin workbench'} />
     {context.projectId && <Badge label={'Project: ' + context.projectId} />}
     {context.connectionState && <Badge status={context.connectionState === 'connected' ?
       'success' : context.connectionState === 'disconnected' ? 'error' : 'warning'}

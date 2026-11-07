@@ -50,7 +50,7 @@ def service_for_app(app) -> ResultService:
         return app.extensions[APP_EXTENSION_KEY]
     except (AttributeError, KeyError) as exc:
         raise ResultRegistryError(
-            'CDEadmin result service is not initialized'
+            'ScratchRobin result service is not initialized'
         ) from exc
 
 

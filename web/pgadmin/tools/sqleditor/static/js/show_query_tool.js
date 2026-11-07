@@ -120,7 +120,7 @@ export function launchQueryTool(queryToolMod, transId, gridUrl, queryToolTitle, 
     pgAdmin.Browser.notifier.alert(
       gettext('Query tool launch error'),
       gettext(
-        'Please allow pop-ups for this site to perform the desired action. If the main CDEadmin window is closed, close this window and open a new CDEadmin session.'
+        'Please allow pop-ups for this site to perform the desired action. If the main ScratchRobin window is closed, close this window and open a new ScratchRobin session.'
       )
     );
   }

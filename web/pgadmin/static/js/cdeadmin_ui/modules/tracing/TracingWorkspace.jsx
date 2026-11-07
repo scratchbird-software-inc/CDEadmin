@@ -229,7 +229,7 @@ function QueryCorrelation({session, invoke}) {
   const [error, setError] = useState('');
   return <Box sx={{height: '100%', display: 'flex', flexDirection: 'column'}}>
     {error && <Banner status="error">{error}</Banner>}
-    {!rows.length ? <EmptyState message="The selected trace has no evidenced CDEadmin correlations." /> :
+    {!rows.length ? <EmptyState message="The selected trace has no evidenced ScratchRobin correlations." /> :
       <DataGrid gridId="tracing/query-correlation" aria-label="Trace query correlations" rows={rows}
         readOnly enableRowSelect rowKeyGetter={(row) => row.id}
         onItemEnter={(row) => {
@@ -246,7 +246,7 @@ QueryCorrelation.propTypes = {session: PropTypes.object, invoke: PropTypes.func}
 
 function IngestionSampling({session, invoke, currentUser}) {
   const [sourceText, setSourceText] = useState(JSON.stringify(session.content.sourceConfigs[0] ?? {
-    id: 'internal', name: 'CDEadmin internal tracing', sourceType: 'cdeadmin_internal',
+    id: 'internal', name: 'ScratchRobin internal tracing', sourceType: 'cdeadmin_internal',
     enabled: true, endpoint: null, providerId: null, resourceRef: null, credentialRef: null,
     transport: {}, sensitivityPolicyId: null, nativeDetails: {}}, null, 2));
   const [policyText, setPolicyText] = useState(JSON.stringify(session.content.samplingPolicies[0] ?? {
@@ -330,7 +330,7 @@ function TracingInspector({session}) {
     <Box component="h3">Attributes</Box><pre>{JSON.stringify(span?.attributes ?? {}, null, 2)}</pre>
     <Box component="h3">Events</Box><Box>{span?.events.length ?? 0}</Box>
     <Box component="h3">Links</Box><Box>{span?.links.length ?? 0}</Box>
-    <Box component="h3">CDEadmin correlation</Box><Box>{span?.correlationRefs.length ?? 0}</Box>
+    <Box component="h3">ScratchRobin correlation</Box><Box>{span?.correlationRefs.length ?? 0}</Box>
     {trace && <Badge label={trace.status} />}</Box>;
 }
 TracingInspector.propTypes = {session: PropTypes.object};

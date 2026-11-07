@@ -464,7 +464,7 @@ define('pgadmin.node.server', [
             }
             return false;
           }
-          let title = gettext('CDEadmin - %s', data.label || data._label);
+          let title = gettext('ScratchRobin - %s', data.label || data._label);
           if(initialContext.task_title) {
             title = gettext('%s — %s', initialContext.task_title,
               data.label || data._label);
@@ -1051,7 +1051,7 @@ define('pgadmin.node.server', [
     let checkSupportedVersion = function (version, info) {
       if (!_.isUndefined(version) && !_.isNull(version) && version < 100000) {
         pgAdmin.Browser.notifier.warning(gettext('You have connected to a server version that is older ' +
-          'than is supported by CDEadmin. This may cause CDEadmin to behave in strange and ' +
+          'than is supported by ScratchRobin. This may cause ScratchRobin to behave in strange and ' +
           'unpredictable ways. Or a plague of frogs. Either way, you have been warned!') +
           '<br /><br />' + gettext('Server connected'), null);
       } else if (!_.isUndefined(info) && !_.isNull(info)) {

@@ -385,7 +385,7 @@ class MongoDBClient:
                 route.get('socket_timeout_ms'), 30000,
                 100, 600000, 'socket timeout'
             ),
-            'appname': route.get('appname', 'CDEadmin'),
+            'appname': route.get('appname', 'ScratchRobin'),
         }
         if 'tz_aware' in route:
             arguments['tz_aware'] = route['tz_aware']
@@ -1983,7 +1983,7 @@ class MongoDBClient:
                     'json_type': 'object', 'default': {},
                 }, {
                     'field_id': 'concurrency_token',
-                    'label': 'CDEadmin document concurrency token',
+                    'label': 'ScratchRobin document concurrency token',
                     'control': 'text', 'required': False,
                 }],
             },
@@ -1997,7 +1997,7 @@ class MongoDBClient:
                     'json_type': 'object', 'default': {},
                 }, {
                     'field_id': 'concurrency_token',
-                    'label': 'CDEadmin document concurrency token',
+                    'label': 'ScratchRobin document concurrency token',
                     'control': 'text', 'required': False,
                 }, {
                     'field_id': 'confirmation',

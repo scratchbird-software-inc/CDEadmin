@@ -648,7 +648,7 @@
       "fields": [
         {
           "field_id": "path",
-          "label": "CDEadmin SQL dump file below the endpoint tool workspace",
+          "label": "ScratchRobin SQL dump file below the endpoint tool workspace",
           "control": "text",
           "required": true
         },

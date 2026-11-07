@@ -452,7 +452,7 @@ class RedisClient:
             route.get('health_check_interval'), 30, 0, 300,
             'health-check interval'
         )
-        route['client_name'] = route.get('client_name', 'CDEadmin')
+        route['client_name'] = route.get('client_name', 'ScratchRobin')
         if not _CLIENT_NAME.fullmatch(route['client_name']):
             raise RedisClientError(
                 'Redis client_name must use printable ASCII without spaces'

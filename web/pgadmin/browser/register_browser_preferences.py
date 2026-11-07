@@ -24,7 +24,7 @@ def register_browser_preferences(self):
         category_label=gettext('Commands'), hidden=True,
         help_str=gettext(
             'Per-user command labels, icons, shortcuts, visibility, and '
-            'enabled-state restrictions used by CDEadmin command surfaces.'
+            'enabled-state restrictions used by ScratchRobin command surfaces.'
         )
     )
     self.preference.register(
@@ -34,7 +34,7 @@ def register_browser_preferences(self):
         category_label=gettext('Interface customization'), hidden=True,
         help_str=gettext(
             'Validated per-user mappings from semantic icon identities to '
-            'assets in the CDEadmin artwork catalog.'
+            'assets in the ScratchRobin artwork catalog.'
         )
     )
     self.preference.register(

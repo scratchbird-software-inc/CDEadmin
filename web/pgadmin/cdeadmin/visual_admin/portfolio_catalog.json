@@ -144,7 +144,7 @@
     "mariadb_restore_logical": {
       "title": "Restore MariaDB database with mariadb 12.2",
       "fields": [
-        {"field_id": "path", "label": "CDEadmin SQL dump file below the endpoint tool workspace", "control": "text", "required": true, "max_length": 4096},
+        {"field_id": "path", "label": "ScratchRobin SQL dump file below the endpoint tool workspace", "control": "text", "required": true, "max_length": 4096},
         {"field_id": "confirmation", "label": "Type the exact target database name to confirm restore", "control": "text", "required": true, "max_length": 64},
         {"field_id": "abort_on_error", "label": "Abort at the first SQL error", "control": "boolean", "required": false, "default": true},
         {"field_id": "binary_mode", "label": "Preserve binary input and disable unsafe client commands", "control": "boolean", "required": false, "default": true},

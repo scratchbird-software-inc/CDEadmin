@@ -38,7 +38,8 @@ def validate_authentication_plugins(route):
     if trusted and not windows_authentication_host():
         raise RelationalClientError(
             'Firebird Windows trusted authentication (Win_Sspi) requires '
-            'the CDEadmin application host to run Windows. It is unavailable '
+            'the ScratchRobin application host to run Windows. It is '
+            'unavailable '
             'on this host; no password fallback was attempted.')
     value = route.get('auth_plugin_list')
     if value is None:

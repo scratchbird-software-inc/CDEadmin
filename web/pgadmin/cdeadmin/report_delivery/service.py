@@ -355,12 +355,13 @@ class SMTPDeliveryAdapter:
         message['From'] = profile['sender']
         message['To'] = ', '.join(target['recipients'])
         message['Subject'] = payload.get('subject') or (
-            f"CDEadmin report: {payload['filename']}"
+            f"ScratchRobin report: {payload['filename']}"
         )
         message['Message-ID'] = make_msgid(domain='cdeadmin.local')
         message.set_content(
             payload.get('body') or
-            'CDEadmin generated the attached bounded, redacted report export.'
+            'ScratchRobin generated the attached bounded, redacted report '
+            'export.'
         )
         maintype, subtype = payload['media_type'].split('/', 1)
         message.add_attachment(

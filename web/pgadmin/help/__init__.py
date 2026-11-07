@@ -44,7 +44,7 @@ class HelpModule(PgAdminModule):
                      url='https://www.pgadmin.org/'),
 
             MenuItem(name='mnu_cdeadmin_fork_status',
-                     label=gettext('CDEadmin Hard-fork Status'),
+                     label=gettext('ScratchRobin Hard-fork Status'),
                      priority=300,
                      target='cdeadmin_status',
                      icon='fa fa-info-circle',

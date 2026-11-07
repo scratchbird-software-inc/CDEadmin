@@ -927,7 +927,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             return self._tool_secret(route, backup)
         if not path.is_file() or not metadata_path.is_file():
             raise RelationalClientError(
-                'MariaDB restore source lacks its CDEadmin metadata'
+                'MariaDB restore source lacks its ScratchRobin metadata'
             )
         try:
             metadata = json.loads(metadata_path.read_text(encoding='utf-8'))

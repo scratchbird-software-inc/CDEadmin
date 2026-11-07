@@ -148,7 +148,7 @@ class TOTPAuthenticator(BaseMFAuth):
 
         uri = totp.provisioning_uri(
             current_user.username, issuer_name=getattr(
-                config, "APP_NAME", "CDEadmin"
+                config, "APP_NAME", "ScratchRobin"
             )
         )
 

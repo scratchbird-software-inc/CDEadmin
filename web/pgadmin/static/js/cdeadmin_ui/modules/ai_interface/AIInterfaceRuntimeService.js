@@ -371,12 +371,12 @@ export class AIInterfaceRuntimeService {
 
   toolProposal(input, context={}) {
     actor(context, 'ai.delegate_draft');
-    exact(input, ['commandId', 'arguments'], 'AI CDEadmin command proposal');
+    exact(input, ['commandId', 'arguments'], 'AI ScratchRobin command proposal');
     if(!this.toolCatalog) throw new Error('AI Tool Catalog is unavailable.');
     const command = this.toolCatalog.commands.get(required(input.commandId,
       'AI proposed command'));
     if(command.aiExposure === 'hidden' || command.aiRiskClass === 'R7') throw new Error(
-      'The requested CDEadmin command is not AI-eligible.'
+      'The requested ScratchRobin command is not AI-eligible.'
     );
     noRawSecrets(input.arguments ?? {}, 'AI proposed command arguments');
     return immutable({schema: 'cdeadmin.ai-command-proposal.v1',
@@ -387,7 +387,7 @@ export class AIInterfaceRuntimeService {
   executeTool(input, context={}) {
     actor(context, 'ai.delegate_write');
     exact(input, ['commandId', 'arguments', 'decision'],
-      'AI CDEadmin command execution');
+      'AI ScratchRobin command execution');
     if(!this.toolCatalog) throw new Error('AI Tool Catalog is unavailable.');
     return this.toolCatalog.invokeCommand(input.commandId, input.arguments,
       input.decision, context);
@@ -396,7 +396,7 @@ export class AIInterfaceRuntimeService {
   invokeReadTool(input, context={}) {
     actor(context, 'ai.delegate_read');
     exact(input, ['readToolId', 'arguments'],
-      'AI CDEadmin read-tool invocation');
+      'AI ScratchRobin read-tool invocation');
     if(!this.toolCatalog || typeof this.toolCatalog.invokeReadTool !== 'function') {
       throw new Error('AI Tool Catalog read-service authority is unavailable.');
     }

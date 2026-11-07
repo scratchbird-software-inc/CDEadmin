@@ -94,9 +94,9 @@ POSTGRESQL_WIRE_FIELDS = (
         ('disable', 'Disable'), ('random', 'Random'),
     ), PG_NETWORK, 'disable'),
     _field('application_name', 'Application name', group=PG_SESSION,
-           default='CDEadmin'),
+           default='ScratchRobin'),
     _field('fallback_application_name', 'Fallback application name',
-           group=PG_SESSION, default='CDEadmin'),
+           group=PG_SESSION, default='ScratchRobin'),
     _field('client_encoding', 'Client encoding', group=PG_SESSION),
     _field('options', 'Server command-line options', 'multiline', PG_SESSION),
     _field('autocommit', 'Autocommit', 'boolean', PG_SESSION,
@@ -413,7 +413,7 @@ CQL_FIELDS = (
     _field('executor_threads', 'Driver executor threads', 'number',
            CQL_SESSION, default=2, minimum=1, maximum=256),
     _field('application_name', 'Application name', group=CQL_SESSION,
-           default='CDEadmin'),
+           default='ScratchRobin'),
 )
 CQL_SECRETS = (
     {'field_id': 'password', 'secret_kind': 'database_password',

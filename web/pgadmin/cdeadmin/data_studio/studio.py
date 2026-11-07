@@ -468,7 +468,7 @@ class DataStudioService:
             )
         if self.result_service is None:
             raise DataStudioAccessError(
-                'CDEadmin typed result service is unavailable'
+                'ScratchRobin typed result service is unavailable'
             )
         return self.result_service.admit_provider_result(
             context,

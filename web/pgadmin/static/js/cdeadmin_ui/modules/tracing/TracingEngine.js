@@ -21,7 +21,7 @@ export function validateTracingDefinition(input) {
   const content = createTracingContent(input); const details = []; const warnings = [];
   if(!content.name.trim()) details.push('Tracing asset name is required.');
   if(!content.sourceConfigs.length) warnings.push(
-    'No trace source is configured; CDEadmin internal tracing remains available only when registered.'
+    'No trace source is configured; ScratchRobin internal tracing remains available only when registered.'
   );
   content.sourceConfigs.forEach((source) => {
     if(['otlp_grpc', 'otlp_http'].includes(source.sourceType) && !source.endpoint) {

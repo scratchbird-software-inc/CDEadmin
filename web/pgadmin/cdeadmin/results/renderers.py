@@ -282,7 +282,8 @@ def export_xlsx(metadata, records):
                          'spreadsheetml/2006/main" xmlns:r="http://schemas.'
                          'openxmlformats.org/officeDocument/2006/'
                          'relationships"'
-                         '><sheets><sheet name="CDEadmin Result" sheetId="1" '
+                         '><sheets><sheet name="ScratchRobin Result" '
+                         'sheetId="1" '
                          'r:id="rId1"/></sheets></workbook>')
         archive.writestr('xl/_rels/workbook.xml.rels',
                          '<?xml version="1.0" encoding="UTF-8"?>'
@@ -327,7 +328,7 @@ def _pdf_fonts():
     regular = font_root / 'Roboto-Regular.ttf'
     bold = font_root / 'Roboto-Bold.ttf'
     if not regular.is_file() or not bold.is_file():
-        raise RuntimeError('CDEadmin PDF fonts are unavailable')
+        raise RuntimeError('ScratchRobin PDF fonts are unavailable')
     with _PDF_FONT_LOCK:
         registered = set(pdfmetrics.getRegisteredFontNames())
         if _PDF_FONT_NAME not in registered:
@@ -341,7 +342,8 @@ def _pdf_page(canvas, document):
     canvas.saveState()
     canvas.setFont(_PDF_FONT_NAME, 7)
     canvas.setFillColor(colors.HexColor('#52606d'))
-    canvas.drawString(document.leftMargin, 8 * mm, 'CDEadmin result export')
+    canvas.drawString(document.leftMargin, 8 * mm, 'ScratchRobin result '
+                                                   'export')
     canvas.drawRightString(
         document.pagesize[0] - document.rightMargin,
         8 * mm,
@@ -362,8 +364,8 @@ def export_pdf(metadata, records):
     omitted_columns = max(0, original_columns - PDF_MAX_COLUMNS)
     output = io.BytesIO()
     document = SimpleDocTemplate(
-        output, pagesize=landscape(A4), title='CDEadmin Result',
-        author='CDEadmin', subject='Provider result export',
+        output, pagesize=landscape(A4), title='ScratchRobin Result',
+        author='ScratchRobin', subject='Provider result export',
         leftMargin=10 * mm, rightMargin=10 * mm,
         topMargin=12 * mm, bottomMargin=14 * mm,
         pageCompression=1, invariant=1,
@@ -383,7 +385,7 @@ def export_pdf(metadata, records):
         'CDEadminPDFHeader', parent=cell_style,
         fontName=_PDF_FONT_BOLD_NAME, textColor=colors.white,
     )
-    story = [Paragraph('CDEadmin Result', title_style), Spacer(1, 4 * mm)]
+    story = [Paragraph('ScratchRobin Result', title_style), Spacer(1, 4 * mm)]
     if columns:
         table_rows = []
         for row_number, row in enumerate(visible):

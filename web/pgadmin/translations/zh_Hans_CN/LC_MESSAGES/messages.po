@@ -59,7 +59,7 @@ msgstr "桌面"
 
 #: pgadmin/about/__init__.py:82
 msgid ""
-"CDEadmin is an independent hard fork that adds a provider-driven, multi-"
+"ScratchRobin is an independent hard fork that adds a provider-driven, multi-"
 "engine and multi-model administration architecture, native ScratchBird "
 "support, and administration surfaces for relational, document, graph, "
 "key-value, analytic and distributed systems."
@@ -69,7 +69,7 @@ msgstr ""
 #, python-format
 msgid ""
 "Forked from pgAdmin 4 %(version)s. Upstream pgAdmin copyright and the "
-"PostgreSQL Licence are retained. CDEadmin is not pgAdmin and is not "
+"PostgreSQL Licence are retained. ScratchRobin is not pgAdmin and is not "
 "endorsed by the pgAdmin Development Team."
 msgstr ""
 
@@ -130,7 +130,7 @@ msgid "Operating System"
 msgstr "操作系统"
 
 #: pgadmin/about/static/js/AboutComponent.jsx:129
-msgid "CDEadmin Configuration Database"
+msgid "ScratchRobin Configuration Database"
 msgstr ""
 
 #: pgadmin/about/static/js/AboutComponent.jsx:139
@@ -138,7 +138,7 @@ msgid "Log File"
 msgstr "日志文件"
 
 #: pgadmin/about/static/js/AboutComponent.jsx:149
-msgid "CDEadmin Server Configuration"
+msgid "ScratchRobin Server Configuration"
 msgstr ""
 
 #: pgadmin/about/static/js/AboutComponent.jsx:165
@@ -257,7 +257,7 @@ msgstr ""
 #, python-format
 msgid ""
 "OAuth2 provider '%(name)s' is configured with 'openid' in OAUTH2_SCOPE "
-"but OAUTH2_SERVER_METADATA_URL is not set. CDEadmin needs the provider's "
+"but OAUTH2_SERVER_METADATA_URL is not set. ScratchRobin needs the provider's "
 "OpenID Connect discovery URL to verify the id_token. Either set "
 "OAUTH2_SERVER_METADATA_URL to the discovery URL (e.g. https://<issuer"
 ">/.well-known/openid-configuration), or remove 'openid' from "
@@ -284,7 +284,7 @@ msgstr ""
 
 #: pgadmin/authenticate/oauth2.py:595
 msgid ""
-"An email id or OAUTH2_USERNAME_CLAIM is required to log in to CDEadmin. "
+"An email id or OAUTH2_USERNAME_CLAIM is required to log in to ScratchRobin. "
 "Please update your OAuth2 profile for email id or set "
 "OAUTH2_USERNAME_CLAIM config parameter."
 msgstr ""
@@ -554,7 +554,7 @@ msgid "Invalid input."
 msgstr ""
 
 #: pgadmin/browser/__init__.py:949
-msgid "CDEadmin user password changed successfully"
+msgid "ScratchRobin user password changed successfully"
 msgstr ""
 
 #: pgadmin/browser/__init__.py:996
@@ -1490,7 +1490,7 @@ msgid "Only the endpoint owner can open its workspace."
 msgstr ""
 
 #: pgadmin/browser/server_groups/servers/__init__.py:1923
-msgid "This endpoint has no shared CDEadmin workspace."
+msgid "This endpoint has no shared ScratchRobin workspace."
 msgstr ""
 
 #: pgadmin/browser/server_groups/servers/__init__.py:2012
@@ -1503,7 +1503,7 @@ msgstr ""
 
 #: pgadmin/browser/server_groups/servers/__init__.py:2122
 msgid ""
-"Provider endpoints must use the CDEadmin endpoint verification and "
+"Provider endpoints must use the ScratchRobin endpoint verification and "
 "workspace path."
 msgstr ""
 
@@ -9644,7 +9644,7 @@ msgstr ""
 
 #: pgadmin/browser/server_groups/servers/static/js/server.js:277
 #, python-format
-msgid "CDEadmin - %s"
+msgid "ScratchRobin - %s"
 msgstr ""
 
 #: pgadmin/browser/server_groups/servers/static/js/server.js:292
@@ -9697,7 +9697,7 @@ msgstr "确实要清除服务器 %s 的 SSH 隧道的保存密码吗？"
 #: pgadmin/browser/server_groups/servers/static/js/server.js:672
 msgid ""
 "You have connected to a server version that is older than is supported by"
-" CDEadmin. This may cause CDEadmin to behave in strange and unpredictable"
+" ScratchRobin. This may cause ScratchRobin to behave in strange and unpredictable"
 " ways. Or a plague of frogs. Either way, you have been warned!"
 msgstr ""
 
@@ -10818,7 +10818,7 @@ msgstr ""
 #: pgadmin/browser/static/js/heartbeat.js:30
 #, python-brace-format
 msgid ""
-"CDEadmin server not responding, try to login again: ${error.message || "
+"ScratchRobin server not responding, try to login again: ${error.message || "
 "error.response.data.errormsg}"
 msgstr ""
 
@@ -10960,22 +10960,22 @@ msgstr ""
 msgid ""
 "Your browser was detected as <strong>{0}</strong> version\n"
 "    <strong>{1}</strong>, which is either deprecated or not supported by\n"
-"    CDEadmin."
+"    ScratchRobin."
 msgstr ""
 
 #: pgadmin/browser/templates/browser/browser.html:6
 #, python-brace-format
 msgid ""
 "Your browser was detected as <strong>{0}</strong> version\n"
-"    <strong>{1}</strong>, which CDEadmin has not been tested with. "
-"CDEadmin may\n"
+"    <strong>{1}</strong>, which ScratchRobin has not been tested with. "
+"ScratchRobin may\n"
 "    not work as expected, and any issues reported when using this browser"
 " may\n"
 "    not be fixed."
 msgstr ""
 
 #: pgadmin/browser/templates/browser/browser.html:11
-msgid "Consult the CDEadmin documentation for the supported browser policy."
+msgid "Consult the ScratchRobin documentation for the supported browser policy."
 msgstr ""
 
 #: pgadmin/browser/templates/browser/index.html:109
@@ -11570,7 +11570,7 @@ msgstr ""
 msgid ""
 "The system_stats extension is not installed. You can install the "
 "extension in a database using the \"CREATE EXTENSION system_stats;\" SQL "
-"command. Reload CDEadmin once it is installed."
+"command. Reload ScratchRobin once it is installed."
 msgstr ""
 
 #: pgadmin/dashboard/static/js/Dashboard.jsx:901
@@ -11691,7 +11691,7 @@ msgstr "开源"
 
 #: pgadmin/dashboard/static/js/WelcomeDashboard.jsx:164
 msgid ""
-"CDEadmin is an independent hard fork of pgAdmin 4 for administering "
+"ScratchRobin is an independent hard fork of pgAdmin 4 for administering "
 "ScratchBird and independently managed database engines. Its provider-"
 "driven workspaces support relational, document, graph, key-value, "
 "analytic and distributed data systems without treating an emulated "
@@ -11707,7 +11707,7 @@ msgid "Add New Server"
 msgstr "添加服务器"
 
 #: pgadmin/dashboard/static/js/WelcomeDashboard.jsx:198
-msgid "Configure CDEadmin"
+msgid "Configure ScratchRobin"
 msgstr ""
 
 #: pgadmin/dashboard/static/js/WelcomeDashboard.jsx:209
@@ -11715,7 +11715,7 @@ msgid "Getting Started"
 msgstr "入门指南"
 
 #: pgadmin/dashboard/static/js/WelcomeDashboard.jsx:224
-msgid "CDEadmin Documentation"
+msgid "ScratchRobin Documentation"
 msgstr ""
 
 #: pgadmin/dashboard/static/js/WelcomeDashboard.jsx:235
@@ -12183,7 +12183,7 @@ msgid "Online Help"
 msgstr "在线帮助"
 
 #: pgadmin/help/__init__.py:47
-msgid "CDEadmin Hard-fork Status"
+msgid "ScratchRobin Hard-fork Status"
 msgstr ""
 
 #: pgadmin/help/__init__.py:64
@@ -12269,7 +12269,7 @@ msgstr ""
 #: pgadmin/llm/__init__.py:140
 msgid ""
 "Path to a file containing your Anthropic API key. This path must be on "
-"the server hosting CDEadmin, e.g. inside the container when using Docker."
+"the server hosting ScratchRobin, e.g. inside the container when using Docker."
 " The file should contain only the API key. The API key may be optional "
 "when using a custom API URL with a provider that does not require "
 "authentication."
@@ -12305,7 +12305,7 @@ msgstr ""
 #: pgadmin/llm/__init__.py:204
 msgid ""
 "Path to a file containing your OpenAI API key. This path must be on the "
-"server hosting CDEadmin, e.g. inside the container when using Docker. The"
+"server hosting ScratchRobin, e.g. inside the container when using Docker. The"
 " file should contain only the API key. The API key may be optional when "
 "using a custom API URL with a provider that does not require "
 "authentication."
@@ -12657,7 +12657,7 @@ msgstr ""
 
 #: pgadmin/misc/__init__.py:108
 msgid ""
-"Choose the layout that suits you best. CDEadmin offers two options: the "
+"Choose the layout that suits you best. ScratchRobin offers two options: the "
 "Classic layout, a longstanding and familiar design, and the Workspace "
 "layout, which provides distraction free dedicated areas for the Query "
 "Tool, PSQL, and Schema Diff tools."
@@ -12682,7 +12682,7 @@ msgstr ""
 
 #: pgadmin/misc/__init__.py:136
 msgid ""
-"If set to True, CDEadmin will save the state of opened tools (such as "
+"If set to True, ScratchRobin will save the state of opened tools (such as "
 "Query Tool, PSQL, Schema Diff, and ERD), including any unsaved data. This"
 " data will be automatically restored in the event of an unexpected "
 "shutdown or browser refresh."
@@ -13086,7 +13086,7 @@ msgstr ""
 #: pgadmin/misc/cloud/static/js/aws_schema.ui.js:155
 #: pgadmin/misc/cloud/static/js/azure_schema.ui.js:471
 #: pgadmin/misc/cloud/static/js/google_schema.ui.js:365
-msgid "CDEadmin server group"
+msgid "ScratchRobin server group"
 msgstr ""
 
 #: pgadmin/misc/cloud/static/js/aws_schema.ui.js:169
@@ -13607,7 +13607,7 @@ msgstr ""
 #: pgadmin/misc/file_manager/static/js/components/FileManager.jsx:399
 msgid ""
 "The file has been modified by another program. Do you want to reload it "
-"and lose changes made in CDEadmin?"
+"and lose changes made in ScratchRobin?"
 msgstr ""
 
 #: pgadmin/misc/file_manager/static/js/components/FileManager.jsx:632
@@ -13749,7 +13749,7 @@ msgstr ""
 
 #: pgadmin/misc/workspaces/static/js/AdHocConnection.jsx:371
 #: pgadmin/tools/sqleditor/static/js/components/dialogs/NewConnectionDialog.jsx:245
-msgid "Connection to CDEadmin server has been lost."
+msgid "Connection to ScratchRobin server has been lost."
 msgstr ""
 
 #: pgadmin/misc/workspaces/static/js/AdHocConnection.jsx:373
@@ -14027,7 +14027,7 @@ msgid "Dependents"
 msgstr "依赖组件"
 
 #: pgadmin/static/js/BrowserComponent.jsx:189
-msgid "Quit CDEadmin"
+msgid "Quit ScratchRobin"
 msgstr ""
 
 #: pgadmin/static/js/BrowserComponent.jsx:190
@@ -14179,7 +14179,7 @@ msgstr ""
 
 #: pgadmin/static/js/api_instance.js:153
 #: pgadmin/static/js/socket_instance.js:50
-msgid "Connection to CDEadmin server has been lost"
+msgid "Connection to ScratchRobin server has been lost"
 msgstr ""
 
 #: pgadmin/static/js/components/KeyboardShortcuts.jsx:99
@@ -14318,12 +14318,12 @@ msgstr "请输入您的主密码。"
 #, python-brace-format
 msgid ""
 "Saved passwords are encrypted using an encryption key stored in "
-"${keyringName}. Enter the master password for your existing CDEadmin "
+"${keyringName}. Enter the master password for your existing ScratchRobin "
 "saved passwords; they will be re-encrypted when you click OK."
 msgstr ""
 
 #: pgadmin/static/js/Dialogs/MasterPasswordContent.jsx:81
-msgid "Please set a master password for CDEadmin."
+msgid "Please set a master password for ScratchRobin."
 msgstr ""
 
 #: pgadmin/static/js/Dialogs/MasterPasswordContent.jsx:85
@@ -15099,7 +15099,7 @@ msgstr ""
 #: pgadmin/static/js/Dialogs/ProviderWorkspaceContent.jsx:2475
 msgid ""
 "Operation state, cancellation, and finality are reported by the selected "
-"provider. CDEadmin does not retry mutations automatically."
+"provider. ScratchRobin does not retry mutations automatically."
 msgstr ""
 
 #: pgadmin/static/js/Dialogs/ProviderWorkspaceContent.jsx:2482
@@ -15264,7 +15264,7 @@ msgid ""
 msgstr "在执行任何其他操作之前, 请确保断开服务器的连接并更新 pgpass 文件中的新密码"
 
 #: pgadmin/static/js/Dialogs/index.jsx:280
-msgid "Change CDEadmin User Password"
+msgid "Change ScratchRobin User Password"
 msgstr ""
 
 #: pgadmin/static/js/Dialogs/index.jsx:420
@@ -16727,7 +16727,7 @@ msgstr "数据表关系厚度"
 
 #: pgadmin/tools/erd/__init__.py:435
 msgid ""
-"The maximum depth CDEadmin should traverse to find related tables when "
+"The maximum depth ScratchRobin should traverse to find related tables when "
 "generating an ERD for a table. Use -1 for no limit."
 msgstr ""
 
@@ -16873,12 +16873,12 @@ msgid "Project saved successfully."
 msgstr "项目保存成功。"
 
 #: pgadmin/tools/erd/static/js/erd_tool/components/ERDTool.jsx:799
-msgid "-- This script was generated by the ERD tool in CDEadmin.\n"
+msgid "-- This script was generated by the ERD tool in ScratchRobin.\n"
 msgstr ""
 
 #: pgadmin/tools/erd/static/js/erd_tool/components/ERDTool.jsx:800
 msgid ""
-"-- Report CDEadmin defects through the designated CDEadmin project "
+"-- Report ScratchRobin defects through the designated ScratchRobin project "
 "channel, including reproduction steps.\n"
 msgstr ""
 
@@ -17565,7 +17565,7 @@ msgstr "移除所有已存在服务器？"
 
 #: pgadmin/tools/import_export_servers/static/js/import_export_selection.ui.js:70
 msgid ""
-"If this option is turned on then CDEadmin will remove all the existing "
+"If this option is turned on then ScratchRobin will remove all the existing "
 "database servers and then import the selected servers. This setting is "
 "applicable only while importing the servers."
 msgstr ""
@@ -18063,7 +18063,7 @@ msgid "Generating script..."
 msgstr "生成脚本中……"
 
 #: pgadmin/tools/schema_diff/static/js/components/SchemaDiffCompare.jsx:358
-msgid "-- This script was generated by the Schema Diff utility in CDEadmin. \n"
+msgid "-- This script was generated by the Schema Diff utility in ScratchRobin. \n"
 msgstr ""
 
 #: pgadmin/tools/schema_diff/static/js/components/SchemaDiffCompare.jsx:359
@@ -18300,7 +18300,7 @@ msgstr "查询工具启动错误"
 #: pgadmin/tools/sqleditor/static/js/show_query_tool.js:122
 msgid ""
 "Please allow pop-ups for this site to perform the desired action. If the "
-"main CDEadmin window is closed, close this window and open a new CDEadmin"
+"main ScratchRobin window is closed, close this window and open a new ScratchRobin"
 " session."
 msgstr ""
 
@@ -18462,7 +18462,7 @@ msgstr ""
 #: pgadmin/tools/sqleditor/static/js/components/QueryToolDataGrid/Editors.jsx:507
 msgid ""
 "This cell contains a large amount of data. Opening it in the JSON editor "
-"may make CDEadmin slow or unresponsive. Do you want to continue?"
+"may make ScratchRobin slow or unresponsive. Do you want to continue?"
 msgstr ""
 
 #: pgadmin/tools/sqleditor/static/js/components/QueryToolDataGrid/Formatters.jsx:89
@@ -19027,7 +19027,7 @@ msgid "No history found"
 msgstr "未找到历史记录"
 
 #: pgadmin/tools/sqleditor/static/js/components/sections/QueryHistory.jsx:540
-msgid "Show queries generated internally by CDEadmin?"
+msgid "Show queries generated internally by ScratchRobin?"
 msgstr ""
 
 #: pgadmin/tools/sqleditor/static/js/components/sections/QueryHistory.jsx:550
@@ -19143,7 +19143,7 @@ msgid "Saving data..."
 msgstr "保存数据中……"
 
 #: pgadmin/tools/sqleditor/static/js/components/sections/ResultSet.jsx:1292
-msgid "This query was generated by CDEadmin as part of a \"Save Data\" operation"
+msgid "This query was generated by ScratchRobin as part of a \"Save Data\" operation"
 msgstr ""
 
 #: pgadmin/tools/sqleditor/static/js/components/sections/ResultSet.jsx:1304
@@ -20067,7 +20067,7 @@ msgstr ""
 
 #: pgadmin/utils/__init__.py:351
 msgid ""
-"Please correct the Binary Path in the Preferences. CDEadmin storage "
+"Please correct the Binary Path in the Preferences. ScratchRobin storage "
 "directory cannot be a utility binary directory."
 msgstr ""
 

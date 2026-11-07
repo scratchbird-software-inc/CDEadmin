@@ -79,14 +79,15 @@ def index():
     info['upstream_name'] = config.UPSTREAM_PRODUCT_NAME
     info['upstream_version'] = config.UPSTREAM_BASE_VERSION
     info['fork_summary'] = gettext(
-        'CDEadmin is an independent hard fork that adds a provider-driven, '
+        'ScratchRobin is an independent hard fork that adds a '
+        'provider-driven, '
         'multi-engine and multi-model administration architecture, native '
         'ScratchBird support, and administration surfaces for relational, '
         'document, graph, key-value, analytic and distributed systems.'
     )
     info['attribution'] = gettext(
         'Forked from pgAdmin 4 %(version)s. Upstream pgAdmin copyright and '
-        'the PostgreSQL Licence are retained. CDEadmin is not pgAdmin and '
+        'the PostgreSQL Licence are retained. ScratchRobin is not pgAdmin and '
         'is not endorsed by the pgAdmin Development Team.',
         version=config.UPSTREAM_BASE_VERSION,
     )

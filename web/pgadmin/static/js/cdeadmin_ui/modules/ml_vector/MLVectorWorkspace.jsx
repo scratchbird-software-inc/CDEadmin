@@ -92,7 +92,7 @@ function IndexDesigner({session, execute, currentUser}) {
       {designId, indexId}, setError)}>Discover capabilities and validate</Button></Toolbar>
     {error && <Banner status="error">{error}</Banner>}
     {!snapshot && <Banner status="info">Provider-specific index controls remain hidden until capability discovery
-      returns evidence. CDEadmin does not infer HNSW, IVF, quantization, or build options.</Banner>}
+      returns evidence. ScratchRobin does not infer HNSW, IVF, quantization, or build options.</Banner>}
     {snapshot && <Box sx={{p: 1}} aria-label="Provider-advertised vector capabilities">
       <Badge label={`${snapshot.providerId} ${snapshot.providerVersion}`} /> Metrics: {
         snapshot.capabilities.supported_metrics.map((item) => `${item.normalized} → ${item.native}`).join(', ')}.

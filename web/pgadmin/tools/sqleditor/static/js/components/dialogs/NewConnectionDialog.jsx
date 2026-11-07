@@ -242,7 +242,7 @@ export default function NewConnectionDialog({onClose, onSave}) {
       connectCallback?.(respData.data);
     } catch (error) {
       if(!error.response) {
-        pgAdmin.Browser.notifier.pgNotifier('error', error, 'Connection error', gettext('Connection to CDEadmin server has been lost.'));
+        pgAdmin.Browser.notifier.pgNotifier('error', error, 'Connection error', gettext('Connection to ScratchRobin server has been lost.'));
       } else {
         queryToolCtx.modal.showModal(gettext('Connect to server'), (closeModal)=>{
           return (

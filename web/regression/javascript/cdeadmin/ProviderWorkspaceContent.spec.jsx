@@ -4167,7 +4167,7 @@ describe('ProviderWorkspaceContent', () => {
     expect(api.post.mock.calls[1][1].request.target_resource).toEqual(view);
     expect(api.post.mock.calls[1][1].request.database_target_id)
       .toBe('firebird-database-one');
-    expect(screen.getByText(/This grid is read-only because CDEadmin/)).toBeInTheDocument();
+    expect(screen.getByText(/This grid is read-only because ScratchRobin/)).toBeInTheDocument();
     expect(screen.getByText(/The engine may support writes/)).toBeInTheDocument();
     expect(screen.queryByRole('textbox', {name: 'id value'})).toBeNull();
     expect(screen.queryByRole('button', {name: 'Save'})).toBeNull();

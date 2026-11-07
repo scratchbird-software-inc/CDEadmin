@@ -468,7 +468,7 @@ class AzureDatabaseSchema extends BaseUISchema {
     return [
       {
         id: 'gid',
-        label: gettext('CDEadmin server group'),
+        label: gettext('ScratchRobin server group'),
         type: 'select',
         options: this.fieldOptions.server_groups,
         mode: ['create'],

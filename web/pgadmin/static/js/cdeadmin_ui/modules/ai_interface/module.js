@@ -171,7 +171,7 @@ function builtInCapabilityAdapter(commands) {
     moduleId: command.aiModuleId, argumentSchema: command.aiArgumentSchema,
     resultSchema: command.aiResultSchema}));
   return {describe: async () => ({connectorClass: 'cdeadmin_capability',
-    implementation: 'CDEadmin CommandRegistry', version: '1.0.0'}),
+    implementation: 'ScratchRobin CommandRegistry', version: '1.0.0'}),
   validateConfiguration: async (input) => { profile = input; return {valid: true,
     errors: []}; },
   authenticateOrResolveIdentity: async ({connectorOwner}) => ({principalId:

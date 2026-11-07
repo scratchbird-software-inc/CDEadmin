@@ -32,7 +32,7 @@
     "tools/tests/test_cdeadmin_product_identity.py"
   ],
   "source_anchors": [
-    {"path": "web/branding.py", "literal": "APP_NAME = 'CDEadmin'"},
+    {"path": "web/branding.py", "literal": "APP_NAME = 'ScratchRobin'"},
     {"path": "web/version.py", "literal": "APP_RELEASE ="},
     {"path": "Makefile", "literal": "APP_NAME :="},
     {"path": "runtime/src/js/cdeadmin.js", "literal": "let cdeadminMainScreen"},
@@ -41,8 +41,8 @@
   "product_surface_assertions": [
     {
       "path": "web/branding.py",
-      "required": ["APP_NAME = 'CDEadmin'", "APP_SHORT_NAME = 'cdeadmin'"],
-      "forbidden": ["APP_NAME = 'pgAdmin 4'", "APP_SHORT_NAME = 'pgadmin4'"]
+      "required": ["APP_NAME = 'ScratchRobin'", "APP_DISPLAY_SHORT_NAME = 'Robin'", "APP_SHORT_NAME = 'cdeadmin'"],
+      "forbidden": ["APP_NAME = 'pgAdmin 4'", "APP_NAME = 'CDEadmin'", "APP_SHORT_NAME = 'pgadmin4'"]
     },
     {
       "path": "web/pgadmin/dashboard/static/js/WelcomeDashboard.jsx",
@@ -71,7 +71,7 @@
     },
     {
       "path": "runtime/src/html/splash.html",
-      "required": ["<title>CDEadmin</title>", "cdeadmin-welcome.svg"],
+      "required": ["<title>ScratchRobin</title>", "cdeadmin-welcome.svg"],
       "forbidden": ["<title>pgAdmin 4</title>", "welcome_logo.svg"]
     },
     {

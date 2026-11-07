@@ -1,7 +1,8 @@
 {
   "identity_version": "1.1.0",
   "product": {
-    "display_name": "CDEadmin",
+    "display_name": "ScratchRobin",
+    "display_short_name": "Robin",
     "short_name": "cdeadmin",
     "version": "0.325-alpha",
     "description": "Multi-engine administration and development environment for ScratchBird and independently managed database engines.",

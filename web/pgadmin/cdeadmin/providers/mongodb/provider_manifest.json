@@ -83,7 +83,7 @@
       {"field_id": "uuid_representation", "route_key": "uuid_representation", "label": "UUID representation", "control": "select", "group": "MongoDB session", "default": "standard", "options": [{"value": "unspecified", "label": "Unspecified"}, {"value": "standard", "label": "Standard"}, {"value": "pythonLegacy", "label": "Python legacy"}, {"value": "javaLegacy", "label": "Java legacy"}, {"value": "csharpLegacy", "label": "C# legacy"}]},
       {"field_id": "unicode_decode_error_handler", "route_key": "unicode_decode_error_handler", "label": "Unicode decode error policy", "control": "select", "group": "MongoDB session", "default": "strict", "options": [{"value": "strict", "label": "Strict"}, {"value": "replace", "label": "Replace"}, {"value": "ignore", "label": "Ignore"}]},
       {"field_id": "fsync", "route_key": "fsync", "label": "Require filesystem sync acknowledgement", "control": "boolean", "group": "MongoDB consistency", "default": false},
-      {"field_id": "appname", "route_key": "appname", "label": "Application name", "control": "text", "group": "MongoDB advanced", "default": "CDEadmin"},
+      {"field_id": "appname", "route_key": "appname", "label": "Application name", "control": "text", "group": "MongoDB advanced", "default": "ScratchRobin"},
       {"field_id": "tool_workspace", "route_key": "tool_workspace", "label": "Backup/import/export workspace", "control": "text", "group": "MongoDB operational tools", "help": "Absolute non-root directory explicitly granted to provider-owned tools."}
     ]
   },

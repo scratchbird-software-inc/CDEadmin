@@ -7,6 +7,16 @@ CDEadmin is a provider-driven, multi-engine and multi-model administration envir
 ScratchBird and independently managed database platforms. PostgreSQL remains
 a supported engine, but it is not the global product identity.
 
+Owner direction, 2026-11-07: the product is named **ScratchRobin**, short name
+**Robin** (as ScratchBird's short name is Bird). A *CDE admin* is the class of
+product ScratchRobin belongs to. CDE stands for convergent data engine, a new
+approach to databases that works like a data hypervisor. A CDE admin
+administers many different types of engines and provides unified cross-engine
+tools, producing results that a single engine could not, or that would
+otherwise need several specialised tools. CDEadmin remains the repository name
+and the name of the application's directories and code namespaces. The naming
+in the paragraph above predates this direction.
+
 The inherited PostgreSQL administration chapters remain useful for the
 PostgreSQL provider. Other providers expose their own objects, forms, query
 languages and workspaces according to capability. See :doc:`cdeadmin_hard_fork`

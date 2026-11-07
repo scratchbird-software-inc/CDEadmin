@@ -428,7 +428,8 @@ _DATABASE_SPECS = {
         ),
         'native_create': False, 'native_alter': False, 'native_drop': False,
         'unsupported_reason': (
-            'Redis logical databases are configured by the server; CDEadmin '
+            'Redis logical databases are configured by the server; '
+            'ScratchRobin '
             'can connect to or forget a database number but cannot create, '
             'alter, or drop it independently.'
         ),
@@ -799,7 +800,7 @@ def provider_form_contract(profile):
             'save_password', 'Save default connection credentials',
             'boolean', default=False,
             help=(
-                'Store the credentials for the default user in CDEadmin. '
+                'Store the credentials for the default user in ScratchRobin. '
                 'Credentials entered while connecting as another user are '
                 'never stored as the default credentials.'
             ),

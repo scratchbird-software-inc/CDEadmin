@@ -44,7 +44,7 @@ describe('CDEadmin interface customization profiles', () => {
     expect(imported.draft.icons['tool.query']).toBe('action.search');
     expect(imported.draft.menus.tools.label).toBe('Utilities');
     expect(imported.draft.commands['tools.query.open'].surface).toBe('tools');
-    expect(()=>importCustomizationProfile('{}')).toThrow('not a CDEadmin');
+    expect(()=>importCustomizationProfile('{}')).toThrow('not a ScratchRobin');
   });
 
   it('exports only bounded presentation preferences without unrelated data', () => {

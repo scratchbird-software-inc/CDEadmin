@@ -374,7 +374,7 @@
       "status": "complete",
       "confirmation": "typed_name",
       "fields": [],
-      "notes": "Closes the database. Warns first: while any database is unloaded, immudb 1.11.0 cannot list databases or report server information, whichever client unloaded it; CDEadmin then lists the databases the metrics endpoint names, without their settings. Read back: /db/use on the database fails \"already closed\". Passed a live round trip on 1.11.0 (2026-10-31, tools/tests/test_ui_descriptor_roundtrip_immudb.py)."
+      "notes": "Closes the database. Warns first: while any database is unloaded, immudb 1.11.0 cannot list databases or report server information, whichever client unloaded it; ScratchRobin then lists the databases the metrics endpoint names, without their settings. Read back: /db/use on the database fails \"already closed\". Passed a live round trip on 1.11.0 (2026-10-31, tools/tests/test_ui_descriptor_roundtrip_immudb.py)."
     },
     {
       "operation_id": "flush_index",

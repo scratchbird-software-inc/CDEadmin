@@ -151,7 +151,7 @@
       "backend_field_id": "save_password",
       "required": false,
       "default": false,
-      "help": "Store the credentials for the default user in CDEadmin. Credentials entered while connecting as another user are never stored as the default credentials."
+      "help": "Store the credentials for the default user in ScratchRobin. Credentials entered while connecting as another user are never stored as the default credentials."
     },
     {
       "field_id": "tls_mode",
@@ -252,7 +252,7 @@
       "backend_field_id": "cde_route_application_name",
       "group": "Session",
       "required": false,
-      "default": "CDEadmin"
+      "default": "ScratchRobin"
     },
     {
       "field_id": "transaction_mode",

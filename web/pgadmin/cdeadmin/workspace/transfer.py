@@ -909,7 +909,7 @@ def service_for_app(app):
         return app.extensions[APP_EXTENSION_KEY]
     except (AttributeError, KeyError) as exc:
         raise WorkspaceTransferError(
-            'CDEadmin workspace transfer service is not initialized'
+            'ScratchRobin workspace transfer service is not initialized'
         ) from exc
 
 

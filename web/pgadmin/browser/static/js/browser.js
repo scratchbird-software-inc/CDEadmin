@@ -255,7 +255,7 @@ define('pgadmin.browser', [
 
           pgAdmin.Browser.notifier.alert(
             'Warning',
-            'CDEadmin detected unrecoverable corruption in its SQLite configuration database. ' +
+            'ScratchRobin detected unrecoverable corruption in its SQLite configuration database. ' +
             'The database has been backed up and recreated with default settings. '+
             'It may be possible to recover data such as query history manually from '+
             'the original/corrupt file using a tool such as DB Browser for SQLite if desired.'+

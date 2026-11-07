@@ -85,9 +85,20 @@ class ProductIdentityContractTests(unittest.TestCase):
         )
         self.assertFalse(self.identity['product']['release_ready'])
 
-    def test_working_product_name_is_cdeadmin(self):
-        self.assertEqual('CDEadmin', self.identity['product']['display_name'])
-        self.assertEqual('cdeadmin', self.identity['product']['short_name'])
+    def test_product_names_follow_owner_direction(self):
+        # Owner direction 2026-11-07: the product is ScratchRobin, short name
+        # Robin; the cdeadmin path and namespace token is kept.
+        product = self.identity['product']
+        self.assertEqual('ScratchRobin', product['display_name'])
+        self.assertEqual('Robin', product['display_short_name'])
+        self.assertEqual('cdeadmin', product['short_name'])
+        for field, value in (('display_name', 'CDEadmin'),
+                             ('display_short_name', 'Scratch'),
+                             ('short_name', 'scratchrobin')):
+            altered = copy.deepcopy(self.identity)
+            altered['product'][field] = value
+            with self.assertRaisesRegex(RUNTIME.ProductIdentityError, field):
+                RUNTIME.validate_identity(altered)
 
     def test_sign_in_artwork_is_self_contained(self):
         # Owner direction 2026-11-06: the sign-in pages show the ScratchRobin
@@ -154,6 +165,10 @@ class ProductIdentityContractTests(unittest.TestCase):
         version = load_module('cdeadmin_version', ROOT / 'web/version.py')
         self.assertEqual(
             self.identity['product']['display_name'], branding.APP_NAME
+        )
+        self.assertEqual(
+            self.identity['product']['display_short_name'],
+            branding.APP_DISPLAY_SHORT_NAME
         )
         self.assertEqual(
             self.identity['product']['short_name'], branding.APP_SHORT_NAME

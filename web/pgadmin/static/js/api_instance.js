@@ -150,7 +150,7 @@ export function parseApiError(error, withData=false) {
     // The request was made but no response was received
     // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
     // http.ClientRequest in node.js
-    return gettext('Connection to CDEadmin server has been lost');
+    return gettext('Connection to ScratchRobin server has been lost');
   } else if(error.message) {
     // Something happened in setting up the request that triggered an Error
     return error.message;

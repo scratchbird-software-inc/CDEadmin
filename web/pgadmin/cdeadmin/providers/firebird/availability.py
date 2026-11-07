@@ -18,7 +18,7 @@ WARNING = (
     'and IGNORE_DB_TRIGGERS for the qualified maintenance-mode workflow. '
     'Firebird remains the authority for each mode, privilege and outcome. '
     'In Firebird 5.0.4 shared-cache operation, the native grace period can '
-    'expire earlier than the requested number of seconds. CDEadmin passes '
+    'expire earlier than the requested number of seconds. ScratchRobin passes '
     'the requested timeout unchanged and does not retry. SINGLE and FULL '
     'shutdown are not available while the database is in physical-backup '
     'mode; end the backup explicitly only when it is safe to do so.')

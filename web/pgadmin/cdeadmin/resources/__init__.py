@@ -58,7 +58,7 @@ def service_for_app(app) -> ResourceExplorerService:
         return app.extensions[APP_EXTENSION_KEY]
     except (AttributeError, KeyError) as exc:
         raise ResourceGraphError(
-            'CDEadmin resource explorer is not initialized'
+            'ScratchRobin resource explorer is not initialized'
         ) from exc
 
 

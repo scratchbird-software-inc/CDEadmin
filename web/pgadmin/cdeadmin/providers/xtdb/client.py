@@ -368,7 +368,7 @@ class XTDBClient:
         route.setdefault('tls_mode', 'disable')
         route.setdefault('connect_timeout', 10)
         route.setdefault('statement_timeout', 30)
-        route.setdefault('application_name', 'CDEadmin')
+        route.setdefault('application_name', 'ScratchRobin')
         route.setdefault('read_only', False)
         route.setdefault('transaction_mode', (
             'read-only' if route['read_only'] else 'inferred'
@@ -1218,7 +1218,8 @@ class XTDBClient:
                 'transactions': declaration(
                     'transaction', status='read_only', reason=(
                         'XTDB transaction state is displayed as an opaque '
-                        'server/driver observation; CDEadmin does not infer '
+                        'server/driver observation; ScratchRobin does not '
+                        'infer '
                         'cross-engine finality.'
                     )
                 ),

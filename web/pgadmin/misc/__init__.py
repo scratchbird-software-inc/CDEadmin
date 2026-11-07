@@ -100,7 +100,7 @@ class MiscModule(PgAdminModule):
 
         profile_options = [
             {'label': gettext('Classic compatibility'), 'value': 'classic'},
-            {'label': gettext('CDEadmin standard'),
+            {'label': gettext('ScratchRobin standard'),
              'value': 'cdeadmin_standard'},
             {'label': gettext('Comfortable'), 'value': 'comfortable'},
             {'label': gettext('System adaptive'),
@@ -336,7 +336,8 @@ class MiscModule(PgAdminModule):
                 'creatable': False,
             },
             help_str=gettext(
-                'Choose the layout that suits you best. CDEadmin offers two '
+                'Choose the layout that suits you best. ScratchRobin offers '
+                'two '
                 'options: the Classic layout, a longstanding and familiar '
                 'design, and the Workspace layout, which provides distraction '
                 'free dedicated areas for the Query Tool, PSQL, and Schema '
@@ -363,7 +364,8 @@ class MiscModule(PgAdminModule):
             'boolean', True,
             category_label=PREF_LABEL_USER_INTERFACE,
             help_str=gettext(
-                'If set to True, CDEadmin will save the state of opened tools'
+                'If set to True, ScratchRobin will save the state of opened '
+                'tools'
                 ' (such as Query Tool, PSQL, Schema Diff, and ERD), including'
                 ' any unsaved data. This data will be automatically restored'
                 ' in the event of an unexpected shutdown or browser refresh.'

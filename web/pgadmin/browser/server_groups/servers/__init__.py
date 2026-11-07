@@ -1013,7 +1013,7 @@ class ServerNode(PGChildNodeView):
                 )
             except Exception:
                 current_app.logger.exception(
-                    'CDEadmin database navigator request failed'
+                    'ScratchRobin database navigator request failed'
                 )
                 return make_json_response(
                     status=502, success=0,
@@ -2674,7 +2674,7 @@ class ServerNode(PGChildNodeView):
             'provider_endpoint', 'legacy_preserved',
         }:
             return bad_request(gettext(
-                'This endpoint has no shared CDEadmin workspace.'
+                'This endpoint has no shared ScratchRobin workspace.'
             ))
         service = provider_workspace_for_app(current_app)
         try:
@@ -3560,7 +3560,7 @@ class ServerNode(PGChildNodeView):
             SemanticModelError,
         ):
             current_app.logger.exception(
-                'CDEadmin provider workspace request failed'
+                'ScratchRobin provider workspace request failed'
             )
             response = make_json_response(
                 status=400,
@@ -3573,7 +3573,7 @@ class ServerNode(PGChildNodeView):
             return response
         except Exception:
             current_app.logger.exception(
-                'CDEadmin provider workspace adapter failed'
+                'ScratchRobin provider workspace adapter failed'
             )
             response = make_json_response(
                 status=502,
@@ -3686,7 +3686,7 @@ class ServerNode(PGChildNodeView):
 
         if _cde_registration(server)['workflow'] == 'provider_endpoint':
             return bad_request(gettext(
-                'Provider endpoints must use the CDEadmin endpoint '
+                'Provider endpoints must use the ScratchRobin endpoint '
                 'verification and workspace path.'
             ))
 

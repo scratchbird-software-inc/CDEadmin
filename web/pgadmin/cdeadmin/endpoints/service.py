@@ -2214,5 +2214,5 @@ def service_for_app(app):
         return app.extensions[APP_EXTENSION_KEY]
     except (AttributeError, KeyError) as exc:
         raise EndpointRegistrationError(
-            'CDEadmin endpoint service is not initialized'
+            'ScratchRobin endpoint service is not initialized'
         ) from exc

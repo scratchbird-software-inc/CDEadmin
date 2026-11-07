@@ -137,7 +137,7 @@ export default function OperationDialog({open, operation, targetName, context={}
       </Banner>}
       {operation.description && <Banner status="info">{operation.description}</Banner>}
       {operation.tier === 3 && operation.execution_host && <Select label="Execution host" fullWidth size="small"
-        options={executionHosts.length ? executionHosts : [{value: 'local', label: 'This CDEadmin server'}]}
+        options={executionHosts.length ? executionHosts : [{value: 'local', label: 'This ScratchRobin server'}]}
         value={host} onChange={(next) => setHost(next)} helperText="Where the native utility runs." />}
       {groups.map((group) => {
         const groupFields = visible.filter((field) => (field.group || '') === group);

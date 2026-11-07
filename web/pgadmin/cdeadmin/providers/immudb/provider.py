@@ -1149,7 +1149,7 @@ def _compile_control(request):
         'warnings': [
             'While any database is unloaded, immudb 1.11.0 cannot list '
             'databases or report server information, whichever client '
-            'unloaded it. CDEadmin then lists the databases the metrics '
+            'unloaded it. ScratchRobin then lists the databases the metrics '
             'endpoint names, without their settings, until every database '
             'is loaded again. Unloading the database this endpoint '
             'connects to also stops its tables, keys and documents being '
@@ -1775,7 +1775,8 @@ _DIALECT = replace(
                 'status': 'not_applicable',
                 'reason': (
                     'immudb 1.11.0 accepts view DDL but exposes no public '
-                    'view-enumeration metadata; CDEadmin does not invent a '
+                    'view-enumeration metadata; ScratchRobin does not invent '
+                    'a '
                     'shadow catalog.'
                 ),
                 'evidence': ['immudb-1.11-pg-views-empty'],

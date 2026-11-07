@@ -874,7 +874,7 @@ def registry_for_app(app) -> ProviderRegistry:
         return app.extensions[APP_EXTENSION_KEY]
     except (AttributeError, KeyError) as exc:
         raise ProviderUnavailableError(
-            'CDEadmin provider registry is not initialized'
+            'ScratchRobin provider registry is not initialized'
         ) from exc
 
 

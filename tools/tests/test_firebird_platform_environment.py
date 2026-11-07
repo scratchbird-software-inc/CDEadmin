@@ -41,6 +41,8 @@ def test_fresh_workflow_process_has_application_import_boundary(
     for _, env, output in observations:
         paths = env['PYTHONPATH'].split(os.pathsep)
         assert paths[:2] == [str(runner.ROOT / 'web'), str(runner.ROOT)]
-        assert output.strip() == 'CDEadmin'
+        # The child imported this application's config (owner direction
+        # 2026-11-07: the product name is ScratchRobin).
+        assert output.strip() == 'ScratchRobin'
         if inherited is not None:
             assert paths[-1] == inherited

@@ -401,7 +401,7 @@ export class FileManagerUtils {
     return new Promise((resolve) => {
       this.params.modal.confirm(
         gettext('Reload file?'),
-        gettext('The file has been modified by another program. Do you want to reload it and lose changes made in CDEadmin?'),
+        gettext('The file has been modified by another program. Do you want to reload it and lose changes made in ScratchRobin?'),
         function () {
           resolve({
             loadFile: true,
