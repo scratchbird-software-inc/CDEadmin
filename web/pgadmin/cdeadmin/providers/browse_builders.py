@@ -156,13 +156,14 @@ def mysql_family(self, resource, native, catalog, language):
 
 
 def _sqlite_keywords(provider):
-    # The keywords of the SQLite library that runs the editor's statements;
-    # the contract's list when the library cannot be asked.
-    from .sqlite.identifier_keywords import native_keywords
-    try:
-        return frozenset(native_keywords()[0])
-    except (OSError, AttributeError, ValueError, UnicodeError):
-        return contract_keywords(provider, _every_keyword)
+    # The keywords of the SQLite library that runs the editor's statements,
+    # as the provider reports them; the contract's list when it cannot. The
+    # provider owns the lookup, so shared code imports no provider package.
+    report = getattr(provider, 'browse_runtime_keywords', None)
+    words = report() if callable(report) else None
+    if words is not None:
+        return frozenset(str(word).upper() for word in words)
+    return contract_keywords(provider, _every_keyword)
 
 
 def sqlite(self, resource, native, catalog, language):

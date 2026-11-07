@@ -288,6 +288,18 @@ ADMINISTRATION = SQLiteAdministration(RelationalAdminDialect(
 class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
     # Browse data (owner direction 2026-11-06).
     _browse_text = browse_builders.sqlite
+
+    def browse_runtime_keywords(self):
+        """Keywords of the loaded SQLite library, for Browse data quoting.
+
+        None when the library cannot report them; the dialect contract's
+        list is used instead.
+        """
+        from .identifier_keywords import native_keywords
+        try:
+            return native_keywords()[0]
+        except (OSError, AttributeError, ValueError, UnicodeError):
+            return None
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 

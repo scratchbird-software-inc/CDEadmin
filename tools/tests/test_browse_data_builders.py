@@ -199,6 +199,29 @@ def test_sqlite_leaves_out_hidden_virtual_table_columns():
         'SELECT body, total\nFROM main.docs')
 
 
+def test_sqlite_quotes_the_keywords_its_provider_reports():
+    table = res('table', ['main', 't'])
+    catalog = [res('column', ['main', 't', name])
+               for name in ('foo', 'select', 'id')]
+    stand_in = provider('sqlite-native')
+    stand_in.browse_runtime_keywords = lambda: ['FOO']
+    assert b.sqlite(stand_in, table, {}, catalog, None) == (
+        'SELECT "foo", select, id\nFROM main.t')
+    # Nothing reported: the dialect contract's keywords are used.
+    stand_in.browse_runtime_keywords = lambda: None
+    assert b.sqlite(stand_in, table, {}, catalog, None) == (
+        'SELECT foo, "select", id\nFROM main.t')
+
+
+def test_sqlite_provider_reports_the_loaded_library_keywords():
+    from pgadmin.cdeadmin.providers.sqlite.identifier_keywords import (
+        native_keywords)
+    from pgadmin.cdeadmin.providers.sqlite.provider import SQLiteProvider
+    reported = SQLiteProvider.browse_runtime_keywords(
+        object.__new__(SQLiteProvider))
+    assert reported == native_keywords()[0] and 'SELECT' in reported
+
+
 def test_duckdb_qualifies_with_database_and_schema():
     view = res('view', ['memory', 'main', 'v'])
     catalog = [res('column', ['memory', 'main', 'v', 'a'],
