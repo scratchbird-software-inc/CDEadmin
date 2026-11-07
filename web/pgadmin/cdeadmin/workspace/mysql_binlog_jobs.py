@@ -16,6 +16,7 @@ import psutil
 from ..operations.fileio import durable_replace,exclusive_file_lock,private_directory,private_file
 from ..operations.store import JsonOperationStore
 from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError,verify
+from .job_liveness import read_settled, worker_stopped
 
 ACTIVE={'dispatching','active','cancel_requested'}
 FIELDS=('job_id','owner','endpoint_id','configuration','options','source','source_state','program','continuation','created_at','expires_at')
@@ -115,14 +116,20 @@ class MySQLBinlogJobs:
                     artifact[key]['position']=str(artifact[key]['position'])
         if record['state'] in ACTIVE:
             with self._maps_lock:known=self.workers.get(record['job_id'])
-            pid,created=record.get('worker_identity',(None,None))
-            try:alive=pid is not None and psutil.Process(pid).create_time()==created
-            except psutil.Error:alive=False
-            if not alive or record.get('worker_identity')==self.worker_identity and not (known and known[0].is_alive()):
+            if worker_stopped(record, self.worker_identity, known):
                 result.update(state='unknown',native_process_termination_confirmed=False)
         return result
 
-    def get(self,job_id,owner,endpoint):return self.public(self.load(job_id,owner,endpoint))
+    def settled(self, job_id, owner, endpoint, view=None):
+        """View a receipt loaded outside its lock. A view that reports another
+        state than the stored one judged a stopped worker against that copy, so
+        the receipt is loaded and viewed again (see job_liveness)."""
+        return read_settled(
+            lambda: self.load(job_id, owner, endpoint), view or self.public,
+            lambda record, shown: shown['state'] != record['state'])
+
+    def get(self, job_id, owner, endpoint):
+        return self.settled(job_id, owner, endpoint)
 
     def update(self,record,**values):
         with self.store(record['job_id']) as store:
@@ -151,11 +158,27 @@ class MySQLBinlogJobs:
             result={'complete':False,'cleanup_confirmed':None,'native_outcome_inferred':False,'observation_error_type':type(error).__name__}
         result={**result,'native_process_termination_confirmed':durable_tool.terminated(result)}
         values={'interrupted_utility_observation':result,'utility_observation_unavailable':None}
-        if durable_tool.terminated(result):
-            values['native_process_termination_confirmed']=True
-            if record['state'] in ACTIVE and self.public(record)['state']=='unknown':values['state']='unknown'
-        self.update(record,**values)
+        terminated = durable_tool.terminated(result)
+        if terminated:
+            values['native_process_termination_confirmed'] = True
+        self.update_judged(record, values, lambda current: (
+            terminated and current['state'] in ACTIVE and
+            self.public(current)['state'] == 'unknown'))
         return result
+
+    def update_judged(self, record, values, unknown):
+        """Store ``values``. The state becomes unknown when ``unknown`` holds
+        for the stored receipt, judged under its lock: a copy read earlier can
+        predate the worker's terminal write (see job_liveness)."""
+        with self.store(record['job_id']) as store:
+            def change(state):
+                current = self.record(state, record['job_id'], record['owner'],
+                                      record['endpoint_id'])
+                abandoned = unknown(current)
+                current.update(deepcopy(values), updated_at=time.time())
+                if abandoned:
+                    current['state'] = 'unknown'
+            store.change(change)
 
     def list(self,owner,endpoint,offset=0,limit=25):
         scope=self.scope(owner,endpoint)

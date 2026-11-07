@@ -232,7 +232,8 @@ def reconcile(jobs, record):
                     'state': 'verified' if complete else 'partial', 'incomplete_tail': last not in (b'', b'\n'),
                     'file_identity': file_identity(path.stat()), 'publication_reconciled': complete}
         jobs.update(current, protocol_stream_artifact=artifact)
-    return jobs.public(jobs.observed(jobs.load(current['job_id'], current['owner'], current['endpoint_id'])))
+    return jobs.status(current['job_id'], current['owner'],
+                       current['endpoint_id'])
 
 
 def commands_running(jobs, record):

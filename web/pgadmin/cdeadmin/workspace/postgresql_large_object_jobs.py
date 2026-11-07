@@ -16,6 +16,7 @@ import psutil
 
 from ..operations.fileio import durable_replace,exclusive_file_lock,private_directory,private_file
 from ..operations.store import JsonOperationStore
+from .job_liveness import worker_stopped
 from ..providers.postgresql.large_object_files import (LargeObjectFileError as Error,CHUNK_BYTES,
     attach,cursor,decimal,import_file,metadata,options,read_chunks)
 
@@ -78,10 +79,8 @@ class PostgreSQLLargeObjectJobs:
         result=deepcopy({key:value for key,value in record.items() if key not in {'owner','configuration','artifact_identity','worker_identity'}})
         result['automatic_retry']=False
         if record['state'] in ACTIVE:
-            worker=self.workers.get(record['job_id']);pid,created=record.get('worker_identity',(None,None))
-            try:alive=pid is not None and psutil.Process(pid).create_time()==created
-            except psutil.Error:alive=False
-            if not alive or record.get('worker_identity')==self.worker_identity and not (worker and worker[0].is_alive()):
+            worker = self.workers.get(record['job_id'])
+            if worker_stopped(record, self.worker_identity, worker):
                 # A worker stores its terminal receipt before it exits, so a
                 # snapshot read before that write is stale, not abandoned.
                 with self.store(record['job_id']) as store:

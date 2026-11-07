@@ -178,7 +178,7 @@ def action(service, server, operation, request):
                 raise TemporarySlotError('Native replication bytes changed before removal')
             path.unlink()
             commands.update(current, artifact_removed=True, artifact_removed_at=time.time())
-        return commands.public(commands.observed(commands.load(child['job_id'], owner, endpoint)))
+        return commands.status(child['job_id'], owner, endpoint)
     if operation in {'inventory', 'command_review', 'command_start'} and resource['program'] != program():
         raise TemporarySlotError('The retained replication adapter changed; release it before opening another resource')
     if operation in {'command_review', 'command_start'} and resource['source'].get('provider_isolation_key') != list(artifact_context(server).isolation_key):
@@ -194,7 +194,7 @@ def action(service, server, operation, request):
     if operation in {'command_status', 'command_cancel'}:
         if set(remaining) != {'job_id'}:
             raise TemporarySlotError('Select one native replication command receipt')
-        return (commands.public(commands.observed(commands.load(remaining['job_id'], owner, endpoint)))
+        return (commands.status(remaining['job_id'], owner, endpoint)
                 if operation == 'command_status' else jobs.cancel_command(resource['job_id'], owner, endpoint, remaining['job_id']))
     if operation == 'command_start':
         return jobs.queue_execute(resource['job_id'], owner, endpoint, remaining)

@@ -34,6 +34,12 @@ class TemporarySlotCommands(MySQLBinlogJobs):
             result.update(state='unknown' if record.get('native_dispatch_admitted') else 'not_dispatched',worker_io_closed=True)
         return result
 
+    def status(self, job_id, owner, endpoint):
+        """The command's public receipt with its resource-owner observation,
+        from a receipt settled against its worker (see job_liveness)."""
+        return self.settled(job_id, owner, endpoint,
+                            lambda record: self.public(self.observed(record)))
+
     def public(self,record):
         result=deepcopy({key:value for key,value in record.items() if key not in {'owner','configuration','source_state'}})
         result['automatic_retry']=False

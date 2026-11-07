@@ -14,6 +14,7 @@ import psutil
 from ..operations.fileio import durable_replace, exclusive_file_lock, private_directory, private_file
 from ..operations.store import JsonOperationStore
 from ..providers.mysql_family.mysql_clone import CloneError, capture, clone_statement, correlated, destination, observation, operation_key, options, rows, thread_identity, thread_matches
+from .job_liveness import read_settled, worker_stopped
 
 
 ACTIVE={'dispatching','active','cancel_requested'}
@@ -80,15 +81,21 @@ class MySQLCloneJobs:
         result['automatic_retry']=False
         if summary:result.pop('native_observation',None)
         if record['state'] in ACTIVE:
-            pid,created=record.get('worker_identity',(None,None))
-            try:alive=psutil.Process(pid).create_time()==created if pid is not None else False
-            except psutil.Error:alive=False
             with self._maps_lock:known=self.workers.get(record['job_id'])
-            if not alive or record.get('worker_identity')==self.worker_identity and not (known and known[0].is_alive()):
+            if worker_stopped(record, self.worker_identity, known):
                 result.update(state='unknown',observation_blocker='The application worker stopped without a terminal receipt. The server clone may still be running; reconcile its native state before further action.')
         return result
 
-    def get(self,job_id,owner,endpoint):return self.public(self.load(job_id,owner,endpoint))
+    def settled(self, job_id, owner, endpoint, *, summary=False):
+        """View a receipt loaded outside its lock, loading it again when the
+        view judged a stopped worker against that copy (see job_liveness)."""
+        return read_settled(
+            lambda: self.load(job_id, owner, endpoint),
+            lambda record: self.public(record, summary=summary),
+            lambda record, shown: shown['state'] != record['state'])
+
+    def get(self, job_id, owner, endpoint):
+        return self.settled(job_id, owner, endpoint)
 
     def update(self,record,**values):
         with self.store(record['job_id']) as store:
@@ -106,7 +113,9 @@ class MySQLCloneJobs:
         result=[];unavailable=[]
         for entry in entries[offset:offset+limit]:
             job_id=entry.name.split('_',1)[-1]
-            try:result.append(self.public(self.load(job_id,owner,endpoint),summary=True))
+            try:
+                result.append(self.settled(job_id, owner, endpoint,
+                                           summary=True))
             except CloneError:unavailable.append(job_id)
         return {'jobs':result,'offset':offset,'limit':limit,'total':len(entries),'more':offset+limit<len(entries),'unavailable_job_ids':unavailable}
 

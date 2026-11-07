@@ -91,7 +91,7 @@ def action(service,server,operation,request):
                 if set(remaining)!={'job_id'}:raise TemporarySlotError('Select one native logical capture for inspection')
                 if commands.observed(child).get('worker_io_closed') is not True:raise TemporarySlotError('Wait for the native logical artifact writer to stop')
                 changes.reconcile(commands,child)
-                return commands.public(commands.observed(commands.load(child['job_id'],owner,endpoint)))
+                return commands.status(child['job_id'], owner, endpoint)
             with changes.artifact_lock(commands,child) as current:
                 if current.get('artifact_removed'):return commands.public(commands.observed(current))
                 if commands.observed(current).get('worker_io_closed') is not True:raise TemporarySlotError('Wait for the native logical artifact writer to stop')
@@ -112,7 +112,10 @@ def action(service,server,operation,request):
             return commands.list(owner,endpoint,**remaining)
         if operation in {'command_status','command_cancel'}:
             if set(remaining)!={'job_id'}:raise TemporarySlotError('Select one temporary-slot command receipt')
-            return commands.public(commands.observed(commands.load(remaining['job_id'],owner,endpoint))) if operation=='command_status' else jobs.cancel_command(resource['job_id'],owner,endpoint,remaining['job_id'])
+            if operation == 'command_status':
+                return commands.status(remaining['job_id'], owner, endpoint)
+            return jobs.cancel_command(resource['job_id'], owner, endpoint,
+                                       remaining['job_id'])
         if operation=='command_start':return jobs.queue_execute(resource['job_id'],owner,endpoint,remaining)
         if set(remaining)!={'operation','options'}:raise TemporarySlotError('Review exact native temporary-slot command options')
         selected=options(remaining['operation'],remaining['options'])

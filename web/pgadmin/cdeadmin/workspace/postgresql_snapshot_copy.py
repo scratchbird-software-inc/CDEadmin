@@ -111,7 +111,8 @@ def reconcile(jobs, record):
                     'native_binary_trailer': tail == b'\xff\xff', 'publication_reconciled': complete,
                     'file_identity': file_identity(path.stat())}
         jobs.update(current, snapshot_copy_artifact=artifact)
-    return jobs.public(jobs.observed(jobs.load(current['job_id'], current['owner'], current['endpoint_id'])))
+    return jobs.status(current['job_id'], current['owner'],
+                       current['endpoint_id'])
 
 
 def preview(jobs, record, request):

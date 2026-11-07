@@ -69,8 +69,8 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
         result={'tools':observed,'native_process_termination_confirmed':stopped,'original_native_load_outcome_unchanged':True,
             'automatic_retry':False,'observed_at':time.time()}
         values={'interrupted_utility_observation':result,'native_process_termination_confirmed':stopped,'utility_observation_unavailable':None}
-        if self.public(record)['state']=='unknown':values['state']='unknown'
-        self.update(record,**values)
+        self.update_judged(record, values, lambda current: (
+            self.public(current)['state'] == 'unknown'))
         return result
 
     @staticmethod

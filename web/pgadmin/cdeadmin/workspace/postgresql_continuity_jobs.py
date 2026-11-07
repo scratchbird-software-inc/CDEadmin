@@ -14,6 +14,7 @@ import psutil
 
 from ..operations.fileio import durable_replace, exclusive_file_lock, private_file, private_directory
 from ..operations.store import JsonOperationStore
+from .job_liveness import worker_stopped
 from ..providers.postgresql.continuity import ContinuityError, PhysicalTools, backup_options, backup_arguments, combine_options, combine_arguments, manifest
 from ..providers.postgresql.continuity_recovery import recovery_options, independent_copy, recovery_command, read_result
 from ..providers.postgresql.continuity_tar import materialize,tablespace_observation
@@ -130,8 +131,7 @@ class PostgreSQLContinuityJobs:
         for entry in entries[offset:offset+limit]:
             job_id=entry.name.split('_',1)[-1]
             try:
-                record=self.load(job_id,owner,endpoint)
-                observed=self.observed(record)
+                record, observed = self.settled(job_id, owner, endpoint)
                 result.append({**self.public(record,summary=True),'state':observed['state'],
                                'observation_blocker':observed.get('observation_blocker')})
             except ContinuityError:unavailable.append(job_id)
@@ -142,9 +142,20 @@ class PostgreSQLContinuityJobs:
         with self.store(job_id) as store:
             return self.record(store.read(),job_id,owner,endpoint)
 
+    def settled(self, job_id, owner, endpoint):
+        """Load a receipt outside its lock and observe it, judging its
+        worker's liveness once. A worker seen running is reported as running
+        for this copy. A worker seen stopped with work unfinished writes
+        nothing more, so the receipt is loaded again and that copy is
+        observed (see job_liveness). Returns the record and its view."""
+        record = self.load(job_id, owner, endpoint)
+        if not self.abandoned(record):
+            return record, self.observed(record, abandoned=False)
+        record = self.load(job_id, owner, endpoint)
+        return record, self.observed(record)
+
     def get(self, job_id, owner, endpoint):
-        record=self.load(job_id,owner,endpoint)
-        return self.observed(record)
+        return self.settled(job_id, owner, endpoint)[1]
 
     def release_transport(self, job_id, owner, endpoint):
         record=self.load(job_id,owner,endpoint)
@@ -171,25 +182,42 @@ class PostgreSQLContinuityJobs:
             self.pending_releases.pop(record['job_id'],None)
             return True
 
-    def observed(self, record):
-        job_id=record['job_id']
+    @staticmethod
+    def unfinished(record):
+        """Work the receipt's worker still owes: a terminal state or a pending
+        slot observation, change publication or stream sealing."""
+        change = record.get('change_artifact') or {}
+        stream = record.get('logical_stream_artifact') or {}
+        return (record['state'] in {'dispatching', 'active', 'verifying',
+                                    'verifying_inputs', 'cancel_requested'} or
+                record.get('slot_observation_state') == 'pending' or
+                change.get('state') == 'publishing' or
+                stream.get('state') == 'sealing')
+
+    def abandoned(self, record):
+        """True when the receipt has unfinished work and its worker stopped."""
+        if not self.unfinished(record):
+            return False
+        with self._worker_maps_lock:
+            known = self.workers.get(record['job_id'])
+        return worker_stopped(record, self.worker_identity, known)
+
+    def observed(self, record, *, abandoned=None):
+        """The public receipt, with unfinished work of a stopped worker
+        reported as unknown or unavailable. ``abandoned`` passes a liveness
+        decision already made for this copy."""
+        if abandoned is None:
+            abandoned = self.abandoned(record)
         result = self.public(record)
         active=record['state'] in {'dispatching','active','verifying','verifying_inputs','cancel_requested'}
         pending_slot=record.get('slot_observation_state')=='pending'
         pending_changes=(record.get('change_artifact') or {}).get('state')=='publishing'
         pending_stream=(record.get('logical_stream_artifact') or {}).get('state')=='sealing'
-        if active or pending_slot or pending_changes or pending_stream:
-            pid, created = record.get('worker_identity',(None,None))
-            try:alive = pid is not None and psutil.Process(pid).create_time()==created
-            except psutil.Error:alive=False
-            with self._worker_maps_lock:
-                known=self.workers.get(job_id)
-                local_alive=known is not None and known[0].is_alive()
-            if not alive or (tuple(record.get('worker_identity',()))==self.worker_identity and not local_alive):
-                if active:result.update(state='unknown', observation_blocker='The worker stopped before a terminal receipt. Inspect the artifact and process; do not repeat the backup.')
-                if pending_slot:result.update(slot_observation_state='unavailable',slot_observation_blocker='The later slot observation is unavailable from this worker; refresh the native slot catalog. The recorded native acknowledgement is unchanged.')
-                if pending_changes:result['change_artifact']={'state':'unavailable','blocker':'The worker stopped before artifact publication; the native acknowledgement is unchanged.'}
-                if pending_stream:result['logical_stream_artifact']={'state':'unavailable','writer_closed':record.get('worker_io_closed') is True,'blocker':'The worker stopped before file sealing; the recorded native receiver outcome is unchanged.'}
+        if abandoned:
+            if active:result.update(state='unknown', observation_blocker='The worker stopped before a terminal receipt. Inspect the artifact and process; do not repeat the backup.')
+            if pending_slot:result.update(slot_observation_state='unavailable',slot_observation_blocker='The later slot observation is unavailable from this worker; refresh the native slot catalog. The recorded native acknowledgement is unchanged.')
+            if pending_changes:result['change_artifact']={'state':'unavailable','blocker':'The worker stopped before artifact publication; the native acknowledgement is unchanged.'}
+            if pending_stream:result['logical_stream_artifact']={'state':'unavailable','writer_closed':record.get('worker_io_closed') is True,'blocker':'The worker stopped before file sealing; the recorded native receiver outcome is unchanged.'}
         return result
 
     def require_stopped_writer(self, record):
@@ -283,8 +311,8 @@ class PostgreSQLContinuityJobs:
         """Stop owned utilities without inferring SQL or artifact success."""
         if not isinstance(request,dict) or set(request)!={'job_id','confirmed'} or request['confirmed'] is not True:
             raise ContinuityError('Confirm reconciliation of one owned native job')
-        record=self.load(request['job_id'],owner,endpoint)
-        if self.observed(record)['state'] not in {'unknown','failed','cancelled'}:
+        record, observed = self.settled(request['job_id'], owner, endpoint)
+        if observed['state'] not in {'unknown', 'failed', 'cancelled'}:
             raise ContinuityError('Cancel an active native job before reconciling its writer')
         with self._worker_maps_lock:known=self.workers.get(record['job_id'])
         if known is not None and known[0].is_alive():
@@ -367,8 +395,9 @@ class PostgreSQLContinuityJobs:
         if not isinstance(ids,list) or operation=='combine' and not 2<=len(ids)<=64 or operation in {'incremental_backup','verify','recovery_drill'} and len(ids)!=1:
             raise ContinuityError('Select the native backup inputs')
         for job_id in ids:
-            previous=self.load(job_id,owner,endpoint)
-            uncertain = operation=='verify' and self.observed(previous)['state'] in {'unknown','failed','cancelled'}
+            previous, observed = self.settled(job_id, owner, endpoint)
+            uncertain = operation == 'verify' and observed['state'] in {
+                'unknown', 'failed', 'cancelled'}
             if not uncertain and (previous['state']!='verified' or not previous.get('manifest')):
                 raise ContinuityError('Select verified, manifest-bearing backup artifacts')
             proof=previous.get('manifest')

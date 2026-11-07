@@ -14,6 +14,7 @@ import psutil
 
 from ..operations.fileio import exclusive_file_lock, private_directory
 from ..operations.store import JsonOperationStore
+from .job_liveness import worker_stopped
 from ..providers.sqlite.recovery import RecoveryError as Error, digest_file, recover
 
 
@@ -113,10 +114,7 @@ class SQLiteRecoveryJobs:
                     if field in item: item[field] = str(item[field])
         if record['state'] in ACTIVE:
             with self.lock: worker = self.workers.get(record['job_id'])
-            pid, created = record.get('worker_identity', (None, None))
-            try: alive = pid is not None and psutil.Process(pid).create_time() == created
-            except psutil.Error: alive = False
-            if not alive or record.get('worker_identity') == self.worker_identity and not (worker and worker[0].is_alive()):
+            if worker_stopped(record, self.worker_identity, worker):
                 # A worker stores its terminal receipt before it exits, so a
                 # snapshot read before that write is stale, not abandoned.
                 with self.store(record['job_id']) as store:
