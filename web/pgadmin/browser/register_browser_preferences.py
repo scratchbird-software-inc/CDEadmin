@@ -149,7 +149,7 @@ def register_browser_preferences(self):
         category_label=PREF_LABEL_DISPLAY,
         help_str=gettext(
             'If enabled, a colored circle indicator will be shown in panel '
-            'tabs (Query Tool, ERD Tool, etc.) matching the server\'s custom '
+            'tabs (Query Tool, Schema Diff, etc.) matching the server\'s custom '
             'background color.'
         )
     )
@@ -508,8 +508,7 @@ def register_browser_preferences(self):
     open_new_tab_options = [
         {'label': gettext('Query Tool'), 'value': 'qt'},
         {'label': gettext('Debugger'), 'value': 'debugger'},
-        {'label': gettext('Schema Diff'), 'value': 'schema_diff'},
-        {'label': gettext('ERD Tool'), 'value': 'erd_tool'}]
+        {'label': gettext('Schema Diff'), 'value': 'schema_diff'}]
 
     # Allow psq tool to open in new browser tab if ENABLE_PSQL is set to True
     if config.ENABLE_PSQL:
@@ -522,8 +521,8 @@ def register_browser_preferences(self):
         category_label=PREF_LABEL_OPTIONS,
         options=open_new_tab_options,
         help_str=gettext(
-            'Select Query Tool, Debugger, Schema Diff, ERD Tool, '
-            'or PSQL Tool from the drop-down to open that module '
+            'Select Query Tool, Debugger, Schema Diff, or PSQL Tool '
+            'from the drop-down to open that module '
             'in a new browser tab.'
         ),
         control_props={

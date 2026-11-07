@@ -72,9 +72,8 @@ class ToolSocketPermissionRequiredTestCase(BaseTestGenerator):
         ('psql resize requires tools_psql_tool',
          dict(namespace='/pty', event='resize',
               params=dict(rows=24, cols=80))),
-        ('erd tables requires tools_erd_tool',
-         dict(namespace='/erd', event='tables',
-              params=dict(trans_id=1, sid=1, did=1))),
+        # The ERD tool's 'tables' handler was retired with the tool
+        # (owner direction 2026-11-07).
     ]
 
     def setUp(self):

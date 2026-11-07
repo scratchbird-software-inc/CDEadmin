@@ -160,7 +160,6 @@ let webpackShimConfig = {
     'pgadmin.tools.restore': path.join(__dirname, './pgadmin/tools/restore/static/js/restore'),
     'pgadmin.tools.schema_diff': path.join(__dirname, './pgadmin/tools/schema_diff/static/js/'),
     'pgadmin.tools.search_objects': path.join(__dirname, './pgadmin/tools/search_objects/static/js/'),
-    'pgadmin.tools.erd': path.join(__dirname, './pgadmin/tools/erd/static/js/'),
     'pgadmin.tools.psql': path.join(__dirname, './pgadmin/tools/psql/static/js/'),
     'pgadmin.tools.sqleditor': path.join(__dirname, './pgadmin/tools/sqleditor/static/js/'),
     'pgadmin.tools.user_management': path.join(__dirname, './pgadmin/tools/user_management/static/js/'),

@@ -9,7 +9,6 @@
 import { getNodeTableSchema } from './table.ui';
 import _ from 'lodash';
 import getApiInstance from '../../../../../../../../static/js/api_instance';
-import { AllPermissionTypes } from '../../../../../../../static/js/constants';
 
 define('pgadmin.node.table', [
   'pgadmin.tables.js/enable_disable_triggers',
@@ -124,14 +123,6 @@ define('pgadmin.node.table', [
           applies: ['object', 'context'], callback: 'count_table_rows',
           priority: 2, label: gettext('Count Rows'),
           enable: true,
-        },{
-          name: 'generate_erd', node: 'table', module: this,
-          applies: ['object', 'context'], callback: 'generate_erd',
-          priority: 5, label: gettext('ERD For Table'),
-          enable: (_, item) => {
-            return !('catalog' in pgAdmin.Browser.tree.getTreeNodeHierarchy(item));
-          },
-          permission: AllPermissionTypes.TOOLS_ERD_TOOL,
         }
         ]);
         pgBrowser.Events.on(
@@ -269,14 +260,6 @@ define('pgadmin.node.table', [
               pgAdmin.Browser.notifier.pgRespErrorNotify(error);
               t.refresh(i);
             });
-        },
-        /* Generate the ERD */
-        generate_erd: function(args) {
-          let input = args || {},
-            t = pgBrowser.tree,
-            i = input.item || t.selected(),
-            d = i ? t.itemData(i) : undefined;
-          pgAdmin.Tools.ERD.showErdTool(d, i, true);
         },
       },
       getSchema: function(treeNodeInfo, itemNodeData) {

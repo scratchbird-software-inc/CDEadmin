@@ -41,7 +41,6 @@ class _PGCSRFProtect(CSRFProtect):
             'pgadmin.tools.schema_diff.panel',
             'pgadmin.tools.schema_diff.ddl_compare',
             'pgadmin.authenticate.login',
-            'pgadmin.tools.erd.panel',
             'pgadmin.tools.psql.panel',
             'pgadmin.preferences.get_all_cli',
         ]

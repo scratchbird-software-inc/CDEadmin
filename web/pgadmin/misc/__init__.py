@@ -366,7 +366,7 @@ class MiscModule(PgAdminModule):
             help_str=gettext(
                 'If set to True, ScratchRobin will save the state of opened '
                 'tools'
-                ' (such as Query Tool, PSQL, Schema Diff, and ERD), including'
+                ' (such as Query Tool, PSQL and Schema Diff), including'
                 ' any unsaved data. This data will be automatically restored'
                 ' in the event of an unexpected shutdown or browser refresh.'
             )

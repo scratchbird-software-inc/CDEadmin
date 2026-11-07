@@ -10,7 +10,6 @@
 import PGSchema from './schema.ui';
 import { getNodePrivilegeRoleSchema } from '../../../../static/js/privilege.ui';
 import { getNodeListByName } from '../../../../../../static/js/node_ajax';
-import { AllPermissionTypes } from '../../../../../../static/js/constants';
 
 define('pgadmin.node.schema', [
   'sources/gettext', 'sources/url_for',
@@ -64,26 +63,12 @@ define('pgadmin.node.schema', [
           applies: ['object', 'context'], callback: 'show_obj_properties',
           category: 'create', priority: 1, label: gettext('Schema...'),
           data: {action: 'create'}, enable: 'can_create_schema',
-        },{
-          name: 'generate_erd', node: 'schema', module: this,
-          applies: ['object', 'context'], callback: 'generate_erd',
-          priority: 5, label: gettext('ERD For Schema'),
-          permission: AllPermissionTypes.TOOLS_ERD_TOOL,
         }]);
       },
       can_create_schema: function(node) {
         return pgBrowser.Nodes['database'].is_conn_allow.call(this, node);
       },
-      callbacks: {
-        /* Generate the ERD */
-        generate_erd: function(args) {
-          let input = args || {},
-            t = pgBrowser.tree,
-            i = input.item || t.selected(),
-            d = i ? t.itemData(i) : undefined;
-          pgAdmin.Tools.ERD.showErdTool(d, i, true);
-        },
-      },
+      callbacks: {},
       getSchema: function(treeNodeInfo, itemNodeData) {
         let schemaObj = pgBrowser.Nodes['schema'];
         return new PGSchema(

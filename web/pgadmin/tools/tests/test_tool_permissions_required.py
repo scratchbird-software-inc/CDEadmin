@@ -20,7 +20,7 @@ denied a tool still drive the rest of that tool's backend workflow:
   * View/Edit Data via sqleditor.initialize_viewdata (Query Tool),
   * object discovery, SQL preview and the real GRANT via the grant wizard,
   * schema diff initialisation, enumeration and comparison,
-  * ERD initialisation and DDL generation,
+  * ERD initialisation and DDL generation (tool retired 2026-11-07),
   * the PSQL panel,
   * the debugger's stored-argument routes.
 
@@ -126,16 +126,8 @@ class ToolPermissionRequiredTestCase(BaseTestGenerator):
                               target_scid=1, source_oid=1, target_oid=1,
                               node_type='table', comp_status='Different'))),
 
-        # --- ERD: init and DDL generation (audit, new) ---
-        ('erd.initialize requires tools_erd_tool',
-         dict(method='post', endpoint='erd.initialize',
-              url_kwargs=dict(trans_id=_TRANS, sgid=1, sid=1, did=1))),
-        ('erd.prequisite requires tools_erd_tool',
-         dict(method='get', endpoint='erd.prequisite',
-              url_kwargs=dict(trans_id=_TRANS, sgid=1, sid=1, did=1))),
-        ('erd.sql requires tools_erd_tool',
-         dict(method='post', endpoint='erd.sql',
-              url_kwargs=dict(trans_id=_TRANS, sgid=1, sid=1, did=1))),
+        # --- ERD: retired 2026-11-07 (owner direction; pgAdmin's ERD tool
+        # and its routes were removed in favour of DDN diagrams). ---
 
         # --- PSQL: panel (audit, new) ---
         ('psql.panel requires tools_psql_tool',

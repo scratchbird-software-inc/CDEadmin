@@ -4,6 +4,16 @@
 `ERD Tool`:index:
 *****************
 
+.. note::
+
+   Owner direction, 2026-11-07: this inherited pgAdmin ERD Tool is
+   retired. Its menu entries (*Tools > ERD Tool*, and *ERD For Database*,
+   *ERD For Schema* and *ERD For Table* on PostgreSQL), its routes, its
+   preferences and its tool permission were removed in the commit titled
+   "Retire pgAdmin's ERD tool"; reverting that commit restores it. Diagrams
+   are made with DDN (Diagram Design Notation). Saved ``.pgerd`` files can
+   no longer be opened. The page below is kept for reference.
+
 The Entity-Relationship Diagram (ERD) tool is a database design tool that provides a graphical representation of database tables, columns, and inter-relationships. ERD can give sufficient information for the database administrator to follow when developing and maintaining the database. The ERD Tool allows you to:
 
 * Design and visualize the database tables and their relationships.

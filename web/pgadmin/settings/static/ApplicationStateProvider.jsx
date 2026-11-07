@@ -38,7 +38,7 @@ export function ApplicationStateProvider({children}){
   };
 
   const isSaveToolDataEnabled = (toolName)=>{
-    let toolMapping = {'sqleditor': 'qt', 'schema_diff': 'schema_diff', 'psql': 'psql_tool', 'ERD': 'erd_tool'};
+    let toolMapping = {'sqleditor': 'qt', 'schema_diff': 'schema_diff', 'psql': 'psql_tool'};
     if(openNewTab?.includes(toolMapping[toolName])){
       return saveAppState && getBrowser().name == 'Electron';
     }

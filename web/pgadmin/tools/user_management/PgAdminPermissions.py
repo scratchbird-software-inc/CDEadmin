@@ -12,7 +12,6 @@ from flask_babel import gettext
 
 class AllPermissionTypes:
     object_register_server = 'object_register_server'
-    tools_erd_tool = 'tools_erd_tool'
     tools_query_tool = 'tools_query_tool'
     tools_debugger = 'tools_debugger'
     tools_psql_tool = 'tools_psql_tool'
@@ -189,11 +188,6 @@ class PgAdminPermissions:
             AllPermissionCategories.tools,
             AllPermissionTypes.tools_grant_wizard,
             gettext("Grant Wizard")
-        )
-        self.add_permission(
-            AllPermissionCategories.tools,
-            AllPermissionTypes.tools_erd_tool,
-            gettext("ERD Tool")
         )
         self.add_permission(
             AllPermissionCategories.tools,

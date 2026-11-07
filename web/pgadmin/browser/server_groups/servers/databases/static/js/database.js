@@ -15,7 +15,6 @@ import {removeSQLConnections} from 'sources/cdeadmin_ui/editors/SQLConnections';
 import { showPostgresqlDashboardEditor, showPostgresqlMonitor, showProviderWorkspace, showServerPassword } from '../../../../../../static/js/Dialogs/index';
 import _ from 'lodash';
 import getApiInstance, { parseApiError } from '../../../../../../static/js/api_instance';
-import { AllPermissionTypes } from '../../../../../static/js/constants';
 
 define('pgadmin.node.database', [
   'sources/gettext', 'sources/url_for',
@@ -176,14 +175,6 @@ define('pgadmin.node.database', [
           enable: 'can_disconnect',data: {
             data_disabled: gettext('All the databases are already disconnected.'),
           },
-        },{
-          name: 'generate_erd', node: 'database', module: this,
-          applies: ['object', 'context'], callback: 'generate_erd',
-          priority: 5, label: gettext('ERD For Database'),
-          enable: (node) => {
-            return node.allowConn;
-          },
-          permission: AllPermissionTypes.TOOLS_ERD_TOOL,
         }]);
 
         _.bindAll(this, 'connection_lost');
@@ -348,15 +339,6 @@ define('pgadmin.node.database', [
           }
 
           return false;
-        },
-
-        /* Generate the ERD */
-        generate_erd: function(args) {
-          let input = args || {},
-            t = pgBrowser.tree,
-            i = input.item || t.selected(),
-            d = i ? t.itemData(i) : undefined;
-          pgAdmin.Tools.ERD.showErdTool(d, i, true);
         },
 
         /* Connect the database (if not connected), before opening this node */

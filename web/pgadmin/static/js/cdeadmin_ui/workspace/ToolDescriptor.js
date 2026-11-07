@@ -139,7 +139,6 @@ export function createToolDescriptor(input={}) {
 const PANEL_KIND_PREFIXES = Object.freeze([
   ['id-query-tool_', TOOL_KINDS.QUERY_EDITOR],
   ['id-psql-tool_', TOOL_KINDS.NATIVE_TERMINAL],
-  ['id-erd-tool_', TOOL_KINDS.ERD],
   ['id-schema-diff-tool_', TOOL_KINDS.SCHEMA_DIFF],
   ['id-debugger-tool_', TOOL_KINDS.DEBUGGER],
 ]);

@@ -27,7 +27,7 @@ import _ from 'lodash';
 import UtilityView from '../../UtilityView';
 import ToolView, { getToolTabParams } from '../../ToolView';
 import { ApplicationStateProvider, useApplicationState } from '../../../../settings/static/ApplicationStateProvider';
-import { BROWSER_PANELS, WORKSPACES } from '../../../../browser/static/js/constants';
+import { BROWSER_PANELS, WORKSPACES, isRetiredToolPanel } from '../../../../browser/static/js/constants';
 import pgWindow from 'sources/window';
 import {createWorkspaceHost} from 'sources/cdeadmin_ui/workspace/WorkspaceHost';
 import {toolFactoryRegistry} from 'sources/cdeadmin_ui/workspace/ToolRegistry';
@@ -988,6 +988,10 @@ export default function Layout({groups, noContextGroups, getLayoutInstance, layo
   }, [props.defaultLayout]);
 
   const loadTab = (tab)=>{
+    if(isRetiredToolPanel(tab.id)) {
+      // A retired tool's tab is dropped from the restored layout.
+      return null;
+    }
     const tabData = flatDefaultLayout.find((t)=>t.id == tab.id);
     if(tab.metaData?.toolDescriptor) {
       return toolFactoryRegistry.restore(tab.metaData.toolDescriptor, {

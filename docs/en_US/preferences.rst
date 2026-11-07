@@ -315,6 +315,12 @@ debugger window navigation:
 The ERD Tool Node
 *****************
 
+.. note::
+
+   Owner direction, 2026-11-07: the ERD Tool is retired (see
+   :ref:`erd_tool`), so this node no longer appears. The text below is kept
+   for reference.
+
 Expand the *ERD Tool* node to specify your ERD Tool display preferences.
 
 Use the fields on the *Keyboard shortcuts* panel to configure shortcuts for the

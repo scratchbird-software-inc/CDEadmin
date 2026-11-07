@@ -94,7 +94,6 @@ module.exports = [{
     'security.pages': 'security.pages',
     sqleditor: './pgadmin/tools/sqleditor/static/js/index.js',
     schema_diff: './pgadmin/tools/schema_diff/static/js/index.js',
-    erd_tool: './pgadmin/tools/erd/static/js/index.js',
     psql_tool: './pgadmin/tools/psql/static/js/index.js',
     debugger: './pgadmin/tools/debugger/static/js/index.js',
     style: ['./pgadmin/static/css/style.css', './pgadmin/static/js/pgadmin.fonticon.js']
@@ -261,7 +260,6 @@ module.exports = [{
             'pure|pgadmin.tools.schema_diff',
             'pure|pgadmin.tools.file_manager',
             'pure|pgadmin.tools.search_objects',
-            'pure|pgadmin.tools.erd',
             'pure|pgadmin.tools.psql',
             'pure|pgadmin.tools.sqleditor',
             'pure|pgadmin.misc.cloud',

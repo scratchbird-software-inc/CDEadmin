@@ -63,7 +63,8 @@ describe('CDEadmin durable tool descriptors', () => {
   it('classifies existing restorable panel identities', () => {
     expect(toolKindFromPanelId('id-query-tool_9'))
       .toBe(TOOL_KINDS.QUERY_EDITOR);
-    expect(toolKindFromPanelId('id-erd-tool_4')).toBe(TOOL_KINDS.ERD);
+    // pgAdmin's ERD tool is retired (owner direction 2026-11-07).
+    expect(toolKindFromPanelId('id-erd-tool_4')).toBe(TOOL_KINDS.GENERIC);
     expect(toolKindFromPanelId('custom-provider-tool'))
       .toBe(TOOL_KINDS.GENERIC);
   });

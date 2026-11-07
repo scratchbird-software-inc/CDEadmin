@@ -35,7 +35,6 @@ export const BROWSER_PANELS = {
   UTILITY_DIALOG: 'id-utility',
   QUERY_TOOL: 'id-query-tool',
   PSQL_TOOL: 'id-psql-tool',
-  ERD_TOOL: 'id-erd-tool',
   SCHEMA_DIFF_TOOL: 'id-schema-diff-tool',
   DEBUGGER_TOOL: 'id-debugger-tool',
   CLOUD_WIZARD: 'id-cloud-wizard',
@@ -58,10 +57,18 @@ export const WORKSPACES = {
 
 export const TOOLS_SUPPORTING_RESTORE = [
   BROWSER_PANELS.QUERY_TOOL,
-  BROWSER_PANELS.ERD_TOOL,
   BROWSER_PANELS.SCHEMA_DIFF_TOOL,
   BROWSER_PANELS.PSQL_TOOL
 ];
+
+// Panels of retired tools. Owner direction 2026-11-07: pgAdmin's ERD tool
+// is retired in favour of DDN diagrams; a saved layout that still holds one
+// of its tabs restores without it.
+export const RETIRED_TOOL_PANELS = ['id-erd-tool'];
+
+export function isRetiredToolPanel(panelId) {
+  return RETIRED_TOOL_PANELS.includes(String(panelId ?? '').split('_')[0]);
+}
 
 export const WEEKDAYS = [
     {label: gettext('Sunday'), value: '7'},
@@ -128,7 +135,6 @@ export const PGAGENT_MONTHDAYS = [...MONTHDAYS].concat([{label: gettext('Last da
 
 export const AllPermissionTypes = {
   OBJECT_REGISTER_SERVER: 'object_register_server',
-  TOOLS_ERD_TOOL: 'tools_erd_tool',
   TOOLS_QUERY_TOOL: 'tools_query_tool',
   TOOLS_DEBUGGER: 'tools_debugger',
   TOOLS_PSQL_TOOL: 'tools_psql_tool',
