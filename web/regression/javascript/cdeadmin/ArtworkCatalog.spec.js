@@ -62,7 +62,16 @@ describe('CDEadmin artwork catalog', () => {
     expect(fs.existsSync(path.join(
       ROOT, 'branding', 'scratchrobincde.svg'
     ))).toBe(true);
-    expect(fs.existsSync(path.join(ROOT, 'auth', 'login.svg'))).toBe(true);
+    // Owner direction 2026-11-06: the sign-in pages show the ScratchRobin
+    // mark for navy backgrounds; the old login illustration was deleted. The
+    // MFA email and authenticator artwork stays in auth/.
+    expect(fs.existsSync(path.join(
+      ROOT, 'branding', 'scratchrobin-dark.svg'
+    ))).toBe(true);
+    expect(fs.existsSync(path.join(ROOT, 'auth', 'login.svg'))).toBe(false);
+    for (const name of ['email_lock.svg', 'totp_lock.svg']) {
+      expect(fs.existsSync(path.join(ROOT, 'auth', name))).toBe(true);
+    }
     expect(fs.existsSync(path.join(ROOT, 'commands', 'HUGEICONS_LICENSE.md')))
       .toBe(true);
     expect(JSON.parse(fs.readFileSync(path.join(
