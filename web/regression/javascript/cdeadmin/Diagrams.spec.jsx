@@ -152,6 +152,8 @@ describe('Diagrams tool', () => {
     const definition = ddnModuleDefinition();
     const command = definition.contributions.commands.find((item) => item.id === 'ddn.diagrams.new');
     expect(command.surfaces).toContain('tools');
+    // Shown to users whose permission list carries names, not dotted values.
+    expect(command.permission ?? []).toEqual([]);
     const showActivity = jest.fn();
     command.execute({}, {showActivity});
     expect(showActivity).toHaveBeenCalledWith('activity.diagrams');

@@ -151,7 +151,10 @@ export function ddnModuleDefinition() {
           id: 'ddn.diagrams.new', label: 'New Diagram…',
           description: 'Create a named diagram (crow\'s foot ERD by default) as a project asset.',
           iconKey: 'tool.erd', surfaces: ['tools', 'project'],
-          permission: ['project.asset.edit'],
+          // No command permission: the browser receives permission names
+          // ('project_asset_edit') while the constants hold dotted values,
+          // so a dotted requirement hides the entry from everyone
+          // (2026-11-08). Saving still needs edit access to the project.
           execute: (_args, context) => {
             context.showActivity?.('activity.diagrams');
             requestDiagramCreate();
