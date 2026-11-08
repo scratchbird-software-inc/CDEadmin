@@ -176,6 +176,33 @@ explicitly retires an older version by raising the floor. Never widen a version
 check without the matching gate. The existing 3.53.0 tests stay mandatory; a
 version with no available runtime is reported as not run.
 
+## PostgreSQL onto the provider tree (owner direction, 2026-11-08)
+
+PostgreSQL still uses the inherited pgAdmin object tree, while every other
+engine uses the provider tree, so each cross-engine feature (Browse data,
+To Diagram, the menu and permission model) has needed separate PostgreSQL
+wiring or is missing there. Owner direction: move PostgreSQL onto the
+provider tree in phases; "the new systems are getting close to the quality
+of the legacy and it would be better to make the new system able to support
+the old system". This continues the 2026-10-11 direction to preserve the
+native PostgreSQL administration surface: its strengths are carried into
+the provider tree, not dropped.
+1. Parity matrix: every inherited node type and action, and every tool
+   entry point, mapped to provider kinds and operations; closed-source
+   EDB Advanced Server items recorded as post beta.
+2. PostgreSQL navigation on the provider tree, reusing the PostgreSQL-family
+   descriptors (YugabyteDB YSQL), switchable per registration while both
+   trees exist.
+3. Port the tabbed property forms with SQL preview and the version-specific
+   SQL templates as shared family forms, reusing pgAdmin's tested SQL.
+4. Re-point the tools (debugger, maintenance, backup and restore,
+   import/export, grant wizard, schema diff, PSQL, search) to provider
+   nodes.
+5. Make the provider tree the default when the matrix passes, keep the
+   inherited tree for one release, then retire it with dated notes in a
+   revertible commit. Do not remove inherited behaviour before its
+   replacement is verified.
+
 ## Engine expansion to full parity (owner direction, 2026-10-29)
 
 Dolt, TiDB, Vitess, CockroachDB, YugabyteDB YSQL, immudb and XTDB are to reach
