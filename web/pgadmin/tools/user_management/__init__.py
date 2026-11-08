@@ -33,7 +33,8 @@ from pgadmin.utils.validation_utils import validate_email
 from pgadmin.model import db, Role, User, UserPreference, Server, \
     ServerGroup, Process, Setting, roles_users, SharedServer
 from pgadmin.utils.paths import create_users_storage_directory
-from pgadmin.tools.user_management.PgAdminPermissions import PgAdminPermissions
+from pgadmin.tools.user_management.PgAdminPermissions import (
+    AllPermissionTypes, PgAdminPermissions)
 from sqlalchemy import func
 
 # set template path for sql scripts
@@ -447,7 +448,7 @@ def role(rid):
         res = {'id': r.id,
                'name': r.name,
                'description': r.description,
-               'permissions': r.permissions,
+               'permissions': AllPermissionTypes.canonical(r.permissions),
                'is_admin': r.name == "Administrator"}
     else:
         roles = Role.query.all()
@@ -457,7 +458,8 @@ def role(rid):
             roles_data.append({'id': r.id,
                                'name': r.name,
                                'description': r.description,
-                               'permissions': r.permissions,
+                               'permissions': AllPermissionTypes.canonical(
+                                   r.permissions),
                                'is_admin': r.name == "Administrator"})
 
         res = roles_data
@@ -799,7 +801,7 @@ def save_permissions(id):
     r = Role.query.get(id)
 
     try:
-        r.permissions = data['permissions']
+        r.permissions = AllPermissionTypes.canonical(data['permissions'])
         db.session.commit()
     except Exception as e:
         db.session.rollback()
@@ -810,6 +812,6 @@ def save_permissions(id):
         response={
             'id': r.id,
             'name': r.name,
-            'permissions': r.permissions
+            'permissions': AllPermissionTypes.canonical(r.permissions)
         }
     )

@@ -185,9 +185,9 @@ class Role(db.Model, RoleMixin):
         from pgadmin.tools.user_management.PgAdminPermissions \
             import AllPermissionTypes
         if self.name == 'Administrator':
-            return AllPermissionTypes.list()
+            return set(AllPermissionTypes.list())
 
-        return super().get_permissions()
+        return set(AllPermissionTypes.canonical(super().get_permissions()))
 
 
 # We override the default UserMixin to change behaviour of has_permission

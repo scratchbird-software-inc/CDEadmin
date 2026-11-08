@@ -99,10 +99,36 @@ class AllPermissionTypes:
     ai_execute_approved = 'ai.execute_approved'
     ai_admin = 'ai.admin'
 
+    # A permission is identified by its value: commands, the role editor
+    # (PgAdminPermissions.all_permissions) and permission checks use it.
+    # pgAdmin's own permissions have the same name and value; the
+    # ScratchRobin permissions use dotted values ('project.asset.edit').
+    # Until 2026-11-08 list() returned the attribute names, so roles seeded
+    # from it hold names for the dotted permissions, the browser received
+    # names, and every command requiring a dotted permission was hidden.
+
+    @staticmethod
+    def _values():
+        return {name: value for name, value in vars(AllPermissionTypes).items()
+                if not name.startswith('_') and isinstance(value, str)}
+
     @staticmethod
     def list():
-        return filter(lambda x: not x.startswith('_'),
-                      AllPermissionTypes.__dict__.keys())
+        return list(AllPermissionTypes._values().values())
+
+    @staticmethod
+    def canonical(permissions):
+        """Stored permissions as values, in order, without repeats.
+
+        Accepts the attribute names that roles seeded before 2026-11-08
+        hold; anything else is kept as it is."""
+        names = AllPermissionTypes._values()
+        result = []
+        for item in permissions or ():
+            value = names.get(item, item)
+            if value not in result:
+                result.append(value)
+        return result
 
 
 class AllPermissionCategories:
