@@ -203,6 +203,27 @@ the provider tree, not dropped.
    revertible commit. Do not remove inherited behaviour before its
    replacement is verified.
 
+Owner decision, 2026-11-08: the parity matrix (step 1) is done, and its
+proposed order for the remaining work is accepted:
+- M2, prerequisites. A PostgreSQL registration can be served by the
+  provider tree beside the inherited one; a PostgreSQL navigator; every
+  provider resource carries the inherited identity chain (server,
+  database, schema, parent relation and object ids) so the inherited tools
+  and dialogs still open from provider nodes; Schema Diff and the Query
+  Tool list provider endpoints; the inherited-only actions (dashboard,
+  monitoring, catalog diagrams, test data, large objects) are declared for
+  the provider tree. The supported PostgreSQL version range is an owner
+  decision to take first.
+- M3, read-only parity for every kind the catalog capture produces, plus
+  roles, tablespaces, columns, system catalogs, replica nodes and pgAgent.
+- M4, editors where a PostgreSQL-family form already exists, smallest gap
+  first; features the YugabyteDB forms refuse are added back for
+  PostgreSQL, not inherited as refusals.
+- M5, kinds with no reusable form.
+- M6, operations and tool openers that do not need the Table family.
+- M7, the Table family last, then the debugger and Schema Diff.
+- EDB Advanced Server and EDB Distributed items stay post beta.
+
 ## Engine expansion to full parity (owner direction, 2026-10-29)
 
 Dolt, TiDB, Vitess, CockroachDB, YugabyteDB YSQL, immudb and XTDB are to reach
