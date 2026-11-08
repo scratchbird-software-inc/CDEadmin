@@ -1487,6 +1487,52 @@ describe('ProviderWorkspaceContent', () => {
       .toEqual({resource_id: 'table:ASSETS', language_profile: 'firebird-sql', client_sql_dialect: 3});
   });
 
+  // Owner direction 2026-11-06 (option b), 2026-11-08: the SQL tab offers
+  // the visual SQL builder only when the engine declares it (workspace
+  // payload sql_builder). Its query reaches the editor like Browse data and
+  // is not run.
+  it('offers Build query only when the engine declares the SQL builder', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'firebird-sql', title: 'Firebird SQL',
+      starter_source: 'SELECT 1 FROM RDB$DATABASE', parameter_shape: 'array',
+    }]}}});
+    api.post.mockResolvedValue({data: {data: {}}});
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/no-builder" initialTab="studio" />);
+    await waitFor(() => expect(screen.getByLabelText('Query source')).toHaveValue('SELECT 1 FROM RDB$DATABASE'));
+    expect(screen.queryByRole('button', {name: 'Build query…'})).not.toBeInTheDocument();
+  });
+
+  it('puts the built query in the editor and does not run it', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, sql_builder: true, languages: [{
+      language_profile: 'firebird-sql', title: 'Firebird SQL',
+      starter_source: 'SELECT 1 FROM RDB$DATABASE', parameter_shape: 'array',
+    }]}}});
+    api.post.mockImplementation((_url, payload) => {
+      if (payload.action === 'sql_builder' && payload.request.operation === 'options') {
+        return Promise.resolve({data: {data: {runtime_version: '5.0.4', options: {},
+          relations: [{path: ['ASSETS'], kind: 'table', name: 'ASSETS', columns: ['ASSET_ID']}]}}});
+      }
+      if (payload.action === 'sql_builder') {
+        return Promise.resolve({data: {data: {source: 'SELECT\n  *\nFROM ASSETS',
+          language_profile: 'firebird-sql'}}});
+      }
+      return Promise.resolve({data: {data: {}}});
+    });
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/builder" initialTab="studio" />);
+    await waitFor(() => expect(screen.getByLabelText('Query source')).toHaveValue('SELECT 1 FROM RDB$DATABASE'));
+    fireEvent.click(screen.getByRole('button', {name: 'Build query…'}));
+    await screen.findByRole('combobox', {name: 'Query FROM'});
+    fireEvent.click(screen.getByRole('button', {name: 'Insert into editor'}));
+    await waitFor(() => expect(screen.getByLabelText('Query source')).toHaveValue('SELECT\n  *\nFROM ASSETS'));
+    const sent = api.post.mock.calls.filter(([, payload]) => payload.action === 'sql_builder')
+      .map(([, payload]) => payload.request);
+    expect(sent).toEqual([{operation: 'options'}, {operation: 'source',
+      model: {query: {selects: [{from: {source: {relation: ['ASSETS']}}}]}}}]);
+    expect(api.post.mock.calls.map(([, payload]) => payload.action)).not.toContain('execute');
+  });
+
   it('keeps the old language and owned session if language-switch release fails', async () => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: 'firebird-sql', title: 'Firebird SQL',

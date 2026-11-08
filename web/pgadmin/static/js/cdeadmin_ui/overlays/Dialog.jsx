@@ -35,8 +35,11 @@ export function Dialog({open, title, children, actions, onClose, size='small',
       onKeyDown?.(event);
     }}
     slotProps={{paper: {'aria-busy': busy || undefined,
+      // The theme puts the dialog container 5% of the window width below
+      // the top (MuiDialog scrollPaper margin '5% auto'); without counting
+      // it a tall dialog's actions fall below the window.
       sx: {width: WIDTHS[size], maxWidth: 'calc(100vw - 48px)',
-        maxHeight: 'calc(100vh - 48px)', m: 3, borderRadius: 0,
+        maxHeight: 'calc(100vh - 48px - 5vw)', m: 3, borderRadius: 0,
         boxShadow: 'none', border: '1px solid', borderColor: 'divider'}}}}
   >
     <DialogTitle id={titleId}>{title}</DialogTitle>

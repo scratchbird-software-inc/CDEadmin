@@ -95,6 +95,7 @@ import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput
 import ProviderAdministrationResult from './ProviderAdministrationResult';
 import {mysqlQueryAttributes} from '../cdeadmin_ui/editors/mysqlQueryAttributes';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
+import SqlBuilderDialog from '../cdeadmin_ui/editors/SqlBuilderDialog';
 import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
 
@@ -113,6 +114,7 @@ const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
   'visual_admin_operation_list', 'visual_admin_operation_get',
   'visual_admin_operation_refresh', 'visual_admin_operation_cancel',
   'visual_admin_operation_post_state',
+  'sql_builder',
 ]);
 
 function errorMessage(error) {
@@ -5365,6 +5367,19 @@ export default function ProviderWorkspaceContent({
   // (LanguageSourceEditor). Nothing is run.
   const sourceRequest = useSQLSourceRequest(endpointUrl);
   const [selectRequest, setSelectRequest] = useState(null);
+  // Visual SQL builder (owner direction 2026-11-06, option b): offered when
+  // the engine declares it; its query reaches the editor the way Browse
+  // data does, so typed text is replaced only after confirmation.
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const builderInserts = useRef(0);
+  const insertBuiltQuery = ({source: built, languageProfile: builtProfile}) => {
+    builderInserts.current += 1;
+    const languageTitle = (workspace?.languages || []).find((item) =>
+      item.language_profile === builtProfile)?.title;
+    setSelectRequest({source: built, languageProfile: builtProfile, languageTitle,
+      nonce: `sql-builder:${builderInserts.current}`, what: 'the built query',
+      retry: 'build the query again'});
+  };
   // Taking a request removes it, which re-runs this effect; the request it
   // started must still land, so it is matched by nonce, not by cleanup.
   const handledSourceRequest = useRef(null);
@@ -6126,6 +6141,9 @@ export default function ProviderWorkspaceContent({
             onClick={releaseQuerySession} />
           <QueryToolAction action="info" title={gettext('Connection details')}
             onClick={() => setConnectionInfoOpen(true)} />
+          {workspace.sql_builder && <Button size="small" onClick={() => setBuilderOpen(true)}
+            disabled={busy || queryStreamActive || scriptLocked || !!occurrenceId}>
+            {gettext('Build query…')}</Button>}
           <TextField select size="small" sx={{ml: 1}} InputProps={{sx: {width: 200}}}
             label={gettext('Dialect')} value={languageProfile}
             disabled={busy || queryStreamActive || !!occurrenceId || scriptLocked || notebookDirty}
@@ -6165,6 +6183,8 @@ export default function ProviderWorkspaceContent({
           disabled={busy || Boolean(occurrenceId) || querySessionBlocked || sessionPolicyUnknown}
           onScriptLock={setScriptLocked} historySensitive={historySensitive} clientSqlDialect={clientSqlDialect}
           selectRequest={selectRequest} />
+        {workspace.sql_builder && <SqlBuilderDialog open={builderOpen} post={post}
+          onClose={() => setBuilderOpen(false)} onInsert={insertBuiltQuery} />}
         <Box aria-label="SQL results and diagnostics" sx={{flex: 1, minHeight: 120, overflow: 'auto'}}>
           <Tabs value={resultPresentation} onChange={(_, value) => setResultPresentation(value)}
             variant="scrollable" aria-label="SQL result panels">

@@ -85,6 +85,23 @@ describe('Browse data in the SQL editor', () => {
     expect(await screen.findByText(/Browse data is written in Cypher\. Choose that dialect/)).toBeInTheDocument();
     expect(values.onChange).not.toHaveBeenCalledWith(expect.stringMatching(/^MATCH/));
   });
+
+  // The SQL builder (2026-11-08) puts its query here the same way and is
+  // named in the messages.
+  it('names the SQL builder when its query cannot be placed', async () => {
+    const builder = {what: 'the built query', retry: 'build the query again'};
+    const values = props({source: ''});
+    const {unmount} = render(<Component {...values} selectRequest={request('SELECT 1', 'sql-builder:1',
+      {...builder, languageProfile: 'sqlite-sql', languageTitle: 'SQLite SQL'})} />);
+    expect(await screen.findByText('The built query is written in SQLite SQL. Choose that dialect, ' +
+      'then build the query again.')).toBeInTheDocument();
+    unmount();
+    const busy = props({source: '', disabled: true});
+    render(<Component {...busy} selectRequest={request(ASSETS, 'sql-builder:2', builder)} />);
+    expect(await screen.findByText('Finish or cancel the current statement before the built query ' +
+      'replaces the editor text.')).toBeInTheDocument();
+    expect(busy.onChange).not.toHaveBeenCalledWith(ASSETS);
+  });
 });
 
 describe('SQL source requests', () => {

@@ -139,8 +139,9 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
   // automatically.
   const [pendingSource, setPendingSource] = useState(null);
   const sourceRef = useRef(source);
-  // The last statement Browse data put in the editor; replacing it unchanged
-  // loses nothing the user wrote, so it needs no question.
+  // The last statement Browse data or the SQL builder put in the editor;
+  // replacing it unchanged loses nothing the user wrote, so it needs no
+  // question.
   const browseSource = useRef(null);
   // Never replace the text under a statement that is running or awaiting
   // its outcome.
@@ -151,13 +152,17 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
     const built = selectRequest?.source;
     if(typeof built !== 'string' || !built) return;
     setError('');
+    // Browse data and the SQL builder both put text here; ``what`` and
+    // ``retry`` name the one that did.
+    const what = selectRequest.what || 'Browse data';
+    const retry = selectRequest.retry || 'use Browse data again';
     if(selectRequest.languageProfile && selectRequest.languageProfile !== nativeProfile) {
-      setError(`Browse data is written in ${selectRequest.languageTitle || selectRequest.languageProfile}. ` +
-        'Choose that dialect, then use Browse data again.');
+      setError(`${what.charAt(0).toUpperCase()}${what.slice(1)} is written in ` +
+        `${selectRequest.languageTitle || selectRequest.languageProfile}. Choose that dialect, then ${retry}.`);
       return;
     }
     if(editorBusy.current) {
-      setError('Finish or cancel the current statement before Browse data replaces the editor text.');
+      setError(`Finish or cancel the current statement before ${what} replaces the editor text.`);
       return;
     }
     const existing = sourceRef.current.trim();
@@ -348,4 +353,4 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       helperText={'Validation: '+(language?.tooling?.validation_authority || 'unavailable')+'. Native execution remains the grammar/semantic authority.'} />}
   </FormReference>;
 }
-LanguageSourceEditor.propTypes={parameterSource:PropTypes.string,mysqlAttributeSource:PropTypes.string,onExecute:PropTypes.func,resources:PropTypes.array,historySensitive:PropTypes.bool,clientSqlDialect:PropTypes.number,language:PropTypes.object,source:PropTypes.string.isRequired,onChange:PropTypes.func.isRequired,post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,databaseTargetId:PropTypes.string,disabled:PropTypes.bool,onScriptLock:PropTypes.func.isRequired,selectRequest:PropTypes.shape({source:PropTypes.string,languageProfile:PropTypes.string,languageTitle:PropTypes.string,nonce:PropTypes.number})};
+LanguageSourceEditor.propTypes={parameterSource:PropTypes.string,mysqlAttributeSource:PropTypes.string,onExecute:PropTypes.func,resources:PropTypes.array,historySensitive:PropTypes.bool,clientSqlDialect:PropTypes.number,language:PropTypes.object,source:PropTypes.string.isRequired,onChange:PropTypes.func.isRequired,post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,databaseTargetId:PropTypes.string,disabled:PropTypes.bool,onScriptLock:PropTypes.func.isRequired,selectRequest:PropTypes.shape({source:PropTypes.string,languageProfile:PropTypes.string,languageTitle:PropTypes.string,nonce:PropTypes.oneOfType([PropTypes.number,PropTypes.string]),what:PropTypes.string,retry:PropTypes.string})};

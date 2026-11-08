@@ -13,6 +13,7 @@ PL/SQL code.
 
    debugger
    query_tool
+   sql_builder
    editgrid
    schema_diff
    diagrams_tool

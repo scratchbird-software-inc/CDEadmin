@@ -5730,6 +5730,10 @@
     "diagram-create": {
       "reference": "SR-F-010016",
       "title": "New diagram"
+    },
+    "sql-builder": {
+      "reference": "SR-F-010017",
+      "title": "Build a query (SQL builder)"
     }
   }
 }
