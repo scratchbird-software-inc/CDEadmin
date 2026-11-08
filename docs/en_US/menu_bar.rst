@@ -38,6 +38,14 @@ workspaces, ERD/whiteboard/dataflow diagrams, model conversion, semantic-model
 design, dashboards, reports, data pump, scheduler, comparison and diagnostics.
 Tools that require a connection ask for or inherit a typed provider target.
 
+Owner direction, 2026-11-08: the *Tools* menu lists only commands that can
+start from it, such as *New Schema Comparison*, *New Diagram…* and
+*Diagrams*. Actions on an open comparison, pipeline, CDC definition,
+replication topology, migration project, AI session or other work in
+progress (for example *Apply Change Plan*, *Execute Failover Plan* or
+*Run Pipeline*) are run from inside that tool, where the work they act on
+is known; the same applies to the DDN view and designer actions.
+
 Window
 ======
 

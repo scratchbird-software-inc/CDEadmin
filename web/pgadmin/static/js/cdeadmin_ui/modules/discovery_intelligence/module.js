@@ -105,7 +105,9 @@ export function discoveryCommandDefinitions(registry) {
     id: item.id, label: label(item.id),
     description: `${label(item.id)} through the governed Discovery authority.`,
     iconKey: 'tool.search', permission: [PERMISSIONS[item.id]],
-    surfaces: ['tools', 'toolbar'], macroCallable: item.class !== 'live_mutation',
+    // Every command needs form content or an existing id (owner direction
+    // 2026-11-08: not on the Tools menu); its workspace runs it.
+    surfaces: ['toolbar'], macroCallable: item.class !== 'live_mutation',
     aiEligible: false, aiExposure: 'hidden', authority: item.authority,
     task: item.task, createsTask: taskType(item),
     auditCategory: `discovery.${item.class}`,

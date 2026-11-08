@@ -27,7 +27,10 @@ function runtime(args, context) {
   const id = args.sessionId ?? context.sessionId; if(!id) throw new Error('API Designer session ID is required.');
   return {service, id};
 }
-function command(input) { return {iconKey: 'tool.api', surfaces: ['tools', 'toolbar'],
+// Owner direction 2026-11-08: module actions run inside the module's own
+// tool, which supplies the session; the Tools menu lists only commands that
+// start from a bare menu click.
+function command(input) { return {iconKey: 'tool.api', surfaces: ['toolbar'],
   macroCallable: false, aiEligible: false, auditCategory: 'api_designer', validateArguments: () => true,
   enabledWhen: () => true, visibleWhen: () => true, disabledReason: 'API Designer action is unavailable.',
   allowedSecurityGroups: [], deniedSecurityGroups: [], createsTask: '', confirmationIntent: 'none', ...input}; }

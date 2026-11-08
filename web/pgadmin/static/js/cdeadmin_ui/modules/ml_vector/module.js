@@ -28,7 +28,10 @@ function runtime(args, context) { const service = context.mlVector ??
 if(!service) throw new Error('ML / Vector runtime service is unavailable.');
 const id = args.sessionId ?? context.sessionId;
 if(!id) throw new Error('ML / Vector session ID is required.'); return {service, id}; }
-function command(input) { return {iconKey: 'tool.ml-vector', surfaces: ['tools', 'toolbar'],
+// Owner direction 2026-11-08: module actions run inside the module's own
+// tool, which supplies the session; the Tools menu lists only commands that
+// start from a bare menu click.
+function command(input) { return {iconKey: 'tool.ml-vector', surfaces: ['toolbar'],
   macroCallable: false, aiEligible: false, auditCategory: 'ml_vector', validateArguments: () => true,
   enabledWhen: () => true, visibleWhen: () => true, disabledReason: 'ML / Vector action is unavailable.',
   allowedSecurityGroups: [], deniedSecurityGroups: [], createsTask: '', confirmationIntent: 'none', ...input}; }

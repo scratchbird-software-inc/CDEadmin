@@ -19,7 +19,9 @@ export const PROJECT_ASSET_SERVICE_ID = 'project.assets';
 
 function surfaceActionCommand(id, label, description, iconKey) {
   return {
-    id, label, description, iconKey, surfaces: ['tools', 'toolbar'],
+    // Needs the open DDN surface's invoke (owner direction 2026-11-08: not on
+    // the Tools menu).
+    id, label, description, iconKey, surfaces: ['toolbar'],
     macroCallable: false,
     enabledWhen: (context) => context.enabled !== false,
     execute: (_args, context) => {
@@ -132,17 +134,19 @@ export function ddnModuleDefinition() {
         },
       ],
       commands: [
+        // The open commands need a project asset, which a bare Tools menu
+        // click cannot supply (owner direction 2026-11-08).
         {
           id: 'ddn.viewer.open', label: 'Open in DDN Viewer',
           description: 'Open the selected DDN project asset read-only.',
-          iconKey: 'tool.erd', surfaces: ['project', 'tools'],
+          iconKey: 'tool.erd', surfaces: ['project'],
           validateArguments: assetArguments,
           execute: openCommand('diagram.ddn.viewer'),
         },
         {
           id: 'ddn.designer.open', label: 'Open in DDN Designer',
           description: 'Edit the selected DDN project asset.',
-          iconKey: 'tool.erd', surfaces: ['project', 'tools'],
+          iconKey: 'tool.erd', surfaces: ['project'],
           permission: ['project.asset.edit'],
           validateArguments: assetArguments,
           execute: openCommand('diagram.ddn.designer'),

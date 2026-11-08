@@ -124,7 +124,9 @@ export function aiInterfaceCommandDefinitions() {
     id: item.id, label: label(item.id),
     description: `${label(item.id)} through the governed AI Interface authority.`,
     iconKey: 'tool.ai', permission: [PERMISSIONS[item.id]],
-    surfaces: ['tools', 'toolbar'], macroCallable: false,
+    // Every command needs form content or an existing id (owner direction
+    // 2026-11-08: not on the Tools menu); its workspace runs it.
+    surfaces: ['toolbar'], macroCallable: false,
     aiEligible: item.task, aiExposure: exposure(item), aiRiskClass: item.risk,
     aiModuleId: AI_INTERFACE_MODULE_ID,
     aiArgumentSchema: exposure(item) === 'hidden' ? undefined : JSON_OBJECT_SCHEMA,

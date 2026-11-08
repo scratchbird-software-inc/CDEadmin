@@ -35,8 +35,11 @@ function runtime(args, context) {
   if(!id) throw new Error('CDC session ID is required.');
   return {service, id};
 }
+// Owner direction 2026-11-08: module actions run inside the module's own
+// tool, which supplies the session; the Tools menu lists only commands that
+// start from a bare menu click.
 function command(input) {
-  return {iconKey: 'tool.cdc', surfaces: ['tools', 'toolbar'], macroCallable: false,
+  return {iconKey: 'tool.cdc', surfaces: ['toolbar'], macroCallable: false,
     aiEligible: false, auditCategory: 'cdc', validateArguments: () => true,
     enabledWhen: () => true, visibleWhen: () => true,
     disabledReason: 'CDC action is unavailable.', allowedSecurityGroups: [],

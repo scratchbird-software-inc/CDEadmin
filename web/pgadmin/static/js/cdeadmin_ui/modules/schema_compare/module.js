@@ -33,9 +33,12 @@ function sessionFrom(args, context) {
   return {service: serviceFrom(context), id};
 }
 
+// Owner direction 2026-11-08: module actions run inside the module's own
+// tool, which supplies the session; the Tools menu lists only commands that
+// start from a bare menu click.
 function command(input) {
   return {
-    iconKey: 'tool.schema-compare', surfaces: ['tools', 'toolbar'],
+    iconKey: 'tool.schema-compare', surfaces: ['toolbar'],
     macroCallable: false, aiEligible: false, auditCategory: 'schema_change',
     validateArguments: () => true, enabledWhen: () => true,
     visibleWhen: () => true, disabledReason: 'Schema Comparison action is unavailable.',
@@ -71,6 +74,8 @@ function moduleCommands() {
     command({
       id: 'schema_compare.session.create', label: 'New Schema Comparison',
       description: 'Create or configure a versioned Schema Comparison session.',
+      // Starts a session and opens its tool, so it can run from the menu.
+      surfaces: ['tools', 'toolbar'],
       permission: ['schema_compare.view'], execute: createSessionCommand,
     }),
     command({

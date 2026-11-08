@@ -39,8 +39,11 @@ function runtime(args, context) {
   if(!id) throw new Error('ETL session ID is required.');
   return {service, id};
 }
+// Owner direction 2026-11-08: module actions run inside the module's own
+// tool, which supplies the session; the Tools menu lists only commands that
+// start from a bare menu click.
 function command(input) {
-  return {iconKey: 'tool.etl', surfaces: ['tools', 'toolbar'], macroCallable: false,
+  return {iconKey: 'tool.etl', surfaces: ['toolbar'], macroCallable: false,
     aiEligible: false, auditCategory: 'etl', validateArguments: () => true,
     enabledWhen: () => true, visibleWhen: () => true,
     disabledReason: 'ETL action is unavailable.', allowedSecurityGroups: [],
