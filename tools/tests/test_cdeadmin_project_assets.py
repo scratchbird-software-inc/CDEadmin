@@ -593,6 +593,27 @@ class ProjectAssetServiceTests(unittest.TestCase):
             'name': 'Project One', 'description': 'Test assets'
         })
 
+    def test_two_assets_cannot_share_a_path(self):
+        # The database keeps paths unique per project; a clash is a
+        # conflict, not an integrity error (2026-11-08).
+        def diagram(asset_id, path, version=0):
+            request = ddn_asset(version)
+            request['assetRef'].update(assetId=asset_id, path=path)
+            return request
+        self.service.save_asset(7, (), 'project-one', 'diagram-one',
+                                diagram('diagram-one', 'diagrams/a.ddn'))
+        with self.assertRaises(ProjectAssetConflict):
+            self.service.save_asset(7, (), 'project-one', 'diagram-two',
+                                    diagram('diagram-two', 'diagrams/a.ddn'))
+        self.assertEqual(['diagram-one'], [
+            row.asset_key for row in self.repository.asset_rows])
+        saved = self.service.save_asset(
+            7, (), 'project-one', 'diagram-one',
+            diagram('diagram-one', 'diagrams/a.ddn', 1))
+        self.assertEqual(2, saved['version'])
+        self.service.save_asset(7, (), 'project-one', 'diagram-two',
+                                diagram('diagram-two', 'diagrams/b.ddn'))
+
     def test_project_lifecycle_is_optimistic_and_globally_identified(self):
         with self.assertRaises(ProjectAssetConflict):
             self.service.create_project(8, 'project-one', {'name': 'Other'})

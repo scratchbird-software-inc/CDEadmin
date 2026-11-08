@@ -4112,6 +4112,13 @@ class ProjectAssetService:
         asset_key = _safe_id(asset_key, 'asset ID')
         values = validate_asset_request(request, project_key, asset_key)
         expected = values.pop('expected_version')
+        # A path names one asset in its project (uq_cde_project_asset_path).
+        # Report a clash as a conflict; the commit used to fail with an
+        # integrity error and a 500 response (2026-11-08).
+        if any(other.path == values['path'] and other.asset_key != asset_key
+               for other in project.assets):
+            raise ProjectAssetConflict(
+                'another asset in this project already uses this path')
         row = self.repository.asset(project.id, asset_key)
         if row is None:
             if expected != 0:
