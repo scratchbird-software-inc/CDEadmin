@@ -214,11 +214,51 @@ def bundle_measurement(source: Path, policy, require_bundle):
     return result, findings
 
 
+STARTUP_DIRECTORY_ENV = 'CDEADMIN_QUALITY_STARTUP_DIR'
+
+
+def startup_data_root(source: Path) -> Path:
+    """Where the startup measurement keeps its configuration database.
+
+    A first start builds the configuration database, so its cost depends on
+    the storage. On a tmpfs /tmp a sync costs nothing; on the disk that holds
+    a user's data directory it does not (5.4 s for the first build at idle,
+    performance review 2026-11-07). The measurement therefore runs on the
+    checkout's own filesystem, or in the directory named by
+    CDEADMIN_QUALITY_STARTUP_DIR.
+    """
+    selected = os.environ.get(STARTUP_DIRECTORY_ENV)
+    return Path(selected) if selected else source
+
+
+def filesystem_type(path) -> str | None:
+    """The type of the filesystem holding ``path`` (Linux), else None."""
+    try:
+        mounts = Path('/proc/self/mountinfo').read_text(encoding='utf-8')
+    except OSError:
+        return None
+    target = os.path.realpath(path)
+    found, depth = None, -1
+    for line in mounts.splitlines():
+        fields = line.split()
+        if '-' not in fields:
+            continue
+        mount_point = (fields[4].replace('\\040', ' ')
+                       .replace('\\011', '\t').replace('\\134', '\\'))
+        inside = (target == mount_point or
+                  target.startswith(mount_point.rstrip('/') + '/'))
+        if inside and len(mount_point) > depth:
+            found, depth = fields[fields.index('-') + 1], len(mount_point)
+    return found
+
+
 def startup_measurement(source: Path, policy):
     startup = policy['startup']
-    with tempfile.TemporaryDirectory(prefix='cdeadmin-quality-startup-') \
-            as directory:
+    with tempfile.TemporaryDirectory(
+            prefix='.cdeadmin-quality-startup-',
+            dir=startup_data_root(source)) as directory:
         temporary = Path(directory)
+        data_filesystem = filesystem_type(temporary)
         data = temporary / 'data'
         for name in ('sessions', 'storage', 'azure'):
             (data / name).mkdir(parents=True)
@@ -283,6 +323,7 @@ def startup_measurement(source: Path, policy):
     result = {
         'wall_seconds': round(wall, 6),
         'exit_code': completed.returncode,
+        'data_filesystem': data_filesystem,
     }
     findings = []
     line = next(

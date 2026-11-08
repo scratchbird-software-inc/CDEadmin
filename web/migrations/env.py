@@ -8,7 +8,7 @@
 ##########################################################################
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, event, pool
 import logging
 
 # this is the Alembic Config object, which provides
@@ -23,7 +23,7 @@ logger = logging.getLogger('alembic.env')
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-from flask import current_app
+from flask import current_app, g
 db_url_escaped = \
     current_app.config.get('SQLALCHEMY_DATABASE_URI').replace('%', '%%')
 config.set_main_option('sqlalchemy.url', db_url_escaped)
@@ -76,11 +76,29 @@ def run_migrations_online():
                                 prefix='sqlalchemy.',
                                 poolclass=pool.NullPool)
 
+    # A fresh SQLite database is built in one transaction. The sqlite3
+    # module opens transactions only for data changes, so each DDL statement
+    # would otherwise commit (and sync) on its own. SQLAlchemy's documented
+    # pysqlite recipe: the driver stays in autocommit and SQLAlchemy emits
+    # BEGIN, so alembic's transaction covers every migration. Upgrades of an
+    # existing database keep the previous per-statement behaviour.
+    options = dict(current_app.extensions['migrate'].configure_args)
+    if (engine.dialect.name == 'sqlite' and
+            getattr(g, 'migrate_in_one_transaction', False)):
+        @event.listens_for(engine, 'connect')
+        def _driver_autocommit(dbapi_connection, _record):
+            dbapi_connection.isolation_level = None
+
+        @event.listens_for(engine, 'begin')
+        def _begin(connection):
+            connection.exec_driver_sql('BEGIN')
+        options['transactional_ddl'] = True
+
     connection = engine.connect()
     context.configure(connection=connection,
                       target_metadata=target_metadata,
                       process_revision_directives=process_revision_directives,
-                      **current_app.extensions['migrate'].configure_args)
+                      **options)
 
     try:
         with context.begin_transaction():

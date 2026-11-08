@@ -342,6 +342,29 @@ class QualityGateTests(unittest.TestCase):
         self.assertEqual(
             5000, result['contract_benchmark']['iterations']
         )
+        # The configuration database is built on the checkout's own storage
+        # (or CDEADMIN_QUALITY_STARTUP_DIR), not on a tmpfs /tmp.
+        self.assertEqual(
+            quality_gate.filesystem_type(
+                quality_gate.startup_data_root(ROOT)),
+            result['startup_measurement']['data_filesystem'],
+        )
+
+    def test_startup_measurement_uses_the_checkout_storage(self):
+        with patch.dict('os.environ', {}, clear=False) as environment:
+            environment.pop(quality_gate.STARTUP_DIRECTORY_ENV, None)
+            self.assertEqual(ROOT, quality_gate.startup_data_root(ROOT))
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+                'os.environ',
+                {quality_gate.STARTUP_DIRECTORY_ENV: directory}):
+            self.assertEqual(
+                Path(directory), quality_gate.startup_data_root(ROOT))
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'Linux mountinfo')
+    def test_filesystem_type_reads_the_mount_holding_a_path(self):
+        self.assertEqual('proc', quality_gate.filesystem_type('/proc/self'))
+        self.assertEqual('sysfs', quality_gate.filesystem_type('/sys/kernel'))
+        self.assertIsNotNone(quality_gate.filesystem_type(ROOT))
 
     def test_actual_contract_and_fixture_quality_inputs_are_consistent(self):
         policy = json.loads(QUALITY_POLICY.read_text(encoding='utf-8'))

@@ -809,7 +809,7 @@ def setup_db(app: Annotated[str, typer.Argument(
                 # Run migration for the first time i.e. create database
                 from config import SQLITE_PATH
                 if not os.path.exists(SQLITE_PATH):
-                    db_upgrade(app)
+                    db_upgrade(app, one_transaction=True)
                 else:
                     version = Version.query.filter_by(name='ConfigDB').first()
                     schema_version = version.value

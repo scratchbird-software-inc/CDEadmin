@@ -406,12 +406,12 @@ def create_app(app_name=None):
             app.logger.error(traceback.format_exc())
             raise RuntimeError('Migration failed')
 
-    def upgrade_db():
+    def upgrade_db(fresh=False):
         """
-        Execute the migrations.
+        Execute the migrations. A fresh database is built in one transaction.
         """
         try:
-            db_upgrade(app)
+            db_upgrade(app, one_transaction=fresh)
             os.environ['CORRUPTED_DB_BACKUP_FILE'] = ''
         except Exception:
             app.logger.error('Database migration failed')
@@ -443,7 +443,7 @@ def create_app(app_name=None):
                 # If running in cli mode then don't try to upgrade, just
                 # raise the exception
                 if not cli_mode:
-                    upgrade_db()
+                    upgrade_db(fresh=True)
                 else:
                     if not os.path.exists(SQLITE_PATH):
                         raise FileNotFoundError(
