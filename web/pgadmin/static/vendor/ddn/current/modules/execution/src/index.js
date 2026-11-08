@@ -107,10 +107,14 @@ function jsonData(value, sorted) {
 export function canonical(value) { return value === undefined ? 'null' : jsonData(value, true); }
 export const fingerprint = (value) => sha256(canonical(value));
 export function clone(value) { return JSON.parse(jsonData(value, false)); }
+// ScratchRobin consumer patch (registry pack cache): objects known to be deep-frozen
+// (shared copies, and sources proven deep-frozen) cannot change, so freezing
+// a new wrapper around them does not walk them again.
+const deeplyFrozen = new WeakSet();
 export function freeze(value) {
     const seen = new Set();
     const visit = (item) => {
-        if (!item || typeof item !== 'object' || ArrayBuffer.isView(item) || seen.has(item))
+        if (!item || typeof item !== 'object' || ArrayBuffer.isView(item) || seen.has(item) || deeplyFrozen.has(item))
             return;
         seen.add(item);
         Object.freeze(item);
@@ -120,6 +124,38 @@ export function freeze(value) {
     };
     visit(value);
     return value;
+}
+// ScratchRobin consumer patch (registry pack cache): a deep-frozen source cannot change, so one
+// frozen plain-JSON copy of it serves every later runtime and verifier. The
+// first copy still validates the data; anything not deep-frozen is copied anew.
+// Every copy is plain JSON frozen throughout, so it is itself deep-frozen.
+const frozenCopies = new WeakMap();
+function isDeeplyFrozen(value, seen) {
+    if (!value || typeof value !== 'object' || deeplyFrozen.has(value) || seen.has(value))
+        return true;
+    if (ArrayBuffer.isView(value) || !Object.isFrozen(value))
+        return false;
+    seen.add(value);
+    for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(value)))
+        if (!('value' in descriptor) || !isDeeplyFrozen(descriptor.value, seen))
+            return false;
+    return true;
+}
+export function frozenCopy(value) {
+    if (!value || typeof value !== 'object')
+        return freeze(clone(value));
+    const cached = frozenCopies.get(value);
+    if (cached !== undefined)
+        return cached;
+    const copy = freeze(clone(value));
+    deeplyFrozen.add(copy);
+    const seen = new Set();
+    if (isDeeplyFrozen(value, seen)) {
+        for (const item of seen)
+            deeplyFrozen.add(item);
+        frozenCopies.set(value, copy);
+    }
+    return copy;
 }
 export class ComputationStopped extends Error {
     outcome;

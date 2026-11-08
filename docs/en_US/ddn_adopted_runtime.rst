@@ -103,6 +103,14 @@ Contracts are regenerated from the patched canonical inputs and provenance
 records the distinction from unpatched upstream. It adds no commercial code,
 remote geography, routing or geocoding.
 
+.. note:: Added 2026-11-07 (owner direction). DDN is a proof of concept, and
+   ScratchRobin may extend its own DDN capture without pushing changes back to
+   the DDN repository. A second reviewed consumer patch,
+   ``tools/dependency_patches/ddn-registry-pack-cache.md``, lets DDN runtimes
+   share one frozen copy of the profile packs and their descriptors, instead of
+   copying about 480 KB of profile data again for each runtime and its verifier.
+   Verification results are unchanged.
+
 Legacy source and evidence
 ==========================
 

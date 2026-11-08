@@ -1,6 +1,6 @@
 import { allNodes, decodeSources, decodedSourceSet } from '../../language/src/index.js';
 import { modelVerifier, registerModelVerifier, verifiedModel } from './model-verifiers.js';
-import { fingerprint, createContext, ComputationStopped, clone, freeze } from '../../execution/src/index.js';
+import { fingerprint, createContext, ComputationStopped, clone, freeze, frozenCopy } from '../../execution/src/index.js';
 import { normalizeLocation } from '../../model/src/index.js';
 import { bundleFiles, getProfile, indexRecords, enclosingDefinitions, nativeProfileDiagnostics, normalizedReference, resolveRecord as resolveUnindexedRecord, roleDescriptor, coreTypeDescriptor, coreDescriptor, safeLocation } from '../../profiles/src/core.js';
 import { codex, getPath, isRecord, stableStringify, stableStringifyLength, validateSchema } from '../../profiles/src/schema-core.js';
@@ -232,8 +232,9 @@ function ruleResult(value, options, input, records, selected) {
 /** Staged verification is headless; source decoding and presentation remain separate. */
 export function createVerifier(runtimeOptions) {
     let destroyed = false, serial = 0;
-    const packs = runtimeOptions.packs.map(pack => ({ manifest: freeze(clone(pack.manifest)), registrations: {
-            profiles: freeze(clone(pack.registrations.profiles ?? [])),
+    // ScratchRobin consumer patch (registry pack cache): shared frozen copies.
+    const packs = runtimeOptions.packs.map(pack => ({ manifest: frozenCopy(pack.manifest), registrations: {
+            profiles: freeze((pack.registrations.profiles ?? []).map(profile => frozenCopy(profile))),
             rules: (pack.registrations.rules ?? []).map(rule => { const { evaluate, ...data } = rule; return freeze({ ...clone(data), evaluate }); }),
         } }));
     const profileDescriptors = new Map(packs.flatMap(p => p.registrations.profiles ?? []).map(p => [p.id, p]));

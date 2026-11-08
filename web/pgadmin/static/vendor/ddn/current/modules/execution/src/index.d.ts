@@ -5,6 +5,7 @@ export declare function canonical(value: unknown): string;
 export declare const fingerprint: (value: unknown) => string;
 export declare function clone<T>(value: T): T;
 export declare function freeze<T>(value: T): T;
+export declare function frozenCopy<T>(value: T): T;
 export declare class ComputationStopped extends Error {
     readonly outcome: 'cancelled' | 'budget-exceeded';
     constructor(outcome: 'cancelled' | 'budget-exceeded', message: string);

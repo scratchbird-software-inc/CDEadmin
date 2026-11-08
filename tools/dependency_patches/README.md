@@ -20,6 +20,15 @@ Updated 2026-11-03 (owner direction): DDN now comes only from the public
 purpose and is no longer a source. The geometry patch now edits the
 public contract layout (`standard/codex`).
 
+Updated 2026-11-07 (owner direction): DDN is a proof of concept. ScratchRobin
+may rewrite or extend its own DDN capture without pushing changes back to the
+DDN repository. The projects that use it are open source, so the changes stay
+available there. The intake now also applies `ddn_registry_pack_cache.py`
+([ddn-registry-pack-cache.md](ddn-registry-pack-cache.md)). It keeps one frozen
+copy of each deep-frozen profile pack source and memoizes profile descriptors,
+so every DDN runtime after the first reuses them. The manifest records it under
+`consumer_patches.registry_pack_cache`.
+
 Native MariaDB 12.2.2 macOS builds apply one guarded source correction in
 `native_servers.patch_mariadb_darwin_linker`: ColumnStore's GNU ld
 `--as-needed` flag is conditional on a non-Apple toolchain. On Intel macOS its

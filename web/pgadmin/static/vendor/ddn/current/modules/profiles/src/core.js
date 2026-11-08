@@ -43,11 +43,19 @@ export function knownProfile(id) { return codex.knownProfiles[id]; }
 export function roleDescriptor(role, category = 'element') { return codex.roles[category === 'relation' ? 'relation::' + role : role]; }
 export function coreDescriptor(id) { return codex.core[id]; }
 export function coreTypeDescriptor(name, category = 'element') { const type = codex.coreTypes[name]; return type?.category === category ? type : undefined; }
+// ScratchRobin consumer patch (registry pack cache): a descriptor is a pure function of the frozen
+// codex and its id, so every pack shares one deep-frozen descriptor per id.
+const descriptors = new Map();
 export function profileDescriptor(id) {
+    const known = descriptors.get(id);
+    if (known)
+        return known;
     const p = getProfile(id);
     if (!p)
         return undefined;
-    return freezeProfileData({ id: p.id, method: p.method, ...(p.inherits ? { inherits: p.inherits } : {}), roles: [...new Set([...p.primary_palette, ...p.context_roles])], relations: [...p.relation_roles], ruleIds: [(nativeProfileIds.includes(p.id) ? 'ddn.native.' : 'ddn.profile.') + p.id], projectionId: p.projection, commandIds: [...standardCommandIds], schemaIds: [p.projection_schema], codexHash: codex.sourceHashes['ddn.schema.json'] ?? '', boundedScope: p.scope, exclusions: [...p.exclusions] });
+    const descriptor = freezeProfileData({ id: p.id, method: p.method, ...(p.inherits ? { inherits: p.inherits } : {}), roles: [...new Set([...p.primary_palette, ...p.context_roles])], relations: [...p.relation_roles], ruleIds: [(nativeProfileIds.includes(p.id) ? 'ddn.native.' : 'ddn.profile.') + p.id], projectionId: p.projection, commandIds: [...standardCommandIds], schemaIds: [p.projection_schema], codexHash: codex.sourceHashes['ddn.schema.json'] ?? '', boundedScope: p.scope, exclusions: [...p.exclusions] });
+    descriptors.set(id, descriptor);
+    return descriptor;
 }
 const owners = { definitions: 'definition', views: 'view_definition', placements: 'view_placement', appearances: 'appearance', data: 'data', sources: 'source', assets: 'asset', templates: 'template', publications: 'publication' };
 export function bundleFiles(normalized) {

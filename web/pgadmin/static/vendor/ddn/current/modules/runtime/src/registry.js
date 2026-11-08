@@ -1,4 +1,4 @@
-import { clone, freeze } from '../../execution/src/index.js';
+import { freeze, frozenCopy } from '../../execution/src/index.js';
 const registryData = new WeakMap();
 const packData = new WeakMap();
 export function registryPacks(registry) { return packData.get(registry)?.() ?? []; }
@@ -60,12 +60,13 @@ export function createRegistry(versions, onChange = () => { }) {
                 if (Object.hasOwn(current.schemas ?? {}, name))
                     throw new Error('Duplicate schema registration: ' + name);
             // Trusted callbacks stay code; all declarative registration data becomes immutable.
-            const copy = { manifest: freeze(clone(m)), registrations: freeze({
-                    ...(incoming.profiles ? { profiles: incoming.profiles.map(p => freeze(clone(p))) } : {}),
+            // ScratchRobin consumer patch (registry pack cache): shared frozen copies.
+            const copy = { manifest: frozenCopy(m), registrations: freeze({
+                    ...(incoming.profiles ? { profiles: incoming.profiles.map(p => frozenCopy(p)) } : {}),
                     ...(incoming.rules ? { rules: incoming.rules.map(p => freeze({ ...p, profiles: [...p.profiles], levels: [...p.levels], purposes: [...p.purposes], readPaths: [...p.readPaths] })) } : {}),
                     ...(incoming.commands ? { commands: incoming.commands.map(p => freeze({ ...p, profiles: [...p.profiles], propertyPaths: [...p.propertyPaths] })) } : {}),
                     ...(incoming.projections ? { projections: incoming.projections.map(p => freeze({ ...p, profiles: [...p.profiles], readPaths: [...p.readPaths] })) } : {}),
-                    ...(incoming.schemas ? { schemas: freeze(clone(incoming.schemas)) } : {}),
+                    ...(incoming.schemas ? { schemas: frozenCopy(incoming.schemas) } : {}),
                 }) };
             installed.set(m.id, copy);
             mergedCache = undefined;

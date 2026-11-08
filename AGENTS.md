@@ -45,6 +45,14 @@ provider metadata/data adapters, authorization, persistence and native-operation
 execution; DDN owns diagram/dashboard rendering and visual editing. Do not build
 another ERD or dashboard editor in ScratchRobin.
 
+Owner direction, 2026-11-07: the DDN software is a proof of concept. ScratchRobin
+is the concern; what it needs from DDN is either a rewrite or an expansion of its
+own DDN capture, with nothing pushed back to the DDN repository. The projects that
+use DDN are open source, so the changes remain source-available there. Make such
+changes as reviewed consumer patches in `tools/dependency_patches/`, applied by the
+intake to the isolated capture and recorded in the vendored manifest. The refresh
+and provenance rules below still apply.
+
 Before EVERY build, and before every test run intended to validate a commit:
 1. Read the current sister-project revision, working-tree status, public API and
    distribution/build instructions. Preserve the other team's working files.

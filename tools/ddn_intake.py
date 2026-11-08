@@ -90,7 +90,13 @@ def refresh(source, work, destination, intake_tool):
     before = inventory(source)
     patch = Path(__file__).parent / 'dependency_patches/ddn_next_native_geometry.py'
     review = patch.with_name('ddn-next-native-geometry.md')
-    tool_hashes = {p.name: digest(p) for p in (Path(__file__), intake_tool, patch, review, Path(__file__).with_name('ddn_toolchain.py'))}
+    # Owner direction 2026-11-07: ScratchRobin may extend its DDN capture
+    # without changing the public DDN repository; each extension is a
+    # reviewed consumer patch recorded in the manifest.
+    cache_patch = patch.with_name('ddn_registry_pack_cache.py')
+    cache_review = patch.with_name('ddn-registry-pack-cache.md')
+    tool_hashes = {p.name: digest(p) for p in (Path(__file__), intake_tool, patch, review, cache_patch, cache_review,
+                                              Path(__file__).with_name('ddn_toolchain.py'))}
     pinned_node, typescript, tool_receipts = resolve_tools(source, work)
     optimizer_modules, optimizer_receipts = resolve_optimizer(source, work)
     tool_receipts = [*tool_receipts, *optimizer_receipts]
@@ -121,6 +127,12 @@ def refresh(source, work, destination, intake_tool):
         module.apply(snapshot)
         subprocess.run([sys.executable, '-B', 'project/ddn/packages/profiles/tools/generate.py'], cwd=snapshot, check=True, capture_output=True)
         patched = {name: digest(snapshot / name) for name in before['files'] if digest(snapshot / name) != before['files'][name]}
+        spec = importlib.util.spec_from_file_location('ddn_registry_pack_cache', cache_patch)
+        cache_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cache_module)
+        cache_module.apply(snapshot)
+        cached = {name: digest(snapshot / name) for name in before['files']
+                  if digest(snapshot / name) != patched.get(name, before['files'][name])}
         isolated_tools = snapshot / '.work/tools/toolchain'
         node = _copy_tool(pinned_node, isolated_tools / node_name)
         shutil.copytree(typescript, isolated_tools / 'typescript', copy_function=_copy_tool)
@@ -159,7 +171,9 @@ def refresh(source, work, destination, intake_tool):
                     'intake_tools': tool_hashes, 'compiler': compiler,
                     'tool_artifacts': tool_receipts,
                     'release_hash': modular['releaseHash'],
-                    'consumer_patches': {'native_geometry': {'tool': digest(patch), 'review': digest(review), 'changed_inputs': patched}},
+                    'consumer_patches': {'native_geometry': {'tool': digest(patch), 'review': digest(review), 'changed_inputs': patched},
+                                         'registry_pack_cache': {'tool': digest(cache_patch), 'review': digest(cache_review),
+                                                                 'changed_inputs': cached}},
                     'artifacts': {p.relative_to(stage).as_posix(): digest(p)
                                   for p in artifact_paths(stage)}}
         (stage / 'resource-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
