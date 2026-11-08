@@ -15,6 +15,8 @@ import {
   LEGACY_REGISTRATION_RETIRED, familyEditorContextActions, providerEndpointUrl, reportServerEditorFailure,
   tryOpenFamilyEditor, tryOpenServerForm,
 } from './ProviderObjectEditor';
+import {diagramChoices} from 'sources/cdeadmin_ui/integrations/ddn/toDiagramMenu';
+import {requestDiagramCreate} from 'sources/cdeadmin_ui/integrations/ddn/DiagramsNavigator';
 
 const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
@@ -24,6 +26,7 @@ const SAFE_HANDLERS = new Set([
   'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
   'open_mysql_host', 'open_mysql_routers', 'open_mysql_physical', 'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mysql_instance_backups', 'open_mysql_instance_restores', 'open_mysql_topologies', 'open_mysql_sandboxes', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
   'register_endpoint', 'verify_endpoint', 'disconnect_endpoint',
+  'add_to_diagram',
 ]);
 
 export const PROVIDER_MENU_CATEGORIES = Object.freeze({
@@ -209,6 +212,12 @@ function dispatch(action, args, context) {
     });
   case 'open_tool':
     return openRegisteredTool(args.surface, endpoint, action.label.replace(/\.\.\.$/, ''));
+  case 'add_to_diagram':
+    // To Diagram: args.diagram is the submenu choice (see toDiagramEntry).
+    return import('sources/cdeadmin_ui/integrations/ddn/toDiagramMenu')
+      .then(({addNodeToDiagram}) => addNodeToDiagram({args, endpointUrl: providerEndpointUrl(
+        serverNode, endpoint.item, endpoint.data, args.database_target_id)}))
+      .catch((error) => pgAdmin.Browser.notifier.error(error?.message || String(error)));
   case 'open_workspace':
     return serverNode.callbacks.open_cde_workspace.call(
       serverNode, {item: endpoint.item}, args.tab || 'resources', {
@@ -327,6 +336,7 @@ export function providerContextMenuItems(itemData, item=null) {
     commandHandler: (args, context) => dispatch(action, args, {
       ...context, item: item || context.item, itemData,
     }),
+    handler: action.handler,
     requiresConfirmation: Boolean(action.requires_confirmation),
     macroCallable: action.macro_callable !== false,
   }));
@@ -362,6 +372,31 @@ export async function openProviderObject(itemData, item) {
   return false;
 }
 
+// To Diagram opens a submenu of the diagrams the user can edit (kept from
+// the last listing; the first opening may still be loading) and New diagram.
+function toDiagramEntry(menu, itemData, item) {
+  const choices = diagramChoices();
+  const listed = choices === null ? [{id: `${menu.commandId}.loading`,
+    label: gettext('Loading diagrams…'), enabled: false, execute: () => false}] :
+    choices.map(({project, asset}) => ({
+      id: `${menu.commandId}.${asset.asset_id}`, label: asset.name, iconKey: 'tool.erd',
+      enabled: true, execute: () => menu.commandHandler({
+        ...menu.commandArguments({itemData, item}), diagram: {project, asset},
+      }, {itemData, item}),
+    }));
+  return {
+    id: menu.commandId, label: menu.label, description: menu.description,
+    iconKey: menu.iconKey, enabled: menu.enable(itemData, item),
+    disabledReason: menu.disabledReason,
+    providerId: itemData?.cde_provider_id || '', objectTypes: [itemData?._type || 'object'],
+    children: [...listed, {id: `${menu.commandId}.new`, label: gettext('New diagram…'),
+      iconKey: 'action.new', enabled: true, execute: () => {
+        pgAdmin.Browser.CDEadminCommandContext?.().showActivity?.('activity.diagrams');
+        requestDiagramCreate();
+      }}],
+  };
+}
+
 export function providerTreeContextActions(itemData, item=null) {
   const menus = providerContextMenuItems(itemData, item);
   if(menus === null) return null;
@@ -380,6 +415,10 @@ export function providerTreeContextActions(itemData, item=null) {
     if(descriptorOperationIds.has(String(menu.commandId).split('.').at(-1))) return;
     const category = menu.category || 'object';
     if(!grouped.has(category)) grouped.set(category, []);
+    if(menu.handler === 'add_to_diagram') {
+      grouped.get(category).push(toDiagramEntry(menu, itemData, item));
+      return;
+    }
     grouped.get(category).push({
       id: menu.commandId,
       label: menu.label,

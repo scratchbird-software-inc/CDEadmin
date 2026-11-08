@@ -22,13 +22,14 @@ import {EmptyState} from '../../feedback/EmptyState';
 import {ProgressOverlay} from '../../feedback/ProgressOverlay';
 import FormReference from '../../navigation/FormReference';
 import {loadDDNLibraries} from './library';
+import {PROJECT_ASSET_OPEN_EVENT, openProjectAsset, setDiagramChoices} from './toDiagramMenu';
 import {
   DEFAULT_DIAGRAM_NOTATION, DIAGRAM_NOTATIONS, createDiagram, diagramNotation,
   listDiagrams,
 } from './diagrams';
 
 export const DIAGRAM_CREATE_EVENT = 'cdeadmin:diagram-create';
-export const PROJECT_ASSET_OPEN_EVENT = 'cdeadmin:open-project-asset';
+export {PROJECT_ASSET_OPEN_EVENT, openProjectAsset};
 const NEW_PROJECT = '\u0000new-project';
 let pendingCreate = false;
 
@@ -43,10 +44,6 @@ function takePendingCreate() {
   const pending = pendingCreate;
   pendingCreate = false;
   return pending;
-}
-
-export function openProjectAsset(project, asset) {
-  window.dispatchEvent(new CustomEvent(PROJECT_ASSET_OPEN_EVENT, {detail: {project, asset}}));
 }
 
 const WRITABLE = new Set(['owner', 'manager', 'editor']);
@@ -68,6 +65,7 @@ export function DiagramsNavigator({client: suppliedClient, libraries,
     try {
       const loaded = await listDiagrams(client);
       setGroups(loaded);
+      setDiagramChoices(loaded);
       return loaded;
     } catch(loadError) {
       setError(loadError.message);

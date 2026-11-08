@@ -26,6 +26,30 @@ def _json(value):
                       separators=(',', ':'), allow_nan=False)
 
 
+# Kinds the engines' diagram builders draw as tables and views.
+DIAGRAM_RELATION_KINDS = frozenset({
+    'table', 'view', 'materialized-view', 'partitioned-table',
+    'foreign-table', 'virtual-table', 'fts-table'})
+
+
+def diagram_relations(diagram, resources):
+    """Each table or view of a relations diagram with its native path.
+
+    "To Diagram" (2026-11-08) uses the path to place a relation in its
+    database and schema regions without knowing the engine.
+    """
+    rows = {row['resource_id']: row for row in resources}
+    relations = []
+    for key, resource_id in diagram['resource_mapping'].items():
+        row = rows.get(resource_id)
+        if row is not None and row['resource_kind'] in DIAGRAM_RELATION_KINDS:
+            relations.append({'key': key, 'resource_id': resource_id,
+                              'kind': row['resource_kind'],
+                              'name': row['display_name'],
+                              'path': list(row.get('display_path') or [])})
+    return sorted(relations, key=lambda item: (item['path'], item['key']))
+
+
 def build_export(resources, *, endpoint_id, target_id, generation,
                  resource_id=None, include_system=False, refreshed=False,
                  native_model=False, engine="firebird"):
@@ -201,6 +225,9 @@ def build_export(resources, *, endpoint_id, target_id, generation,
         result['diagram'] = build_diagram(items, provenance)
     except ValueError as error:
         result['diagram'] = {'unavailable': str(error)}
+    if result['diagram'] and 'resource_mapping' in result['diagram']:
+        result['diagram']['relations'] = diagram_relations(
+            result['diagram'], items)
     if multi:
         result['download_text'] = download
     return result

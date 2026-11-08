@@ -50,3 +50,41 @@ Explorer.
 
 A diagram is a project asset of type ``ddn-workspace`` whose metadata
 records ``{"diagram": {"schema": "cdeadmin.diagram.v1", "notation": ...}}``.
+
+Adding database objects: To Diagram
+===================================
+
+.. note::
+
+   Added 2026-11-08 for Firebird, MySQL, MariaDB, SQLite and DuckDB
+   databases in the Data Explorer. PostgreSQL's database and table nodes come
+   from the inherited pgAdmin tree and do not offer it yet, and a server node
+   alone (one element for the server and each instance, without a database)
+   is not offered yet.
+
+Right-click a registered database, or a table or view in it, and choose *To
+Diagram*. The submenu lists the diagrams you can edit; *New diagram…* opens
+the Diagrams panel to create one. The first opening of the submenu may show
+*Loading diagrams…* while the list is read.
+
+Choosing a diagram:
+
+* reads the database's catalog the way *metadata and DDN diagrams* does, with
+  each table and view, its columns and one relation per foreign key;
+* puts those declarations in a file of the diagram,
+  ``objects/<engine>-<id>.ddn``, one per connection and database;
+* adds the database (all its tables and views) or the chosen table or view
+  to the diagram's view. Foreign keys between objects in the view are drawn
+  with crow's-foot cardinality. The referencing side is zero or many; the
+  referenced side is one when every foreign-key column is NOT NULL, and zero
+  or one otherwise;
+* groups them in nested regions: the host, the connection (with its port),
+  the database, then the database's own containers (schemas, attached
+  databases, DuckDB catalogs);
+* has DDN verify the result, saves it as a new version of the diagram, and
+  opens it.
+
+Adding a database again refreshes its file from the current catalog. Objects
+that are no longer in the database leave the view, and edits made to that
+file in the designer are replaced. The diagram's view keeps its title,
+layout and appearance.

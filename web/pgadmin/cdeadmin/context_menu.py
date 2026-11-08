@@ -48,6 +48,8 @@ _HANDLERS = frozenset({
     'open_firebird_docker',
     'open_firebird_dashboard_editor',
     'refresh_node',
+    # To Diagram: the browser offers the user's diagrams as a submenu.
+    'add_to_diagram',
     'register_endpoint',
     'verify_endpoint',
 })
@@ -1246,7 +1248,22 @@ def database_target_context_actions(
                 }, confirmation=mutation == 'destructive',
                 macro=mutation != 'destructive',
             ))
+    actions.extend(_to_diagram(engine_id, 'database', base))
     return actions
+
+
+def _to_diagram(engine_id, scope, base):
+    """To Diagram (owner direction 2026-11-06) for engines whose catalog
+    export builds a relations diagram; the browser lists the diagrams."""
+    from pgadmin.cdeadmin.workspace.catalog_diagrams import ENGINES
+    if engine_id not in set(ENGINES.values()):
+        return []
+    return [_action(
+        f'{scope}.{engine_id}.to_diagram', 'To Diagram', 'add_to_diagram',
+        icon='tool.erd', group='common', priority=90,
+        description=('Add this object and its relations to a diagram made '
+                     'with the Diagrams tool.'),
+        mutation='none', arguments=dict(base))]
 
 
 def resource_group_context_actions(profile, resource_kind, visual_catalog,
@@ -1375,6 +1392,11 @@ def resource_context_actions(
                     'resource_kind': resource_kind,
                 },
             ))
+        from pgadmin.cdeadmin.workspace.firebird_catalog_export import (
+            DIAGRAM_RELATION_KINDS)
+        if resource_kind in DIAGRAM_RELATION_KINDS:
+            actions.extend(_to_diagram(engine_id, 'resource', {
+                **base, 'resource_kind': resource_kind}))
     descriptor = next((item for item in (
         (visual_catalog or {}).get('objects') or []
     ) if item.get('resource_kind') == resource_kind), None)

@@ -2576,6 +2576,14 @@ class ProviderWorkspaceService:
             provider_route=endpoint['route'],
         )
 
+    def catalog_diagram(self, server, request):
+        """One database's relations for To Diagram (catalog_diagrams)."""
+        from .catalog_diagrams import catalog_diagram
+        try:
+            return catalog_diagram(self, server, request)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def browse_source(self, server, request):
         """Editor text reading one resource's records (Browse data).
 
