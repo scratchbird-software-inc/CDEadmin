@@ -11,7 +11,8 @@ import uuid
 
 import psutil
 
-from ..operations.fileio import durable_replace, exclusive_file_lock, private_directory, private_file
+from ..operations.fileio import (
+    exclusive_file_lock, private_directory, publish_private_file)
 from ..operations.store import JsonOperationStore
 from ..providers.mysql_family.mysql_clone import CloneError, capture, clone_statement, correlated, destination, observation, operation_key, options, rows, thread_identity, thread_matches
 from .job_liveness import read_settled, worker_stopped
@@ -150,9 +151,8 @@ class MySQLCloneJobs:
             path.mkdir(parents=True,exist_ok=True,mode=0o700);private_directory(path)
         with self.store(record['job_id']) as store:
             store.change(lambda state:state.setdefault('mysql_clone_jobs',{}).update({record['job_id']:record}))
-        entry=scope/'index'/(f'{time.time_ns():020d}_'+record['job_id']);staging=entry.with_name('.'+entry.name)
-        with staging.open('xb') as stream:private_file(staging);stream.flush();os.fsync(stream.fileno())
-        durable_replace(staging,entry)
+        entry = f'{time.time_ns():020d}_' + record['job_id']
+        publish_private_file(scope / 'index' / entry)
         return self.public(record)
 
     def start(self,request,owner,endpoint,source,configuration,transport):

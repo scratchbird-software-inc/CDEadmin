@@ -12,7 +12,8 @@ import uuid
 
 import psutil
 
-from ..operations.fileio import durable_replace, exclusive_file_lock, private_file, private_directory
+from ..operations.fileio import (
+    exclusive_file_lock, private_file, private_directory, publish_private_file)
 from ..operations.store import JsonOperationStore
 from .job_liveness import worker_stopped
 from ..providers.postgresql.continuity import ContinuityError, PhysicalTools, backup_options, backup_arguments, combine_options, combine_arguments, manifest
@@ -484,12 +485,7 @@ class PostgreSQLContinuityJobs:
                 jobs = state.setdefault('postgresql_continuity_jobs',{})
                 jobs[record['job_id']]=record
             store.change(save)
-        staging=index/('.'+index_entry.name)
-        descriptor=os.open(staging,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
-        try:
-            private_file(staging);os.fsync(descriptor)
-        finally:os.close(descriptor)
-        durable_replace(staging,index_entry)
+        publish_private_file(index_entry)
         return self.public(record)
 
     def start(self, request, owner, endpoint, source, configuration, transport):

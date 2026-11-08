@@ -69,6 +69,26 @@ def durable_replace(source, target):
             os.close(descriptor)
 
 
+def publish_private_file(path, data=b'', *, staging=None):
+    """Durably publish ``data`` as a private file at ``path``.
+
+    The bytes go to a new staging file in the same directory (``.<name>``
+    unless ``staging`` names another), which is made private, flushed and
+    synced, and then replaces ``path`` through durable_replace. The staging
+    file must not already exist. Callers keep their own encoding, so a JSON
+    writer passes the exact bytes it wrote before.
+    """
+    path = Path(path)
+    staging = (path.with_name('.' + path.name) if staging is None
+               else Path(staging))
+    with staging.open('xb') as stream:
+        private_file(staging)
+        stream.write(data)
+        stream.flush()
+        os.fsync(stream.fileno())
+    durable_replace(staging, path)
+
+
 @lru_cache(maxsize=1)
 def _windows_security():
     import csv

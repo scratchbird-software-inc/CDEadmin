@@ -34,11 +34,9 @@ def main(root, expected):
     files_path = own.parent.parent / 'operations' / 'fileio.py'
     files = module('cdeadmin_guardian_fileio', files_path, intent['helpers'][str(files_path)])
     def write(path, value):
-        temporary = path.with_name('.' + path.name + '-' + uuid.uuid4().hex)
-        with temporary.open('x', encoding='utf8') as stream:
-            files.private_file(temporary); json.dump(value, stream, ensure_ascii=True, allow_nan=False)
-            stream.flush(); os.fsync(stream.fileno())
-        files.durable_replace(temporary, path)
+        data = json.dumps(value, ensure_ascii=True, allow_nan=False)
+        staging = path.with_name('.' + path.name + '-' + uuid.uuid4().hex)
+        files.publish_private_file(path, data.encode('utf8'), staging=staging)
     process_path = own.with_name('tool_process.py')
     processes = module('cdeadmin_guardian_process', process_path, intent['helpers'][str(process_path)])
     descriptor = os.open(root / 'guardian.lock', os.O_RDWR | os.O_CREAT, 0o600)

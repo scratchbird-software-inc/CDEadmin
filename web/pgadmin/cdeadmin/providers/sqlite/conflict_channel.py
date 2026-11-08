@@ -7,7 +7,7 @@ import re
 import threading
 import time
 
-from ...operations.fileio import durable_replace,private_file
+from ...operations.fileio import private_file,publish_private_file
 from .changeset_inspection import decode_cell,decode_page
 from .session_api import SessionAPIError
 
@@ -56,8 +56,7 @@ class ConflictChannel:
                 value['sha256']=hashed.hexdigest()
         candidate=self.directory/'pending-conflict.incoming';target=self.directory/'pending-conflict.json'
         data=json.dumps(event,sort_keys=True,ensure_ascii=True,separators=(',',':')).encode('utf8')
-        with candidate.open('xb') as stream:private_file(candidate);stream.write(data);stream.flush();os.fsync(stream.fileno())
-        durable_replace(candidate,target)
+        publish_private_file(target,data,staging=candidate)
         self.pending={'sequence':sequence,'challenge':challenge,'kind':NAMES[kind],'waiting':True,
             'event_file':'pending-conflict.json','event_sha256':hashlib.sha256(data).hexdigest(),'event_size':str(len(data)),
             'allowed_choices':event['allowed_choices'],'received_at':time.time()}

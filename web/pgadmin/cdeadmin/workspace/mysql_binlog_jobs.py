@@ -13,7 +13,8 @@ import uuid
 
 import psutil
 
-from ..operations.fileio import durable_replace,exclusive_file_lock,private_directory,private_file
+from ..operations.fileio import (
+    exclusive_file_lock, private_directory, publish_private_file)
 from ..operations.store import JsonOperationStore
 from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError,verify
 from .job_liveness import read_settled, worker_stopped
@@ -205,9 +206,8 @@ class MySQLBinlogJobs:
         directory=self.directory(record);directory.mkdir(mode=0o700);private_directory(directory)
         with self.store(record['job_id']) as store:
             store.change(lambda state:state.setdefault('mysql_binlog_jobs',{}).update({record['job_id']:record}))
-        entry=scope/'index'/(f'{time.time_ns():020d}_'+record['job_id']);temporary=entry.with_name('.'+entry.name)
-        with temporary.open('xb') as stream:private_file(temporary);stream.flush();os.fsync(stream.fileno())
-        durable_replace(temporary,entry)
+        entry = f'{time.time_ns():020d}_' + record['job_id']
+        publish_private_file(scope / 'index' / entry)
         return self.public(record)
 
     def start(self,request,owner,endpoint,current,transport):

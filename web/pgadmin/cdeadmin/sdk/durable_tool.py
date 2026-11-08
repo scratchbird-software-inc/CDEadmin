@@ -14,7 +14,8 @@ import uuid
 
 import psutil
 
-from ..operations.fileio import durable_replace, private_directory, private_file
+from ..operations.fileio import (
+    private_directory, private_file, publish_private_file)
 
 
 def sha(path):
@@ -26,12 +27,9 @@ def sha(path):
 
 def write(path, value):
     path = Path(path)
-    temporary = path.with_name('.' + path.name + '-' + uuid.uuid4().hex)
-    with temporary.open('x', encoding='utf8') as stream:
-        private_file(temporary)
-        json.dump(value, stream, ensure_ascii=True, allow_nan=False)
-        stream.flush(); os.fsync(stream.fileno())
-    durable_replace(temporary, path)
+    data = json.dumps(value, ensure_ascii=True, allow_nan=False)
+    staging = path.with_name('.' + path.name + '-' + uuid.uuid4().hex)
+    publish_private_file(path, data.encode('utf8'), staging=staging)
 
 
 def directory(workspace, name):

@@ -10,7 +10,8 @@ import threading
 import time
 
 from .mysql_binlog_archives import BinlogArchiveError, seal
-from ...operations.fileio import durable_replace, private_directory, private_file
+from ...operations.fileio import (
+    private_directory, private_file, publish_private_file)
 from ...sdk.tooling import ProviderToolGrant
 
 
@@ -78,10 +79,7 @@ def file_identity(path):
 
 def index_snapshot(directory,child_id):
     index=directory/'snapshots';index.mkdir(exist_ok=True,mode=0o700);private_directory(index)
-    temporary=index/('.'+child_id)
-    with temporary.open('xb') as output:
-        private_file(temporary);output.flush();os.fsync(output.fileno())
-    durable_replace(temporary,index/child_id)
+    publish_private_file(index/child_id)
 
 
 def seal_received(native,client,family,record,workspace,source_directory,chosen,grant,observer,cancel,progress,*,source_postimages=None):

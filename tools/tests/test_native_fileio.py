@@ -121,3 +121,24 @@ def test_nonblocking_native_lock_reports_contention_without_waiting_for_the_owne
             if process.is_alive():process.terminate();process.join(timeout=5)
         messages.close();messages.join_thread()
     assert process.exitcode==0
+
+
+def test_publish_private_file_stages_beside_target_and_replaces_it(tmp_path):
+    # One helper for the "private staging file, sync, durable replace"
+    # writers that were repeated in the job stores (review F5.1, 2026-11-08).
+    publish = _fileio.publish_private_file
+    target = tmp_path / 'index' / '0001_job'
+    target.parent.mkdir()
+    publish(target)
+    assert target.read_bytes() == b'' and has_private_file_permissions(target)
+    assert [path.name for path in target.parent.iterdir()] == ['0001_job']
+    publish(target, b'{"state":"done"}',
+            staging=tmp_path / 'index' / '.0001_job-x')
+    assert target.read_bytes() == b'{"state":"done"}'
+    assert has_private_file_permissions(target)
+    assert [path.name for path in target.parent.iterdir()] == ['0001_job']
+    # The staging name must be new: an existing one is never reused.
+    (tmp_path / 'index' / '.0001_job').write_bytes(b'stale')
+    with pytest.raises(FileExistsError):
+        publish(target, b'other')
+    assert target.read_bytes() == b'{"state":"done"}'
