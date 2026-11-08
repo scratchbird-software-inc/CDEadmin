@@ -10,9 +10,10 @@
 # AWS RDS Cloud Deployment Implementation
 
 import requests
-import boto3
 import json
-from boto3.session import Session
+# Cloud SDKs are imported by the functions that use them, so the
+# application does not load them at startup (performance review
+# 2026-11-07).
 from flask_babel import gettext
 from flask import session, current_app, request
 from pgadmin.user_login_check import pga_login_required
@@ -150,6 +151,7 @@ def get_db_versions():
 @pga_login_required
 def get_regions():
     """GET Regions for AWS."""
+    from boto3.session import Session
     try:
         clear_aws_session()
         _session = Session()
@@ -189,6 +191,7 @@ class RDS():
     ##########################################################################
     def _get_aws_client(self, type):
         """ Create/cache/return an AWS client object """
+        import boto3
         if type in self._clients:
             return self._clients[type]
 

@@ -48,6 +48,7 @@ from pgadmin.model import db, Role, Server, SharedServer, ServerGroup, \
     User, Keys, Version, SCHEMA_VERSION as CURRENT_SCHEMA_VERSION
 from pgadmin.utils import PgAdminModule, driver, KeyManager, heartbeat
 from pgadmin.utils.db_utils import normalize_database_uri
+from pgadmin.utils.lazy_url_rules import LazyBuilderRule
 from pgadmin.utils.preferences import Preferences
 from pgadmin.utils.session import create_session_interface, pga_unauthorised
 from pgadmin.utils.versioned_template_loader import VersionedTemplateLoader
@@ -82,6 +83,9 @@ _INDEX_PATH = 'browser.index'
 
 
 class PgAdmin(Flask):
+    # URL builders are compiled on first use, not for every route at startup.
+    url_rule_class = LazyBuilderRule
+
     def __init__(self, *args, **kwargs):
         # Set the template loader to a postgres-version-aware loader
         self.jinja_options = ImmutableDict(

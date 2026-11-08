@@ -38,10 +38,9 @@ from oauthlib.oauth2 import AccessDeniedError
 # fall back to google-auth cleanly. See issue #10110.
 sys.modules.setdefault('oauth2client', None)
 
-from googleapiclient import discovery
-from googleapiclient.errors import HttpError
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
+# Cloud SDKs are imported by the functions that use them, so the
+# application does not load them at startup (performance review
+# 2026-11-07).
 
 MODULE_NAME = 'google'
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # Required for Oauth2
@@ -460,6 +459,7 @@ class Google:
         :param host_url: Base url for hosting application
         :return: authorisation url to complete authentication
         """
+        from google_auth_oauthlib.flow import InstalledAppFlow
         auth_url = None
         error = None
         # reset below variable to get latest values in fresh
@@ -486,6 +486,7 @@ class Google:
         :param flask_request:
         :return: Success or error message
         """
+        from google_auth_oauthlib.flow import InstalledAppFlow
         try:
             authorization_response = flask_request.url
             if session['state'] != flask_request.args.get('state', None):
@@ -528,6 +529,7 @@ class Google:
         :param scopes: Required scope of credentials
         :return: google credential object
         """
+        from google.auth.transport.requests import Request
         if not self._credentials or not self._credentials.valid:
             if self._credentials and self._credentials.expired and \
                     self._credentials.refresh_token and \
@@ -541,6 +543,8 @@ class Google:
         List the google projects for authorised user
         :return:
         """
+        from googleapiclient import discovery
+        from googleapiclient.errors import HttpError
         projects = []
         error = None
         credentials = self._get_credentials(self._scopes)
@@ -565,6 +569,8 @@ class Google:
         :param project: google cloud project id.
         :return:
         """
+        from googleapiclient import discovery
+        from googleapiclient.errors import HttpError
         self._project_id = project
         credentials = self._get_credentials(self._scopes)
         service = discovery.build('compute',
@@ -606,6 +612,8 @@ class Google:
         :param region:
         :return:
         """
+        from googleapiclient import discovery
+        from googleapiclient.errors import HttpError
         standard_instances = []
         shared_instances = []
         high_mem = []
@@ -656,6 +664,8 @@ class Google:
         Lists the PostgreSQL database versions
         :return:
         """
+        from googleapiclient import discovery
+        from googleapiclient.errors import HttpError
         pg_database_versions = []
         database_versions = []
         error = None

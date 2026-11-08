@@ -19,7 +19,6 @@ from pgadmin.utils.constants import MIMETYPE_APP_JS
 from pgadmin.utils.ajax import make_json_response
 import config
 from pgadmin.model import User
-from user_agents import parse
 import platform
 import re
 import sys
@@ -150,7 +149,10 @@ def detect_browser(request):
     except Exception as _:
         os_details = ''
 
-    os_details += parse(platform.platform()).ua_string
+    # user_agents.parse(text).ua_string returns text unchanged; reading
+    # the platform string directly avoids loading the user-agent parser's
+    # regex tables at startup (performance review 2026-11-07).
+    os_details += platform.platform()
 
     if 'Electron' in agent:
         electron_version = re.findall('Electron/([\\d.]+\\d+)', agent)[0]

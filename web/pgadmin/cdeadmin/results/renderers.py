@@ -21,18 +21,11 @@ from threading import Lock
 from xml.sax.saxutils import escape
 from typing import Any, Mapping
 
-from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import mm
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import (
-    LongTable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, TableStyle,
-)
-
 from .models import RendererContribution
+
+# reportlab is imported by the PDF functions on first use, so loading the
+# renderers at application startup does not load it (performance review
+# 2026-11-07).
 
 
 PDF_MAX_ROWS = 1000
@@ -321,6 +314,8 @@ def export_svg(metadata, records):
 
 def _pdf_fonts():
     """Register CDEadmin-shipped fonts once per rendering process."""
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
     registered = set(pdfmetrics.getRegisteredFontNames())
     if {_PDF_FONT_NAME, _PDF_FONT_BOLD_NAME}.issubset(registered):
         return
@@ -339,6 +334,8 @@ def _pdf_fonts():
 
 def _pdf_page(canvas, document):
     """Draw inert CDEadmin page identity and pagination."""
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
     canvas.saveState()
     canvas.setFont(_PDF_FONT_NAME, 7)
     canvas.setFillColor(colors.HexColor('#52606d'))
@@ -354,6 +351,14 @@ def _pdf_page(canvas, document):
 
 def export_pdf(metadata, records):
     """Create a bounded, font-embedded, paginated PDF result table."""
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (
+        LongTable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, TableStyle,
+    )
     _pdf_fonts()
     rows = _tabular_rows(metadata, records)
     original_columns = len(rows[0]) if rows else 0

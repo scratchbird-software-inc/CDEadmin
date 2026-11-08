@@ -25,14 +25,9 @@ from pgacloud.utils.azure_cache import load_persistent_cache, \
 import os
 
 
-from azure.mgmt.rdbms.postgresql_flexibleservers import \
-    PostgreSQLManagementClient
-from azure.identity import AzureCliCredential, DeviceCodeCredential,\
-    AuthenticationRecord
-from azure.mgmt.resource import ResourceManagementClient
-from azure.mgmt.subscription import SubscriptionClient
-from azure.mgmt.rdbms.postgresql_flexibleservers.models import \
-    NameAvailabilityRequest
+# Cloud SDKs are imported by the functions that use them, so the
+# application does not load them at startup (performance review
+# 2026-11-07).
 
 MODULE_NAME = 'azure'
 
@@ -366,6 +361,7 @@ class Azure:
         return True, _credentials
 
     def _azure_cli_auth(self):
+        from azure.identity import AzureCliCredential
         if self._cli_credentials is None:
             self._cli_credentials = AzureCliCredential()
             self.list_subscriptions()
@@ -380,6 +376,7 @@ class Azure:
         session['azure']['azure_auth_code'] = azure_auth_code
 
     def _azure_interactive_auth(self):
+        from azure.identity import AuthenticationRecord, DeviceCodeCredential
         if self.authentication_record_json is None:
             _interactive_credential = DeviceCodeCredential(
                 tenant_id=self._tenant_id,
@@ -407,6 +404,10 @@ class Azure:
 
     def _get_azure_client(self, type):
         """ Create/cache/return an Azure client object """
+        from azure.mgmt.rdbms.postgresql_flexibleservers import (
+            PostgreSQLManagementClient)
+        from azure.mgmt.resource import ResourceManagementClient
+        from azure.mgmt.subscription import SubscriptionClient
         if type in self._clients:
             return self._clients[type]
 
@@ -429,6 +430,8 @@ class Azure:
         Checks whether given server name is available or not
         :param cluster_name
         """
+        from azure.mgmt.rdbms.postgresql_flexibleservers.models import (
+            NameAvailabilityRequest)
         postgresql_client = self._get_azure_client('postgresql')
         res = postgresql_client.check_name_availability.execute(
             NameAvailabilityRequest(
