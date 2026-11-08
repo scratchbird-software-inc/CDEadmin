@@ -9,7 +9,12 @@ from .assets import ProjectAssetError, ProjectAssetForbidden, ProjectAssetNotFou
 # Serialize this adapter's read/check/save operations. The underlying asset store
 # remains authoritative and carries immutable revisions and expected versions.
 _LOCK = threading.RLock()
-ENGINE_NAMES = {'firebird': 'Firebird', 'postgresql': 'PostgreSQL', 'mysql': 'MySQL', 'mariadb': 'MariaDB', 'duckdb': 'DuckDB'}
+# One entry per engine whose monitoring host serves dashboard definitions.
+# SQLite was missing until 2026-11-08, so its drafts and published
+# layouts were refused.
+ENGINE_NAMES = {'firebird': 'Firebird', 'postgresql': 'PostgreSQL',
+                'mysql': 'MySQL', 'mariadb': 'MariaDB', 'duckdb': 'DuckDB',
+                'sqlite': 'SQLite'}
 
 
 class DashboardDefinitions:
@@ -22,7 +27,7 @@ class DashboardDefinitions:
     def _identity(self, owner, sid, target):
         scope = self.authorize(owner, sid, target)
         engine = scope.get('engine', 'firebird')
-        if engine not in ('firebird', 'postgresql', 'mysql', 'mariadb', 'duckdb'):
+        if engine not in ENGINE_NAMES:
             raise ProjectAssetError('Unknown dashboard engine')
         project = f'{engine}-dashboard-drafts-{owner}'
         key = hashlib.sha256(json.dumps(scope, sort_keys=True).encode()).hexdigest()
