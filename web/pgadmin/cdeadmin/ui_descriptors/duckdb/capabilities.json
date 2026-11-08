@@ -395,5 +395,104 @@
         }
       ]
     }
-  ]
+  ],
+  "sql_builder": {
+    "verified": "2026-11-08: each option run on DuckDB 1.5.2, the tested version; versions from the 1.1.0 floor up to it were not run.",
+    "relation_kinds": [
+      "table",
+      "view"
+    ],
+    "options": {
+      "cte": {
+        "available": true
+      },
+      "cte.recursive": {
+        "available": true
+      },
+      "cte.materialized": {
+        "available": true
+      },
+      "distinct": {
+        "available": true
+      },
+      "distinct_on": {
+        "available": true
+      },
+      "join.inner": {
+        "available": true
+      },
+      "join.left": {
+        "available": true
+      },
+      "join.right": {
+        "available": true
+      },
+      "join.full": {
+        "available": true
+      },
+      "join.cross": {
+        "available": true
+      },
+      "join.natural": {
+        "available": true
+      },
+      "join.using": {
+        "available": true
+      },
+      "where": {
+        "available": true
+      },
+      "where.or": {
+        "available": true
+      },
+      "aggregate": {
+        "available": true
+      },
+      "aggregate.distinct": {
+        "available": true
+      },
+      "group_by": {
+        "available": true
+      },
+      "group_by.rollup": {
+        "available": true
+      },
+      "group_by.cube": {
+        "available": true
+      },
+      "group_by.grouping_sets": {
+        "available": true
+      },
+      "group_by.all": {
+        "available": true
+      },
+      "having": {
+        "available": true
+      },
+      "order_by": {
+        "available": true
+      },
+      "order_by.nulls": {
+        "available": true
+      },
+      "limit": {
+        "available": true
+      },
+      "offset": {
+        "available": true
+      },
+      "set.union": {
+        "available": true
+      },
+      "set.union_all": {
+        "available": true
+      },
+      "set.intersect": {
+        "available": true
+      },
+      "set.except": {
+        "available": true
+      }
+    }
+  }
 }

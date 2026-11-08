@@ -145,6 +145,61 @@
           }
         }
       }
+    },
+    "sql_builder": {
+      "type": "object",
+      "description": "Visual SQL builder (owner direction 2026-11-06, option b). Declares every option of cdeadmin/sdk/sql_builder.py OPTIONS: available, an optional version gate on the connected runtime, and the reason shown when it is greyed out.",
+      "required": [
+        "relation_kinds",
+        "options"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "verified": {
+          "type": "string",
+          "description": "How the declarations were checked"
+        },
+        "relation_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "available"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "available": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "version": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "minimum": {
+                    "type": "string"
+                  },
+                  "maximum_exclusive": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

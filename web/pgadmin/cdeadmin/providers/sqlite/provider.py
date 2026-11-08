@@ -288,6 +288,7 @@ ADMINISTRATION = SQLiteAdministration(RelationalAdminDialect(
 class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
     # Browse data (owner direction 2026-11-06).
     _browse_text = browse_builders.sqlite
+    _sql_builder_names = browse_builders.sqlite_names
 
     def browse_runtime_keywords(self):
         """Keywords of the loaded SQLite library, for Browse data quoting.

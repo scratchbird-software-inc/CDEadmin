@@ -166,22 +166,30 @@ def _sqlite_keywords(provider):
     return contract_keywords(provider, _every_keyword)
 
 
+def sqlite_names(self):
+    """SQLite names, delimited only when needed (also the SQL builder's)."""
+    return SqlNames('"', regular=_ANY_CASE, reserved=_sqlite_keywords(self))
+
+
+def duckdb_names(self):
+    """DuckDB names, delimited only when needed (also the SQL builder's)."""
+    return SqlNames('"', regular=_ANY_CASE,
+                    reserved=contract_keywords(self, _duckdb_reserved))
+
+
 def sqlite(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view')
     # Hidden columns of virtual tables (hidden = 1) are not in SELECT *;
     # generated columns (2, 3) are.
     columns = path_columns(resource, catalog, exclude=lambda column: (
         column.get('catalog_metadata') or {}).get('hidden') == 1)
-    return sql_select(columns, resource['display_path'], SqlNames(
-        '"', regular=_ANY_CASE, reserved=_sqlite_keywords(self)))
+    return sql_select(columns, resource['display_path'], sqlite_names(self))
 
 
 def duckdb(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view')
     return sql_select(path_columns(resource, catalog),
-                      resource['display_path'], SqlNames(
-                          '"', regular=_ANY_CASE,
-                          reserved=contract_keywords(self, _duckdb_reserved)))
+                      resource['display_path'], duckdb_names(self))
 
 
 # -- PostgreSQL-wire and MySQL-wire distributed SQL ---------------------------

@@ -149,6 +149,7 @@ ADMINISTRATION = DuckDBAdministration(RelationalAdminDialect(
 class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     # Browse data (owner direction 2026-11-06).
     _browse_text = browse_builders.duckdb
+    _sql_builder_names = browse_builders.duckdb_names
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 

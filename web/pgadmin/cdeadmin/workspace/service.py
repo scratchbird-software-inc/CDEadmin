@@ -40,6 +40,25 @@ class ProviderWorkspaceError(RuntimeError):
     """A provider endpoint workspace request cannot be admitted."""
 
 
+def sql_builder_declaration(endpoint):
+    """The engine's ``sql_builder`` capabilities section, or None.
+
+    The engine is the ui_descriptors folder whose capabilities list the
+    endpoint's profile; the app's shared descriptor service is used when
+    there is one.
+    """
+    from flask import current_app, has_app_context
+    from ..ui_descriptors import APP_EXTENSION_KEY, UIDescriptorService
+    descriptors = ((current_app.extensions.get(APP_EXTENSION_KEY)
+                    if has_app_context() else None) or UIDescriptorService())
+    profile_id = ((endpoint or {}).get('identity') or {}).get('profile_id')
+    for engine_id in descriptors.engine_ids():
+        capabilities = descriptors.engine(engine_id)['capabilities']
+        if profile_id in capabilities.get('profiles', ()):
+            return capabilities.get('sql_builder') or None
+    return None
+
+
 class ProviderWorkspaceService:
     """Mount explorer, studio and typed results for one endpoint."""
 
@@ -257,6 +276,9 @@ class ProviderWorkspaceService:
                 ),
             },
             'languages': editor_languages(self.studio_service.languages(context)),
+            # The SQL tab offers the visual SQL builder when the engine
+            # declares it (owner direction 2026-11-06, option b).
+            'sql_builder': sql_builder_declaration(endpoint) is not None,
             'engine_contracts': engine_contracts,
             'database_targets': self.endpoint_service.database_catalog(
                 server
@@ -2575,6 +2597,60 @@ class ProviderWorkspaceService:
             expected_generation=generation,
             provider_route=endpoint['route'],
         )
+
+    def sql_builder(self, server, request):
+        """Visual SQL builder (owner direction 2026-11-06, option b).
+
+        ``options``: every builder option for the connected runtime, from
+        the engine's ui_descriptors capabilities.json, and the cached
+        catalog's relations with their columns. ``source``: the statement
+        for a query model, written with the provider's own quoting; an
+        option the engine lacks is refused. Nothing is run.
+        """
+        from ..sdk.browse import path_columns
+        from ..sdk.sql_builder import build, relations, resolve_options
+        if (not isinstance(request, dict) or set(request) - {
+                'operation', 'model', 'database_target_id'} or
+                request.get('operation') not in ('options', 'source')):
+            raise ProviderWorkspaceError('SQL builder request is invalid')
+        context, endpoint, root = self.endpoint_service.workspace(
+            server,
+            database_target_id=request.get('database_target_id', Ellipsis))
+        declared = sql_builder_declaration(endpoint)
+        if not declared:
+            raise ProviderWorkspaceError(
+                'The SQL builder is not available for this connection.')
+        version = ((endpoint.get('verified_runtime') or {}).get('version') or
+                   (endpoint.get('declared_runtime') or {}).get('version'))
+        available = resolve_options(declared, version)
+        provider = self.endpoint_service.provider_registry.resolve(
+            context).instance
+        try:
+            names = provider.sql_builder_names()
+        except Exception as exc:
+            raise ProviderWorkspaceError(str(exc)) from None
+        if request['operation'] == 'source':
+            # SqlBuilderError reaches the user: the workspace route returns
+            # its text (the option and why), unlike other workspace errors.
+            source = build(request.get('model'), names, available)
+            return {'source': source,
+                    'language_profile': provider.profile.language_profile}
+        catalog, continuation, generation = [], None, None
+        while True:
+            page = self.resource_service.list_page(
+                context, root, page_size=500, cursor=continuation,
+                expected_generation=generation,
+                provider_route=endpoint['route'],
+            ).to_dict()
+            catalog.extend(page['items'])
+            generation = page['generation']
+            continuation = page.get('next_cursor')
+            if continuation is None:
+                break
+        return {'runtime_version': version, 'options': available,
+                'relations': relations(
+                    catalog, declared['relation_kinds'],
+                    lambda resource: path_columns(resource, catalog))}
 
     def catalog_diagram(self, server, request):
         """One database's relations for To Diagram (catalog_diagrams)."""

@@ -301,5 +301,119 @@
         }
       ]
     }
-  ]
+  ],
+  "sql_builder": {
+    "verified": "2026-11-08: each option run on the tracked SQLite 3.35.0 and 3.45.1 runtimes; 3.35.0 refuses RIGHT and FULL joins, both refuse DISTINCT ON and ROLLUP.",
+    "relation_kinds": [
+      "table",
+      "view",
+      "virtual-table",
+      "fts-table"
+    ],
+    "options": {
+      "cte": {
+        "available": true
+      },
+      "cte.recursive": {
+        "available": true
+      },
+      "cte.materialized": {
+        "available": true
+      },
+      "distinct": {
+        "available": true
+      },
+      "distinct_on": {
+        "available": false,
+        "reason": "SQLite has no DISTINCT ON."
+      },
+      "join.inner": {
+        "available": true
+      },
+      "join.left": {
+        "available": true
+      },
+      "join.right": {
+        "available": true,
+        "version": {
+          "minimum": "3.45.1",
+          "reason": "Needs a newer SQLite: 3.35.0 refuses RIGHT and FULL joins; ScratchRobin offers them from its tracked 3.45.1 runtime."
+        }
+      },
+      "join.full": {
+        "available": true,
+        "version": {
+          "minimum": "3.45.1",
+          "reason": "Needs a newer SQLite: 3.35.0 refuses RIGHT and FULL joins; ScratchRobin offers them from its tracked 3.45.1 runtime."
+        }
+      },
+      "join.cross": {
+        "available": true
+      },
+      "join.natural": {
+        "available": true
+      },
+      "join.using": {
+        "available": true
+      },
+      "where": {
+        "available": true
+      },
+      "where.or": {
+        "available": true
+      },
+      "aggregate": {
+        "available": true
+      },
+      "aggregate.distinct": {
+        "available": true
+      },
+      "group_by": {
+        "available": true
+      },
+      "group_by.rollup": {
+        "available": false,
+        "reason": "SQLite has no ROLLUP."
+      },
+      "group_by.cube": {
+        "available": false,
+        "reason": "SQLite has no CUBE."
+      },
+      "group_by.grouping_sets": {
+        "available": false,
+        "reason": "SQLite has no GROUPING SETS."
+      },
+      "group_by.all": {
+        "available": false,
+        "reason": "SQLite has no GROUP BY ALL."
+      },
+      "having": {
+        "available": true
+      },
+      "order_by": {
+        "available": true
+      },
+      "order_by.nulls": {
+        "available": true
+      },
+      "limit": {
+        "available": true
+      },
+      "offset": {
+        "available": true
+      },
+      "set.union": {
+        "available": true
+      },
+      "set.union_all": {
+        "available": true
+      },
+      "set.intersect": {
+        "available": true
+      },
+      "set.except": {
+        "available": true
+      }
+    }
+  }
 }

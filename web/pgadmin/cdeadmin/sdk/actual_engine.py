@@ -1364,6 +1364,21 @@ class ActualEnginePilotProvider:
         raise BrowseUnavailable(
             'Browse data is not available for this connector.')
 
+    def sql_builder_names(self):
+        """How the visual SQL builder writes this connector's names.
+
+        Owner direction 2026-11-06 (option b). The builder writes a query
+        into the editor; nothing is run. A provider supports it by setting
+        ``_sql_builder_names``; its options are declared in the engine's
+        ui_descriptors capabilities.json (sql_builder).
+        """
+        self._require('data_read', 'endpoint')
+        return self._sql_builder_names()
+
+    def _sql_builder_names(self):
+        raise PilotProviderError(
+            'The SQL builder is not available for this connector.')
+
     def describe_security(self, request):
         self._require('data_read', 'resource')
         payload = _mapping(request)
