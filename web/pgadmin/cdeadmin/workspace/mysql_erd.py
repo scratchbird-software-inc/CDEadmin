@@ -33,6 +33,9 @@ def build_diagram(resources, provenance, *, engine='mysql'):
     for row in relations:
         identity, native = row['resource_id'], native_metadata(row, engine)
         fields = []
+        nullable = {
+            column['column_name']: column.get('is_nullable') != 'NO'
+            for column in native.get('children', {}).get('COLUMNS', [])}
         for column in sorted(native.get('children', {}).get('COLUMNS', []), key=lambda item: int(item.get('ordinal_position', 0))):
             cid = identity + ':' + quote(column['column_name'])
             properties = {'datatype': column['column_type'], 'nullable': column.get('is_nullable') != 'NO'}
@@ -68,7 +71,10 @@ def build_diagram(resources, provenance, *, engine='mysql'):
             label = name + ' (' + ', '.join(item['column_name'] for item in columns) + ') -> (' + ', '.join(item['referenced_column_name'] for item in columns) + ')'
             declarations.append(ddn.relation_edge(key(fk_id), label, key(identity), key(target['resource_id']),
                 prefix + fk_id, {'native_json': quote(columns)}, module,
-                vocabulary.get(name, {}).get('values') if shape == 'table' else None))
+                vocabulary.get(name, {}).get('values')
+                if shape == 'table' else None,
+                marks=ddn.crowfoot_marks(nullable.get(item['column_name'])
+                                         for item in columns)))
             edges.append((key(fk_id), identity, target['resource_id']))
             mapping[key(fk_id)] = fk_id
     views, blocks = [], []

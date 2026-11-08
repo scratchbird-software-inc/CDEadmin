@@ -26,6 +26,7 @@ def build_diagram(resources, provenance):
         raise ValueError('Ambiguous native relation identities')
     prefix = 'postgresql:' + provenance['endpoint_id'] + ':' + provenance['database_target_id'] + ':'
     declarations, warnings, edges, mapping, column_names = [], [], [], {}, {}
+    nullable = {}
     groups, catalog = physical.forward(resources), physical.resource_map(resources)
     for row in relations:
         identity = row['resource_id']
@@ -38,6 +39,9 @@ def build_diagram(resources, provenance):
             number = int(column['attnum'])
             column_id = identity + ':' + str(number)
             column_names[(int(native['oid']), number)] = column['attname']
+            known = isinstance(column.get('attnotnull'), bool)
+            nullable[(int(native['oid']), number)] = (
+                not column['attnotnull'] if known else None)
             props = {}
             if column.get('formatted_type'): props['datatype'] = column['formatted_type']
             if column.get('attnotnull') is True: props['nullable'] = False
@@ -82,7 +86,10 @@ def build_diagram(resources, provenance):
         label = row['display_name'] + ' (' + ', '.join(source_columns) + ') -> (' + ', '.join(target_columns) + ')'
         declarations.append(ddn.relation_edge(key(identity), label, key(source), key(target),
             prefix + identity, {'resource_id': identity, 'native_json': quoted(native)}, module,
-            physical.edge_values(row, catalog)))
+            physical.edge_values(row, catalog),
+            marks=ddn.crowfoot_marks(
+                nullable.get((source_oid, int(number)))
+                for number in facts.get('conkey', []))))
         edges.append((key(identity), source, target))
         mapping[key(identity)] = identity
     views, blocks = [], []

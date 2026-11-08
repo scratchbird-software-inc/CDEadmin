@@ -26,7 +26,7 @@ def build_diagram(resources, provenance):
     indexes = {row['display_name']: native_metadata(row) for row in resources if row['resource_kind'] == 'index'}
     warnings, declarations, edges, mapping = [], [], [], {}
     groups, catalog = physical.forward(resources), physical.resource_map(resources)
-    children = {}
+    children, nullable = {}, {}
     for item in resources:
         if item['resource_kind'] == 'column':
             children.setdefault(tuple(item.get('display_path', [])[:-1]), []).append(item)
@@ -61,6 +61,8 @@ def build_diagram(resources, provenance):
             if array: props['shape'] = 'array'
             if label is not None: props['datatype'] = label
             if str(facts.get('not_null')) == '1' or str(facts.get('domain_not_null')) == '1': props['nullable'] = False
+            nullable[(name, column['display_name'])] = props.get(
+                'nullable', True)
             if facts.get('description'): props['description'] = facts['description']
             fields.append(ddn.native_field(key(column['resource_id']), column['display_name'],
                 prefix + column['resource_id'], props, physical.column_values(column['display_name'])))
@@ -99,7 +101,9 @@ def build_diagram(resources, provenance):
         declarations.append(ddn.relation_edge(key(identity), label, key(source_id), key(target_id),
             prefix + identity, {'resource_id': identity, 'native_json': quoted({**facts,
                 'source_columns': source_columns, 'target_columns': target_columns})}, module,
-            physical.edge_values(row, catalog)))
+            physical.edge_values(row, catalog),
+            marks=ddn.crowfoot_marks(nullable.get((source_name, column))
+                                     for column in source_columns)))
         edges.append((key(identity), source_id, target_id)); mapping[key(identity)] = identity
     views, blocks = [], []
     for start in range(0, len(relations), 25):

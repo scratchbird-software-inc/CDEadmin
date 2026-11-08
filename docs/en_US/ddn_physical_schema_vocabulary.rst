@@ -43,6 +43,15 @@ that already exists and is not changed by this document.
      - One edge per visible foreign key, ``properties.enforcement = "database"`` and
        two ``endpoints``. Label ``name (cols) -> (cols)``. Foreign keys whose target is
        outside the visible selection are omitted with a warning, never redirected.
+       Since 2026-11-08 the edge also carries crow's-foot cardinality,
+       ``properties.source_mark`` and ``properties.target_mark``: the referencing
+       side is ``zeromany``; the referenced side is ``one`` when every foreign-key
+       column is NOT NULL and ``zeroone`` otherwise. Uniqueness of the foreign key
+       is not inspected. No marks are written when a column's nullability is not
+       known. DDN draws the marks in these ``ddn@1`` views as well as in
+       crow's-foot diagrams. A saved catalog design takes the marks on its next
+       merge of the native catalog; a relation edited in the design is reported
+       as a conflict instead.
    * - ``view ... as "ddn@1"``
      - ``relations_N`` pages of at most 25 relations plus their one-hop FK targets;
        the layout and legend are presentation only.

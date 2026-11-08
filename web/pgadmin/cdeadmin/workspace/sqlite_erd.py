@@ -40,6 +40,8 @@ def build_diagram(resources, provenance):
         identity = row['resource_id']
         native = native_metadata(row, 'sqlite')
         fields = []
+        nullable = {column['name']: bool(column['nullable'])
+                    for column in native.get('columns', [])}
         for column in sorted(native.get('columns', []),
                              key=lambda item: item['ordinal_position']):
             column_id = column['resource_id']
@@ -74,7 +76,10 @@ def build_diagram(resources, provenance):
                      ', '.join(constraint['columns']) + ') -> (' +
                      ', '.join(constraint['referenced_columns']) + ')')
             declarations.append(ddn.relation_edge(key(cid), label, key(identity), key(target['resource_id']),
-                prefix + cid, {'native_json': quote(constraint), **fk_values(identity, cid)}, module))
+                prefix + cid,
+                {'native_json': quote(constraint), **fk_values(identity, cid)},
+                module, marks=ddn.crowfoot_marks(
+                    nullable.get(name) for name in constraint['columns'])))
             edges.append((key(cid), identity, target['resource_id']))
             mapping[key(cid)] = cid
     views, pages = [], []

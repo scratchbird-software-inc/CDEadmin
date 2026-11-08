@@ -29,6 +29,8 @@ def build_diagram(resources, provenance):
     for row in relations:
         identity = row['resource_id']; native = native_metadata(row, 'duckdb')
         fields = []
+        nullable = {column['name']: bool(column['nullable'])
+                    for column in native.get('columns', [])}
         for column in sorted(native.get('columns', []), key=lambda item: item['ordinal_position']):
             cid = column['resource_id']
             properties = {'datatype': column['data_type'], 'nullable': bool(column['nullable'])}
@@ -57,7 +59,11 @@ def build_diagram(resources, provenance):
             cid = constraint['resource_id']
             label = constraint['name'] + ' (' + ', '.join(constraint['column_names']) + ') -> (' + ', '.join(constraint['referenced_column_names']) + ')'
             declarations.append(ddn.relation_edge(key(cid), label, key(identity), key(target['resource_id']),
-                prefix + cid, {'native_json': quote(constraint), **fk_values(identity, cid)}, module))
+                prefix + cid,
+                {'native_json': quote(constraint), **fk_values(identity, cid)},
+                module, marks=ddn.crowfoot_marks(
+                    nullable.get(name)
+                    for name in constraint['column_names'])))
             edges.append((key(cid), identity, target['resource_id'])); mapping[key(cid)] = cid
     views, blocks = [], []
     for start in range(0, len(relations), 25):

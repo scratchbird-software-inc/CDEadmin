@@ -222,9 +222,28 @@ def relation_object(identity, title, role, uid, native, fields, module, physical
             identity, title, uid, {'subject_kind': role, **native, **(physical_values or {})}, module)
 
 
-def relation_edge(identity, title, source, target, uid, native, module, physical_values=None):
+def crowfoot_marks(nullable_columns):
+    """Crow's-foot cardinality of one foreign key, or None when unknown.
+
+    The referencing side may hold any number of rows for a referenced row
+    (zero or many). The referenced side is required (one) unless a
+    foreign-key column admits NULL (zero or one). Uniqueness of the foreign
+    key is not inspected, so a one-to-one key is still drawn zero or many.
+    Without the nullability of every column no marks are written.
+    """
+    values = list(nullable_columns)
+    if not values or any(value is None for value in values):
+        return None
+    return {'source_mark': 'zeromany',
+            'target_mark': 'zeroone' if any(values) else 'one'}
+
+
+def relation_edge(identity, title, source, target, uid, native, module,
+                  physical_values=None, marks=None):
+    # Marks are relation properties; DDN draws them in every ERD notation,
+    # including the ddn@1 views of the catalog diagrams (2026-11-08).
     return declaration('relation', identity, 'ref', {'title': title,
-        'properties': {'enforcement': 'database'},
+        'properties': {**(marks or {}), 'enforcement': 'database'},
         'endpoints': [{'definition': ref(source)}, {'definition': ref(target)}]}) + annotation(
             identity, title, uid, {'subject_kind': 'ref', **native, **(physical_values or {})}, module)
 
