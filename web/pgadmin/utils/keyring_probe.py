@@ -66,7 +66,7 @@ def _run_probe(config):
             [sys.executable, '-c', _PROBE_SCRIPT],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     except Exception:
-        # Can't probe - leave config as evaluate_config.py set it.
+        # Can't probe - leave config as config_overrides.py set it.
         return
 
     try:

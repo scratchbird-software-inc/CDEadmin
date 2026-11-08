@@ -30,7 +30,7 @@ CONFIG_DATABASE_CONNECTION_POOL_SIZE = 5
 # the connection pool size.
 CONFIG_DATABASE_CONNECTION_MAX_OVERFLOW = 100
 
-from pgadmin.utils import env, IS_WIN, fs_short_path
+from platform_helpers import env, IS_WIN, fs_short_path
 from version import APP_VERSION, APP_RELEASE, APP_REVISION, APP_SUFFIX, \
     APP_VERSION_INT, CDEADMIN_VERSION, CDEADMIN_FORK_STATUS, \
     UPSTREAM_PRODUCT_NAME, UPSTREAM_BASE_VERSION
@@ -1227,5 +1227,5 @@ CDEADMIN_MONITORING_HISTORY = {'enabled': False}
 #############################################################################
 # Patch the default config with custom config and other manipulations
 #############################################################################
-from pgadmin.evaluate_config import evaluate_and_patch_config
+from config_overrides import evaluate_and_patch_config
 locals().update(evaluate_and_patch_config(locals()))

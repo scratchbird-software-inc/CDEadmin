@@ -23,6 +23,9 @@ from flask_security.utils import get_post_login_redirect, \
     get_post_logout_redirect
 from threading import Lock
 import config
+# Defined outside the pgadmin package so that config.py can use them
+# without importing the application; re-exported here.
+from platform_helpers import IS_WIN, env, fs_short_path  # noqa: F401
 from .paths import get_storage_directory
 from .preferences import Preferences
 from pgadmin.utils.constants import UTILITIES_ARRAY, USER_NOT_FOUND, \
@@ -133,8 +136,6 @@ class PgAdminModule(Blueprint):
         return res
 
 
-IS_WIN = (os.name == 'nt')
-
 sys_encoding = sys.getdefaultencoding()
 if not sys_encoding or sys_encoding == 'ascii':
     # Fall back to 'utf-8', if we couldn't determine the default encoding,
@@ -160,34 +161,6 @@ if IS_WIN:
     import ctypes
     from ctypes import wintypes
 
-    def env(name):
-        if name in os.environ:
-            return os.environ[name]
-        return None
-
-    _GetShortPathNameW = ctypes.windll.kernel32.GetShortPathNameW
-    _GetShortPathNameW.argtypes = [
-        wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD
-    ]
-    _GetShortPathNameW.restype = wintypes.DWORD
-
-    def fs_short_path(_path):
-        """
-        Gets the short path name of a given long path.
-        http://stackoverflow.com/a/23598461/200291
-        """
-        buf_size = len(_path)
-        while True:
-            res = ctypes.create_unicode_buffer(buf_size)
-            # Note:- _GetShortPathNameW may return empty value
-            # if directory doesn't exist.
-            needed = _GetShortPathNameW(_path, res, buf_size)
-
-            if buf_size >= needed:
-                return res.value
-            else:
-                buf_size += needed
-
     def document_dir():
         CSIDL_PERSONAL = 5  # My Documents
         SHGFP_TYPE_CURRENT = 0  # Get current, not default value
@@ -200,14 +173,6 @@ if IS_WIN:
         return buf.value
 
 else:
-    def env(name):
-        if name in os.environ:
-            return os.environ[name]
-        return None
-
-    def fs_short_path(_path):
-        return _path
-
     def document_dir():
         return os.path.realpath(os.path.expanduser('~/'))
 

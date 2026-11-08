@@ -11,8 +11,6 @@ import os
 import sys
 import importlib.util
 
-from pgadmin.utils.db_utils import normalize_database_uri
-
 # User configs loaded from config_local, config_distro etc.
 custom_config_settings = {}
 
@@ -56,6 +54,15 @@ def validate_config_variable(key, value):
         # Do not validate
         return True
 
+
+# config.py loads this module, so it must not import the pgadmin package,
+# which imports the whole application (2026-11-08). db_utils stays
+# importable on its own (the Docker entrypoint imports it from its own
+# directory), so it is loaded here by path.
+normalize_database_uri = import_module_from_path(
+    'cdeadmin_config_db_utils',
+    os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                 'pgadmin', 'utils', 'db_utils.py')).normalize_database_uri
 
 # Load distribution-specific config overrides
 try:
