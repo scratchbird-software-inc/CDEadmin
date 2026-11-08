@@ -38,5 +38,41 @@
   {"resource_kind":"character-set","family":"engine_object","title":"Character sets","operations":[]},
   {"resource_kind":"collation","family":"engine_object","title":"Collations","operations":[]},
   {"resource_kind":"storage-engine","family":"engine_object","title":"Storage engines","operations":[]}
- ]
+ ],
+ "sql_builder": {
+  "verified": "2026-11-08: each option run on MySQL 9.7.0 (the declared version range); CUBE and GROUPING SETS are refused as not supported (error 6033).",
+  "relation_kinds": ["table","view"],
+  "options": {
+   "cte": {"available":true},
+   "cte.recursive": {"available":true},
+   "cte.materialized": {"available":false,"reason":"MySQL has no MATERIALIZED for common table expressions."},
+   "distinct": {"available":true},
+   "distinct_on": {"available":false,"reason":"MySQL has no DISTINCT ON."},
+   "join.inner": {"available":true},
+   "join.left": {"available":true},
+   "join.right": {"available":true},
+   "join.full": {"available":false,"reason":"MySQL has no FULL OUTER JOIN."},
+   "join.cross": {"available":true},
+   "join.natural": {"available":true},
+   "join.using": {"available":true},
+   "where": {"available":true},
+   "where.or": {"available":true},
+   "aggregate": {"available":true},
+   "aggregate.distinct": {"available":true},
+   "group_by": {"available":true},
+   "group_by.rollup": {"available":true},
+   "group_by.cube": {"available":false,"reason":"MySQL does not support CUBE."},
+   "group_by.grouping_sets": {"available":false,"reason":"MySQL does not support GROUPING SETS."},
+   "group_by.all": {"available":false,"reason":"MySQL has no GROUP BY ALL."},
+   "having": {"available":true},
+   "order_by": {"available":true},
+   "order_by.nulls": {"available":false,"reason":"MySQL has no NULLS FIRST or NULLS LAST."},
+   "limit": {"available":true},
+   "offset": {"available":true},
+   "set.union": {"available":true},
+   "set.union_all": {"available":true},
+   "set.intersect": {"available":true},
+   "set.except": {"available":true}
+  }
+ }
 }

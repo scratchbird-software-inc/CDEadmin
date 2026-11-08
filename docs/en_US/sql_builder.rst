@@ -8,7 +8,7 @@
 
    Owner direction, 2026-11-06 (option b): a visual SQL builder opened from
    the SQL tab writes a query into the editor. Owner direction, 2026-11-08:
-   SQLite and DuckDB first. Added 2026-11-08.
+   SQLite and DuckDB first, then MySQL and MariaDB. Added 2026-11-08.
 
 The SQL builder is a form that writes a ``SELECT`` statement in the
 connection's own SQL and puts it in the SQL tab's editor. It never runs the
@@ -18,8 +18,9 @@ Opening the builder
 ===================
 
 On the SQL tab of a connection whose engine offers the builder, click
-*Build query…* on the toolbar. As of 2026-11-08 the SQLite and DuckDB
-connections offer it; on other connections the button is not shown.
+*Build query…* on the toolbar. As of 2026-11-08 the SQLite, DuckDB, MySQL
+and MariaDB connections offer it; on other connections the button is not
+shown.
 
 The *Build a query* dialog (form reference SR-F-010017) reads the tables
 and views of the connection's catalog, with their columns, and the options
@@ -58,6 +59,15 @@ version of the connected server or library:
   the oldest tracked SQLite build that accepts them; SQLite 3.35.0 refuses
   them.
 * **DuckDB** has every option. It was checked on DuckDB 1.5.2 only.
+* **MySQL** has no ``MATERIALIZED`` common table expressions, ``DISTINCT
+  ON``, full joins, ``CUBE``, ``GROUPING SETS``, ``GROUP BY ALL`` or ``NULLS
+  FIRST``/``NULLS LAST``. It was checked on MySQL 9.7.0, the version
+  ScratchRobin supports.
+* **MariaDB** lacks the same options. ``ROLLUP`` is written ``GROUP BY ...
+  WITH ROLLUP``, and MariaDB cannot sort such a result: a query that uses
+  both ``ROLLUP`` and ``ORDER BY`` is refused with that reason. It was
+  checked on MariaDB 12.2.2; the versions from 10.6.0 up to it were not
+  checked.
 
 The server checks the options again when it writes the statement. If a
 query uses an option the connection lacks, the dialog shows the reason and
@@ -101,6 +111,17 @@ Names are written the way *Browse data* writes them: without quotes when
 the connection's SQL reads the name back unchanged, and quoted otherwise.
 Text values are written as SQL string literals; numbers must be finite.
 Values are never pasted into the statement as SQL.
+
+On MySQL and MariaDB a backslash in quoted text is an escape character
+unless the session's ``sql_mode`` includes ``NO_BACKSLASH_ESCAPES``, and the
+builder writes the statement before it knows the session. When a text value
+contains a backslash, every text value of that statement is written as a
+hexadecimal literal (for example ``_utf8mb4 X'433A5C78'`` for ``C:\x``),
+which reads back the same in every ``sql_mode``. The builder writes a
+``LIKE`` pattern as you enter it, so a backslash in the pattern keeps the
+engine's own meaning: checked 2026-11-08, MySQL 9.7.0 treats it as an
+escape unless ``sql_mode`` includes ``NO_BACKSLASH_ESCAPES``, and MariaDB
+12.2.2 treats it as an escape in both modes.
 
 Limits
 ======

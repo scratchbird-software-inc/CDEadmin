@@ -2632,7 +2632,8 @@ class ProviderWorkspaceService:
         if request['operation'] == 'source':
             # SqlBuilderError reaches the user: the workspace route returns
             # its text (the option and why), unlike other workspace errors.
-            source = build(request.get('model'), names, available)
+            source = build(request.get('model'), names, available,
+                           provider.sql_builder_dialect())
             return {'source': source,
                     'language_profile': provider.profile.language_profile}
         catalog, continuation, generation = [], None, None

@@ -1379,6 +1379,13 @@ class ActualEnginePilotProvider:
         raise PilotProviderError(
             'The SQL builder is not available for this connector.')
 
+    # How the SQL builder writes what standard SQL leaves open
+    # (sdk/sql_builder.py STANDARD_DIALECT); standard unless a provider says.
+    _sql_builder_dialect = {}
+
+    def sql_builder_dialect(self):
+        return dict(self._sql_builder_dialect)
+
     def describe_security(self, request):
         self._require('data_read', 'resource')
         payload = _mapping(request)

@@ -71,6 +71,14 @@ GROUPINGS = {'columns': 'group_by', 'rollup': 'group_by.rollup',
              'all': 'group_by.all'}
 LIMITS = {'ctes': 16, 'selects': 8, 'joins': 16, 'items': 200,
           'depth': 8, 'name': 128, 'text': 4096}
+# How an engine writes what standard SQL leaves open. ``rollup``: 'function'
+# writes GROUP BY ROLLUP (a, b), 'with_rollup' writes GROUP BY a, b WITH
+# ROLLUP. ``rollup_order_by``: None, or why ROLLUP and ORDER BY cannot be
+# combined. ``text``: 'standard', or 'mysql' for engines whose string
+# literals treat a backslash as an escape unless the session's sql_mode
+# says otherwise; the text is written before any session exists.
+STANDARD_DIALECT = {'rollup': 'function', 'rollup_order_by': None,
+                    'text': 'standard'}
 
 
 class SqlBuilderError(ValueError):
@@ -103,8 +111,14 @@ def resolve_options(declared: Mapping[str, Any] | None,
     return resolved
 
 
-def literal(value: Any) -> str:
-    """A SQL literal: text, a finite number, TRUE, FALSE or NULL."""
+def literal(value: Any, text: str = 'standard') -> str:
+    """A SQL literal: text, a finite number, TRUE, FALSE or NULL.
+
+    With ``text='mysql'`` a value containing a backslash is written as a
+    hexadecimal utf8mb4 literal, which reads back the same in every sql_mode
+    (a backslash escapes in quoted text unless NO_BACKSLASH_ESCAPES is set);
+    ``text='mysql-hex'`` writes every text value that way.
+    """
     if value is None:
         return 'NULL'
     if isinstance(value, bool):
@@ -119,6 +133,8 @@ def literal(value: Any) -> str:
         if '\0' in value or len(value) > LIMITS['text']:
             raise SqlBuilderError('Text values cannot contain NUL and are '
                                   'limited to 4096 characters.')
+        if text == 'mysql-hex' or (text == 'mysql' and '\\' in value):
+            return "_utf8mb4 X'" + value.encode('utf-8').hex().upper() + "'"
         return "'" + value.replace("'", "''") + "'"
     raise SqlBuilderError('Values are text, numbers, true, false or null.')
 
@@ -167,9 +183,20 @@ def _name(value, label):
 
 class _Writer:
     def __init__(self, names: Callable[[str], str],
-                 available: Mapping[str, Mapping[str, Any]]):
+                 available: Mapping[str, Mapping[str, Any]],
+                 dialect: Mapping[str, Any] | None = None):
         self.names = names
         self.available = available
+        unknown = set(dialect or {}) - set(STANDARD_DIALECT)
+        if unknown:
+            raise ValueError(f'unknown SQL builder dialect keys: {unknown}')
+        self.dialect = {**STANDARD_DIALECT, **(dialect or {})}
+        self.backslash = False
+
+    def literal(self, value):
+        if isinstance(value, str) and '\\' in value:
+            self.backslash = True
+        return literal(value, self.dialect['text'])
 
     def need(self, option):
         state = self.available.get(option) or {}
@@ -196,7 +223,7 @@ class _Writer:
             parts = _list(body, f'{label} column', empty=False, limit=2)
             return '.'.join(self.name(part, 'Column name') for part in parts)
         if kind == 'value':
-            return literal(body)
+            return self.literal(body)
         aggregate = _object(body, ('function', 'distinct', 'argument'),
                             'Aggregate', ('function', 'argument'))
         self.need('aggregate')
@@ -248,7 +275,7 @@ class _Writer:
                        ('expr', 'values'))
         values = _list(body['values'], 'IN values', empty=False)
         return (f'{self.expression(body["expr"])} IN ('
-                f'{", ".join(literal(item) for item in values)})')
+                f'{", ".join(self.literal(item) for item in values)})')
 
     # -- sources ---------------------------------------------------------
     def source(self, value, alias, visible_ctes):
@@ -325,6 +352,8 @@ class _Writer:
                 for entry in sets)
             return f'{pad}GROUP BY GROUPING SETS ({written})'
         items = self.expressions(value.get('items'), 'Grouping column')
+        if kind == 'rollup' and self.dialect['rollup'] == 'with_rollup':
+            return f'{pad}GROUP BY {items} WITH ROLLUP'
         return f'{pad}GROUP BY ' + (
             items if kind == 'columns' else f'{kind.upper()} ({items})')
 
@@ -401,6 +430,12 @@ class _Writer:
         order = _list(value.get('order_by', []), 'ORDER BY')
         if order:
             self.need('order_by')
+            refusal = self.dialect['rollup_order_by']
+            if refusal and any(
+                    isinstance(select.get('group_by'), Mapping) and
+                    select['group_by'].get('kind') == 'rollup'
+                    for select in selects):
+                raise SqlBuilderError(refusal)
             lines.append(f'{pad}ORDER BY ' + ', '.join(
                 self.order(item) for item in order))
         for key in ('limit', 'offset'):
@@ -463,9 +498,18 @@ class _Writer:
 
 
 def build(model: Mapping[str, Any], names: Callable[[str], str],
-          available: Mapping[str, Mapping[str, Any]]) -> str:
+          available: Mapping[str, Mapping[str, Any]],
+          dialect: Mapping[str, Any] | None = None) -> str:
     """The statement for ``model``, or SqlBuilderError."""
-    return _Writer(names, available).statement(model)
+    writer = _Writer(names, available, dialect)
+    statement = writer.statement(model)
+    if writer.backslash and writer.dialect['text'] == 'mysql':
+        # A hexadecimal literal takes the charset's default collation and a
+        # quoted one the connection's; MariaDB refuses to compare the two
+        # (illegal mix of collations), so one hex value makes them all hex.
+        statement = _Writer(names, available, {
+            **writer.dialect, 'text': 'mysql-hex'}).statement(model)
+    return statement
 
 
 def relations(catalog: Sequence[Mapping[str, Any]], kinds: Sequence[str],

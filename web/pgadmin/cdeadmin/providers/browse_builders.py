@@ -143,8 +143,11 @@ def firebird(self, resource, native, catalog, language):
     return sql_select(columns, resource['display_path'], names)
 
 
-def _mysql_names(provider):
-    # Backticks delimit identifiers in every sql_mode, ANSI_QUOTES included.
+def mysql_names(provider):
+    """MySQL-family names (also the SQL builder's).
+
+    Backticks delimit identifiers in every sql_mode, ANSI_QUOTES included.
+    """
     return SqlNames('`', regular=_MYSQL,
                     reserved=contract_keywords(provider, _every_keyword))
 
@@ -152,7 +155,7 @@ def _mysql_names(provider):
 def mysql_family(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view')
     return sql_select(path_columns(resource, catalog),
-                      resource['display_path'], _mysql_names(self))
+                      resource['display_path'], mysql_names(self))
 
 
 def _sqlite_keywords(provider):
@@ -224,7 +227,7 @@ def _mysql_wire(provider, resource, native, catalog):
             native.get('table_type') or '').upper() == 'SEQUENCE':
         raise BrowseUnavailable('A sequence has no rows to browse.')
     return sql_select(path_columns(resource, catalog),
-                      resource['display_path'], _mysql_names(provider))
+                      resource['display_path'], mysql_names(provider))
 
 
 def tidb(self, resource, native, catalog, language):

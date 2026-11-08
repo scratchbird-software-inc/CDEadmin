@@ -1726,6 +1726,10 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 class MySQLPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     # Browse data (owner direction 2026-11-06).
     _browse_text = browse_builders.mysql_family
+    # SQL builder (owner direction 2026-11-08: MySQL and MariaDB next).
+    # MySQL 9.7.0 accepts the standard GROUP BY ROLLUP (...) form.
+    _sql_builder_names = browse_builders.mysql_names
+    _sql_builder_dialect = {'text': 'mysql'}
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MYSQL_PROFILE)
 
@@ -1864,6 +1868,14 @@ class MySQLPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
 class MariaDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     # Browse data (owner direction 2026-11-06).
     _browse_text = browse_builders.mysql_family
+    # SQL builder (owner direction 2026-11-08). MariaDB 12.2.2 has no
+    # ROLLUP (...) function form and refuses WITH ROLLUP with ORDER BY
+    # (error 1221).
+    _sql_builder_names = browse_builders.mysql_names
+    _sql_builder_dialect = {
+        'text': 'mysql', 'rollup': 'with_rollup',
+        'rollup_order_by': 'MariaDB cannot sort a WITH ROLLUP result with '
+                           'ORDER BY.'}
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
 

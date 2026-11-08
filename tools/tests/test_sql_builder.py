@@ -158,7 +158,8 @@ def test_every_offering_engine_declares_every_option():
     offering = sorted(path.parent.name for path in
                       DESCRIPTORS.glob('*/capabilities.json')
                       if 'sql_builder' in json.loads(path.read_text()))
-    assert offering == ['duckdb', 'sqlite']
+    # MySQL and MariaDB: tools/tests/test_sql_builder_mysql_family.py.
+    assert offering == ['duckdb', 'mariadb', 'mysql', 'sqlite']
     for engine in offering:
         assert list(declared(engine)['options']) == list(OPTION_IDS)
         for option, entry in declared(engine)['options'].items():
@@ -296,6 +297,7 @@ def _service(version, profile='sqlite-native'):
     endpoint = {'identity': {'profile_id': profile}, 'route': {},
                 'verified_runtime': {'version': version}}
     provider = SimpleNamespace(sql_builder_names=lambda: NAMES,
+                               sql_builder_dialect=lambda: {},
                                profile=SimpleNamespace(
                                    language_profile='sqlite-sql'))
     page = SimpleNamespace(to_dict=lambda: {
@@ -329,7 +331,8 @@ def test_the_server_refuses_a_gated_join_for_an_older_runtime():
                                     'columns': ['id']}]
     with pytest.raises(ProviderWorkspaceError, match='not available'):
         ProviderWorkspaceService.sql_builder(
-            _service('8.0', 'mysql-native'), None, {'operation': 'options'})
+            _service('5.0.4', 'firebird-native'), None,
+            {'operation': 'options'})
     with pytest.raises(ProviderWorkspaceError, match='invalid'):
         ProviderWorkspaceService.sql_builder(
             _service('3.53.0'), None, {'operation': 'run'})
