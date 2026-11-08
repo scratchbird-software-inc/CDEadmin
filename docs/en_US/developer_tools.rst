@@ -15,6 +15,7 @@ PL/SQL code.
    query_tool
    editgrid
    schema_diff
+   diagrams_tool
    erd_tool
    psql_tool
    ai_tools

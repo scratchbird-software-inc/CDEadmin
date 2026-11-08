@@ -5722,6 +5722,14 @@
     "sqlite-recovery": {
       "reference": "SR-F-010010",
       "title": "SQLite native file recovery and recovered-copy activation"
+    },
+    "diagrams": {
+      "reference": "SR-F-010015",
+      "title": "Diagrams tool"
+    },
+    "diagram-create": {
+      "reference": "SR-F-010016",
+      "title": "New diagram"
     }
   }
 }

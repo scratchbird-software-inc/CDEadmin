@@ -12,6 +12,7 @@ import {ProjectAssetClient} from '../../projects/ProjectAssetClient';
 import {DDNDesignerSurface} from './DDNDesignerSurface';
 import {DDNViewerSurface} from './DDNViewerSurface';
 import {splitDDNAssetContent} from './contracts';
+import {DiagramsNavigator, requestDiagramCreate} from './DiagramsNavigator';
 
 export const DDN_MODULE_ID = 'cdeadmin.ddn';
 export const PROJECT_ASSET_SERVICE_ID = 'project.assets';
@@ -146,6 +147,27 @@ export function ddnModuleDefinition() {
           validateArguments: assetArguments,
           execute: openCommand('diagram.ddn.designer'),
         },
+        {
+          id: 'ddn.diagrams.new', label: 'New Diagram…',
+          description: 'Create a named diagram (crow\'s foot ERD by default) as a project asset.',
+          iconKey: 'tool.erd', surfaces: ['tools', 'project'],
+          permission: ['project.asset.edit'],
+          execute: (_args, context) => {
+            context.showActivity?.('activity.diagrams');
+            requestDiagramCreate();
+          },
+        },
+        {
+          id: 'ddn.diagrams.show', label: 'Diagrams',
+          description: 'List the diagrams in your projects.',
+          iconKey: 'tool.erd', surfaces: ['tools', 'view'],
+          execute: (_args, context) => {
+            if(typeof context.showActivity !== 'function') {
+              throw new Error('Workbench activity authority is unavailable.');
+            }
+            return context.showActivity('activity.diagrams');
+          },
+        },
         surfaceActionCommand('ddn.viewer.fit', 'Fit DDN View',
           'Fit the active DDN view to its content.', 'action.fit'),
         surfaceActionCommand('ddn.viewer.export', 'Export DDN View',
@@ -164,6 +186,7 @@ export function ddnModuleDefinition() {
       activity: [{
         id: 'activity.diagrams', label: 'Diagrams', iconKey: 'tool.erd',
         priority: 50, surfaceId: 'diagram.ddn.viewer',
+        render: () => React.createElement(DiagramsNavigator),
       }],
       inspector: [{
         id: 'inspector.ddn.validation', label: 'DDN validation',

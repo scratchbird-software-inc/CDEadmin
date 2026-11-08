@@ -414,6 +414,17 @@ function Layouts({browser, platform}) {
     }
   };
 
+  // Panels outside the Project Explorer (the Diagrams tool) open assets the
+  // same way it does.
+  const openAssetRef = useRef(openAsset);
+  openAssetRef.current = openAsset;
+  useEffect(() => {
+    const open = (event) => openAssetRef.current(
+      event.detail.project, event.detail.asset);
+    window.addEventListener('cdeadmin:open-project-asset', open);
+    return () => window.removeEventListener('cdeadmin:open-project-asset', open);
+  }, []);
+
   useEffect(() => () => surfaceHost.current?.dispose(), []);
 
   return (
