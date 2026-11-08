@@ -33,7 +33,6 @@ from flask_mail import Mail
 from flask_paranoid import Paranoid
 from flask_security import Security, SQLAlchemyUserDatastore, current_user
 from flask_security.utils import login_user, logout_user
-from flask_migrate import Migrate
 from werkzeug.datastructures import ImmutableDict
 from werkzeug.local import LocalProxy
 from werkzeug.utils import find_modules
@@ -54,6 +53,7 @@ from pgadmin.utils.session import create_session_interface, pga_unauthorised
 from pgadmin.utils.versioned_template_loader import VersionedTemplateLoader
 from datetime import timedelta, datetime
 from pgadmin.setup import get_version, set_version, check_db_tables
+from pgadmin.setup.db_upgrade import register_migrate
 from pgadmin.utils.ajax import internal_server_error, make_json_response, \
     unauthorized
 from pgadmin.utils.csrf import pgCSRFProtect
@@ -372,7 +372,10 @@ def create_app(app_name=None):
 
     # Create database connection object and mailer
     db.init_app(app)
-    Migrate(app, db)
+    # Flask-Migrate loads alembic, so db_upgrade() registers it when a
+    # migration runs. The `flask db` commands need it at once.
+    if os.environ.get('FLASK_RUN_FROM_CLI') == 'true':
+        register_migrate(app)
 
     ##########################################################################
     # Upgrade the schema (if required)

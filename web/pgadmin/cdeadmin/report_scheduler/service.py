@@ -18,7 +18,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from croniter import CroniterBadCronError, croniter
+# croniter is imported by the functions that evaluate schedules, so the
+# application does not load it at startup (performance review 2026-11-07).
 
 from pgadmin.cdeadmin.core import EndpointContext
 from pgadmin.cdeadmin.security import SecretReference
@@ -518,6 +519,7 @@ class ReportSchedulerService:
     @classmethod
     def next_instants(cls, schedule, after, count):
         """The next ``count`` instants (naive UTC) strictly after ``after``."""
+        from croniter import croniter
         cls._validate_cron(schedule)
         zone = ZoneInfo(schedule['timezone'])
         iterator = croniter(
@@ -890,6 +892,7 @@ class ReportSchedulerService:
 
     @staticmethod
     def _validate_cron(schedule):
+        from croniter import CroniterBadCronError, croniter
         if len(schedule['expression'].split()) != 5:
             raise ReportSchedulerError(
                 'report schedules require a five-field cron expression'
@@ -908,6 +911,7 @@ class ReportSchedulerService:
 
     @classmethod
     def _due_instants(cls, schedule, base, now):
+        from croniter import croniter
         cls._validate_cron(schedule)
         zone = ZoneInfo(schedule['timezone'])
         base_aware = base.replace(tzinfo=timezone.utc).astimezone(zone)

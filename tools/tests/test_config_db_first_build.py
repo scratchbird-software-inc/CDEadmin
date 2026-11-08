@@ -20,10 +20,10 @@ ROOT = Path(__file__).resolve().parents[2]
 MAXIMUM_FIRST_START_TRANSACTIONS = 10
 
 
-def _first_start(directory):
+def _start(directory, **environment):
     data = directory / 'data'
     for name in ('sessions', 'storage', 'azure'):
-        (data / name).mkdir(parents=True)
+        (data / name).mkdir(parents=True, exist_ok=True)
     isolated = {
         'SERVER_MODE': False, 'TESTING': True, 'CONFIG_DATABASE_URI': '',
         'DATA_DIR': str(data), 'SQLITE_PATH': str(data / 'pgadmin4.db'),
@@ -41,21 +41,28 @@ def _first_start(directory):
               'owned = json.loads(os.environ["ISOLATED"])\n'
               'for name, value in owned.items():\n'
               '    setattr(config, name, value)\n'
+              'import sys\n'
               'from pgadmin import create_app\n'
-              'create_app()\n')
+              'app = create_app()\n'
+              'print(json.dumps({"migrate": "migrate" in app.extensions,\n'
+              '                  "alembic": "alembic" in sys.modules}))\n')
     completed = subprocess.run(
         [sys.executable, '-c', script], cwd=directory, capture_output=True,
         text=True, timeout=300,
-        env={**os.environ, 'ISOLATED': json.dumps(isolated),
+        env={**{name: value for name, value in os.environ.items()
+                if name != 'FLASK_RUN_FROM_CLI'},
+             **environment, 'ISOLATED': json.dumps(isolated),
              'PYTHONPATH': os.pathsep.join([str(directory),
                                             str(ROOT / 'web')])})
     assert completed.returncode == 0, completed.stderr[-2000:]
-    return data / 'pgadmin4.db'
+    return data / 'pgadmin4.db', json.loads(
+        completed.stdout.strip().splitlines()[-1])
 
 
 def test_first_start_builds_the_configuration_database_in_one_transaction(
         tmp_path):
-    database = _first_start(tmp_path)
+    database, loaded = _start(tmp_path)
+    assert loaded['migrate']
     header = database.read_bytes()[:100]
     changes = int.from_bytes(header[24:28], 'big')
     assert 1 <= changes <= MAXIMUM_FIRST_START_TRANSACTIONS, changes
@@ -71,3 +78,15 @@ def test_first_start_builds_the_configuration_database_in_one_transaction(
         assert {'user', 'server', 'servergroup', 'version', 'keys'} <= tables
     finally:
         connection.close()
+
+
+def test_migration_tooling_loads_only_when_a_migration_runs(tmp_path):
+    # The first start migrated, so it registered Flask-Migrate (alembic).
+    _database, first = _start(tmp_path)
+    assert first == {'migrate': True, 'alembic': True}
+    # A later start finds the schema current and does not load either.
+    _database, later = _start(tmp_path)
+    assert later == {'migrate': False, 'alembic': False}
+    # Under the flask command line the `flask db` commands need it at once.
+    _database, command_line = _start(tmp_path, FLASK_RUN_FROM_CLI='true')
+    assert command_line['migrate'] is True

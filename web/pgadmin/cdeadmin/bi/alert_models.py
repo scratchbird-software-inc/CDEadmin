@@ -25,7 +25,8 @@ from decimal import Decimal
 from typing import Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from croniter import CroniterBadCronError, croniter
+# croniter is imported by the functions that evaluate schedules, so the
+# application does not load it at startup (performance review 2026-11-07).
 
 from pgadmin.cdeadmin.semantic_models.models import EXPORT_FORMATS
 
@@ -129,6 +130,7 @@ def _number(value, label):
 
 def validate_schedule(value):
     """A five-field cron expression in an IANA time zone."""
+    from croniter import CroniterBadCronError, croniter
     item = _map(value, 'schedule')
     expression = _text(item.get('expression'), 'schedule.expression', 120)
     zone_name = _text(item.get('timezone', 'UTC'), 'schedule.timezone', 64)
@@ -146,6 +148,7 @@ def validate_schedule(value):
 
 def schedule_interval_seconds(schedule, samples=6):
     """The shortest gap between the next few instants (for rate limits)."""
+    from croniter import croniter
     zone = ZoneInfo(schedule['timezone'])
     iterator = croniter(schedule['expression'],
                         datetime(2026, 1, 1, tzinfo=zone))
