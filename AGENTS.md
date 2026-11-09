@@ -237,6 +237,11 @@ applications. The process is the same as for cube, ERD and BI design. This
 is the last planning element of the current design stage; its research,
 specification and mock-ups are to-do items.
 
+Owner clarification, 2026-11-08 (later): ScratchRobin's part is limited to
+the screen mesh (a wireframe of a form) or a screenshot, linked into the
+rest of the diagrams, for example to the data a form shows. A full form
+designer that builds working forms is outside ScratchRobin's scope.
+
 ## Dashboard viewer, collector and history separation
 
 Owner correction, 2026-10-10: engine/server/database dashboards are display-only.
