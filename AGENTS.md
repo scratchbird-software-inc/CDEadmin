@@ -211,6 +211,24 @@ module was a first pass built without firm design specifications; it is
 early work, reused where it fits as the planned elements are implemented.
 Mock-ups and a full specification come first; they are a to-do item.
 
+Owner decisions, 2026-11-08 (BI):
+- Plan a single query model shared by BI questions and the visual SQL
+  builder, possibly expressed in SBsql and translated to each target
+  engine, with workarounds for that engine's limits.
+- BI designs are DDN, so their text form is kept in Git.
+- ScratchRobin's local store is planned to use SBsql (ScratchBird); it
+  tracks version details and freshness. The open-source ScratchBird
+  edition has fewer features but supports this to a point.
+- Metabase and Apache Superset are references only. Rewrite rather than
+  bring in code built on different assumptions or with licence questions;
+  ScratchRobin is under the PostgreSQL Licence.
+- Importing Metabase and Superset content and converting it to DDN is a
+  key feature. DDN can define dashboards, graphs, diagrams and dynamic
+  data sources.
+- ScratchRobin includes a dashboard server for displaying dashboards on
+  remote devices, and can also display dashboards itself.
+- ScratchRobin has the option of using AI.
+
 ## Screen and form design (owner direction, 2026-11-08)
 
 Screen mock-ups and forms are designed with a specialised DDN designer:
