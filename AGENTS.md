@@ -211,6 +211,14 @@ module was a first pass built without firm design specifications; it is
 early work, reused where it fits as the planned elements are implemented.
 Mock-ups and a full specification come first; they are a to-do item.
 
+## Screen and form design (owner direction, 2026-11-08)
+
+Screen mock-ups and forms are designed with a specialised DDN designer:
+forms are designed, linked to the underlying data, and shared across
+applications. The process is the same as for cube, ERD and BI design. This
+is the last planning element of the current design stage; its research,
+specification and mock-ups are to-do items.
+
 ## Dashboard viewer, collector and history separation
 
 Owner correction, 2026-10-10: engine/server/database dashboards are display-only.
