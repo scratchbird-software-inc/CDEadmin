@@ -140,6 +140,30 @@ a separate cube canvas in ScratchRobin.
   active version) before it can be accepted. ScratchRobin does not provide
   concurrent editing.
 
+## ERD and data modelling design (owner direction, 2026-11-08)
+
+The ERD designer is a data modelling design tool, not only a diagram tool,
+and it goes beyond what most ERD tools support. As with cube design, the
+design is kept separate from the database and its current implementation:
+nothing applies to a database immediately. The tool combines four roles:
+- Whiteboard: free-form drafting before all information is known, with
+  name-only entities and relationships; nothing touches a database.
+- Conversion: a sketch becomes a typed design for a chosen engine; a design
+  converts from one engine to another through data type conversion maps
+  the user can edit; designs come in from a live catalog, a DDL script or
+  an exchange format.
+- Design: the full modelling surface, with versions saved as checkpoints.
+- Modification: an existing database is loaded into a design and changed;
+  versions, the live database or a script are compared, the user chooses
+  which differences to carry, and the result is a generated change plan
+  that reaches a database only through ScratchRobin's native-operation
+  review.
+TMS Data Modeler is a feature specification and interface reference only.
+It is a Delphi/Pascal code base, incompatible with ScratchRobin, and
+source-available rather than open source: never copy its code.
+Planning only until the PostgreSQL provider-tree migration is further
+along.
+
 ## Dashboard viewer, collector and history separation
 
 Owner correction, 2026-10-10: engine/server/database dashboards are display-only.
