@@ -105,6 +105,41 @@ migration statements. Preserve exact types, identities, names and dependencies.
 A view filter is never deletion intent. Current DDN illustrative SQL export and
 visual diff views do not constitute deployable native schema generation/diff.
 
+## Cube design through DDN (owner direction, 2026-11-08)
+
+Planning only: implementation waits until the PostgreSQL provider-tree
+migration is further along. Cube (semantic model) design uses a specialised
+DDN designer, as ERD design does and BI dashboard design will; do not build
+a separate cube canvas in ScratchRobin.
+- DDN is the design and transfer layer: the cube's metadata and SQL editor.
+  The ScratchRobin semantic-model store holds the data structures that
+  implement the cube, so the data is ready when people use it.
+- A store-to-DDN process connects them. The designer reads the store into
+  DDN to edit an existing cube, or starts a new one, and saves design
+  changes back. The round trip must not lose design content.
+- Like stored procedure source, a cube's DDN, with its comments and other
+  elements, can be kept in the ScratchRobin store. Git keeps the DDN, not
+  the values in the store. Operations include new cube, save a draft
+  locally (in the ScratchRobin store), save to Git, load from local and
+  load from Git.
+- A cube's DDN is versioned with directed save points, using DDN's user-set
+  statuses (Draft, In-progress, In-review, Accepted). Accepted means
+  applied: accepting a version makes it the active cube in the store;
+  earlier save points change nothing in use.
+- Who may accept follows the security setup and is flexible: the user
+  specifies who or what authenticates and authorizes an approval.
+- Database changes (for example materialized aggregates) are highlighted as
+  changes in the DDN generated from, and compared with, the store. They are
+  executed only through ScratchRobin's native-operation review.
+- Leaving an accepted version is the user's decision: roll back to an
+  earlier accepted version, or force a new draft version with a minor
+  version bump.
+- ScratchRobin assumes no changes by others while a draft is edited.
+  Changes someone else accepted are detected when saving or accepting, and
+  the draft takes them in through a DDN diff (its base version against the
+  active version) before it can be accepted. ScratchRobin does not provide
+  concurrent editing.
+
 ## Dashboard viewer, collector and history separation
 
 Owner correction, 2026-10-10: engine/server/database dashboards are display-only.
