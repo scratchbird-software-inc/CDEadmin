@@ -198,6 +198,19 @@ Owner decisions, 2026-11-08:
   proof-of-concept DDN viewer and designer, which stay off the menus for
   now.
 
+## BI questions and dashboards (owner direction, 2026-11-08)
+
+BI design (questions, dashboards and their alerts) follows the same process
+as cube and ERD design: it is a specialised DDN task, and the patterns in
+those two sections apply. The DDN holds the current state and is kept in
+the ScratchRobin store and in Git; the store holds the implementation;
+versions use directed save points; approval follows the user's security
+setup; changes are tested at save. BI tools may use, and be called from,
+other ScratchRobin tools such as the visual SQL builder. The existing BI
+module was a first pass built without firm design specifications; it is
+early work, reused where it fits as the planned elements are implemented.
+Mock-ups and a full specification come first; they are a to-do item.
+
 ## Dashboard viewer, collector and history separation
 
 Owner correction, 2026-10-10: engine/server/database dashboards are display-only.
