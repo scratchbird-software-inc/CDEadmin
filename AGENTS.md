@@ -164,6 +164,29 @@ source-available rather than open source: never copy its code.
 Planning only until the PostgreSQL provider-tree migration is further
 along.
 
+Owner decisions, 2026-11-08:
+- A design's DDN is a text document holding the current state. It is kept
+  in the ScratchRobin store and in Git; earlier versions and history live
+  in the store and Git history, not in the DDN. Because renames are read
+  from that history, every element keeps a stable stored identity.
+- A model has four levels: conceptual (the whiteboard), logical, physical
+  and deployment. All levels are in the DDN document, linked by DDN's own
+  relations, and each can be viewed or edited as elements of the model at
+  a given state. A design may cross database engines, platforms, databases
+  and schemas, and may describe machines, racks, cloud locations and
+  instance types, and reporting.
+- Deployment details may be entered by hand (the usual case), taken from
+  ScratchRobin's registered servers, or imported from outside sources;
+  which outside sources to support is researched during implementation.
+- An accepted design produces alter scripts. A change to metadata may lose
+  data, so ScratchRobin warns that it may be destructive and not
+  reversible: the metadata can be recreated, but the data it referred to
+  cannot, unless the database keeps versions (for example ScratchBird).
+- ScratchRobin assumes no changes by others while a design is edited.
+  Changes are tested when the design is saved: possible conflicts are
+  shown and can be recorded in the DDN's notes, or the change can be
+  reversed or cancelled. ScratchRobin does not provide concurrent editing.
+
 ## Dashboard viewer, collector and history separation
 
 Owner correction, 2026-10-10: engine/server/database dashboards are display-only.
