@@ -186,6 +186,17 @@ Owner decisions, 2026-11-08:
   Changes are tested when the design is saved: possible conflicts are
   shown and can be recorded in the DDN's notes, or the change can be
   reversed or cancelled. ScratchRobin does not provide concurrent editing.
+- An ERD exists in one of three places: the physical database (the
+  metadata of what exists), the ScratchRobin store (tables holding the
+  design), or Git (a DDN text file under version control).
+- System diagrams are limited by the hooks each environment offers. For
+  example, monitoring clients such as Nagios can supply information from
+  the network; such tools differ widely in what they support, and some
+  environments allow automated updates. What is possible is investigated
+  at implementation.
+- Task-specific viewers and designers are used rather than the
+  proof-of-concept DDN viewer and designer, which stay off the menus for
+  now.
 
 ## Dashboard viewer, collector and history separation
 
@@ -305,6 +316,13 @@ proposed order for the remaining work is accepted:
 - M6, operations and tool openers that do not need the Table family.
 - M7, the Table family last, then the debugger and Schema Diff.
 - EDB Advanced Server and EDB Distributed items stay post beta.
+
+Owner decision, 2026-11-08 (M2 version range): ScratchRobin supports the
+PostgreSQL versions the PostgreSQL project currently supports. A version the
+project no longer supports (end of life, archived) is not supported by
+ScratchRobin; every version the project supports is. The supported set
+changes over time, so check the project's versioning policy when
+implementing.
 
 ## Engine expansion to full parity (owner direction, 2026-10-29)
 
