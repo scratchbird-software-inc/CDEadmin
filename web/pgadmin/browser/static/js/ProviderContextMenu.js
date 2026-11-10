@@ -21,7 +21,7 @@ import {requestDiagramCreate} from 'sources/cdeadmin_ui/integrations/ddn/Diagram
 const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
   'clear_credentials', 'connector_info', 'edit_endpoint',
-  'forget_endpoint', 'open_workspace', 'open_tool', 'open_firebird_fleet', 'open_mysql_fleet', 'open_mysql_dashboard_editor', 'open_postgresql_fleet', 'open_postgresql_dashboard_editor', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
+  'forget_endpoint', 'open_workspace', 'open_tool', 'open_firebird_fleet', 'open_mysql_fleet', 'open_mysql_dashboard_editor', 'open_postgresql_fleet', 'open_postgresql_dashboard_editor', 'open_postgresql_monitor', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
   'open_mariadb_fleet', 'open_mariadb_dashboard_editor', 'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
   'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
   'open_mysql_host', 'open_mysql_routers', 'open_mysql_physical', 'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mysql_instance_backups', 'open_mysql_instance_restores', 'open_mysql_topologies', 'open_mysql_sandboxes', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
@@ -181,7 +181,13 @@ function dispatch(action, args, context) {
     return import('sources/Dialogs').then(({showMySQLDashboardEditor}) => showMySQLDashboardEditor(
       endpoint.data ? Number(endpoint.data._id ?? endpoint.data.id) : undefined, args.database_target_id));
   case 'open_postgresql_dashboard_editor':
-    return import('sources/Dialogs').then(({showPostgresqlDashboardEditor}) => showPostgresqlDashboardEditor());
+    // Database scope passes its target (M2, 2026-11-10); endpoint scope passes none, as before.
+    return import('sources/Dialogs').then(({showPostgresqlDashboardEditor}) =>
+      showPostgresqlDashboardEditor(args.database_target_id ? endpoint.data._id : undefined, args.database_target_id));
+  case 'open_postgresql_monitor':
+    // The PostgreSQL dashboard the inherited database node opened, for a provider database node.
+    return import('sources/Dialogs').then(({showPostgresqlMonitor}) => showPostgresqlMonitor(
+      endpoint.data._id, args.database_target_id, endpoint.data.label || endpoint.data._label, Boolean(args.policy_mode)));
   case 'open_postgresql_fleet':
     return import('sources/Dialogs').then(({showPostgresqlFleet}) => showPostgresqlFleet());
   case 'open_firebird_fleet':

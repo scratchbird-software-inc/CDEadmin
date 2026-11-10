@@ -1,7 +1,7 @@
 {
   "schema": "cdeadmin.ui-tools.v1",
   "engine": "postgresql",
-  "notes": "Tool openers for this engine. Lifecycle entries come from the family forms and tier 2/3 operations from operations.json; keep only openers here.",
+  "notes": "Tool openers for this engine. Lifecycle entries come from the family forms and tier 2/3 operations from operations.json; keep only openers here. Owner direction 2026-11-08 / decision 2026-11-10 (M2): the database actions the inherited database node offered (dashboard, monitoring settings, dashboard editor, catalog DDN, test data, large-object files, advanced objects) are declared here for the provider tree, so a PostgreSQL server browsed through it keeps them. Labels match the inherited entries.",
   "tools": [
     {
       "command_id": "endpoint.{engine_id}.bi_questions",
@@ -19,6 +19,102 @@
       "enabled_when": [
         "verified"
       ]
+    },
+    {
+      "command_id": "database.postgresql.monitoring",
+      "scope": "database",
+      "slot": "post_lifecycle",
+      "label": "PostgreSQL dashboard...",
+      "description": "Open the PostgreSQL dashboard for this database.",
+      "handler": "open_postgresql_monitor",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "priority": 7
+    },
+    {
+      "command_id": "database.postgresql.monitoring_policy",
+      "scope": "database",
+      "slot": "post_lifecycle",
+      "label": "Configure PostgreSQL monitoring...",
+      "description": "Collection policy for the PostgreSQL dashboard of this database.",
+      "handler": "open_postgresql_monitor",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "priority": 8,
+      "mutation": "admin",
+      "arguments": {
+        "policy_mode": true
+      }
+    },
+    {
+      "command_id": "database.postgresql.dashboard_editor",
+      "scope": "database",
+      "slot": "post_lifecycle",
+      "label": "Edit PostgreSQL dashboard...",
+      "description": "Edit the dashboard definition for this database.",
+      "handler": "open_postgresql_dashboard_editor",
+      "icon": "action.edit",
+      "group": "availability",
+      "priority": 9,
+      "mutation": "write"
+    },
+    {
+      "command_id": "database.postgresql.catalog_ddn",
+      "scope": "database",
+      "slot": "post_lifecycle",
+      "label": "PostgreSQL catalog DDN...",
+      "description": "Capture this database catalog as DDN.",
+      "handler": "open_workspace",
+      "icon": "action.export",
+      "group": "database",
+      "priority": 44,
+      "arguments": {
+        "tab": "export"
+      }
+    },
+    {
+      "command_id": "database.postgresql.test_data",
+      "scope": "database",
+      "slot": "post_lifecycle",
+      "label": "Generate PostgreSQL test data...",
+      "description": "Generate test data into this database.",
+      "handler": "open_workspace",
+      "icon": "action.insert",
+      "group": "database",
+      "priority": 45,
+      "mutation": "write",
+      "arguments": {
+        "tab": "postgresql-test-data"
+      }
+    },
+    {
+      "command_id": "database.postgresql.large_object_files",
+      "scope": "database",
+      "slot": "post_lifecycle",
+      "label": "PostgreSQL large-object files...",
+      "description": "Import and export large objects of this database as files.",
+      "handler": "open_workspace",
+      "icon": "action.export",
+      "group": "database",
+      "priority": 46,
+      "arguments": {
+        "tab": "postgresql-large-object-files"
+      }
+    },
+    {
+      "command_id": "database.postgresql.advanced_objects",
+      "scope": "database",
+      "slot": "post_lifecycle",
+      "label": "PostgreSQL advanced objects...",
+      "description": "Access methods, operators, conversions and other catalog objects.",
+      "handler": "open_workspace",
+      "icon": "action.view",
+      "group": "database",
+      "priority": 47,
+      "arguments": {
+        "tab": "administration",
+        "resource_kind": "access-method"
+      }
     }
   ]
 }

@@ -466,7 +466,11 @@ define('pgadmin.node.server', [
           const localProfile = data?.cde_endpoint &&
             (isProviderRegistrationWorkspace(initialTab, initialContext) ||
               initialTab === 'sqlite-recovery' && data.cde_profile_id === 'sqlite-native');
-          const postgresReady = ['semantic', 'studio'].includes(initialTab) &&
+          // A connected inherited PostgreSQL server serves these provider
+          // workspace tabs (database.js opens them directly; M2 2026-11-10
+          // adds the provider-tree database openers).
+          const postgresReady = ['semantic', 'studio', 'export', 'postgresql-test-data',
+            'postgresql-large-object-files', 'administration'].includes(initialTab) &&
             !data?.cde_endpoint && data?.connected;
           if (!providerReady && !postgresReady && !localProfile) {
             if(data?.cde_endpoint) {
