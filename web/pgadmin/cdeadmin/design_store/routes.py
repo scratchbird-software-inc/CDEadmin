@@ -23,9 +23,11 @@ from .service import (
 )
 from .shared_ddn import (
     StoreDDNProcess,
+    build_four_level_erd_ddn,
     compute_server_layout,
     compute_system_diagram_drift,
     convert_erd_design_engine,
+    preview_erd_alter_plan,
     propose_system_diagram_change,
 )
 
@@ -185,6 +187,33 @@ def _register_routes(app, project_asset_service) -> None:
                         body.get('observe_resources', False)
                     ),
                     note=str(body.get('note') or ''),
+                )
+            )
+        if mode == 'create_erd':
+            title = str(body.get('title') or body.get('key') or 'Data Model')
+            ddn_text = build_four_level_erd_ddn(
+                title=title,
+                conceptual_entities=body.get('conceptual_entities'),
+                logical_entities=body.get('logical_entities'),
+                physical_tables=body.get('physical_tables'),
+                deployment_nodes=body.get('deployment_nodes'),
+                level_links=body.get('level_links'),
+                extensions=body.get('extensions'),
+            )
+            return invoke(
+                lambda store, _proc: store.create_design(
+                    project_id=project_id,
+                    key=str(body.get('key') or ''),
+                    kind='erd',
+                    title=title,
+                    ddn_text=ddn_text,
+                    actor_id=uid,
+                    status=str(body.get('status') or 'draft'),
+                    note=str(body.get('note') or ''),
+                    origin=str(body.get('origin') or 'local'),
+                    observe_resources=bool(
+                        body.get('observe_resources', False)
+                    ),
                 )
             )
         return invoke(
@@ -530,5 +559,70 @@ def _register_routes(app, project_asset_service) -> None:
             )
 
         return invoke(_drift)
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>/erd/model',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def erd_model(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'editor'
+        )
+        body = request.get_json(silent=True) or {}
+
+        def _save_model(store: DesignStore, proc: StoreDDNProcess):
+            design = store.get_design(design_id)
+            title = str(body.get('title') or design['title'])
+            ddn_text = build_four_level_erd_ddn(
+                title=title,
+                conceptual_entities=body.get('conceptual_entities'),
+                logical_entities=body.get('logical_entities'),
+                physical_tables=body.get('physical_tables'),
+                deployment_nodes=body.get('deployment_nodes'),
+                level_links=body.get('level_links'),
+                extensions=body.get('extensions'),
+            )
+            return proc.save_from_ddn(
+                design_id,
+                expected_head_version=int(
+                    body.get('expected_head_version')
+                    or design['head_version']
+                ),
+                ddn_or_workspace=ddn_text,
+                actor_id=uid,
+                pinned_positions=body.get('pinned_positions'),
+                status=str(body.get('status') or 'draft'),
+                note=str(body.get('note') or 'Updated ERD model'),
+                observe_resources=bool(body.get('observe_resources', False)),
+            )
+
+        return invoke(_save_model)
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/erd/alter-plan',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def erd_alter_plan(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        body = request.get_json(silent=True) or {}
+        return invoke(
+            lambda store, _proc: preview_erd_alter_plan(
+                store,
+                design_id,
+                base_version=body.get('base_version'),
+                desired_version=body.get('desired_version'),
+                selected_difference_ids=body.get('selected_difference_ids'),
+                target_engine=str(body.get('target_engine') or 'sqlite'),
+                catalog_snapshot=body.get('catalog_snapshot'),
+                handoff_options=body.get('handoff_options'),
+            )
+        )
 
     app.register_blueprint(api)

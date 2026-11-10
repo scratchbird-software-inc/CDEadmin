@@ -1259,3 +1259,30 @@ indexes. Reply loss retains an unknown outcome and a spent durable review token;
 independent rediscovery cannot retroactively assert receipt of the lost reply.
 Linux Firebird 5.0.4 evidence does not qualify Windows/macOS, another engine, or
 human-team form validation.
+
+
+Task-specific ERD and data modelling designer (Added 2026-11-10)
+----------------------------------------------------------------
+
+The task-specific Data Model (ERD) designer (``diagram.erd.designer``,
+``SR-F-010018``, with navigator ``SR-F-010019`` and creation dialog
+``SR-F-010020``) builds on the shared ``DesignStore``, ``StoreDDNProcess`` and
+``DDNViewerSurface`` libraries rather than a separate ERD canvas:
+
+* **Four modelling levels in one DDN document**: ``conceptual`` (whiteboard
+  drafting), ``logical``, ``physical`` and ``deployment`` views share UUIDv7
+  element identities in ``designs.db``. Conceptual sketches and deployment
+  landscape nodes are excluded from SQL DDL generation (DDN-DB-007); ORM
+  application mapping keys are rejected while opaque extension metadata is
+  preserved.
+* **Neutral-logical engine conversion**: physical designs convert across
+  SQLite, DuckDB, Firebird 5, MySQL and MariaDB through neutral logical types
+  with user-editable type maps and mandatory explicit choices for lossy items
+  (DDN-DB-008).
+* **Alter-plan preview and native review**: comparing save points or live
+  physical imports matches elements by stable UUIDv7 identity to detect table
+  and column renames, additions, modifications and drops, lets the user select
+  which differences to carry forward, warns that metadata changes may lose data
+  and are non-reversible unless the target database retains version history,
+  and hands off changes exclusively through ScratchRobin's native-operation
+  review (never executing DDL directly from the diagram).

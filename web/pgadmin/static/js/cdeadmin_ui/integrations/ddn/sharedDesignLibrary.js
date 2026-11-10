@@ -315,6 +315,101 @@ export class DesignStoreClient {
     );
   }
 
+  createErdDesign(
+    projectId,
+    {
+      key,
+      title,
+      conceptualEntities = [],
+      logicalEntities = [],
+      physicalTables = [],
+      deploymentNodes = [],
+      levelLinks = [],
+      extensions = null,
+      note = '',
+    }
+  ) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/designs`, {
+        mode: 'create_erd',
+        key,
+        title,
+        conceptual_entities: conceptualEntities,
+        logical_entities: logicalEntities,
+        physical_tables: physicalTables,
+        deployment_nodes: deploymentNodes,
+        level_links: levelLinks,
+        extensions,
+        note,
+      })
+    );
+  }
+
+  saveErdModel(
+    projectId,
+    designId,
+    {
+      title = null,
+      expectedHeadVersion = null,
+      conceptualEntities = [],
+      logicalEntities = [],
+      physicalTables = [],
+      deploymentNodes = [],
+      levelLinks = [],
+      extensions = null,
+      pinnedPositions = null,
+      status = 'draft',
+      note = '',
+    }
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}/erd/model`,
+        {
+          title,
+          expected_head_version: expectedHeadVersion,
+          conceptual_entities: conceptualEntities,
+          logical_entities: logicalEntities,
+          physical_tables: physicalTables,
+          deployment_nodes: deploymentNodes,
+          level_links: levelLinks,
+          extensions,
+          pinned_positions: pinnedPositions,
+          status,
+          note,
+        }
+      )
+    );
+  }
+
+  previewErdAlterPlan(
+    projectId,
+    designId,
+    {
+      baseVersion = null,
+      desiredVersion = null,
+      selectedDifferenceIds = null,
+      targetEngine = 'sqlite',
+      catalogSnapshot = null,
+      handoffOptions = null,
+    } = {}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/erd/alter-plan`,
+        {
+          base_version: baseVersion,
+          desired_version: desiredVersion,
+          selected_difference_ids: selectedDifferenceIds,
+          target_engine: targetEngine,
+          catalog_snapshot: catalogSnapshot,
+          handoff_options: handoffOptions,
+        }
+      )
+    );
+  }
+
   proposeErdDiagramChange(
     projectId,
     designId,
@@ -401,6 +496,7 @@ export class SharedDDNTaskController {
       layout,
       tiles: layout?.tiles || [],
       resolvedIncludes: resolved_includes || [],
+      bindings: design.bindings || [],
       bindingSummary: binding_summary || {
         total: 0,
         valid: 0,
@@ -501,5 +597,62 @@ export class SharedDDNTaskController {
       newTargetRef,
     });
     return this.load({version: this.session?.design?.version?.version});
+  }
+
+  async branchDraft({note = ''} = {}) {
+    const branched = await this.client.branchDraftFromAccepted(
+      this.projectId,
+      this.designId,
+      {note}
+    );
+    return this.load({version: branched.head_version});
+  }
+
+  async rollback(version, {comment = ''} = {}) {
+    await this.client.rollbackVersion(
+      this.projectId,
+      this.designId,
+      version,
+      {comment}
+    );
+    return this.load({version});
+  }
+
+  async convertErdEngine(options) {
+    const result = await this.client.convertErdEngine(
+      this.projectId,
+      this.designId,
+      {
+        version: this.session?.design?.version?.version ?? null,
+        ...options,
+      }
+    );
+    if (options?.saveVersion && result?.saved?.design?.version?.version) {
+      await this.load({version: result.saved.design.version.version});
+    }
+    return result;
+  }
+
+  previewErdAlterPlan(options = {}) {
+    return this.client.previewErdAlterPlan(this.projectId, this.designId, {
+      desiredVersion: this.session?.design?.version?.version ?? null,
+      ...options,
+    });
+  }
+
+  computeErdDrift({liveNodes = []} = {}) {
+    return this.client.computeErdDrift(this.projectId, this.designId, {
+      version: this.session?.design?.version?.version ?? null,
+      liveNodes,
+    });
+  }
+
+  proposeErdDiagramChange({elementId, action, parameters = {}}) {
+    return this.client.proposeErdDiagramChange(this.projectId, this.designId, {
+      version: this.session?.design?.version?.version ?? null,
+      elementId,
+      action,
+      parameters,
+    });
   }
 }

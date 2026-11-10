@@ -21,6 +21,7 @@ from flask import Flask
 import pytest
 
 from pgadmin.cdeadmin.design_store import (
+    DESTRUCTIVE_METADATA_WARNING,
     DesignStore,
     DesignStoreError,
     DesignStoreForbidden,
@@ -31,6 +32,7 @@ from pgadmin.cdeadmin.design_store import (
     convert_erd_design_engine,
     ddn_text_to_workspace,
     init_routes_app,
+    preview_erd_alter_plan,
     propose_system_diagram_change,
 )
 from pgadmin.cdeadmin.workspace import ddn_source as ddn, firebird_erd
@@ -550,3 +552,222 @@ def test_design_store_flask_routes_end_to_end(tmp_path):
     conv = res.get_json()['data']
     assert conv['loss_report']['target_engine'] == 'sqlite'
     assert conv['saved']['design']['head_version'] == 3
+
+    # 6. Create 4-level ERD via mode='create_erd' and preview alter plan
+    res_erd = client.post(
+        '/cdeadmin/api/projects/demo-proj/designs',
+        json={
+            'mode': 'create_erd',
+            'key': 'billing-erd',
+            'title': 'Billing ERD',
+            'conceptual_entities': [{'name': 'Invoice Concept'}],
+            'physical_tables': [
+                {
+                    'id': '019a0000-0000-7000-8000-000000000101',
+                    'name': 'customers',
+                    'engine': 'sqlite',
+                    'fields': [
+                        {
+                            'id': '019a0000-0000-7000-8000-000000000102',
+                            'name': 'id',
+                            'datatype': 'INTEGER',
+                            'nullable': False,
+                        },
+                        {
+                            'id': '019a0000-0000-7000-8000-000000000103',
+                            'name': 'legacy_code',
+                            'datatype': 'TEXT',
+                            'nullable': True,
+                        },
+                    ],
+                }
+            ],
+        },
+    )
+    assert res_erd.status_code == 200
+    erd_id = res_erd.get_json()['data']['id']
+
+    # Accept v1 as baseline
+    acc_erd = client.post(
+        f'/cdeadmin/api/projects/demo-proj/designs/{erd_id}/versions/1/accept',
+        json={'comment': 'Baseline physical schema'},
+    )
+    assert acc_erd.status_code == 200
+
+    # Save v2 via POST /erd/model: rename customers -> accounts (same UUIDv7),
+    # drop legacy_code, add credit_limit, and add invoices table
+    upd_erd = client.post(
+        f'/cdeadmin/api/projects/demo-proj/designs/{erd_id}/erd/model',
+        json={
+            'title': 'Billing ERD',
+            'expected_head_version': 1,
+            'conceptual_entities': [{'name': 'Invoice Concept'}],
+            'physical_tables': [
+                {
+                    'id': '019a0000-0000-7000-8000-000000000101',
+                    'name': 'accounts',
+                    'engine': 'sqlite',
+                    'fields': [
+                        {
+                            'id': '019a0000-0000-7000-8000-000000000102',
+                            'name': 'id',
+                            'datatype': 'INTEGER',
+                            'nullable': False,
+                        },
+                        {
+                            'id': '019a0000-0000-7000-8000-000000000104',
+                            'name': 'credit_limit',
+                            'datatype': 'NUMERIC',
+                            'nullable': False,
+                        },
+                    ],
+                },
+                {
+                    'id': '019a0000-0000-7000-8000-000000000105',
+                    'name': 'invoices',
+                    'engine': 'sqlite',
+                    'fields': [
+                        {
+                            'id': '019a0000-0000-7000-8000-000000000106',
+                            'name': 'invoice_id',
+                            'datatype': 'INTEGER',
+                            'nullable': False,
+                        }
+                    ],
+                },
+            ],
+            'note': 'Renamed customers to accounts and added invoices',
+        },
+    )
+    assert upd_erd.status_code == 200
+
+    # Preview full alter plan (v1 -> v2)
+    plan_res = client.post(
+        f'/cdeadmin/api/projects/demo-proj/designs/{erd_id}/erd/alter-plan',
+        json={'target_engine': 'duckdb'},
+    )
+    assert plan_res.status_code == 200
+    plan = plan_res.get_json()['data']
+    assert plan['requires_native_review'] is True
+    assert plan['applied_immediately'] is False
+    assert plan['destructive_warning'] == DESTRUCTIVE_METADATA_WARNING
+    assert plan['has_destructive_changes'] is True
+    kinds = {d['change_kind'] for d in plan['differences']}
+    assert kinds == {
+        'rename_table',
+        'add_column',
+        'drop_column',
+        'create_table',
+    }
+    # Conceptual entity 'Invoice Concept' must not appear in SQL DDL
+    assert 'Invoice Concept' not in plan['script']
+
+    # Filter to non-destructive subset only
+    safe_ids = [
+        d['difference_id']
+        for d in plan['differences']
+        if not d['destructive']
+    ]
+    sub_res = client.post(
+        f'/cdeadmin/api/projects/demo-proj/designs/{erd_id}/erd/alter-plan',
+        json={
+            'target_engine': 'duckdb',
+            'selected_difference_ids': safe_ids,
+        },
+    )
+    assert sub_res.status_code == 200
+    sub_plan = sub_res.get_json()['data']
+    assert sub_plan['has_destructive_changes'] is False
+    assert 'DROP COLUMN' not in sub_plan['script']
+    assert 'RENAME TO "accounts"' in sub_plan['script']
+
+
+def test_live_sqlite_and_duckdb_erd_roundtrip_and_alter_preview(tmp_path):
+    import sqlite3
+    import test_cdeadmin_relational_providers  # noqa: F401
+    from pgadmin.cdeadmin.providers.sqlite.provider import (
+        _resources as capture_sqlite_resources,
+    )
+    from pgadmin.cdeadmin.workspace import duckdb_erd, sqlite_erd
+
+    store = DesignStore(db_path=tmp_path / 'live_erd.db')
+
+    # 1. Live SQLite catalog -> physical ERD import -> alter plan preview
+    sq_file = tmp_path / 'sample.sqlite'
+    conn = sqlite3.connect(str(sq_file))
+    try:
+        conn.execute(
+            'CREATE TABLE widgets '
+            '(id INTEGER PRIMARY KEY, label TEXT NOT NULL)'
+        )
+        conn.commit()
+        sq_rows = capture_sqlite_resources(
+            conn, {'capability_generation': 'gen-1'}
+        )
+    finally:
+        conn.close()
+
+    sq_diag = sqlite_erd.build_diagram(
+        sq_rows,
+        {'endpoint_id': 'local-sqlite', 'database_target_id': 'main'},
+    )
+    imported_sq = store.import_physical_erd_workspace(
+        project_id='live-proj',
+        key='sqlite-widgets',
+        title='SQLite Widgets',
+        workspace=sq_diag['snapshot'],
+        actor_id=1,
+    )
+    sq_plan = preview_erd_alter_plan(
+        store,
+        imported_sq['id'],
+        base_version=0,
+        desired_version=1,
+        target_engine='sqlite',
+    )
+    assert sq_plan['requires_native_review'] is True
+    assert any(
+        d['change_kind'] == 'create_table'
+        and d['object_name'].endswith('widgets')
+        for d in sq_plan['differences']
+    )
+
+    # 2. Live DuckDB catalog -> physical ERD import -> alter plan preview
+    duckdb = pytest.importorskip('duckdb')
+    from pgadmin.cdeadmin.providers.duckdb.catalog import (
+        capture as duckdb_capture,
+    )
+
+    dk_conn = duckdb.connect(str(tmp_path / 'sample.duckdb'))
+    try:
+        dk_conn.execute(
+            'CREATE TABLE metrics (id INTEGER PRIMARY KEY, val DOUBLE)'
+        )
+        dk_rows = duckdb_capture(dk_conn)['resources']
+    finally:
+        dk_conn.close()
+
+    dk_diag = duckdb_erd.build_diagram(
+        dk_rows,
+        {'endpoint_id': 'local-duckdb', 'database_target_id': 'metrics-db'},
+    )
+    imported_dk = store.import_physical_erd_workspace(
+        project_id='live-proj',
+        key='duckdb-metrics',
+        title='DuckDB Metrics',
+        workspace=dk_diag['snapshot'],
+        actor_id=1,
+    )
+    dk_plan = preview_erd_alter_plan(
+        store,
+        imported_dk['id'],
+        base_version=0,
+        desired_version=1,
+        target_engine='duckdb',
+    )
+    assert dk_plan['requires_native_review'] is True
+    assert any(
+        d['change_kind'] == 'create_table'
+        and d['object_name'].endswith('metrics')
+        for d in dk_plan['differences']
+    )

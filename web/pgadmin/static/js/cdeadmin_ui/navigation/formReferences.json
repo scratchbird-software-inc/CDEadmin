@@ -5734,6 +5734,18 @@
     "sql-builder": {
       "reference": "SR-F-010017",
       "title": "Build a query (SQL builder)"
+    },
+    "erd-designer": {
+      "reference": "SR-F-010018",
+      "title": "Data model (ERD) designer"
+    },
+    "erd-models": {
+      "reference": "SR-F-010019",
+      "title": "Data models (ERD) navigator"
+    },
+    "erd-model-create": {
+      "reference": "SR-F-010020",
+      "title": "New data model (ERD)"
     }
   }
 }

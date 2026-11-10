@@ -208,7 +208,7 @@ export function schemaCompareModuleDefinition(registry) {
       })),
       commands: moduleCommands(),
       activity: [{
-        id: 'activity.schema_compare', label: 'Schema Diff',
+        id: 'activity.schema_compare', label: 'Schema Comparison',
         iconKey: 'tool.schema-compare', priority: 30,
         render: () => <SchemaCompareActivity registry={registry} />,
       }],

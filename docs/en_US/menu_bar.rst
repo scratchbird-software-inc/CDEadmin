@@ -53,6 +53,14 @@ and the planned cube, data model, BI and screen designers) are used
 instead. Diagrams still open from the Diagrams tool and the Project
 Explorer, which hand the asset to the viewer or designer themselves.
 
+Added 2026-11-10: the task-specific Data Model (ERD) designer registers only
+its launcher commands (*New Data Model (ERD)…* and *Data Models (ERD)*) on the
+*Tools* menu. Open-model actions (*Save ERD Checkpoint*, *Convert ERD Engine*,
+*Preview ERD Alter Plan*, *Accept ERD Version* and *Open in ERD Designer*) stay
+on the open designer toolbar. The cross-engine comparison module uses the label
+*Schema Comparison* on its activity and *Tools* entry while legacy PostgreSQL
+*Schema Diff* remains for inherited registrations until PostgreSQL M7.
+
 Window
 ======
 

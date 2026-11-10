@@ -43,3 +43,18 @@ export {
   ERD_MODELLING_LEVELS,
   SharedDDNTaskController,
 } from './sharedDesignLibrary.js';
+export {ERDDesignerSurface} from './ERDDesignerSurface';
+export {
+  ERD_MODEL_CREATE_EVENT,
+  ERD_MODEL_OPEN_EVENT,
+  ERDModelsNavigator,
+  openERDModel,
+  requestERDModelCreate,
+} from './ERDModelsNavigator';
+export {
+  DESIGN_STORE_SERVICE_ID,
+  ERD_DESIGN_ASSET_TYPE,
+  ERD_MODULE_ID,
+  erdModuleDefinition,
+  registerERDModule,
+} from './erdModule.js';

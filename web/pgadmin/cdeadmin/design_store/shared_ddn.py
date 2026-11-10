@@ -1087,40 +1087,461 @@ def build_four_level_erd_ddn(
     all_nodes = [
         nid for lvl in ERD_LEVELS for nid in level_Buckets[lvl]
     ]
-    if all_nodes:
+    parts.append(
+        ddn.declaration(
+            'view',
+            'erd_all_levels',
+            'ddn@1',
+            {
+                'title': title,
+                'selection': {
+                    'include': [
+                        ddn.ref(i) for i in (*all_nodes, *all_edge_ids)
+                    ]
+                },
+            },
+        )
+    )
+    for lvl in ERD_LEVELS:
+        lvl_nodes = set(level_Buckets[lvl])
+        lvl_edges = [
+            lid
+            for lid, link in zip(all_edge_ids, level_links or ())
+            if link['source'] in lvl_nodes and link['target'] in lvl_nodes
+        ]
         parts.append(
             ddn.declaration(
                 'view',
-                'erd_all_levels',
+                f'erd_{lvl}',
                 'ddn@1',
                 {
-                    'title': title,
+                    'title': f'{title} ({lvl})',
                     'selection': {
                         'include': [
-                            ddn.ref(i) for i in (*all_nodes, *all_edge_ids)
+                            ddn.ref(i)
+                            for i in (*level_Buckets[lvl], *lvl_edges)
                         ]
                     },
                 },
             )
         )
-    for lvl in ERD_LEVELS:
-        if level_Buckets[lvl]:
-            parts.append(
-                ddn.declaration(
-                    'view',
-                    f'erd_{lvl}',
-                    'ddn@1',
-                    {
-                        'title': f'{title} ({lvl})',
-                        'selection': {
-                            'include': [
-                                ddn.ref(i) for i in level_Buckets[lvl]
-                            ]
-                        },
-                    },
-                )
-            )
     return ''.join(parts)
+
+
+DESTRUCTIVE_METADATA_WARNING = (
+    'Metadata changes may lose data and are not reversible: the metadata can '
+    'be recreated, but the data it referred to cannot unless the target '
+    'database retains version history (for example ScratchBird). Review the '
+    'native operation plan before applying.'
+)
+
+
+def _quote_sql_ident(name: str, engine: str) -> str:
+    if engine in ('mysql', 'mariadb'):
+        return '`' + name.replace('`', '``') + '`'
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _extract_physical_erd_model(ddn_text: str) -> dict[str, Any]:
+    """Extract deployable physical tables, columns and FKs by UUIDv7 ID."""
+    if not ddn_text or not ddn_text.strip():
+        return {'tables': {}, 'relations': {}}
+    blocks = _parse_blocks(ddn_text)
+    annotations: dict[str, dict[str, str]] = {}
+    for block in blocks:
+        if block['kind'] == 'element' and block['role'] == 'record':
+            subj = re.search(
+                r'^\s+subject_id\s+"((?:[^"]|"")+)"\s*$',
+                block['body'],
+                re.MULTILINE,
+            )
+            if subj:
+                sid = subj.group(1).replace('""', '"')
+                props: dict[str, str] = {}
+                for m in re.finditer(
+                    r'^\s+([a-zA-Z0-9_]+)\s+"((?:[^"]|"")+)"\s*$',
+                    block['body'],
+                    re.MULTILINE,
+                ):
+                    props[m.group(1)] = m.group(2).replace('""', '"')
+                annotations[sid] = props
+
+    fields_by_id: dict[str, dict[str, Any]] = {}
+    tables_by_id: dict[str, dict[str, Any]] = {}
+    relations_by_id: dict[str, dict[str, Any]] = {}
+
+    for block in blocks:
+        bid = block['id']
+        if block['kind'] == 'element' and block['role'] == 'field':
+            title_m = re.search(
+                r'^\s+title\s+"((?:[^"]|"")+)"\s*$',
+                block['body'],
+                re.MULTILINE,
+            )
+            dtype_m = re.search(
+                r'^\s+datatype\s+"((?:[^"]|"")+)"\s*$',
+                block['body'],
+                re.MULTILINE,
+            )
+            null_m = re.search(
+                r'^\s+nullable\s+(true|false)\s*$',
+                block['body'],
+                re.MULTILINE,
+            )
+            ann = annotations.get(bid, {})
+            fields_by_id[bid] = {
+                'id': bid,
+                'name': (
+                    title_m.group(1).replace('""', '"') if title_m else bid
+                ),
+                'datatype': (
+                    dtype_m.group(1).replace('""', '"')
+                    if dtype_m
+                    else 'TEXT'
+                ),
+                'nullable': (
+                    null_m.group(1) == 'true' if null_m else True
+                ),
+                'parent_id': ann.get('parent_id'),
+                'modelling_level': ann.get('modelling_level'),
+            }
+        elif block['kind'] == 'element' and block['role'] == 'table':
+            ann = annotations.get(bid, {})
+            lvl = ann.get('modelling_level')
+            # Conceptual whiteboard sketches and deployment nodes are not SQL
+            # tables (DDN-DB-007).
+            if lvl in ('conceptual', 'logical', 'deployment'):
+                continue
+            title_m = re.search(
+                r'^\s+title\s+"((?:[^"]|"")+)"\s*$',
+                block['body'],
+                re.MULTILINE,
+            )
+            member_ids = [
+                m.group(1).replace('""', '"')
+                for m in re.finditer(
+                    r'^\s+item\n\s+id\s+"((?:[^"]|"")+)"',
+                    block['body'],
+                    re.MULTILINE,
+                )
+            ]
+            tables_by_id[bid] = {
+                'id': bid,
+                'name': (
+                    title_m.group(1).replace('""', '"') if title_m else bid
+                ),
+                'engine': ann.get('engine'),
+                'member_ids': member_ids,
+                'columns': {},
+            }
+        elif block['kind'] == 'relation':
+            ann = annotations.get(bid, {})
+            link_kind = ann.get('link_kind')
+            if link_kind in ('traces_to', 'refines', 'implements', 'hosts'):
+                continue
+            eps = [
+                m.group(1).replace('""', '"')
+                for m in re.finditer(
+                    r'^\s+definition\n\s+id\s+"((?:[^"]|"")+)"',
+                    block['body'],
+                    re.MULTILINE,
+                )
+            ]
+            title_m = re.search(
+                r'^\s+title\s+"((?:[^"]|"")+)"\s*$',
+                block['body'],
+                re.MULTILINE,
+            )
+            if len(eps) >= 2:
+                relations_by_id[bid] = {
+                    'id': bid,
+                    'name': (
+                        title_m.group(1).replace('""', '"')
+                        if title_m
+                        else bid
+                    ),
+                    'source': eps[0],
+                    'target': eps[1],
+                }
+
+    for fid, fobj in fields_by_id.items():
+        pid = fobj.get('parent_id')
+        if pid and pid in tables_by_id:
+            tables_by_id[pid]['columns'][fid] = fobj
+
+    for tbl in tables_by_id.values():
+        for mid in tbl['member_ids']:
+            if mid in fields_by_id and mid not in tbl['columns']:
+                tbl['columns'][mid] = fields_by_id[mid]
+
+    valid_relations = {
+        rid: rel
+        for rid, rel in relations_by_id.items()
+        if rel['source'] in tables_by_id and rel['target'] in tables_by_id
+    }
+    return {'tables': tables_by_id, 'relations': valid_relations}
+
+
+def preview_erd_alter_plan(
+    store: DesignStore,
+    design_id: str,
+    *,
+    base_version: int | None = None,
+    desired_version: int | None = None,
+    selected_difference_ids: list[str] | None = None,
+    target_engine: str = 'sqlite',
+    catalog_snapshot: dict[str, Any] | None = None,
+    handoff_options: dict[str, bool] | None = None,
+) -> dict[str, Any]:
+    """Compare two ERD states by stable UUIDv7 element identity and build a
+    reviewable alter plan (owner direction 2026-11-08 & 2026-11-10).
+
+    Never executes statements directly; changes reach a database only through
+    ScratchRobin's native-operation review.
+    """
+    eng = (target_engine or 'sqlite').lower()
+    if eng not in DEFAULT_LOGICAL_TYPE_MAPS:
+        raise DesignStoreError(f'Unsupported target engine: {target_engine!r}')
+
+    head_design = store.get_design(design_id, version=desired_version)
+    des_ver = head_design['version']['version']
+    des_ddn = head_design['version']['ddn_text']
+
+    resolved_base_ver = (
+        base_version
+        if base_version is not None
+        else (head_design['active_version'] or 0)
+    )
+    if resolved_base_ver > 0:
+        base_design = store.get_design(design_id, version=resolved_base_ver)
+        base_ddn = base_design['version']['ddn_text']
+    else:
+        base_ddn = ''
+
+    before = _extract_physical_erd_model(base_ddn)
+    after = _extract_physical_erd_model(des_ddn)
+
+    differences: list[dict[str, Any]] = []
+
+    # 1. Created, renamed and modified tables + columns
+    for tid, t_after in sorted(
+        after['tables'].items(), key=lambda item: (item[1]['name'], item[0])
+    ):
+        t_before = before['tables'].get(tid)
+        q_table = _quote_sql_ident(t_after['name'], eng)
+        if t_before is None:
+            col_defs = []
+            for col in t_after['columns'].values():
+                q_col = _quote_sql_ident(col['name'], eng)
+                nn = '' if col['nullable'] else ' NOT NULL'
+                col_defs.append(f'{q_col} {col["datatype"]}{nn}')
+            cols_sql = ', '.join(col_defs) if col_defs else 'id INTEGER'
+            differences.append({
+                'difference_id': f'create_table:{tid}',
+                'element_id': tid,
+                'change_kind': 'create_table',
+                'object_name': t_after['name'],
+                'destructive': False,
+                'statement': f'CREATE TABLE {q_table} ({cols_sql});',
+            })
+            continue
+
+        if t_before['name'] != t_after['name']:
+            q_old = _quote_sql_ident(t_before['name'], eng)
+            differences.append({
+                'difference_id': f'rename_table:{tid}',
+                'element_id': tid,
+                'change_kind': 'rename_table',
+                'object_name': f'{t_before["name"]} -> {t_after["name"]}',
+                'from_name': t_before['name'],
+                'to_name': t_after['name'],
+                'destructive': False,
+                'statement': (
+                    f'ALTER TABLE {q_old} RENAME TO {q_table};'
+                ),
+            })
+
+        for cid, c_after in sorted(
+            t_after['columns'].items(),
+            key=lambda item: (item[1]['name'], item[0]),
+        ):
+            c_before = t_before['columns'].get(cid)
+            q_col = _quote_sql_ident(c_after['name'], eng)
+            if c_before is None:
+                nn = '' if c_after['nullable'] else ' NOT NULL'
+                differences.append({
+                    'difference_id': f'add_column:{cid}',
+                    'element_id': cid,
+                    'parent_id': tid,
+                    'change_kind': 'add_column',
+                    'object_name': f'{t_after["name"]}.{c_after["name"]}',
+                    'destructive': False,
+                    'statement': (
+                        f'ALTER TABLE {q_table} ADD COLUMN '
+                        f'{q_col} {c_after["datatype"]}{nn};'
+                    ),
+                })
+                continue
+
+            if c_before['name'] != c_after['name']:
+                q_cold = _quote_sql_ident(c_before['name'], eng)
+                differences.append({
+                    'difference_id': f'rename_column:{cid}',
+                    'element_id': cid,
+                    'parent_id': tid,
+                    'change_kind': 'rename_column',
+                    'object_name': (
+                        f'{t_after["name"]}.{c_before["name"]} -> '
+                        f'{c_after["name"]}'
+                    ),
+                    'from_name': c_before['name'],
+                    'to_name': c_after['name'],
+                    'destructive': False,
+                    'statement': (
+                        f'ALTER TABLE {q_table} RENAME COLUMN '
+                        f'{q_cold} TO {q_col};'
+                    ),
+                })
+
+            if (
+                c_before['datatype'] != c_after['datatype']
+                or c_before['nullable'] != c_after['nullable']
+            ):
+                nn = '' if c_after['nullable'] else ' NOT NULL'
+                differences.append({
+                    'difference_id': f'alter_column:{cid}',
+                    'element_id': cid,
+                    'parent_id': tid,
+                    'change_kind': 'alter_column',
+                    'object_name': f'{t_after["name"]}.{c_after["name"]}',
+                    'before': {
+                        'datatype': c_before['datatype'],
+                        'nullable': c_before['nullable'],
+                    },
+                    'after': {
+                        'datatype': c_after['datatype'],
+                        'nullable': c_after['nullable'],
+                    },
+                    'destructive': True,
+                    'statement': (
+                        f'ALTER TABLE {q_table} ALTER COLUMN '
+                        f'{q_col} TYPE {c_after["datatype"]}{nn};'
+                    ),
+                })
+
+        for cid, c_before in sorted(
+            t_before['columns'].items(),
+            key=lambda item: (item[1]['name'], item[0]),
+        ):
+            if cid not in t_after['columns']:
+                q_cold = _quote_sql_ident(c_before['name'], eng)
+                differences.append({
+                    'difference_id': f'drop_column:{cid}',
+                    'element_id': cid,
+                    'parent_id': tid,
+                    'change_kind': 'drop_column',
+                    'object_name': f'{t_after["name"]}.{c_before["name"]}',
+                    'destructive': True,
+                    'statement': (
+                        f'ALTER TABLE {q_table} DROP COLUMN {q_cold};'
+                    ),
+                })
+
+    # 2. Dropped tables
+    for tid, t_before in sorted(
+        before['tables'].items(), key=lambda item: (item[1]['name'], item[0])
+    ):
+        if tid not in after['tables']:
+            q_old = _quote_sql_ident(t_before['name'], eng)
+            differences.append({
+                'difference_id': f'drop_table:{tid}',
+                'element_id': tid,
+                'change_kind': 'drop_table',
+                'object_name': t_before['name'],
+                'destructive': True,
+                'statement': f'DROP TABLE {q_old};',
+            })
+
+    # 3. Added and dropped foreign-key relations
+    for rid, rel_after in sorted(after['relations'].items()):
+        if rid not in before['relations']:
+            src_tbl = after['tables'][rel_after['source']]['name']
+            tgt_tbl = after['tables'][rel_after['target']]['name']
+            differences.append({
+                'difference_id': f'add_foreign_key:{rid}',
+                'element_id': rid,
+                'change_kind': 'add_foreign_key',
+                'object_name': f'{src_tbl} -> {tgt_tbl}',
+                'destructive': False,
+                'statement': (
+                    f'-- Review native foreign key {rel_after["name"]}: '
+                    f'{_quote_sql_ident(src_tbl, eng)} REFERENCES '
+                    f'{_quote_sql_ident(tgt_tbl, eng)}'
+                ),
+            })
+
+    for rid, rel_before in sorted(before['relations'].items()):
+        if rid not in after['relations']:
+            src_tbl = before['tables'][rel_before['source']]['name']
+            tgt_tbl = before['tables'][rel_before['target']]['name']
+            differences.append({
+                'difference_id': f'drop_foreign_key:{rid}',
+                'element_id': rid,
+                'change_kind': 'drop_foreign_key',
+                'object_name': f'{src_tbl} -> {tgt_tbl}',
+                'destructive': True,
+                'statement': (
+                    f'-- Review dropping foreign key {rel_before["name"]} '
+                    f'on {_quote_sql_ident(src_tbl, eng)}'
+                ),
+            })
+
+    selected_set = (
+        set(selected_difference_ids)
+        if selected_difference_ids is not None
+        else {d['difference_id'] for d in differences}
+    )
+    selected_diffs = [
+        d for d in differences if d['difference_id'] in selected_set
+    ]
+
+    native_handoff = None
+    if catalog_snapshot is not None and resolved_base_ver > 0:
+        from ..workspace import firebird_relational_review
+
+        orig_ws = ddn_text_to_workspace(
+            base_ddn, entry=f'{head_design["key"]}.ddn'
+        )
+        des_ws = ddn_text_to_workspace(
+            des_ddn, entry=f'{head_design["key"]}.ddn'
+        )
+        native_handoff = firebird_relational_review.handoff(
+            catalog_snapshot,
+            orig_ws,
+            des_ws,
+            engine=eng,
+            **(handoff_options or {}),
+        )
+
+    return {
+        'design_id': design_id,
+        'base_version': resolved_base_ver,
+        'desired_version': des_ver,
+        'target_engine': eng,
+        'differences': differences,
+        'selected_difference_ids': [
+            d['difference_id'] for d in selected_diffs
+        ],
+        'statements': [d['statement'] for d in selected_diffs],
+        'script': '\n'.join(d['statement'] for d in selected_diffs),
+        'has_destructive_changes': any(
+            d['destructive'] for d in selected_diffs
+        ),
+        'requires_native_review': True,
+        'applied_immediately': False,
+        'destructive_warning': DESTRUCTIVE_METADATA_WARNING,
+        'native_handoff': native_handoff,
+    }
 
 
 def compute_system_diagram_drift(

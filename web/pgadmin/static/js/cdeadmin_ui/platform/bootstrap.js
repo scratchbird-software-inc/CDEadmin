@@ -13,6 +13,9 @@ import {
   DDN_MODULE_ID, PROJECT_ASSET_SERVICE_ID, registerDDNModule,
 } from '../integrations/ddn/module';
 import {
+  DESIGN_STORE_SERVICE_ID, ERD_MODULE_ID, registerERDModule,
+} from '../integrations/ddn/erdModule';
+import {
   PLATFORM_SERVICE_IDS, registerCorePlatformServices,
 } from './PlatformServices';
 import {
@@ -129,6 +132,10 @@ export function initializeCDEadminPlatform({api, services: serviceOptions}={}) {
       !moduleRegistry.has(DDN_MODULE_ID)) {
     registerDDNModule({modules: moduleRegistry, services: serviceRegistry, api});
   }
+  if(!serviceRegistry.has(DESIGN_STORE_SERVICE_ID) ||
+      !moduleRegistry.has(ERD_MODULE_ID)) {
+    registerERDModule({modules: moduleRegistry, services: serviceRegistry, api});
+  }
   if(!moduleRegistry.has(SCHEMA_COMPARE_MODULE_ID)) registerSchemaCompareModule({
     modules: moduleRegistry, services: serviceRegistry, api,
   });
@@ -178,6 +185,7 @@ export function initializeCDEadminPlatform({api, services: serviceOptions}={}) {
       moduleRegistry.activate(CORE_MODULE_ID),
       moduleRegistry.activate(PROJECTS_MODULE_ID),
       moduleRegistry.activate(DDN_MODULE_ID),
+      moduleRegistry.activate(ERD_MODULE_ID),
       moduleRegistry.activate(SCHEMA_COMPARE_MODULE_ID),
       moduleRegistry.activate(LINEAGE_MODULE_ID),
       moduleRegistry.activate(QUALITY_MODULE_ID),
@@ -199,6 +207,7 @@ export function initializeCDEadminPlatform({api, services: serviceOptions}={}) {
     return Object.freeze({
       modules: moduleRegistry, services: Object.freeze(services),
       projectAssets: await serviceRegistry.resolve(PROJECT_ASSET_SERVICE_ID),
+      designStore: await serviceRegistry.resolve(DESIGN_STORE_SERVICE_ID),
       schemaCompare: await serviceRegistry.resolve(SCHEMA_COMPARE_SERVICE_ID),
       lineage: await serviceRegistry.resolve(LINEAGE_SERVICE_ID),
       quality: await serviceRegistry.resolve(QUALITY_SERVICE_ID),

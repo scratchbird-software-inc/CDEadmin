@@ -44,6 +44,7 @@ from .service import (
 )
 from .shared_ddn import (
     DEFAULT_LOGICAL_TYPE_MAPS,
+    DESTRUCTIVE_METADATA_WARNING,
     DIALECT_EXPANSION_ORDER,
     ERD_LEVELS,
     GLOBAL_TILE_CACHE,
@@ -57,6 +58,7 @@ from .shared_ddn import (
     convert_erd_design_engine,
     copy_type_map,
     normalize_to_logical_type,
+    preview_erd_alter_plan,
     propose_system_diagram_change,
 )
 
@@ -65,6 +67,7 @@ __all__ = (
     'BINDING_STATES',
     'DEFAULT_LOGICAL_TYPE_MAPS',
     'DESIGN_KINDS',
+    'DESTRUCTIVE_METADATA_WARNING',
     'DIALECT_EXPANSION_ORDER',
     'ERD_LEVELS',
     'GIT_SYNC_STATES',
@@ -97,6 +100,7 @@ __all__ = (
     'inspect_ddn_text',
     'is_uuid7',
     'normalize_to_logical_type',
+    'preview_erd_alter_plan',
     'process_for_app',
     'propose_system_diagram_change',
     'sha256_text',
