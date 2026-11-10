@@ -130,6 +130,13 @@ Owner decisions, 2026-11-09:
 - For the initial uses, the local server-side store is SQLite, not JSON
   documents, with DDN import and export. The planned move to SBsql comes
   later.
+- A full storage redesign is needed across all of these items: BI
+  questions and dashboards, ERD and data models, the screen mesh designer
+  and the cube designer. Today each keeps JSON documents in the
+  configuration database; the redesign gives them one store (SQLite first)
+  holding the DDN current state, its versions and save points, bindings by
+  element identity, and DDN import and export. The redesign is planned
+  before any of the four designers is implemented.
 
 ## Cube design through DDN (owner direction, 2026-11-08)
 
