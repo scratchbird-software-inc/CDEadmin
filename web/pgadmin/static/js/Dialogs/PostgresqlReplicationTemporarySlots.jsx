@@ -60,7 +60,13 @@ export default function PostgresqlReplicationTemporarySlots({post,endpointUrl}) 
     if(!resource?.job_id || !active(resource.state))return undefined;
     let live=true,timer;const token=serial.current;
     const poll=async () => {
-      try {const value=await call('status',{job_id:resource.job_id});if(!live || token!==serial.current)return;setResource(value);if(active(value.state))timer=setTimeout(poll,700);}
+      try {
+        const value=await call('status',{job_id:resource.job_id});if(!live || token!==serial.current)return;
+        // A poll answers for the job it asked about. If the user has moved to another
+        // resource meanwhile (for example a reviewed consumer), keep that one.
+        setResource(current => (current?.job_id===value.job_id ? value : current));
+        if(active(value.state))timer=setTimeout(poll,700);
+      }
       catch(failure) {if(live && token===serial.current)setError(failure.response?.data?.errormsg || failure.message);}
     };
     timer=setTimeout(poll,400);return () => {live=false;clearTimeout(timer);};
