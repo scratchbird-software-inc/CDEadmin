@@ -118,6 +118,19 @@ differ, but all of them produce DDN and all display it through the same
 underlying viewer. Build task behaviour on the common libraries; do not give
 a tool its own rendering or its own DDN handling.
 
+Owner decisions, 2026-11-09:
+- The planning for the cube, ERD, BI and screen mesh designers found areas
+  where the DDN dialect cannot hold all the data those tasks need. Expand
+  the dialect to hold it, as part of ScratchRobin's own DDN capture (the
+  consumer-patch rule above), rather than keeping task data outside DDN.
+  Known gaps so far: wireframe controls beyond the seven-control stencil
+  (grid, dropdown, radio, tabs), control-to-data bindings, regions on an
+  image, screen-to-screen navigation, dimensional (cube) elements, and
+  BI question and dashboard content.
+- For the initial uses, the local server-side store is SQLite, not JSON
+  documents, with DDN import and export. The planned move to SBsql comes
+  later.
+
 ## Cube design through DDN (owner direction, 2026-11-08)
 
 Planning only: implementation waits until the PostgreSQL provider-tree
