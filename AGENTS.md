@@ -105,6 +105,19 @@ migration statements. Preserve exact types, identities, names and dependencies.
 A view filter is never deletion intent. Current DDN illustrative SQL export and
 visual diff views do not constitute deployable native schema generation/diff.
 
+## Shared DDN designer and viewer libraries (owner direction, 2026-11-09)
+
+Unlike the standard DDN tools, ScratchRobin's DDN work is done mostly on the
+server: server-side code, not client-side JavaScript, performs the
+calculations, tiles larger diagrams and does the designer work. There is one
+shared set of libraries, a server-side set and a client-side set, for the
+designer and the viewer. Each task-specific tool (the cube designer, the ERD
+and data modelling designer, the BI designer, the screen mesh designer) uses
+those libraries differently: their appearance, interaction and behaviour
+differ, but all of them produce DDN and all display it through the same
+underlying viewer. Build task behaviour on the common libraries; do not give
+a tool its own rendering or its own DDN handling.
+
 ## Cube design through DDN (owner direction, 2026-11-08)
 
 Planning only: implementation waits until the PostgreSQL provider-tree
