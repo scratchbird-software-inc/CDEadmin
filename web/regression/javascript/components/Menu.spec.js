@@ -91,8 +91,17 @@ describe('Menu', ()=>{
       expect(Number.parseFloat(childMenu.style.maxHeight)).toBeLessThanOrEqual(window.innerHeight);
       // The library portals submenus out of a scrollable parent list.
       expect(parent.contains(childMenu)).toBe(false);
+      // Opening a submenu moves the library's hover to its first item, on a short timer
+      // when focus is captured. Let that finish before navigating, or the timer's hover
+      // change lands after End and Enter then finds no hovered item.
+      const first = screen.getByRole('menuitem', {name: 'First command'});
+      await waitFor(() => expect(first).toHaveAttribute('tabindex', '0'));
       fireEvent.keyDown(childMenu, {key: 'End'});
-      await waitFor(() => expect(last).toHaveFocus());
+      // Enter acts only on the hovered item (tabIndex 0), set one render after focus.
+      await waitFor(() => {
+        expect(last).toHaveFocus();
+        expect(last).toHaveAttribute('tabindex', '0');
+      });
       fireEvent.keyDown(last, {key: 'Enter'});
       expect(execute).toHaveBeenCalledTimes(1);
     });
