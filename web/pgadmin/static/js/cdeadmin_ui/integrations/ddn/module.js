@@ -134,19 +134,22 @@ export function ddnModuleDefinition() {
         },
       ],
       commands: [
-        // The open commands need a project asset, which a bare Tools menu
-        // click cannot supply (owner direction 2026-11-08).
+        // The open commands need a project asset, which a bare menu click cannot
+        // supply (owner direction 2026-11-08). Owner direction 2026-11-08 (later):
+        // the proof-of-concept DDN viewer and designer stay off the menus; the
+        // task-specific designers are used instead. The commands remain callable
+        // from the Project Explorer and other code, so only their surface changes.
         {
           id: 'ddn.viewer.open', label: 'Open in DDN Viewer',
           description: 'Open the selected DDN project asset read-only.',
-          iconKey: 'tool.erd', surfaces: ['project'],
+          iconKey: 'tool.erd', surfaces: ['toolbar'],
           validateArguments: assetArguments,
           execute: openCommand('diagram.ddn.viewer'),
         },
         {
           id: 'ddn.designer.open', label: 'Open in DDN Designer',
           description: 'Edit the selected DDN project asset.',
-          iconKey: 'tool.erd', surfaces: ['project'],
+          iconKey: 'tool.erd', surfaces: ['toolbar'],
           permission: ['project.asset.edit'],
           validateArguments: assetArguments,
           execute: openCommand('diagram.ddn.designer'),

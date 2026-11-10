@@ -68,7 +68,10 @@ describe('Tools menu module commands', () => {
       'ddn.designer.save']) {
       expect(byId[id].surfaces).toEqual(['toolbar']);
     }
-    expect(byId['ddn.designer.open'].surfaces).toEqual(['project']);
+    // Owner direction 2026-11-08: the proof-of-concept DDN viewer and designer
+    // are off the menus; the open commands stay callable from the Project Explorer.
+    expect(byId['ddn.designer.open'].surfaces).toEqual(['toolbar']);
+    expect(byId['ddn.viewer.open'].surfaces).toEqual(['toolbar']);
   });
 
   it('runs every Tools command with no arguments and no session', async () => {

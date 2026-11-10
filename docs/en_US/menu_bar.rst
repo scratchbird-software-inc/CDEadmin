@@ -46,6 +46,13 @@ progress (for example *Apply Change Plan*, *Execute Failover Plan* or
 *Run Pipeline*) are run from inside that tool, where the work they act on
 is known; the same applies to the DDN view and designer actions.
 
+Owner direction, 2026-11-08 (later): *Open in DDN Viewer* and *Open in DDN
+Designer* are no longer offered on the menus. The DDN viewer and designer
+they open are a proof of concept; the task-specific designers (diagrams,
+and the planned cube, data model, BI and screen designers) are used
+instead. Diagrams still open from the Diagrams tool and the Project
+Explorer, which hand the asset to the viewer or designer themselves.
+
 Window
 ======
 
