@@ -130,6 +130,20 @@ Where PostgreSQL fits
 
 PostgreSQL keeps its SQL templates and backend, but its UI moves behind the same descriptor so the six engines are treated identically by the shell. Practically: the PG ``*.ui.js`` schemas are the reference for the canonical tab vocabulary, and are migrated last, family by family, once the shared editor renders the other five engines. Until then the shell routes ``legacy_preserved`` kinds to the existing pgAdmin dialogs. Nothing PG currently does regresses; the migration is validated by the existing 70 ``*.ui.spec.js`` tests plus the new family tests.
 
+Owner decision, 2026-11-10 (PostgreSQL M2, per-server tree choice): a PostgreSQL
+registration keeps its preserved workflow (inherited Connect, driver, saved
+password and every inherited tool) and can be browsed, per server, through the
+provider tree instead of the inherited object tree (*Browse with the provider
+tree* / *Browse with the inherited object tree* on the server menu). The choice
+is presentation only. Under the provider tree the database nodes are the
+preserved catalog's targets by OID and object nodes come from the shared
+workspace navigator, each carrying the inherited identity chain. Registering
+PostgreSQL as a provider endpoint was surveyed the same day and cannot verify
+today (the endpoint route carries no server id, the provider reads the version
+from a driver only the inherited Connect opens, and saved passwords are stored
+as credential bundles the driver would pass through), so the opt-in lives on the
+preserved registration rather than on a second manifest.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

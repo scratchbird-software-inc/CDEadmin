@@ -401,6 +401,15 @@ ScratchRobin; every version the project supports is. The supported set
 changes over time, so check the project's versioning policy when
 implementing.
 
+Owner decision, 2026-11-10 (M2 per-server opt-in): option 1. The PostgreSQL
+registration stays preserved (inherited Connect, driver, saved password and
+tools) and is browsed through the provider tree by a per-server choice kept on
+the endpoint's extension profile; no second provider-endpoint manifest. Reason:
+a survey found a PostgreSQL provider endpoint cannot verify today and would
+lose the inherited tools until M6/M7, contradicting "nothing regresses while
+parity is incomplete". Under this option endpoint verification stays the
+inherited Connect; the provider's discovery records the runtime after it.
+
 ## Engine expansion to full parity (owner direction, 2026-10-29)
 
 Dolt, TiDB, Vitess, CockroachDB, YugabyteDB YSQL, immudb and XTDB are to reach
