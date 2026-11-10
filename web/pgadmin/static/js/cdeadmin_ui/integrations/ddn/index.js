@@ -35,3 +35,11 @@ export {
   ddnModuleDefinition,
   registerDDNModule,
 } from './module.js';
+export {
+  DESIGN_KINDS,
+  DESIGN_SAVE_POINTS,
+  DesignStoreClient,
+  DesignStoreClientError,
+  ERD_MODELLING_LEVELS,
+  SharedDDNTaskController,
+} from './sharedDesignLibrary.js';

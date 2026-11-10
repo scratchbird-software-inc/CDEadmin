@@ -127,6 +127,22 @@ remote geography, routing or geocoding.
    bridge directly into ``erd`` designs with ``resource_identity`` and
    ``binding`` rows.
 
+.. note:: Added 2026-11-10 (owner decision). The shared server-side and
+   client-side DDN libraries (``pgadmin.cdeadmin.design_store.shared_ddn``,
+   ``pgadmin.cdeadmin.design_store.routes`` and
+   ``cdeadmin_ui/integrations/ddn/sharedDesignLibrary.js``) connect
+   ``DesignStore`` to the common DDN viewer. The server computes deterministic
+   layered layout, incremental placement (honoring pinned nodes) and spatial
+   tile partitions with content-addressed tile caching for large diagrams;
+   clients render vectors through ``DDNViewerSurface``. Accepting a version
+   requires a ScratchRobin permission (with optional Git review recorded on
+   ``acceptance``), and design dependencies pin a target version by default
+   with an opt-in to follow the latest accepted version. ERD designs support
+   four modelling levels (``conceptual``, ``logical``, ``physical``,
+   ``deployment``), neutral-logical engine-to-engine type conversion with
+   user-editable type maps and explicit loss choices, and system-diagram drift
+   overlays that route proposed changes through native operation review.
+
 Legacy source and evidence
 ==========================
 

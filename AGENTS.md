@@ -162,6 +162,26 @@ Owner decisions, 2026-11-10 (design store and physical ERD):
   store's element model.
 - Initial live checks run against SQLite, DuckDB, Firebird 5 (network and
   embedded) and MariaDB/MySQL.
+- Accepting a design version requires a ScratchRobin permission, with an
+  optional per-project Git review gate recorded in `acceptance`; included
+  designs pin the referenced version by default with an opt-in to follow
+  the latest accepted version.
+- DDN dialect expansion order: bindings and element IDs first, then
+  ERD/modelling levels, BI content, cube dimensional elements, and screen
+  mesh wireframe controls, image regions and screen navigation.
+- Server-side rendering boundary and layout: the server computes
+  deterministic layered layout, incremental placement (preserving pinned
+  nodes) and tiling metadata with server-side tile caching for large
+  diagrams, while the client renders crisp vectors through the shared DDN
+  viewer; no new unverified third-party layout library dependencies.
+- System diagrams support both generated topology and bound hand-drawn
+  landscapes with a drift overlay, and diagram-initiated changes go through
+  native operation review; legacy PostgreSQL Schema Diff stays for
+  inherited registrations until PG M7 while the cross-engine tool uses
+  "Schema Comparison"; ORM/application mapping fields are omitted (opaque
+  extension metadata is allowed); engine-to-engine conversion routes
+  through the neutral logical level with user-editable per-engine type maps
+  and explicit choices for lossy items.
 
 ## Cube design through DDN (owner direction, 2026-11-08)
 

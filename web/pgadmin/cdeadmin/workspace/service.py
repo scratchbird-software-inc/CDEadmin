@@ -4301,7 +4301,14 @@ def init_app(
     service.query_history_factory = query_history_repository
     from .firebird_design_assets import FirebirdDesignAssets
     from .assets import service_for_app as asset_service
-    service.firebird_design_assets = FirebirdDesignAssets(asset_service(app))
+    from ..design_store.routes import (
+        init_app as init_design_store_routes,
+        process_for_app as design_process_for_app,
+    )
+    project_assets = asset_service(app)
+    service.firebird_design_assets = FirebirdDesignAssets(project_assets)
+    service.design_store = init_design_store_routes(app, project_assets)
+    service.design_process = design_process_for_app(app)
     import atexit
     atexit.register(service.firebird_events.close)
     app.extensions[APP_EXTENSION_KEY] = service
