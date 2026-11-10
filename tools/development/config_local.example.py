@@ -14,5 +14,6 @@ STORAGE_DIR = os.path.join(DATA_DIR, 'storage')
 KERBEROS_CCACHE_DIR = os.path.join(DATA_DIR, 'krbccache')
 AZURE_CREDENTIAL_CACHE_DIR = os.path.join(DATA_DIR, 'azurecredentialcache')
 CDEADMIN_OPERATION_STORE_PATH = os.path.join(DATA_DIR, 'operations.json')
+CDEADMIN_DESIGN_STORE_PATH = os.path.join(DATA_DIR, 'designs.db')
 MASTER_PASSWORD_REQUIRED = True
 ALLOW_SAVE_PASSWORD = True

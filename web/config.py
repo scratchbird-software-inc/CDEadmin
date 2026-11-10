@@ -347,6 +347,10 @@ SQLITE_PATH = env('SQLITE_PATH') or \
 CDEADMIN_OPERATION_STORE_PATH = env('CDEADMIN_OPERATION_STORE_PATH') or \
     os.path.join(DATA_DIR, 'cdeadmin-operations.json')
 
+# Local SQLite design store for DDN-based tools (ERD, cube, BI, screen mesh).
+CDEADMIN_DESIGN_STORE_PATH = env('CDEADMIN_DESIGN_STORE_PATH') or \
+    os.path.join(DATA_DIR, 'designs.db')
+
 # Qualified SQLite recovery library on the application host. Jobs cannot supply
 # executable/library paths; recovered output stays in the registered file root.
 CDEADMIN_SQLITE_RECOVERY_LIBRARY = env('CDEADMIN_SQLITE_RECOVERY_LIBRARY') or ''

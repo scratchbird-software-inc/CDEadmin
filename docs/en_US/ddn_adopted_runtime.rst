@@ -111,6 +111,22 @@ remote geography, routing or geocoding.
    copying about 480 KB of profile data again for each runtime and its verifier.
    Verification results are unchanged.
 
+.. note:: Added 2026-11-10 (owner decision). ``pgadmin.cdeadmin.design_store``
+   provides the shared SQLite design store (``designs.db`` in ``DATA_DIR``) for
+   DDN-based tools (ERD, cube, BI questions/dashboards, screen mesh and
+   monitoring dashboards). Design, element, binding and resource-identity rows
+   use time-ordered UUIDv7 identifiers written into DDN text as ``id``. Layout
+   remains inside ``ddn_text``; binary attachments live in ``asset_blob``
+   (content-addressed by SHA-256, 16 MiB cap). Versions use directed save
+   points (``draft``, ``in_progress``, ``in_review``, ``accepted``) with
+   immutable ``design_version`` history and ``acceptance`` records. The
+   ``binding`` table tracks ``valid``, ``suspect`` and ``unknown`` link states
+   and marks bindings ``suspect`` when a bound catalog target is renamed or
+   dropped until a user confirms. Physical-schema workspaces
+   (``scratchrobin.<engine>.relations`` / ``scratchrobin.physical-schema@1``)
+   bridge directly into ``erd`` designs with ``resource_identity`` and
+   ``binding`` rows.
+
 Legacy source and evidence
 ==========================
 

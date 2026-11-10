@@ -138,6 +138,31 @@ Owner decisions, 2026-11-09:
   element identity, and DDN import and export. The redesign is planned
   before any of the four designers is implemented.
 
+Owner decisions, 2026-11-10 (design store and physical ERD):
+- Design, element, binding and resource-identity identifiers in the new
+  design store use UUIDv7 (time-ordered, written into DDN text as `id`);
+  legacy tables keep uuid4.
+- The local SQLite design store lives in a separate `designs.db` file in
+  `DATA_DIR`, with a portable schema so an external database or SBsql can
+  host it later.
+- Visual layout stays inside the main `ddn_text` document rather than a
+  separate layout column or sidecar file.
+- Binary attachments (such as screen-mesh screenshots) are stored in an
+  `asset_blob` table in `designs.db`, content-addressed by SHA-256 with a
+  16 MiB per-blob cap.
+- The `binding` table in `designs.db` is authoritative for binding validity
+  state (`valid`, `suspect`, `unknown`), while the DDN text carries the
+  target reference; when a bound catalog target is renamed or dropped,
+  affected bindings are marked `suspect` until confirmed by a user.
+- Every saved design version is retained (no automatic draft pruning).
+- BI alerts and embeds remain runtime tables without design-version history
+  (outward effects are reviewed at accept time).
+- The ERD physical level starts from the existing `ddn_database_roundtrip`
+  / `scratchrobin.physical-schema@1` vocabulary and bridges into the design
+  store's element model.
+- Initial live checks run against SQLite, DuckDB, Firebird 5 (network and
+  embedded) and MariaDB/MySQL.
+
 ## Cube design through DDN (owner direction, 2026-11-08)
 
 Planning only: implementation waits until the PostgreSQL provider-tree
