@@ -326,15 +326,28 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
         self.assertEqual('18.3',
                          result['verified_runtime']['server_version'])
         self.assertEqual(180003, self.driver.manager.version)
+        # Owner decision 2026-11-08: every version the PostgreSQL project
+        # supports is admitted, not only the tested profile version.
         self.driver.manager.version = 180004
-        with self.assertRaisesRegex(PostgreSQLProviderError,
-                                    'exact profile 18.3'):
-            self.provider.discover_endpoint({'route': {'server_id': 7}})
+        result = self.provider.discover_endpoint({'route': {'server_id': 7}})
+        self.assertEqual('18.4',
+                         result['verified_runtime']['server_version'])
+        self.driver.manager.version = 160015
+        result = self.provider.discover_endpoint({'route': {'server_id': 7}})
+        self.assertEqual('16.15',
+                         result['verified_runtime']['server_version'])
 
-    def test_endpoint_discovery_rejects_wrong_exact_runtime_or_driver(self):
-        self.driver.manager.version = 18.4
+    def test_endpoint_discovery_rejects_unsupported_runtime_or_driver(self):
+        # PostgreSQL 13's final release was 2025-11-13; the project no
+        # longer supports it, so ScratchRobin refuses it with the reason.
+        self.driver.manager.version = 130022
         with self.assertRaisesRegex(
-            PostgreSQLProviderError, 'exact profile 18.3'
+            PostgreSQLProviderError, 'no longer supported'
+        ):
+            self.provider.discover_endpoint({'route': {'server_id': 7}})
+        self.driver.manager.version = 'latest'
+        with self.assertRaisesRegex(
+            PostgreSQLProviderError, 'could not be read'
         ):
             self.provider.discover_endpoint({'route': {'server_id': 7}})
 
@@ -397,6 +410,12 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
         resource = self.provider.list_resources(parent)[0]
         self.assertEqual(resource['resource_id'], 'postgresql:pg_opfamily:91')
         self.assertEqual(resource['extensions']['postgresql']['native']['index_method'], 'btree')
+        # The inherited route chain rides every captured resource (parity
+        # matrix blocker 5); an operator family has no legacy node.
+        self.assertEqual(
+            {'sid': 7, 'did': 10, 'scid': None, 'tid': None, 'oid': 91,
+             'node_type': None},
+            resource['extensions']['postgresql']['legacy_route'])
         self.provider.capture_catalog.assert_called_once_with(parent['route'], include_system=False)
         inspected = self.provider.inspect_resource(resource)
         self.assertEqual(inspected['resource_id'], resource['resource_id'])

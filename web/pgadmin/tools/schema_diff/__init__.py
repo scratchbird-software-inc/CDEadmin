@@ -290,8 +290,11 @@ def servers():
 
         for server in get_user_server_query().filter(
                 Server.is_adhoc == 0):
-            from pgadmin.browser.server_groups.servers import _cde_registration
-            if _cde_registration(server)['workflow'] == 'provider_endpoint':
+            from pgadmin.browser.server_groups.servers import (
+                _cde_registration, inherited_postgresql_tools_apply,
+            )
+            if not inherited_postgresql_tools_apply(
+                    _cde_registration(server)):
                 continue
 
             shared_server = SharedServer.query.filter_by(

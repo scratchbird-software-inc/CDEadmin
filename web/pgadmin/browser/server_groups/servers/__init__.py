@@ -139,6 +139,21 @@ def _cde_registration(server):
     return registration_profile_for_endpoint(endpoint)
 
 
+def inherited_postgresql_tools_apply(profile):
+    """Whether the inherited PostgreSQL tools may list this registration.
+
+    Schema Diff and the Query Tool's connection switcher are PostgreSQL
+    tools driven through the psycopg3 manager. A provider endpoint of
+    another engine has no such manager and must stay off their lists; a
+    PostgreSQL provider endpoint is verified through that same manager,
+    so it stays listed (parity matrix blocker 8, owner direction
+    2026-11-08: PostgreSQL moves onto the provider tree without losing
+    its tools).
+    """
+    return (profile['workflow'] != 'provider_endpoint' or
+            profile.get('engine_id') == 'postgresql')
+
+
 def _cde_navigator_parent(profile):
     from pgadmin.browser.server_groups.engine_types import navigator_engine_id
     return f"engine_type_{navigator_engine_id(profile['engine_id'])}"
@@ -293,6 +308,20 @@ def _unsupported_operations(visual_admin, resource_kind):
     return []
 
 
+def _cde_legacy_route(gid, resource):
+    """Return the inherited route chain for a provider resource, if any.
+
+    PostgreSQL resources carry ``sid/did/scid/tid/oid`` and the legacy
+    node type from the provider; the tree adds the server group so the
+    inherited tools and dialogs can be opened from a provider node.
+    """
+    extensions = resource.get('extensions') or {}
+    chain = (extensions.get('postgresql') or {}).get('legacy_route')
+    if not isinstance(chain, dict):
+        return None
+    return {'gid': gid, **chain}
+
+
 def _cde_resource_nodes(gid, sid, profile, state, snapshot):
     """Convert provider-neutral navigator presentations to browser nodes."""
     nodes = []
@@ -393,6 +422,7 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
                 database_target_id=base_state.get('target_id'),
             ),
             'cde_authority_path': resource['authority_path'],
+            'cde_legacy_route': _cde_legacy_route(gid, resource),
             'cde_endpoint': True,
             'cde_engine_id': profile['engine_id'],
             'cde_profile_id': profile['profile_id'],

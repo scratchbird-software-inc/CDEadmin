@@ -56,8 +56,8 @@ and test outputs.
      - Source state
      - Qualification still required
    * - PostgreSQL
-     - Native administration and shared editor work; substantial current change set
-     - Requalify exact PostgreSQL 18 workflows, forms and live engine paths
+     - Native administration and shared editor work; substantial current change set. 2026-11-10: provider-tree prerequisites (M2) in progress: version admission follows the PostgreSQL project's support policy; captured provider resources carry the inherited identity chain; a PostgreSQL navigator descriptor; Schema Diff and the Query Tool list PostgreSQL provider endpoints
+     - Requalify exact PostgreSQL 18 workflows, forms and live engine paths; live check of a provider-endpoint PostgreSQL registration once the per-server opt-in exists
    * - Firebird
      - All 128 declared network administration tasks qualified through 24 native gates
      - Close the remaining Firebird acceptance backlog and browser/platform review

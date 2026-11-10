@@ -1824,14 +1824,16 @@ class EndpointService:
             raise EndpointRegistrationError(
                 'PostgreSQL must be connected before opening shared studios'
             )
+        from pgadmin.cdeadmin.providers.postgresql.support_policy import (
+            admission_error, public_version,
+        )
         native_version = manager.version
-        observed = (f'{native_version // 10000}.{native_version % 10000}'
-                    if type(native_version) is int and native_version >= 100000
-                    else str(native_version))
-        if observed != PROFILE_VERSION:
-            raise EndpointRegistrationError(
-                'connected PostgreSQL runtime does not match profile 18.3'
-            )
+        observed = public_version(native_version)
+        # Owner decision 2026-11-08: admit the versions the PostgreSQL
+        # project supports, not only the tested profile version.
+        refusal = admission_error(native_version)
+        if refusal is not None:
+            raise EndpointRegistrationError(refusal)
         identity = {
             'endpoint_id': endpoint.id,
             'endpoint_mode': 'legacy_native',

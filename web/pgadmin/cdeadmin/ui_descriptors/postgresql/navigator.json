@@ -1,7 +1,238 @@
 {
   "schema": "cdeadmin.ui-navigator.v1",
   "engine": "postgresql",
+  "notes": "Owner direction 2026-11-08 (PostgreSQL onto the provider tree, M2): groups follow the YugabyteDB navigator, which is PostgreSQL-derived, with the kinds YugabyteDB lacks added (text search, foreign data wrappers, languages, subscriptions, casts, conversions, operators). Kinds not yet declared in capabilities.json are listed so the tree order is settled before their forms arrive (M3-M5). The provider tree today groups by the visual-admin declarations; this descriptor is served in the engine bundle for consumers of cdeadmin.ui-navigator.v1.",
   "sort": "alphabetical",
-  "groups": [],
-  "kind_icons": {}
+  "groups": [
+    {
+      "group_id": "namespaces",
+      "title": "Databases and schemas",
+      "kinds": [
+        "database",
+        "schema",
+        "tablespace",
+        "extension"
+      ],
+      "order": 1
+    },
+    {
+      "group_id": "relations",
+      "title": "Tables and views",
+      "kinds": [
+        "table",
+        "partitioned-table",
+        "column",
+        "index",
+        "partitioned-index",
+        "constraint",
+        "partition",
+        "view",
+        "materialized-view",
+        "sequence",
+        "foreign-table",
+        "extended-statistics"
+      ],
+      "order": 2
+    },
+    {
+      "group_id": "programmability",
+      "title": "Types, routines and triggers",
+      "kinds": [
+        "type",
+        "domain",
+        "function",
+        "procedure",
+        "aggregate",
+        "window-function",
+        "trigger",
+        "event-trigger",
+        "rule",
+        "collation",
+        "conversion",
+        "operator",
+        "operator-class",
+        "operator-family",
+        "cast",
+        "transform",
+        "language"
+      ],
+      "order": 3
+    },
+    {
+      "group_id": "text-search",
+      "title": "Text search",
+      "kinds": [
+        "text-search-configuration",
+        "text-search-dictionary",
+        "text-search-parser",
+        "text-search-template"
+      ],
+      "order": 4
+    },
+    {
+      "group_id": "replication",
+      "title": "Replication",
+      "kinds": [
+        "publication",
+        "subscription",
+        "replica-node"
+      ],
+      "order": 5
+    },
+    {
+      "group_id": "security",
+      "title": "Security",
+      "kinds": [
+        "role",
+        "privilege",
+        "default-privileges",
+        "row-policy"
+      ],
+      "order": 6
+    },
+    {
+      "group_id": "federation",
+      "title": "Foreign data",
+      "kinds": [
+        "foreign-data-wrapper",
+        "foreign-server",
+        "user-mapping"
+      ],
+      "order": 7
+    },
+    {
+      "group_id": "storage",
+      "title": "Storage and access methods",
+      "kinds": [
+        "access-method",
+        "large-object"
+      ],
+      "order": 8
+    },
+    {
+      "group_id": "operations",
+      "title": "Jobs and schedules",
+      "kinds": [
+        "pgagent-job",
+        "pgagent-schedule",
+        "pgagent-step"
+      ],
+      "order": 9
+    },
+    {
+      "group_id": "activity",
+      "title": "Activity",
+      "kinds": [
+        "session"
+      ],
+      "order": 10
+    }
+  ],
+  "resource_children": {
+    "table": [
+      "column",
+      "index",
+      "constraint",
+      "partition",
+      "trigger",
+      "row-policy",
+      "rule"
+    ],
+    "partitioned-table": [
+      "column",
+      "index",
+      "constraint",
+      "partition",
+      "trigger",
+      "row-policy",
+      "rule"
+    ],
+    "partition": [
+      "column",
+      "index",
+      "constraint",
+      "trigger",
+      "row-policy",
+      "rule"
+    ],
+    "view": [
+      "column",
+      "trigger",
+      "rule"
+    ],
+    "materialized-view": [
+      "column",
+      "index"
+    ],
+    "foreign-table": [
+      "column",
+      "constraint",
+      "trigger"
+    ],
+    "domain": [
+      "constraint"
+    ],
+    "foreign-server": [
+      "user-mapping"
+    ],
+    "pgagent-job": [
+      "pgagent-schedule",
+      "pgagent-step"
+    ]
+  },
+  "kind_icons": {
+    "database": "object.database",
+    "schema": "object.schema",
+    "tablespace": "object.tablespace",
+    "extension": "object.extension",
+    "table": "object.table",
+    "partitioned-table": "object.table",
+    "column": "object.column",
+    "index": "object.index",
+    "partitioned-index": "object.index",
+    "constraint": "object.constraint",
+    "partition": "object.partition",
+    "view": "object.view",
+    "materialized-view": "object.materialized_view",
+    "sequence": "object.sequence",
+    "foreign-table": "object.table",
+    "extended-statistics": "object.index",
+    "type": "object.type",
+    "domain": "object.domain",
+    "function": "object.function",
+    "procedure": "object.procedure",
+    "aggregate": "object.function",
+    "window-function": "object.function",
+    "trigger": "object.trigger",
+    "event-trigger": "object.trigger",
+    "rule": "object.relationship",
+    "collation": "object.collation",
+    "conversion": "object.type",
+    "operator": "object.function",
+    "operator-class": "object.index",
+    "operator-family": "object.index",
+    "cast": "object.type",
+    "transform": "object.type",
+    "language": "object.function",
+    "text-search-configuration": "object.type",
+    "text-search-dictionary": "object.type",
+    "text-search-parser": "object.type",
+    "text-search-template": "object.type",
+    "publication": "object.publication",
+    "subscription": "object.replication",
+    "replica-node": "object.node",
+    "role": "object.role",
+    "privilege": "object.privilege",
+    "default-privileges": "object.privilege",
+    "row-policy": "object.privilege",
+    "foreign-data-wrapper": "object.server-link",
+    "foreign-server": "object.server-link",
+    "user-mapping": "object.role",
+    "access-method": "object.index",
+    "large-object": "object.filespace",
+    "pgagent-job": "object.job",
+    "pgagent-schedule": "object.job",
+    "pgagent-step": "object.job",
+    "session": "object.session"
+  }
 }

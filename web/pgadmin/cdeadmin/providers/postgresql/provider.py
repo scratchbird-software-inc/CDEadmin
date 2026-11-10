@@ -54,6 +54,8 @@ from .native_admin import (
     PostgreSQLNativeAdminError, compile_native_admin,
 )
 from .catalog_capture import CAPTURE_RESOURCE_KINDS
+from .support_policy import admission_error, public_version
+from .legacy_identity import legacy_route, schema_oids
 from .preserved_surface import (
     SURFACE_ID, adapt_catalog, concept_declarations, administration_operations,
 )
@@ -879,16 +881,13 @@ class PostgreSQLProvider:
         # The preserved driver exposes libpq's server_version integer;
         # template selection must retain that integer, but profile identity
         # uses PostgreSQL's public major.minor release notation.
-        runtime_version = (
-            f'{native_version // 10000}.{native_version % 10000}'
-            if isinstance(native_version, int) and native_version >= 100000
-            else str(native_version)
-        )
+        runtime_version = public_version(native_version)
         driver_version = str(self._driver.version())
-        if runtime_version != PROFILE_VERSION:
-            raise PostgreSQLProviderError(
-                'PostgreSQL runtime does not match exact profile 18.3'
-            )
+        # Owner decision 2026-11-08: admit the versions the PostgreSQL
+        # project supports (support_policy), not only the tested profile.
+        refusal = admission_error(native_version)
+        if refusal is not None:
+            raise PostgreSQLProviderError(refusal)
         if driver_version not in APPROVED_DRIVER_VERSIONS:
             raise PostgreSQLProviderError(
                 'psycopg runtime is outside the approved exact versions'
@@ -941,6 +940,9 @@ class PostgreSQLProvider:
 
     def _captured_resources(self, parent, route):
         capture = self.capture_catalog(route, include_system=False)
+        # Legacy identity chain (parity matrix blocker 5): the schema OIDs
+        # come from the captured namespaces, so the chain costs no query.
+        schemas = schema_oids(capture['resources'])
         result = []
         for item in capture['resources']:
             native = copy.deepcopy(item['native'])
@@ -969,7 +971,10 @@ class PostgreSQLProvider:
                 'extensions': {'postgresql': {
                     'server_id': route['server_id'], 'database_id': route['database_id'],
                     'catalog_kind': item['resource_kind'], 'object_id': native['oid'],
-                    'capture_identity': True, 'native': normalize_resource_properties(native)}}})
+                    'capture_identity': True, 'native': normalize_resource_properties(native),
+                    'legacy_route': legacy_route(
+                        route['server_id'], route['database_id'],
+                        item['resource_kind'], item['native'], schemas)}}})
         return result
 
     def _resource(self, parent, route, catalog_kind, row):

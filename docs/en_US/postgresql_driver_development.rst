@@ -9,7 +9,20 @@ a synchronous psycopg connection; a worker executes SQL and publishes ordered
 result pages. The preserved Query Tool retains its separate execution path.
 
 The current admitted server profile is PostgreSQL 18.3. Approved psycopg
-versions are 3.2.13 and 3.3.4. Install project requirements, the platform's libpq
+versions are 3.2.13 and 3.3.4.
+
+Owner decision, 2026-11-08 (recorded 2026-11-10): the server versions a
+registration may connect are no longer only the profile version. ScratchRobin
+admits every PostgreSQL version the PostgreSQL project supports and refuses a
+version the project has retired, with the reason and the final release date.
+The table of supported majors and the date it was read live in
+``providers/postgresql/support_policy.py``; a test checks it against the
+project's five-year rule. The profile version above still names the version
+the dialect, metrics and template contracts were qualified on; whether a
+feature exists on an admitted version is decided per feature by its own
+version gate, never assumed from admission.
+
+Install project requirements, the platform's libpq
 runtime (or the admitted psycopg binary distribution) and PostgreSQL client
 utilities matching the managed server for native backup/restore workflows.
 The portable driver gate uses no Docker. Windows and macOS teams should run

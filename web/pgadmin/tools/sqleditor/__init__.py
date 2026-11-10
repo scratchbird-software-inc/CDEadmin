@@ -2529,6 +2529,7 @@ def get_new_connection_data(sgid=None, sid=None):
         driver = get_driver(PG_DEFAULT_DRIVER)
         from pgadmin.browser.server_groups.servers import (
             server_icon_and_background, _cde_registration,
+            inherited_postgresql_tools_apply,
         )
         server_groups = get_server_groups_for_user()
         server_group_data = {server_group.name: [] for server_group in
@@ -2538,8 +2539,10 @@ def get_new_connection_data(sgid=None, sid=None):
 
         for server in servers:
             # This dialog opens the inherited PostgreSQL query tool. Other
-            # engines open their provider-native query workspace instead.
-            if _cde_registration(server)['workflow'] == 'provider_endpoint':
+            # engines open their provider-native query workspace instead;
+            # a PostgreSQL provider endpoint keeps this tool.
+            if not inherited_postgresql_tools_apply(
+                    _cde_registration(server)):
                 continue
             manager = driver.connection_manager(server.id)
             # An instance-only registration has no default database. Listing
