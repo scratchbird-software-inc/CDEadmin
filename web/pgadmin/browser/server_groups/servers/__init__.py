@@ -318,6 +318,54 @@ def _unsupported_operations(visual_admin, resource_kind):
     return []
 
 
+# Server-level collections of the inherited PostgreSQL tree, offered on the
+# provider tree with the inherited labels (M3, 2026-11-11).
+_PROVIDER_TREE_SERVER_GROUPS = (
+    ('role', 'Login/Group Roles'),
+    ('tablespace', 'Tablespaces'),
+)
+
+
+def _provider_tree_server_groups(gid, sid, profile, server):
+    """Group nodes for roles and tablespaces under a provider-tree server.
+
+    Their children come from the provider navigator at server scope,
+    where the PostgreSQL provider lists the inherited roles and
+    tablespaces templates' rows with their identity chains.
+    """
+    nodes = []
+    for resource_kind, label in _PROVIDER_TREE_SERVER_GROUPS:
+        state = {
+            'scope': 'kind', 'target_id': _CDE_SERVER_SCOPE_TARGET,
+            # The navigator cuts the server's own name off resource paths
+            # when the state names it, as the database states do.
+            'display_name': server.name,
+            'parent_path': [], 'resource_kind': resource_kind,
+        }
+        token = encode_navigator_state(state)
+        node_id = hashlib.sha256(token.encode('ascii')).hexdigest()[:24]
+        nodes.append({
+            'id': f'cde_resource_group_{node_id}',
+            'label': gettext(label),
+            'icon': 'icon-coll-object',
+            'icon_key': f'object.{resource_kind}',
+            'inode': True,
+            'expandable': True,
+            'node_kind': 'container',
+            '_type': 'cde_resource_group',
+            '_id': node_id,
+            '_pid': sid,
+            'module': 'pgadmin.node.server',
+            'children_url': _cde_navigator_url(gid, sid, state),
+            'cde_endpoint': True,
+            'cde_engine_id': profile['engine_id'],
+            'cde_profile_id': profile['profile_id'],
+            'cde_resource_kind': resource_kind,
+            'cde_context_actions': [],
+        })
+    return nodes
+
+
 def _cde_legacy_route(gid, resource):
     """Return the inherited route chain for a provider resource, if any.
 
@@ -1093,10 +1141,15 @@ class ServerNode(PGChildNodeView):
         try:
             catalog = endpoint_service_for_app(
                 current_app).database_catalog(server)
-            return make_json_response(data=_cde_database_nodes(
+            nodes = _cde_database_nodes(
                 gid, sid, profile, catalog,
                 runtime_version=public_version(manager.version),
-            ))
+            )
+            # M3 (2026-11-11): the inherited tree's server-level
+            # collections, served by the provider navigator at server scope.
+            nodes.extend(_provider_tree_server_groups(
+                gid, sid, profile, server))
+            return make_json_response(data=nodes)
         except (EndpointRegistrationError, ProviderNavigatorError) as exc:
             return make_json_response(
                 status=409, success=0, errormsg=str(exc))

@@ -157,8 +157,13 @@ password literals in inherited SQL are redacted. Second slice (2026-11-11):
 the ``statistics`` section carries the inherited statistics for the kinds
 whose inherited node had them (databases, tables, materialized views,
 sequences, indexes, functions and procedures, subscriptions, primary and unique
-keys); one object's statistics show as a name and value list. Server-scope
-roles and tablespaces, columns, system objects and pgAgent are later slices.
+keys); one object's statistics show as a name and value list. Third slice
+(2026-11-11): a PostgreSQL server browsed through the provider tree carries
+the inherited tree's *Login/Group Roles* and *Tablespaces* collections beside
+its databases; their members come from the inherited node templates at server
+scope, each with its identity chain, so the same inherited SQL, dependencies
+and (for tablespaces) statistics apply. Columns, system objects, replica nodes
+and pgAgent are later slices.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

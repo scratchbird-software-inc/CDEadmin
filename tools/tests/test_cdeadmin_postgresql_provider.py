@@ -421,6 +421,51 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
         with self.assertRaisesRegex(PostgreSQLProviderError, 'no longer exists'):
             self.provider.inspect_resource(resource)
 
+    def test_server_scope_lists_databases_roles_and_tablespaces(self):
+        rows = {
+            'database': [{'did': 10, 'name': 'appdb'}],
+            'role': [{'oid': 16400, 'name': 'app_owner'}],
+            'tablespace': [{'oid': 1663, 'name': 'pg_default'}],
+        }
+        self.provider._catalog = SimpleNamespace(
+            read=lambda kind, route, object_id=None: rows[kind])
+        root = {**parent_resource('server'), 'resource_kind': 'server',
+                'authority_path': ['postgresql', 'endpoint', 'e1'],
+                'display_path': ['demo'],
+                'extensions': {'postgresql': {
+                    'child_kind': 'database', 'server_id': 7}}}
+        listed = self.provider.list_resources(root)
+        self.assertEqual(['database', 'role', 'tablespace'],
+                         [item['resource_kind'] for item in listed])
+        chains = [item['extensions']['postgresql']['legacy_route']
+                  for item in listed]
+        self.assertEqual({'sid': 7, 'did': 10, 'scid': None, 'tid': None,
+                          'oid': 10, 'node_type': 'database'}, chains[0])
+        self.assertEqual({'sid': 7, 'did': None, 'scid': None, 'tid': None,
+                          'oid': 16400, 'node_type': 'role'}, chains[1])
+        self.assertEqual('tablespace', chains[2]['node_type'])
+        self.assertEqual(['app_owner'], listed[1]['display_path'])
+        self.assertEqual(['demo', 'appdb'], listed[0]['display_path'])
+
+    def test_server_scope_inspect_keeps_the_listed_identity(self):
+        rows = {'role': [{'oid': 16400, 'name': 'app_owner'}]}
+        self.provider._catalog = SimpleNamespace(
+            read=lambda kind, route, object_id=None: rows[kind])
+        root = {**parent_resource('server'), 'resource_kind': 'server',
+                'authority_path': ['postgresql', 'endpoint', 'e1'],
+                'display_path': ['demo'], 'generation': 'g1',
+                'extensions': {'postgresql': {
+                    'child_kind': 'database', 'server_id': 7}}}
+        self.provider._catalog.read = lambda kind, route, object_id=None: (
+            rows['role'] if kind == 'role' else [])
+        listed = [item for item in self.provider.list_resources(root)
+                  if item['resource_kind'] == 'role'][0]
+        with patch('flask.has_request_context', lambda: False):
+            inspected = self.provider.inspect_resource(listed)
+        for key in ('resource_id', 'authority_path', 'display_path',
+                    'parent_resource_id', 'generation'):
+            self.assertEqual(listed[key], inspected[key], key)
+
     def test_resource_contributions_are_postgresql_owned_and_read_only(self):
         contributions = self.provider.resource_contributions()
         inspector = contributions['inspectors'][0]
@@ -855,6 +900,27 @@ class PostgreSQLCatalogOwnershipTests(unittest.TestCase):
             WEB / 'pgadmin/browser/server_groups/servers/databases'
         )
         self.assertTrue(any(preserved.rglob('nodes.sql')))
+
+    def test_catalog_source_lists_roles_and_tablespaces_from_templates(self):
+        manager = FakeManager()
+        driver = FakeDriver(manager)
+        renderer = Mock(return_value='SELECT preserved_catalog')
+        source = PostgreSQLCatalogSource(driver, renderer)
+        manager._connection.execute_dict = Mock(side_effect=(
+            (True, {'rows': [{'oid': 10, 'rolname': 'app_owner',
+                              'rolcanlogin': True}]}),
+            (True, {'rows': [{'oid': 1663, 'name': 'pg_default'}]}),
+        ))
+        roles = source.read('role', {'server_id': 7})
+        spaces = source.read('tablespace', {'server_id': 7})
+        templates = [call.args[0] for call in renderer.call_args_list]
+        self.assertEqual(['roles/sql/#18.3#/nodes.sql',
+                          'tablespaces/sql/#18.3#/nodes.sql'], templates)
+        self.assertEqual('rid', [k for k in renderer.call_args_list[0].kwargs
+                                 if k.endswith('id')][0])
+        # The inherited role template names the role rolname.
+        self.assertEqual('app_owner', roles[0]['name'])
+        self.assertEqual('pg_default', spaces[0]['name'])
 
     def test_advanced_catalog_binds_native_scope_and_retains_identity(self):
         manager = FakeManager()

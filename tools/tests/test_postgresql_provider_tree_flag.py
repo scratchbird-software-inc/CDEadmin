@@ -121,6 +121,11 @@ class WiringTests(unittest.TestCase):
         self.assertIn('def provider_tree(self, gid, sid)', text)
         self.assertIn('provider_tree_enabled(server)', text.split(
             'def children(self, gid, sid)')[1].split('def ')[0])
+        # M3: the server-level collections ride the provider branch.
+        self.assertIn("('role', 'Login/Group Roles')", text)
+        self.assertIn("('tablespace', 'Tablespaces')", text)
+        self.assertIn('_provider_tree_server_groups(', text.split(
+            'def _provider_tree_children(')[1].split('    def ')[0])
         # The inherited Connect records the runtime (owner decision
         # 2026-11-10) and never fails the connection over it.
         connect = text.split('    def connect(self, gid, sid')[1]

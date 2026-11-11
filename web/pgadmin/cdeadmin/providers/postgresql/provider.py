@@ -69,7 +69,11 @@ LEGACY_DRIVER_TYPE = 'psycopg3'
 APPROVED_DRIVER_VERSIONS = frozenset({'3.2.13', '3.3.4'})
 EVIDENCE_REFERENCE = 'cde-prep-050:postgresql-preservation-20260831'
 CATALOG_KINDS = frozenset({'database', 'schema', 'table', 'conversion',
-                           'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object'})
+                           'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
+                           'role', 'tablespace'})
+# Kinds listed at server scope (M3, 2026-11-11): the inherited tree's
+# server-level collections beside the databases.
+SERVER_SCOPE_KINDS = ('database', 'role', 'tablespace')
 TABULAR_RENDER_CAPABILITY = 'postgresql.result.tabular.render'
 
 TOOL_DISPOSITIONS = {
@@ -194,6 +198,8 @@ class PostgreSQLCatalogSource:
             raise PostgreSQLProviderError('PostgreSQL server is unavailable')
         if catalog_kind == 'database':
             return self._databases(manager, object_id)
+        if catalog_kind in {'role', 'tablespace'}:
+            return self._cluster_objects(manager, catalog_kind, object_id)
         database_id = _required_int(route, 'database_id')
         connection = manager.connection(did=database_id)
         if catalog_kind in {'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object'}:
@@ -248,6 +254,23 @@ class PostgreSQLCatalogSource:
         rows = self._rows(status, result)
         if len(rows) > 1000:
             raise PostgreSQLProviderError('Advanced-object catalog exceeds 1000 objects; narrow the scope')
+        return rows
+
+    def _cluster_objects(self, manager, catalog_kind, object_id):
+        """Roles and tablespaces from the inherited node templates."""
+        connection = manager.connection()
+        if catalog_kind == 'role':
+            template = 'roles/sql/#{0}#/nodes.sql'.format(manager.version)
+            sql = self._renderer(template, rid=object_id, conn=connection)
+        else:
+            template = 'tablespaces/sql/#{0}#/nodes.sql'.format(
+                manager.version)
+            sql = self._renderer(template, tsid=object_id, conn=connection)
+        status, result = connection.execute_dict(sql)
+        rows = self._rows(status, result)
+        if catalog_kind == 'role':
+            # The inherited role template names the role rolname.
+            rows = [{**row, 'name': row.get('rolname')} for row in rows]
         return rows
 
     def _databases(self, manager, object_id):
@@ -914,6 +937,16 @@ class PostgreSQLProvider:
         if payload.get('resource_kind') == 'server' and route.get('database_id') is not None:
             return self._captured_resources(payload, route)
         catalog_kind = extension.get('child_kind')
+        if (payload.get('resource_kind') == 'server' and
+                catalog_kind == 'database' and
+                extension.get('database_id') is None):
+            # Server scope: the inherited tree's databases, roles and
+            # tablespaces (M3, 2026-11-11).
+            return [
+                self._resource(payload, extension, kind, row)
+                for kind in SERVER_SCOPE_KINDS
+                for row in self._catalog.read(kind, extension)
+            ]
         rows = self._catalog.read(catalog_kind, extension)
         return [
             self._resource(payload, extension, catalog_kind, row)
@@ -940,7 +973,19 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError(
                 'PostgreSQL resource identity did not resolve exactly once'
             )
-        return self._resource(payload, extension, catalog_kind, rows[0])
+        # The payload is the resource itself; _resource builds from its
+        # parent, so the identity (authority and display paths) must be
+        # rebuilt from the resource's own, not appended to them.
+        parent = {
+            'resource_id': payload.get('parent_resource_id'),
+            'authority_path': list(payload.get('authority_path', []))[:-2],
+            'display_path': (list(payload.get('display_path', []))[:-1]
+                             if catalog_kind not in {'role', 'tablespace'}
+                             else []),
+            'generation': payload.get('generation'),
+        }
+        return self._with_inherited_inspection(
+            self._resource(parent, extension, catalog_kind, rows[0]))
 
     def _with_inherited_inspection(self, resource):
         """Add the inherited panels' SQL and dependencies to one resource.
@@ -1033,6 +1078,11 @@ class PostgreSQLProvider:
         authority_path = list(parent.get('authority_path', []))
         authority_path.extend((catalog_kind, str(object_id)))
         display_path = list(parent.get('display_path', []))
+        if catalog_kind in {'role', 'tablespace'}:
+            # Server-level objects: the navigator places a kind's members
+            # one level below the branch, so their path is their own name
+            # (the server root carries the server's).
+            display_path = []
         display_path.append(name)
         resource_id = 'postgresql:' + '/'.join(authority_path)
         resource_route = {
@@ -1040,9 +1090,16 @@ class PostgreSQLProvider:
             for key in ('server_id', 'database_id', 'schema_id')
             if key in route
         }
+        legacy = None
+        if catalog_kind in {'database', 'role', 'tablespace'}:
+            legacy = {'sid': route.get('server_id'),
+                      'did': object_id if catalog_kind == 'database' else None,
+                      'scid': None, 'tid': None, 'oid': object_id,
+                      'node_type': catalog_kind}
         resource_route.update({
             'catalog_kind': catalog_kind,
             'object_id': object_id,
+            **({'legacy_route': legacy} if legacy else {}),
             'legacy_metadata': dict(row),
             'native': normalize_resource_properties({
                 **{key: row[key] for key in ('schema', 'name', 'index_method', 'data_type', 'language', 'left_type', 'right_type', 'identity_arguments', 'sql_identity', 'oid') if key in row},

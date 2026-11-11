@@ -116,11 +116,15 @@ VIEW_SPECS = {
                         scid=False, did=False),
 }
 
+# Cluster-level node types: no database in the chain; their inherited
+# views carry their own dependency routes.
+CLUSTER_NODE_TYPES = frozenset({'role', 'tablespace'})
+
 # Node types whose inherited view has a statistics method.
 STATISTICS_NODE_TYPES = frozenset({
     'database', 'table', 'mview', 'sequence', 'index', 'function',
     'procedure', 'trigger_function', 'subscription', 'primary_key',
-    'unique_constraint',
+    'unique_constraint', 'tablespace',
 })
 
 # Node types whose inherited view needs an id the chain does not carry yet
@@ -244,10 +248,17 @@ def inherited_dependencies(chain, connection):
     """(dependencies, dependents) as the inherited panels listed them."""
     spec = VIEW_SPECS[chain['node_type']]
     view = _view(spec)
-    if chain['node_type'] == 'role':
-        # RoleView overrides get_dependents(conn, sid, rid).
-        return (view.get_dependencies(connection, chain['oid']),
-                view.get_dependents(connection, chain['sid'], chain['oid']))
+    if chain['node_type'] in CLUSTER_NODE_TYPES:
+        # The cluster-level views override the helpers with their own
+        # signatures and state; their route methods set that state up.
+        kwargs = view_kwargs(chain)
+        results = []
+        for method in ('dependencies', 'dependents'):
+            ok, value = _unwrap_json(getattr(view, method)(**kwargs))
+            if not ok:
+                raise RuntimeError(f'{method}: {value}')
+            results.append(value)
+        return tuple(results)
     return (view.get_dependencies(connection, chain['oid']),
             view.get_dependents(connection, chain['oid']))
 

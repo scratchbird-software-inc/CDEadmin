@@ -181,6 +181,29 @@ class InspectionTests(unittest.TestCase):
                       result['states']['ddl'])
         self.assertEqual('inherited', result['states']['dependencies'])
 
+    def test_cluster_level_kinds_use_their_own_dependency_routes(self):
+        calls = []
+
+        class View:
+            def sql(self, **kwargs):
+                return Response('CREATE ROLE r')
+
+            def dependencies(self, **kwargs):
+                calls.append(('dependencies', kwargs))
+                return Response({'data': [{'type': 'database', 'name': 'd'}]})
+
+            def dependents(self, **kwargs):
+                calls.append(('dependents', kwargs))
+                return Response({'data': []})
+
+        with patch.object(views, '_view', lambda spec: View()):
+            result = views.inherited_inspection(
+                chain('role', did=None, scid=None, tid=None), lambda d: 'c')
+        self.assertEqual([{'type': 'database', 'name': 'd'}],
+                         result['dependencies'])
+        self.assertEqual({'gid': 1, 'sid': 7, 'rid': 16610}, calls[0][1])
+        self.assertEqual('inherited', result['states']['dependencies'])
+
     def test_kinds_without_a_view_say_why(self):
         self.assertIn('no inherited node', views.inherited_inspection(
             chain(None))['states']['all'])
