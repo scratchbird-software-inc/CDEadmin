@@ -124,6 +124,12 @@ class WiringTests(unittest.TestCase):
         # M3: the server-level collections ride the provider branch.
         self.assertIn("('role', 'Login/Group Roles')", text)
         self.assertIn("('tablespace', 'Tablespaces')", text)
+        # Replica Nodes follows the inherited module's rule: slots exist.
+        self.assertIn("('replica-node', 'Replica Nodes')", text)
+        groups = text.split('def _provider_tree_server_groups(')[1].split(
+            '\ndef ')[0]
+        self.assertIn("replication != 'log'", groups)
+        self.assertIn('get_replication_type(', groups)
         self.assertIn('_provider_tree_server_groups(', text.split(
             'def _provider_tree_children(')[1].split('    def ')[0])
         # The inherited Connect records the runtime (owner decision

@@ -323,18 +323,31 @@ def _unsupported_operations(visual_admin, resource_kind):
 _PROVIDER_TREE_SERVER_GROUPS = (
     ('role', 'Login/Group Roles'),
     ('tablespace', 'Tablespaces'),
+    ('replica-node', 'Replica Nodes'),
 )
 
 
-def _provider_tree_server_groups(gid, sid, profile, server):
-    """Group nodes for roles and tablespaces under a provider-tree server.
+def _provider_tree_server_groups(gid, sid, profile, server, manager=None):
+    """Group nodes for roles, tablespaces and replica nodes under a
+    provider-tree server.
 
     Their children come from the provider navigator at server scope,
-    where the PostgreSQL provider lists the inherited roles and
-    tablespaces templates' rows with their identity chains.
+    where the PostgreSQL provider lists the inherited roles, tablespaces
+    and replica-node templates' rows with their identity chains. Replica
+    Nodes appears under the inherited module's own rule: only when the
+    server's replication type is logical/physical slots ('log').
     """
     nodes = []
+    replication = None
+    if manager is not None:
+        try:
+            replication = get_replication_type(
+                manager.connection(), manager.version)
+        except Exception:
+            replication = None
     for resource_kind, label in _PROVIDER_TREE_SERVER_GROUPS:
+        if resource_kind == 'replica-node' and replication != 'log':
+            continue
         state = {
             'scope': 'kind', 'target_id': _CDE_SERVER_SCOPE_TARGET,
             # The navigator cuts the server's own name off resource paths
@@ -1148,7 +1161,7 @@ class ServerNode(PGChildNodeView):
             # M3 (2026-11-11): the inherited tree's server-level
             # collections, served by the provider navigator at server scope.
             nodes.extend(_provider_tree_server_groups(
-                gid, sid, profile, server))
+                gid, sid, profile, server, manager))
             return make_json_response(data=nodes)
         except (EndpointRegistrationError, ProviderNavigatorError) as exc:
             return make_json_response(

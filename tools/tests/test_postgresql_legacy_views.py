@@ -212,6 +212,9 @@ class InspectionTests(unittest.TestCase):
             chain(None))['states']['all'])
         self.assertIn('foreign-data-wrapper id', views.inherited_inspection(
             chain('user_mapping'))['states']['all'])
+        self.assertIn('properties only', views.inherited_inspection(
+            chain('replica_nodes', did=None, scid=None, tid=None),
+            lambda d: 'c')['states']['all'])
         with patch.object(views, 'inherited_sql',
                           lambda c: (True, 'CREATE VIEW v AS SELECT 1')):
             result = views.inherited_inspection(chain('view'), None)

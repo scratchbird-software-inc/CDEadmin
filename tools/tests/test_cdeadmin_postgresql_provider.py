@@ -523,6 +523,8 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
             'database': [{'did': 10, 'name': 'appdb'}],
             'role': [{'oid': 16400, 'name': 'app_owner'}],
             'tablespace': [{'oid': 1663, 'name': 'pg_default'}],
+            # Replica Nodes (M3): listed at server scope too; none here.
+            'replica-node': [],
         }
         self.provider._catalog = SimpleNamespace(
             read=lambda kind, route, object_id=None: rows[kind])
@@ -543,6 +545,42 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
         self.assertEqual('tablespace', chains[2]['node_type'])
         self.assertEqual(['app_owner'], listed[1]['display_path'])
         self.assertEqual(['demo', 'appdb'], listed[0]['display_path'])
+
+    def test_server_scope_lists_replica_nodes_by_walsender_pid(self):
+        rows = {'database': [], 'role': [], 'tablespace': [],
+                'replica-node': [{'pid': 4242, 'name': 'Standby [10.0.0.9]',
+                                  'state': 'streaming',
+                                  'slot_name': 'standby_a'}]}
+        reads = []
+
+        def read(kind, route, object_id=None):
+            reads.append((kind, object_id))
+            return rows[kind]
+        self.provider._catalog = SimpleNamespace(read=read)
+        root = {**parent_resource('server'), 'resource_kind': 'server',
+                'authority_path': ['postgresql', 'endpoint', 'e1'],
+                'display_path': ['demo'], 'generation': 'g1',
+                'extensions': {'postgresql': {
+                    'child_kind': 'database', 'server_id': 7}}}
+        listed = self.provider.list_resources(root)
+        self.assertEqual(['replica-node'],
+                         [item['resource_kind'] for item in listed])
+        node = listed[0]
+        self.assertEqual('postgresql:postgresql/endpoint/e1/replica-node/'
+                         '4242', node['resource_id'])
+        self.assertEqual(['Standby [10.0.0.9]'], node['display_path'])
+        extension = node['extensions']['postgresql']
+        self.assertEqual(4242, extension['object_id'])
+        self.assertEqual({'sid': 7, 'did': None, 'scid': None, 'tid': None,
+                          'oid': 4242, 'node_type': 'replica_nodes'},
+                         extension['legacy_route'])
+        self.assertEqual('streaming',
+                         extension['native']['catalog_metadata']['state'])
+        with patch('flask.has_request_context', lambda: False):
+            inspected = self.provider.inspect_resource(node)
+        self.assertEqual(('replica-node', 4242), reads[-1])
+        for key in ('resource_id', 'display_path', 'authority_path'):
+            self.assertEqual(node[key], inspected[key], key)
 
     def test_server_scope_inspect_keeps_the_listed_identity(self):
         rows = {'role': [{'oid': 16400, 'name': 'app_owner'}]}
@@ -1018,6 +1056,21 @@ class PostgreSQLCatalogOwnershipTests(unittest.TestCase):
         # The inherited role template names the role rolname.
         self.assertEqual('app_owner', roles[0]['name'])
         self.assertEqual('pg_default', spaces[0]['name'])
+
+    def test_catalog_source_lists_replica_nodes_from_the_properties_template(
+            self):
+        manager = FakeManager()
+        renderer = Mock(return_value='SELECT preserved_catalog')
+        source = PostgreSQLCatalogSource(FakeDriver(manager), renderer)
+        manager._connection.execute_dict = Mock(return_value=(
+            True, {'rows': [{'pid': 4242, 'name': 'Standby [10.0.0.9]'}]}))
+        rows = source.read('replica-node', {'server_id': 7})
+        self.assertEqual('Standby [10.0.0.9]', rows[0]['name'])
+        self.assertEqual('replica_nodes/sql/#18.3#/properties.sql',
+                         renderer.call_args.args[0])
+        self.assertIsNone(renderer.call_args.kwargs['pid'])
+        source.read('replica-node', {'server_id': 7}, 4242)
+        self.assertEqual(4242, renderer.call_args.kwargs['pid'])
 
     def test_advanced_catalog_binds_native_scope_and_retains_identity(self):
         manager = FakeManager()

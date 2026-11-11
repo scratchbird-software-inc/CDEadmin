@@ -70,13 +70,16 @@ APPROVED_DRIVER_VERSIONS = frozenset({'3.2.13', '3.3.4'})
 EVIDENCE_REFERENCE = 'cde-prep-050:postgresql-preservation-20260831'
 CATALOG_KINDS = frozenset({'database', 'schema', 'table', 'conversion',
                            'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
-                           'role', 'tablespace'})
+                           'role', 'tablespace', 'replica-node'})
+# Server-level kinds below the server root (M3, 2026-11-11): the inherited
+# tree's Login/Group Roles, Tablespaces and Replica Nodes collections.
+SERVER_LEVEL_KINDS = frozenset({'role', 'tablespace', 'replica-node'})
 # Relation kinds whose pg_attribute facts become column children (M3).
 COLUMN_OWNER_KINDS = frozenset({'table', 'partitioned-table', 'view',
                                 'materialized-view', 'foreign-table'})
 # Kinds listed at server scope (M3, 2026-11-11): the inherited tree's
 # server-level collections beside the databases.
-SERVER_SCOPE_KINDS = ('database', 'role', 'tablespace')
+SERVER_SCOPE_KINDS = ('database', 'role', 'tablespace', 'replica-node')
 TABULAR_RENDER_CAPABILITY = 'postgresql.result.tabular.render'
 
 TOOL_DISPOSITIONS = {
@@ -201,7 +204,7 @@ class PostgreSQLCatalogSource:
             raise PostgreSQLProviderError('PostgreSQL server is unavailable')
         if catalog_kind == 'database':
             return self._databases(manager, object_id)
-        if catalog_kind in {'role', 'tablespace'}:
+        if catalog_kind in SERVER_LEVEL_KINDS:
             return self._cluster_objects(manager, catalog_kind, object_id)
         database_id = _required_int(route, 'database_id')
         connection = manager.connection(did=database_id)
@@ -260,8 +263,18 @@ class PostgreSQLCatalogSource:
         return rows
 
     def _cluster_objects(self, manager, catalog_kind, object_id):
-        """Roles and tablespaces from the inherited node templates."""
+        """Roles, tablespaces and replica nodes from the inherited node
+        templates."""
         connection = manager.connection()
+        if catalog_kind == 'replica-node':
+            # The inherited Replica Nodes collection: pg_stat_replication
+            # rows joined to their slots, keyed by the walsender pid. The
+            # properties template carries the name and every column.
+            template = 'replica_nodes/sql/#{0}#/properties.sql'.format(
+                manager.version)
+            sql = self._renderer(template, pid=object_id, conn=connection)
+            status, result = connection.execute_dict(sql)
+            return self._rows(status, result)
         if catalog_kind == 'role':
             template = 'roles/sql/#{0}#/nodes.sql'.format(manager.version)
             sql = self._renderer(template, rid=object_id, conn=connection)
@@ -989,7 +1002,7 @@ class PostgreSQLProvider:
             'resource_id': payload.get('parent_resource_id'),
             'authority_path': list(payload.get('authority_path', []))[:-2],
             'display_path': (list(payload.get('display_path', []))[:-1]
-                             if catalog_kind not in {'role', 'tablespace'}
+                             if catalog_kind not in SERVER_LEVEL_KINDS
                              else []),
             'generation': payload.get('generation'),
         }
@@ -1168,7 +1181,8 @@ class PostgreSQLProvider:
         return columns
 
     def _resource(self, parent, route, catalog_kind, row):
-        id_field = 'did' if catalog_kind == 'database' else 'oid'
+        id_field = {'database': 'did', 'replica-node': 'pid'}.get(
+            catalog_kind, 'oid')
         object_id = row.get(id_field)
         name = row.get('name')
         if object_id is None or not isinstance(name, str):
@@ -1178,7 +1192,7 @@ class PostgreSQLProvider:
         authority_path = list(parent.get('authority_path', []))
         authority_path.extend((catalog_kind, str(object_id)))
         display_path = list(parent.get('display_path', []))
-        if catalog_kind in {'role', 'tablespace'}:
+        if catalog_kind in SERVER_LEVEL_KINDS:
             # Server-level objects: the navigator places a kind's members
             # one level below the branch, so their path is their own name
             # (the server root carries the server's).
@@ -1191,11 +1205,12 @@ class PostgreSQLProvider:
             if key in route
         }
         legacy = None
-        if catalog_kind in {'database', 'role', 'tablespace'}:
+        if catalog_kind == 'database' or catalog_kind in SERVER_LEVEL_KINDS:
             legacy = {'sid': route.get('server_id'),
                       'did': object_id if catalog_kind == 'database' else None,
                       'scid': None, 'tid': None, 'oid': object_id,
-                      'node_type': catalog_kind}
+                      'node_type': {'replica-node': 'replica_nodes'}.get(
+                          catalog_kind, catalog_kind)}
         resource_route.update({
             'catalog_kind': catalog_kind,
             'object_id': object_id,

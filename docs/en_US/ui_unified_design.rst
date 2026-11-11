@@ -178,7 +178,14 @@ schemas (``pg_temp_*``) appear among the system schemas. Sixth slice
 whole database to find the node again; the explorer hands the listed resource
 to the provider, which confirms the object with one catalog row on a private
 attachment and then adds the inherited sections. A node whose object is gone
-reports that it no longer exists. Replica nodes and pgAgent are later slices.
+reports that it no longer exists. Seventh slice (2026-11-11): a provider-tree
+server carries the inherited *Replica Nodes* collection under the inherited
+module's own rule (only when the server has replication slots); its members
+are the inherited template's rows (streaming walsenders joined to their
+slots, named ``Standby [address]`` and keyed by the walsender pid), with the
+row's columns as properties. The inherited node shows properties only, so the
+SQL, statistics and dependency sections report that state. pgAgent is a later
+slice.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

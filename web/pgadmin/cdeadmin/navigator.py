@@ -58,6 +58,7 @@ _KIND_LABELS = {
     'procedure': 'Procedures',
     'publication': 'Replication objects',
     'replication-channel': 'Replication objects',
+    'replica-node': 'Replica Nodes',
     'resource-group': 'Resource groups',
     'role': 'Roles',
     'authentication-mapping': 'Local authentication mappings',

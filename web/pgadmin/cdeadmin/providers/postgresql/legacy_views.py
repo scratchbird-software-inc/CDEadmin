@@ -134,6 +134,9 @@ STATISTICS_NODE_TYPES = frozenset({
 # Node types whose inherited view needs an id the chain does not carry yet
 # (the foreign-data-wrapper OID): reported as unavailable, not attempted.
 NEEDS_WRAPPER_ID = frozenset({'foreign_server', 'user_mapping'})
+# Node types whose inherited node shows properties only: no SQL, statistics
+# or dependency panels to inherit (the replica node is a walsender row).
+PROPERTIES_ONLY = frozenset({'replica_nodes'})
 
 _PASSWORD_LITERAL = re.compile(r"(?i)(password\s*)'(?:[^']|'')*'")
 _PASSWORD_ASSIGNMENT = re.compile(r"(?i)(password\s*=\s*)[^\s,;)']+")
@@ -285,6 +288,10 @@ def inherited_inspection(chain, connection_for=None):
         result['states']['all'] = (
             'unavailable: the inherited view needs the foreign-data-wrapper '
             'id, which the identity chain does not carry yet')
+        return result
+    if node_type in PROPERTIES_ONLY:
+        result['states']['all'] = (
+            'unavailable: the inherited node shows properties only')
         return result
     if node_type not in VIEW_SPECS:
         result['states']['all'] = f'unavailable: no view map for {node_type}'

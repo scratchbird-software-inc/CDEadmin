@@ -560,6 +560,7 @@ class KindLabelTests(unittest.TestCase):
         from pgadmin.cdeadmin.navigator import kind_label
         self.assertEqual('Operator classes', kind_label('operator-class'))
         self.assertEqual('Operator families', kind_label('operator-family'))
+        self.assertEqual('Replica Nodes', kind_label('replica-node'))
         self.assertEqual('Text search dictionaries',
                          kind_label('text-search-dictionary'))
         self.assertEqual('Text search parsers',
